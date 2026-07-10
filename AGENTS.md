@@ -10,7 +10,7 @@
 ## Product invariants
 
 - StoryOS has one general, novel-project-scoped Agent Loop. Task-specific behavior comes from Tools, MCP servers, Services, Skills, and policy, not separate fixed workflow runtimes.
-- The author owns every authoritative creative state. Prose, canon, characters, timeline, outline, structure, and author plans change only through inspectable proposals and explicit domain commands.
+- The author owns every authoritative creative state. Narrow deterministic direct author manipulation changes it through explicit domain commands; Agent-, Tool-, MCP-, extension-produced, bulk, cross-location, or not-fully-previsible changes require an inspectable StoryOS Core Proposal accepted by the author.
 - Discovery is not authorization. Tools and extensions receive only the capabilities, context, budget, and outbound-data access explicitly granted to the current run.
 - Local project data is authoritative. Any external model, service, or MCP server receives only the minimum context required for the approved step, with provenance and disclosure recorded.
 - Agent runs, plans, tool calls, approvals, artifacts, and state transitions are durable and inspectable. A network connection or model process is never the source of truth.
