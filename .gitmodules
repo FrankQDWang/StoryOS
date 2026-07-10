@@ -1,0 +1,4 @@
+[submodule ".reference/codex"]
+	path = .reference/codex
+	url = https://github.com/openai/codex.git
+	shallow = true
