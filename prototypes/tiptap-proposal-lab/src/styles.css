@@ -1,0 +1,636 @@
+:root {
+  color: #24231f;
+  background: #f8f7f3;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  --canvas: #fbfaf7;
+  --panel: #f7f6f2;
+  --ink: #23221e;
+  --muted: #77756e;
+  --faint: #a3a099;
+  --line: #e7e4dd;
+  --proposal: #f2f1ed;
+  --proposal-line: #77756f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 920px;
+  min-height: 640px;
+  overflow: hidden;
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+textarea:focus-visible,
+.manuscript-prosemirror:focus-visible {
+  outline: 2px solid #78756e;
+  outline-offset: 2px;
+}
+
+.workspace {
+  width: 100vw;
+  height: 100dvh;
+  display: grid;
+  grid-template-columns: clamp(220px, 17.5vw, 268px) minmax(480px, 1fr) clamp(340px, 27.1vw, 404px);
+  background: var(--canvas);
+  transition: grid-template-columns 180ms ease;
+}
+
+.workspace.agent-is-collapsed {
+  grid-template-columns: clamp(220px, 17.5vw, 268px) minmax(560px, 1fr) 52px;
+}
+
+.tree-panel,
+.agent-panel {
+  min-width: 0;
+  background: rgba(248, 247, 243, 0.96);
+}
+
+.tree-panel {
+  border-right: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: 78px 58px 1fr 68px;
+  position: relative;
+}
+
+.project-header,
+.agent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.project-header {
+  padding: 0 22px;
+  color: #55534d;
+}
+
+.project-identity {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.project-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px 0 24px;
+  color: #74716a;
+  font-size: 13px;
+}
+
+.tree-heading button,
+.tree-footer button,
+.agent-header button,
+.composer button,
+.lab-hotspot,
+.prototype-lab header button {
+  border: 0;
+  background: transparent;
+  padding: 6px;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  border-radius: 7px;
+}
+
+.tree-heading button:hover,
+.tree-footer button:hover,
+.agent-header button:hover,
+.composer button:hover,
+.prototype-lab header button:hover {
+  background: #eceae4;
+}
+
+.manuscript-tree {
+  overflow: auto;
+  scrollbar-width: thin;
+  padding: 0 0 18px;
+}
+
+.volume-group + .volume-group {
+  margin-top: 9px;
+}
+
+.volume-row,
+.chapter-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.volume-row {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 22px;
+  color: #4e4c46;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.chapter-row {
+  min-height: 38px;
+  padding: 8px 18px 8px 57px;
+  color: #77746d;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  line-height: 1.45;
+  border-left: 2px solid transparent;
+}
+
+.chapter-row:hover {
+  background: rgba(232, 230, 224, 0.48);
+  color: #3f3d38;
+}
+
+.chapter-row.active {
+  color: #24231f;
+  background: #eceae5;
+  border-left-color: #34332f;
+  font-weight: 600;
+}
+
+.tree-footer {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 0 26px;
+  color: #6e6c66;
+}
+
+.tree-footer button:last-child {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.editor-panel {
+  min-width: 0;
+  background: var(--canvas);
+  overflow: hidden;
+}
+
+.editor-scroll {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.manuscript {
+  width: min(100%, 850px);
+  min-height: 100%;
+  margin: 0 auto;
+  padding: 84px 66px 112px 84px;
+}
+
+.chapter-heading {
+  margin: 0 0 38px;
+}
+
+.chapter-heading h1 {
+  margin: 0;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: clamp(27px, 2.1vw, 32px);
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.055em;
+  color: #191814;
+}
+
+.manuscript-prosemirror {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 16px;
+  line-height: 2.05;
+  letter-spacing: 0.025em;
+  color: #34322d;
+  caret-color: #292824;
+  outline: none;
+}
+
+.manuscript-prosemirror p {
+  margin: 0 0 23px;
+  min-height: 1.9em;
+}
+
+.manuscript-prosemirror p:not(.proposal-block) {
+  margin-bottom: 27px;
+}
+
+.manuscript-prosemirror .proposal-block {
+  margin: 0;
+  padding: 7px 25px 7px 31px;
+  background: var(--proposal);
+  position: relative;
+}
+
+.manuscript-prosemirror .proposal-block::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--proposal-line);
+}
+
+.manuscript-prosemirror .proposal-block-first {
+  padding-top: 12px;
+}
+
+.manuscript-prosemirror .proposal-block-last {
+  padding-bottom: 13px;
+}
+
+.manuscript-prosemirror .proposal-block-last::after {
+  content: "";
+}
+
+.proposal-actions {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 16px 0 0 9px;
+  min-height: 48px;
+}
+
+.proposal-actions button {
+  border: 0;
+  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 4px;
+  color: #5b5953;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.proposal-actions button:hover:not(:disabled) {
+  color: #171612;
+}
+
+.proposal-actions button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.agent-panel {
+  border-left: 1px solid var(--line);
+  display: grid;
+  grid-template-rows: 78px 1fr auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.agent-header {
+  padding: 0 29px 0 30px;
+}
+
+.agent-header strong {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.agent-header button {
+  color: #77746d;
+}
+
+.message-list {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px 28px 18px;
+  scrollbar-width: thin;
+}
+
+.message {
+  margin-bottom: 34px;
+  color: #3c3a35;
+}
+
+.message.author {
+  padding: 18px 18px 11px;
+  border-radius: 13px;
+  background: #f1f0ec;
+  margin-bottom: 60px;
+}
+
+.message-label {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.message p {
+  margin: 0;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  line-height: 1.85;
+}
+
+.message time {
+  display: block;
+  margin-top: 9px;
+  text-align: right;
+  color: #88857e;
+  font-size: 11px;
+}
+
+.run-summary {
+  display: grid;
+  grid-template-columns: 19px 1fr 16px;
+  gap: 11px;
+  align-items: start;
+  margin-top: 12px;
+  padding: 18px 17px;
+  border-radius: 13px;
+  background: #f1f0ec;
+  color: #44423d;
+}
+
+.run-summary div {
+  display: grid;
+  gap: 7px;
+}
+
+.run-summary strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.run-summary span {
+  color: #8c8982;
+  font-size: 12px;
+}
+
+.transcript-action {
+  width: 100%;
+  border: 1px solid #dedbd4;
+  background: transparent;
+  border-radius: 9px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  color: #57554f;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.transcript-action:hover {
+  background: #eeece7;
+}
+
+.composer {
+  margin: 0 28px 27px;
+  border: 1px solid #dedbd4;
+  border-radius: 12px;
+  background: rgba(251, 250, 247, 0.85);
+  overflow: hidden;
+}
+
+.composer textarea {
+  width: 100%;
+  min-height: 72px;
+  resize: none;
+  border: 0;
+  background: transparent;
+  padding: 14px 15px 4px;
+  outline: none;
+  color: #3f3d38;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.composer textarea::placeholder {
+  color: #aaa7a0;
+}
+
+.composer-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 9px 9px;
+}
+
+.composer-controls button {
+  width: 29px;
+  height: 29px;
+  border: 1px solid #a6a39d;
+  border-radius: 50%;
+  color: #6e6b65;
+}
+
+.composer-controls .send-button {
+  background: #aaa7a0;
+  border-color: #aaa7a0;
+  color: white;
+}
+
+.composer-controls .send-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.agent-panel.collapsed {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding-top: 26px;
+}
+
+.agent-panel.collapsed button {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  color: #77746d;
+}
+
+.agent-panel.collapsed span {
+  writing-mode: vertical-rl;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  color: #8b8881;
+}
+
+.lab-hotspot {
+  position: fixed;
+  left: 78px;
+  bottom: 21px;
+  color: #6e6c66;
+  z-index: 2;
+}
+
+.notice {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 10;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border: 1px solid #dcd9d2;
+  border-radius: 999px;
+  background: rgba(34, 33, 29, 0.92);
+  box-shadow: 0 10px 30px rgba(36, 34, 29, 0.12);
+  color: white;
+  font-size: 12px;
+}
+
+.lab-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  background: rgba(37, 35, 31, 0.22);
+  backdrop-filter: blur(3px);
+}
+
+.prototype-lab {
+  width: min(520px, calc(100vw - 48px));
+  border: 1px solid #dcd9d2;
+  border-radius: 17px;
+  background: #fbfaf7;
+  box-shadow: 0 28px 90px rgba(38, 35, 29, 0.2);
+  padding: 26px;
+}
+
+.prototype-lab header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 22px;
+}
+
+.prototype-lab header div {
+  display: grid;
+  gap: 4px;
+}
+
+.prototype-lab header span {
+  color: #96928a;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.prototype-lab header strong {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 21px;
+}
+
+.state-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.state-grid div {
+  border-radius: 10px;
+  background: #f0efeb;
+  padding: 12px;
+}
+
+.state-grid dt {
+  color: #929087;
+  font-size: 10px;
+}
+
+.state-grid dd {
+  margin: 5px 0 0;
+  color: #3c3a35;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.lab-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.lab-actions button {
+  border: 1px solid #d6d3cb;
+  border-radius: 9px;
+  background: #292823;
+  color: white;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.lab-actions button.quiet {
+  background: transparent;
+  color: #55524c;
+}
+
+.prototype-lab > p {
+  margin: 18px 0 0;
+  color: #7b7871;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 1120px) {
+  .workspace {
+    grid-template-columns: 218px minmax(430px, 1fr) 320px;
+  }
+
+  .workspace.agent-is-collapsed {
+    grid-template-columns: 218px minmax(500px, 1fr) 52px;
+  }
+
+  .manuscript {
+    padding-inline: 48px;
+  }
+
+  .message-list,
+  .agent-header {
+    padding-inline: 22px;
+  }
+
+  .composer {
+    margin-inline: 21px;
+  }
+}
