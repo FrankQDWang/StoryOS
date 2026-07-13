@@ -6,7 +6,6 @@ import {
   ArrowUp,
   BookOpen,
   CaretDown,
-  CaretLeft,
   CaretRight,
   Check,
   GearSix,
@@ -15,6 +14,7 @@ import {
   PaperPlaneRight,
   Plus,
   Sparkle,
+  SidebarSimple,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -78,7 +78,7 @@ function replaceEditorDocument(editor, document, source) {
   editor.view.dispatch(transaction);
 }
 
-function TreePanel({ activeChapter, expandedVolumes, onToggle, onSelect }) {
+function TreePanel({ activeChapter, expandedVolumes, onToggle, onSelect, onOpenLab }) {
   return (
     <aside className="tree-panel" aria-label="章节目录">
       <header className="project-header">
@@ -134,7 +134,12 @@ function TreePanel({ activeChapter, expandedVolumes, onToggle, onSelect }) {
         <button type="button" aria-label="搜索">
           <MagnifyingGlass size={20} />
         </button>
-        <button type="button" aria-label="原型检查" data-testid="open-lab">
+        <button
+          type="button"
+          aria-label="打开原型检查"
+          data-testid="open-lab"
+          onClick={onOpenLab}
+        >
           <GearSix size={20} />
         </button>
       </footer>
@@ -186,28 +191,26 @@ function AgentPanel({
 }) {
   if (collapsed) {
     return (
-      <aside className="agent-panel collapsed" aria-label="Agent 对话栏已收起">
-        <button type="button" onClick={onCollapse} aria-label="展开 Agent 对话栏">
-          <CaretLeft size={18} />
+      <aside className="agent-panel collapsed" aria-label="写作助手已收起">
+        <button type="button" onClick={onCollapse} aria-label="展开写作助手">
+          <SidebarSimple size={20} />
         </button>
-        <span>Agent</span>
       </aside>
     );
   }
 
   return (
-    <aside className="agent-panel" aria-label="Agent 对话">
+    <aside className="agent-panel" aria-label="写作助手对话">
       <header className="agent-header">
-        <strong>Agent</strong>
-        <button type="button" onClick={onCollapse} aria-label="收起 Agent 对话栏">
-          <CaretRight size={18} />
+        <strong>写作助手</strong>
+        <button type="button" onClick={onCollapse} aria-label="收起写作助手">
+          <SidebarSimple size={20} />
         </button>
       </header>
 
       <div className="message-list" aria-live="polite">
         {messages.map((message) => (
           <article key={message.id} className={`message ${message.role}`}>
-            <div className="message-label">{message.label}</div>
             <p>{message.text}</p>
             <time>{message.time}</time>
           </article>
@@ -238,8 +241,8 @@ function AgentPanel({
         <textarea
           value={draft}
           onChange={(event) => onDraftChange(event.target.value)}
-          placeholder="告诉 Agent 你想做什么…"
-          aria-label="给 Agent 的消息"
+          placeholder="告诉写作助手你想做什么…"
+          aria-label="给写作助手的消息"
           rows={3}
         />
         <div className="composer-controls">
@@ -332,7 +335,6 @@ export function App() {
       {
         id: `message-agent-${Date.now()}`,
         role: "agent",
-        label: "Agent",
         time: timestamp(),
         text,
       },
@@ -658,7 +660,6 @@ export function App() {
       {
         id: `message-author-${Date.now()}`,
         role: "author",
-        label: "你",
         time: timestamp(),
         text,
       },
@@ -683,6 +684,7 @@ export function App() {
         expandedVolumes={expandedVolumes}
         onToggle={toggleVolume}
         onSelect={selectChapter}
+        onOpenLab={() => setLabOpen(true)}
       />
 
       <section className="editor-panel">
@@ -715,15 +717,6 @@ export function App() {
         onUndoAcceptance={undoAcceptance}
         onReopenRejected={reopenRejected}
       />
-
-      <button
-        type="button"
-        className="lab-hotspot"
-        aria-label="打开原型检查"
-        onClick={() => setLabOpen(true)}
-      >
-        <GearSix size={20} />
-      </button>
 
       {notice && <div className="notice" role="status">{notice}</div>}
 

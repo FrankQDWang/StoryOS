@@ -13,3 +13,6 @@ When implementing from a selected generated mock, treat that image as the source
 - Render replacement or continuation Proposal prose directly after the affected paragraph and keep it editable in place.
 - Expose only accept and reject in the manuscript review surface. Do not add a visible diff view or a `查看差异` action.
 - Keep technical scenario controls out of the default author-facing surface; any prototype-only inspection harness must stay behind the settings control.
+- Keep the volume-to-chapter tree independently scrollable while its project header, directory header, and bottom utility bar remain fixed. The prototype inspection control belongs in that bottom utility bar and must never overlay chapter rows.
+- Label the right conversation panel `写作助手`. When collapsed, render only the sidebar-toggle icon in the rail's upper-right corner, using the rounded split-panel icon style; do not keep a vertical text label in the rail.
+- Do not render explicit `你` or `Agent` labels above conversation messages. Distinguish roles spatially: writing-assistant messages align left and author messages align right.

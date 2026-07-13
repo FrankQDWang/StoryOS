@@ -3,18 +3,19 @@
 - Source visual truth: `/Users/frankqdwang/MLE/StoryOS/docs/design/storyos-three-column-writing-workspace.png`
 - Implementation screenshot: `/Users/frankqdwang/MLE/StoryOS/prototypes/tiptap-proposal-lab/artifacts/prototype-default.png`
 - Viewport: `1487 × 1058`
-- State: default desktop workspace; volume two expanded; chapter twelve active; editable Proposal ready and valid; Agent panel expanded.
+- State: default desktop workspace; volume two expanded; chapter twelve active; editable Proposal ready and valid; 写作助手 panel expanded. The collapsed state is captured separately in `artifacts/prototype-collapsed.png`.
 
 ## Full-view comparison evidence
 
 `artifacts/design-qa-comparison.png` places the approved source on the left and the browser-rendered implementation on the right at the same viewport and state.
 
-The final comparison preserves the source's three major regions, volume-to-chapter hierarchy, manuscript measure, warm neutral palette, low-chrome density, Proposal placement, Agent transcript structure, and bottom composer. No actionable P0, P1, or P2 differences remain.
+The final comparison preserves the source's three major regions, volume-to-chapter hierarchy, manuscript measure, warm neutral palette, low-chrome density, Proposal placement, conversation structure, and bottom composer. The user-directed `写作助手` naming and spatial role distinction intentionally replace the source's explicit `你` / `Agent` labels. No actionable P0, P1, or P2 differences remain.
 
 ## Focused comparison evidence
 
 - `artifacts/design-qa-proposal-comparison.png` compares the manuscript and editable Proposal regions. Heading hierarchy, paragraph measure, Proposal background, vertical marker, reading order, and accept/reject placement align with the source.
-- `artifacts/design-qa-agent-comparison.png` compares the transcript, run summary, and composer. Panel proportions, message hierarchy, card treatment, spacing, and composer anchoring align with the source.
+- `artifacts/design-qa-agent-comparison.png` compares the conversation, run summary, and composer. Panel proportions, message hierarchy, card treatment, spacing, and composer anchoring align with the source; the author card is right-aligned and the writing-assistant response is left-aligned without role headings.
+- `artifacts/prototype-collapsed.png` verifies the requested collapsed state: the rail contains no visible text and the split-panel expand button sits in its upper-right corner.
 
 ## Required fidelity surfaces
 
@@ -22,12 +23,13 @@ The final comparison preserves the source's three major regions, volume-to-chapt
 - Spacing and layout rhythm: the final grid uses the source proportions at 1487 × 1058. The manuscript starts at the same horizontal measure, the Proposal follows the affected paragraph, and the transcript/run/composer rhythm matches.
 - Colors and visual tokens: warm off-white canvas, charcoal text, warm-gray Proposal surface, subtle separators, and neutral active states match the approved direction without gradients or dashboard chrome.
 - Image quality and asset fidelity: the target contains no raster illustrations, logos, or custom imagery that require separate assets. Phosphor supplies the visible UI icons; no handcrafted SVG, CSS icon, emoji, or placeholder asset is used.
-- Copy and content: the chapter tree, manuscript, author request, Agent response, run summary, and accept/reject actions reproduce the approved target's content and intent. The implementation intentionally shows Proposal revision `r3` instead of the mock's elapsed duration because it exposes real prototype state.
+- Copy and content: the chapter tree, manuscript, author request, writing-assistant response, run summary, and accept/reject actions reproduce the approved target's content and intent. `写作助手` replaces `Agent`, and explicit role headings are omitted by author direction. The implementation intentionally shows Proposal revision `r3` instead of the mock's elapsed duration because it exposes real prototype state.
 
 ## Browser interaction evidence
 
-- Volume/chapter navigation: chapter thirteen opens without Proposal controls; chapter twelve restores its document and Proposal.
-- Agent panel: collapse and expand both work.
+- Volume/chapter navigation: at the short `1487 × 720` check, selecting chapter fourteen scrolled the independent tree to its maximum while the bottom utility bar remained fixed; chapter twelve restores its document and Proposal.
+- Writing-assistant panel: collapse and expand both work; the collapsed rail has no visible text, measures 52 px, and places its button 26 px from the top and 8 px from the right.
+- Conversation roles: the initial author message is right-aligned, the writing-assistant message is left-aligned, and no `.message-label` elements remain.
 - Proposal editing: author input at the Proposal end created revision `r4`, showed pending validation, then returned to valid.
 - Acceptance: accepting removed Proposal controls and exposed a transcript action; undoing acceptance reopened the same content through a new revision.
 - Rejection: rejecting removed only candidate content; reopening restored it and revalidated the new revision.
@@ -52,6 +54,12 @@ The final comparison preserves the source's three major regions, volume-to-chapt
 - Fixes: increased authoritative-paragraph spacing and the post-author-message gap without changing Proposal paragraph density.
 - Post-fix evidence: both focused comparison images show aligned Proposal and transcript landmarks.
 
+### Iteration 3
+
+- Earlier findings: the chapter tree could overflow behind a fixed inspection button; the collapsed conversation rail retained vertical `Agent` text and centered its expand control; message roles relied on explicit labels.
+- Fixes: made the chapter navigation the only scrollable left-column track, moved the inspection control into the fixed bottom utility bar, renamed the panel `写作助手`, adopted the split-panel icon, removed visible role headings, aligned assistant/author messages left/right, and placed the collapsed expand control at the rail's upper-right.
+- Post-fix evidence: `artifacts/prototype-default.png`, `artifacts/prototype-collapsed.png`, and the refreshed comparison images show the corrected states at the approved `1487 × 1058` viewport. Browser geometry checks also verified the short-viewport tree scroll and fixed footer.
+
 ## Findings
 
 No actionable P0, P1, or P2 findings remain.
@@ -59,13 +67,15 @@ No actionable P0, P1, or P2 findings remain.
 ## Follow-up polish
 
 - P3: the browser's Noto Serif SC appears slightly lighter than the generated mock's literary serif.
-- P3: the source uses an abstract collapse glyph; the implementation uses the closest matching Phosphor chevron.
+- P3: the Phosphor split-panel icon is the closest library match to the macOS-style reference glyph.
 
 ## Implementation checklist
 
 - [x] Approved three-column source recreated at the target viewport.
 - [x] Core visible interactions are functional.
 - [x] Proposal behavior scenarios are inspectable without adding debug chrome to the default workspace.
+- [x] Chapter navigation scrolls independently without covering the fixed bottom utilities.
+- [x] Expanded and collapsed writing-assistant states match the latest user direction.
 - [x] Browser screenshot, focused comparisons, interaction evidence, and console check are recorded.
 
 final result: passed

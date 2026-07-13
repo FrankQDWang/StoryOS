@@ -104,7 +104,7 @@ export const chapterDocuments = Object.fromEntries(
             paragraph(`${id}-p1`, `${title.replace(/　/g, " ")}。`),
             paragraph(
               `${id}-p2`,
-              "这一章仍在整理中。你可以在此直接写作，也可以在右侧告诉 Agent 想继续推进的方向。",
+              "这一章仍在整理中。你可以在此直接写作，也可以在右侧告诉写作助手想继续推进的方向。",
             ),
           ],
         },
@@ -129,14 +129,12 @@ export const initialMessages = [
   {
     id: "message-author-1",
     role: "author",
-    label: "你",
     time: "10:18",
     text: "请在“雨夜”章节后半段，补写苏砚前往旧仓的过程与氛围，保持克制、含蓄的叙述风格。",
   },
   {
     id: "message-agent-1",
     role: "agent",
-    label: "Agent",
     time: "10:19",
     text: "已为你补写苏砚前往旧仓的过程与氛围，延续克制、含蓄的叙述风格，突出雨夜的环境与内心的张力。你可以直接在正文中的提案里修改。",
   },

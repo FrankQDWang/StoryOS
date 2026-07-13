@@ -72,7 +72,9 @@ textarea:focus-visible,
 .tree-panel {
   border-right: 1px solid var(--line);
   display: grid;
-  grid-template-rows: 78px 58px 1fr 68px;
+  grid-template-rows: 78px 58px minmax(0, 1fr) 68px;
+  min-height: 0;
+  overflow: hidden;
   position: relative;
 }
 
@@ -117,7 +119,6 @@ textarea:focus-visible,
 .tree-footer button,
 .agent-header button,
 .composer button,
-.lab-hotspot,
 .prototype-lab header button {
   border: 0;
   background: transparent;
@@ -137,9 +138,12 @@ textarea:focus-visible,
 }
 
 .manuscript-tree {
-  overflow: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   scrollbar-width: thin;
   padding: 0 0 18px;
+  overscroll-behavior: contain;
 }
 
 .volume-group + .volume-group {
@@ -194,12 +198,9 @@ textarea:focus-visible,
   align-items: center;
   gap: 13px;
   padding: 0 26px;
+  border-top: 1px solid rgba(231, 228, 221, 0.68);
+  background: rgba(248, 247, 243, 0.98);
   color: #6e6c66;
-}
-
-.tree-footer button:last-child {
-  opacity: 0;
-  pointer-events: none;
 }
 
 .editor-panel {
@@ -343,22 +344,23 @@ textarea:focus-visible,
 }
 
 .message {
+  width: min(92%, 310px);
   margin-bottom: 34px;
   color: #3c3a35;
 }
 
 .message.author {
+  margin-left: auto;
+  margin-right: 0;
   padding: 18px 18px 11px;
   border-radius: 13px;
   background: #f1f0ec;
   margin-bottom: 60px;
 }
 
-.message-label {
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-weight: 600;
-  font-size: 14px;
-  margin-bottom: 8px;
+.message.agent {
+  margin-left: 0;
+  margin-right: auto;
 }
 
 .message p {
@@ -374,6 +376,10 @@ textarea:focus-visible,
   text-align: right;
   color: #88857e;
   font-size: 11px;
+}
+
+.message.agent time {
+  text-align: left;
 }
 
 .run-summary {
@@ -473,32 +479,24 @@ textarea:focus-visible,
 .agent-panel.collapsed {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 18px;
-  padding-top: 26px;
+  justify-content: flex-start;
+  align-items: flex-end;
+  padding: 26px 8px 0 0;
 }
 
 .agent-panel.collapsed button {
   border: 0;
   background: transparent;
+  padding: 7px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 7px;
   cursor: pointer;
   color: #77746d;
 }
 
-.agent-panel.collapsed span {
-  writing-mode: vertical-rl;
-  font-family: "Noto Serif SC", "Songti SC", serif;
-  font-size: 13px;
-  letter-spacing: 0.08em;
-  color: #8b8881;
-}
-
-.lab-hotspot {
-  position: fixed;
-  left: 78px;
-  bottom: 21px;
-  color: #6e6c66;
-  z-index: 2;
+.agent-panel.collapsed button:hover {
+  background: #eceae4;
 }
 
 .notice {
