@@ -16,3 +16,4 @@ When implementing from a selected generated mock, treat that image as the source
 - Keep the volume-to-chapter tree independently scrollable while its project header, directory header, and bottom utility bar remain fixed. The prototype inspection control belongs in that bottom utility bar and must never overlay chapter rows.
 - Label the right conversation panel `写作助手`. When collapsed, render only the sidebar-toggle icon in the rail's upper-right corner, using the rounded split-panel icon style; do not keep a vertical text label in the rail.
 - Do not render explicit `你` or `Agent` labels above conversation messages. Distinguish roles spatially: writing-assistant messages align left and author messages align right.
+- Do not draw a focus outline around the full Tiptap manuscript root when the author clicks or edits prose; the caret and selection communicate editor focus, while buttons and text inputs retain visible keyboard focus treatment.
