@@ -77,7 +77,7 @@ A Run Hold caused by a safety guardrail such as repeated no progress, a retry st
 _Avoid_: Resource Hold, budget extension prompt, reset circuit breaker
 
 **Run Wait**:
-A durable, uniquely addressable unresolved dependency, such as author input, Approval, or an external result, that blocks only the work depending on it. Only a typed response bound to that exact Wait may resolve it; an AgentRun can remain active while another branch continues despite one or more Waits.
+A durable, uniquely addressable unresolved dependency, such as author input, Approval, an external result, or an exact Subrun observation condition, that blocks only the work depending on it. Only a typed response bound to that exact Wait may resolve it; a Subrun observation deadline ends only that observation and never changes the child or its Join, while independent branches may continue.
 _Avoid_: Run Hold, global paused state, in-memory waiter
 
 **Run Wakeup**:
@@ -92,6 +92,10 @@ _Avoid_: Generic reply, Steering Input, Run resume
 An immutable, ordered author instruction submitted to a nonterminal AgentRun for consideration at its next safe decision boundary. It never rewrites an existing Step Snapshot, Agent Decision, or confirmed effect; Pause, Cancel, Approval, and answers to exact Run Waits use their own typed commands instead.
 _Avoid_: Live prompt mutation, Run Pause, generic approval response
 
+**Subrun Interrupt**:
+An idempotent control command targeting the exact current Execution Attempt on one Subrun Run Lane, requesting cooperative interruption without creating a Hold, cancelling the Subrun, changing its lifecycle, or propagating to descendants. The Attempt and any uncertain Tool effects remain durable evidence, and subsequent work requires an explicit Recovery Decision.
+_Avoid_: Run Pause, Run Cancellation, process kill, Subrun Follow-up
+
 **Run Pause**:
 An author control that immediately creates a Run Hold, prevents new work from starting, and requests cooperative interruption of work that remains safe to cancel. The Hold propagates to descendant Subruns and preserves confirmed or uncertain effects; resuming the parent clears only the inherited Hold, not a child's own Hold or Wait.
 _Avoid_: Run Wait, process kill, Run Cancellation
@@ -101,7 +105,7 @@ An irreversible intent to stop an AgentRun that immediately prevents new work an
 _Avoid_: Run Pause, process kill, rollback
 
 **Run Finalization Gate**:
-The automatic, deterministic, idempotent host check that turns a persisted Agent Finalize Intent into one terminal Run Outcome only after all in-flight operations, required joins, Waits, Holds, reservations, effect uncertainties, final Artifacts, Proposals, provenance, and unfinished-work dispositions are durably settled. It requires no routine author confirmation, cannot be bypassed by a model completion claim, and can resume safely after a crash without duplicating output or terminal events.
+The automatic, deterministic, idempotent host check that turns a persisted Agent Finalize Intent into one terminal Run Outcome only after all in-flight operations, direct child Subruns, Required Joins, Subrun Result Dispositions, Waits, Holds, reservations, effect uncertainties, final Artifacts, Proposals, provenance, and unfinished-work dispositions are durably settled. It requires no routine author confirmation, cannot be bypassed by a model completion claim, and can resume safely after a crash without duplicating output or terminal events.
 _Avoid_: Author confirmation dialog, Approval, model-declared completion, conversation-turn end
 
 **Run Outcome**:
@@ -120,20 +124,80 @@ _Avoid_: Operating-system thread, worker, conversation thread, concurrent RunSte
 A renewable execution-ownership lease for one Run Lane carrying a monotonically increasing fencing token. State-changing writes require the current token, expected Run sequence, and an idempotency key, so a stale Worker cannot mutate the Run after recovery assigns a newer owner. Lease expiry permits reconciliation and takeover but proves neither ToolCall failure nor effect absence; the Lease is coordination metadata, never authority, budget, or durable execution truth.
 _Avoid_: Capability Grant, process lock as source of truth, ToolCall timeout, permission
 
+**Execution Capacity Reservation**:
+A durable atomic scheduler allocation permitting one exact RunStep or Execution Attempt to occupy execution capacity under the Host, project, root AgentRun, ancestor-budget, depth, and fan-out limits. It is bound to the current Run Lease fencing token and released when execution stops, waits, or holds; it is neither Subrun existence, lifecycle, authority, nor a resident model session.
+_Avoid_: Subrun count, Run Lease, Capability Grant, resident session
+
+**Subrun Request**:
+The immutable declaration in one Agent Decision that identifies one intended child execution under a stable request key. Repeated delivery of the same Request resolves to the same Subrun, while an intentional retry or repetition requires a new causally linked Request and never reopens a terminal Subrun.
+_Avoid_: Task name, objective text, spawn command, reopened Subrun
+
+**Subrun Lifecycle**:
+The minimal irreversible progression of every Subrun from Queued to Active to Terminal, with safe pre-start termination also permitted from Queued. Waits, Holds, recovery, cancellation, finalization, child-turn activity, and individual Attempt outcomes remain orthogonal records; only finalization with one immutable Subrun Result makes the Subrun Terminal.
+_Avoid_: Child-turn state, model-session status, worker status, phase-expanded lifecycle
+
+**Subrun Context Bundle**:
+The immutable, attributable, hard-bounded projection of exact project revisions, Artifacts, transcript fragments, Skill snapshots, and other context supplied to one Subrun. Parent context never flows into it implicitly; every later addition is a persisted bounded supplement applied only through a subsequent Step Snapshot.
+_Avoid_: Transcript fork, live parent context, implicit inheritance, prompt copy
+
+**Subrun Capability Grant**:
+The exact versioned attenuation requested for one Subrun and validated as a complete subset of the project policy ceiling, root AgentRun Grant, and every ancestor Subrun Capability Grant. Parent expansion never flows implicitly and prospective expansion requires an explicit new Grant Revision, while live policy, revocation, contract, and effect checks may still narrow execution.
+_Avoid_: Copied parent grant, inherited permission, credential set, permanent authorization
+
 **Subrun**:
-A durable hierarchical child execution within one root AgentRun, bound to an immutable direct parent and owning its own Run Lane, narrowed context and capabilities, budget slice, Waits, Holds, and typed outcome. It is not a top-level AgentRun, has no independent project-level grant, cannot outlive its root, and can never commit Authoritative State.
-_Avoid_: Child AgentRun, background process, cloned conversation, permanent Agent
+A durable hierarchical child execution within one root AgentRun, bound to an immutable direct parent and owning its own Run Lane, narrowed context and capabilities, budget slice, Waits, Holds, and typed outcome. It is not a top-level AgentRun, has no independent project-level grant, cannot be reparented or outlive its direct parent, and can never commit Authoritative State.
+_Avoid_: Child AgentRun, background process, cloned conversation, orphaned child, permanent Agent
+
+**Subrun Message**:
+An immutable typed communication record between one Subrun and its direct parent, carrying a stable Message ID, per-direction sequence, causal references, and a bounded payload or Artifact reference. Transport is at least once while durable reception and effects are idempotent by Message ID, and Delivered, Acknowledged, and Consumed remain distinct facts.
+_Avoid_: Transcript message, best-effort notification, sibling message, exactly-once transport
+
+**Queue-Only Subrun Message**:
+A Subrun Message whose delivery never schedules a RunStep or Run Wakeup and never interrupts current work. It may be explicitly consumed only in a later RunStep scheduled for another reason.
+_Avoid_: Subrun Follow-up, Steering Input, interrupt signal, trigger-turn flag
+
+**Subrun Progress Report**:
+An immutable hard-bounded Subrun Message that summarizes completed facts, current work, blockers, Artifact references, usage, and requested attention while citing an exact child-event range and watermark. It is informational rather than execution truth, Subrun Result, or Join Resolution; the parent must consume it explicitly, while full child events remain available only through bounded observability queries and the Author UI stream.
+_Avoid_: Transcript dump, raw log stream, guessed percentage, Subrun Result
+
+**Subrun Follow-up**:
+An immutable idempotent direct-parent control command that adds bounded pending work to an existing nonterminal Subrun and schedules a future RunStep. An idle child may be woken after admission, an active child receives the work only after its current RunStep reaches a safe boundary, and a terminal child rejects it rather than reopening.
+_Avoid_: Queue-Only Subrun Message, new Subrun Request, implicit interrupt, trigger-turn flag
 
 **Subrun Mailbox**:
-The durable, ordered, bounded channel for typed progress, observation, Artifact, question, plan-change proposal, task, cancellation, and terminal-result messages between one Subrun and its direct parent. It grants no shared writable state or direct author access; any author question is escalated by the root lane, while Tool Gateway may independently surface an exact Approval Wait for a child ToolCall.
+The durable, ordered, bounded channel for typed progress, observation, Artifact, question, plan-change proposal, queued context, terminal-result, and control-notice messages between one Subrun and its direct parent. It grants no shared writable state, direct author access, scheduling effect, or control authority; any author question is escalated by the root lane, while Tool Gateway may independently surface an exact Approval Wait for a child ToolCall.
 _Avoid_: Shared memory, cloned transcript, direct author chat, permission channel
 
+**Subrun Mailbox Backpressure**:
+The explicit durable admission condition raised when a Subrun Mailbox's ordinary unconsumed-count or payload-byte capacity is exhausted, rejecting new ordinary messages without silently dropping existing ones. A separate non-borrowable critical reserve protects terminal, safety, cancellation-settlement, and recovery notices, while Progress Report supersession may compact only the active projection and preserves its cited event history.
+_Avoid_: Silent message drop, unbounded queue, TTL cleanup, shared critical capacity
+
+**Subrun Mailbox Seal**:
+The durable terminal boundary proving that one root AgentRun has no unsettled Subrun deliveries and that every sender generation is closed at recorded directional high-watermarks. Message payload retention is independent, but Message ID deduplication evidence cannot be discarded by age before the Seal and may be compacted afterward only without losing the proof needed to reject replay.
+_Avoid_: TTL expiry, Inbox deletion, delivery acknowledgement, payload retention policy
+
+**Undeliverable Subrun Message**:
+A durable invariant-violation record created only when an exact direct parent's persistent identity or lifecycle cannot validly accept a Subrun Message after recovery. It preserves the message and reason, creates a root Safety Hold, and never reroutes delivery, reparents the child, or lets the root consume on the parent's behalf; an offline Worker or application is not undeliverable.
+_Avoid_: Transient parent outage, dropped message, root delivery, automatic reparenting
+
+**Subrun Outcome**:
+The immutable Succeeded, PartiallySucceeded, Failed, or Cancelled settlement of one Subrun against its exact completion criteria. PartiallySucceeded requires a usable deliverable and explicit unmet criteria, while waiting, interruption, and outcome-unknown effects are not outcomes and unresolved effect uncertainty blocks success.
+_Avoid_: Subrun Lifecycle, child-turn status, Run Outcome, OutcomeUnknown
+
+**Subrun Finalization Gate**:
+The automatic deterministic idempotent host check that may turn a persisted Subrun Finalize Intent into one terminal Subrun Outcome and Result only after its work, direct children and dispositions, Mailbox obligations, Waits, Holds, effects, reservations, usage, deliverables, provenance, and unfinished work are durably settled. It atomically records the Result, terminal Run Event, and direct-parent delivery intent, cannot be bypassed by a model completion claim, and returns the same settlement when recovered or retried.
+_Avoid_: Model-declared completion, child-turn end, author confirmation dialog, best-effort final message
+
 **Subrun Result**:
-The immutable typed terminal output of one Subrun, containing its outcome, produced Artifact references, observations, usage settlement, and unresolved effect evidence. It is delivered through the Subrun Mailbox and changes parent execution only after an explicit parent consumption record.
+The immutable hard-bounded typed terminal envelope of one Subrun, binding its Subrun Outcome and completion settlement to produced Artifact and Core Proposal references, observations, effects and disclosures, usage settlement, unresolved work, event range, exact contracts, context, capabilities, and provenance. Its persistence and terminal Mailbox delivery intent form one atomic transition, it never changes Authoritative State, and it affects parent execution only through one Subrun Result Disposition by its direct parent.
 _Avoid_: Final chat message, parent outcome, shared state mutation
 
+**Subrun Result Disposition**:
+The single immutable direct-parent record that settles one exact Subrun Result as Integrated, ConsideredNotUsed, Superseded, or UnconsumedByTermination, bound to the responsible parent RunStep and Agent Decision or to an exact host termination cause. Applicable results are presented in Subrun Request declaration order rather than completion order; disposition commits atomically with the parent decision when one exists, cannot be reopened, and later references do not create another disposition.
+_Avoid_: Mailbox consumption, implicit merge, retry request, multiple consumers
+
 **Subrun Join**:
-The parent-declared Required or Advisory dependency governing how a parent RunStep consumes one Subrun Result. Ordinary child failure never automatically fails the parent, while any outcome-unknown effect must escalate to the root AgentRun and prevent termination until reconciled or explicitly adjudicated.
+The immutable Required or Advisory dependency declared by the direct parent in one Subrun Request. Required prevents the creating RunStep from settling until any terminal Subrun Result exists, while Advisory permits it to settle; neither kind automatically merges the result or propagates child success or failure, and any outcome-unknown effect still escalates to the root AgentRun.
 _Avoid_: Failure propagation, thread join, implicit result merge
 
 **Step Snapshot**:
