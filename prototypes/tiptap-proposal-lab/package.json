@@ -6,13 +6,16 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "test": "node --test",
     "preview": "vite preview"
   },
   "dependencies": {
     "@fontsource/noto-sans-sc": "^5.2.9",
     "@fontsource/noto-serif-sc": "^5.2.8",
     "@phosphor-icons/react": "^2.1.10",
+    "@tiptap/core": "^3.27.3",
     "@tiptap/extension-unique-id": "^3.27.3",
+    "@tiptap/pm": "^3.27.3",
     "@tiptap/react": "^3.27.3",
     "@tiptap/starter-kit": "^3.27.3",
     "@vitejs/plugin-react": "5.0.4",

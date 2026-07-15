@@ -10,11 +10,10 @@ import {
   Check,
   GearSix,
   List,
-  MagnifyingGlass,
-  PaperPlaneRight,
   Plus,
   Sparkle,
   SidebarSimple,
+  UserCircle,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -24,7 +23,6 @@ import {
   initialMessages,
   initialProposal,
   proposalParagraphs,
-  STORAGE_KEY,
   volumes,
 } from "./data.js";
 import {
@@ -34,6 +32,15 @@ import {
   ProposalProjection,
   proposalPluginKey,
 } from "./proposal-extension.js";
+import {
+  captureRejectedProposalRevision,
+  createReopenProposalTransaction,
+} from "./proposal-revision.js";
+import {
+  clearPrototypeState,
+  loadPrototypeState,
+  savePrototypeState,
+} from "./prototype-storage.js";
 
 const STREAM_CHUNKS = [
   "可那行字像一根细针，",
@@ -41,15 +48,6 @@ const STREAM_CHUNKS = [
   "扎得他夜不能寐。",
   "他想起那人最后一次回头时的眼神。",
 ];
-
-function loadPrototypeState() {
-  try {
-    const saved = window.localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
-  } catch {
-    return null;
-  }
-}
 
 function timestamp() {
   return new Intl.DateTimeFormat("zh-CN", {
@@ -61,8 +59,8 @@ function timestamp() {
 
 function proposalStatusLabel(proposal) {
   if (proposal.resolution === "applied") return "已接受";
-  if (proposal.resolution === "rejected") return "已拒绝";
   if (proposal.validation === "conflicted") return "需要重新规划";
+  if (proposal.resolution === "rejected") return "已拒绝";
   if (proposal.generation === "generating") return "正在生成";
   if (proposal.generation === "ready_partial") return "生成已暂停";
   if (proposal.validation === "pending") return "正在检查";
@@ -131,16 +129,17 @@ function TreePanel({ activeChapter, expandedVolumes, onToggle, onSelect, onOpenL
       </nav>
 
       <footer className="tree-footer">
-        <button type="button" aria-label="搜索">
-          <MagnifyingGlass size={20} />
-        </button>
+        <div className="account-placeholder" aria-label="当前用户：作者">
+          <UserCircle size={21} weight="fill" />
+          <span>作者</span>
+        </div>
         <button
           type="button"
-          aria-label="打开原型检查"
+          aria-label="设置"
           data-testid="open-lab"
           onClick={onOpenLab}
         >
-          <GearSix size={20} />
+          <GearSix size={18} />
         </button>
       </footer>
     </aside>
@@ -185,75 +184,77 @@ function AgentPanel({
   draft,
   onDraftChange,
   onSend,
-  onCollapse,
   onUndoAcceptance,
   onReopenRejected,
 }) {
-  if (collapsed) {
-    return (
-      <aside className="agent-panel collapsed" aria-label="写作助手已收起">
-        <button type="button" onClick={onCollapse} aria-label="展开写作助手">
-          <SidebarSimple size={20} />
-        </button>
-      </aside>
-    );
-  }
-
   return (
-    <aside className="agent-panel" aria-label="写作助手对话">
-      <header className="agent-header">
-        <strong>写作助手</strong>
-        <button type="button" onClick={onCollapse} aria-label="收起写作助手">
-          <SidebarSimple size={20} />
-        </button>
-      </header>
+    <aside
+      id="writing-assistant-panel"
+      className="agent-panel"
+      aria-label={collapsed ? "写作助手已收起" : "写作助手对话"}
+    >
+      {!collapsed && (
+        <>
+          <header className="agent-header">
+            <strong>写作助手</strong>
+          </header>
 
-      <div className="message-list" aria-live="polite">
-        {messages.map((message) => (
-          <article key={message.id} className={`message ${message.role}`}>
-            <p>{message.text}</p>
-            <time>{message.time}</time>
-          </article>
-        ))}
+          <div className="message-list" aria-live="polite">
+            {messages.map((message) => (
+              <article key={message.id} className={`message ${message.role}`}>
+                <p>{message.text}</p>
+                <time>{message.time}</time>
+              </article>
+            ))}
 
-        <article className="run-summary" data-testid="run-summary">
-          <Sparkle size={17} weight="fill" />
-          <div>
-            <strong>写作建议 · 生成片段</strong>
-            <span>{proposalStatusLabel(proposal)} · r{proposal.revision}</span>
+            <article className="run-summary" data-testid="run-summary">
+              <Sparkle size={17} weight="fill" />
+              <div>
+                <strong>写作建议 · 生成片段</strong>
+                <span>{proposalStatusLabel(proposal)} · r{proposal.revision}</span>
+              </div>
+              <CaretDown size={15} />
+            </article>
+
+            {proposal.resolution === "applied" && (
+              <button className="transcript-action" type="button" onClick={onUndoAcceptance}>
+                撤销接受并重新打开提案
+              </button>
+            )}
+            {proposal.resolution === "rejected" && proposal.rejectedRevision && (
+              <button
+                className="transcript-action"
+                type="button"
+                onClick={onReopenRejected}
+                disabled={proposal.validation === "conflicted"}
+              >
+                {proposal.validation === "conflicted"
+                  ? "提案位置已变化，需要重新规划"
+                  : "重新打开刚才拒绝的提案"}
+              </button>
+            )}
           </div>
-          <CaretDown size={15} />
-        </article>
 
-        {proposal.resolution === "applied" && (
-          <button className="transcript-action" type="button" onClick={onUndoAcceptance}>
-            撤销接受并重新打开提案
-          </button>
-        )}
-        {proposal.resolution === "rejected" && (
-          <button className="transcript-action" type="button" onClick={onReopenRejected}>
-            重新打开刚才拒绝的提案
-          </button>
-        )}
-      </div>
-
-      <form className="composer" onSubmit={onSend}>
-        <textarea
-          value={draft}
-          onChange={(event) => onDraftChange(event.target.value)}
-          placeholder="告诉写作助手你想做什么…"
-          aria-label="给写作助手的消息"
-          rows={3}
-        />
-        <div className="composer-controls">
-          <button type="button" aria-label="添加上下文">
-            <Plus size={18} />
-          </button>
-          <button type="submit" className="send-button" aria-label="发送" disabled={!draft.trim()}>
-            <ArrowUp size={17} weight="bold" />
-          </button>
-        </div>
-      </form>
+          <div className="composer-dock">
+            <form className="composer" onSubmit={onSend}>
+              <textarea
+                value={draft}
+                onChange={(event) => onDraftChange(event.target.value)}
+                placeholder="告诉写作助手你想做什么…"
+                aria-label="给写作助手的消息"
+              />
+              <div className="composer-controls">
+                <button type="button" aria-label="添加上下文">
+                  <Plus size={16} />
+                </button>
+                <button type="submit" className="send-button" aria-label="发送" disabled={!draft.trim()}>
+                  <ArrowUp size={15} weight="bold" />
+                </button>
+              </div>
+            </form>
+          </div>
+        </>
+      )}
     </aside>
   );
 }
@@ -320,7 +321,6 @@ export function App() {
   const activeChapterRef = useRef(activeChapter);
   const runGateRef = useRef(false);
   const streamTimerRef = useRef(null);
-  const rejectedDocumentRef = useRef(null);
   const chapterDocumentsRef = useRef({
     ...chapterDocuments,
     "chapter-12": saved?.document ?? chapterTwelveDocument,
@@ -459,13 +459,11 @@ export function App() {
   useEffect(() => {
     if (!editor || activeChapter !== "chapter-12") return undefined;
     const timer = window.setTimeout(() => {
-      const snapshot = {
-        marker: "PROTOTYPE — safe to wipe",
+      savePrototypeState({
         document: editor.getJSON(),
         proposal,
         messages,
-      };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+      });
     }, 200);
     return () => window.clearTimeout(timer);
   }, [activeChapter, editor, messages, proposal]);
@@ -523,30 +521,83 @@ export function App() {
   const rejectProposal = () => {
     if (!editor) return;
     const envelope = findProposalEnvelope(editor.state.doc, proposal.blockIds);
-    if (!envelope) return;
+    const captured = captureRejectedProposalRevision({
+      doc: editor.state.doc,
+      proposalId: proposal.id,
+      proposalRevision: proposal.revision,
+      chapterId: activeChapter,
+      blockIds: proposal.blockIds,
+    });
+    if (!envelope || !captured.ok) {
+      setProposal((previous) => ({
+        ...previous,
+        validation: "conflicted",
+        conflictReason: captured.reason ?? "proposal_envelope_missing",
+      }));
+      addAgentMessage("当前提案片段不完整，StoryOS 没有执行破坏性删除；需要先重新规划提案范围。");
+      setNotice("提案范围已变化，未执行拒绝");
+      return;
+    }
 
-    rejectedDocumentRef.current = editor.getJSON();
     const transaction = editor.state.tr
       .delete(envelope.from, envelope.to)
-      .setMeta(PROPOSAL_META, { allow: true, source: "reject" });
+      .setMeta(PROPOSAL_META, { allow: true, source: "reject" })
+      .setMeta("addToHistory", false);
     editor.view.dispatch(transaction);
-    setProposal((previous) => ({ ...previous, resolution: "rejected" }));
+    setProposal((previous) => ({
+      ...previous,
+      resolution: "rejected",
+      validation: "valid",
+      conflictReason: null,
+      rejectedRevision: captured.revision,
+    }));
     addAgentMessage("已拒绝这次提案，章节正文没有被改写。你可以从这里重新打开它。");
     setNotice("已拒绝提案");
   };
 
   const reopenRejected = () => {
-    if (!editor || !rejectedDocumentRef.current) return;
-    replaceEditorDocument(editor, rejectedDocumentRef.current, "reopen_rejected");
+    if (!editor) return;
+
+    const rejectedRevision = proposalRef.current.rejectedRevision;
+    if (!rejectedRevision) {
+      addAgentMessage("被拒绝的修订记录不可用，因此没有改写当前章节。请重新生成一份提案。");
+      setNotice("没有可重新打开的提案修订");
+      return;
+    }
+
+    if (activeChapter !== rejectedRevision.chapterId) {
+      selectChapter(rejectedRevision.chapterId);
+    }
+
+    const reopened = createReopenProposalTransaction(
+      editor.state,
+      rejectedRevision,
+    );
+    if (!reopened.ok) {
+      setProposal((previous) => ({
+        ...previous,
+        validation: "conflicted",
+        conflictReason: reopened.reason,
+      }));
+      addAgentMessage("当前章节的提案锚点已经变化，StoryOS 没有猜测插入位置；需要基于现有正文重新规划。");
+      setNotice("提案位置已变化，需要重新规划");
+      return;
+    }
+
+    editor.view.dispatch(reopened.transaction);
     setProposal((previous) => ({
       ...previous,
       revision: previous.revision + 1,
+      blockIds: reopened.blockIds,
       resolution: "pending",
       generation: "ready",
       validation: "pending",
+      conflictReason: null,
+      derivedFromRevision: rejectedRevision.proposalRevision,
       creator: "author",
     }));
     addAgentMessage("已从被拒绝的历史内容创建新修订并重新打开，正在重新检查当前目标。");
+    setNotice("已重新打开提案");
   };
 
   const completePartial = () => {
@@ -639,10 +690,9 @@ export function App() {
     if (streamTimerRef.current) window.clearInterval(streamTimerRef.current);
     streamTimerRef.current = null;
     runGateRef.current = false;
-    window.localStorage.removeItem(STORAGE_KEY);
+    clearPrototypeState();
     if (editor) replaceEditorDocument(editor, chapterTwelveDocument, "prototype_reset");
     chapterDocumentsRef.current = { ...chapterDocuments };
-    rejectedDocumentRef.current = null;
     setActiveChapter("chapter-12");
     setProposal(initialProposal);
     setMessages(initialMessages);
@@ -713,10 +763,20 @@ export function App() {
         draft={draft}
         onDraftChange={setDraft}
         onSend={sendMessage}
-        onCollapse={() => setAgentCollapsed((value) => !value)}
         onUndoAcceptance={undoAcceptance}
         onReopenRejected={reopenRejected}
       />
+
+      <button
+        type="button"
+        className="assistant-toggle"
+        onClick={() => setAgentCollapsed((value) => !value)}
+        aria-controls="writing-assistant-panel"
+        aria-expanded={!agentCollapsed}
+        aria-label={agentCollapsed ? "展开写作助手" : "收起写作助手"}
+      >
+        <SidebarSimple size={20} />
+      </button>
 
       {notice && <div className="notice" role="status">{notice}</div>}
 

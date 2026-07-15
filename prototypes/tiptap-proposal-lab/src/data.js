@@ -1,5 +1,3 @@
-export const STORAGE_KEY = "storyos-prototype-tiptap-proposal-v1";
-
 export const volumes = [
   {
     id: "volume-1",
@@ -122,6 +120,9 @@ export const initialProposal = {
   lastAppliedStreamSeq: 8,
   pauseFence: null,
   baseRevision: "chapter-12-r7",
+  derivedFromRevision: null,
+  rejectedRevision: null,
+  conflictReason: null,
   creator: "agent",
 };
 
