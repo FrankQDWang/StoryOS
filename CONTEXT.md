@@ -388,6 +388,94 @@ _Avoid_: Permission flag, confirmation dialog, Acceptance, permanent project set
 An immutable result of StoryOS deterministically evaluating a request against already-effective project policy and Capability Grants. It may authorize an in-scope request or deny it, but it can never create, extend, or replace a Capability Grant; new authority requires author Approval.
 _Avoid_: Approval, policy-authored grant, implicit permission
 
+**Model Gateway**:
+The sole StoryOS-owned boundary through which any RunStep invokes a local or external model. It applies only an exact Model Route Decision, requires fallback to produce a new Decision, and never executes model-produced Tool requests; only a validated, persisted Agent Decision may derive ToolCalls for the Tool Gateway.
+_Avoid_: Provider client, model SDK, Tool Gateway, direct provider call
+
+**Model Provider Adapter**:
+The host-controlled protocol projection used by the Model Gateway to exchange one exact invocation with a local or external model provider and report provider-declared capabilities and failure evidence. It cannot decide retryability, select or substitute a model, initiate fallback, execute ToolCalls, grant authority, or become durable Run truth.
+_Avoid_: Provider Adapter, provider-owned router, silent fallback, Tool executor
+
+**Model Registration**:
+The host-owned, versioned routable identity that binds one stable StoryOS model reference to an exact Model Provider Adapter, provider endpoint and account boundary, provider model identifier, Credential Reference, and Model Capability Profile revision. An opaque provider alias remains explicitly unverifiable, any binding change creates a new Registration revision, and provider evidence that conflicts with an exact binding creates Model Failure rather than rewriting past Run evidence.
+_Avoid_: Model name, provider alias, deployment name, capability tier
+
+**Model Registration Status**:
+The durable Active, Quarantined, or Retired routing eligibility state of one exact Model Registration revision: only Active may enter a new Model Route Decision, Quarantined requires explicit Host revalidation, and Retired never returns to service. Status changes preserve past evidence; transient credential, quota, health, latency, and pricing facts belong to Model Operational Snapshot, while reintroducing a Retired binding requires a new Registration revision.
+_Avoid_: Provider health, credential availability, model version, mutable Registration
+
+**Model Capability Profile**:
+The immutable, versioned, provider-neutral semantic envelope trusted for one Model Registration, covering supported input and output modalities, context and output bounds, streaming, Tool-request and structured-output semantics and their exact native or Host-compiled projection modes, generation controls, and reportable usage dimensions. Provider claims enter it only through Host mapping or validation, and an unknown required capability makes the Registration ineligible.
+_Avoid_: Provider model card, Model Operational Snapshot, benchmark score, availability state
+
+**Model Operational Snapshot**:
+An immutable, attributable point-in-time observation of one Model Registration's current credential-reference availability, provider health, rate-limit or quota state, latency, pricing reference, and other dynamic routing facts. It may change current eligibility without changing the Registration or Model Capability Profile and never proves semantic capability.
+_Avoid_: Model Capability Profile, Model Registration, durable model identity
+
+**Model Routing Policy**:
+The immutable, versioned Host rule set that deterministically filters Model Registrations by hard Model Route Request requirements, then ranks eligible candidates by declared soft preferences with a stable tie-breaker. Models and providers cannot author it; benchmark or learned evidence must be explicit and versioned, while random or experimental routing requires a separately authorized policy rather than hidden selection.
+_Avoid_: Model recommendation, provider router, mutable score, implicit experiment
+
+**Model Route Request**:
+The immutable pre-sampling statement of hard model capabilities, context bounds, allowed provider and Outbound Disclosure destinations, budgets, and soft quality, latency, and cost preferences for one RunStep, assembled by the Host from its exact plan, Skills, author settings, policy, grants, and inputs. It names no executable model, grants no authority, and exists before that RunStep's Agent Decision.
+_Avoid_: Model name, prompt hint, Model Route Decision, model self-selection
+
+**Model Route Decision**:
+The immutable Host result that either selects one exact Model Registration revision for a Model Route Request or records that no eligible route exists, binding the Model Routing Policy revision, complete evaluated candidate set and reasons, Capability Profiles, Operational Snapshots, grants, budgets, and comparison evidence used. It precedes sampling, cannot be authored by a model, and every fallback requires a new Decision over the same hard requirements.
+_Avoid_: Model suggestion, mutable route, provider fallback, load-balancer choice
+
+**Model Route Override**:
+An immutable root-AgentRun-scoped author setting captured as Automatic, Prefer an exact Model Registration revision, or Require that revision, and applied prospectively to every Model Route Request in the whole execution tree; descendant Subruns may only add narrower requirements. It never bypasses capability, disclosure, grant, budget, credential, or policy eligibility; Prefer may allow another Route Decision, while Require records no eligible route instead of falling back.
+_Avoid_: Optional model ID, mutable active model, Capability Grant, provider fallback
+
+**Model Fallback**:
+The Host-controlled admission of a successor Model Attempt for the same Model Invocation using a different exact Model Registration revision after a new Model Route Decision re-evaluates the unchanged Model Route Request. It never relaxes hard requirements, never repeats a Registration revision within one fallback chain, remains bounded by all Run budgets and overrides, and cannot be delegated to a provider router or SDK.
+_Avoid_: Same-route retry, provider substitution, capability downgrade, fallback loop
+
+**Model Invocation**:
+The single logical request by one RunStep to obtain one Agent Decision under an immutable Model Route Request, owning the ordered Model Attempts and their derived aggregate outcome and usage. Provider completion terminates only its Attempt; the Invocation succeeds only when the Host validates and durably records one typed Agent Decision, and a later successful Attempt never erases earlier evidence.
+_Avoid_: Provider request, Model Attempt, model response blob, retry counter
+
+**Model Attempt**:
+The model-specific Execution Attempt durably established before one concrete provider submission under one exact Model Route Decision, binding its request and disclosure evidence to the resulting stream, provider identifiers, partial output, usage, uncertainty, and terminal outcome. Retrying the same Registration appends an Attempt, while fallback also requires a new Model Route Decision; outputs from separate Attempts are never silently concatenated.
+_Avoid_: Model Invocation, provider retry counter, overwritten request, merged fallback response
+
+**Model Attempt Request**:
+The immutable provider-neutral effective request for one Model Attempt, binding its exact Step Snapshot, ContextManifest, prompt and output contracts, Tool Exposure and ToolSpec digests, generation controls, streaming mode, output bounds, Model Route Decision, and parameter provenance or default state. Its Adapter projection records the mapping and wire-request digests without silently changing required semantics; ordinary retry preserves the semantic digest, repair creates a new Request, and fallback may change only the provider projection.
+_Avoid_: Model Route Request, mutable prompt, provider payload as canonical contract, silent default
+
+**Model Attempt Cancellation**:
+An immutable Host cancellation fence persisted before any best-effort provider abort, permanently preventing its Model Attempt from supplying an Agent Decision. It distinguishes confirmed non-submission or provider-confirmed cancellation from OutcomeUnknown after possible submission, retains partial and late evidence for reconciliation, and permits no successor without a Recovery Decision or after Run Cancellation.
+_Avoid_: Closing a stream, confirmed provider stop, discarded output, automatic retry
+
+**Model Repair Attempt**:
+A bounded successor Model Attempt within the same Model Invocation whose only semantic addition is Host-generated validation diagnostics for a completed output that could not form an Agent Decision. It retains the exact RunStep objective, Step Snapshot, Model Route Request, Tool Exposure, capability, and authority boundaries while creating fresh request, disclosure, and budget evidence; changing any retained boundary requires a new RunStep and Model Invocation.
+_Avoid_: Replan, expanded prompt, hidden context injection, ordinary retry
+
+**Model Stream Event**:
+An immutable, provider-neutral observation in one Model Attempt's strictly ordered Host sequence, preserving provider correlation and whether its content is provisional or terminal. The Author UI projects the same sequence; partial text, reasoning summaries, and Tool arguments remain evidence only until a complete Agent Decision is validated, while raw provider traffic is optional diagnostics rather than durable Run truth.
+_Avoid_: UI token, raw SSE frame, transcript entry, Agent Decision
+
+**Model Tool Request**:
+A provider-neutral candidate inside one complete model output that names an exposed Tool and supplies its business arguments without creating authority or a ToolCall. Native and Host-compiled requests share this form; the Host validates the entire requested batch against the exact Step Snapshot before persisting the Agent Decision and idempotently deriving independently authorized ToolCalls, while any invalid member rejects the whole batch.
+_Avoid_: ToolCall, provider function frame, executable request, provider-hosted Tool
+
+**Model Failure**:
+An immutable, provider-neutral evidence record bound to the applicable Model Route Request, Model Route Decision, or Model Attempt, identifying failure phase, submission certainty, provider correlation and status, retry hints, partial output, and original diagnostics without granting retry or fallback. Provider refusal is a completed semantic result rather than a Model Failure; only a Host Recovery Decision may choose same-route retry, repair, Hold, termination, or fallback through a new Model Route Decision.
+_Avoid_: Provider error string, retryable flag, refusal, Recovery Decision
+
+**Model Attempt Outcome**:
+The immutable settlement of one Model Attempt from provider and stream evidence, distinguishing a confirmed result from OutcomeUnknown. An unknown Attempt is never ordinary failure or zero usage; a successor may be admitted only after live revalidation, a new Outbound Disclosure record, and budget reservation for both Attempts, after which the predecessor can supply only late reconciliation evidence rather than an Agent Decision.
+_Avoid_: HTTP status, missing terminal event, inferred failure, retry permission
+
+**Model Usage Settlement**:
+An immutable per-Attempt accounting record that distinguishes provider-reported, Host-estimated, and unknown usage and cost, while Model Invocation totals remain derived from all Attempts. OutcomeUnknown retains its enforceable worst-case Budget Reservation until later evidence confirms consumption or releases unused headroom, and absence of evidence never settles it as zero.
+_Avoid_: Provider invoice, optimistic token estimate, Invocation-only total, cleared reservation
+
+**Model Telemetry Projection**:
+A sampleable, droppable, and redactable traces, metrics, or logs view derived from durable Model Invocation, Model Attempt, routing, stream, failure, disclosure, and usage records. It may correlate provider and transport identifiers but never supplies StoryOS identity, authority, recovery, budget settlement, audit truth, or Author UI state.
+_Avoid_: Durable Run evidence, provider log as truth, recovery source, audit ledger
+
 **StoryOS ToolSpec**:
 The provider-neutral, versioned semantic contract for one Tool, consisting only of its callable input, output, and error contract, Tool Effect Envelope, execution policy, and result and provenance rules. Implementation source and credentials belong to Tool Registration, while project enablement, provider compatibility, Exposure, grants, Approval, pricing, and invocation state remain separate dynamic records.
 _Avoid_: Provider function schema, Tool Registration, installed tool, ToolCall
