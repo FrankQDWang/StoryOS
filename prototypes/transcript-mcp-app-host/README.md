@@ -1,6 +1,6 @@
 # Transcript-embedded MCP App host prototype
 
-> **THROWAWAY PROTOTYPE — do not merge this branch into `main`.**
+> **DISPOSABLE RESEARCH PROTOTYPE — executable evidence only; not production runtime.**
 
 ## Question
 
