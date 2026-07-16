@@ -463,21 +463,39 @@ Tool Artifacts contain only durable outputs that lack a more specific Core Artif
 
 ### 10.3 App View Artifacts
 
-An App View Artifact Revision is a reproducible View Descriptor containing:
+An App View Artifact is a reproducible View Descriptor whose immutable Revisions use
+the `Prepared | Terminal` stages defined by
+[ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md).
+Each Revision contains or references:
 
 ```text
-ui_resource_uri
-ui_resource_digest
-protocol_version
+app_ui_resource_revision_ref
+protocol_profile
+app_view_capability_snapshot_ref
 input_artifact_revision_refs[]
-host_context_snapshot
+authorized_host_context_snapshot
 persisted_view_state?
-static_fallback
+stage:
+  Prepared { app_view_prepared_receipt_ref }
+  Terminal { terminal_outcome_ref, app_static_fallback }
 ```
 
-Persisted view state conforms to a declared versioned schema. StoryOS does not persist a live DOM, JavaScript heap, cookies, temporary credentials, or arbitrary local storage. App actions go through Host-mediated ToolCalls and may produce new Artifacts or Proposals; they never mutate authoritative domain data or rewrite a historical App View Revision.
+The Prepared Receipt is a minimal Operational Record rather than a rich fallback. A
+Terminal Revision cannot be exposed through a Message until its safe StoryOS-rendered
+static fallback is durable and valid. Persisted view state conforms to a declared
+versioned schema. StoryOS does not persist a live DOM, JavaScript heap, cookies,
+temporary credentials, arbitrary local storage, or pending bridge callbacks.
 
-`host_context_snapshot` contains only non-sensitive values actually authorized and disclosed for that specific App invocation; it is not a copy of global Host state.
+Every iframe or renderer is a disposable App View Instance bound to one exact
+Revision. Reload and reconnect create a new Instance and never re-execute the
+originating ToolCall. App actions enter through a durable App Action Request and the
+normal Host command, AgentRun, Tool Gateway, Proposal, and Acceptance boundaries;
+they never inherit the originating Run's authority, mutate authoritative domain data,
+or rewrite a historical App View Revision.
+
+`authorized_host_context_snapshot` contains only non-sensitive values actually
+authorized and disclosed for that specific App invocation; it is not a copy of global
+Host state.
 
 ## 11. Retention, deletion, and provenance gaps
 
