@@ -1,118 +1,294 @@
 // One author-facing Transcript slice around the existing host/recovery harness.
-// The visual direction is already fixed; this is not a multi-variant UI exploration.
+// The shell follows the approved StoryOS workspace; the Transcript hierarchy
+// follows the low-chrome conversational pattern used by Codex.
 export function transcriptPage({ sandboxOrigin }) {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>写作助手 · StoryOS</title>
+  <title>第十二章 · StoryOS</title>
   <style>
     :root {
-      color: #24231f;
-      background: #fbfbfa;
-      font-family: "Noto Sans SC", "PingFang SC", system-ui, sans-serif;
+      color: #26241f;
+      background: #fbfaf8;
+      font-family: "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
       font-synthesis: none;
-      --canvas: #fbfbfa;
-      --assistant-panel: #f9f8f7;
-      --author-surface: #f5f3f2;
-      --activity-surface: #f6f5f4;
-      --line: #ece9e5;
+      --paper: #fbfaf8;
+      --side: #f8f7f4;
+      --agent: #faf9f7;
+      --soft: #f1efec;
+      --proposal: #f3f1ee;
+      --line: rgba(62, 59, 53, .11);
       --ink: #292722;
-      --muted: #7f7b73;
-      --faint: #a5a199;
+      --muted: #77736b;
+      --faint: #aaa69e;
     }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
-    body { margin: 0; overflow: hidden; background: var(--canvas); }
+    body { margin: 0; overflow: hidden; background: var(--paper); }
     button, textarea { font: inherit; }
     button { color: inherit; }
-    button:focus-visible, textarea:focus-visible { outline: 2px solid #78756e; outline-offset: 2px; }
-    .workspace-edge { width: 100vw; height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr) clamp(390px, 31vw, 452px); }
-    .manuscript-context { min-width: 0; padding: 78px clamp(44px, 8vw, 130px); overflow: hidden; color: #3d3a34; }
-    .manuscript-context article { width: min(680px, 100%); margin: 0 auto; opacity: .72; }
-    .manuscript-context h1 { margin: 0 0 42px; font: 600 30px/1.3 "Noto Serif SC", "Songti SC", serif; letter-spacing: .04em; }
-    .manuscript-context p { margin: 0 0 25px; font: 16px/2.15 "Noto Serif SC", "Songti SC", serif; }
-    .assistant-panel { min-width: 0; height: 100dvh; display: grid; grid-template-rows: 40px minmax(0, 1fr) auto; border-left: 1px solid var(--line); background: var(--assistant-panel); }
-    .assistant-header { position: relative; z-index: 2; display: flex; align-items: center; padding: 0 28px; border-bottom: 1px solid rgba(74,71,66,.1); background: var(--assistant-panel); }
-    .assistant-header::after { content: ""; position: absolute; top: 100%; right: 0; left: 0; height: 18px; background: linear-gradient(to bottom, var(--assistant-panel), rgba(249,248,247,0)); pointer-events: none; }
-    .assistant-header strong { font: 600 17px/1 "Noto Serif SC", "Songti SC", serif; }
-    .message-list { min-height: 0; overflow-y: auto; padding: 25px 27px 42px; scrollbar-width: thin; }
-    .message { width: min(100%, 340px); margin-bottom: 28px; color: #3c3a35; }
-    .message p { margin: 0; font: 14px/1.85 "Noto Serif SC", "Songti SC", serif; }
-    .message time { display: block; margin-top: 8px; color: #97938b; font-size: 11px; }
-    .message.author { margin-left: auto; padding: 16px 17px 10px; border-radius: 13px; background: var(--author-surface); }
-    .message.author time { text-align: right; }
-    .message.agent { margin-right: auto; }
-    .activity-row { display: grid; grid-template-columns: 19px 1fr auto; gap: 10px; align-items: center; margin: 4px 0 14px; padding: 12px 13px; border-radius: 10px; background: var(--activity-surface); color: #4b4842; }
-    .activity-icon { display: grid; place-items: center; width: 19px; height: 19px; color: #6f6b63; }
-    .activity-row strong { display: block; font-size: 12px; font-weight: 500; }
-    .activity-row span { color: #908c84; font-size: 11px; }
-    .app-shell { margin: 0 0 26px; overflow: hidden; border: 1px solid #dfdcd7; border-radius: 13px; background: #f6f5f3; }
-    .app-shell iframe { display: block; width: 100%; height: 266px; border: 0; background: #f6f5f3; }
-    .fallback { padding: 17px; }
-    .fallback h2 { margin: 0 0 8px; font-size: 14px; }
-    .fallback p { margin: 0 0 8px; color: #65625b; font-size: 13px; line-height: 1.7; }
-    .fallback small { color: #938f87; }
-    .approval { margin: 0 0 28px; padding: 15px; border: 1px solid #dcd8d2; border-radius: 12px; background: rgba(255,255,255,.72); }
-    .approval-kicker { display: block; margin-bottom: 7px; color: #77736b; font-size: 11px; }
-    .approval strong { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 600; }
-    .approval p { margin: 0; color: #68645d; font-size: 12px; line-height: 1.7; }
-    .approval-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
-    .approval-actions button { padding: 7px 11px; border: 1px solid #d6d2cc; border-radius: 8px; background: transparent; cursor: pointer; font-size: 12px; }
-    .approval-actions button.primary { border-color: #3e3b36; background: #3e3b36; color: white; }
-    .approval-actions button:hover { filter: brightness(.96); }
-    .boundary-note { margin: -10px 0 28px; padding-left: 12px; border-left: 2px solid #c7c2ba; color: #69665f; font-size: 12px; line-height: 1.75; }
-    .boundary-note strong { display: block; color: #45423c; font-weight: 500; }
-    .composer-dock { position: relative; z-index: 1; padding: 0 20px 14px; background: var(--assistant-panel); }
-    .composer-dock::before { content: ""; position: absolute; right: 0; bottom: 100%; left: 0; height: 24px; background: linear-gradient(to bottom, rgba(249,248,247,0), var(--assistant-panel)); pointer-events: none; }
-    .composer { border: 1px solid #dfdcd7; border-radius: 14px; background: rgba(255,255,255,.72); box-shadow: 0 10px 30px rgba(54,51,46,.07), 0 1px 2px rgba(54,51,46,.04); overflow: hidden; }
-    .composer textarea { width: 100%; min-height: 54px; resize: none; border: 0; background: transparent; padding: 11px 14px 5px; outline: none; color: #77736c; font-size: 13px; line-height: 1.6; }
-    .composer textarea::placeholder { color: #aaa7a0; }
-    .composer-footer { display: flex; justify-content: space-between; padding: 2px 8px 8px; }
-    .circle { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 1px solid #b5b2ac; border-radius: 50%; background: transparent; color: #6e6b65; }
-    .circle.send { border-color: #aaa7a0; background: #aaa7a0; color: white; opacity: .5; }
-    @media (max-width: 760px) {
-      .workspace-edge { grid-template-columns: 1fr; }
-      .manuscript-context { display: none; }
-      .assistant-panel { border-left: 0; }
+    button:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid #77736c;
+      outline-offset: 3px;
+    }
+    .workspace {
+      width: 100vw;
+      height: 100dvh;
+      display: grid;
+      grid-template-columns: 222px minmax(500px, 1fr) clamp(404px, 33vw, 456px);
+      background: var(--paper);
+    }
+    .manuscript-tree {
+      min-width: 0;
+      overflow: hidden;
+      border-right: 1px solid var(--line);
+      background: var(--side);
+      color: #56524a;
+    }
+    .project-name {
+      height: 58px;
+      display: flex;
+      align-items: center;
+      padding: 0 22px;
+      color: #403d37;
+      font: 600 14px/1.2 "Noto Serif SC", "Songti SC", serif;
+    }
+    .tree-heading {
+      margin: 29px 22px 17px;
+      color: #817d75;
+      font-size: 12px;
+    }
+    .tree-list { margin: 0; padding: 0 10px; list-style: none; }
+    .tree-list li { padding: 7px 12px 7px 24px; font: 13px/1.45 "Noto Serif SC", "Songti SC", serif; }
+    .tree-list .volume { padding-left: 12px; color: #3f3c36; font-weight: 600; }
+    .tree-list .active {
+      border-radius: 7px;
+      background: #eceae6;
+      box-shadow: inset 2px 0 #4d4942;
+      color: #26241f;
+      font-weight: 600;
+    }
+    .editor {
+      min-width: 0;
+      overflow-y: auto;
+      padding: 76px clamp(48px, 7vw, 104px) 96px;
+      scrollbar-width: thin;
+    }
+    .editor article { width: min(690px, 100%); margin: 0 auto; }
+    .editor h1 {
+      margin: 0 0 42px;
+      color: #282620;
+      font: 600 31px/1.35 "Noto Serif SC", "Songti SC", serif;
+      letter-spacing: .04em;
+    }
+    .editor p {
+      margin: 0 0 23px;
+      color: #4b4841;
+      font: 16px/2.08 "Noto Serif SC", "Songti SC", serif;
+    }
+    .editor-proposal {
+      margin: 26px 0 30px;
+      padding: 18px 21px;
+      background: var(--proposal);
+      box-shadow: inset 2px 0 #706b63;
+    }
+    .editor-proposal[hidden] { display: none; }
+    .editor-proposal small {
+      display: block;
+      margin-bottom: 9px;
+      color: #858078;
+      font-size: 11px;
+    }
+    .editor-proposal p { margin: 0; color: #37342e; }
+    .agent-panel {
+      min-width: 0;
+      height: 100dvh;
+      display: grid;
+      grid-template-rows: 58px minmax(0, 1fr) auto;
+      overflow: hidden;
+      border-left: 1px solid var(--line);
+      background: var(--agent);
+    }
+    .agent-header { display: flex; align-items: center; padding: 0 30px; }
+    .agent-header strong { font: 600 17px/1 "Noto Serif SC", "Songti SC", serif; }
+    .transcript {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 20px 30px 26px;
+      scrollbar-width: thin;
+    }
+    .author-message {
+      width: min(100%, 330px);
+      margin: 0 0 38px auto;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: var(--soft);
+      color: #3d3a34;
+    }
+    .author-message p,
+    .agent-turn > p {
+      margin: 0;
+      font: 14px/1.8 "Noto Serif SC", "Songti SC", serif;
+    }
+    .agent-turn { color: #3b3832; }
+    .activity {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin: 18px 0 13px;
+      color: #858078;
+      font-size: 12px;
+    }
+    .activity span:last-child { color: #7d7870; }
+    .app-shell {
+      margin: 0 0 25px;
+      overflow: hidden;
+      border-radius: 16px;
+      background: var(--soft);
+    }
+    .app-shell iframe {
+      display: block;
+      width: 100%;
+      height: 224px;
+      border: 0;
+      background: var(--soft);
+    }
+    .fallback { padding: 19px 20px 20px; }
+    .fallback h2 { margin: 0 0 9px; font-size: 15px; font-weight: 600; }
+    .fallback p { margin: 0 0 7px; color: #5f5b54; font-size: 13px; line-height: 1.7; }
+    .fallback small { color: #8f8a82; font-size: 11px; }
+    .approval { margin: 0 0 30px; }
+    .approval-kicker { display: block; margin-bottom: 8px; color: #8a857d; font-size: 11px; }
+    .approval strong { display: block; margin-bottom: 7px; font-size: 15px; font-weight: 600; }
+    .approval p { margin: 0; color: #68645d; font-size: 12px; line-height: 1.75; }
+    .approval-actions { display: flex; align-items: center; gap: 8px; margin-top: 15px; }
+    .approval-actions button {
+      min-height: 34px;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 10px;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .approval-actions button:hover { background: #efede9; }
+    .approval-actions button.primary { background: #34312c; color: #fff; }
+    .approval-actions button.primary:hover { background: #24221e; }
+    .boundary-note {
+      margin: 0 0 30px;
+      color: #67635c;
+      font-size: 13px;
+      line-height: 1.75;
+    }
+    .boundary-note strong { display: block; margin-bottom: 3px; color: #35322d; font-weight: 600; }
+    .text-action {
+      margin: 9px 0 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #4e4a43;
+      cursor: pointer;
+      font-size: 12px;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+    .composer-dock { padding: 0 20px 16px; background: var(--agent); }
+    .composer {
+      overflow: hidden;
+      border: 1px solid rgba(71, 67, 60, .17);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, .72);
+      box-shadow: 0 8px 24px rgba(44, 41, 36, .06);
+    }
+    .composer textarea {
+      width: 100%;
+      min-height: 54px;
+      resize: none;
+      border: 0;
+      background: transparent;
+      padding: 12px 14px 6px;
+      outline: none;
+      color: #77736c;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .composer textarea::placeholder { color: #817d75; }
+    .composer-footer { display: flex; justify-content: space-between; padding: 1px 10px 9px; }
+    .composer-footer button {
+      padding: 2px 4px;
+      border: 0;
+      background: transparent;
+      color: #817d75;
+      font-size: 11px;
+    }
+    @media (max-width: 1050px) {
+      .workspace { grid-template-columns: minmax(500px, 1fr) minmax(390px, 430px); }
+      .manuscript-tree { display: none; }
+    }
+    @media (max-width: 780px) {
+      .workspace { grid-template-columns: 1fr; }
+      .editor { display: none; }
+      .agent-panel { border-left: 0; }
+      .transcript { padding-right: 24px; padding-left: 24px; }
+      .text-action { display: none; }
     }
   </style>
 </head>
 <body>
-  <main class="workspace-edge">
-    <section class="manuscript-context" aria-label="正文上下文">
+  <main class="workspace">
+    <nav class="manuscript-tree" aria-label="稿件目录">
+      <div class="project-name">雾尽时与月同归</div>
+      <div class="tree-heading">目录</div>
+      <ul class="tree-list">
+        <li class="volume">卷二　风起</li>
+        <li>第九章　迷雾</li>
+        <li>第十章　亡局</li>
+        <li>第十一章　暗涌</li>
+        <li class="active" aria-current="page">第十二章　雨夜</li>
+        <li>第十三章　归期</li>
+        <li>第十四章　破晓</li>
+      </ul>
+    </nav>
+
+    <section class="editor" aria-label="正文编辑器">
       <article>
         <h1>第十二章　雨夜</h1>
         <p>雨下得很大，城外的灯火被水汽揉成一片模糊的光。</p>
         <p>苏砚站在廊下，望着巷口渐深的夜色，迟迟没有迈步。</p>
         <p>旧仓在城西，早年是官府的粮仓，如今半废，杂草丛生。</p>
+        <section class="editor-proposal" id="editor-proposal" tabindex="-1" hidden>
+          <small>待审阅提案 · 尚未写入正文</small>
+          <p id="editor-proposal-text"></p>
+        </section>
+        <p>风从城墙的裂缝里钻出来，带着潮湿的土腥味。</p>
       </article>
     </section>
-    <aside class="assistant-panel" aria-label="写作助手对话">
-      <header class="assistant-header"><strong>写作助手</strong></header>
-      <div class="message-list" id="message-list" aria-live="polite">
-        <article class="message author">
+
+    <aside class="agent-panel" aria-label="Agent 对话">
+      <header class="agent-header"><strong>Agent</strong></header>
+      <div class="transcript" id="message-list" aria-live="polite">
+        <article class="author-message">
           <p>看看项目里有哪些资料可以用于这一章。</p>
-          <time>刚刚</time>
         </article>
-        <article class="message agent">
-          <p>我查看了当前项目，可以直接使用正文、人物卡和研究资料。</p>
-        </article>
-        <div class="activity-row" aria-label="工具活动">
-          <span class="activity-icon">✦</span>
-          <div><strong>读取项目资料</strong><span>3 个资料源</span></div>
-          <span>完成</span>
-        </div>
-        <div class="app-shell" id="app-slot" aria-label="资料库 App"></div>
-        <div id="host-flow"></div>
+        <section class="agent-turn">
+          <p>我找到了当前正文、人物卡和研究资料，可以直接用于这一章。</p>
+          <div class="activity" aria-label="工具活动">
+            <span>读取项目资料</span>
+            <span>3 个来源</span>
+          </div>
+          <div class="app-shell" id="app-slot" aria-label="资料库 App"></div>
+          <div id="host-flow"></div>
+        </section>
       </div>
       <div class="composer-dock">
         <div class="composer">
-          <textarea aria-label="给写作助手的消息" placeholder="告诉写作助手你想做什么…" disabled></textarea>
+          <textarea aria-label="给 Agent 的消息" placeholder="继续对话…" disabled></textarea>
           <div class="composer-footer">
-            <button class="circle" type="button" aria-label="添加上下文" disabled>＋</button>
-            <button class="circle send" type="button" aria-label="发送" disabled>↑</button>
+            <button type="button" disabled>添加上下文</button>
+            <button type="button" disabled>发送</button>
           </div>
         </div>
       </div>
@@ -123,6 +299,8 @@ export function transcriptPage({ sandboxOrigin }) {
     const appSlot = document.querySelector("#app-slot");
     const hostFlow = document.querySelector("#host-flow");
     const messageList = document.querySelector("#message-list");
+    const editorProposal = document.querySelector("#editor-proposal");
+    const editorProposalText = document.querySelector("#editor-proposal-text");
     let snapshot = null;
     let sandboxFrame = null;
     let rejectedMessages = 0;
@@ -131,6 +309,7 @@ export function transcriptPage({ sandboxOrigin }) {
       snapshot = await fetch("/api/snapshot").then((response) => response.json());
       renderApp(snapshot.durable.appViews[0] ?? null);
       renderHostFlow(snapshot.durable);
+      renderEditorState(snapshot.durable);
     }
 
     function renderApp(view) {
@@ -168,11 +347,11 @@ export function transcriptPage({ sandboxOrigin }) {
       hostFlow.replaceChildren();
       const unresolved = state.waits.find((wait) => wait.status === "unresolved");
       if (unresolved) {
-        const card = document.createElement("section");
-        card.className = "approval";
-        card.innerHTML = "<span class='approval-kicker'>需要你的批准</span><strong>生成一份正文修改提案</strong><p>资料库希望基于刚才读取的资料提出修改。批准只会创建可审阅提案，不会改写正文。</p><div class='approval-actions'><button type='button' data-action='reject'>拒绝</button><button type='button' class='primary' data-action='approve'>允许生成提案</button></div>";
-        card.dataset.waitId = unresolved.id;
-        hostFlow.append(card);
+        const approval = document.createElement("section");
+        approval.className = "approval";
+        approval.innerHTML = "<span class='approval-kicker'>StoryOS 需要确认</span><strong>允许资料库创建正文提案？</strong><p>允许后只会把提案放进编辑器，正文不会自动改变。</p><div class='approval-actions'><button type='button' data-action='reject'>拒绝</button><button type='button' class='primary' data-action='approve'>允许</button></div>";
+        approval.dataset.waitId = unresolved.id;
+        hostFlow.append(approval);
         return;
       }
 
@@ -181,7 +360,7 @@ export function transcriptPage({ sandboxOrigin }) {
       if (latestProposal?.status === "awaiting_author_acceptance") {
         const note = document.createElement("div");
         note.className = "boundary-note";
-        note.innerHTML = "<strong>提案已生成</strong>请在正文编辑器中查看、修改、接受或拒绝。Transcript 不会替你改写正文。";
+        note.innerHTML = "<strong>提案已放进编辑器</strong>它仍未写入正文，需要你在正文中继续审阅。<br><button class='text-action' type='button' data-action='view-proposal'>查看提案</button>";
         hostFlow.append(note);
       } else if (rejectedResolution) {
         const note = document.createElement("div");
@@ -191,16 +370,27 @@ export function transcriptPage({ sandboxOrigin }) {
       }
     }
 
+    function renderEditorState(state) {
+      const proposal = state.proposals.find((candidate) => candidate.status === "awaiting_author_acceptance");
+      editorProposal.hidden = !proposal;
+      editorProposalText.textContent = proposal?.requestedEdit ?? "";
+    }
+
     hostFlow.addEventListener("click", async (event) => {
       const button = event.target.closest("button[data-action]");
       if (!button) return;
-      const card = button.closest(".approval");
+      if (button.dataset.action === "view-proposal") {
+        editorProposal.scrollIntoView({ behavior: "smooth", block: "center" });
+        editorProposal.focus({ preventScroll: true });
+        return;
+      }
+      const approval = button.closest(".approval");
       const path = button.dataset.action === "approve" ? "/api/approve" : "/api/reject";
       button.disabled = true;
       await fetch(path, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ waitId: card.dataset.waitId })
+        body: JSON.stringify({ waitId: approval.dataset.waitId })
       });
       await refresh();
       messageList.scrollTop = messageList.scrollHeight;
