@@ -1,0 +1,10 @@
+{
+  "name": "storyos-transcript-mcp-app-host-prototype",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/supervisor.mjs",
+    "matrix": "node src/supervisor.mjs --matrix"
+  }
+}
