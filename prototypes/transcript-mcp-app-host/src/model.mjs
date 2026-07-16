@@ -45,6 +45,7 @@ export function reduce(current, action) {
     interrupt_call: interruptCall,
     record_bridge_denial: recordBridgeDenial,
     record_evidence: recordEvidence,
+    reject_wait: rejectWait,
     resolve_wait_to_proposal: resolveWaitToProposal,
     simulate_resource_loss: simulateResourceLoss,
     start_interruptible_call: startInterruptibleCall,
@@ -143,7 +144,7 @@ function bootstrapCompleted(state, action) {
     effectiveCapabilities: ["tools/call:story.request_edit"],
     inputRevision: "tool-input-library-r1",
     resultRevision: "tool-result-library-r1",
-    hostContext: { theme: "light", locale: "en", displayMode: "inline" },
+    hostContext: { theme: "light", locale: "zh-CN", displayMode: "inline" },
     resource: {
       uri: action.resource.uri,
       mimeType: action.resource.mimeType,
@@ -152,7 +153,7 @@ function bootstrapCompleted(state, action) {
     },
     structuredResult: action.result.structuredContent,
     staticFallback: {
-      title: "Library summary",
+      title: "可用资料",
       text: action.result.content[0].text,
       provenance: "tool-library-1 / tool-result-library-r1"
     }
@@ -245,6 +246,25 @@ function resolveWaitToProposal(state, action) {
   });
   appendEvent(state, "run_wait.resolved", { waitId: wait.id, resolutionId });
   appendEvent(state, "proposal.created", { proposalId });
+}
+
+function rejectWait(state, action) {
+  const wait = state.waits.find((candidate) => candidate.id === action.waitId);
+  if (!wait) {
+    throw new Error(`missing Run Wait: ${action.waitId}`);
+  }
+  if (wait.status === "resolved") {
+    return;
+  }
+  const resolutionId = `resolution-${wait.id}`;
+  wait.status = "resolved";
+  wait.resolutionId = resolutionId;
+  state.waitResolutions.push({
+    id: resolutionId,
+    waitId: wait.id,
+    decision: "rejected_by_author"
+  });
+  appendEvent(state, "run_wait.rejected", { waitId: wait.id, resolutionId });
 }
 
 function acceptProposal(state, action) {

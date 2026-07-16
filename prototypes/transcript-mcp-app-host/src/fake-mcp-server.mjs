@@ -34,7 +34,7 @@ async function handleRpc(rpc) {
       jsonrpc: "2.0",
       id: rpc.id,
       result: {
-        content: [{ type: "text", text: "Three indexed story sources are available." }],
+        content: [{ type: "text", text: "当前有 3 个可用资料源：正文、人物卡和研究资料。" }],
         structuredContent: {
           sources: ["manuscript", "character-notes", "research-library"],
           count: 3

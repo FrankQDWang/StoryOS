@@ -25,8 +25,8 @@ if (process.argv.includes("--matrix")) {
     await stopAll();
   }
 } else {
-  await startMcp();
-  await startHost();
+  await reset();
+  await postHost("/api/bootstrap");
   await runInteractive();
 }
 
@@ -46,14 +46,14 @@ async function runInteractive() {
     v: runMatrix,
     w: requestAppEdit,
     y: acceptFirstProposal,
-    z: reset
+    z: resetForReview
   };
 
   const redraw = async (notice = "") => {
     const current = await safeSnapshot();
     process.stdout.write("\x1b[2J\x1b[H");
-    process.stdout.write(`${bold("StoryOS transcript MCP App host — THROWAWAY PROTOTYPE")}\n`);
-    process.stdout.write(`${dim("Browser: http://localhost:4181")}${notice ? `\n${notice}` : ""}\n\n`);
+    process.stdout.write(`${bold("技术验证控制台 — 无需审阅")}\n`);
+    process.stdout.write(`${dim("作者审阅面: http://localhost:4181")}${notice ? `\n${notice}` : ""}\n\n`);
     if (!current) {
       process.stdout.write("host unavailable\n");
     } else {
@@ -63,7 +63,7 @@ async function runInteractive() {
     process.stdout.write("[b] bootstrap View  [r] restart host  [m] toggle MCP  [w] App edit request\n");
     process.stdout.write("[a] approve Wait    [y] accept Proposal [l] live reconnect [i] interrupt\n");
     process.stdout.write("[c] compact context [f] fork branch     [d] drift/fallback [u] deny RPC\n");
-    process.stdout.write("[v] run 10 cases    [z] wipe scratch    [q] quit\n\n> ");
+    process.stdout.write("[v] run 10 cases    [z] reset review   [q] quit\n\n> ");
   };
 
   input.on("line", async (line) => {
@@ -215,13 +215,35 @@ async function runMatrix() {
   const unchangedBeforeAcceptance = proposed.durable.project.authoritativeRevision === authoritativeBefore;
   await postHost("/api/accept", { proposalId: proposal.id });
   const accepted = await snapshot();
+
+  const rejectRequest = bridgeRequest("app-edit-matrix-reject-1", "story.request_edit", {
+    replacement: "The lighthouse dimmed beyond the salt marsh."
+  });
+  await postHost("/api/bridge", rejectRequest);
+  const waitingForRejection = await snapshot();
+  const rejectedWait = waitingForRejection.durable.waits.find(
+    (wait) => wait.requestId === "app-edit-matrix-reject-1"
+  );
+  await postHost("/api/reject", { waitId: rejectedWait.id });
+  await postHost("/api/reject", { waitId: rejectedWait.id });
+  const rejected = await snapshot();
+  const rejectedWithoutMutation = rejected.durable.project.authoritativeRevision
+    === accepted.durable.project.authoritativeRevision;
   results.push(await evidence(
     "authoritative edit attempt",
     waiting.durable.waits.filter((wait) => wait.requestId === "app-edit-matrix-1").length === 1
       && unchangedBeforeAcceptance
       && accepted.durable.project.authoritativeRevision !== authoritativeBefore
-      && accepted.durable.acceptances.at(-1)?.actor === "author",
-    "replayed App request created one Wait; Approval created only a Proposal; separate author Acceptance changed truth"
+      && accepted.durable.acceptances.at(-1)?.actor === "author"
+      && rejectedWithoutMutation
+      && rejected.durable.waitResolutions.filter(
+        (resolution) => resolution.waitId === rejectedWait.id
+          && resolution.decision === "rejected_by_author"
+      ).length === 1
+      && !rejected.durable.proposals.some(
+        (candidate) => candidate.id === `proposal-${rejectedWait.id}`
+      ),
+    "App requests became one Wait each; Approval made only a Proposal, author Acceptance changed truth, and rejection made no Proposal or edit"
   ));
 
   results.push(await unauthorizedScenario());
@@ -357,6 +379,12 @@ async function reset() {
   await startMcp();
   await startHost();
   return { summary: "prototype scratch wiped; fresh host and MCP processes started" };
+}
+
+async function resetForReview() {
+  await reset();
+  await postHost("/api/bootstrap");
+  return { summary: "作者审阅场景已重置并准备好" };
 }
 
 async function restartHost() {

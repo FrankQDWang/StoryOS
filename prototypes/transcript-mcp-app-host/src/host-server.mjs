@@ -4,9 +4,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { renderMode, transcriptProjection } from "./model.mjs";
-import { hostPage, proxyPage } from "./pages.mjs";
+import { proxyPage } from "./pages.mjs";
 import { RESOURCE_MIME, RESOURCE_URI } from "./resource-fixture.mjs";
 import { dispatch, loadState } from "./store.mjs";
+import { transcriptPage } from "./transcript-page.mjs";
 
 const sourceDirectory = dirname(fileURLToPath(import.meta.url));
 const prototypeDirectory = resolve(sourceDirectory, "..");
@@ -29,7 +30,7 @@ const hostServer = createServer(async (request, response) => {
   try {
     const url = new URL(request.url, hostOrigin);
     if (request.method === "GET" && url.pathname === "/") {
-      return html(response, 200, hostPage({ hostOrigin, sandboxOrigin }), {
+      return html(response, 200, transcriptPage({ sandboxOrigin }), {
         "content-security-policy": `default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; frame-src ${sandboxOrigin} data:`,
         "permissions-policy": "camera=(), microphone=(), geolocation=(), clipboard-read=(), clipboard-write=()"
       });
@@ -88,6 +89,13 @@ const hostServer = createServer(async (request, response) => {
       const body = await readJson(request);
       return json(response, 200, await apply({
         type: "resolve_wait_to_proposal",
+        waitId: body.waitId
+      }));
+    }
+    if (request.method === "POST" && url.pathname === "/api/reject") {
+      const body = await readJson(request);
+      return json(response, 200, await apply({
+        type: "reject_wait",
         waitId: body.waitId
       }));
     }

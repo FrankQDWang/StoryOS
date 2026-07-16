@@ -10,9 +10,10 @@ real host-process restart without rerunning the original tool or trusting browse
 state; fail closed to an inspectable static fallback; and mediate every App action
 without granting domain authority?
 
-This harness answers a state/recovery question, not a visual-design question. It uses
-provisional record shapes and a wipeable JSON store under `.scratch/`. The pure state
-reducer is isolated in `src/model.mjs`; the terminal and browser shells are disposable.
+This harness answers a state/recovery question, not a visual-design question. The
+default browser route is now an **author-facing Transcript slice** around that logic;
+internal state and security probes stay in the terminal. It uses provisional record
+shapes and a wipeable JSON store under `.scratch/`.
 
 ## Run it
 
@@ -20,10 +21,13 @@ reducer is isolated in `src/model.mjs`; the terminal and browser shells are disp
 npm --prefix prototypes/transcript-mcp-app-host start
 ```
 
-The terminal shows the complete relevant state after every action. Open
-<http://localhost:4181> while it is running to inspect the real cross-origin sandbox,
-bridge handshake, transcript projection, App-initiated edit request, and sibling-frame
-rejection.
+Open <http://localhost:4181>. That is the only human review surface. It shows a normal
+StoryOS writing-assistant Transcript with a sandboxed App, Host-owned Approval, and the
+Proposal boundary. The command starts from a clean, ready-to-review fixture.
+
+The terminal is an internal technical control surface. It exposes process restart,
+offline, interrupt, compaction, branching, resource drift, and denial probes; it is not
+part of the product interaction being reviewed.
 
 Press `v` in the terminal to execute the ten-case research matrix, or run it directly:
 
@@ -36,9 +40,9 @@ not a production test suite.
 
 ## Deliberate boundaries
 
-- `localhost:4181` is the StoryOS host origin.
-- `127.0.0.1:4182` is a distinct Sandbox proxy origin.
-- `127.0.0.1:4183` is a deterministic fake MCP server.
+- `localhost:4181` is the author-facing Transcript host.
+- The Sandbox proxy and fake MCP server use separate internal origins. They are not
+  standalone pages and are never human review surfaces.
 - The originating tool invocation is counted and never repeated for transcript replay.
 - The exact resource bytes and digest, input/result references, negotiated protocol,
   effective capabilities, host context, and static fallback belong to the App View
@@ -49,5 +53,5 @@ not a production test suite.
 
 ## Reset
 
-Press `z` in the TUI. It deletes only this prototype's `.scratch/` directory and starts
-fresh child processes.
+Press `z` in the TUI. It deletes only this prototype's `.scratch/` directory, starts
+fresh child processes, and prepares the author-facing Transcript fixture again.
