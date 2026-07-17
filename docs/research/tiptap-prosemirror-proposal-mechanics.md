@@ -95,9 +95,9 @@ The upstream history plugin state defines only `init` and `apply`, not `toJSON` 
 
 `EditorView.composing` is officially exposed and is true during an active composition. `handleDOMEvents` handlers run before ProseMirror's own handler; returning false lets normal input continue. This lets StoryOS synchronously mark a run as locally paused at `compositionstart` without swallowing the user's input. [EditorView.composing](https://prosemirror.net/docs/ref/#view.EditorView.composing) [DOM event ordering](https://prosemirror.net/docs/ref/#view.EditorProps.handleDOMEvents)
 
-ProseMirror's own view source flushes pending DOM observation at composition start, tracks a composition ID, and may defer the final DOM flush until a microtask after `compositionend`. It also includes browser-specific handling for Safari, Firefox, Android, and Windows Chrome. StoryOS must not replace this machinery with React input state. [Composition source](https://github.com/ProseMirror/prosemirror-view/blob/ca4c78e9b56f1b164c0b3758b59d8748f11b7534/src/input.ts#L435-L523)
+ProseMirror's own view source flushes pending DOM observation at composition start, tracks a composition ID, and may defer the final DOM flush until a microtask after `compositionend`. The upstream implementation contains multiple browser-specific branches, but StoryOS product validation targets its supported desktop Chrome profile only. StoryOS must not replace this machinery with React input state. [Composition source](https://github.com/ProseMirror/prosemirror-view/blob/ca4c78e9b56f1b164c0b3758b59d8748f11b7534/src/input.ts#L435-L523)
 
-Upstream tests using simulated DOM composition events demonstrate that a dispatched document change overlapping the simulated composition cancels it, while a change elsewhere can remain compatible. They do not prove behavior with a real OS IME. StoryOS's stronger settled rule—pause all Agent document writes as soon as the author starts input—is technically conservative, but real Chinese/Japanese IME verification remains a hard prototype gate. [Simulated composition overlap tests](https://github.com/ProseMirror/prosemirror-view/blob/ca4c78e9b56f1b164c0b3758b59d8748f11b7534/test/webtest-composition.ts#L238-L270)
+Upstream tests using simulated DOM composition events demonstrate that a dispatched document change overlapping the simulated composition cancels it, while a change elsewhere can remain compatible. They do not prove behavior with a real OS IME. StoryOS's stronger settled rule—pause all Agent document writes as soon as the author starts input—is technically conservative. The author manually verified real Chinese Pinyin input in the contract probe on supported desktop Chrome on 2026-07-17, closing this prototype's real OS IME evidence gate. Other browsers and author-input languages are outside the product support profile. [Simulated composition overlap tests](https://github.com/ProseMirror/prosemirror-view/blob/ca4c78e9b56f1b164c0b3758b59d8748f11b7534/test/webtest-composition.ts#L238-L270)
 
 ### Stable node IDs
 
@@ -385,14 +385,26 @@ The follow-up disposable prototype should fail unless it demonstrates all of the
 
 ### IME and input tests
 
-- Real Chinese Pinyin and Japanese IME checks on current Chrome, Safari, and Firefox on macOS.
+- Real Chinese Pinyin checks in supported Chrome; English direct input is checked separately and does not require an IME composition lifecycle.
 - Composition starts inside a streaming Proposal, at both boundaries, and elsewhere in the chapter.
 - `compositionstart` synchronously closes the adapter-owned RunWriteGate before any subsequent ProseMirror dispatch; no Agent transaction passes it even when network deltas race.
 - The composed text, selection, marks, and undo grouping remain correct after `compositionend`.
-- Paste, drop, cut, direct typing, mobile/native `beforeinput`, and rapid consecutive compositions all trigger the same author-priority pause policy.
+- Paste, drop, cut, direct typing, Chrome `beforeinput`, and rapid consecutive compositions all trigger the same author-priority pause policy.
 - Composition at a Proposal boundary follows one ownership association; a selected range crossing a boundary follows the explicit whole-transaction policy without corrupting the DOM.
 
 Synthetic composition events are useful regression tests but are not sufficient evidence for real IME behavior.
+
+Prototype result (2026-07-17): the author manually verified real Chinese
+Pinyin input in the contract probe on supported desktop Chrome. Together with
+the deterministic composition fence and ownership tests, the first prototype's
+supported-language IME gate is passing. Real Chrome native `Mod-v` and `Mod-x`
+over the mixed `｜提` selection also passed whole-refusal and Draft recovery:
+the document remained unchanged, the browser emitted `native_paste` and
+`native_cut`, and cut copied the actual selected text to the clipboard. Native
+cross-owner text drag/drop also passed by author manual verification in real
+desktop Chrome: the browser emitted `native_dragstart` and `native_drop`, the
+contract emitted `refused_edit_draft`, the authoritative document remained
+unchanged, and the attempted moved result was preserved as a Draft.
 
 ### Stable identity and conflict tests
 

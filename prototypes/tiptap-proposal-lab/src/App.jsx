@@ -41,6 +41,7 @@ import {
   loadPrototypeState,
   savePrototypeState,
 } from "./prototype-storage.js";
+import { ContractProbe } from "./ContractProbe.jsx";
 
 const STREAM_CHUNKS = [
   "可那行字像一根细针，",
@@ -259,7 +260,15 @@ function AgentPanel({
   );
 }
 
-function PrototypeLab({ proposal, onClose, onStream, onConflict, onReload, onReset }) {
+function PrototypeLab({
+  proposal,
+  refusedDraft,
+  onClose,
+  onStream,
+  onConflict,
+  onReload,
+  onReset,
+}) {
   return (
     <div className="lab-backdrop" role="presentation" onMouseDown={onClose}>
       <section
@@ -286,6 +295,9 @@ function PrototypeLab({ proposal, onClose, onStream, onConflict, onReload, onRes
           <div><dt>resolution</dt><dd>{proposal.resolution}</dd></div>
           <div><dt>stream seq</dt><dd>{proposal.lastAppliedStreamSeq}</dd></div>
           <div><dt>pause fence</dt><dd>{proposal.pauseFence ?? "—"}</dd></div>
+          <div><dt>receipt</dt><dd data-testid="acceptance-receipt">{proposal.acceptance?.receiptId ?? "—"}</dd></div>
+          <div><dt>accept source</dt><dd>{proposal.acceptance?.source ?? "—"}</dd></div>
+          <div><dt>editor undo depth</dt><dd>{proposal.editorHistoryDepth ?? 0}</dd></div>
         </dl>
 
         <div className="lab-actions">
@@ -299,6 +311,15 @@ function PrototypeLab({ proposal, onClose, onStream, onConflict, onReload, onRes
           流式续写期间在提案内输入，RunWriteGate 会先同步关闭，晚到的 Agent
           片段不会进入编辑器。跨越正文与提案的替换会整体拒绝。
         </p>
+
+        {refusedDraft && (
+          <article className="main-refused-draft">
+            <strong>最近一次主编辑器 Refused Edit Draft</strong>
+            <p>{refusedDraft.attemptedText}</p>
+          </article>
+        )}
+
+        <ContractProbe />
       </section>
     </div>
   );
@@ -316,6 +337,8 @@ export function App() {
   const [draft, setDraft] = useState("");
   const [labOpen, setLabOpen] = useState(false);
   const [notice, setNotice] = useState("");
+  const [refusedDraft, setRefusedDraft] = useState(null);
+  const [documentEpoch, setDocumentEpoch] = useState(0);
 
   const proposalRef = useRef(proposal);
   const activeChapterRef = useRef(activeChapter);
@@ -363,8 +386,81 @@ export function App() {
     );
   }, [addAgentMessage]);
 
-  const onRefusedTransaction = useCallback(() => {
-    setNotice("这次编辑同时跨过正文与提案，已完整保留输入并拒绝应用");
+  const applyAcceptance = useCallback((source = "direct") => {
+    const current = proposalRef.current;
+    if (
+      current.generation !== "ready" ||
+      current.validation !== "valid" ||
+      current.resolution !== "pending"
+    ) {
+      setNotice("提案尚未满足接受条件");
+      return false;
+    }
+
+    const suffix = `${Date.now()}-${current.revision + 1}`;
+    setProposal((previous) => ({
+      ...previous,
+      resolution: "applied",
+      acceptance: {
+        commandId: `accept-command-${suffix}`,
+        commitId: `accept-commit-${suffix}`,
+        receiptId: `accept-receipt-${suffix}`,
+        source,
+      },
+      acceptanceRedoAvailable: false,
+      editorHistoryDepth: 0,
+      authorAction: { kind: "acceptance", safe: true },
+    }));
+    addAgentMessage(
+      source === "redo"
+        ? "已作为一次新的接受尝试重新应用提案；新的 Command、Commit 与 Receipt 已生成。"
+        : "提案已写入当前章节。接受记录已保留，你仍可以安全撤销这次接受。",
+    );
+    setNotice(source === "redo" ? "已重新接受提案（新 Receipt）" : "已接受提案");
+    return true;
+  }, [addAgentMessage]);
+
+  const undoAcceptanceFromInput = useCallback(() => {
+    const current = proposalRef.current;
+    if (current.authorAction?.safe === false) {
+      setNotice("最新动作无法安全撤销；没有跳过它去撤销更早内容");
+      return true;
+    }
+    if (
+      current.resolution !== "applied" ||
+      current.authorAction?.kind !== "acceptance" ||
+      (current.editorHistoryDepth ?? 0) > 0
+    ) {
+      return false;
+    }
+
+    setProposal((previous) => ({
+      ...previous,
+      revision: previous.revision + 1,
+      resolution: "pending",
+      validation: "valid",
+      creator: "author",
+      acceptanceRedoAvailable: true,
+      authorAction: { kind: "undo_acceptance", safe: true },
+    }));
+    addAgentMessage("已补偿刚才的接受，并用一个新修订重新打开提案；原接受记录没有被改写。");
+    setNotice("已撤销接受并重新打开提案");
+    return true;
+  }, [addAgentMessage]);
+
+  const redoAcceptanceFromInput = useCallback(() => {
+    const current = proposalRef.current;
+    if (current.authorAction?.safe === false) {
+      setNotice("最新动作无法安全重做；没有跳过它去恢复更早内容");
+      return true;
+    }
+    if (!current.acceptanceRedoAvailable) return false;
+    return applyAcceptance("redo");
+  }, [applyAcceptance]);
+
+  const onRefusedTransaction = useCallback((nextDraft) => {
+    setRefusedDraft(nextDraft);
+    setNotice("这次编辑跨越正文与提案，已整笔拒绝并保存 Refused Edit Draft");
   }, []);
 
   const proposalExtension = useMemo(
@@ -373,8 +469,10 @@ export function App() {
         initialBlockIds: proposalRef.current.blockIds,
         onAuthorSignal: stopStream,
         onRefusedTransaction,
+        onUndoRequest: undoAcceptanceFromInput,
+        onRedoRequest: redoAcceptanceFromInput,
       }),
-    [onRefusedTransaction, stopStream],
+    [onRefusedTransaction, redoAcceptanceFromInput, stopStream, undoAcceptanceFromInput],
   );
 
   const editor = useEditor({
@@ -399,19 +497,40 @@ export function App() {
       if (transaction.getMeta(PROPOSAL_META)?.allow) return;
       if (activeChapterRef.current !== "chapter-12") return;
 
+      setDocumentEpoch((value) => value + 1);
+
       const ownership = classifyTransaction(
         transaction,
         transaction.before,
         proposalRef.current.blockIds,
       );
-      if (ownership === "proposal") {
-        setProposal((previous) => ({
+      const history = transaction.getMeta("history$");
+      setProposal((previous) => {
+        const wasApplied = previous.resolution === "applied";
+        const currentDepth = previous.editorHistoryDepth ?? 0;
+        const editorHistoryDepth = wasApplied
+          ? history
+            ? Math.max(0, currentDepth + (history.redo ? 1 : -1))
+            : currentDepth + 1
+          : currentDepth;
+
+        return {
           ...previous,
-          revision: previous.revision + 1,
-          validation: "pending",
-          creator: "author",
-        }));
-      }
+          ...(ownership === "proposal"
+            ? {
+                revision: previous.revision + 1,
+                validation: "pending",
+                creator: "author",
+              }
+            : {}),
+          acceptanceRedoAvailable: false,
+          editorHistoryDepth,
+          authorAction:
+            wasApplied && editorHistoryDepth === 0
+              ? { kind: "acceptance", safe: true }
+              : { kind: "editor", safe: true },
+        };
+      });
     },
   });
 
@@ -466,7 +585,7 @@ export function App() {
       });
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [activeChapter, editor, messages, proposal]);
+  }, [activeChapter, documentEpoch, editor, messages, proposal]);
 
   useEffect(
     () => () => {
@@ -492,31 +611,9 @@ export function App() {
     setActiveChapter(chapterId);
   };
 
-  const acceptProposal = () => {
-    if (
-      proposal.generation !== "ready" ||
-      proposal.validation !== "valid" ||
-      proposal.resolution !== "pending"
-    ) {
-      setNotice("提案尚未满足接受条件");
-      return;
-    }
-    setProposal((previous) => ({ ...previous, resolution: "applied" }));
-    addAgentMessage("提案已写入当前章节。接受记录已保留，你仍可以安全撤销这次接受。");
-    setNotice("已接受提案");
-  };
+  const acceptProposal = () => applyAcceptance("direct");
 
-  const undoAcceptance = () => {
-    setProposal((previous) => ({
-      ...previous,
-      revision: previous.revision + 1,
-      resolution: "pending",
-      validation: "valid",
-      creator: "author",
-    }));
-    addAgentMessage("已补偿刚才的接受，并用一个新修订重新打开提案；原接受记录没有被改写。");
-    setNotice("已撤销接受并重新打开提案");
-  };
+  const undoAcceptance = () => undoAcceptanceFromInput();
 
   const rejectProposal = () => {
     if (!editor) return;
@@ -682,6 +779,7 @@ export function App() {
     setProposal((previous) => ({
       ...previous,
       validation: "conflicted",
+      authorAction: { kind: "conflict", safe: false },
     }));
     setNotice("目标修订已变化，提案不能静默重基或接受");
   };
@@ -697,6 +795,7 @@ export function App() {
     setProposal(initialProposal);
     setMessages(initialMessages);
     setDraft("");
+    setRefusedDraft(null);
     setLabOpen(false);
     setNotice("原型已重置");
   };
@@ -783,6 +882,7 @@ export function App() {
       {labOpen && (
         <PrototypeLab
           proposal={proposal}
+          refusedDraft={refusedDraft}
           onClose={() => setLabOpen(false)}
           onStream={startStream}
           onConflict={simulateConflict}

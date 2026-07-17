@@ -625,7 +625,9 @@ textarea:focus-visible {
 }
 
 .prototype-lab {
-  width: min(520px, calc(100vw - 48px));
+  width: min(920px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
   border: 1px solid #dcd9d2;
   border-radius: 17px;
   background: #fbfaf7;
@@ -708,6 +710,257 @@ textarea:focus-visible {
   color: #7b7871;
   font-size: 12px;
   line-height: 1.7;
+}
+
+.main-refused-draft,
+.refused-draft {
+  margin-top: 14px;
+  border: 1px solid #ded9cf;
+  border-radius: 10px;
+  background: #f4f0e8;
+  padding: 12px 14px;
+  color: #4b4841;
+}
+
+.main-refused-draft strong,
+.refused-draft strong {
+  font-size: 12px;
+}
+
+.main-refused-draft p,
+.refused-draft p {
+  margin: 7px 0 0;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.refused-draft small {
+  display: block;
+  margin-top: 7px;
+  color: #89857d;
+  font-size: 10px;
+}
+
+.contract-probe {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 24px;
+  border-top: 1px solid #e1ddd5;
+  padding-top: 24px;
+}
+
+.contract-section {
+  min-width: 0;
+  border: 1px solid #e3dfd7;
+  border-radius: 13px;
+  background: #fffefa;
+  padding: 16px;
+}
+
+.contract-section:first-child {
+  grid-column: 1 / -1;
+}
+
+.contract-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.contract-section-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.contract-section-heading span {
+  color: #99958d;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.contract-section-heading strong {
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 15px;
+}
+
+.contract-section-heading button,
+.contract-controls button {
+  border: 1px solid #d7d3cb;
+  border-radius: 8px;
+  background: #2f2d28;
+  color: white;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.contract-controls button.quiet {
+  background: transparent;
+  color: #5a5751;
+}
+
+.admission-badge {
+  max-width: 280px;
+  border-radius: 999px;
+  padding: 5px 8px;
+  overflow-wrap: anywhere;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.admission-badge.full {
+  background: #e1eee1;
+  color: #3d6841;
+}
+
+.admission-badge.safe {
+  background: #eee5d5;
+  color: #795e31;
+}
+
+.contract-prosemirror,
+.identity-prosemirror {
+  min-height: 52px;
+  border: 1px solid #dedad2;
+  border-radius: 9px;
+  background: #fbfaf7;
+  padding: 12px 14px;
+  outline: none;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.contract-prosemirror p,
+.identity-prosemirror p,
+.identity-prosemirror h2 {
+  margin: 0;
+}
+
+.identity-prosemirror p + p,
+.identity-prosemirror h2 + p {
+  margin-top: 5px;
+}
+
+.contract-proposal {
+  border-bottom: 1px solid #858179;
+  background: #ebe9e4;
+}
+
+.contract-proposal-safe {
+  border-bottom-style: dashed;
+  background: #eee8dc;
+  color: #777168;
+}
+
+.contract-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.contract-readout {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin: 12px 0 0;
+}
+
+.contract-readout div {
+  border-radius: 8px;
+  background: #f3f1ec;
+  padding: 8px;
+}
+
+.contract-readout dt {
+  color: #99958d;
+  font-size: 9px;
+}
+
+.contract-readout dd {
+  margin: 4px 0 0;
+  font-size: 10px;
+}
+
+.contract-help,
+.profile-line {
+  margin: 11px 0 0;
+  color: #7d7971;
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.gate-grid {
+  display: grid;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.gate-grid label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #59564f;
+  font-size: 11px;
+}
+
+.capability-list,
+.identity-results,
+.event-log ol {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.capability-list li,
+.identity-results li,
+.event-log li {
+  border-radius: 7px;
+  background: #f3f1ec;
+  padding: 7px 9px;
+  font-size: 10px;
+}
+
+.pass {
+  color: #456a48;
+}
+
+.fail {
+  color: #8a493e;
+}
+
+.identity-results li {
+  display: grid;
+  gap: 3px;
+}
+
+.identity-results span {
+  color: #77736b;
+  overflow-wrap: anywhere;
+}
+
+.event-log li {
+  color: #69665f;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+@media (max-width: 760px) {
+  .contract-probe {
+    grid-template-columns: 1fr;
+  }
+
+  .contract-section:first-child {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 1120px) {

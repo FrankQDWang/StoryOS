@@ -1,6 +1,7 @@
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import { createRefusedEditDraft } from "./proposal-contract.js";
 
 export const proposalPluginKey = new PluginKey("storyosProposalProjection");
 export const PROPOSAL_META = "storyosProposalMeta";
@@ -38,6 +39,17 @@ export function findProposalEnvelope(doc, proposalIds) {
 }
 
 function insertionOwnership(position, blocks) {
+  const proposalBlocks = blocks.filter((block) => block.proposal);
+  const firstProposal = proposalBlocks[0];
+  const lastProposal = proposalBlocks.at(-1);
+  if (
+    !firstProposal ||
+    position === firstProposal.from ||
+    position === lastProposal.to
+  ) {
+    return "authority";
+  }
+
   const next = blocks.find((block) => block.from === position);
   if (next?.proposal) return "proposal";
 
@@ -107,6 +119,8 @@ export const ProposalProjection = Extension.create({
       initialBlockIds: [],
       onAuthorSignal: () => {},
       onRefusedTransaction: () => {},
+      onUndoRequest: () => false,
+      onRedoRequest: () => false,
     };
   },
 
@@ -144,7 +158,15 @@ export const ProposalProjection = Extension.create({
 
           if (ownership !== "mixed") return true;
 
-          queueMicrotask(() => options.onRefusedTransaction());
+          const draft = createRefusedEditDraft({
+            intent: "mixed_owner_transaction",
+            beforeDoc: state.doc,
+            afterDoc: transaction.doc,
+            beforeSelection: state.selection.toJSON(),
+            afterSelection: transaction.selection.toJSON(),
+            steps: transaction.steps.map((step) => step.toJSON()),
+          });
+          queueMicrotask(() => options.onRefusedTransaction(draft));
           return false;
         },
         props: {
@@ -158,6 +180,14 @@ export const ProposalProjection = Extension.create({
               return false;
             },
             beforeinput(_view, event) {
+              if (event.inputType === "historyUndo" && options.onUndoRequest()) {
+                event.preventDefault();
+                return true;
+              }
+              if (event.inputType === "historyRedo" && options.onRedoRequest()) {
+                event.preventDefault();
+                return true;
+              }
               options.onAuthorSignal(event.inputType || "beforeinput");
               return false;
             },
@@ -173,6 +203,16 @@ export const ProposalProjection = Extension.create({
               options.onAuthorSignal("cut");
               return false;
             },
+          },
+          handleKeyDown(_view, event) {
+            if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") {
+              return false;
+            }
+            if (event.shiftKey ? options.onRedoRequest() : options.onUndoRequest()) {
+              event.preventDefault();
+              return true;
+            }
+            return false;
           },
         },
       }),

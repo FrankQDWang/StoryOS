@@ -16,6 +16,26 @@ _Avoid_: Artifact Revision, mutable row
 The project-ordered atomic record of one author-authorized domain transaction, identifying its actor, cause, and all prior and resulting Authoritative Revisions. It provides a global sequence without copying a full project snapshot.
 _Avoid_: Project snapshot, Run Event
 
+**Block Split Identity**:
+When a stable top-level manuscript block is split, the fragment containing the original block start retains its Block ID and the new right fragment receives a new Block ID. Identity inheritance never depends on cursor direction or editor-generated IDs.
+_Avoid_: Shared fragment identity, cursor-dependent inheritance, regenerated original ID
+
+**Block Join Identity**:
+When two adjacent stable top-level manuscript blocks join, the left block retains its Block ID and the right block leaves current Authoritative State. The right identity is never reassigned, while its historical Authoritative Revisions and Commit references remain addressable regardless of edit direction.
+_Avoid_: Direction-dependent survivor, reused removed ID, erased block history
+
+**Block Transfer Identity**:
+An atomic, verifiable move preserves the Block ID while changing its location or parent structure; copying, duplication, ordinary paste, external import, or a non-atomic cut and paste creates a new Block ID with source provenance. Equal content alone never proves identity continuity.
+_Avoid_: Content-derived identity, copied Block ID, inferred move
+
+**Block Retype Identity**:
+A one-to-one change of a stable manuscript block's type preserves its Block ID and appends an Authoritative Revision. A transformation that changes block cardinality or hierarchy follows the split, join, and transfer identity rules instead.
+_Avoid_: Type-derived identity, one ID for multiple blocks, regenerated retyped block
+
+**Block Identity Restoration**:
+Undo and redo of one unchanged reversible structural action restore its exact historical Block IDs; an identity that left current state may return only as that same object's restoration. State drift makes redo unavailable, and a newly executed structural action receives newly generated identities.
+_Avoid_: Fresh ID on exact redo, reassigned historical ID, redo across drift
+
 **Direct Author Action**:
 A deterministic, immediately visible change caused through the author's own editor input path against one exact authoritative target under direct manipulation, including manual paste. Bulk, cross-location, not-fully-previsible, Agent-, Tool-, MCP-, or extension-produced changes remain Proposal-gated even when an author click initiates them.
 _Avoid_: Author-triggered automation, silent bulk edit
@@ -616,6 +636,38 @@ _Avoid_: Suggestion, direct write, executable extension
 A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen, while reopening creates a new Proposal Revision and retains the operation ID only when target and semantic identity are unchanged.
 _Avoid_: Diff hunk, visual change marker
 
+**Proposal Boundary Ownership**:
+Author input exactly at either edge of an InlineEditProposal Operation belongs to the adjacent Authoritative State as a Direct Author Action; only input strictly inside the Operation edits the Proposal. Extending a Proposal across an edge requires an explicit Proposal edit.
+_Avoid_: Inclusive Proposal edge, implicit Proposal growth, cursor affinity as authority
+
+**Proposal Block Exclusivity**:
+A stable top-level manuscript block may contain at most one unresolved InlineEditProposal Operation across all Proposals. Another Proposal targeting that block waits until the existing Operation is resolved or withdrawn, while Direct Author Actions outside its exact range remain permitted.
+_Avoid_: Same-block Proposal concurrency, interval sharing, implicit Proposal merge
+
+**Proposal Structural Reshaping**:
+An author edit inside a pending Proposal Operation that splits, joins, moves, retypes, or changes the block span of its candidate content. StoryOS preserves the edit in a new Proposal Revision but projects a conflict until explicit replanning either proves unchanged semantic identity and retains the Operation ID or replaces it.
+_Avoid_: Automatic anchor repair, rejected author input, silent Operation split
+
+**Refused Edit Draft**:
+A non-authoritative Draft created when an author edit is atomically refused for crossing Authoritative State and Proposal ownership. It preserves the attempted payload, exact selection snapshot, and edit intent for an explicit narrowed retry, Proposal expansion, or discard without mutating either target.
+_Avoid_: Toast-only rejection, partial application, failed Direct Author Action
+
+**Composition Edit**:
+A complete author input intent bounded by one IME composition lifecycle and classified as a single edit only after the input method finishes while Agent document writes remain fenced. A single-owner result commits atomically, while mixed ownership restores the last durable projection and creates a Refused Edit Draft.
+_Avoid_: Per-event authoritative write, cancelled IME as correctness, interleaved Agent write
+
+**Proposal Safe Mode**:
+A per-editor-session fallback used when the environment cannot uphold lossless Proposal editing, ownership recovery, or unified undo. Authoritative manuscript editing remains available while direct candidate editing and other unproven Proposal interactions are disabled without weakening authority checks.
+_Avoid_: Weakened authority mode, blocked manuscript editor, silent compatibility downgrade
+
+**Editor Support Profile**:
+The explicit product promise for manuscript editing environments and author input languages. StoryOS currently supports desktop Chrome with Chinese and English author input; behavior observed in other browsers or input languages is exploratory evidence, not a release gate or an implied support promise.
+_Avoid_: Upstream browser matrix as product scope, every available IME, accidental compatibility promise
+
+**Proposal Editing Admission**:
+The fail-closed decision that permits one editor session to use full Proposal editing only when it belongs to the Editor Support Profile, its exact editor-contract versions and prior compatibility evidence match, and its live capabilities pass non-destructive checks. Unsupported, unknown, stale, mismatched, or violated evidence selects Proposal Safe Mode rather than weakening an invariant.
+_Avoid_: User-Agent allowlist, feature presence as proof, optimistic compatibility
+
 **Proposal Bundle**:
 A Proposal subtype whose stable Bundle-level Operations reference exact child Proposal Revisions, selected child Operation IDs, and dependencies without copying child payloads. It declares atomic or ordered-independent execution, and Bundles cannot be nested.
 _Avoid_: Mixed-domain Proposal, nested workflow
@@ -643,6 +695,14 @@ _Avoid_: Rejection, deletion
 **Undo Acceptance**:
 An author-authorized action that safely creates compensating authoritative versions and, when retained source content and a safe linear head allow it, a new Proposal Revision containing the previously applied content against the compensated base. Otherwise it creates a new derived Proposal or Reversal Proposal and never overwrites later conflicting author changes.
 _Avoid_: History deletion, editor-only undo
+
+**Acceptance Reapplication**:
+An author redo of a successfully undone Acceptance is a new Acceptance attempt against the exact reopened Proposal Revision under current Acceptance Eligibility. It uses new command identity, Commit, and Receipt records, never restores the prior attempt, and becomes unavailable after relevant state drift.
+_Avoid_: Redo Acceptance, Receipt replay, status rollback
+
+**Author Undo Order**:
+A single newest-first order over reversible author-visible actions, regardless of whether they changed Authoritative State or editable Proposal content. An unsafe newest action stops undo and requires its explicit reversal or unavailable disposition; StoryOS never skips it to undo older work.
+_Avoid_: Independent undo stacks, editor-first undo, silent history skip
 
 **Reversal Proposal**:
 A Proposal that expresses the inverse of an earlier Acceptance against current Authoritative State when a direct Undo Acceptance would conflict with later changes. It requires ordinary inspection and Acceptance.

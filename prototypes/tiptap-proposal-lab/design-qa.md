@@ -41,6 +41,47 @@ The final comparison preserves the source's three major regions, volume-to-chapt
 
 ## Browser interaction evidence
 
+### Proposal contract completion pass — 2026-07-16
+
+- The product compatibility scope is desktop Google Chrome with Chinese and
+  English author input.
+- Real Google Chrome entered `FULL` admission and classified an insertion exactly
+  at the inline Proposal start as
+  authoritative and a strict-interior insertion as Proposal-owned.
+- Real Google Chrome classified the exact Proposal end as authoritative. Exclusive decoration
+  mapping kept adjacent insertions outside the Proposal range.
+- Real Google Chrome cross-owner keyboard replacement, backward delete, and
+  forward delete each left the editor byte-for-byte unchanged and produced an
+  inspectable `Refused Edit Draft` containing the attempted result.
+- Real Google Chrome exercised runtime-capability mismatch and invariant violation.
+  Each entered Safe Mode and refused direct Proposal editing. Compatibility-
+  evidence mismatch remains covered by the deterministic contract tests.
+- The real Tiptap Block ID matrix passed split, exact undo/redo restoration, join,
+  atomic move, StoryOS copy, and one-to-one retype. The first copy probe exposed
+  that Tiptap `UniqueID` retains duplicate IDs for arbitrary programmatic copies;
+  the StoryOS command boundary now clears copied identity before insertion.
+- Real Google Chrome unified-undo evidence showed direct Acceptance followed by
+  `Mod-z` preserving the original Receipt while reopening the Proposal, then
+  `Mod-Shift-z` performing a new Acceptance with a new Receipt.
+- On 2026-07-17 the author manually verified real Chinese Pinyin input in the
+  contract probe on supported desktop Google Chrome. The real OS IME evidence
+  gate is therefore passing for this prototype; English direct input had
+  already passed separately.
+- On 2026-07-17 real Chrome `Mod-v` over the mixed `｜提` selection emitted
+  `native_paste`, kept the document byte-for-byte unchanged, and preserved the
+  attempted `原生粘贴` result as a `Refused Edit Draft`. Real `Mod-x` emitted
+  `native_cut`, kept the document unchanged, preserved its Draft, and copied the
+  actual selected text `｜提` to the clipboard.
+- On 2026-07-17 the author manually dragged the mixed `｜提` selection across the
+  ownership boundary in real desktop Chrome. The browser emitted
+  `native_dragstart` and `native_drop`; the contract emitted
+  `refused_edit_draft`, kept the authoritative document byte-for-byte unchanged,
+  and preserved the attempted moved result as a `Refused Edit Draft`.
+- No Chrome console errors were reported during the contract matrix.
+- All native Chrome input evidence required by this browser/editor ticket is
+  passing. Crash-window reconciliation remains separately deferred until the
+  Core and storage boundaries exist.
+
 - Volume/chapter navigation: at the short `1487 × 720` check, selecting chapter fourteen scrolled the independent tree to its maximum while the bottom utility bar remained fixed; chapter twelve restores its document and Proposal.
 - Writing-assistant panel: collapse and expand both work; the collapsed rail has no visible text and measures 44 px. The writing-assistant header is 40 px high. Its title and the 36 × 36 px toggle share `centerY = 20`; the toggle keeps the same `x = 1447`, `y = 2`, and `right = 4` geometry in expanded and collapsed states.
 - Color-calibration regression: after a full reload at `1329 × 768`, the writing-assistant panel still collapsed and expanded from the same fixed upper-right toggle without layout movement. The CSS-only token change introduced no interaction or content-state regression.
