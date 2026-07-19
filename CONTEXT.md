@@ -13,8 +13,24 @@ An immutable version of one authoritative domain object, created through a Direc
 _Avoid_: Artifact Revision, mutable row
 
 **Authoritative Commit**:
-The project-ordered atomic record of one author-authorized domain transaction, identifying its actor, cause, and all prior and resulting Authoritative Revisions. It provides a global sequence without copying a full project snapshot.
-_Avoid_: Project snapshot, Run Event
+The project-ordered atomic record of one author-authorized domain transaction, identifying its actor, cause, and all prior and resulting Authoritative Revisions. Its project-local sequence begins at one and advances without gaps only when an authority-changing transaction commits; refused, failed, and no-change attempts have no Commit sequence.
+_Avoid_: Project snapshot, Run Event, attempted-command sequence, wall-clock order
+
+**Durable Identity**:
+A stable, opaque, strongly typed identity assigned to one durable StoryOS entity or record. Identity types are not interchangeable, and an identity never conveys authority, causality, freshness, project order, or capability.
+_Avoid_: Content Digest, sortable clock, shared string ID, capability token
+
+**Revision Lineage**:
+The single-parent linear history of immutable Revisions under one Durable Identity, with every append guarded by the exact expected current Revision. A stale append conflicts without branching, overwriting, or automatic rebasing; alternative work receives a new Proposal or Artifact identity linked through Provenance.
+_Avoid_: Revision tree, last-write-wins, implicit rebase, mutable history
+
+**Revision Envelope**:
+The common immutable identity, lineage, schema, creator, cause, audit-time, payload, and integrity boundary carried by every Authoritative Revision and Proposal Revision. Its parent is the exact expected head matched by the successful command, while physical payload placement is outside the domain contract.
+_Avoid_: Mutable metadata row, storage blob layout, authority marker
+
+**Core Transition**:
+The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, lifecycle events, and required follow-up intent become visible together, while refusal or conflict records only its no-change Receipt and no partial domain effect.
+_Avoid_: Partial commit, database rollback as undo, external effect as transaction truth
 
 **Block Split Identity**:
 When a stable top-level manuscript block is split, the fragment containing the original block start retains its Block ID and the new right fragment receives a new Block ID. Identity inheritance never depends on cursor direction or editor-generated IDs.
@@ -39,6 +55,14 @@ _Avoid_: Fresh ID on exact redo, reassigned historical ID, redo across drift
 **Direct Author Action**:
 A deterministic, immediately visible change caused through the author's own editor input path against one exact authoritative target under direct manipulation, including manual paste. Bulk, cross-location, not-fully-previsible, Agent-, Tool-, MCP-, or extension-produced changes remain Proposal-gated even when an author click initiates them.
 _Avoid_: Author-triggered automation, silent bulk edit
+
+**Author Edit**:
+One complete normalized editor intent submitted with Author Intent for whole-command ownership classification by StoryOS Core. It produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries; raw editor transactions remain diagnostic evidence rather than the domain command.
+_Avoid_: Client-selected write path, ProseMirror transaction as authority, partial mixed edit
+
+**Author Intent**:
+The immutable Host-attested evidence that one explicit author interaction authorized one exact author-owned Core command, including authoritative, Proposal, lifecycle, and undo decisions. It binds the author, project, and command input without becoming a reusable capability, and cannot be asserted by an Agent, Tool, MCP server, extension, or untrusted client.
+_Avoid_: Client-supplied actor, session role, Approval, reusable authorization token
 
 **Operational Record**:
 A durable record of execution, context, authorization, usage, validation, or a state transition, such as an AgentRun, RunStep, RunPlan, ContextManifest, ToolCall, Approval, Artifact Lifecycle Event, Domain Receipt, or Run Event. It can reference and produce Artifacts but does not inherit Artifact lifecycle or authority.
@@ -557,8 +581,12 @@ An immutable snapshot of an Artifact's content and provenance. Derivation and Ac
 _Avoid_: Current blob, mutable version
 
 **Content Digest**:
-An integrity identifier for an immutable payload that may also support physical storage deduplication. It never replaces Artifact or Artifact Revision identity, so causally distinct outputs remain distinct even when their payloads match.
-_Avoid_: Artifact ID, semantic identity
+An integrity identifier for an immutable payload computed under one exact Digest Profile that may also support physical storage deduplication. It never replaces Artifact or Artifact Revision identity, so causally distinct outputs remain distinct even when their payloads match.
+_Avoid_: Artifact ID, semantic identity, unprofiled hash
+
+**Digest Profile**:
+The versioned, purpose-specific contract that defines the exact typed fields and canonical bytes covered by a Content Digest or command digest. A Profile is reproducible across StoryOS runtimes, never silently normalizes authoritative prose, and cannot be reused as a different integrity claim merely because the bytes match.
+_Avoid_: Runtime serialization, implicit Unicode normalization, universal hash meaning
 
 **Provenance**:
 The structured lineage that identifies an Artifact Revision's creator, exact source revisions or snapshots, schema version, creation time, and integrity digest. Provenance belongs to the Artifact Revision itself and does not depend on reconstructing a Run log.
@@ -636,6 +664,26 @@ _Avoid_: Suggestion, direct write, executable extension
 A stable, independently resolvable domain change within a Proposal; dynamically calculated diff hunks are never operations. Historical applied or rejected incarnations remain frozen, while reopening creates a new Proposal Revision and retains the operation ID only when target and semantic identity are unchanged.
 _Avoid_: Diff hunk, visual change marker
 
+**Proposal Generation**:
+One durably identified Agent production attempt for a Proposal, owning a strictly ordered and idempotent sequence of candidate batches under one active-writer boundary. A paused or completed Generation never reopens; explicit continuation creates a new Generation identity from an exact Proposal Revision.
+_Avoid_: Network stream, resumable socket, mutable generator session
+
+**Proposal Pause Fence**:
+The immutable boundary that ends one Proposal Generation at an exact Proposal Revision and digest, admitted-through batch sequence, projection checkpoint, and author-edit cause. Later batches remain Run evidence but are permanently ineligible for Proposal or editor replay.
+_Avoid_: Network cancellation, UI pause flag, queued late delta
+
+**Proposal State Axes**:
+The orthogonal generation (`generating | ready_partial | ready`), validation (`pending | valid | invalid | conflicted`), closure (`open | withdrawn | superseded`), and per-Operation resolution (`pending | applied | rejected`) facts of a Proposal. Completion, partial application, and Acceptance Eligibility are derived projections rather than additional states, while Retention State remains separate.
+_Avoid_: Proposal status, accepted Proposal state, rejected Proposal state, stale state
+
+**Proposal Transition**:
+One exhaustive StoryOS Core command-and-event change to a Proposal State Axis under exact expected Revision and lifecycle preconditions. Unlisted transitions are invalid; content correction, replanning, reopening, and Undo Acceptance append new Proposal Revisions rather than rewriting historical state.
+_Avoid_: Status assignment, implicit transition, mutable historical resolution
+
+**Proposal Anchor**:
+The durable, versioned, block-relative address by which an InlineEditProposal Operation binds a stable Manuscript Block, exact base Authoritative Revision, coordinate and boundary contract, range, and canonical base-slice digest. A multi-block Operation carries ordered Anchors, while document-wide positions, DOM state, and editor decorations remain reconstructible projections.
+_Avoid_: Absolute editor position, DOM range, Decoration identity, visible-text match
+
 **Proposal Boundary Ownership**:
 Author input exactly at either edge of an InlineEditProposal Operation belongs to the adjacent Authoritative State as a Direct Author Action; only input strictly inside the Operation edits the Proposal. Extending a Proposal across an edge requires an explicit Proposal edit.
 _Avoid_: Inclusive Proposal edge, implicit Proposal growth, cursor affinity as authority
@@ -652,6 +700,10 @@ _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 A non-authoritative Draft created when an author edit is atomically refused for crossing Authoritative State and Proposal ownership. It preserves the attempted payload, exact selection snapshot, and edit intent for an explicit narrowed retry, Proposal expansion, or discard without mutating either target.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
+**Recovery Draft**:
+A non-authoritative Draft preserving a complete author-edit intent that appeared in an editor checkpoint but has no committed Domain Receipt after recovery. It requires an explicit author retry or discard and is never automatically applied to Authoritative State or a Proposal.
+_Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
+
 **Composition Edit**:
 A complete author input intent bounded by one IME composition lifecycle and classified as a single edit only after the input method finishes while Agent document writes remain fenced. A single-owner result commits atomically, while mixed ownership restores the last durable projection and creates a Refused Edit Draft.
 _Avoid_: Per-event authoritative write, cancelled IME as correctness, interleaved Agent write
@@ -659,6 +711,10 @@ _Avoid_: Per-event authoritative write, cancelled IME as correctness, interleave
 **Proposal Safe Mode**:
 A per-editor-session fallback used when the environment cannot uphold lossless Proposal editing, ownership recovery, or unified undo. Authoritative manuscript editing remains available while direct candidate editing and other unproven Proposal interactions are disabled without weakening authority checks.
 _Avoid_: Weakened authority mode, blocked manuscript editor, silent compatibility downgrade
+
+**Proposal Recovery Conflict**:
+The fail-closed recovery condition in which durable Proposal Heads, stream sequences, Pause Fences, Anchors, digests, or an editor checkpoint cannot prove one unambiguous review projection. Agent replay and Acceptance remain disabled until explicit reconciliation; no cache or network order may fill the uncertainty.
+_Avoid_: Best-effort replay, hidden repair, ordinary validation pending
 
 **Editor Support Profile**:
 The explicit product promise for manuscript editing environments and author input languages. StoryOS currently supports desktop Chrome with Chinese and English author input; behavior observed in other browsers or input languages is exploratory evidence, not a release gate or an implied support promise.
@@ -680,9 +736,13 @@ _Avoid_: Acceptable type, trusted Proposal
 A Proposal generation outcome preserved after production stops before its intended completion. It remains editable but is not eligible for Acceptance until the author explicitly completes the current content or generation finishes.
 _Avoid_: Failed Proposal, accepted partial
 
+**Proposal Invalidity**:
+The condition in which an exact Proposal Revision violates its own schema, Operation contract, or domain invariants even against its declared base. Invalidity belongs to the Proposal content rather than later target drift.
+_Avoid_: Proposal Conflict, creator error message, low confidence
+
 **Proposal Conflict**:
-The condition in which a Proposal's target, base version, or preconditions no longer hold. A conflicted Proposal cannot be accepted or silently rebased and must instead be replaced or explicitly replanned.
-_Avoid_: Stale warning, automatic merge
+The condition in which an internally well-formed Proposal Revision's exact target, base Revision, Anchor, or preconditions cannot be proven against current Authoritative State. Any referenced target Revision change conflicts even outside the proposed range; recovery appends an explicitly replanned Proposal Revision rather than rebasing or revalidating the old Revision in place.
+_Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:
 An author's non-destructive decision not to apply selected pending Proposal Operations. Reopen creates a new pending Proposal Revision, which cannot regain Acceptance Eligibility until current targets and preconditions validate successfully.
@@ -692,17 +752,33 @@ _Avoid_: Withdrawal, deletion
 A non-destructive removal of a Proposal from active review by its current producer or the author. Withdrawal is not represented as an author rejection.
 _Avoid_: Rejection, deletion
 
+**Safe Compensation Head**:
+The condition in which an Applied Acceptance is the current Author Undo Frontier, has not already been compensated, and every affected target's current Head and payload digest exactly match the resulting Authoritative Revision recorded by its Receipt while the prior evidence remains usable. Any non-exact Head requires a Reversal Proposal or an unavailable outcome rather than range-level inference.
+_Avoid_: Non-overlapping guess, inverse patch on a later Head, storage rollback
+
 **Undo Acceptance**:
-An author-authorized action that safely creates compensating authoritative versions and, when retained source content and a safe linear head allow it, a new Proposal Revision containing the previously applied content against the compensated base. Otherwise it creates a new derived Proposal or Reversal Proposal and never overwrites later conflicting author changes.
+An author-authorized action that appends compensating Authoritative Revisions only against a Safe Compensation Head and, when retained source content and a safe Proposal lineage allow it, a new Proposal Revision containing the previously applied content against the compensated base. Proposal lineage drift may derive a new Proposal but never blocks otherwise safe authoritative compensation; target Head drift instead requires a Reversal Proposal or unavailable outcome.
 _Avoid_: History deletion, editor-only undo
 
 **Acceptance Reapplication**:
 An author redo of a successfully undone Acceptance is a new Acceptance attempt against the exact reopened Proposal Revision under current Acceptance Eligibility. It uses new command identity, Commit, and Receipt records, never restores the prior attempt, and becomes unavailable after relevant state drift.
 _Avoid_: Redo Acceptance, Receipt replay, status rollback
 
+**Author Action Sequence**:
+The project-local continuous order assigned once to every successfully committed author-owned Core Transition, spanning authoritative changes, Proposal edits, resolutions, lifecycle decisions, and successful compensations. Automatic producer, validation, and input-safety transitions do not become author actions merely because they are visible or cite an Author Intent. The sequence binds the Transition's canonical Revision, Receipt, or Commit plus either a typed Forward disposition or a Compensation disposition naming the exact earlier action it settled; exact retries reuse it, while refused and no-effect attempts receive none.
+_Avoid_: UUID order, wall-clock order, mutable action ledger, editor-history index
+
+**Author Undo Frontier**:
+The latest Forward Author Action Sequence that has not been named by a successful Compensation disposition. At most one committed Compensation may name a Forward action; Compensation entries remain in Author Action order for audit but are never themselves undo candidates, while a Reversal Proposal is a new Forward action and does not compensate its source.
+_Avoid_: Maximum Author Action Sequence, compensation of a compensation, redo cursor
+
 **Author Undo Order**:
-A single newest-first order over reversible author-visible actions, regardless of whether they changed Authoritative State or editable Proposal content. An unsafe newest action stops undo and requires its explicit reversal or unavailable disposition; StoryOS never skips it to undo older work.
+A single newest-first order over uncompensated Forward author-owned actions, regardless of whether they changed Authoritative State or editable Proposal content. The Author Undo Frontier is its exact current candidate; an unsafe Frontier stops undo and requires its explicit reversal or unavailable disposition, and StoryOS never skips it to undo older work.
 _Avoid_: Independent undo stacks, editor-first undo, silent history skip
+
+**Author Undo**:
+An Author Intent-bound request to reverse the exact Author Undo Frontier through its registered typed Core handler and record one immutable routing Receipt. A successful compensation appends its own Author Action Sequence entry naming that source, but is never a later undo target. Author Undo never skips a Barrier, applies a generic inverse patch, depends on editor history as truth, or creates a durable generic redo.
+_Avoid_: Editor-only undo, arbitrary history rollback, universal inverse, redo stack
 
 **Reversal Proposal**:
 A Proposal that expresses the inverse of an earlier Acceptance against current Authoritative State when a direct Undo Acceptance would conflict with later changes. It requires ordinary inspection and Acceptance.
@@ -817,8 +893,16 @@ The creation of a new Artifact from exact source Artifact Revisions while preser
 _Avoid_: Conversion, type mutation
 
 **Acceptance**:
-An author-authorized action that applies selected operations from an exact eligible Proposal Revision through a StoryOS-owned domain handler. Domain Proposal selections are atomic, while Proposal Bundles obey their explicit atomic or ordered-independent policy.
+An Author Intent-bound action that applies a nonempty selection of pending Operations from an exact eligible Proposal Revision and current Validation Receipt through a StoryOS-owned domain handler. Domain Proposal selections are atomic, while Proposal Bundles obey their explicit atomic or ordered-independent policy.
 _Avoid_: Promotion, status flip, overwrite
+
+**Acceptance Attempt**:
+The first Core execution of one schema-valid, authorized Acceptance command after idempotency resolution, with all current eligibility, targets, Anchors, preconditions, and domain effects revalidated before commit. Every Attempt produces one immutable Acceptance Receipt, while an exact retry only returns that Receipt and is not another Attempt.
+_Avoid_: Acceptance retry, button click, Receipt lookup
+
+**Acceptance Result**:
+The exhaustive settlement of one Acceptance Attempt as Applied, Invalid, Conflicted, Refused, or NoEffect. Only Applied changes Authoritative State and resolves selected Operations as applied; infrastructure uncertainty is not a Result and is reconciled through the command's idempotency key.
+_Avoid_: Success boolean, exception text, accepted Proposal state, unknown as failure
 
 **Acceptance Receipt**:
 The durable outcome of one Acceptance attempt, identifying its command digest and idempotency key, exact Proposal Revision and selected operations, prior and resulting Authoritative Revisions, zero or more Authoritative Commits, child Receipts, and result. Bundle progress may be derived across linked attempt Receipts.

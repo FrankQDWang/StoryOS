@@ -3,6 +3,7 @@
 - Status: accepted
 - Wayfinder resolution: [Define the Authoritative-State and Artifact Domain Vocabulary](https://github.com/FrankQDWang/StoryOS/issues/44)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Manuscript/Proposal refinement: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)
 
 ## 1. Purpose
 
@@ -305,7 +306,7 @@ closure == open
 every selected operation == pending
 ```
 
-Creating a content revision resets validation to `pending`. A target change does not mutate an old Validation Receipt; it makes that Receipt non-current and projects the Proposal as pending revalidation or conflicted.
+Creating a content revision resets validation to `pending`. Any change to a referenced target Authoritative Revision does not mutate the old Validation Receipt; it makes that Receipt non-current and projects the old Proposal Revision as `conflicted`. Regaining eligibility requires an explicitly replanned new Proposal Revision against current targets.
 
 ### 6.5 Stable Proposal Operations
 
@@ -370,7 +371,7 @@ validated_at
 validator_version
 ```
 
-Changing Proposal content or a relevant target never mutates the historical Receipt; it makes that Receipt non-current for Acceptance. The Proposal validation projection returns to pending or conflicted until Core validates the new inputs. Acceptance rechecks the current Receipt, target versions, permission, and preconditions to prevent time-of-check/time-of-use gaps. Extension-provided checks are advisory only.
+Changing Proposal content or a relevant target never mutates the historical Receipt. New Proposal content creates a new `pending` Revision; a changed referenced target projects the old Revision as `conflicted` until explicit replan creates another pending Revision. Acceptance rechecks the current Receipt, target versions, permission, Anchors, digests, and preconditions to prevent time-of-check/time-of-use gaps. Extension-provided checks are advisory only.
 
 ## 8. Authority-changing commands
 
@@ -385,16 +386,22 @@ An author may directly change Authoritative State without a Proposal only when t
 
 Typing, deleting, manually pasting, and moving a directly manipulated block qualify. Bulk, cross-location, or not-fully-previsible transformations remain Proposal-gated even when implemented by StoryOS Core and initiated by an author click. An Agent-, Tool-, MCP-, or extension-issued insertion command is likewise Proposal-gated. The causal command path and scope, not the textual origin alone, define the boundary.
 
+All editor input enters Core through one `ApplyAuthorEdit` command. Core recomputes ownership from durable Heads and Proposal Anchors and returns one whole-command result: authoritative applied, Proposal revised, refused to Draft, conflicted, or no effect. The client cannot select an authoritative or Proposal write route, and one mixed-ownership input is never split.
+
 ### 8.2 Acceptance
 
 The external command surface for a domain Proposal uses the selected envelope:
 
 ```text
 AcceptProposal {
+  command_schema_version
+  project_id
   proposal_id
   proposal_revision_id
+  validation_receipt_id
   selected_operation_ids
-  expected_target_versions
+  expected_target_revisions
+  author_intent_id
   idempotency_key
 }
 ```
@@ -413,20 +420,24 @@ For a domain Proposal, the selected operations are atomic: all succeed or none a
 
 ### 8.4 Undo Acceptance
 
-`UndoAcceptance` takes an Acceptance Receipt identity, expected current target versions, expected Proposal head when appending to the same identity, and an idempotency key.
+`UndoAcceptance` takes an Acceptance Receipt identity, exact current target Revisions, expected Proposal head, Author Intent, and an idempotency key.
 
-When later changes do not conflict with the accepted target range, it atomically:
+Direct compensation is allowed only when the Acceptance is the current Author Undo Frontier, has not already been compensated, and every affected target's current Head and payload digest exactly match the resulting Authoritative Revision in the Acceptance Receipt. It atomically:
 
 - creates compensating Authoritative Revisions and an Authoritative Commit;
 - appends a new Proposal Revision preserving the accepted content against the compensated base only when the Proposal still has a safe linear head;
 - reopens the corresponding operations as pending;
 - preserves the original Acceptance Receipt and creates an immutable Undo Acceptance Receipt.
 
-When the Proposal head advanced incompatibly, was withdrawn or superseded, StoryOS creates a new derived Proposal identity instead of branching history. When later author changes overlap the target range, direct undo is refused and StoryOS derives a `ReversalProposal` against current Authoritative State. If the Proposal was tombstoned, its deleted content is not restored; authoritative before/after revisions and immutable Receipts may still support compensation, otherwise the outcome is reversal-required or unavailable.
+When the Proposal head advanced incompatibly, was withdrawn or superseded, StoryOS creates a new derived Proposal identity instead of branching history without blocking otherwise safe authoritative compensation. Any non-exact authoritative target Head, including an apparently non-overlapping later change, forbids direct compensation and derives a `ReversalProposal` against current Authoritative State when possible. If required evidence was tombstoned or is unsupported, the outcome is unavailable.
 
-### 8.5 Domain Receipts
+### 8.5 Unified author undo order
 
-Validation, Acceptance, and Undo Acceptance Receipts are immutable StoryOS Core Operational Records, not Artifacts. A Receipt records a Core validation or domain-command attempt, including attempts that are refused, redirected, or make no Authoritative State change. Every Receipt links directly to its originating RunEvent. An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision and selected operations, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, result, and optional prior-attempt Receipt. An Undo Acceptance Receipt records the original Acceptance Receipt, command digest, idempotency key, and an outcome union:
+Every successfully committed author-owned Core Transition receives one project-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Intent caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
+
+### 8.6 Domain Receipts
+
+Validation, Acceptance, and Undo Acceptance Receipts are immutable StoryOS Core Operational Records, not Artifacts. A Receipt records a Core validation or domain-command attempt, including attempts that are refused, redirected, or make no Authoritative State change. Every Receipt links directly to its exact causal Author Intent, RunEvent, or other typed Core cause. An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision, Validation Receipt, selected operations, expected targets, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused | NoEffect` result. An Undo Acceptance Receipt records the original Acceptance Receipt, command digest, idempotency key, and an outcome union:
 
 ```text
 Compensated { authoritative_commit_ref, proposal_ref? }
