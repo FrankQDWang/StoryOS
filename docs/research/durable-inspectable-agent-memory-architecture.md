@@ -1,6 +1,7 @@
 # Durable, inspectable Agent memory architecture: source research and StoryOS implications
 
 - Status: research complete; decision input for [Research Durable, Inspectable Agent Memory Architecture](https://github.com/FrankQDWang/StoryOS/issues/65), not a domain decision or implementation authorization
+- Accepted downstream contract: [Fiction Memory and Research Provenance Semantics](../foundation/fiction-memory-and-research-provenance-semantics.md)
 - Repository baseline: `main` as inspected on 2026-07-20
 - External-source check date: 2026-07-20
 - Reference baseline: `.reference/codex` at pinned commit `1f0566d3f59298d1bb88820a0d35294f1eeb07ea`; read-only implementation evidence, never a StoryOS dependency or contract
@@ -43,7 +44,7 @@ The evidence has important limits. CoALA is a conceptual organizing framework. G
 
 The report answers the ticket's lifecycle question at the semantic level: working and cross-Run continuity are separated from episodic evidence, semantic claims, and procedural candidates; writes pass through settled-input, source-class, scope, privacy, and minimum-signal gates; extraction and consolidation preserve exact lineage; correction, contradiction, and supersession append inspectable history; retention distinguishes decay, archive, and tombstone; retrieval is separated from model-context admission; and every item is bounded to an explicit project/thread/Run/subject scope. The failure-mode table then covers poisoning, feedback loops, stale or recursively reinforced summaries, hidden self-modification, unbounded growth, scope and privacy leaks, lost corrections, ghost deletion, duplicate recovery, and false success lessons.
 
-Those are evidence-backed lifecycle constraints and recommendations, not newly accepted StoryOS types or policy. This report does not decide which memory roles become Core Artifact kinds, when extraction runs, which candidates need author confirmation, how fiction time and epistemic scope work, the exact ContextManifest ranking/admission contract, physical storage or deletion fan-out, or the versioned wire shape. Those decisions remain with [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51), [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54), [Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56), [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), and [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64).
+Those constraints remain research evidence rather than the accepted contract. The fiction-memory and research-provenance decisions were subsequently resolved in [Fiction Memory and Research Provenance Semantics](../foundation/fiction-memory-and-research-provenance-semantics.md). Context assembly, physical storage, protocol shape, and Run retention remain with [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54), [Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56), [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), and [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64).
 
 ## Primary-source facts
 
@@ -198,7 +199,7 @@ These rows are semantic roles, not final type names.
 | Procedural lesson | project, optionally task/domain-scoped | likely derived Artifact or Candidate | verified outcomes plus author feedback | non-authoritative | validate applicability; may source Skill/policy Proposal; never executes itself |
 | Author procedural preference | project by default; wider scope requires a separate decision | unresolved: author-owned project setting or Artifact | explicit author action, not assistant inference | only its owning project-setting command may make it binding | inspect/edit/revoke/version; inferred candidates remain separate |
 | Semantic project-knowledge claim | project + subject + valid-time/epistemic scope where relevant | Research Synthesis/Claim, Candidate, or owning domain | exact source/authoritative revisions | non-authoritative unless independently applied through owning domain | revise, contradict, supersede, archive, tombstone |
-| Authoritative fiction or plan fact | project | Authoritative State | current authoritative revision | authoritative | owning domain revision and Proposal/Acceptance rules |
+| Authoritative fiction fact | project | Authoritative State | current authoritative revision | authoritative | owning domain revision and Proposal/Acceptance rules |
 | Consolidated memory view | project or subject | derived Artifact/read model | exact included revisions and consolidation activity | non-authoritative | regenerate as new revision; old view remains attributable |
 | Retrieval index/rank feature | project projection | storage/read model | declared covered revisions | none | stale/rebuildable; delete with tombstone; never cited as source |
 | ContextManifest entry | RunStep/model call | Operational Record | context-admission decision | none | immutable call evidence |
@@ -266,9 +267,9 @@ A stale index must never return a tombstoned payload or silently omit an author-
 | Recovery duplication | crash repeats extraction, consolidation, or deletion | idempotency key; claimed input set; leases/heartbeats; atomic state plus event/outbox; deterministic rebuild |
 | False success lesson | model completion or flaky evaluator is stored as verified procedure | finalization gate; exact Tool/domain evidence; evaluator identity; outcome class; candidate-only fallback |
 
-## Exact remaining HITL questions
+## Questions prepared for downstream HITL
 
-These should be answered one at a time before a memory specification is accepted.
+These questions were prepared for one-at-a-time resolution. Their fiction-memory and research-provenance answers now live in the accepted [Fiction Memory and Research Provenance Semantics](../foundation/fiction-memory-and-research-provenance-semantics.md); context, storage, protocol, and Run-retention questions remain with their owning tickets.
 
 1. Is `MemoryCandidate` the single Core entry point for all extracted cross-Run lessons, or should episodic lesson, semantic claim, and procedural-preference candidate be separate Artifact kinds?
 2. Is an explicit author procedural preference a versioned authoritative project setting, an author-owned Artifact, or a non-authoritative memory item that is merely mandatory context?
@@ -291,18 +292,18 @@ These should be answered one at a time before a memory specification is accepted
 19. May a procedural lesson automatically draft a Skill or project-policy Proposal, and what verification evidence must accompany it?
 20. Is any memory allowed above project scope? If personal/global preferences are later desired, which separate authority, privacy, export, and deletion contract owns them?
 
-## Ownership split across current tickets
+## Ownership split identified by the research
 
 | Ticket | Owns | Must not decide here |
 |---|---|---|
-| [#51 Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51) | fiction-domain meanings of canon/author plan/candidate, story-world time, epistemic scope, research Claims/source evidence, conflict meaning | Agent extraction scheduling, generic ContextManifest ranking, physical storage |
+| [#51 Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51) | fiction-domain meanings of canon and Candidates, story-world time, epistemic scope, research Claims/source evidence, conflict meaning | Agent extraction scheduling, generic ContextManifest ranking, physical storage |
 | [#54 Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | mandatory versus dynamic context, query and admission, pin/exclude/inspect, caps, ranking evidence, stale projection behavior, provider disclosure | fiction truth semantics, tables, wire encoding |
 | [#56 Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | physical records/blobs, transactions, indexes, encryption, backup/export, migrations, projection rebuild, deletion execution | semantic authority and retrieval policy |
 | [#58 Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | versioned DTOs, commands, queries, events, compatibility and protocol errors for accepted semantics | inventing the semantic lifecycle |
 | [#64 Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | exact Run/Message/snapshot retention, compaction, archival, recovery evidence, mailbox payload lifecycle | fiction-domain memory meaning and general retrieval ranking |
 | [#65 this research ticket](https://github.com/FrankQDWang/StoryOS/issues/65) | primary evidence, option comparison, cross-ticket lifecycle risks, and HITL questions | final domain decisions or implementation |
 
-The next specification should depend on #51 for fiction semantics and coordinate with #54, #56, #58, and #64. It should not collapse all five concerns into one “memory service” mega-contract.
+The accepted downstream specification now fixes the #51 semantics and hands the remaining mechanics to #54, #56, #58, and #64. Those tickets must not collapse all five concerns into one “memory service” mega-contract.
 
 ## Recommended decision sequence
 

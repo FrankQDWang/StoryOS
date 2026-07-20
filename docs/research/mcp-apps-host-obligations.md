@@ -146,7 +146,7 @@ The official transcript example shows why capability advertisement matters: it r
 
 **StoryOS obligation**
 
-- The iframe is a sandboxed View/Controller over StoryOS-owned typed Artifacts. It never owns characters, relationships, timeline events, research sources, canon, author plans, or prose.
+- The iframe is a sandboxed View/Controller over StoryOS-owned typed Artifacts. It never owns author-owned project data.
 - The View receives immutable snapshots or tool results. App actions return through Host-mediated ToolCalls and may produce a `Candidate`, `Proposal`, or another non-authoritative Artifact. Any intended change to creative Authoritative State must be expressed as a StoryOS Core `Proposal` and pass through ordinary author inspection and `Acceptance`; an App interaction never qualifies as a `Direct Author Action` and cannot invoke a direct authoritative write path.
 - App local state, DOM state, IndexedDB/localStorage, `ui/update-model-context`, and MCP `_meta` are never sources of domain truth.
 - If an App submits an opaque UI-preference blob in a future StoryOS-specific contract, it remains non-authoritative, versioned by App/resource hash, size-limited, inspectable/deletable, and isolated from model context.

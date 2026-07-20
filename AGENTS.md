@@ -9,6 +9,7 @@
 
 ## Product invariants
 
+- StoryOS is designed for discovery writing, drawing on Dean Koontz's page-by-page method: the author discovers and advances the novel by refining the current passage and making present creative choices, and the Agent assists the work currently placed before it.
 - StoryOS has one general, novel-project-scoped Agent Loop. Task-specific behavior comes from Tools, MCP servers, Services, Skills, and policy, not separate fixed workflow runtimes.
 - The author owns every authoritative creative state. Narrow deterministic direct author manipulation changes it through explicit domain commands; Agent-, Tool-, MCP-, extension-produced, bulk, cross-location, or not-fully-previsible changes require an inspectable StoryOS Core Proposal accepted by the author.
 - Discovery is not authorization. Tools and extensions receive only the capabilities, context, budget, and outbound-data access explicitly granted to the current run.

@@ -5,8 +5,31 @@ StoryOS is a novel-project workspace in which the author retains authority over 
 ## Language
 
 **Authoritative State**:
-The author-approved current truth of a novel project, including prose, canon, characters, timeline, outline, structure, and author plans. Authority is a binary boundary reached only through an explicit author-authorized domain action; lifecycle, confidence, and lock status do not form authority levels.
+The author-approved current truth of a novel project, including prose, established fictional-world truth, characters, relationships, timeline, and manuscript structure. Authority is a binary boundary reached only through an explicit author-authorized domain action; lifecycle, confidence, and lock status do not form authority levels.
 _Avoid_: Canon (too narrow), accepted artifact, Agent memory
+
+**Discovery Writing**:
+The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
+
+**Author Preference**:
+An explicit, future-facing, scope-bounded author-owned creative or working constraint within Authoritative State. When an unambiguous author instruction maps deterministically to its domain action, that instruction is its authorization; local or ambiguous feedback cannot create one and may only source an Inferred Preference.
+_Avoid_: Inferred Preference, hidden rule, globalized feedback, memory confirmation
+
+**Fiction Assertion**:
+An addressable fiction-domain statement composed of one Proposition, Story Scope, and Epistemic Scope. Its owning Authoritative Revision or Artifact determines authority; the Assertion shape itself does not, and only incompatible Propositions under genuinely overlapping scopes conflict.
+_Avoid_: Flat entity property, universal canon fact, memory fact
+
+**Proposition**:
+The content asserted about exact project subjects, separate from where or when it applies, who holds or communicates it, and whether its owning source is authoritative.
+_Avoid_: Unscoped fact, belief, database field
+
+**Story Scope**:
+The work, fictional world or continuity, branch, story time, scene, and narrative position within which a Fiction Assertion applies. Story-world validity and narrative revelation are distinct, while audit time is neither.
+_Avoid_: Audit timestamp, chapter number as story time, global story fact
+
+**Epistemic Scope**:
+The holder or in-fiction source and epistemic relation that frames a Proposition as project fact or as something known, believed, suspected, claimed, remembered, or retold. Different holders and relations are not interchangeable, and project truth never automatically becomes character knowledge or permitted revelation.
+_Avoid_: Belief owner only, narrator truth, automatic knowledge propagation
 
 **Authoritative Revision**:
 An immutable version of one authoritative domain object, created through a Direct Author Action, Acceptance, or safe compensation and guarded by an expected prior revision.
@@ -67,6 +90,22 @@ _Avoid_: Client-supplied actor, session role, Approval, reusable authorization t
 **Operational Record**:
 A durable record of execution, context, authorization, usage, validation, or a state transition, such as an AgentRun, RunStep, RunPlan, ContextManifest, ToolCall, Approval, Artifact Lifecycle Event, Domain Receipt, or Run Event. It can reference and produce Artifacts but does not inherit Artifact lifecycle or authority.
 _Avoid_: Artifact, temporary log
+
+**Agent Memory**:
+A project-scoped, source-bearing, typed, and rebuildable retrieval projection over exact Authoritative State, Artifact, and Operational Record sources that supports continuity across threads and AgentRuns. It has no independent authority or writable truth and never interrupts active writing to demand memory confirmation; source conflict invalidates the projection, durable inference remains an Artifact, and only an explicit author-authorized domain action may change Authoritative State.
+_Avoid_: Fourth truth store, hidden model memory, unified mutable memory blob, Agent memory as Authoritative State, interruptive memory approval
+
+**Working Context**:
+The Run-bounded view of live author input, in-progress model or Tool activity, short-term plans, and other unsettled material needed to continue active work. Its evidence may remain in Operational Records for recovery, but it is excluded from long-term Agent Memory and cannot directly source a Memory Candidate.
+_Avoid_: Agent Memory, durable project knowledge, hidden cross-Run memory
+
+**Settled Source Version**:
+An exact durable Revision or typed terminal outcome whose settlement meaning has committed and is stable enough to analyze as a derivation source. Settlement makes that version eligible for extraction but does not prove a generalization, make it permanently current, or prevent later source change from invalidating derived results.
+_Avoid_: Live stream, intermediate event, latest value, permanently true source
+
+**Retrieval Index**:
+A disposable, rebuildable full-text, vector, graph, or other access projection over exact domain identities, Revisions, current qualification records, and one build-policy version. Its internal IDs and scores have no domain meaning, and every result must fail closed unless current source, Admission, Lifecycle, Suppression, scope, and permission eligibility can be revalidated before context use.
+_Avoid_: Semantic memory, vector store of record, index ID as Durable Identity, ranking as truth
 
 **AgentRun**:
 A durable execution aggregate for one bounded user-, event-, or schedule-triggered intent, owning its plan, steps, Capability Grant, budget, approvals, ToolCalls, produced results, and terminal outcome. A nonterminal AgentRun survives process restarts and may wait, pause, and resume; a terminal AgentRun is retained and immutable, while continuation or retry creates a new causally linked AgentRun.
@@ -608,13 +647,21 @@ _Avoid_: Bookmark, source URL
 A Research Artifact Revision containing an immutable capture of evidence supplied from a local file or explicit import. Re-importing creates a new Snapshot, while annotation or correction creates a derived Research Artifact.
 _Avoid_: Attachment, untracked file
 
+**Evidence Locator**:
+A snapshot-relative, media-specific coordinate that lets an inspector re-find exact content inside one Source Snapshot Revision. It may identify structured web content, a PDF page and region, a media time range with transcript Revision, or a dataset version and replayable record or result; a live location alone is not evidence.
+_Avoid_: Live URL fragment, current page position, citation text without a Snapshot
+
+**Evidence Relation**:
+A Claim-scoped relationship to an exact Source Snapshot Revision and Evidence Locator that distinguishes supporting, opposing, or qualifying evidence and names the exact Claim or subclaim addressed. `available_as_context` remains independent and proves neither use nor support, while derived conclusions retain their intermediate analysis rather than claiming that a source stated them directly.
+_Avoid_: Source list, whole-document citation, context availability as support
+
 **Research Synthesis**:
 A Research Artifact that combines or interprets evidence and binds its claims to exact Source Snapshot revisions through supported-by Provenance Edges.
 _Avoid_: Source Snapshot, uncited summary
 
-**Claim**:
-A stable, addressable conclusion within a Research Synthesis, linked to the exact evidence that supports it. A Claim remains non-authoritative regardless of confidence or repetition.
-_Avoid_: Canon fact, paragraph citation
+**Research Claim**:
+A stable, addressable, independently evaluable conclusion within a Research Synthesis, linked to exact evidence through Evidence Relations. Evidence that addresses only part of a compound conclusion must target an explicit subclaim or cause the Claim to split; a Claim remains non-authoritative regardless of evidence, confidence, or repetition.
+_Avoid_: Claim (too generic), Canon fact, paragraph citation
 
 **Finding**:
 A stable, addressable conclusion within an Analysis Report, linked to its project targets and supporting evidence. A Finding may suggest Candidates or Proposals but cannot directly change Authoritative State.
@@ -787,6 +834,34 @@ _Avoid_: Forced rollback, silent undo
 **Candidate**:
 A Core Artifact presenting one independently reviewable semantic fact or object without carrying an authoritative change command. It can serve as a source for a Proposal but cannot be accepted directly; independently selectable alternatives remain separate Candidates.
 _Avoid_: Proposal, pending truth
+
+**Memory Candidate**:
+A typed, source-bearing Candidate derived only from one or more Settled Source Versions for possible admission into Agent Memory. Extraction is replay-safe and preserves exact source lineage, but does not by itself validate the candidate, admit it for retrieval, or grant it authority.
+_Avoid_: Memory entry, extracted truth, generic untyped summary, live-stream memory
+
+**Memory Admission**:
+The source- and policy-evaluated decision that one exact Memory Candidate is eligible for ordinary project retrieval only within its supported scope. It is separate from extraction and ranking, fails closed on stale, unsupported, conflicting, self-referential, suppressed, or forbidden evidence, and grants no authority.
+_Avoid_: Retrieval score, extraction success, truth promotion, model confidence
+
+**Admitted Memory Entry**:
+The non-authoritative, source-bearing Agent Memory projection of one exact Memory Candidate under one current Memory Admission. It participates in ordinary retrieval only while its source, scope, permission, and suppression conditions remain valid; ranking may select among admitted entries but cannot admit them.
+_Avoid_: Accepted truth, authoritative memory, ranked candidate, permanent memory
+
+**Memory Lifecycle Relation**:
+An immutable appended fact that changes current retrieval eligibility or links a successor without rewriting a Memory Candidate, Memory Admission, source, or prior Run context. `corrects` replaces an error at the same scope and effective time, `supersedes` succeeds a once-valid entry from an explicit boundary, and `invalidates` removes eligibility without requiring a replacement; differences explained by story branch, time, or epistemic scope are not errors.
+_Avoid_: Mutable memory edit, overwrite, deletion as correction, historical context rewrite
+
+**Memory Suppression**:
+An auditable, scope-bounded author or authoritative-policy control that excludes targeted Memory Candidates, Admitted Memory Entries, source sets, or semantic ranges from extraction, admission, current projection, and ordinary retrieval without modifying their sources or prior Run context. It survives replay and rebuild, is normally reversible, and lifting it restores only eligibility for current re-evaluation rather than any historical Admission.
+_Avoid_: Archive, Tombstone, negative retrieval score, inferred memory rule
+
+**Inferred Preference**:
+A source-bearing Candidate that infers one bounded author preference from prior actions or feedback. Agent Memory may retrieve it as a non-binding hint, but repetition, confidence, author silence, or prior use never turns it into a constraint or lets it override a current author instruction.
+_Avoid_: Hidden policy, binding preference, implicit instruction, procedural memory
+
+**Operational Lesson**:
+A source-bearing Candidate that generalizes one bounded, reusable execution lesson from multiple comparable, settled, and causally independent Operational Records, including supporting and opposing evidence, applicability and version scope, and a re-evaluation boundary. Memory Admission may let it advise future Runs, but it cannot govern execution or alter a SkillPackage, StoryOS ToolSpec, Capability, or policy; that requires a separate governed change.
+_Avoid_: Procedural memory, single-failure rule, executable instruction, promoted Skill
 
 **Draft**:
 A Core Artifact containing editable work that has not been expressed as validated domain changes. It can serve as a source for a Proposal but cannot be accepted directly.

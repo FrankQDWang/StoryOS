@@ -3,6 +3,7 @@
 - Status: accepted
 - Wayfinder resolution: [Define the Authoritative-State and Artifact Domain Vocabulary](https://github.com/FrankQDWang/StoryOS/issues/44)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
+- Related foundation specification: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md)
 - Manuscript/Proposal refinement: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)
 
 ## 1. Purpose
@@ -33,7 +34,7 @@ flowchart LR
 
 ### 2.1 Authoritative State
 
-Authoritative State is the author-approved current truth of the project: prose, canon, characters, relationships, timeline, outline, structure, and author plans.
+Authoritative State is the author-approved current truth of the project: prose, established fictional-world truth, characters, relationships, timeline, and manuscript structure.
 
 - Authority is binary. There is no ordered `authority_level` such as draft, accepted, canon, or locked.
 - Lifecycle, confidence, lock state, and repetition never make an object partially authoritative.
@@ -91,21 +92,16 @@ ProposalKind
 ├── RelationshipChangeProposal
 ├── TimelineChangeProposal
 ├── CanonChangeProposal
-├── OutlineChangeProposal
-├── AuthorPlanChangeProposal
 ├── ReversalProposal
 └── ProposalBundle
 
 CandidateKind
-├── MemoryCandidate
-├── CharacterCandidate
-├── TimelineEventCandidate
-└── CanonCandidate
+├── FictionAssertionCandidate
+├── InferredPreference
+└── OperationalLesson
 
 DraftKind
-├── PlanDraft
-├── OutlineDraft
-└── SynopsisDraft
+└── PlanDraft
 
 ResearchArtifactKind
 ├── ExternalSourceSnapshot
@@ -233,6 +229,8 @@ Core roles are:
 |---|---|
 | `derived_from` | The revision directly transforms or edits the target. |
 | `supported_by` | The target provides evidence for identified claims or findings. |
+| `opposed_by` | The target provides counterevidence against identified claims or findings. |
+| `qualified_by` | The target limits or conditions identified claims or findings. |
 | `available_as_context` | The target was available to the generating step; this does not claim the model used it as evidence. |
 | `responds_to` | The revision answers a Message, author instruction, or goal. |
 
@@ -543,7 +541,7 @@ This decision intentionally does not choose:
 
 - Rust structs, serialization libraries, database tables, indexes, or wire encodings;
 - exact manuscript anchors, ProseMirror mappings, and editor transaction mechanics;
-- exact canon, character, relationship, timeline, outline, and memory aggregate schemas;
+- exact fictional-world truth, character, relationship, timeline, and memory aggregate schemas;
 - MCP Apps bridge methods, CSP details, iframe lifecycle, and protocol negotiation;
 - Tool capability and Approval policy implementation;
 - crash consistency across SQLite and content-addressed files;
