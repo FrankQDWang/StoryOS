@@ -5,8 +5,9 @@
 ## Status
 
 - Approved by the author as the default visual reference on 2026-07-13.
-- This artifact fixes the intended product direction; it is not proof that the interaction contract has been implemented or verified.
-- The implementation must still be tested through [Validate the Editable Proposal Contract in Tiptap](https://github.com/FrankQDWang/StoryOS/issues/45) and the complete shell through [Prototype the Fixed Workspace Shell and Dynamic Surface Boundary](https://github.com/FrankQDWang/StoryOS/issues/55).
+- The editor Proposal contract was validated and closed in [Validate the Editable Proposal Contract in Tiptap](https://github.com/FrankQDWang/StoryOS/issues/45); its reproducible evidence remains in the [Tiptap Proposal lab](../../prototypes/tiptap-proposal-lab/NOTES.md).
+- The complete shell and dynamic-surface boundary were validated and closed in [Prototype the Fixed Workspace Shell and Dynamic Surface Boundary](https://github.com/FrankQDWang/StoryOS/issues/55); the current evidence is the [fixed workspace shell conclusion](../../prototypes/fixed-workspace-shell/NOTES.md) and [design QA record](../../prototypes/fixed-workspace-shell/design-qa.md).
+- These disposable prototypes validate interaction feasibility and surface ownership. They are not a production frontend or proof that production runtime, persistence, recovery, or backend integration has been implemented.
 
 ## Non-negotiable workspace structure
 
