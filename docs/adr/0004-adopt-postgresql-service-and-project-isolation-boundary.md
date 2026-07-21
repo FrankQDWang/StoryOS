@@ -23,12 +23,12 @@ This ADR supersedes only the incompatible physical-deployment, storage-engine, l
 
 ## Consequences
 
-- PostgreSQL is the authoritative physical database from initial development onward; [the storage and migration ticket](https://github.com/FrankQDWang/StoryOS/issues/56) owns its schema, transaction isolation, separately stored payload policy if any, migrations, backup, restore, export, and secret-store integration.
+- PostgreSQL is the authoritative physical database from initial development onward; the accepted [PostgreSQL Project Storage, Isolation, and Migration Contract](../foundation/postgresql-project-storage-isolation-and-migration-contract.md) owns its schema, transaction isolation, payload layout, migrations, backup, restore, export, and secret-store integration.
 - Initial local execution and later controlled cloud deployment must exercise the same domain identities, Project Isolation, Context Assembly, disclosure, recovery, and migration contracts.
 - A Project has one `owner_user_id`; ownership transfer and additional membership relations do not exist in the current Foundation.
 - Project-scoped commands and external DTOs are authorized from trusted requester context plus exact Project Scope. A client-supplied owner field is evidence to validate, never authority.
 - Authoritative State, Artifacts, Operational Records, AgentRuns, Subruns, Messages, Proposals, Receipts, ToolCalls, Memory, indexes, embeddings, caches, manifests, Outbound Disclosure Events, idempotency records, and replay cursors cannot be read, joined, reused, or delivered across Project Scope.
 - Globally reusable definitions such as schema versions, ToolSpecs, provider-neutral adapters, and public capability metadata may remain unscoped only when they contain no project-derived data or project authority.
 - Model and embedding submissions always cross the StoryOS Controlled Processing Boundary and follow the full Context Assembly and destination-specific Outbound Disclosure contract.
-- Local development may use environment-backed credentials or another development secret mechanism, but an operating-system keychain is not a portable service invariant and credential values never enter project records.
+- Local development and tests may use environment-backed inputs, while the Foundation-local deployment resolves Credential References through macOS Keychain and a later controlled-cloud deployment uses a managed secret service through the same backend-neutral resolver contract; credential values never enter project records, ordinary logs, backups, or exports.
 - Existing historical research remains evidence of its time. Current normative files and explicit supersession comments identify the accepted contract without rewriting that evidence.

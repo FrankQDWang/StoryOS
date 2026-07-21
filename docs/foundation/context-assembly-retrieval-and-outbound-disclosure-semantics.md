@@ -1018,7 +1018,7 @@ This specification fixes semantics and hands off physical or wire realization:
 
 | Ticket | Owns next | Must preserve |
 |---|---|---|
-| [PostgreSQL Project Storage, Isolation, and Migration](https://github.com/FrankQDWang/StoryOS/issues/56) | tables, constraints, transactions, indexes, payload storage, migrations, backup, restore, export, and Credential Reference integration | manifest-before-egress durability, immutable history, exact Project Scope, cache invalidation, rebuildable indexes |
+| [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md) | tables, constraints, transactions, indexes, payload storage, migrations, backup, restore, export, and Credential Reference integration | manifest-before-egress durability, immutable history, exact Project Scope, cache invalidation, rebuildable indexes |
 | [Threat-Model the Host and Extension Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | abuse cases, trust crossings, credential and exfiltration threats | orthogonal trust axes, fail-closed eligibility, destination-specific grants, no ambient context |
 | [Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | DTOs, schemas, commands, event envelopes, compatibility, and errors | all exact identities, Revisions, manifests, controls, attempts, and Project Scope |
 | [Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | fake destinations, property tests, crash/retry/replay and isolation tests | seven ordered gates, no disclosure before commit, recursive boundaries, uncertainty preservation |

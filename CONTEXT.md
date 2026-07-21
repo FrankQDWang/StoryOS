@@ -44,12 +44,24 @@ The current Foundation rule that every Project has one exact Project Author and 
 _Avoid_: Global current user, single-tenant shortcut, shared project, collaboration role model
 
 **Project Isolation**:
-The fail-closed StoryOS boundary that prevents Authoritative State, Artifacts, Operational Records, Context Candidates, manifests, caches, indexes, Credential References and authorized project-use bindings, and destination disclosures from being discovered, joined, retrieved, authorized, or reused across either member of a Project Scope. Every such record and disposable projection must retain the exact `owner_user_id` and `project_id` needed to enforce and audit the boundary; missing, ambiguous, or mismatched identity makes the operation ineligible.
+The fail-closed StoryOS boundary that prevents Authoritative State, Artifacts, Operational Records, Context Candidates, manifests, caches, indexes, Credential References and authorized project-use bindings, and destination disclosures from being discovered, joined, retrieved, authorized, or reused across either member of a Project Scope. Every such record and disposable projection must retain the exact `owner_user_id` and `project_id`, and the authoritative persistence boundary independently rejects scope-mismatched reads, writes, references, and joins; caller-side filtering is not a substitute, while missing or ambiguous identity makes the operation ineligible.
 _Avoid_: UI-only filtering, global vector namespace, shared prompt cache, caller-supplied project scope
+
+**Project Export Archive**:
+A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret canonical record, immutable payload, schema/profile identifier, and provenance fact required to restore that Project without consulting a disposable projection or external runtime. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
+_Avoid_: Selected-table dump, backup, cache snapshot, credential bundle, project copy
+
+**Project Restore**:
+The validating import of one Project Export Archive as the same Project Scope into a target that is authorized for the same durable User identity and does not already contain that Scope. Restore stages and verifies the complete archive, schema compatibility, digests, referential closure, and scope before making the Project atomically visible, then deterministically rebuilds disposable projections; any identity conflict, partial archive, unsupported schema, or divergent existing Project fails closed without merge, overwrite, or identity remapping. Unresolvable Credential References remain explicitly Unbound. Creating a copy, fork, new Project identity, or ownership transfer requires a separate future domain contract.
+_Avoid_: Import as new, ID remapping, partial merge, overwrite restore, ownership transfer
 
 **Foundation Validation Deployment**:
 The initial product stage in which one bootstrapped User uses StoryOS to write a real novel while exercising the same Project Scope and Project Isolation contracts required when more Users are served later. It is a validation stage, not a distinct single-user domain model or permission shortcut; deployment and persistence choices belong to architecture decisions.
 _Avoid_: Product-wide single-user mode, global current User, throwaway domain model, implicit Project access
+
+**Foundation Recovery Service Profile**:
+The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss; loss of the database host or disk has a recovery-point objective of at most fifteen minutes and a recovery-time objective of at most two hours. The deployment therefore uses synchronous PostgreSQL commit durability, a daily physical base backup plus continuous WAL archival into a failure domain independent of the database host, and a successful automated restore proof for every release candidate. Backup retention duration belongs to the later retention contract, but every claimed window must retain a complete verifiable recovery chain. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster, and later controlled-cloud deployments may declare a stricter profile.
+_Avoid_: Asynchronous author acknowledgement, same-disk backup, daily dump only, untested backup file, Foundation high-availability cluster
 
 **Effective Model Context**:
 The Effective Destination Context for one Model Attempt, including the AgentRun's bound Project Instruction Revision whenever one exists. Compaction, window management, provider cache, prior-response, and continuity mechanisms may optimize transport only when StoryOS can prove the bound instruction remains logically present; otherwise it is retransmitted or the Attempt is blocked.
@@ -94,6 +106,10 @@ _Avoid_: Revision tree, last-write-wins, implicit rebase, mutable history
 **Revision Envelope**:
 The common immutable identity, lineage, schema, creator, cause, audit-time, payload, and integrity boundary carried by every Authoritative Revision and Proposal Revision. Its parent is the exact expected head matched by the successful command, while physical payload placement is outside the domain contract.
 _Avoid_: Mutable metadata row, storage blob layout, authority marker
+
+**Canonical Payload**:
+The exact immutable content owned by an Authoritative Revision, Artifact Revision, or Operational Record and required to interpret, verify, replay, export, or migrate it. Physical placement does not change that ownership, and a cache, index, Provider copy, or external runtime is never its sole source.
+_Avoid_: Blob cache, derived projection, Provider-held source of truth
 
 **Core Transition**:
 The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, lifecycle events, and required follow-up intent become visible together, while refusal or conflict records only its no-change Receipt and no partial domain effect.
@@ -932,8 +948,8 @@ The sole StoryOS-owned authorization and execution boundary for every StoryOS-di
 _Avoid_: Tool Registry, provider runtime, direct adapter call
 
 **Credential Reference**:
-An opaque, host-owned reference to credential material resolved only inside the execution boundary that needs it. Tool Registrations and Operational Records may identify the reference and its availability but never contain its value; models, MCP Apps, generated programs, Tool arguments, outputs, transcripts, and external servers cannot inspect, select, or transport it.
-_Avoid_: API key field, secret value, model parameter, logged credential
+An opaque, host-owned, Project Scope-bound reference to credential material held by a deployment-specific secret backend and resolved only inside the execution boundary that needs it. PostgreSQL may retain its backend identity, non-secret locator and generation, availability or rebinding state, and authorized project-use binding, but never the value or a value digest; Registrations and Operational Records may identify the Reference and its availability without containing the secret. The Foundation-local backend is macOS Keychain, later controlled-cloud deployments use the same resolver contract with a managed secret service, and environment variables are development/test inputs only. Ordinary database backups, logs, support material, and Project exports omit secret material; an import whose destination cannot resolve a Reference leaves it explicitly Unbound until an authorized rebind. Models, MCP Apps, generated programs, Tool arguments, outputs, transcripts, and external servers cannot inspect, select, or transport credential material.
+_Avoid_: API key field, encrypted database secret, secret-value digest, portable secret export, production environment variable
 
 **Tool Effect Envelope**:
 The versioned, host-owned upper bound on the composable effects a registered Tool may request, covering project reads, Artifact writes, Outbound Disclosure, and external reads or writes. Artifact writes distinguish creating an Artifact from appending an Artifact Revision. The Envelope can never include mutation of Authoritative State, and untrusted Tool or MCP annotations cannot expand it.

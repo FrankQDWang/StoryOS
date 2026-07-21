@@ -17,8 +17,8 @@ crash recovery. It refines the parent domain model without changing its primary
 authority rule: only a Direct Author Action, Acceptance, or safe author-approved
 compensation changes Authoritative State.
 
-The following are deliberately outside this contract and remain owned by
-[Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56):
+The following are deliberately outside this contract and are implemented by
+the [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md):
 
 - PostgreSQL tables, indexes, constraints, transaction isolation, durability, and locking policy;
 - separately stored payload layout if any, compression, physical deduplication, and encryption;
@@ -812,7 +812,7 @@ For a streaming Proposal:
 
 Recovery never infers success from a network process, model stream, editor
 cache, timestamp, or absent error. Physical corruption detection and store
-repair belong to [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56);
+repair belong to the [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md);
 until repaired, Core remains fail-closed.
 
 ## 13. Normative commands, events, and records
