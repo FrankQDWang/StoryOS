@@ -204,11 +204,11 @@ without content- or existence-bearing differences.
 
 **Residual risk and owner.** A compromised runtime or database-owner boundary
 can still defeat application isolation. Exact envelopes and errors belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 adversarial proof belongs to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60);
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the minimum enforcement slice belongs to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 10. AP-02: RLS, role, migration, or backup authority bypass
 
@@ -251,9 +251,9 @@ database, and role connections fail before any scoped query.
 
 **Residual risk and owner.** A stolen maintenance or platform-admin credential
 retains its intended broad blast radius. Protocol exposes no such route;
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60)
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 owns posture and isolation gates, and
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62)
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
 must include role separation before validation data is trusted.
 
 ## 11. AP-03: Localhost or cloud HTTP request forgery
@@ -293,9 +293,9 @@ sensitive reads fail before a domain attempt or disclosure.
 **Residual risk and owner.** XSS or a fully compromised first-party Client can
 act inside its granted browser session, so command-specific Author Intent and
 Approval remain necessary. Exact auth, Origin, CSRF, command, and error
-contracts belong to [Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+contracts belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 browser adversarial tests belong to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60).
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
 ## 12. AP-04: SSE replay, cursor confusion, or stale authorization
 
@@ -331,11 +331,11 @@ replays the correct sequence or performs an explicit scoped resync.
 
 **Residual risk and owner.** A Client may render stale information while
 offline, but it cannot commit stale authority. Cursor/envelope/error semantics
-belong to [Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 cursor retention and compaction belong to
-[Run Retention and Archival](https://github.com/FrankQDWang/StoryOS/issues/64);
+[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64);
 replay tests belong to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60).
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
 ## 13. AP-05: MCP App bridge spoofing or iframe authority escalation
 
@@ -377,9 +377,9 @@ revocation. No denied request reaches Tool Gateway or model context.
 **Residual risk and owner.** A browser sandbox escape is a platform compromise;
 the App still holds no credential, host cookie, direct database path, or
 ambient Project context. Bridge DTOs and reason codes belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 the adversarial host matrix belongs to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60).
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
 ## 14. AP-06: Tool/MCP confused deputy, contract drift, or token misuse
 
@@ -420,9 +420,9 @@ or the call fails closed before execution.
 **Residual risk and owner.** An external service can misuse data that was
 legitimately disclosed within an exact grant; StoryOS records but cannot
 control that destination. Wire Tool/MCP contracts belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 contract-drift and deputy tests belong to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60).
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
 ## 15. AP-07: Prompt or content injection crosses an authority boundary
 
@@ -463,9 +463,9 @@ cause unapproved egress/effects, or bypass Proposal/Acceptance.
 creative output from eligible malicious data; author inspection and evidence
 quality address that product risk. Hard security effects remain Host-gated.
 Exact input/output discriminants belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 the injection matrix belongs to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60).
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
 ## 16. AP-08: Research fetching becomes SSRF or ambient credential egress
 
@@ -508,11 +508,11 @@ mismatch, and credential/header reflection.
 side effects or return parser exploits; the fetcher remains credential-free,
 read-only, bounded, and its captured bytes stay untrusted. URL/redirect/result
 contracts belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 SSRF and parser tests belong to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60);
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the isolated minimal fetcher belongs to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 17. AP-09: Provider or embedding disclosure escapes its admitted manifest
 
@@ -550,13 +550,13 @@ behavior or a distinct recorded Attempt.
 **Residual risk and owner.** StoryOS cannot prove a Provider's internal
 retention, training, breach response, or legal disclosure; it can prove what
 it sent, where, why, and what outcome it observed. Wire and retry contracts
-belong to [Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
+belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
 retention evidence to
-[Run Retention and Archival](https://github.com/FrankQDWang/StoryOS/issues/64),
+[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
 adapter proofs to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60),
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and the first admitted Provider path to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 18. AP-10: Credential Reference resolution leaks or crosses authority
 
@@ -594,12 +594,12 @@ secret-bearing distinction; audit contains reference/version/result only.
 **Residual risk and owner.** A fully compromised host, secret-service operator,
 or destination process can observe the secret at its necessary use boundary.
 Reference and failure semantics belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), evidence
-retention to [Run Retention and Archival](https://github.com/FrankQDWang/StoryOS/issues/64),
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), evidence
+retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
 leak and rotation gates to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60),
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and resolver integration to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 19. AP-11: Logs, telemetry, support evidence, or error surfaces leak data
 
@@ -634,13 +634,13 @@ status, timing class, and non-identifying errors.
 
 **Residual risk and owner.** Operators may still infer bounded operational
 metadata that the service intentionally records. The event/error vocabulary
-belongs to [Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
+belongs to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
 classification and expiry to
-[Run Retention and Archival](https://github.com/FrankQDWang/StoryOS/issues/64),
+[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
 leak testing to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60),
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and production-safe defaults to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 20. AP-12: Backup, WAL, or restore leaks or silently changes authority
 
@@ -677,11 +677,11 @@ and measured RPO/RTO.
 **Residual risk and owner.** Infrastructure administrators retain broad access,
 and correlated loss of database plus recovery stores remains environmental
 risk. Retention/archival policy and restore evidence belong to
-[Run Retention and Archival](https://github.com/FrankQDWang/StoryOS/issues/64);
+[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64);
 gates belong to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60);
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the first operational recovery proof belongs to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 21. AP-13: Import archives or author files escape scope or parser bounds
 
@@ -722,12 +722,12 @@ database unchanged; success is exactly scoped and reproducible.
 **Residual risk and owner.** Memory-safe parsers may still contain denial-of-
 service or logic defects, so isolation and hard budgets remain mandatory.
 Archive/command schemas belong to
-[Versioned Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), archive
-retention to [Run Retention and Archival](https://github.com/FrankQDWang/StoryOS/issues/64),
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), archive
+retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
 the corpus to
-[Deterministic Verification](https://github.com/FrankQDWang/StoryOS/issues/60),
+[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and the narrow importer to
-[First Production Vertical Slice](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 22. AP-14: Retry or OutcomeUnknown duplicates an external or authoritative effect
 
@@ -759,10 +759,10 @@ effect, stable replay, preserved uncertainty, and no cross-scope key collision.
 
 **Residual risk and owner.** Some destinations offer no authoritative lookup;
 uncertainty may remain permanently visible. Envelope/idempotency contracts
-belong to [#58](https://github.com/FrankQDWang/StoryOS/issues/58), durable
-Attempt/outbox retention to [#64](https://github.com/FrankQDWang/StoryOS/issues/64),
-fault injection to [#60](https://github.com/FrankQDWang/StoryOS/issues/60), and
-the first end-to-end recovery path to [#62](https://github.com/FrankQDWang/StoryOS/issues/62).
+belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), durable
+Attempt/outbox retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+fault injection to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
+the first end-to-end recovery path to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 23. AP-15: Retrieval, embedding, or cache poisoning changes eligible context
 
@@ -792,10 +792,10 @@ dependency closure.
 
 **Residual risk and owner.** Authorized malicious prose can still influence
 model quality, but cannot obtain authority. Projection schemas belong to
-[#58](https://github.com/FrankQDWang/StoryOS/issues/58), invalidation and
-retention to [#64](https://github.com/FrankQDWang/StoryOS/issues/64), adversarial
-rebuild proof to [#60](https://github.com/FrankQDWang/StoryOS/issues/60), and
-the first bounded retrieval slice to [#62](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), invalidation and
+retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64), adversarial
+rebuild proof to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
+the first bounded retrieval slice to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 24. AP-16: Historical evidence or provenance is rewritten after the fact
 
@@ -826,10 +826,10 @@ Attempt, cursor, and provenance lineages or emit the specified loss marker.
 
 **Residual risk and owner.** A database/platform administrator can rewrite both
 facts and ordinary checks, so independent recovery evidence is needed for
-detection. Historical wire schemas belong to [#58](https://github.com/FrankQDWang/StoryOS/issues/58),
-compaction/redaction/tombstones to [#64](https://github.com/FrankQDWang/StoryOS/issues/64),
-rebuild and tamper gates to [#60](https://github.com/FrankQDWang/StoryOS/issues/60),
-and minimum audit lineage to [#62](https://github.com/FrankQDWang/StoryOS/issues/62).
+detection. Historical wire schemas belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
+compaction/redaction/tombstones to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+rebuild and tamper gates to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
+and minimum audit lineage to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 25. AP-17: A stale lease or fence completes work after recovery
 
@@ -859,10 +859,10 @@ stable outcome without losing the late evidence.
 
 **Residual risk and owner.** A non-idempotent external effect may remain
 OutcomeUnknown even though stale local writes are fenced. Fence/event contracts
-belong to [#58](https://github.com/FrankQDWang/StoryOS/issues/58), lease and
-snapshot retention to [#64](https://github.com/FrankQDWang/StoryOS/issues/64),
-race tests to [#60](https://github.com/FrankQDWang/StoryOS/issues/60), and the
-first crash-safe worker path to [#62](https://github.com/FrankQDWang/StoryOS/issues/62).
+belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), lease and
+snapshot retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+race tests to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and the
+first crash-safe worker path to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 26. AP-18: Untrusted input or replay exhausts bounded service resources
 
@@ -893,10 +893,10 @@ canonical facts, and continued control/recovery operations.
 
 **Residual risk and owner.** Foundation limits are not Internet-scale DDoS
 protection or billing policy. Budget/error contracts belong to
-[#58](https://github.com/FrankQDWang/StoryOS/issues/58), expiry/Snapshot/replay
-floors to [#64](https://github.com/FrankQDWang/StoryOS/issues/64), stress gates
-to [#60](https://github.com/FrankQDWang/StoryOS/issues/60), and bounded default
-configuration to [#62](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), expiry/Snapshot/replay
+floors to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64), stress gates
+to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and bounded default
+configuration to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 # Severity Calibration
 
@@ -926,10 +926,10 @@ Wayfinder owner:
 
 | Downstream owner | Security obligations received from this model | Attack paths |
 |---|---|---|
-| [#58 Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; provider and research destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-18 |
-| [#64 Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | replay floors and Snapshot semantics; Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18 |
-| [#60 Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin/bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-18 |
-| [#62 First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-18 |
+| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; provider and research destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-18 |
+| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | replay floors and Snapshot semantics; Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18 |
+| [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin/bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-18 |
+| [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-18 |
 
 No separate security implementation, cloud-operations, identity-system, or
 provider-specific Wayfinder ticket follows from this research. No unresolved
