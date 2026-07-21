@@ -4,6 +4,7 @@
 - Wayfinder resolution: [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
+- Context and disclosure refinement: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Authority decision: [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md)
 - Ownership and deployment decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research inputs: [Fiction memory and research provenance semantics](../research/fiction-memory-and-research-provenance-semantics.md) and [Durable, inspectable Agent memory architecture](../research/durable-inspectable-agent-memory-architecture.md)
@@ -398,12 +399,12 @@ inspection and settings may exist away from the uninterrupted writing flow.
 
 This specification fixes the semantic invariants consumed by downstream work:
 
-| Ticket | Owns next | Must preserve from this specification |
+| Contract or ticket | Owns next | Must preserve from this specification |
 |---|---|---|
-| [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | mandatory and dynamic selection, ranking, context budgets, explanation, author controls, and outbound disclosure | qualification before ranking, no authority from relevance, exact source and Admission evidence, no interruptive memory confirmation |
+| [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md), resolving [issue 54](https://github.com/FrankQDWang/StoryOS/issues/54) | accepted mandatory and dynamic selection, ranking, context budgets, explanation, author controls, and outbound disclosure | qualification before ranking, no authority from relevance, exact source and Admission evidence, no interruptive memory confirmation |
 | [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | PostgreSQL records and transactions, separately stored payloads if any, indexes, projection rebuild, physical deletion, backup, and migration | canonical domain records survive index loss; every copy preserves Project Scope; Suppression and Tombstone fan out to every derived copy without becoming index-only state |
 | [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact identities, DTOs, commands, events, relations, idempotency keys, compatibility, and errors | immutable candidates and decisions, exact source revisions, append-only lifecycle, deterministic replay safety |
-| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Run, Message, Context Assembly Manifest, snapshot, mailbox, and recovery-evidence retention | historical Runs retain what they actually used; every record preserves Project Scope; Working Context is not silently converted into long-term memory |
+| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Run, Message, Context Assembly Manifest, snapshot, mailbox, and recovery-evidence retention | historical Runs retain what StoryOS assembled, disclosed, and executed without claiming model-internal use; every record preserves Project Scope; Working Context is not silently converted into long-term memory |
 
 No new follow-up ticket is required: the clarified work is already owned by
 these existing tickets.
