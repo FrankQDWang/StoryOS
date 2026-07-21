@@ -5,6 +5,7 @@
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Related foundation specification: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md)
 - Manuscript/Proposal refinement: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)
+- Ownership and deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 
 ## 1. Purpose
 
@@ -13,6 +14,7 @@ This specification defines the durable domain language shared by the StoryOS edi
 - the boundary between author-owned truth and Agent-produced material;
 - the Core Artifact families and the restricted extension surface;
 - Artifact identity, revisions, provenance, lifecycle, and retention;
+- the exact User and Project ownership boundary shared by all project-scoped objects;
 - the only path by which a Proposal can affect Authoritative State;
 - the distinction between Artifacts, authoritative domain objects, and operational execution records.
 
@@ -21,6 +23,8 @@ This document is normative for later foundation tickets. Later work may refine s
 ## 2. Three disjoint durable spaces
 
 StoryOS has three disjoint kinds of durable object.
+
+Every project-scoped member of all three spaces binds one trusted `ProjectScope { owner_user_id, project_id }`. An object, reference, query, command, cache, index, or projection with a missing or mismatched member of that pair is ineligible. A client-supplied owner, a process-global current User, a project path, or ProjectId alone never authorizes access. Globally reusable definitions may remain unscoped only when they contain no project-derived data or project authority.
 
 ```mermaid
 flowchart LR
@@ -51,7 +55,7 @@ Operational Records explain execution rather than product content. They include:
 
 - `AgentRun` and `RunStep`;
 - `RunPlan`;
-- `ContextManifest`;
+- `ContextAssemblyManifest`;
 - `ToolCall`;
 - `Approval`;
 - usage and cost records;
@@ -163,6 +167,10 @@ An Artifact has a stable logical identity. Its revisions form one linear history
 Each Artifact Revision is an immutable snapshot of content and provenance. A conceptual envelope contains:
 
 ```text
+project_scope {
+  owner_user_id
+  project_id
+}
 artifact_id
 artifact_revision_id
 artifact_kind
@@ -190,6 +198,10 @@ The digest provides integrity and physical deduplication. It never supplies sema
 Every Artifact Revision is independently explainable without replaying an Agent Run. It records:
 
 ```text
+project_scope {
+  owner_user_id
+  project_id
+}
 artifact_id
 artifact_revision_id
 artifact_kind
@@ -203,7 +215,7 @@ content_digest
 `creator` is a closed discriminated union:
 
 ```text
-Author
+Author { user_id }
 AgentRunStep
 ToolCall
 Import
@@ -234,7 +246,7 @@ Core roles are:
 | `available_as_context` | The target was available to the generating step; this does not claim the model used it as evidence. |
 | `responds_to` | The revision answers a Message, author instruction, or goal. |
 
-Targets pin an exact Artifact Revision, Authoritative Revision, selection snapshot, external-source snapshot, or ContextManifest as appropriate. StoryOS never collapses “was visible to the model” and “supports this claim” into the same relation.
+Targets pin an exact Artifact Revision, Authoritative Revision, selection snapshot, external-source snapshot, or Context Assembly Manifest as appropriate. StoryOS never collapses “was visible to the model” and “supports this claim” into the same relation.
 
 ### 5.3 Source snapshots and structured conclusions
 
@@ -393,7 +405,7 @@ The external command surface for a domain Proposal uses the selected envelope:
 ```text
 AcceptProposal {
   command_schema_version
-  project_id
+  project_scope
   proposal_id
   proposal_revision_id
   validation_receipt_id
@@ -403,6 +415,8 @@ AcceptProposal {
   idempotency_key
 }
 ```
+
+`project_scope` contains `owner_user_id` and `project_id`, which must match the trusted requester and the Proposal's immutable Project Scope. Both identities participate in the command digest and idempotency boundary but do not let a client assert ownership. Every referenced Proposal, Receipt, target Revision, and selected Operation must resolve under that same scope before validation or mutation.
 
 StoryOS Core dispatches to a handler selected by closed `ProposalKind`. Extensions cannot register Acceptance handlers. An idempotency key is permanently bound to one command digest: an exact retry returns the existing attempt Receipt, while the same key with different input fails.
 
@@ -431,7 +445,7 @@ When the Proposal head advanced incompatibly, was withdrawn or superseded, Story
 
 ### 8.5 Unified author undo order
 
-Every successfully committed author-owned Core Transition receives one project-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Intent caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
+Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Intent caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
 
 ### 8.6 Domain Receipts
 
@@ -449,14 +463,14 @@ Receipts are displayable in the Run Timeline and future Eval surface, but they c
 
 Each authoritative domain object has a stable identity and immutable linear Authoritative Revisions guarded by an expected prior revision.
 
-Every author-authorized domain transaction also creates one project-ordered `AuthoritativeCommit` containing:
+Every author-authorized domain transaction also creates one Project Scope-ordered `AuthoritativeCommit` containing:
 
-- a monotonic project sequence;
+- a monotonic sequence local to the exact Project Scope;
 - actor and cause;
 - all prior and resulting Authoritative Revision references;
 - the associated Direct Author Action, Acceptance Receipt, or an Undo Acceptance Receipt whose outcome is `Compensated`.
 
-This provides precise local conflict checks and a single atomic project order without creating a complete project snapshot for every edit. Current Authoritative State is a projection over each object's current revision.
+This provides precise object conflict checks and a single atomic Project Scope order without creating a complete project snapshot for every edit. Current Authoritative State is a projection over each object's current revision.
 
 ## 10. Specialized Artifact behavior
 
@@ -510,7 +524,7 @@ Host state.
 
 `ArchiveArtifact` is reversible and excludes the Artifact from normal retrieval and model context while retaining its payload.
 
-`TombstoneArtifact` is terminal. It removes the Artifact's owned payload, indexes, and derived caches, including captured source content when the Artifact is itself a Source Snapshot. It never deletes separately referenced source Artifacts or a content-addressed blob still referenced by another logical Artifact. It retains a minimum tombstone for every former Revision: artifact ID, revision ID, parent revision ID, kind, creation time, digest, deletion actor/time/reason, and necessary relationship structure.
+`TombstoneArtifact` is terminal. It removes the Artifact's owned payload, indexes, and derived caches, including captured source content when the Artifact is itself a Source Snapshot. It never deletes separately referenced source Artifacts or a content-addressed blob still referenced by another logical Artifact. It retains a minimum tombstone for every former Revision: Project Scope, artifact ID, revision ID, parent revision ID, kind, creation time, digest, deletion actor/time/reason, and necessary relationship structure.
 
 Immutable inbound Provenance Edges never change. When an edge resolves to a Revision Tombstone, the read projection renders a `PurgedSourceRef` and states that the source was removed and can no longer be verified. Tombstoning a source does not automatically change or delete Authoritative State. Reversing authoritative effects requires Undo Acceptance or a new Proposal.
 
@@ -534,6 +548,8 @@ Immutable inbound Provenance Edges never change. When an edge resolves to a Revi
 16. Tombstoning a source makes the provenance gap explicit and never cascades into silent authoritative deletion.
 17. Operational Records and Domain Receipts are not Artifacts.
 18. Transcript Messages never rewrite history by resolving mutable latest Artifact revisions.
+19. Every project-scoped durable object, reference, command, idempotency record, index, cache, and read projection binds and validates one exact Project Scope.
+20. No cross-Project Scope reference, join, retrieval result, cache reuse, or disclosure is valid merely because an opaque ID or content digest matches.
 
 ## 13. Deferred to later Wayfinder tickets
 
@@ -544,7 +560,7 @@ This decision intentionally does not choose:
 - exact fictional-world truth, character, relationship, timeline, and memory aggregate schemas;
 - MCP Apps bridge methods, CSP details, iframe lifecycle, and protocol negotiation;
 - Tool capability and Approval policy implementation;
-- crash consistency across SQLite and content-addressed files;
+- transactional crash consistency across PostgreSQL and any separately stored payloads;
 - context ranking, retrieval algorithms, or provider disclosure rules;
 - protocol versioning and generated TypeScript/OpenAPI tooling;
 - final test matrix and performance budgets.

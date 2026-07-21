@@ -13,7 +13,7 @@
 - StoryOS has one general, novel-project-scoped Agent Loop. Task-specific behavior comes from Tools, MCP servers, Services, Skills, and policy, not separate fixed workflow runtimes.
 - The author owns every authoritative creative state. Narrow deterministic direct author manipulation changes it through explicit domain commands; Agent-, Tool-, MCP-, extension-produced, bulk, cross-location, or not-fully-previsible changes require an inspectable StoryOS Core Proposal accepted by the author.
 - Discovery is not authorization. Tools and extensions receive only the capabilities, context, budget, and outbound-data access explicitly granted to the current run.
-- Local project data is authoritative. Any external model, service, or MCP server receives only the minimum context required for the approved step, with provenance and disclosure recorded.
+- StoryOS-controlled project data is authoritative regardless of whether the StoryOS Server and PostgreSQL run locally or in a later controlled cloud deployment. Every project-scoped record and operation binds one exact owning User and Project; external model, embedding, service, Tool, or MCP destinations receive only the minimum context required for the approved step, with provenance and disclosure recorded.
 - Agent runs, plans, tool calls, approvals, artifacts, and state transitions are durable and inspectable. A network connection or model process is never the source of truth.
 - Transcript-native MCP Apps are sandboxed views/controllers over StoryOS-owned typed artifacts. They never become the authoritative data store.
 - Prose proposals, editable diffs, accept/reject operations, and proposal conflict handling belong in the editor, not in an MCP App.

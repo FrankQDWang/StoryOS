@@ -8,6 +8,8 @@ StoryOS represents a transcript-embedded MCP App as an immutable, reproducible V
 
 This decision resolves [issue 53](https://github.com/FrankQDWang/StoryOS/issues/53). It refines the Artifact boundary in [ADR 0001](0001-separate-authoritative-state-artifacts-and-operational-records.md) without creating an App-specific workflow runtime.
 
+[ADR 0004](0004-adopt-postgresql-service-and-project-isolation-boundary.md) additionally requires every project-bearing App View Artifact, Instance, delivery, App Action, Host Context snapshot, cache entry, and routed command or AgentRun to bind the same exact Project Scope. A reusable App UI Resource may remain outside a Project Scope only when it contains no project-derived data or authority; Registration and project enablement still gate its use.
+
 ## Identity and ownership
 
 ### App UI Resource
@@ -34,6 +36,7 @@ Server removal does not remove a retained Resource Revision. Explicit author-gov
 
 An `AppViewArtifact` is a Core Artifact whose revisions form one linear history. It is a reproducible descriptor, not an iframe snapshot. Each revision references:
 
+- one exact Project Scope;
 - one exact App UI Resource Revision;
 - the selected MCP Apps protocol profile;
 - the App View Capability Snapshot and authorized Host Context snapshot;
@@ -44,6 +47,8 @@ An `AppViewArtifact` is a Core Artifact whose revisions form one linear history.
 It never contains a live DOM, JavaScript heap, browser storage, pending RPC callback, media handle, or App-owned authoritative state.
 
 An `AppViewInstance` is a disposable rendering of one exact App View Artifact Revision. Reload, reconnect, branch replay, and concurrent windows each create a different Instance. An Instance never changes its bound revision, restores a prior runtime, or re-executes the originating ToolCall.
+
+Every Instance, delivery, Action Request, response delivery, and executable derivative inherits the Artifact Revision's exact Project Scope. A bridge payload, global ID, or resource URI cannot select or change that scope, and a mismatch fails before routing or disclosure.
 
 ### Transcript binding
 
@@ -170,7 +175,7 @@ The persisted App Action Routing Decision maps the Request to exactly one of:
 
 The Request and Routing Decision are ingress and provenance records, not an executor. The App never inherits the originating Run's authority, even when that Run is still active. The historical capability snapshot grants nothing. There is no raw MCP client that auto-forwards bridge calls.
 
-`tools/call`, `resources/read`, `ui/open-link`, and other external or effectful operations use new execution lineage. `ui/message` requires an author confirmation before the normal transcript command and is never represented as author speech merely because the App requested it. `ui/update-model-context` creates only a bounded, attributed, instance-scoped contribution; a future Run may include it only through normal ContextManifest policy. Creative-state changes can produce only a Core Proposal and require author Acceptance.
+`tools/call`, `resources/read`, `ui/open-link`, and other external or effectful operations use new execution lineage. `ui/message` requires an author confirmation before the normal transcript command and is never represented as author speech merely because the App requested it. `ui/update-model-context` creates only a bounded, attributed, instance-scoped contribution; a future Run may include it only through normal Context Assembly Manifest policy. Creative-state changes can produce only a Core Proposal and require author Acceptance.
 
 Accepted work continues under the routed record's lifecycle after the requesting Instance becomes Terminal. A separate App Action Response Delivery targets only the requesting Instance and is `Pending`, `Dispatched`, or `Abandoned`. Instance termination abandons an undelivered response without cancelling or retrying work, restoring a promise, or transferring a callback to another Instance. Durable results appear through their normal Artifact and Message paths.
 
@@ -193,7 +198,7 @@ These are normative domain event names and one-to-one semantic transitions. Stor
 | create or settle an App response delivery | `AppActionResponseDeliveryCreated`, `AppActionResponseDispatched`, `AppActionResponseAbandoned` |
 | invalidate resource derivatives | `AppUIDerivedDataInvalidated` with Resource Revision and prior generation |
 
-Every event binds the owning identity, expected prior state or sequence, idempotency key, causation and correlation identities, timestamp, and controlled payload references. Secret-bearing data remains behind encrypted or redacted references rather than raw event payloads.
+Every event binds the owning identity, exact Project Scope when project-bearing, expected prior state or sequence, idempotency key, causation and correlation identities, timestamp, and controlled payload references. Secret-bearing data remains behind encrypted or redacted references rather than raw event payloads.
 
 ## Considered options
 

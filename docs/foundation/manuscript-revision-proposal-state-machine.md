@@ -4,6 +4,7 @@
 - Wayfinder resolution: [Specify the Manuscript Revision and Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
+- Ownership and deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research input: [Manuscript revision and Proposal state-machine source audit](../research/manuscript-revision-proposal-state-machine-source-audit.md)
 - Editor evidence: [Tiptap / ProseMirror durable Proposal mechanics](../research/tiptap-prosemirror-proposal-mechanics.md)
 
@@ -17,10 +18,10 @@ authority rule: only a Direct Author Action, Acceptance, or safe author-approved
 compensation changes Authoritative State.
 
 The following are deliberately outside this contract and remain owned by
-[Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56):
+[Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56):
 
-- SQLite tables, indexes, journal mode, `synchronous` policy, and savepoints;
-- file and blob layout, compression, physical deduplication, and encryption;
+- PostgreSQL tables, indexes, constraints, transaction isolation, durability, and locking policy;
+- separately stored payload layout if any, compression, physical deduplication, and encryption;
 - backup, restore, migration execution, and portability;
 - concrete cache eviction and retention periods.
 
@@ -36,16 +37,17 @@ Every durable entity and record identity is a distinct UUIDv7 newtype. At
 minimum this includes:
 
 ```text
-ProjectId                    ManuscriptObjectId
-ManuscriptBlockId            AuthoritativeRevisionId
-AuthoritativeCommitId        ProposalId
-ProposalRevisionId           ProposalOperationId
-ProposalGenerationId         DomainReceiptId
-ValidationReceiptId          AcceptanceReceiptId
-UndoAcceptanceReceiptId      AuthorUndoReceiptId
-AuthorIntentId               EditorSessionId
-ProjectionCheckpointId       DraftId
-IdempotencyKey               DomainEventId
+UserId                       ProjectId
+ManuscriptObjectId           ManuscriptBlockId
+AuthoritativeRevisionId      AuthoritativeCommitId
+ProposalId                   ProposalRevisionId
+ProposalOperationId          ProposalGenerationId
+DomainReceiptId              ValidationReceiptId
+AcceptanceReceiptId          UndoAcceptanceReceiptId
+AuthorUndoReceiptId          AuthorIntentId
+EditorSessionId              ProjectionCheckpointId
+DraftId                      IdempotencyKey
+DomainEventId
 ```
 
 Core uses an RFC 9562-conforming CSPRNG implementation and enforces uniqueness.
@@ -54,7 +56,27 @@ same. Code must never parse or sort the UUID timestamp to decide freshness,
 causality, authority, conflict, project order, or authorization. Knowing an ID
 grants no capability.
 
-### 2.2 Ordered integers
+### 2.2 Project Scope
+
+Every entity, record, command, idempotency binding, sequence, Head, reference,
+query, and recovery projection in this state machine belongs to one trusted
+Project Scope:
+
+```text
+ProjectScope {
+  owner_user_id: UserId
+  project_id: ProjectId
+}
+```
+
+The Project has one owning User acting as its Project Author. Project Scope is
+resolved from trusted Host state and must match every referenced object; a
+caller field, ProjectId alone, globally unique object ID, or editor session
+cannot establish ownership. Any missing or mismatched member fails before a
+domain attempt and cannot produce or retrieve a Receipt. Ownership transfer,
+shared ownership, and multi-author editing are outside the current Foundation.
+
+### 2.3 Ordered integers
 
 The logical integer types are:
 
@@ -76,17 +98,17 @@ versioned migration before further writes of that kind.
 `from <= to`; equality represents insertion at a point. Offset overflow, an
 out-of-bounds range, or unsupported coordinate version is a typed conflict.
 
-### 2.3 Audit time
+### 2.4 Audit time
 
 Every durable record carries an audit timestamp supplied by the trusted Host.
 Time is presentation and forensic evidence only. It is not a concurrency
 precondition, sequence, or source of causal order.
 
-## 3. Independent project order
+## 3. Independent Project Scope order
 
 ### 3.1 Authoritative Commit order
 
-Each project has one `AuthoritativeCommitSequence`, beginning at 1. A Core
+Each Project Scope has one `AuthoritativeCommitSequence`, beginning at 1. A Core
 Transition that successfully changes Authoritative State allocates exactly the
 next value and appends one `AuthoritativeCommit`. Failed, refused, conflicted,
 invalid, and no-effect attempts allocate none. Transaction rollback leaves no
@@ -96,7 +118,7 @@ The Commit binds:
 
 ```text
 AuthoritativeCommit {
-  project_id
+  project_scope
   commit_id
   sequence
   author_action_sequence
@@ -109,7 +131,7 @@ AuthoritativeCommit {
 
 ### 3.2 Author Action order
 
-Each project separately has one `AuthorActionSequence`, beginning at 1. A
+Each Project Scope separately has one `AuthorActionSequence`, beginning at 1. A
 successful author-owned Core Transition allocates one value even when it
 creates several Revisions, Receipts, or a Commit. Exact idempotent retry returns
 the existing value. Refused, conflicted, invalid, no-effect, recovery-Draft, and
@@ -155,7 +177,7 @@ envelope:
 
 ```text
 RevisionEnvelope<ObjectId, RevisionId, Payload> {
-  project_id: ProjectId
+  project_scope: ProjectScope
   object_id: ObjectId
   revision_id: RevisionId
   parent_revision_id: RevisionId | None
@@ -333,11 +355,16 @@ only when semantic identity is proven unchanged.
 
 ### 7.1 Common command rules
 
-Every schema-valid domain command has a version, project identity, typed cause,
-and idempotency key. Author commands additionally carry an immutable
-Host-attested `AuthorIntentId` bound to the author, project, and exact command
+Every schema-valid domain command has a version, exact Project Scope, typed
+cause, and idempotency key. Author commands additionally carry an immutable
+Host-attested `AuthorIntentId` bound to the owning User, Project, and exact command
 input. Agents, Tools, MCP servers, extensions, and untrusted clients cannot
 self-assert Author Intent.
+
+The trusted requester User and command Project Scope must match every input,
+Head, Revision, Receipt, checkpoint, idempotency record, and producer cause.
+Scope validation precedes lookup and mutation so an opaque ID cannot become a
+cross-project existence oracle.
 
 The v1 producer cause is exhaustive and Host-attested:
 
@@ -372,7 +399,7 @@ Proposal write endpoint.
 ```text
 ApplyAuthorEdit {
   command_schema_version
-  project_id
+  project_scope
   editor_session_id
   normalized_edit_intent
   selection_snapshot
@@ -423,7 +450,7 @@ starting at 1.
 ```text
 AppendProposalGenerationBatch {
   command_schema_version
-  project_id
+  project_scope
   proposal_id
   generation_id
   stream_seq
@@ -452,7 +479,7 @@ The Host then issues:
 ```text
 PauseProposalGeneration {
   command_schema_version
-  project_id
+  project_scope
   proposal_id
   generation_id
   expected_proposal_revision_id
@@ -480,7 +507,7 @@ edit leaves the safety fact intact without inventing an author action.
 ```text
 ValidateProposal {
   command_schema_version
-  project_id
+  project_scope
   proposal_id
   proposal_revision_id
   expected_target_revisions
@@ -491,7 +518,7 @@ ValidateProposal {
 
 ReplanProposal {
   command_schema_version
-  project_id
+  project_scope
   proposal_id
   conflicted_proposal_revision_id
   expected_current_proposal_head
@@ -512,7 +539,7 @@ old conflict or Receipt.
 ```text
 AcceptProposal {
   command_schema_version
-  project_id
+  project_scope
   proposal_id
   proposal_revision_id
   validation_receipt_id
@@ -559,7 +586,7 @@ CompleteReadyPartialProposal
 ContinueProposalGeneration
 ```
 
-Each carries project ID, exact Proposal ID and Revision, complete selected
+Each carries exact Project Scope, exact Proposal ID and Revision, complete selected
 Operation IDs when applicable, current target expectations, a typed producer
 cause, and an idempotency key. Reject, author reopen, supersede, explicit
 completion, and continuation require Author Intent. Withdrawal accepts either
@@ -605,7 +632,7 @@ Every first Acceptance attempt produces:
 ```text
 AcceptanceReceipt {
   receipt_id
-  project_id
+  project_scope
   command_digest
   idempotency_key
   author_intent_id
@@ -657,7 +684,7 @@ The public coordinator command is:
 ```text
 UndoLatestAuthorAction {
   command_schema_version
-  project_id
+  project_scope
   expected_author_undo_frontier_sequence
   author_intent_id
   idempotency_key
@@ -688,7 +715,7 @@ verifies durable history. A handlerless action is a Barrier.
 ```text
 UndoAcceptance {
   command_schema_version
-  project_id
+  project_scope
   acceptance_receipt_id
   expected_current_target_revisions
   expected_current_proposal_head
@@ -785,7 +812,7 @@ For a streaming Proposal:
 
 Recovery never infers success from a network process, model stream, editor
 cache, timestamp, or absent error. Physical corruption detection and store
-repair belong to [Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56);
+repair belong to [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56);
 until repaired, Core remains fail-closed.
 
 ## 13. Normative commands, events, and records
@@ -816,7 +843,7 @@ these one-to-one semantics:
 | preserve an uncommitted edit | `RecoveryDraftCreated` |
 | expose ambiguous Proposal recovery | `ProposalRecoveryConflictDetected` |
 
-Every event binds its owning identity, expected prior Revision or state,
+Every event binds its exact Project Scope, owning identity, expected prior Revision or state,
 idempotency key, cause, correlation references, author-action sequence when
 applicable, audit time, and controlled payload references or digests. Unknown
 event variants fail closed until a versioned migration or compatible reader is
@@ -827,7 +854,7 @@ available.
 1. Durable identity never implies authority, order, causality, or capability.
 2. One object identity has one immutable linear Revision history.
 3. Authoritative Commit order and Author Action order are independent explicit
-   project-local sequences.
+   Project Scope-local sequences.
 4. A digest has meaning only under one exact versioned Digest Profile.
 5. One Core command result is atomic with its Revisions, Heads, Receipt, events,
    sequences, resolutions, and outbox intent.
@@ -848,3 +875,6 @@ available.
     never skipped.
 14. Recovery reconstructs from Core facts and exposes ambiguity instead of
     replaying or guessing.
+15. Every entity, command, reference, Head, Receipt, event, sequence,
+    idempotency record, and recovery projection validates one exact Project
+    Scope; no opaque ID, digest, or client assertion permits cross-scope access.

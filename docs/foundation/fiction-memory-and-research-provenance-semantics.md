@@ -5,11 +5,12 @@
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
 - Authority decision: [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md)
+- Ownership and deployment decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research inputs: [Fiction memory and research provenance semantics](../research/fiction-memory-and-research-provenance-semantics.md) and [Durable, inspectable Agent memory architecture](../research/durable-inspectable-agent-memory-architecture.md)
 
 ## 1. Scope and authority
 
-This specification defines the logical contract for project-scoped Agent
+This specification defines the logical contract for Project Scope-bound Agent
 continuity across threads and AgentRuns, typed fiction assertions, durable
 memory candidates, admission and lifecycle, author preferences, operational
 lessons, research claims and evidence, suppression, and rebuildable retrieval
@@ -20,6 +21,14 @@ Operational Records. It does not create another durable truth space and does
 not authorize implementation work. Database layout, wire representations,
 retrieval algorithms, user-interface layout, and retention periods remain with
 their owning Wayfinder tickets.
+
+Every Settled Source, Candidate, Admission Decision, Entry, Suppression,
+Evidence Relation, retrieval row, embedding input, cache key, and historical
+context reference binds one trusted `ProjectScope { owner_user_id, project_id }`.
+Project Scope is checked before discovery and after index lookup; a global
+namespace, opaque object ID, content digest, or caller-supplied owner cannot
+cross either the User or Project boundary. Missing or mismatched scope fails
+closed and cannot be softened by relevance, confidence, or rank.
 
 StoryOS serves Discovery Writing. Long-term memory supports continuity around
 the passage and creative choices currently placed before the Agent; memory
@@ -272,7 +281,8 @@ Admission, StoryOS tolerates a temporary recall gap rather than continuing to
 serve known-wrong content.
 
 Every Run records the exact Memory Entries, source revisions, and Admission
-Decisions actually supplied through its Context Manifest and Step Snapshot.
+Decisions actually supplied through its Project Scope-bound Context Assembly
+Manifest and Step Snapshot.
 Later correction never rewrites that historical context, so StoryOS can still
 explain an earlier Agent decision using the information eligible at that time.
 
@@ -299,8 +309,9 @@ author deletion, safety, privacy, or retention obligations. Only a minimum
 non-content deletion proof remains. The Storage and Run-retention tickets own
 physical fan-out and what protected evidence may legally remain.
 
-Memory Suppression is an authoritative author or policy control over an exact
-project, work, Agent, source set, candidate kind, object set, or semantic scope.
+Memory Suppression is an authoritative author or policy control under one exact
+Project Scope over a work, Agent, source set, candidate kind, object set, or
+semantic scope.
 It changes no source content, but it applies during extraction, admission,
 current-view construction, index rebuild, and retrieval. Existing matching
 entries immediately leave ordinary recall. Replay, Worker recovery, policy
@@ -327,12 +338,18 @@ disposable access projections. They own no domain identity, source truth,
 Admission Decision, lifecycle fact, Suppression, Evidence Relation,
 Provenance, or permission.
 
+Every physical or logical retrieval namespace and cache key includes the exact
+Project Scope. Index lookup may produce candidates only inside that scope, and
+each hit is revalidated against canonical ownership before any content is
+returned. Embedding generation through an external API is an Outbound
+Disclosure operation and cannot use a cross-project batch or global text cache.
+
 Index-local document, vector, node, and edge identifiers are not durable object
 identities and cannot be cited by Runs, Artifacts, Claims, or audit records.
 Index records may copy qualification fields for filtering and performance, but
-those fields are non-canonical and identify the exact domain object, source
-revision, qualification revision, index policy, and content/build version from
-which they were projected.
+those fields are non-canonical and identify the exact Project Scope, domain
+object, source revision, qualification revision, index policy, and content/build
+version from which they were projected.
 
 Before a retrieval result enters Context Assembly, StoryOS fails closed unless
 current domain records or a version-bound eligibility projection revalidate:
@@ -384,9 +401,9 @@ This specification fixes the semantic invariants consumed by downstream work:
 | Ticket | Owns next | Must preserve from this specification |
 |---|---|---|
 | [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | mandatory and dynamic selection, ranking, context budgets, explanation, author controls, and outbound disclosure | qualification before ranking, no authority from relevance, exact source and Admission evidence, no interruptive memory confirmation |
-| [Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | records and blobs, transactions, indexes, projection rebuild, physical deletion, backup, and migration | canonical domain records survive index loss; Suppression and Tombstone fan out to every derived copy without becoming index-only state |
+| [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | PostgreSQL records and transactions, separately stored payloads if any, indexes, projection rebuild, physical deletion, backup, and migration | canonical domain records survive index loss; every copy preserves Project Scope; Suppression and Tombstone fan out to every derived copy without becoming index-only state |
 | [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact identities, DTOs, commands, events, relations, idempotency keys, compatibility, and errors | immutable candidates and decisions, exact source revisions, append-only lifecycle, deterministic replay safety |
-| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Run, Message, Context Manifest, snapshot, mailbox, and recovery-evidence retention | historical Runs retain what they actually used; Working Context is not silently converted into long-term memory |
+| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Run, Message, Context Assembly Manifest, snapshot, mailbox, and recovery-evidence retention | historical Runs retain what they actually used; every record preserves Project Scope; Working Context is not silently converted into long-term memory |
 
 No new follow-up ticket is required: the clarified work is already owned by
 these existing tickets.
@@ -417,8 +434,11 @@ these existing tickets.
 14. Memory Suppression survives extraction replay and every projection rebuild.
 15. Archive, Tombstone, and Memory Suppression remain independent controls.
 16. No retrieval index owns canonical domain meaning or durable identity.
-17. Current qualification and permission are revalidated before context use.
-18. Operational Lessons advise but never execute or self-promote.
-19. Active writing is never interrupted solely to confirm memory maintenance.
-20. Historical Runs preserve the exact memory and source revisions actually
+17. Every memory source, lifecycle record, index entry, cache key, retrieval
+    result, and embedding operation validates one exact Project Scope before
+    discovery, use, disclosure, or reuse.
+18. Current qualification and permission are revalidated before context use.
+19. Operational Lessons advise but never execute or self-promote.
+20. Active writing is never interrupted solely to confirm memory maintenance.
+21. Historical Runs preserve the exact memory and source revisions actually
     supplied at the time.
