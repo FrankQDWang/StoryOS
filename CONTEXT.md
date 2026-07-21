@@ -8,6 +8,10 @@ StoryOS is a novel-project workspace in which the author retains authority over 
 A stable StoryOS principal identified by one durable `UserId`. The Foundation Validation Deployment bootstraps one local User without requiring a login or account-management product, while the same identity contract permits a later StoryOS service to host many isolated Users; credentials, display names, pen names, and billing accounts are not the User's domain identity.
 _Avoid_: Operating-system current user, global singleton, login session, pen name, account feature set
 
+**Client Session Binding**:
+The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, and canonical command digest; the Binding is never User identity, Author Intent, Capability, Approval, Acceptance, or a URL bearer credential.
+_Avoid_: Login session as User identity, client-asserted role, CORS as CSRF protection, URL access token, reusable command nonce
+
 **Project Author**:
 The one User who owns a Project and may exercise its author-only intents, settings, Acceptance, and other creative-authority commands. `Author` names this project-scoped role rather than a second durable person identity; shared ownership, collaborators, ownership transfer, and multi-author editing require a separate later contract.
 _Avoid_: Separate AuthorId, display byline, collaborator, global author singleton
@@ -114,6 +118,26 @@ _Avoid_: Blob cache, derived projection, Provider-held source of truth
 **Core Transition**:
 The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, lifecycle events, and required follow-up intent become visible together, while refusal or conflict records only its no-change Receipt and no partial domain effect.
 _Avoid_: Partial commit, database rollback as undo, external effect as transaction truth
+
+**Command Acknowledgement**:
+The idempotently replayable public result of submitting one exact command, returned as Committed with its immutable Receipt only after the complete Core Transition commits, or as Accepted with a durable operation reference when later asynchronous settlement remains. Accepted proves only durable admission and never success; its settlement is observed through a bounded query or the Project Activity Stream rather than a delayed HTTP result.
+_Avoid_: HTTP success as domain success, in-memory job acknowledgement, long-poll completion, duplicate execution after lost response
+
+**Protocol Compatibility Profile**:
+The direction-aware N/N-1 wire-evolution rule under which command and control inputs are closed against unknown fields, duplicate names, discriminators, and control enums, while public Query, Artifact, and Event outputs may add ignorable fields. A new Event or value that changes authority, lifecycle, settlement, Approval, or security meaning requires a compatible projection or an explicit upgrade-required outcome before consumption; only presentation-safe unknowns may use a generic fallback and advance the cursor.
+_Avoid_: Ignore-all parsing, reject-all evolution, client-guessed safety semantics, silent control-enum fallback
+
+**External Contract Compatibility Decision**:
+The immutable Host result that admits or rejects one exact Provider, Tool, MCP, or MCP App Registration and Adapter revision against its pinned protocol, schema or Tool digest, capability snapshot, wire mapping, destination boundary, and effect ceiling. External versions receive no N/N-1 promise, handshake or semver grants no compatibility or authority, drift quarantines new use, and any widening of destination, disclosure, Credential binding, effect, or capability requires new authorization while historical work remains bound to its original contract.
+_Avoid_: Semver-range trust, Provider alias compatibility, handshake as authorization, silent SDK upgrade, permanent external-version support
+
+**Protocol Limit Profile**:
+An immutable versioned contract fixing absolute byte, item, depth, time, token, attempt, replay, expansion, and concurrency ceilings for every public and external protocol crossing, with a Server's advertised effective limits permitted only to equal or narrow those ceilings. Receipts, Attempts, Snapshots, and limit outcomes bind the applied Profile Revision; changing a dimension or its meaning is a protocol change, while authors receive no routine limit configuration burden.
+_Avoid_: Scattered magic limit, client-requested expansion, unversioned deployment limit, author-facing protocol tuning
+
+**Application Wire Record**:
+The immutable non-secret evidence retaining the exact schema-valid message-content bytes, wire schema and profile, typed-record reference, and digest for an authorized durable command or admission and for each supported public Event representation. It excludes transport headers, cookies, authorization and anti-forgery material, credential-bearing envelopes, unauthorized or malformed request bodies, repeated SSE deliveries, and rebuildable Query response bytes; canonical semantic bytes never stand in for separately claimed original wire bytes.
+_Avoid_: HTTP traffic capture, request log, Query-response archive, JCS digest as original wire evidence
 
 **Block Split Identity**:
 When a stable top-level manuscript block is split, the fragment containing the original block start retains its Block ID and the new right fragment receives a new Block ID. Identity inheritance never depends on cursor direction or editor-generated IDs.
@@ -418,6 +442,18 @@ _Avoid_: Direct status update, Transcript message, partial multi-table write, ex
 **Run Event**:
 An immutable, causally attributable, monotonically sequenced fact recording one committed Run Transition for inspection and recovery history. Run Events and normalized current records are written atomically without requiring pure event sourcing; Checkpoints, caches, and read models are derived, while external effects follow persisted intent through the Tool Gateway and append their outcomes afterward.
 _Avoid_: Mutable status row, model transcript, telemetry log, cache entry
+
+**Project Activity Stream**:
+The one canonical public replay stream for an exact Project Scope, assigning every committed client-visible activity event a strictly increasing project-local position while preserving its typed identity, cause, and any owning Run or aggregate sequence. Run-, Artifact-, and other filtered streams are cursor-bound derived views rather than separate truth streams, while Mailbox, Worker, Provider, MCP, and Adapter protocols remain outside this public envelope.
+_Avoid_: Global event bus, per-Run truth stream, internal event log, universal protocol envelope
+
+**Canonical Query**:
+A public read of exact Authoritative State, Artifact, Receipt, Approval, Run, or other canonical facts at one committed Project Scope-bound Snapshot. It supports read-your-acknowledgement against a required Project Activity Stream position, and every page remains bound to the same Snapshot and stable order or fails with an explicit resync outcome.
+_Avoid_: Eventually consistent authority read, mixed-Snapshot pagination, cache result as current truth
+
+**Projection Query**:
+A public read of one bounded rebuildable search, embedding, retrieval, history, or other projection, returning its exact source Snapshot, projection watermark, completeness, and lag. It never presents lag as an empty canonical result; an unmet required watermark returns an explicit projection-not-ready outcome, while Snapshot lifetime remains a retention policy.
+_Avoid_: Canonical Query, hidden eventual consistency, empty result for stale projection, unbounded projection dump
 
 **Run Hold**:
 A durable gate that prevents an active AgentRun from starting new work until an explicit author or host resolution releases it. Author pause, a tripped guardrail, or required recovery adjudication may create a Hold even when every existing Wait has resolved.
