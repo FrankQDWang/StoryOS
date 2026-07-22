@@ -123,7 +123,8 @@ SnapshotId                     CursorId
 ActivityEventId                ArtifactId
 ArtifactRevisionId             PayloadId
 ApplicationWireRecordId        ProposalId
-AcceptanceId                   ToolCallId
+AcceptanceReceiptId            UndoAcceptanceReceiptId
+ToolCallId                     DestinationAttemptAdmissionDecisionId
 AgentRunId                     RunStepId
 ExecutionAttemptId             DestinationAttemptId
 DomainReceiptId                CorrelationId
@@ -238,6 +239,11 @@ Origin. CORS is not anti-forgery or authorization.
 
 ### 5.2 State-changing requests
 
+CSRF resistance is the compound admission of exact Host, exact first-party
+Origin, current Client Session Binding generation, non-simple content type,
+and the command-bound anti-forgery challenge below. No one input substitutes
+for the others, and CORS remains only a browser response-sharing policy.
+
 The first-party client obtains an anti-forgery challenge through:
 
 ```text
@@ -260,10 +266,13 @@ AntiForgeryChallenge {
 
 This preflight validates exact Host, first-party Origin, current Client Session
 generation, resolved Project Scope, non-simple content type, closed schema,
-digest syntax, and admission rate. It creates no Command, Receipt, domain
-Attempt, or authority and exposes no target-object existence. The returned
-nonce is sent only in the command header, never a URL or log. The client performs
-this automatically; it is not an author setting or confirmation step.
+digest syntax, and admission rate. It resolves one pre-domain idempotency record
+under the exact arbitration tuple from section 7.3 and binds the challenge to
+that record identity, its `idempotency_key`, and its canonical command digest.
+It creates no Command, Receipt, domain Attempt, or authority and exposes no
+target-object existence. The returned nonce is sent only in the command header,
+never a URL or log. The client performs this automatically; it is not an author
+setting or confirmation step.
 
 Every state-changing request:
 
@@ -272,15 +281,19 @@ Every state-changing request:
 - has a closed command schema and canonical command digest;
 - consumes one unguessable anti-forgery nonce bound server-side to the current
   Client Session Binding generation, Project Scope, method, route template,
-  and canonical command digest;
+  command kind, `idempotency_key`, canonical command digest, and exact
+  pre-domain idempotency record;
 - validates any required Author Intent, Approval, Acceptance, Capability, and
   expected Revision independently.
 
-The anti-forgery nonce grants no reusable authority. An exact transport retry
-may reuse it only as part of resolving the same idempotency record and digest;
-another method, target, body, scope, or command kind conflicts. Author Intent
-remains Host-attested evidence for the exact author gesture and is never
-created by accepting a cookie or nonce.
+Nonce consumption is recorded atomically against that same idempotency record.
+The anti-forgery nonce grants no reusable authority: the same digest under a
+new `idempotency_key` is a different record and cannot reuse the nonce. An exact
+transport retry may present an already consumed nonce only to resolve the same
+record, key, and digest to its in-progress or immutable prior result; it cannot
+start another admission. Another method, target, body, scope, command kind, key,
+or record conflicts. Author Intent remains Host-attested evidence for the exact
+author gesture and is never created by accepting a cookie or nonce.
 
 ### 5.3 Reads and SSE
 
@@ -309,7 +322,7 @@ independent identifiers such as `storyos.command.accept-proposal.v1` or
 
 The Server declares its current public release `N`, supported previous release
 `N-1`, supported API majors, public envelope profiles, payload schemas,
-activity profiles, and effective Protocol Limit Profile through:
+activity profiles, and supported Protocol Limit Profile revisions through:
 
 ```text
 GET /api/v1/protocol
@@ -366,7 +379,8 @@ newtype generated before first submission. The canonical command digest covers:
 - resolved Project Scope;
 - all target identities and expected Revisions/Heads;
 - the exact typed body after closed-schema validation;
-- Author Intent, Approval, or Acceptance references where applicable.
+- Author Intent, Approval, Acceptance Receipt, or Undo Acceptance Receipt
+  references where applicable.
 
 It excludes session cookies, anti-forgery material, trace headers, audit time,
 and transport framing.
@@ -415,8 +429,9 @@ precondition.
 - A missing mandatory expected field returns `428 precondition_required`.
 - A failed HTTP representation condition returns `412 precondition_failed`.
 - A stale or inconsistent domain Head, Revision, Run sequence, Proposal state,
-  or author undo frontier returns `409 domain_conflict` with only scope-safe
-  current references.
+  or author undo frontier encountered by an admitted domain command settles a
+  no-effect Receipt as described below. `409 domain_conflict` is reserved for
+  non-command or pre-attempt conflicts where no domain Receipt can exist.
 - StoryOS never performs last-write-wins, implicit rebase, inferred non-overlap,
   or blind retry.
 
@@ -451,10 +466,25 @@ CommandAcknowledgement =
   }
 ```
 
-`Committed` is returned only after the complete Core Transition, no-change
-Receipt, events, sequence movement, invalidation, and outbox intent commit.
-Depending on the command, the HTTP status is `200` for a committed action on an
-existing resource or `201` when a durable resource was created.
+`Committed` is returned only after the complete Core Transition, including a
+no-change transition, its Receipt, required Events and sequence facts,
+invalidation, and outbox intent commit. It means that settlement evidence
+committed, not that the requested domain effect was accepted or changed state.
+The `receipt_ref` is mandatory and names the stable typed result: for an
+Acceptance command it is an `AcceptanceReceiptId`, for undo an
+`UndoAcceptanceReceiptId`, and otherwise the owning typed `DomainReceiptId`.
+The Acceptance command is the Acceptance Attempt and its `CommandId` identifies
+that submitted attempt; there is no separate `AcceptanceId`.
+
+An applied action on an existing resource, a domain refusal, invalidity,
+conflict, or no-effect settlement returns HTTP `200` with `Committed`; creation
+of a durable resource may return `201`. The Receipt carries the closed domain
+disposition and only scope-safe conflict or refusal evidence. Exact idempotent
+replay returns the same acknowledgement and Receipt reference. A committed
+domain outcome is never replaced by Problem Details, because that would hide
+its stable Receipt path; Problem Details represents a pre-attempt admission,
+transport, query, or infrastructure failure for which no domain Receipt was
+committed.
 
 `Accepted` uses HTTP `202`. It means only that asynchronous work and its
 recovery identity are durable. Completion may later succeed, partially
@@ -820,8 +850,14 @@ the stream and prevents replay even when the cursor is otherwise valid.
 Heartbeat comments carry no domain state and do not extend authorization.
 
 Within the advertised replay floor, the Server resumes strictly after the
-cursor position and may redeliver the last Event; clients deduplicate by
-`event_id` and validate monotonic sequence. A cursor ahead of the current
+cursor position. The cursor in an SSE `id` denotes the Event carried by that
+frame, so a reconnect presenting it through `Last-Event-ID` uses an exclusive
+resume and the Server does not intentionally include that Event again.
+Delivery remains at-least-once: a frame may be observed again when the client
+did not durably retain the newest cursor, reconnects from an older cursor, or a
+transport duplicates bytes before the newer cursor is accepted. Clients
+therefore deduplicate by durable `event_id` and validate sequence, including
+overlap after an older resume point. A cursor ahead of the current
 authorized stream fails closed. A valid cursor older than the replay floor
 returns `409 activity_cursor_too_old` as Problem Details before an SSE stream
 starts, with a safe resync query. It never silently skips missing Events.
@@ -884,7 +920,7 @@ not authorization to bypass idempotency, expected Revision, or current grants.
 | `operation_denied` | 403 | after_condition | caller may know the resource but the action is denied |
 | `resource_not_found` | 404 | never | unknown, cross-Scope, or existence-hidden resource |
 | `method_not_allowed` | 405 | never | route exists but method is not admitted |
-| `domain_conflict` | 409 | after_condition | current in-Scope domain state conflicts |
+| `domain_conflict` | 409 | after_condition | current in-Scope state prevents a non-command or pre-domain-attempt operation |
 | `idempotency_conflict` | 409 | never | same arbitration key has another command digest |
 | `command_in_progress` | 409 | same_request | identical admission has not settled its first transaction |
 | `activity_cursor_too_old` | 409 | after_condition | authorized replay position precedes the current replay floor |
@@ -894,6 +930,7 @@ not authorization to bypass idempotency, expected Revision, or current grants.
 | `payload_too_large` | 413 | never | a byte or expansion ceiling was exceeded |
 | `unsupported_media_type` | 415 | never | media type is not admitted for this schema |
 | `unprocessable_content` | 422 | never | well-formed content violates typed semantic validation |
+| `archive_integrity_failed` | 422 | never | archive root coverage or trusted integrity protection did not verify |
 | `precondition_required` | 428 | never | a mandatory expected Revision/Head is absent |
 | `rate_limited` | 429 | after_condition | a bounded admission budget is temporarily unavailable |
 | `outcome_unknown` | 503 | outcome_unknown | an admitted effect cannot safely be classified or repeated |
@@ -907,6 +944,11 @@ meanings. A conflict exposes only typed in-Scope revisions or settlement links
 that the requester may already inspect. It never returns another User,
 Project, hidden Artifact, Capability, Credential Reference, or registration
 identity.
+
+Problem Details never stands in for or creates a domain Receipt. A domain
+command's committed refusal, conflict, invalidity, or no-effect outcome uses
+the `Committed` acknowledgement and its mandatory `receipt_ref`; a Problem
+means the current request has no committed domain Receipt path.
 
 ### 11.3 Non-oracular failures and OutcomeUnknown
 
@@ -942,7 +984,9 @@ ExecutionAttemptRecord {
   registration_revision | null
   adapter_revision | null
   external_compatibility_decision | null
+  destination_attempt_admission_decision | null
   limit_profile_revision
+  effective_bounds
   lease_generation
   fence_generation
   state
@@ -1001,12 +1045,17 @@ fence. Deleting or acknowledging an outbox row is never the authoritative
 business settlement.
 
 For external egress, the Host persists the semantic request, destination and
-disclosure manifests, Wire Payload Projection, Attempt, current admission, and
-fence before I/O. The transaction that durably claims dispatch creates the
-immutable Outbound Disclosure Event and changes the Attempt to conservative
-`outcome_unknown`; only after that commit may bytes leave. Later provider or
-transport evidence may append `confirmed_submitted` or a typed terminal result
-without rewriting the claim.
+disclosure manifests, Wire Payload Projection, Destination Attempt, final
+Destination Attempt Admission Decision identity, its frozen effective bounds,
+and fence before I/O. The short dispatch transaction revalidates and binds that
+exact admitted Decision to the Attempt, wire projection, manifests, credential
+binding generation, claim, and Outbound Disclosure Event. It then changes the
+Attempt to conservative `outcome_unknown`; only after that commit may bytes
+leave. A crash before this claim proves no dispatch authority was committed. A
+crash after it preserves the exact Decision and wire evidence but remains
+OutcomeUnknown until stronger destination evidence settles it. Later provider
+or transport evidence may append `confirmed_submitted` or a typed terminal
+result without rewriting the claim.
 
 ## 13. Security-sensitive protocol contracts
 
@@ -1055,11 +1104,12 @@ for Proposal Acceptance or changes Authoritative State.
 
 ### 13.3 Tool and MCP registration
 
-Tool and MCP discovery is untrusted observation. A usable registration is a
-Host-owned immutable revision:
+Tool and MCP discovery is untrusted observation. Reusable contract and Adapter
+mapping is a Host-owned immutable revision that contains no Project data,
+Credential Reference, grant, or runtime use state:
 
 ```text
-ExternalRegistrationRevision {
+GlobalExternalContractRegistrationRevision {
   registration_id
   revision_id
   registration_kind
@@ -1068,9 +1118,29 @@ ExternalRegistrationRevision {
   protocol_revision
   adapter_revision
   destination_identity
-  credential_reference_id | null
   effect_ceiling
   intake_contract
+  lifecycle
+  created_at
+}
+
+ProjectExternalUseBindingRevision {
+  project_scope
+  binding_revision_id
+  registration_revision
+  project_use_authorization_revision
+  credential_binding:
+    NoCredentialBinding { binding_kind: "none" }
+    | ProjectCredentialBinding {
+        binding_kind: "project_credential"
+        project_scope
+        credential_binding_revision
+        credential_reference_id
+        credential_binding_generation
+      }
+  allowed_purposes
+  allowed_destination_identity
+  effect_ceiling
   lifecycle
   created_at
 }
@@ -1078,50 +1148,103 @@ ExternalRegistrationRevision {
 
 `registration_kind` distinguishes built-in Tool, MCP Tool, MCP Resource, MCP
 Prompt, MCP App UI Resource, Model Provider, embedding Provider, and research
-Adapter contracts. The Registration is global Host mapping evidence; separate
-Project Scope-bound enablement decides whether it may be considered. Neither
-discovery, enablement, model-visible exposure, a handshake, a name, a semver
-range, nor Credential configuration grants invocation authority.
+Adapter contracts. The global Registration is reusable Host mapping evidence
+only while it is free of project-derived content and authority. The separate
+use binding is exact Project Scope-bound enablement plus any Credential
+Reference binding; a Credential Reference never occupies a global namespace.
+`project_use_authorization_revision` is a closed surface-specific reference,
+such as a Project Tool Enablement or Project Destination Grant, rather than a
+universal authority record. A credential-bearing variant repeats the complete
+Scope and must join both members to the outer binding; paired nullable
+credential fields are forbidden.
+Neither discovery, enablement, model-visible exposure, a handshake, a name, a
+semver range, nor Credential configuration grants invocation authority.
 
 Before each new use the Host verifies the exact active Registration revision,
 trusted contract digest, Adapter revision, external compatibility decision,
-destination, effect ceiling, Credential Reference availability, project
-enablement, caller route, Capability, Approval when required, and limits.
-Drift quarantines the Registration for new work and clears derived exposure.
-Historical work remains inspectable against its pinned revision.
+destination, effect ceiling, Credential Reference availability and binding
+generation, project enablement, caller route, Capability, Approval when
+required, and limits. Every use, Attempt, and External Contract Compatibility
+Decision repeats and validates both members of the Project Scope and pins the
+exact `ProjectExternalUseBindingRevision`; no global Registration, credential
+identifier, or compatibility cache may satisfy that join. Drift quarantines
+the Registration for new work and clears derived exposure. Historical work
+remains inspectable against its pinned revisions.
 
 ### 13.4 Tool and MCP invocation
 
 ```text
 ToolInvocationRequest {
   project_scope
+  requester_user_id
   tool_call_id
   caller_route
   registration_revision
+  project_external_use_binding_revision
+  credential_binding:
+    NoCredentialBinding { binding_kind: "none" }
+    | ProjectCredentialBindingRef {
+        binding_kind: "project_credential"
+        project_scope
+        credential_binding_revision
+        credential_reference_id
+        credential_binding_generation
+      }
   external_compatibility_decision
   validated_arguments
   argument_digest
   resolved_target_refs
   requested_effect
   authority_evidence
-  destination_manifest_ref | null
-  attempt_id
+  context_assembly_manifest_ref
+  destination_context_manifest_ref
+  destination_attempt_id
+  destination_attempt_admission_decision_ref
+  processing_boundary:
+    ControlledProcessing {
+      boundary_kind: "controlled"
+    }
+    | ExternalProcessing {
+        boundary_kind: "external"
+        outbound_disclosure_manifest_ref
+        wire_payload_projection_ref
+      }
   fence_generation
   limit_profile_revision
+  effective_bounds
 }
 ```
 
-Only the Tool Registry boundary may turn this request into execution. It
-revalidates the Scope and all authority, resolves secrets internally, invokes
-the pinned Adapter, validates bounded output against the exact contract, and
-records the outcome. A model, generated program, MCP App, Provider-hosted tool,
-raw MCP client, or Adapter cannot call through this boundary directly.
+The Context Assembly Manifest, Destination Context Manifest, Destination
+Attempt, and final Destination Attempt Admission Decision are mandatory for
+every Tool or MCP execution, including a controlled built-in destination. The
+external processing variant, its Outbound Disclosure Manifest, and its Wire
+Payload Projection are additionally mandatory for an External Processing
+Destination; a controlled destination
+uses the closed controlled variant rather than nullable fields. A missing,
+cross-Scope, stale, refused, or differently bounded reference fails closed;
+`null` cannot bypass any of the seven Context Assembly gates.
+
+Only the Tool Gateway may turn this request into execution. It revalidates the
+composite Scope, project use and Credential bindings, all authority and
+manifests, and the exact admitted Decision; resolves secrets internally;
+invokes the pinned Adapter; validates bounded output against the exact
+contract; and records the outcome. A model, generated program, MCP App,
+Provider-hosted tool, raw MCP client, or Adapter cannot call through this
+boundary directly.
 
 MCP JSON-RPC request IDs are transport correlation only. They do not replace
 `ToolCallId`, Attempt identity, idempotency, Project Scope, Capability, or
 fence. External output stays untrusted and non-authoritative; an effectful or
 bulk result changes Authoritative State only through a typed Proposal and
 explicit Acceptance.
+
+A Tool or MCP result is retained as a bounded typed result and provenance
+source. If any part later enters model, Tool, App, research, or other
+destination context, it becomes a new Context Candidate and crosses the full
+seven gates again, producing new Projection and manifest evidence for that
+new use. The earlier ToolCall, result validation, disclosure, or admitted
+Decision is never reusable context eligibility or outbound authority.
 
 ### 13.5 MCP App bridge
 
@@ -1136,6 +1259,7 @@ AppBridgeMessage {
   sandbox_profile_revision
   instance_sequence
   direction
+  bridge_request_id: string | null
   jsonrpc_message
   payload_digest
   limit_profile_revision
@@ -1148,6 +1272,24 @@ Run, Tool, Credential, model, transcript, or network authority. Every incoming
 message validates source window, origin expectations, Instance lifecycle,
 monotonic bounded sequence, JSON-RPC shape, declared method, payload digest,
 message size, rate, and current resource eligibility.
+
+The bridge profile permits one JSON-RPC 2.0 object per message; batches are
+forbidden. A request or response ID is a 1-to-128-byte ASCII string and JSON
+numbers and `null` are forbidden IDs. For a request, `bridge_request_id` is
+present and byte-for-byte equal to `jsonrpc_message.id`; there is no case
+folding, Unicode normalization, numeric coercion, or alternate mapping. A
+response uses the same string as its request. Under Digest Profile
+`storyos.app-bridge-binding.jcs.v1`, the payload digest is JCS SHA-256 over the
+closed object `{ bridge_request_id, jsonrpc_message }`, so the duplicated
+binding cannot diverge. Allowed request, response, error, and notification
+shapes and method names come from the exact closed Instance negotiation
+profile.
+
+A JSON-RPC notification has no `id` and sets `bridge_request_id` to `null`. It
+is admitted only for explicitly allowlisted presentation/lifecycle methods
+that cannot read data or produce semantic, context, transcript, disclosure, or
+authoritative effects. A semantic notification is rejected before routing and
+cannot create anonymous or unrepeatable work.
 
 Presentation-only signals remain ephemeral and bounded. Any message with
 semantic meaning, data access, disclosure, model-context impact, transcript
@@ -1199,10 +1341,17 @@ ProjectArchiveManifest {
   export_id
   project_scope
   source_snapshot
+  source_schema_compatibility
   schema_catalog
+  table_family_counts
+  serialization_profile
+  digest_profile
   limit_profile_revision
   entries: [{ path, media_type, payload_schema, byte_length, digest }]
+  provenance_closure
+  known_purged_gaps
   root_digest
+  integrity_protection
   created_at
 }
 ```
@@ -1214,6 +1363,50 @@ nonces, Credential values, disposable projections, caches, embeddings,
 Provider-held state, logs, and executable runtime state. It preserves exact
 User, Project, object, Revision, and event identities and grants no destination
 or ownership authority.
+
+`digest_profile` is exactly `storyos.project-archive-root.jcs.v1`. Entries are
+sorted by their normalized UTF-8 path bytes, paths are unique, and each entry
+digest covers the exact uncompressed entry bytes under its declared profile.
+The exact root input is:
+
+```text
+ProjectArchiveRootInput {
+  archive_profile
+  export_id
+  project_scope
+  source_snapshot
+  source_schema_compatibility
+  schema_catalog
+  table_family_counts
+  serialization_profile
+  digest_profile
+  limit_profile_revision
+  entries
+  provenance_closure
+  known_purged_gaps
+  created_at
+}
+```
+
+JCS UTF-8 bytes of that closed object are hashed with SHA-256. Excluding
+`root_digest` and `integrity_protection` prevents self-reference while the
+named input covers the schema catalog, counts, profiles, every entry descriptor
+and digest, provenance closure, known gaps, source Snapshot, Scope, and time.
+
+`integrity_protection` names an exact signature or deployment integrity
+profile, a trusted out-of-archive anchor ID, the canonical protected-input
+profile, and its proof bytes. Profile
+`storyos.project-archive-protected-input.jcs.v1` signs exactly the JCS UTF-8
+bytes of `{ archive_profile, export_id, project_scope, root_digest }` after all
+digests recompute.
+An embedded public key or digest with no independently trusted anchor is not
+integrity protection. Export completes only after the proof is durable. Import
+recomputes every entry and root digest, resolves the trusted anchor, and
+verifies the proof before referential validation or visibility. Any missing,
+unknown, malformed, mismatched, or untrusted proof returns
+`archive_integrity_failed`, leaves live state unchanged, and quarantines or
+discards staging under the retention-owned cleanup policy. This contract fixes
+verification, not key lifetime or archive retention duration.
 
 Import streams into non-authoritative staging and validates media type, archive
 profile, total and expanded bytes, entry count, nesting, path normalization,
@@ -1238,6 +1431,7 @@ DestinationManifestBinding {
   purpose
   processing_destination_identity
   registration_revision
+  project_external_use_binding_revision
   adapter_revision
   external_compatibility_decision
   context_assembly_manifest_ref
@@ -1248,15 +1442,19 @@ DestinationManifestBinding {
   wire_payload_projection_ref
   authority_evidence
   hard_bounds
-  attempt_id
+  destination_attempt_id
+  destination_attempt_admission_decision_ref
 }
 ```
 
 The Host admits the destination, source Revisions, lifecycle, Memory
 Suppression, Context Exclude, Purpose, project grant, exact disclosure Approval
 when required, Credential Reference, policy, and budgets immediately before
-dispatch. The manifest commits before egress and records only minimum-necessary
-logical and non-secret wire evidence. Redirects, DNS resolution changes,
+dispatch. The final Admission Decision freezes the actual effective bounds and
+is referenced by the manifest binding, Destination Attempt, dispatch claim,
+Outbound Disclosure Event, and crash-cut evidence. The manifests and Decision
+commit before egress and record only minimum-necessary logical and non-secret
+wire evidence. Redirects, DNS resolution changes,
 private/link-local targets, proxy behavior, authentication challenges,
 fallbacks, cache references, and Provider aliases cannot silently change the
 Processing Destination Identity or expand disclosure.
@@ -1285,7 +1483,7 @@ StoryOS versions these axes independently:
 | Core contract revision | Server-to-Core typed semantics | coordinated internal migration |
 | Worker/Adapter revision | execution handoff and wire mapping | fence old work and pin or migrate explicitly |
 | archive profile | export manifest and portable representation | reader compatibility or explicit import refusal |
-| Protocol Limit Profile | absolute ceilings and interpretation | new profile revision; no silent widening |
+| Protocol Limit Profile | public validity ceilings, counting rules, and interpretation | every numeric or semantic change creates a new profile revision; no silent narrowing or widening |
 | external Registration revision | pinned third-party observation and Host mapping | new External Contract Compatibility Decision |
 
 An API major is not reused as a payload, Event, Core, Adapter, or external
@@ -1332,6 +1530,14 @@ clients, old API majors, or every historical payload as a current mutable
 input. Removing N-1 support is a declared release event and cannot occur in a
 patch to N.
 
+The release catalog maps each supported public release to an exact Protocol
+Limit Profile revision. A client selecting release N-1 thereby selects its
+advertised profile; while N-1 is supported, the Server must continue to admit
+an N-1 input that was valid under that profile unless an independent current
+authorization or temporary admission condition refuses it. A narrower profile
+requires a newly negotiated release/profile and cannot be imposed under the
+same revision. Every response echoes the selected profile revision.
+
 ### 14.3 Additive and breaking examples
 
 Additive within a public release family:
@@ -1341,7 +1547,8 @@ Additive within a public release family:
 - a new Artifact kind that an old client can preserve and show through the
   bounded generic read-only renderer;
 - a new Event with an N-1 projection to already understood lifecycle meaning;
-- a narrower advertised effective limit that still admits the current request.
+- a temporary `429 rate_limited` response that changes no content-validity
+  rule or supported Profile revision.
 
 Breaking or upgrade-gated:
 
@@ -1392,6 +1599,12 @@ Changing actual processor, endpoint/account boundary, effect, destination,
 data category, Credential binding, or capability ceiling requires new
 authorization in addition to a new compatibility decision.
 
+Every compatibility decision used for project work is bound to the exact
+Project Scope and `ProjectExternalUseBindingRevision`. A global contract or
+Adapter compatibility observation may be reused only as non-authorizing input;
+it cannot carry a Credential Reference, satisfy project enablement, or admit an
+Attempt without the scope-bound decision.
+
 This rule resolves the parent-map fog item about Provider/MCP version
 compatibility. No separate follow-up ticket is needed.
 
@@ -1401,17 +1614,24 @@ compatibility. No separate follow-up ticket is needed.
 
 Every admission resolves one immutable Protocol Limit Profile revision. The
 Foundation absolute profile below is a safety ceiling, not a target default.
-The Server advertises effective limits that are equal to or narrower than the
-absolute profile and may narrow them by deployment, operation kind, Project,
-Run, Capability, Approval, destination, Registration, or current resource
-pressure. It may never widen them without publishing and admitting a new
-absolute profile.
+Every numerical or semantic change to a protocol content, shape, byte,
+complexity, token-counting, replay-batch, time, attempt, expansion, rate, or
+concurrency limit creates a new Profile revision. A supported revision is
+immutable; the Server cannot use deployment or current resource pressure to
+make an input that is valid under that revision permanently invalid.
 
-Clients may use advertised effective limits to batch or choose referenced
+An admission computes `effective_bounds` as the non-widening intersection of
+the selected Profile and exact revisioned operation policy, Project/Run grants,
+Capability, Approval, destination intake contract, Registration, and
+provider/model mapping. Those narrower authorization and destination bounds
+are not a silent rewrite of public protocol validity. The admission freezes
+their actual values and all source revision references in its Receipt,
+Attempt, Snapshot, Application Wire Record, limit Problem, or external
+manifest. A later policy or capacity change cannot reinterpret that admission.
+
+Clients may use release-negotiated limits to batch or choose referenced
 payloads, but cannot request a wider limit. The default author experience does
-not expose routine limit controls. A typed Receipt, Attempt, Snapshot,
-Application Wire Record, limit Problem, and external manifest binds the exact
-profile revision and relevant effective values.
+not expose routine limit controls.
 
 ### 15.2 Foundation absolute profile
 
@@ -1445,10 +1665,10 @@ profile revision and relevant effective values.
 | concurrent App View Instances per Client Session | 32 |
 | one non-secret external semantic request or validated Tool input | 8 MiB |
 | one external result before referenced-payload handling | 64 MiB |
-| one model-visible Context item | 10,000 tokens |
+| one model-visible Context item | 10,000 tokens under the admitted Token Counting Profile |
 | items selected into one Effective Destination Context | 4,096 |
-| total model input for one Destination Attempt | 1,000,000 tokens |
-| requested model output for one Destination Attempt | 128,000 tokens |
+| total model input for one Destination Attempt | 1,000,000 tokens under the admitted Token Counting Profile |
+| requested model output for one Destination Attempt | 128,000 tokens under the admitted Token Counting Profile |
 | physical Attempts for one logical operation | 32 |
 | HTTP redirects for one admitted research fetch | 10 |
 | one external network Attempt wall time | 10 minutes |
@@ -1467,6 +1687,37 @@ deployment capacity usually make effective values materially smaller. The
 new context item kind that can exceed 1,000 tokens requires explicit design
 review even though the absolute ceiling is higher.
 
+Token ceilings are not evaluated by an unspecified tokenizer or character
+estimate. Every token-limited admission pins:
+
+```text
+TokenCountingProfile {
+  profile_revision
+  tokenizer_family
+  tokenizer_revision_or_digest
+  input_normalization
+  special_token_rules
+  message_and_tool_framing_rules
+  count_algorithm_revision
+}
+
+ProviderTokenMappingEvidence {
+  processing_destination_identity
+  registration_revision
+  adapter_revision
+  provider_model_identity
+  token_counting_profile_revision
+  evidence_revision
+  verified_at
+}
+```
+
+The external compatibility decision and Destination Attempt bind that mapping
+evidence. Counts cover the exact admitted semantic projection plus all wire
+framing and fixed overhead defined by the profile. A missing, drifted, or
+unverifiable Provider mapping fails admission; the Host does not guess from
+characters, another model, a Provider alias, or a mutable SDK helper.
+
 No partial success is inferred when a hard ceiling is hit. An over-limit input
 is rejected before domain admission. A page or replay batch ends only at a
 typed item boundary and supplies a continuation cursor. A streamed external
@@ -1477,12 +1728,21 @@ retention-owned cleanup rule.
 
 ### 15.3 Effective values and exhaustion
 
-`GET /api/v1/protocol` publishes global public effective values. Project- or
-operation-specific admissions return only values the requester is allowed to
-know. Rate/concurrency exhaustion returns `rate_limited` with a bounded
+`GET /api/v1/protocol` publishes every supported immutable public Profile and
+its numeric values. Project- or operation-specific admissions return only
+values the requester is allowed to know. Rate/concurrency exhaustion returns
+`rate_limited` with a bounded
 condition or safe `Retry-After`; content/complexity exhaustion returns
 `payload_too_large` or `limit_exceeded`. Retry never bypasses the original
 idempotency, Snapshot, Capability, Attempt, or fence binding.
+
+Dynamic resource pressure may only refuse or defer a new admission through a
+temporary rate/concurrency outcome such as `429 rate_limited` with
+`after_condition`. It cannot, under the same Profile revision, convert an
+otherwise valid content shape, byte length, complexity, replay batch, or token
+count into `payload_too_large`, `limit_exceeded`, or another permanent-invalid
+classification. Once admitted, the frozen effective bounds govern settlement
+even if current capacity changes.
 
 Timeout stops waiting, not truth. After durable admission, timeout reports the
 known asynchronous operation or `outcome_unknown` as appropriate. It does not
@@ -1570,6 +1830,15 @@ The eventual repository verification command must fail when:
 - the N/N-1 corpus cannot be parsed and projected by its advertised client;
 - a stored historical wire fixture is reserialized after upgrade;
 - a digest coverage fixture changes without a new Digest Profile;
+- any Profile numeric value changes without a new Protocol Limit Profile
+  revision, or N/N-1 enforcement rejects an input valid under its selected
+  supported revision without an independent temporary or authorization cause;
+- a token-limited fixture lacks an exact Token Counting Profile and verified
+  Provider mapping evidence;
+- a Tool/MCP invocation omits a mandatory context or Destination Attempt
+  admission reference, or an external invocation omits disclosure/wire evidence;
+- an archive root, protected-input digest, trusted-anchor proof, or exact entry
+  digest does not recompute;
 - an Artifact/Event example references a mutable alias rather than an exact
   Revision;
 - a secret-bearing or cross-Scope field enters any generated output, log
@@ -1584,7 +1853,12 @@ implementation; this specification owns what it must prove.
 
 ### 16.4 Canonical adversarial fixture families
 
-The generated negative corpus includes at least:
+The generated positive corpus includes applied, refused, invalid, conflicted,
+and no-effect committed domain outcomes with their stable typed Receipt
+references, identical idempotent replays, exclusive SSE resume, bounded
+at-least-once duplicate handling, all required Tool/MCP seven-gate evidence,
+and a verifiable signed or integrity-protected archive. The negative corpus
+includes at least:
 
 1. duplicate JSON names at the top level and inside nested authority fields;
 2. unknown Command fields, discriminators, Approval states, and Attempt states;
@@ -1592,25 +1866,37 @@ The generated negative corpus includes at least:
 4. wrong `owner_user_id`, Project, Run, Artifact Revision, cursor, Snapshot,
    Capability, Approval, and Credential Reference substitutions;
 5. caller-supplied owner, role, or Capability claims;
-6. reused idempotency key with a changed body, route, command kind, or scope;
+6. reused idempotency key with a changed body, route, command kind, or scope,
+   and the same digest under a new key attempting to reuse a consumed nonce;
 7. stale expected Revision/Head and concurrent identical submission;
-8. expired, cross-route, cross-body, replayed, and stolen anti-forgery nonce;
+8. expired, cross-route, cross-body, cross-record, replayed, and stolen
+   anti-forgery nonce, plus exact retry against the wrong idempotency record;
 9. disallowed Host, Origin, content type, and credentialed cross-origin request;
-10. valid SSE reconnect, duplicate delivery, cross-filter cursor, cursor ahead,
+10. valid exclusive SSE reconnect, client resume from an older cursor with
+    duplicate delivery and Event-ID dedupe, cross-filter cursor, cursor ahead,
     cursor below replay floor, revocation between reconnects, and compaction
     generation change;
 11. payload length/digest/media/schema mismatch and payload-reference swapping;
 12. JSON, archive, decompression, Query, SSE, Tool, Provider, and bridge inputs
-    at, below, and one unit above every absolute ceiling;
+    at, below, and one unit above every Profile ceiling; same-revision dynamic
+    content narrowing; frozen-bound drift; and missing or wrong tokenizer
+    mapping evidence;
 13. archive path traversal, absolute path, Unicode/case collision, symlink,
-    hardlink, device entry, recursive archive, and expansion bomb;
-14. stale lease, old fence, late result, duplicate outbox delivery, crash before
-    dispatch claim, crash after claim, and uncertain Provider outcome;
-15. Tool/MCP discovery drift, same-name replacement, unpinned schema, widened
-    effect, hidden SDK retry, and incompatible cancellation/error mapping;
-16. spoofed App window, wrong Instance or Artifact Revision, repeated bridge ID
-    with another digest, out-of-order sequence, rate exhaustion, stale sandbox,
-    and response after Instance termination;
+    hardlink, device entry, recursive archive, expansion bomb, root
+    self-reference, reordered/omitted coverage, bad entry/root digest, and
+    missing, embedded-only, unknown, or invalid integrity anchor/proof;
+14. stale lease, old fence, late result, duplicate outbox delivery, missing or
+    mismatched final Admission Decision, crash before dispatch claim, crash
+    after claim, and uncertain Provider outcome;
+15. Tool/MCP discovery drift, same-name replacement, unpinned schema, global
+    Credential Reference or compatibility cache, cross-Scope enablement/use,
+    missing seven-gate manifest, widened effect, hidden SDK retry, result reuse
+    without reassembly, and incompatible cancellation/error mapping;
+16. spoofed App window, wrong Instance or Artifact Revision, absent/mismatched,
+    numeric, null, overlength, or non-ASCII bridge request ID, semantic
+    notification, repeated bridge ID with another digest, an attempt to reuse
+    one Instance's Request in another Instance, out-of-order sequence, rate
+    exhaustion, stale sandbox, and response after Instance termination;
 17. Credential value, value digest, locator, or secret-bearing header attempts
     through arguments, output, logs, wire records, archives, and App messages;
 18. Provider redirect, DNS rebinding, private/link-local address, ambient proxy
@@ -1728,7 +2014,9 @@ data: {"envelope_version":1,"activity_profile":"storyos.project-activity.v1","ev
 ```
 
 The SSE `id` is the scoped cursor; the durable Event identity is the `event_id`
-inside `data`.
+inside `data`. Reconnecting with this exact `id` resumes exclusively at the
+next authorized position; reconnecting from an older retained cursor may
+redeliver this Event, which the client discards by `event_id`.
 
 ### 17.5 Non-oracular not found
 
@@ -1764,6 +2052,7 @@ the latter may have a distinct sanitized internal security reason.
   "sandbox_profile_revision": "storyos.app-sandbox.v1",
   "instance_sequence": "7",
   "direction": "app_to_host",
+  "bridge_request_id": "app-request-7",
   "jsonrpc_message": {
     "jsonrpc": "2.0",
     "id": "app-request-7",
@@ -1774,8 +2063,8 @@ the latter may have a distinct sanitized internal security reason.
   },
   "payload_digest": {
     "algorithm": "sha256",
-    "profile": "storyos.app-bridge.jcs.v1",
-    "value_hex_lowercase": "075a511c08543b6b1e86d2577fe94db57785cbcc5c89cd8886cdc755568042fe"
+    "profile": "storyos.app-bridge-binding.jcs.v1",
+    "value_hex_lowercase": "51d58aaeb339232414589911534cdf613486469bd8475716c1ab53143ab782ba"
   },
   "limit_profile_revision": "storyos.foundation.absolute.v1"
 }
@@ -1784,6 +2073,86 @@ the latter may have a distinct sanitized internal security reason.
 The bridge Request does not contain Project Scope or Capability supplied by the
 App. The Host derives both from the Instance binding and current operation,
 then creates the durable App Action Request before querying.
+
+### 17.7 Project archive root and integrity binding
+
+The synthetic archive contains one entry whose exact uncompressed bytes,
+without a trailing newline, are:
+
+```text
+{"project_id":"018f0000-0000-7001-8000-000000000002","schema":"storyos.project-record.v1"}
+```
+
+```json
+{
+  "archive_profile": "storyos.project-export.v1",
+  "export_id": "018f0000-0000-7001-8000-000000000071",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "source_snapshot": {
+    "snapshot_id": "018f0000-0000-7001-8000-000000000072",
+    "project_activity_position": "44"
+  },
+  "source_schema_compatibility": {
+    "minimum_reader": "storyos.schema.1",
+    "maximum_reader": "storyos.schema.1"
+  },
+  "schema_catalog": "storyos.schema-catalog.v1",
+  "table_family_counts": {
+    "projects": "1"
+  },
+  "serialization_profile": "storyos.project-archive-json.jcs.v1",
+  "digest_profile": "storyos.project-archive-root.jcs.v1",
+  "limit_profile_revision": "storyos.foundation.absolute.v1",
+  "entries": [
+    {
+      "path": "canonical/project.json",
+      "media_type": "application/json",
+      "payload_schema": "storyos.project-record.v1",
+      "byte_length": "90",
+      "digest": {
+        "algorithm": "sha256",
+        "profile": "storyos.archive-entry.raw-bytes.v1",
+        "value_hex_lowercase": "e2e04dc008f68b1c35338884373c8c3a1f46ee1cb591dbddc6de1a782c682ba2"
+      }
+    }
+  ],
+  "provenance_closure": {
+    "status": "complete",
+    "edge_count": "0"
+  },
+  "known_purged_gaps": [],
+  "root_digest": {
+    "algorithm": "sha256",
+    "profile": "storyos.project-archive-root.jcs.v1",
+    "value_hex_lowercase": "608f98a9fd3f450199b32f62d88c008b35e945554c206c217dfafcf017cd4861"
+  },
+  "integrity_protection": {
+    "kind": "signature",
+    "profile": "storyos.project-archive-integrity.ed25519.v1",
+    "trusted_anchor_id": "storyos.fixture.archive-signing-key.v1",
+    "protected_input_profile": "storyos.project-archive-protected-input.jcs.v1",
+    "protected_input_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.project-archive-protected-input.jcs.v1",
+      "value_hex_lowercase": "623d622b68d28bc52607a5fa382a2587aac53b833cd13db69ee06f1d45aa27fe"
+    },
+    "signature_base64url": "T-fvnq2xuXoLbCLUgKERaOrXVQnedl3NnXK1AYvdMC0MV-6Fe9SGnbU-T5b0R5is5GM4IiDRw4_wX9UA1VxfAw"
+  },
+  "created_at": "2026-07-22T09:00:00.000Z"
+}
+```
+
+The root digest excludes `root_digest` and `integrity_protection` exactly as
+specified in section 13.7. The protected-input digest covers the closed object
+`{ archive_profile, export_id, project_scope, root_digest }`; the signature is
+verified against the independently trusted fixture anchor, not a key supplied
+by the archive. The out-of-archive fixture anchor catalog maps the named anchor
+to Ed25519 public key `xSMHMLALUXpg9LlfOQL8DeaYJMyYIa2szZuBOlUk3og`
+(base64url, SHA-256
+`b0ff220aba9ce5c1739acf3217d3193ef80af2e7ca619a82df98c16152c6fb4f`).
 
 ## 18. Downstream ownership and migration impact
 
@@ -1822,37 +2191,48 @@ An implementation conforms only if all of these remain true:
    `{ owner_user_id, project_id }`; public owner, Project, role, or Capability
    claims never authorize it.
 2. Client Session, Host, Origin, anti-forgery, Project Scope, object Scope, and
-   operation authority are separate fail-closed checks.
+   operation authority are separate fail-closed checks; a nonce is consumed
+   only against its exact idempotency key, record, and command digest.
 3. Commands use exact idempotency digest binding and explicit concurrency
-   preconditions; duplicates cannot create another logical effect.
+   preconditions; duplicates cannot create another logical effect, and every
+   admitted domain settlement returns its stable typed Receipt path.
 4. `Committed` means the complete owning transaction committed; `Accepted`
-   means only durable asynchronous admission.
+   means only durable asynchronous admission. Committed refusal, conflict,
+   invalidity, and no-effect are Receipt-bearing settlements, not lost Problems.
 5. Canonical Queries identify a committed Snapshot; Projection Queries expose
    source boundary, generation, watermark, completeness, and lag.
 6. Artifact identity, Revision identity, digest, payload bytes, and rebuildable
    projections remain distinct.
 7. One exact Project Scope has one canonical Project Activity Stream. SSE is a
    replayable delivery view, not authority or the source of truth.
-8. Cursor reconnect reauthorizes, cursor-too-old never skips silently, and
-   compaction never guesses a position.
+8. Cursor reconnect reauthorizes and resumes exclusively after the cursor;
+   client Event-ID dedupe handles at-least-once overlap, cursor-too-old never
+   skips silently, and compaction never guesses a position.
 9. Public failures do not reveal another User or Project object's existence;
    uncertainty remains explicitly `outcome_unknown`.
 10. Every physical retry, resend, fallback, or repair has a new Attempt; stale
     fences cannot settle or publish late work.
-11. Tool, MCP, App, Provider, research, import, and external content remains
-    untrusted. Manifests commit before egress, and only Host/Core authority can
-    change authoritative state.
+11. Tool, MCP, App, Provider, research, import, and external contents remain
+    untrusted. Every Tool/MCP use crosses all seven gates, results repeat them
+    before later context use, final admission and manifests commit before
+    egress, and only Host/Core authority can change authoritative state.
 12. Commands and control inputs are closed; public outputs evolve additively
     only where unknown meaning is presentation-safe.
 13. Public N/N-1 support uses generated projections; external contracts use
-    exact pinning, compatibility decisions, drift quarantine, and fresh
-    authorization for widening.
+    exact pinning, Project Scope-bound use and Credential bindings,
+    compatibility decisions, drift quarantine, and fresh authorization for
+    widening. Global registrations contain no Project data or credentials.
 14. Historical Application Wire Records and domain history are immutable;
     upgrades append projections and migration evidence.
-15. Every operation is admitted under named hard bounds no wider than its
-    Protocol Limit Profile, without turning those bounds into author settings.
+15. Every operation freezes named effective bounds no wider than its immutable
+    Protocol Limit Profile; numeric changes create a new revision, dynamic
+    pressure is temporary rate/concurrency admission, and token limits have an
+    exact counting profile and Provider mapping, without author settings.
 16. Rust contracts are the sole editable external source; OpenAPI, JSON Schema,
     TypeScript, catalogs, fixtures, and wire corpus cannot drift independently.
+17. Project archive root coverage excludes only its root and integrity proof,
+    every digest recomputes, and import requires independently trusted
+    integrity protection before visibility.
 
 ## 20. Accepted inputs and evidence
 

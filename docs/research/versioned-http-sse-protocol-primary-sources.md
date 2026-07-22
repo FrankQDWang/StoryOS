@@ -1,7 +1,7 @@
 # Versioned HTTP, SSE, schema, digest, and MCP protocol primary sources
 
-- Audited: 2026-07-21
-- Scope: external protocol facts needed by GitHub issue 58
+- Audited: 2026-07-22
+- Scope: external protocol facts needed by [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58)
 - Evidence policy: official standards, official specifications, and first-party
   protocol repositories only
 - Authority: research evidence only; this note does not choose StoryOS domain
