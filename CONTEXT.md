@@ -63,6 +63,22 @@ _Avoid_: Import as new, ID remapping, partial merge, overwrite restore, ownershi
 The initial product stage in which one bootstrapped User uses StoryOS to write a real novel while exercising the same Project Scope and Project Isolation contracts required when more Users are served later. It is a validation stage, not a distinct single-user domain model or permission shortcut; deployment and persistence choices belong to architecture decisions.
 _Avoid_: Product-wide single-user mode, global current User, throwaway domain model, implicit Project access
 
+**Foundation Monorepo**:
+The one StoryOS repository that jointly governs the Rust workspace, production Web Client, external-contract source, and checked-in generated contract artifacts so a compatible product change is reviewed and reproducibly verified as one unit. It does not make internal package boundaries an author setting or admit disposable prototypes or `.reference` as production members.
+_Avoid_: Split runtime repositories, separately authoritative generated SDK, prototype workspace
+
+**Server/Worker Separation Boundary**:
+The modular-monolith boundary in which the Server owns public transport and trusted request admission, Core owns authoritative transitions, and the Worker executes only durably claimed asynchronous or external work through Core-owned contracts. Server and Worker remain independently startable and deployable, while the Foundation default may co-locate them; neither becomes a separate authority store, microservice, or broker-owned workflow.
+_Avoid_: HTTP background thread as recovery boundary, mandatory separate service fleet, worker-owned truth
+
+**Prototype Evidence Asset**:
+A disposable, bounded-risk experiment retained only to reproduce and inspect the exact question, environment, observations, and limitations that informed an accepted StoryOS contract. It is frozen rather than absorbed into production, and may be deleted only through an explicit reviewable decision after its durable evidence record is sufficient.
+_Avoid_: Production seed, evolving pre-production branch, runtime dependency, unrecorded experiment
+
+**Reference Evidence Locator**:
+A repository-owned non-runtime record that makes an upstream design or source observation reproducible by naming its canonical location, exact immutable revision or digest, license, retrieval date, and relevant scope. A local `.reference` snapshot is not a Locator merely because it exists and never becomes a production dependency, workspace member, test input, or accepted evidence without this independently reviewable identity.
+_Avoid_: Machine-local snapshot, vendored runtime source, implicit dependency, unpinned citation
+
 **Foundation Recovery Service Profile**:
 The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss; loss of the database host or disk has a recovery-point objective of at most fifteen minutes and a recovery-time objective of at most two hours. The deployment therefore uses synchronous PostgreSQL commit durability, a daily physical base backup plus continuous WAL archival into a failure domain independent of the database host, and a successful automated restore proof for every release candidate. Backup retention duration belongs to the later retention contract, but every claimed window must retain a complete verifiable recovery chain. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster, and later controlled-cloud deployments may declare a stricter profile.
 _Avoid_: Asynchronous author acknowledgement, same-disk backup, daily dump only, untested backup file, Foundation high-availability cluster
