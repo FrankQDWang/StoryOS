@@ -145,7 +145,7 @@ generic EAV/event bucket, or remove Project Scope from a project-bearing row.
 | Agent execution | `agent_runs`, `subruns`, `subrun_joins`, `run_grant_revisions`, `subrun_capability_grants`, `run_plans`, `run_steps`, `run_lanes`, `run_events`, `run_mailbox_messages`, `run_mailbox_deliveries`, `run_waits`, `wait_resolutions`, `run_holds`, `run_wakeups`, `run_leases`, `run_execution_attempts`, `run_budget_accounts`, `run_budget_reservations`, `usage_records` | normalized live state is backed by immutable events and receipts; mailbox delivery is durable and leases and budget claims are fenced |
 | Transcript and approval | `transcript_items`, `approval_waits`, `approval_decisions`, `steering_inputs`, `run_checkpoints` | Transcript items and decisions are canonical Operational Records; checkpoints are disposable projections |
 | Tool, MCP, and Skill | `tool_specs`, `tool_registration_revisions`, `tool_registration_heads`, `tool_registration_status_events`, `tool_calls`, `tool_attempts`, `mcp_server_registration_revisions`, `mcp_server_registration_heads`, `mcp_app_artifacts`, `skill_package_revisions`, `skill_package_heads`, `skill_activations` | reusable non-project definitions are unscoped only when content-free of project data; calls, activations, Apps, and status evidence are scoped |
-| Model Gateway | `model_registration_revisions`, `model_registration_heads`, `model_registration_status_events`, `model_capability_profiles`, `model_operational_snapshots`, `model_routing_policy_revisions`, `model_route_requests`, `model_route_decisions`, `model_invocations`, `model_attempts`, `model_usage_settlements` | Provider-neutral columns and versioned adapter payload; no Provider-specific authority table |
+| Model Gateway | `model_registration_revisions`, `model_registration_heads`, `model_registration_status_events`, `model_capability_profiles`, `project_model_use_binding_revisions`, `model_operational_snapshots`, `model_routing_policy_revisions`, `model_route_requests`, `model_route_decisions`, `model_invocations`, `model_attempts`, `model_usage_settlements` | Registration/capability contracts are unscoped only while free of Project data, Credential References, and authority; each model-use binding and every operational snapshot, route decision, invocation, attempt, and fallback repeats exact Project Scope and pins the composed project-use/credential/compatibility evidence; Provider-neutral columns and versioned Adapter payload add no Provider-specific authority table |
 | Memory and research | `memory_candidates`, `memory_admissions`, `memory_suppressions`, `research_claims`, `research_evidence_edges`, `source_snapshots` | source Revisions and provenance remain canonical; retrieval projections remain separate |
 | Context and disclosure | `operation_requirements`, `context_candidates`, `context_eligibility_decisions`, `context_selection_decisions`, `context_projections`, `context_assembly_manifests`, `context_manifest_members`, `destination_attempts`, `wire_payload_projections`, `outbound_disclosure_events`, `destination_attempt_settlements` | the Manifest and exact non-secret wire evidence commit before external dispatch claim |
 | Durable work delivery | `outbox_entries`, `worker_fences` | outbox intent commits with its owning transition; a worker generation fences all settlements |
@@ -392,7 +392,8 @@ generation. Lexical term rows and any physical indexes are disposable.
 
 `embedding_projections` stores scope, exact source fragment, source digest,
 embedding input profile and digest, exact Model Registration and capability
-profile, vector dimension, observed vector values, generation, and status. A
+profile, exact Project Scope-bound model-use/credential/compatibility binding,
+vector dimension, observed vector values, generation, and status. A
 Foundation implementation may use a PostgreSQL-native array and exact scan;
 an optional later in-database vector extension and ANN index remain disposable
 projection choices and require their own pinned migration and restore proof.
@@ -453,7 +454,8 @@ Unavailable and retrieval falls back only to an independently admitted mode.
 
 ### 8.1 Credential Reference persistence
 
-`credential_references` and project-use bindings store only opaque reference
+`credential_references` and project-use bindings, including model-use bindings,
+store only opaque reference
 identity, backend kind and namespace, non-secret locator, generation, status,
 availability evidence, and exact authorized Project Scope. They never store a
 secret value, value digest, decrypting key, authorization header, or

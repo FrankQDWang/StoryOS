@@ -179,6 +179,11 @@ Model Route Request and creates the Model Route Decision from hard Purpose,
 capability, context-bound,
 disclosure, authorization, and budget requirements inside gate one. Other
 destination kinds use their owning immutable Registration or routing decision.
+The Decision selects a globally reusable, non-authorizing Model Registration
+only together with one exact Project Scope-bound Project Model Use Binding that
+pins project use authorization, Credential Reference binding when required,
+external compatibility, destination, and hard bounds. A Registration or
+project-free Provider observation cannot satisfy this binding.
 No source content is disclosed during resolution. Gate one cannot complete,
 and Candidate Discovery cannot begin, until one exact Processing Destination
 Identity, endpoint or account boundary, and governing intake contract are
@@ -595,6 +600,8 @@ One immutable DestinationContextManifest binds:
 - its ContextAssemblyManifest;
 - exact requester User and Project Scope;
 - one exact Processing Destination Identity and its owning Registration Revision;
+- the exact Project Scope-bound external-use binding, compatibility decision,
+  and Credential binding generation when the destination requires one;
 - one Purpose and the applicable owning intake contract: Model Capability
   Profile plus Model Attempt Request for a model, or Destination Context Intake
   Contract for a non-model destination;
@@ -618,7 +625,8 @@ Every concrete planned destination execution, including an initial submission,
 physical resend, retry, repair, fallback, or destination change, owns a distinct
 Destination Attempt even when it settles before dispatch. It is durably
 established before outbound I/O and binds its exact Processing Destination
-Identity, manifests, and semantic request. Model Attempt and the owning
+Identity, Project Scope-bound external-use binding, manifests, and semantic
+request. Model Attempt and the owning
 destination-specific Tool or service attempt refine this common boundary.
 
 When exact destination disclosure approval is required, the Host first creates
@@ -674,7 +682,9 @@ Destination Attempt or Disclosure Event as current execution evidence.
 
 A fallback to another Model Registration, endpoint, or account boundary always
 requires a new Operation Requirement, Context Assembly, route decision,
-destination and disclosure manifests, and Destination Attempt. If the actual
+Project Model Use Binding, destination and disclosure manifests, and
+Destination Attempt. It cannot carry the prior route's Credential Reference
+or compatibility binding forward. If the actual
 processor, endpoint/account, control classification, or intake/disclosure
 boundary changes, it also resolves a new Processing Destination Identity and
 requires authority for that identity. A Registration, Adapter, serialization,
@@ -1039,8 +1049,10 @@ Downstream implementation and verification must cover at least:
    otherwise the AgentRun records its explicit absence, without requiring a
    character sheet or per-call confirmation.
 2. A configured Model Attempt, refining the Destination Attempt boundary and
-   operating inside its Project Destination Grant, passes all gates and records
-   separate assembly, destination, wire, disclosure, and execution evidence.
+   operating inside its exact Project Model Use Binding and Project Destination
+   Grant, passes all gates and records separate scope/use, compatibility,
+   credential-binding, assembly, destination, wire, disclosure, and execution
+   evidence.
 3. A new Provider, endpoint, Purpose, or wider data category blocks on exact
    authorization before disclosure.
 4. An ineligible mandatory source produces the declared Degraded outcome or
@@ -1065,9 +1077,10 @@ Downstream implementation and verification must cover at least:
     exact Project Scope as its root.
 14. Model Fallback reruns all seven gates for the newly resolved route while
     preserving the same Model Invocation, Route Request, semantic request
-    digest, and Effective Model Context; a dispatched fallback creates a new
-    Destination Attempt, wire projection, and Disclosure Event, while semantic
-    drift refuses fallback.
+    digest, and Effective Model Context; it uses the new route's exact Project
+    Model Use Binding rather than inheriting the prior credential/compatibility
+    binding. A dispatched fallback creates a new Destination Attempt, wire
+    projection, and Disclosure Event, while semantic drift refuses fallback.
 15. An OutcomeUnknown Destination Attempt remains visible and budgeted when a
     successor is admitted.
 16. Inspection distinguishes the exact non-secret wire delta and opaque

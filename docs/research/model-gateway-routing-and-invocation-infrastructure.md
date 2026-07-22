@@ -35,9 +35,9 @@ There is one important constraint. Official OpenAI and Anthropic SDKs retry some
 ### Provider and infrastructure specifications
 
 - OpenAI official Python SDK: [request IDs, retries, and timeouts](https://github.com/openai/openai-python#request-ids), plus the [retry implementation](https://github.com/openai/openai-python/blob/main/src/openai/_base_client.py).
-- OpenAI Responses API: [streaming events](https://platform.openai.com/docs/api-reference/responses-streaming/response/completed) and [request debugging](https://platform.openai.com/docs/api-reference/backward-compatibility#debugging-requests).
+- OpenAI Responses API: [streaming events](https://developers.openai.com/api/reference/resources/responses/streaming-events#response.completed) and [request debugging](https://developers.openai.com/api/reference/overview#debugging-requests).
 - Anthropic: [streaming event order, cumulative usage, partial tool JSON, and stream errors](https://platform.claude.com/docs/en/build-with-claude/streaming), [Python SDK retries and timeouts](https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/python#retries), [request IDs and mid-stream errors](https://platform.claude.com/docs/en/api/errors), and [server-side/client-side fallback semantics and per-attempt usage](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback).
-- OpenTelemetry: [GenAI client inference spans](https://github.com/open-telemetry/semantic-conventions/blob/main/model/gen-ai/spans.yaml), [HTTP retry/resend spans](https://opentelemetry.io/docs/specs/semconv/http/http-spans/#http-request-retries-and-redirects), and the [logical-client-operation versus nested protocol-call example](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#spankind).
+- OpenTelemetry: [GenAI client inference spans](https://github.com/open-telemetry/semantic-conventions-genai/blob/2e994c6d59a93bb4fc1752c5378eedb9b8e14d6b/model/gen-ai/spans.yaml#L154-L272), [HTTP retry/resend spans](https://opentelemetry.io/docs/specs/semconv/http/http-spans/#http-request-retries-and-redirects), and the [logical-client-operation versus nested protocol-call example](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#spankind).
 - Temporal: [Activity Execution as the full chain of Activity Task Executions](https://docs.temporal.io/activity-execution#what-is-an-activity-execution) and [retry behavior](https://docs.temporal.io/encyclopedia/retry-policies#activity-execution).
 - Google Cloud Vertex AI: [`GenerateContentResponse`](https://cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/GenerateContentResponse), including `responseId`, actual `modelVersion`, finish reason, and `usageMetadata`.
 - AWS Bedrock: [model invocation logging](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html), including per-invocation request ID, operation, model ID, account/region identity, request metadata, and input/output token counts.
@@ -57,7 +57,7 @@ There is one important constraint. Official OpenAI and Anthropic SDKs retry some
 | Source fact | Anthropic streams ordered lifecycle events, cumulative usage, partial JSON tool arguments, and error events that can arrive after HTTP 200 ([source](https://platform.claude.com/docs/en/build-with-claude/streaming#event-types)). | A normalized stream needs ordering, explicit terminality, partial-data handling, and provider-specific usage normalization. HTTP status alone is not an attempt outcome. |
 | Source fact | Anthropic's beta server-side fallback can run several models inside one API call; `usage.iterations` records every model attempt, mid-stream fallback preserves a model boundary, and already streamed output may be billable ([source](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback#what-the-response-contains)). Its SDK middleware can also retry another model and splice events onto the open stream ([source](https://platform.claude.com/docs/en/build-with-claude/refusals-and-fallback#client-side-fallback-with-the-sdk-middleware)). | A provider/SDK can hide model selection and multiple billable attempts below one client call. That conflicts with Host-owned fallback unless disabled or explicitly modeled. |
 | Source fact | OpenTelemetry says retries send multiple physical HTTP requests to satisfy the same API call and recommends a distinct span with `http.request.resend_count` for every resend ([source](https://opentelemetry.io/docs/specs/semconv/http/http-spans/#http-request-retries-and-redirects)). It also recognizes nested protocol spans within one logical client operation ([source](https://github.com/open-telemetry/opentelemetry-specification/blob/main/specification/trace/api.md#spankind)). | Operation-level and attempt/transport-level observability are separate layers, not competing names for one record. |
-| Source fact | OpenTelemetry's GenAI inference span carries provider, requested model, actual response model, response ID, finish reasons, streaming timing, and usage dimensions ([source](https://github.com/open-telemetry/semantic-conventions/blob/main/model/gen-ai/spans.yaml#L1580-L1767)). | StoryOS can map attempt telemetry to standard attributes while retaining richer durable domain records. OpenTelemetry spans are observability projections, not authority or persistence truth. |
+| Source fact | OpenTelemetry's GenAI inference span carries provider, requested model, actual response model, response ID, finish reasons, streaming timing, and usage dimensions ([span source](https://github.com/open-telemetry/semantic-conventions-genai/blob/2e994c6d59a93bb4fc1752c5378eedb9b8e14d6b/model/gen-ai/spans.yaml#L154-L272), [usage source](https://github.com/open-telemetry/semantic-conventions-genai/blob/2e994c6d59a93bb4fc1752c5378eedb9b8e14d6b/model/gen-ai/spans.yaml#L38-L48)). | StoryOS can map attempt telemetry to standard attributes while retaining richer durable domain records. OpenTelemetry spans are observability projections, not authority or persistence truth. |
 | Source fact | Temporal defines one Activity Execution as the full chain of Activity Task Executions and creates a new task execution for every retry ([execution](https://docs.temporal.io/activity-execution#what-is-an-activity-execution), [retry](https://docs.temporal.io/encyclopedia/retry-policies#activity-execution)). | Durable systems commonly preserve one logical parent while appending concrete attempts beneath it. |
 | Source fact | Google returns a response ID, actual model version, finish reason, and usage metadata; AWS Bedrock invocation logs identify each request by request ID, operation, model ID, account/region, and token counts ([Google](https://cloud.google.com/vertex-ai/generative-ai/docs/reference/rest/v1/GenerateContentResponse), [AWS](https://docs.aws.amazon.com/bedrock/latest/userguide/model-invocation-logging.html#model-invocation-logging-log-entry-format)). | Provider-neutral records need provider-native correlation fields and must distinguish requested registration from actual served model evidence. |
 
@@ -112,7 +112,8 @@ Model Invocation
   derived aggregate outcome and usage; never overwrites attempt evidence
 
 Model Attempt
-  one admitted concrete try under one exact Model Route Decision
+  one admitted concrete try under one exact Model Route Decision and its
+  exact Project Scope-bound Project Model Use Binding
   created durably before outbound I/O
   one exact request/context digest and disclosure destination
   one adapter/provider submission lifecycle
@@ -120,7 +121,7 @@ Model Attempt
   ordered stream evidence, usage, partial output, and one terminal attempt outcome
 ```
 
-A retry that preserves the same exact Registration and request digest appends a new Model Attempt and may reference the same still-valid Model Route Decision after live revalidation. A fallback to another Registration appends both a new Model Route Decision and a new Model Attempt under the same Invocation, provided the logical RunStep objective and Model Route Request remain unchanged. If the prompt, required capability, authority, disclosure destination set, or intended Agent Decision changes materially, that is a new Invocation rather than a retry.
+A Model Registration is a globally reusable, non-authorizing contract and Adapter mapping; it contains no Project data, Credential Reference, or use admission. A retry that preserves the same exact Registration, Project Model Use Binding, and request digest appends a new Model Attempt and may reference the same still-valid Model Route Decision after live revalidation. A fallback to another Registration appends both a new Model Route Decision and a new Model Attempt under the same Invocation, with that route's own exact Project Model Use Binding, provided the logical RunStep objective and Model Route Request remain unchanged. If the prompt, required capability, authority, disclosure destination set, or intended Agent Decision changes materially, that is a new Invocation rather than a retry.
 
 The existing generic `Execution Attempt` vocabulary can remain the common super-concept; `Model Attempt` is the model-specific contract because it has provider IDs, route-decision binding, streams, model usage, and disclosure evidence that generic attempts do not name.
 
@@ -155,7 +156,9 @@ For every Model Invocation, expose its RunStep, Model Route Request, current sta
 
 For every Model Attempt, preserve at minimum:
 
-- exact Model Route Decision and Model Registration revisions;
+- exact Project Scope, Model Route Decision, global Model Registration revision,
+  and Project Model Use Binding with its compatibility decision and Credential
+  binding generation when required;
 - provider, endpoint/account boundary, requested model identifier, and actual served-model evidence;
 - attempt ordinal, causal retry/fallback reason, request digest, and idempotency token if any;
 - disclosure record, context-manifest reference, and transmitted data categories;
@@ -172,7 +175,7 @@ OpenTelemetry GenAI and nested HTTP spans should be emitted as projections of th
 
 1. A Model Invocation succeeds only after the Host validates and durably records one typed Agent Decision; provider completion terminates only its Model Attempt.
 2. Retryability is a Host Recovery Decision after live revalidation. Confirmed transient failures may retry within policy and budget, deterministic invalid requests may not retry unchanged, and ambiguous submission follows the OutcomeUnknown rules.
-3. A same-Registration retry may reuse a still-valid Model Route Decision after live revalidation and creates a new Attempt with the same semantic request digest. Fallback always creates a new Decision.
+3. A same-Registration retry may reuse a still-valid Model Route Decision only after live revalidation of the same exact Project Model Use Binding and creates a new Attempt with the same semantic request digest. Fallback always creates a new Decision and uses the newly selected route's own binding; it never inherits the prior credential or compatibility evidence.
 4. Partial text and Tool arguments remain ordered Attempt evidence projected to the Author UI. They cannot silently enter normal model history, become an Agent Decision, or reach the Tool Gateway.
 5. Provider- or SDK-managed model routing and fallback are forbidden in the first slice. Any future composite router requires a separately specified Registration contract.
 6. OutcomeUnknown retains enforceable worst-case reservation. A successor requires authorization for another disclosure and budget for both Attempts; late usage reconciles the reservation and never rewrites earlier evidence.

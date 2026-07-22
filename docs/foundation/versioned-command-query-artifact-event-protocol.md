@@ -123,18 +123,56 @@ SnapshotId                     CursorId
 ActivityEventId                ArtifactId
 ArtifactRevisionId             PayloadId
 ApplicationWireRecordId        ProposalId
+DomainReceiptId                ValidationReceiptId
 AcceptanceReceiptId            UndoAcceptanceReceiptId
-ToolCallId                     DestinationAttemptAdmissionDecisionId
+AuthorUndoReceiptId            ToolCallId
+DestinationAttemptAdmissionDecisionId
 AgentRunId                     RunStepId
 ExecutionAttemptId             DestinationAttemptId
-DomainReceiptId                CorrelationId
-AuthorIntentId                 ApprovalId
-CapabilityGrantId              AppViewInstanceId
-AppActionRequestId             CredentialReferenceId
-RegistrationId                 RegistrationRevisionId
-ExternalCompatibilityDecisionId AppViewInstanceNegotiationId
+CorrelationId                  AuthorIntentId
+ApprovalId                     CapabilityGrantId
+AppViewInstanceId              AppActionRequestId
+CredentialReferenceId          RegistrationId
+RegistrationRevisionId         ExternalCompatibilityDecisionId
+AppViewInstanceNegotiationId
 IdempotencyKey
 ```
+
+Receipt identities are never interchangeable or collapsed into a generic
+Domain Receipt. Every generated envelope and Event schema imports one closed
+owning-contract union:
+
+```text
+ReceiptRef =
+  DomainReceiptRef {
+    kind: "domain_receipt"
+    id: DomainReceiptId
+  }
+  | ValidationReceiptRef {
+      kind: "validation_receipt"
+      id: ValidationReceiptId
+    }
+  | AcceptanceReceiptRef {
+      kind: "acceptance_receipt"
+      id: AcceptanceReceiptId
+    }
+  | UndoAcceptanceReceiptRef {
+      kind: "undo_acceptance_receipt"
+      id: UndoAcceptanceReceiptId
+    }
+  | AuthorUndoReceiptRef {
+      kind: "author_undo_receipt"
+      id: AuthorUndoReceiptId
+    }
+```
+
+This union is extensible only through the Rust contracts source graph: the
+contract that owns a new Receipt identity contributes a new typed variant and
+the generator emits a new payload/Event schema plus required N/N-1 projection
+or `upgrade_required` behavior. There is no opaque catch-all, stringly typed
+ID, or fallback to `DomainReceiptId` for an unknown Receipt kind. `Committed`,
+idempotency replay, Queries, and `ProjectActivityEvent.receipt_ref` use this
+same generated union for their selected schema release.
 
 ### 4.3 Project Scope and requester
 
@@ -379,8 +417,8 @@ newtype generated before first submission. The canonical command digest covers:
 - resolved Project Scope;
 - all target identities and expected Revisions/Heads;
 - the exact typed body after closed-schema validation;
-- Author Intent, Approval, Acceptance Receipt, or Undo Acceptance Receipt
-  references where applicable.
+- Author Intent, Approval, and exact typed Receipt identities where applicable,
+  including Validation, Acceptance, Undo Acceptance, and Author Undo Receipts.
 
 It excludes session cookies, anti-forgery material, trace headers, audit time,
 and transport framing.
@@ -394,7 +432,8 @@ The idempotency arbitration key is:
 ```
 
 Its record stores the command digest/profile, Command ID, admission state,
-immutable acknowledgement, Receipt/result reference, and commit time.
+immutable acknowledgement, exact typed `ReceiptRef` or asynchronous result
+reference, and commit time.
 
 - Same scope, kind, key, and digest returns the original acknowledgement and
   references byte-for-byte under the same negotiated representation.
@@ -447,7 +486,7 @@ CommandAcknowledgement =
     command_id
     project_scope
     correlation_id
-    receipt_ref
+    receipt_ref: ReceiptRef
     project_activity_position
     committed_at
     limit_profile_revision
@@ -470,11 +509,14 @@ CommandAcknowledgement =
 no-change transition, its Receipt, required Events and sequence facts,
 invalidation, and outbox intent commit. It means that settlement evidence
 committed, not that the requested domain effect was accepted or changed state.
-The `receipt_ref` is mandatory and names the stable typed result: for an
-Acceptance command it is an `AcceptanceReceiptId`, for undo an
-`UndoAcceptanceReceiptId`, and otherwise the owning typed `DomainReceiptId`.
-The Acceptance command is the Acceptance Attempt and its `CommandId` identifies
-that submitted attempt; there is no separate `AcceptanceId`.
+The `receipt_ref` is mandatory and uses the closed generated `ReceiptRef` union
+from section 4.2. The owning command contract selects its exact identity:
+Validation, Acceptance, Undo Acceptance, and Author Undo remain distinct
+`ValidationReceiptId`, `AcceptanceReceiptId`, `UndoAcceptanceReceiptId`, and
+`AuthorUndoReceiptId` variants; a command whose owning result is a
+`DomainReceiptId` uses only that variant. The Acceptance command is the
+Acceptance Attempt and its `CommandId` identifies that submitted attempt;
+there is no separate `AcceptanceId` and no fallback that erases Receipt type.
 
 An applied action on an existing resource, a domain refusal, invalidity,
 conflict, or no-effect settlement returns HTTP `200` with `Committed`; creation
@@ -782,7 +824,7 @@ ProjectActivityEvent {
   correlation_id
   causation
   command_id | null
-  receipt_ref | null
+  receipt_ref: ReceiptRef | null
   occurred_at
   recorded_at
   payload
@@ -982,6 +1024,8 @@ ExecutionAttemptRecord {
   operation_ref
   semantic_request_digest
   registration_revision | null
+  project_external_use_binding_revision | null
+  credential_binding_revision | null
   adapter_revision | null
   external_compatibility_decision | null
   destination_attempt_admission_decision | null
@@ -1171,6 +1215,49 @@ identifier, or compatibility cache may satisfy that join. Drift quarantines
 the Registration for new work and clears derived exposure. Historical work
 remains inspectable against its pinned revisions.
 
+For a model surface, `ModelRegistrationRevision` is one
+`GlobalExternalContractRegistrationRevision` variant: it owns the stable
+provider-neutral model contract, Model Provider Adapter, endpoint/account
+boundary, provider model identifier, and Model Capability Profile, but no
+Project or Credential Reference. Routing composes this exact scope-bound
+evidence instead:
+
+```text
+ModelRouteUseEvidence {
+  project_scope
+  requester_user_id
+  model_registration_revision
+  project_model_use_binding_revision
+  project_use_authorization_revision
+  credential_binding:
+    NoCredentialBinding { binding_kind: "none" }
+    | ProjectCredentialBindingRef {
+        binding_kind: "project_credential"
+        project_scope
+        credential_binding_revision
+        credential_reference_id
+        credential_binding_generation
+      }
+  external_compatibility_decision
+  model_operational_snapshot
+  processing_destination_identity
+  effective_bounds
+}
+```
+
+`project_model_use_binding_revision` is the model-specific typed reference to
+the same Project Scope-bound contract represented generically by
+`ProjectExternalUseBindingRevision`. Each Model Operational Snapshot repeats
+it. A Model Route Decision evaluates and selects Registration/use-binding
+pairs, and the Model Invocation, Model Attempt Request, every Model Attempt,
+and its destination/admission evidence repeat the selected pair and complete
+Scope. Same-route retry revalidates the same binding; fallback creates a new
+Route Decision and uses the selected route's own binding and Credential
+generation. No route, Snapshot, fallback, Provider alias, or globally cached
+compatibility result can create or inherit a credential namespace. These are
+Host contracts beneath the zero-configuration author experience; Bailian
+remains only a test Adapter choice.
+
 ### 13.4 Tool and MCP invocation
 
 ```text
@@ -1345,6 +1432,7 @@ ProjectArchiveManifest {
   schema_catalog
   table_family_counts
   serialization_profile
+  archive_path_profile
   digest_profile
   limit_profile_revision
   entries: [{ path, media_type, payload_schema, byte_length, digest }]
@@ -1364,8 +1452,44 @@ Provider-held state, logs, and executable runtime state. It preserves exact
 User, Project, object, Revision, and event identities and grants no destination
 or ownership authority.
 
+Every manifest pins Archive Path Profile
+`storyos.archive-path.utf8-nfc-unicode-16.0.0.v1`. It defines the logical entry
+namespace before any sorting, digest, extraction, or host-filesystem operation:
+
+1. The ZIP general-purpose UTF-8 flag is mandatory. Central-directory and
+   local-header filename bytes must be identical, valid UTF-8, and decode to
+   Unicode scalar values. Legacy encodings and Unicode-path extra-field
+   overrides are rejected.
+2. A path is a non-empty relative file path using only U+002F `/` as separator.
+   Leading or trailing `/`, repeated separators, U+005C `\\`, a first segment
+   matching ASCII drive prefix `[A-Za-z]:`, empty segments, and segments equal
+   to `.` or `..` are rejected rather than rewritten.
+3. Each decoded path must already be Unicode NFC under the pinned Unicode
+   16.0.0 data tables. Import performs no normalization. NUL, C0/C1 controls,
+   DEL, and code points whose General Category is `Cc`, `Cf`, `Cs`, `Co`, or
+   `Cn` under those tables are rejected.
+4. The collision key is UTF-8 of
+   `NFC(Default_Case_Folding(path, Unicode 16.0.0))`, where default case folding
+   is the non-Turkic mapping from the pinned `CaseFolding.txt` statuses `C` and
+   `F`. Two different accepted paths with the same collision key are rejected.
+   The canonical identity and sort key nevertheless remain the original
+   admitted NFC UTF-8 bytes, ordered lexicographically as unsigned bytes; case
+   folding never rewrites a path.
+5. Entries describe files only. Explicit directory entries are rejected and
+   directories are implied by `/`-separated prefixes. No file path may equal a
+   directory prefix required by another entry. Entry-byte uniqueness,
+   collision-key uniqueness, the 512-byte path limit, and 16-segment depth are
+   checked before the entry enters the manifest.
+
+The importer treats these paths as keys in a staging namespace and never joins
+an unvalidated name to an operating-system path. Changing encoding,
+normalization tables, collision keys, sorting, directory rules, or limit
+interpretation requires a new Archive Path Profile and archive profile
+compatibility decision; JCS alone supplies none of these rules.
+
 `digest_profile` is exactly `storyos.project-archive-root.jcs.v1`. Entries are
-sorted by their normalized UTF-8 path bytes, paths are unique, and each entry
+sorted by their Archive Path Profile canonical sort bytes, paths and collision
+keys are unique, and each entry
 digest covers the exact uncompressed entry bytes under its declared profile.
 The exact root input is:
 
@@ -1379,6 +1503,7 @@ ProjectArchiveRootInput {
   schema_catalog
   table_family_counts
   serialization_profile
+  archive_path_profile
   digest_profile
   limit_profile_revision
   entries
@@ -1409,15 +1534,15 @@ discards staging under the retention-owned cleanup policy. This contract fixes
 verification, not key lifetime or archive retention duration.
 
 Import streams into non-authoritative staging and validates media type, archive
-profile, total and expanded bytes, entry count, nesting, path normalization,
-duplicate/case-colliding names, symlink/hardlink/device rejection, compression
-ratio, digests, duplicate JSON keys, schema support, referential closure, exact
-Project Scope, and object identities before any visibility. Active content is
-never rendered during inspection. Restore is allowed only for the same durable
-User and Project identity into a target where that Scope is absent. It becomes
-visible atomically; no partial merge, overwrite, ID remap, copy, fork, or
-ownership transfer is implied. Unresolvable Credential References become
-explicitly `unbound`.
+profile, total and expanded bytes, entry count, exact Archive Path Profile
+admission, duplicate/case-colliding names, symlink/hardlink/device rejection,
+compression ratio, digests, duplicate JSON keys, schema support, referential
+closure, exact Project Scope, and object identities before any visibility.
+Active content is never rendered during inspection. Restore is allowed only
+for the same durable User and Project identity into a target where that Scope
+is absent. It becomes visible atomically; no partial merge, overwrite, ID
+remap, copy, fork, or ownership transfer is implied. Unresolvable Credential
+References become explicitly `unbound`.
 
 ### 13.8 Provider, embedding, and research disclosure
 
@@ -1483,6 +1608,7 @@ StoryOS versions these axes independently:
 | Core contract revision | Server-to-Core typed semantics | coordinated internal migration |
 | Worker/Adapter revision | execution handoff and wire mapping | fence old work and pin or migrate explicitly |
 | archive profile | export manifest and portable representation | reader compatibility or explicit import refusal |
+| Archive Path Profile | entry-name encoding, identity, collision, ordering, and directory rules | new profile and explicit import compatibility decision |
 | Protocol Limit Profile | public validity ceilings, counting rules, and interpretation | every numeric or semantic change creates a new profile revision; no silent narrowing or widening |
 | external Registration revision | pinned third-party observation and Host mapping | new External Contract Compatibility Decision |
 
@@ -1677,8 +1803,8 @@ not expose routine limit controls.
 | expanded Project archive | 16 GiB |
 | archive entries | 100,000 |
 | archive expansion ratio | 100:1 |
-| archive path after normalization | 512 UTF-8 bytes |
-| archive directory depth | 16 |
+| one Archive Path Profile-admitted path | 512 UTF-8 bytes |
+| path segments in one Archive Path Profile-admitted path | 16 |
 | complete archive validation wall time | 15 minutes |
 
 Provider or Adapter limits, current model context, author-granted budget, and
@@ -1702,9 +1828,12 @@ TokenCountingProfile {
 }
 
 ProviderTokenMappingEvidence {
+  project_scope
   processing_destination_identity
   registration_revision
+  project_model_use_binding_revision
   adapter_revision
+  external_compatibility_decision
   provider_model_identity
   token_counting_profile_revision
   evidence_revision
@@ -1829,6 +1958,9 @@ The eventual repository verification command must fail when:
 - an output change is classified additive but changes control meaning;
 - the N/N-1 corpus cannot be parsed and projected by its advertised client;
 - a stored historical wire fixture is reserialized after upgrade;
+- generated `ReceiptRef` variants differ between Committed acknowledgements,
+  idempotency replay, Query results, or Events, omit an owning Receipt identity,
+  or introduce a generic/string fallback;
 - a digest coverage fixture changes without a new Digest Profile;
 - any Profile numeric value changes without a new Protocol Limit Profile
   revision, or N/N-1 enforcement rejects an input valid under its selected
@@ -1837,6 +1969,12 @@ The eventual repository verification command must fail when:
   Provider mapping evidence;
 - a Tool/MCP invocation omits a mandatory context or Destination Attempt
   admission reference, or an external invocation omits disclosure/wire evidence;
+- a Model Operational Snapshot, Route Decision, Invocation, Attempt Request,
+  Attempt, or fallback lacks the exact Project Scope-bound Project Model Use
+  Binding selected with its global non-authorizing Model Registration;
+- an archive entry fails its pinned Archive Path Profile, path ordering differs
+  from that Profile's unsigned canonical UTF-8 byte order, or the root input
+  omits the Profile revision;
 - an archive root, protected-input digest, trusted-anchor proof, or exact entry
   digest does not recompute;
 - an Artifact/Event example references a mutable alias rather than an exact
@@ -1854,14 +1992,16 @@ implementation; this specification owns what it must prove.
 ### 16.4 Canonical adversarial fixture families
 
 The generated positive corpus includes applied, refused, invalid, conflicted,
-and no-effect committed domain outcomes with their stable typed Receipt
-references, identical idempotent replays, exclusive SSE resume, bounded
-at-least-once duplicate handling, all required Tool/MCP seven-gate evidence,
-and a verifiable signed or integrity-protected archive. The negative corpus
-includes at least:
+and no-effect committed domain outcomes, examples of every current
+`ReceiptRef` variant (`DomainReceiptId`, `ValidationReceiptId`,
+`AcceptanceReceiptId`, `UndoAcceptanceReceiptId`, and `AuthorUndoReceiptId`),
+identical idempotent replays, exclusive SSE resume, bounded at-least-once
+duplicate handling, all required Tool/MCP seven-gate evidence, and a verifiable
+signed or integrity-protected archive. The negative corpus includes at least:
 
 1. duplicate JSON names at the top level and inside nested authority fields;
-2. unknown Command fields, discriminators, Approval states, and Attempt states;
+2. unknown Command fields, discriminators, Approval states, Attempt states, and
+   `ReceiptRef` kinds, plus a Receipt kind paired with another variant's ID;
 3. valid unknown presentation-only output fields;
 4. wrong `owner_user_id`, Project, Run, Artifact Revision, cursor, Snapshot,
    Capability, Approval, and Credential Reference substitutions;
@@ -1881,17 +2021,27 @@ includes at least:
     at, below, and one unit above every Profile ceiling; same-revision dynamic
     content narrowing; frozen-bound drift; and missing or wrong tokenizer
     mapping evidence;
-13. archive path traversal, absolute path, Unicode/case collision, symlink,
+13. archive invalid UTF-8 or missing ZIP UTF-8 flag, local/central filename
+    mismatch, legacy or Unicode-extra-field override, empty or absolute path,
+    backslash/drive prefix, leading/trailing/repeated separator, `.` or `..`
+    segment, NUL/control/forbidden Unicode category, non-NFC input, exact-byte
+    duplicate, Unicode default-case-fold collision, file/directory-prefix
+    collision, wrong canonical sort order, overlong/deep path, symlink,
     hardlink, device entry, recursive archive, expansion bomb, root
-    self-reference, reordered/omitted coverage, bad entry/root digest, and
-    missing, embedded-only, unknown, or invalid integrity anchor/proof;
+    self-reference, missing or wrong Archive Path Profile, reordered/omitted
+    coverage, bad entry/root digest, and missing, embedded-only, unknown, or
+    invalid integrity anchor/proof;
 14. stale lease, old fence, late result, duplicate outbox delivery, missing or
     mismatched final Admission Decision, crash before dispatch claim, crash
     after claim, and uncertain Provider outcome;
 15. Tool/MCP discovery drift, same-name replacement, unpinned schema, global
     Credential Reference or compatibility cache, cross-Scope enablement/use,
     missing seven-gate manifest, widened effect, hidden SDK retry, result reuse
-    without reassembly, and incompatible cancellation/error mapping;
+    without reassembly, and incompatible cancellation/error mapping; plus a
+    Model Registration carrying Project or Credential data, and a Model
+    Snapshot, Route Decision, Invocation, Attempt, or fallback whose Project
+    Model Use Binding, Scope, compatibility decision, or Credential generation
+    differs from the selected route;
 16. spoofed App window, wrong Instance or Artifact Revision, absent/mismatched,
     numeric, null, overlength, or non-ASCII bridge request ID, semantic
     notification, repeated bridge ID with another digest, an attempt to reuse
@@ -2104,6 +2254,7 @@ without a trailing newline, are:
     "projects": "1"
   },
   "serialization_profile": "storyos.project-archive-json.jcs.v1",
+  "archive_path_profile": "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
   "digest_profile": "storyos.project-archive-root.jcs.v1",
   "limit_profile_revision": "storyos.foundation.absolute.v1",
   "entries": [
@@ -2127,7 +2278,7 @@ without a trailing newline, are:
   "root_digest": {
     "algorithm": "sha256",
     "profile": "storyos.project-archive-root.jcs.v1",
-    "value_hex_lowercase": "608f98a9fd3f450199b32f62d88c008b35e945554c206c217dfafcf017cd4861"
+    "value_hex_lowercase": "2780d69d6d43249632da2b459060b571a5695347e126e98fe743d717e492adbf"
   },
   "integrity_protection": {
     "kind": "signature",
@@ -2137,16 +2288,18 @@ without a trailing newline, are:
     "protected_input_digest": {
       "algorithm": "sha256",
       "profile": "storyos.project-archive-protected-input.jcs.v1",
-      "value_hex_lowercase": "623d622b68d28bc52607a5fa382a2587aac53b833cd13db69ee06f1d45aa27fe"
+      "value_hex_lowercase": "05dc36aa12aee20fc11103085eb0ee59258919c3ba119215180898d1e6c30cdf"
     },
-    "signature_base64url": "T-fvnq2xuXoLbCLUgKERaOrXVQnedl3NnXK1AYvdMC0MV-6Fe9SGnbU-T5b0R5is5GM4IiDRw4_wX9UA1VxfAw"
+    "signature_base64url": "HuLv32wSI-UjFu4WElOHMWSdyNX0rBru5E3QFcSYhxDYi1bKsbtMq6MFC36X--NB4GsHxnF6KOpk_dDDbzXHDA"
   },
   "created_at": "2026-07-22T09:00:00.000Z"
 }
 ```
 
-The root digest excludes `root_digest` and `integrity_protection` exactly as
-specified in section 13.7. The protected-input digest covers the closed object
+The example path is admitted and ordered under the exact
+`archive_path_profile`. The root digest excludes `root_digest` and
+`integrity_protection` exactly as specified in section 13.7. The
+protected-input digest covers the closed object
 `{ archive_profile, export_id, project_scope, root_digest }`; the signature is
 verified against the independently trusted fixture anchor, not a key supplied
 by the archive. The out-of-archive fixture anchor catalog maps the named anchor
@@ -2221,7 +2374,9 @@ An implementation conforms only if all of these remain true:
 13. Public N/N-1 support uses generated projections; external contracts use
     exact pinning, Project Scope-bound use and Credential bindings,
     compatibility decisions, drift quarantine, and fresh authorization for
-    widening. Global registrations contain no Project data or credentials.
+    widening. Global registrations contain no Project data or credentials;
+    every model Snapshot, Route Decision, Invocation, Attempt, and fallback
+    proves the exact Project Model Use Binding selected for that route.
 14. Historical Application Wire Records and domain history are immutable;
     upgrades append projections and migration evidence.
 15. Every operation freezes named effective bounds no wider than its immutable
@@ -2231,7 +2386,8 @@ An implementation conforms only if all of these remain true:
 16. Rust contracts are the sole editable external source; OpenAPI, JSON Schema,
     TypeScript, catalogs, fixtures, and wire corpus cannot drift independently.
 17. Project archive root coverage excludes only its root and integrity proof,
-    every digest recomputes, and import requires independently trusted
+    pins the exact Archive Path Profile, and orders only paths admitted by that
+    Profile; every digest recomputes, and import requires independently trusted
     integrity protection before visibility.
 
 ## 20. Accepted inputs and evidence

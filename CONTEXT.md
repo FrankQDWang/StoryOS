@@ -52,7 +52,7 @@ The fail-closed StoryOS boundary that prevents Authoritative State, Artifacts, O
 _Avoid_: UI-only filtering, global vector namespace, shared prompt cache, caller-supplied project scope
 
 **Project Export Archive**:
-A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret canonical record, immutable payload, schema/profile identifier, and provenance fact required to restore that Project without consulting a disposable projection or external runtime. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
+A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret canonical record, immutable payload, schema/profile identifier, and provenance fact required to restore that Project without consulting a disposable projection or external runtime. Every entry name is admitted under the manifest's exact versioned Archive Path Profile before sorting or digest coverage, so platform path rules, Unicode normalization, or case behavior cannot reinterpret archive identity. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
 _Avoid_: Selected-table dump, backup, cache snapshot, credential bundle, project copy
 
 **Project Restore**:
@@ -812,7 +812,7 @@ The immutable Operational Record transactionally created when an egress worker d
 _Avoid_: Outbound Disclosure Manifest, Destination Attempt, planned transfer, cache hit
 
 **Processing Destination Identity**:
-The Host-owned exact identity of one processing and disclosure boundary, resolved through the applicable immutable Model, Tool, MCP, embedding, telemetry, or other Registration revision while separating the actual processor, endpoint and account boundary, control classification, and governing intake or disclosure boundary from its Adapter mapping. Changing one of those actual boundaries creates a different destination identity. An Adapter, serialization, model, or Registration revision change that preserves them requires fresh compatibility, wire, cache, and admission evidence but does not alone require new author destination authorization. Identity alone grants no project enablement, Capability, disclosure permission, or execution authority.
+The Host-owned exact identity of one processing and disclosure boundary, resolved through the applicable immutable Model, Tool, MCP, embedding, telemetry, or other global Registration revision together with the exact Project Scope-bound external-use binding, while separating the actual processor, endpoint and account boundary, control classification, and governing intake or disclosure boundary from its Adapter mapping. Changing one of those actual boundaries creates a different destination identity; an Adapter, serialization, model, or Registration revision change that preserves them requires fresh compatibility, wire, cache, and admission evidence but does not alone require new author destination authorization, while identity alone grants no project enablement, Capability, disclosure permission, or execution authority.
 _Avoid_: Provider brand, SDK client, hostname alone, credential, shared vendor account
 
 **Project Destination Grant**:
@@ -848,7 +848,7 @@ An immutable result of StoryOS deterministically evaluating a request against al
 _Avoid_: Approval, policy-authored grant, implicit permission
 
 **Model Gateway**:
-The sole StoryOS-owned boundary through which any RunStep invokes a configured external model API. It applies only an exact Project Scope-bound Model Route Decision, requires fallback to produce a new Decision, and never executes model-produced Tool requests; only a validated, persisted Agent Decision may derive ToolCalls for the Tool Gateway.
+The sole StoryOS-owned boundary through which any RunStep invokes a configured external model API. It applies only an exact Project Scope-bound Model Route Decision that pins one current Project Model Use Binding, requires fallback to produce a new Decision and revalidate that binding, and never executes model-produced Tool requests; only a validated, persisted Agent Decision may derive ToolCalls for the Tool Gateway.
 _Avoid_: Provider client, model SDK, Tool Gateway, direct provider call
 
 **Model Provider Adapter**:
@@ -856,11 +856,15 @@ The host-controlled protocol projection used by the Model Gateway to exchange on
 _Avoid_: Provider Adapter, provider-owned router, silent fallback, Tool executor
 
 **Model Registration**:
-The host-owned, versioned routable identity that binds one stable StoryOS model reference to an exact Model Provider Adapter, provider endpoint and account boundary, provider model identifier, Credential Reference, and Model Capability Profile revision. An opaque provider alias remains explicitly unverifiable, any binding change creates a new Registration revision, and provider evidence that conflicts with an exact binding creates Model Failure rather than rewriting past Run evidence.
-_Avoid_: Model name, provider alias, deployment name, capability tier
+The host-owned, versioned, globally reusable non-authorizing contract identity that binds one stable StoryOS model reference to an exact Model Provider Adapter, provider endpoint and account boundary, provider model identifier, and Model Capability Profile revision. It contains no Project data, Project enablement, Credential Reference, grant, compatibility admission, or runtime use state. An opaque provider alias remains explicitly unverifiable, any contract or Adapter binding change creates a new Registration revision, and provider evidence that conflicts with an exact binding creates Model Failure rather than rewriting past Run evidence.
+_Avoid_: Model name, provider alias, deployment name, capability tier, global Credential Reference
+
+**Project Model Use Binding**:
+The immutable, exact Project Scope-bound binding that makes one active Model Registration revision eligible for named project Purposes by composing the current Project Destination Grant or other owning use authorization, one Project Scope-bound Credential Reference binding when required, one External Contract Compatibility Decision, destination identity, and non-widening hard bounds. It grants no authority by itself and is revalidated by every Model Operational Snapshot, Model Route Decision, Model Invocation, Model Attempt, and fallback. Host defaults and project settings establish it without per-call author configuration; Bailian or any other Provider remains only an Adapter choice, and no credential identifier forms a global namespace.
+_Avoid_: Model Registration, global provider credential, Model Route Decision, per-call provider setting
 
 **Model Registration Status**:
-The durable Active, Quarantined, or Retired routing eligibility state of one exact Model Registration revision: only Active may enter a new Model Route Decision, Quarantined requires explicit Host revalidation, and Retired never returns to service. Status changes preserve past evidence; transient credential, quota, health, latency, and pricing facts belong to Model Operational Snapshot, while reintroducing a Retired binding requires a new Registration revision.
+The durable Active, Quarantined, or Retired global contract-eligibility state of one exact Model Registration revision: only Active may be considered for a new Project Model Use Binding or Model Route Decision, Quarantined requires explicit Host revalidation, and Retired never returns to service. Status changes preserve past evidence; Project credential availability and dynamic route facts belong to a Project Scope-bound Model Operational Snapshot, while reintroducing a Retired contract requires a new Registration revision.
 _Avoid_: Provider health, credential availability, model version, mutable Registration
 
 **Model Capability Profile**:
@@ -868,39 +872,39 @@ The immutable, versioned, provider-neutral semantic envelope trusted for one Mod
 _Avoid_: Provider model card, Model Operational Snapshot, benchmark score, availability state
 
 **Model Operational Snapshot**:
-An immutable, attributable point-in-time observation of one Model Registration's current credential-reference availability, provider health, rate-limit or quota state, latency, pricing reference, and other dynamic routing facts. It may change current eligibility without changing the Registration or Model Capability Profile and never proves semantic capability.
+An immutable, attributable, exact Project Scope-bound point-in-time observation of one Project Model Use Binding and its Model Registration, including current Credential Reference binding availability when required, compatibility and destination eligibility, provider health, rate-limit or quota state, latency, pricing reference, and other dynamic routing facts. Project-free provider observations may be shared only as non-authorizing inputs; the Snapshot repeats the exact use binding before they can affect route eligibility. It may change current eligibility without changing the Registration or Model Capability Profile and never proves semantic capability.
 _Avoid_: Model Capability Profile, Model Registration, durable model identity
 
 **Model Routing Policy**:
-The immutable, versioned Host rule set that deterministically filters Model Registrations by hard Model Route Request requirements, then ranks eligible candidates by declared soft preferences with a stable tie-breaker. Models and providers cannot author it; benchmark or learned evidence must be explicit and versioned, while random or experimental routing requires a separately authorized policy rather than hidden selection.
+The immutable, versioned Host rule set that deterministically filters exact Project Model Use Binding and Model Registration pairs by hard Model Route Request requirements, then ranks eligible pairs by declared soft preferences with a stable tie-breaker. Models and providers cannot author it; benchmark or learned evidence must be explicit and versioned, while random or experimental routing requires a separately authorized policy rather than hidden selection.
 _Avoid_: Model recommendation, provider router, mutable score, implicit experiment
 
 **Model Route Request**:
-The immutable pre-sampling statement of hard model capabilities, context bounds, allowed provider and Outbound Disclosure destinations, budgets, and soft quality, latency, and cost preferences for one RunStep, assembled by the Host from its exact plan, Skills, author settings, policy, grants, and inputs. It names no executable model, grants no authority, and exists before that RunStep's Agent Decision.
+The immutable, exact Project Scope-bound pre-sampling statement of hard model capabilities, context bounds, allowed provider and Outbound Disclosure destinations, budgets, and soft quality, latency, and cost preferences for one RunStep, assembled by the Host from its exact plan, Skills, author settings, policy, grants, and inputs. It names no executable model or credential, grants no authority, and exists before that RunStep's Agent Decision.
 _Avoid_: Model name, prompt hint, Model Route Decision, model self-selection
 
 **Model Route Decision**:
-The immutable Host result that either selects one exact Model Registration revision for a Model Route Request or records that no eligible route exists, binding the Model Routing Policy revision, complete evaluated candidate set and reasons, Capability Profiles, Operational Snapshots, grants, budgets, and comparison evidence used. It precedes sampling, cannot be authored by a model, and every fallback requires a new Decision over the same hard requirements.
+The immutable exact Project Scope-bound Host result that either selects one exact Model Registration revision together with one current Project Model Use Binding for a Model Route Request or records that no eligible route exists. It binds the Model Routing Policy revision, complete evaluated candidate binding set and reasons, Capability Profiles, Project Scope-bound Operational Snapshots, compatibility decisions, Credential binding generations when required, grants, budgets, and comparison evidence used. It precedes sampling, cannot be authored by a model, and every fallback requires a new Decision over the same hard requirements and a freshly revalidated use binding.
 _Avoid_: Model suggestion, mutable route, provider fallback, load-balancer choice
 
 **Model Route Override**:
-An immutable root-AgentRun-scoped author setting captured as Automatic, Prefer an exact Model Registration revision, or Require that revision, and applied prospectively to every Model Route Request in the whole execution tree; descendant Subruns may only add narrower requirements. It never bypasses capability, disclosure, grant, budget, credential, or policy eligibility; Prefer may allow another Route Decision, while Require records no eligible route instead of falling back.
+An immutable root-AgentRun-scoped author setting captured as Automatic, Prefer an exact Model Registration revision, or Require that revision, and applied prospectively to every Model Route Request in the whole execution tree; descendant Subruns may only add narrower requirements. It never creates or selects a Project Model Use Binding and never bypasses capability, disclosure, compatibility, grant, budget, credential, or policy eligibility; Prefer may allow another Route Decision, while Require records no eligible route instead of falling back.
 _Avoid_: Optional model ID, mutable active model, Capability Grant, provider fallback
 
 **Model Fallback**:
-The Host-controlled admission of a successor Model Attempt for the same Model Invocation using a different exact Model Registration revision after a new Model Route Decision re-evaluates the unchanged Model Route Request. It never relaxes hard requirements, never repeats a Registration revision within one fallback chain, remains bounded by all Run budgets and overrides, and cannot be delegated to a provider router or SDK.
+The Host-controlled admission of a successor Model Attempt for the same Model Invocation using a different exact Model Registration revision and its exact Project Model Use Binding after a new Model Route Decision re-evaluates the unchanged Model Route Request. It never reuses the prior route's Credential or use binding, never relaxes hard requirements, never repeats a Registration revision within one fallback chain, remains bounded by all Run budgets and overrides, and cannot be delegated to a provider router or SDK.
 _Avoid_: Same-route retry, provider substitution, capability downgrade, fallback loop
 
 **Model Invocation**:
-The single logical request by one RunStep to obtain one Agent Decision under an immutable Model Route Request, owning the ordered Model Attempts and their derived aggregate outcome and usage. Provider completion terminates only its Attempt; the Invocation succeeds only when the Host validates and durably records one typed Agent Decision, and a later successful Attempt never erases earlier evidence.
+The single logical exact Project Scope-bound request by one RunStep to obtain one Agent Decision under an immutable Model Route Request, owning the ordered Model Attempts and their exact Project Model Use Binding history plus derived aggregate outcome and usage. Provider completion terminates only its Attempt; the Invocation succeeds only when the Host validates and durably records one typed Agent Decision, and a later successful Attempt never erases earlier binding or execution evidence.
 _Avoid_: Provider request, Model Attempt, model response blob, retry counter
 
 **Model Attempt**:
-The model-specific Execution Attempt durably established before one concrete provider submission under one exact Model Route Decision, binding its request and disclosure evidence to the resulting stream, provider identifiers, partial output, usage, uncertainty, and terminal outcome. Retrying the same Registration appends an Attempt, while fallback also requires a new Model Route Decision; outputs from separate Attempts are never silently concatenated.
+The model-specific Execution Attempt durably established before one concrete provider submission under one exact Model Route Decision, repeating the exact Project Scope, Project Model Use Binding, Model Registration, compatibility decision, Credential binding generation when required, and final destination admission evidence. It binds its request and disclosure evidence to the resulting stream, provider identifiers, partial output, usage, uncertainty, and terminal outcome. Retrying the same Registration appends an Attempt only after revalidating the same use binding; fallback requires a new Model Route Decision and the selected route's own use binding. Outputs from separate Attempts are never silently concatenated.
 _Avoid_: Model Invocation, provider retry counter, overwritten request, merged fallback response
 
 **Model Attempt Request**:
-The immutable provider-neutral effective request for one Model Attempt, binding its exact Step Snapshot, Context Assembly Manifest, prompt and output contracts, Tool Exposure and ToolSpec digests, generation controls, streaming mode, output bounds, Model Route Decision, and parameter provenance or default state. Its Adapter projection records the mapping and wire-request digests without silently changing required semantics; ordinary retry preserves the semantic digest, repair creates a new Request, and fallback may change only the provider projection.
+The immutable provider-neutral effective request for one Model Attempt, binding its exact Project Scope, Project Model Use Binding, Step Snapshot, Context Assembly Manifest, prompt and output contracts, Tool Exposure and ToolSpec digests, generation controls, streaming mode, output bounds, Model Route Decision, and parameter provenance or default state. Its Adapter projection records the mapping and wire-request digests without silently changing required semantics; ordinary retry preserves the semantic digest and use binding after live revalidation, repair creates a new Request, and fallback changes the route/use binding and may change only the provider projection while preserving the logical request.
 _Avoid_: Model Route Request, mutable prompt, provider payload as canonical contract, silent default
 
 **Model Attempt Cancellation**:
