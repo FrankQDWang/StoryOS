@@ -52,11 +52,11 @@ The fail-closed StoryOS boundary that prevents Authoritative State, Artifacts, O
 _Avoid_: UI-only filtering, global vector namespace, shared prompt cache, caller-supplied project scope
 
 **Project Export Archive**:
-A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret canonical record, immutable payload, schema/profile identifier, and provenance fact required to restore that Project without consulting a disposable projection or external runtime. Every entry name is admitted under the manifest's exact versioned Archive Path Profile before sorting or digest coverage, so platform path rules, Unicode normalization, or case behavior cannot reinterpret archive identity. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
+A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret currently exportable canonical record and immutable payload, plus lifecycle, redaction, retention, and provenance facts for any known gap, required to restore that Project without consulting a disposable projection or external runtime. Every entry name is admitted under the manifest's exact versioned Archive Path Profile before sorting or digest coverage, so platform path rules, Unicode normalization, or case behavior cannot reinterpret archive identity. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
 _Avoid_: Selected-table dump, backup, cache snapshot, credential bundle, project copy
 
 **Project Restore**:
-The validating import of one Project Export Archive as the same Project Scope into a target that is authorized for the same durable User identity and does not already contain that Scope. Restore stages and verifies the complete archive, schema compatibility, digests, referential closure, and scope before making the Project atomically visible, then deterministically rebuilds disposable projections; any identity conflict, partial archive, unsupported schema, or divergent existing Project fails closed without merge, overwrite, or identity remapping. Unresolvable Credential References remain explicitly Unbound. Creating a copy, fork, new Project identity, or ownership transfer requires a separate future domain contract.
+The validating import of one Project Export Archive as the same Project Scope into a target that is authorized for the same durable User identity and does not already contain that Scope. Restore stages and verifies the complete archive, schema compatibility, digests, referential closure, scope, and known lifecycle/redaction gaps before making the Project atomically visible, then deterministically rebuilds disposable projections; any identity conflict, partial archive, unsupported schema, or divergent existing Project fails closed without merge, overwrite, identity remapping, or resurrection of unavailable payload. Unresolvable Credential References remain explicitly Unbound. Creating a copy, fork, new Project identity, or ownership transfer requires a separate future domain contract.
 _Avoid_: Import as new, ID remapping, partial merge, overwrite restore, ownership transfer
 
 **Foundation Validation Deployment**:
@@ -80,8 +80,28 @@ A repository-owned non-runtime record that makes an upstream design or source ob
 _Avoid_: Machine-local snapshot, vendored runtime source, implicit dependency, unpinned citation
 
 **Foundation Recovery Service Profile**:
-The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss; loss of the database host or disk has a recovery-point objective of at most fifteen minutes and a recovery-time objective of at most two hours. The deployment therefore uses synchronous PostgreSQL commit durability, a daily physical base backup plus continuous WAL archival into a failure domain independent of the database host, and a successful automated restore proof for every release candidate. Backup retention duration belongs to the later retention contract, but every claimed window must retain a complete verifiable recovery chain. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster, and later controlled-cloud deployments may declare a stricter profile.
+The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss; loss of the database host or disk has a recovery-point objective of at most fifteen minutes and a recovery-time objective of at most two hours. The deployment therefore uses synchronous PostgreSQL commit durability, a daily physical base backup plus continuous WAL archival into a failure domain independent of the database host, and a successful automated restore proof for every release candidate. Backup retention duration belongs to the later retention contract, but every claimed window must retain a complete verifiable recovery chain and Recovery Visibility Proof before a restored Project becomes readable. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster, and later controlled-cloud deployments may declare a stricter profile.
 _Avoid_: Asynchronous author acknowledgement, same-disk backup, daily dump only, untested backup file, Foundation high-availability cluster
+
+**Recovery Copy**:
+A bounded PostgreSQL base backup, WAL segment, or equivalent recovery-chain member retained only to meet the Foundation Recovery Service Profile, never as a Project Export, ordinary read source, or independent authority. It remains subject to the exact retained lifecycle ledger and can serve a Project only through a successful Recovery Visibility Proof.
+_Avoid_: Export archive, cold Project copy, raw recovery database, alternate source of truth
+
+**Recovery Visibility Proof**:
+The inspectable determination that a restored Project Scope includes and has applied every recoverable later lifecycle decision relevant to the selected recovery target, including Redaction, Tombstone, retention, and availability gaps, before any ordinary read or execution is enabled. A missing or unverifiable lifecycle range fails closed to a recovery hold rather than exposing an older view as current.
+_Avoid_: Successful database boot, point-in-time restore alone, best-effort lifecycle replay
+
+**Physical Deletion Completion**:
+The lifecycle fact recorded only after every StoryOS-controlled online, archive, and Recovery Copy retention window authorized for an erased payload has expired or been verifiably cleaned. It does not claim deletion from an already delivered Project Export or external destination and never changes the earlier logical Redaction or Tombstone effect.
+_Avoid_: Immediate disk wipe claim, Provider erasure, logical redaction alone
+
+**Project Deletion Request**:
+The explicit author-owned command that begins deletion of one exact Project Scope, atomically preventing new Runs, outbox dispatch, Context Assembly, Export, Restore, and outbound disclosure while existing work enters controlled cancellation or recovery settlement. It is never inferred from a Retention Profile, archive threshold, or cache cleanup.
+_Avoid_: Automatic project expiry, table drop, bulk cache eviction, implicit account deletion
+
+**Project Deletion Settlement**:
+The immutable terminal lifecycle decision reached after a Project Deletion Request records every known in-flight operation as settled or OutcomeUnknown, fences future work, and makes the Project Scope logically unreadable, unexecutable, unexportable, and unrestorable. It starts physical cleanup under the Retention Profile and preserves only the minimum deletion, availability, and external-effect evidence until Physical Deletion Completion.
+_Avoid_: Immediate disk wipe, cancelled request, restored Project, forgotten external effect
 
 **Effective Model Context**:
 The Effective Destination Context for one Model Attempt, including the AgentRun's bound Project Instruction Revision whenever one exists. Compaction, window management, provider cache, prior-response, and continuity mechanisms may optimize transport only when StoryOS can prove the bound instruction remains logically present; otherwise it is retransmitted or the Attempt is blocked.
@@ -128,7 +148,7 @@ The common immutable identity, lineage, schema, creator, cause, audit-time, payl
 _Avoid_: Mutable metadata row, storage blob layout, authority marker
 
 **Canonical Payload**:
-The exact immutable content owned by an Authoritative Revision, Artifact Revision, or Operational Record and required to interpret, verify, replay, export, or migrate it. Physical placement does not change that ownership, and a cache, index, Provider copy, or external runtime is never its sole source.
+The exact immutable content owned by an Authoritative Revision, Artifact Revision, or Operational Record and required, while retained, to interpret, verify, replay, export, or migrate it. An authorized lifecycle operation may make its bytes unavailable only while preserving the exact identity, digest, availability fact, and known gap; a cache, index, Provider copy, or external runtime is never its sole source.
 _Avoid_: Blob cache, derived projection, Provider-held source of truth
 
 **Core Transition**:
@@ -138,6 +158,10 @@ _Avoid_: Partial commit, database rollback as undo, external effect as transacti
 **Command Acknowledgement**:
 The idempotently replayable public result of submitting one exact command, returned as Committed with its immutable Receipt only after the complete Core Transition commits, or as Accepted with a durable operation reference when later asynchronous settlement remains. Accepted proves only durable admission and never success; its settlement is observed through a bounded query or the Project Activity Stream rather than a delayed HTTP result.
 _Avoid_: HTTP success as domain success, in-memory job acknowledgement, long-poll completion, duplicate execution after lost response
+
+**Command Idempotency Fence**:
+The compact Project Scope-bound continuation of one settled command's idempotency arbiter, preserving its command kind, key, digest, Command ID, immutable acknowledgement or replayable acknowledgement reference, final Receipt or operation reference, and retention provenance after larger execution payloads leave hot storage. A matching retry replays the same logical acknowledgement through current authorized redaction without re-executing; a different digest conflicts, and a known key never becomes a new command through expiry or compaction.
+_Avoid_: Expired key reuse, response-cache entry, new command with old key, best-effort duplicate filter
 
 **Protocol Compatibility Profile**:
 The direction-aware N/N-1 wire-evolution rule under which command and control inputs are closed against unknown fields, duplicate names, discriminators, and control enums, while public Query, Artifact, and Event outputs may add ignorable fields. A new Event or value that changes authority, lifecycle, settlement, Approval, or security meaning requires a compatible projection or an explicit upgrade-required outcome before consumption; only presentation-safe unknowns may use a generic fallback and advance the cursor.
@@ -150,6 +174,14 @@ _Avoid_: Semver-range trust, Provider alias compatibility, handshake as authoriz
 **Protocol Limit Profile**:
 An immutable versioned contract fixing public validity ceilings and counting meaning for byte, item, depth, time, token, attempt, replay, expansion, rate, and concurrency at every public and external protocol crossing. Every numeric or semantic change creates a new Profile Revision; supported N/N-1 inputs cannot be silently narrowed under the same revision, and dynamic resource pressure may only produce temporary rate or concurrency admission. Each Receipt, Attempt, Snapshot, and limit outcome binds both the Profile Revision and the actual effective bounds frozen from exact policy, grant, destination, and counting-profile inputs, while authors receive no routine limit configuration burden.
 _Avoid_: Scattered magic limit, client-requested expansion, same-revision narrowing, unversioned token counting, author-facing protocol tuning
+
+**Retention Profile**:
+A versioned policy contract that supplies the bounded time, capacity, replay, checkpoint, archive, and compaction values for one Project Scope's Operational Retention Classes. Every lifecycle action binds its exact Profile Revision and frozen effective values; a new revision applies prospectively, while affecting an existing record requires a new inspectable Retention Decision rather than a silent retroactive expiry.
+_Avoid_: Global mutable TTL, host configuration switch, per-Run author setting
+
+**Retention Decision**:
+The immutable Project Scope-bound lifecycle determination that applies one Retention Profile Revision to an exact record or payload role, recording its class, eligibility, source and settlement evidence, effective bounds, due condition, and resulting availability transition or refusal. A Profile update alone is not a Retention Decision and cannot delete, compact, archive, or revive prior payloads.
+_Avoid_: Background cleanup log, mutable expiry column, profile update
 
 **Application Wire Record**:
 The immutable non-secret evidence retaining the exact schema-valid message-content bytes, wire schema and profile, typed-record reference, and digest for an authorized durable command or admission and for each supported public Event representation. It excludes transport headers, cookies, authorization and anti-forgery material, credential-bearing envelopes, unauthorized or malformed request bodies, repeated SSE deliveries, and rebuildable Query response bytes; canonical semantic bytes never stand in for separately claimed original wire bytes.
@@ -456,12 +488,28 @@ The atomic application of one uniquely identified author, host, or recovery comm
 _Avoid_: Direct status update, Transcript message, partial multi-table write, external side effect
 
 **Run Event**:
-An immutable, causally attributable, monotonically sequenced fact recording one committed Run Transition for inspection and recovery history. Run Events and normalized current records are written atomically without requiring pure event sourcing; Checkpoints, caches, and read models are derived, while external effects follow persisted intent through the Tool Gateway and append their outcomes afterward.
+An immutable, causally attributable, monotonically sequenced fact recording one committed Run Transition for inspection and recovery history. Run Events and normalized current records are written atomically without requiring pure event sourcing; the event fact remains historical even when an associated eligible operational payload later becomes unavailable through Operational History Compaction, while Checkpoints, caches, and read models are derived and external effects follow persisted intent through the Tool Gateway and append their outcomes afterward.
 _Avoid_: Mutable status row, model transcript, telemetry log, cache entry
 
+**Run Event Segment**:
+A Project Scope-bound, losslessly encoded physical grouping of contiguous immutable Run Events for storage or cold Archive. It may be compressed, moved, or have its replay service bounded, but it never semantically deletes, reorders, rewrites, or replaces any committed Event or its causal meaning.
+_Avoid_: Semantic event deletion, lossy transcript summary, mutable event batch, new truth stream
+
 **Project Activity Stream**:
-The one canonical public replay stream for an exact Project Scope, assigning every committed client-visible activity event a strictly increasing project-local position while preserving its typed identity, cause, and any owning Run or aggregate sequence. Run-, Artifact-, and other filtered streams are cursor-bound derived views rather than separate truth streams, while Mailbox, Worker, Provider, MCP, and Adapter protocols remain outside this public envelope.
+The one canonical public replay stream for an exact Project Scope, assigning every committed client-visible activity event a strictly increasing project-local position while preserving its typed identity, cause, and any owning Run or aggregate sequence. Run-, Artifact-, and other filtered streams are cursor-bound derived views rather than separate truth streams; every cursor is bounded by its Replay Generation and resumes only through that generation or a fresh Activity Stream Resync, while Mailbox, Worker, Provider, MCP, and Adapter protocols remain outside this public envelope.
 _Avoid_: Global event bus, per-Run truth stream, internal event log, universal protocol envelope
+
+**Replay Generation**:
+A project-local bounded replay epoch of the Project Activity Stream, published with one authorized replay floor and fresh Snapshot at a compaction or archival boundary. A cursor never crosses generations: a below-floor cursor fails explicitly rather than being translated, guessed, or silently advanced.
+_Avoid_: Infinite cursor migration, guessed offset, stream fork
+
+**Activity Stream Resync**:
+The authorized recovery from an expired Project Activity cursor that loads a fresh canonical Snapshot and resumes strictly after its recorded Activity position. It exposes the replay-generation boundary and never treats a cursor-too-old failure as an empty stream, a successful replay, or permission to skip historical facts.
+_Avoid_: Cursor translation, silent reset, empty history
+
+**Canonical Query Snapshot**:
+An authorized, time-bounded stable reading boundary over Project Scope-bound durable facts, binding its Activity position, query/view inputs, redaction, schema, and replay generation. It may expire and be reissued, but is neither a Run Checkpoint, a backup, nor a permanent second copy of history.
+_Avoid_: Run Checkpoint, backup, permanent query result, live process view
 
 **Canonical Query**:
 A public read of exact Authoritative State, Artifact, Receipt, Approval, Run, or other canonical facts at one committed Project Scope-bound Snapshot. It supports read-your-acknowledgement against a required Project Activity Stream position, and every page remains bound to the same Snapshot and stable order or fails with an explicit resync outcome.
@@ -580,8 +628,12 @@ The explicit durable admission condition raised when a Subrun Mailbox's ordinary
 _Avoid_: Silent message drop, unbounded queue, TTL cleanup, shared critical capacity
 
 **Subrun Mailbox Seal**:
-The durable terminal boundary proving that one root AgentRun has no unsettled Subrun deliveries and that every sender generation is closed at recorded directional high-watermarks. Message payload retention is independent, but Message ID deduplication evidence cannot be discarded by age before the Seal and may be compacted afterward only without losing the proof needed to reject replay.
+The durable terminal boundary proving that one root AgentRun has no unsettled Subrun deliveries and that every sender generation is closed at recorded directional high-watermarks. Message payload retention is independent, but Message ID deduplication evidence cannot be discarded by age before the Seal and may afterward be compacted only into a Seal Deduplication Fence that still rejects every replay or invalid late message.
 _Avoid_: TTL expiry, Inbox deletion, delivery acknowledgement, payload retention policy
+
+**Seal Deduplication Fence**:
+The compact Operational Evidence Floor created from one sealed root's mailbox-deduplication records, binding its exact Seal, direction, sender generation, and closed sequence high-watermark. It rejects a late message at or below that boundary as replay or invalid delivery and above it as a closed-generation violation without reusing its payload, consumption, Run Wakeup, or effect; it remains at least as long as the root's Evidence Floor.
+_Avoid_: Per-message payload archive, expired dedup key, open sender generation, best-effort duplicate filter
 
 **Undeliverable Subrun Message**:
 A durable invariant-violation record created only when an exact direct parent's persistent identity or lifecycle cannot validly accept a Subrun Message after recovery. It preserves the message and reason, creates a root Safety Hold, and never reroutes delivery, reparents the child, or lets the root consume on the parent's behalf; an offline Worker or application is not undeliverable.
@@ -752,8 +804,40 @@ A stable semantic work item within RunPlan Revisions, describing an objective an
 _Avoid_: RunStep, ToolCall, checklist row, execution status
 
 **Run Checkpoint**:
-A replaceable, derived projection of one AgentRun at an exact durable sequence, used only to accelerate recovery of its lanes, plan, waits, child operations, and guardrail counters. It contains no live process state or authority and may be discarded and rebuilt from normalized persistent records.
+A durable, Project Scope-bound PostgreSQL projection of one AgentRun at an exact durable sequence, used only to accelerate recovery of its lanes, plan, waits, child operations, and guardrail counters. It contains no live process state or authority, may be discarded and rebuilt from normalized persistent records, and cannot turn a known compacted-payload gap into byte-level replay or a permanent second history.
 _Avoid_: Source of truth, backup, Step Snapshot, live session
+
+**Operational History Compaction**:
+A policy-versioned automatic retention transition for an eligible terminal, root-sealed Run or Subrun that makes a Compactable Operational Payload unavailable while retaining its Operational Evidence Floor, digest, checkpoint or snapshot evidence, and explicit availability gap. It is distinct from Operational Archive and never changes Authoritative State, an Artifact, or prior context or disclosure history; Artifact Tombstone and author-initiated deletion are separate.
+_Avoid_: History rewrite, Artifact Tombstone, cache eviction, silent log deletion
+
+**Operational Retention Class**:
+The policy-versioned classification of one exact Operational Record fact or payload role as either an Operational Evidence Floor or a Compactable Operational Payload, independently of the enclosing Run's lifetime. An unknown or unclassified role fails closed to the evidence floor rather than inheriting a Run-wide TTL.
+_Avoid_: Run-wide TTL, Artifact Retention State, cache eviction
+
+**Operational Evidence Floor**:
+The compactable-payload-independent minimum durable facts for a Run or Subrun: its event identities and sequences, relevant Attempts, Manifests, Receipts, terminal Result and Outcome, Mailbox Seal and deduplication proof, lifecycle decision, digest, and explicit payload-availability gaps. It preserves what happened and its current inspectability without asserting that every historical raw byte remains available.
+_Avoid_: Full raw transcript, complete byte replay, Run-wide blob
+
+**Compactable Operational Payload**:
+A high-volume, non-authoritative operational byte payload whose current availability is governed separately from its enclosing Run's Operational Evidence Floor, such as eligible stream fragments or redundant diagnostic material. It can become unavailable only through Operational History Compaction after every applicable settlement and Seal boundary; a cache or projection is not such a payload.
+_Avoid_: Run Event fact, Artifact payload, disposable cache, silent cleanup
+
+**Operational Archive**:
+A reversible Project Scope-bound cold-retention state for an Operational Payload that preserves its bytes and evidence while excluding it from ordinary retrieval, model context, replay service, and outbound disclosure. An authorized explicit inspection or restoration may make it available under current eligibility, but archive never restores a compacted payload or grants past authority.
+_Avoid_: Compaction, Tombstone, cache tier, hidden context source
+
+**Redaction Decision**:
+An immutable Project Scope-bound lifecycle decision that immediately makes one exact retained payload, fragment, or read-view scope ineligible for current inspection, cache reuse, Context Assembly, export, and future disclosure while preserving historical identity, provenance, and a safe availability gap. It does not retract a prior confirmed submission or rewrite a prior Manifest, Attempt, Event, or Receipt.
+_Avoid_: History rewrite, provider recall, delayed cleanup, Archive
+
+**Redaction Execution**:
+The fenced, idempotent asynchronous physical cleanup of payload copies authorized by a Redaction Decision after its logical ineligibility is already committed. Completion may establish cleanup evidence but cannot reopen access, make an erased payload reconstructable, or serve as a substitute for the Decision.
+_Avoid_: Delayed redaction, cache invalidation only, destructive history edit
+
+**Diagnostic Projection**:
+A bounded, non-authoritative, Project Scope-bound operational projection for local logs, tracing, crash diagnostics, or support correlation, containing only sanitized identifiers, reason categories, timings, counters, and safe availability facts. It contains no default prose, prompt, raw Tool/MCP/Provider payload, Credential, or value digest; it is excluded from Project Export and Restore, has its own short Retention Profile, and loses current readability when its source is redacted.
+_Avoid_: Shadow transcript, support archive, canonical Attempt evidence, raw debug log
 
 **Run Budget**:
 The multidimensional resource envelope governing one AgentRun's cumulative consumption, reservations, concurrency, and finalization capacity. It is bounded by project policy and the Run's Capability Grant and is narrowed, never copied, for descendant Subruns.
@@ -972,7 +1056,7 @@ A Tool executed by or behind a model Provider rather than StoryOS's controlled T
 _Avoid_: Model Tool Request, StoryOS ToolCall, provider prompt capability, inherited disclosure
 
 **Telemetry Disclosure**:
-An Outbound Disclosure to a traces, metrics, logs, debug, crash-reporting, or support destination, defaulting to sanitized operational categories, identifiers, timings, and digests rather than project prose, prompts, research, Tool results, Project Instructions, or credentials. Telemetry's diagnostic purpose never grants ambient access to durable Run or Artifact payloads.
+An Outbound Disclosure to a traces, metrics, logs, debug, crash-reporting, or support destination, defaulting to sanitized operational categories, identifiers, timings, and digests rather than project prose, prompts, research, Tool results, Project Instructions, or credentials. It is independently current-eligibility and Redaction checked, never enters Project Export or Restore, and telemetry's diagnostic purpose never grants ambient access to durable Run or Artifact payloads.
 _Avoid_: Model Telemetry Projection, debug upload, support bundle as permission
 
 **Tool Discovery Record**:

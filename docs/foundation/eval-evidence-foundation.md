@@ -605,7 +605,7 @@ physical realization without creating a new implementation ticket.
 
 | Existing owner | Owns next | Must preserve from this specification |
 |---|---|---|
-| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Event/snapshot lifecycle, retention, archival, redaction execution, export, restore, deletion, and historical availability handling | Exact historical references, visible availability gaps, lifecycle/provenance distinctions, and no resurrection of erased payload |
+| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | Event/snapshot lifecycle, retention, archival, redaction execution, export, restore, deletion, and historical availability handling | Exact historical references, visible availability gaps, lifecycle/provenance distinctions, and no resurrection of erased payload |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | Deterministic verification design, adversarial proof gates, recovery behavior, and test implementation | Explicit-case-only capture, no page-load egress, Scope isolation, redaction/non-oracle behavior, uncertainty preservation, provider-opacity limits, and no authority crossing |
 | [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | The first shippable slice, user-facing sequencing, implementation priority, and acceptance criteria | A standalone author-facing advisory Eval product, normal author flow without evaluation setup, and no implementation that turns observation into hidden monitoring or control |
 

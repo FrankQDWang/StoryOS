@@ -6,6 +6,7 @@
 - Related foundation specification: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md)
 - Context and disclosure refinement: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Manuscript/Proposal refinement: [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md)
+- Operational lifecycle refinement: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
 - Ownership and deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 
 ## 1. Purpose
@@ -528,6 +529,12 @@ Host state.
 `TombstoneArtifact` is terminal. It removes the Artifact's owned payload, indexes, and derived caches, including captured source content when the Artifact is itself a Source Snapshot. It never deletes separately referenced source Artifacts or a content-addressed blob still referenced by another logical Artifact. It retains a minimum tombstone for every former Revision: Project Scope, artifact ID, revision ID, parent revision ID, kind, creation time, digest, deletion actor/time/reason, and necessary relationship structure.
 
 Immutable inbound Provenance Edges never change. When an edge resolves to a Revision Tombstone, the read projection renders a `PurgedSourceRef` and states that the source was removed and can no longer be verified. Tombstoning a source does not automatically change or delete Authoritative State. Reversing authoritative effects requires Undo Acceptance or a new Proposal.
+
+Run and Subrun operational retention is independent of this Artifact axis and is
+governed by [Run Event, Mailbox, Snapshot, Retention, and Archival
+Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md). It
+cannot convert operational compaction into an Artifact Tombstone or delete
+author-owned creative state.
 
 ## 12. Normative invariants
 

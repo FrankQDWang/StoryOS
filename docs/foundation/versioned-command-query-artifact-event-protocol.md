@@ -454,7 +454,7 @@ reference, and commit time.
 
 Idempotency evidence cannot be reusable while its command, Receipt, effect,
 Attempt uncertainty, or replay reference remains meaningful. Exact expiry and
-tombstone duration belong to the retention contract; expiry never permits a
+tombstone duration belong to the [operational retention contract](run-event-mailbox-snapshot-retention-and-archival-semantics.md); expiry never permits a
 known old key to execute again without a new command identity.
 
 ### 7.4 Preconditions and concurrency
@@ -2441,7 +2441,7 @@ to Ed25519 public key `xSMHMLALUXpg9LlfOQL8DeaYJMyYIa2szZuBOlUk3og`
 | Downstream owner | Receives from this specification | Still owns |
 | --- | --- | --- |
 | [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59) | public/Core/internal/external surface separation and contracts-crate generation boundary | crate/module layout, dependency rules, repository governance |
-| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Project Activity envelope, Snapshot/cursor identity, replay generation, Application Wire Record class, handoff failures | retention durations, compaction/archive mechanics, Mailbox and internal Run Event detail |
+| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | Project Activity envelope, Snapshot/cursor identity, replay generation, Application Wire Record class, handoff failures | retention durations, compaction/archive mechanics, Mailbox and internal Run Event detail |
 | [Define Foundation Evidence for the Standalone Eval Surface](https://github.com/FrankQDWang/StoryOS/issues/61) | inspectable typed protocol evidence and profile identities | Eval claims, datasets, scoring, evidence acceptance |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | required drift/adversarial families, fences, Attempts, commit and OutcomeUnknown invariants | executable tests, crash schedules, CI gates, fake destinations |
 | [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | complete contract menu and absolute ceilings | which coherent subset ships first, effective defaults, acceptance gate |

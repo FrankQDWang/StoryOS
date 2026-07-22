@@ -333,7 +333,7 @@ replays the correct sequence or performs an explicit scoped resync.
 offline, but it cannot commit stale authority. Cursor/envelope/error semantics
 belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 cursor retention and compaction belong to
-[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64);
+[Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md);
 replay tests belong to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
@@ -552,7 +552,7 @@ retention, training, breach response, or legal disclosure; it can prove what
 it sent, where, why, and what outcome it observed. Wire and retry contracts
 belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
 retention evidence to
-[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+[Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 adapter proofs to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and the first admitted Provider path to
@@ -595,7 +595,7 @@ secret-bearing distinction; audit contains reference/version/result only.
 or destination process can observe the secret at its necessary use boundary.
 Reference and failure semantics belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), evidence
-retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 leak and rotation gates to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and resolver integration to
@@ -636,7 +636,7 @@ status, timing class, and non-identifying errors.
 metadata that the service intentionally records. The event/error vocabulary
 belongs to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
 classification and expiry to
-[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+[Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 leak testing to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and production-safe defaults to
@@ -677,7 +677,7 @@ and measured RPO/RTO.
 **Residual risk and owner.** Infrastructure administrators retain broad access,
 and correlated loss of database plus recovery stores remains environmental
 risk. Retention/archival policy and restore evidence belong to
-[Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64);
+[Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md);
 gates belong to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the first operational recovery proof belongs to
@@ -723,7 +723,7 @@ database unchanged; success is exactly scoped and reproducible.
 service or logic defects, so isolation and hard budgets remain mandatory.
 Archive/command schemas belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), archive
-retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 the corpus to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and the narrow importer to
@@ -760,7 +760,7 @@ effect, stable replay, preserved uncertainty, and no cross-scope key collision.
 **Residual risk and owner.** Some destinations offer no authoritative lookup;
 uncertainty may remain permanently visible. Envelope/idempotency contracts
 belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), durable
-Attempt/outbox retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+Attempt/outbox retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 fault injection to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
 the first end-to-end recovery path to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
@@ -793,7 +793,7 @@ dependency closure.
 **Residual risk and owner.** Authorized malicious prose can still influence
 model quality, but cannot obtain authority. Projection schemas belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), invalidation and
-retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64), adversarial
+retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md), adversarial
 rebuild proof to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
 the first bounded retrieval slice to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
@@ -827,7 +827,7 @@ Attempt, cursor, and provenance lineages or emit the specified loss marker.
 **Residual risk and owner.** A database/platform administrator can rewrite both
 facts and ordinary checks, so independent recovery evidence is needed for
 detection. Historical wire schemas belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
-compaction/redaction/tombstones to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+compaction/redaction/tombstones to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 rebuild and tamper gates to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and minimum audit lineage to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
@@ -860,7 +860,7 @@ stable outcome without losing the late evidence.
 **Residual risk and owner.** A non-idempotent external effect may remain
 OutcomeUnknown even though stale local writes are fenced. Fence/event contracts
 belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), lease and
-snapshot retention to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64),
+snapshot retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 race tests to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and the
 first crash-safe worker path to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
@@ -894,7 +894,7 @@ canonical facts, and continued control/recovery operations.
 **Residual risk and owner.** Foundation limits are not Internet-scale DDoS
 protection or billing policy. Budget/error contracts belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), expiry/Snapshot/replay
-floors to [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64), stress gates
+floors to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md), stress gates
 to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and bounded default
 configuration to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
@@ -927,7 +927,7 @@ Wayfinder owner:
 | Downstream owner | Security obligations received from this model | Attack paths |
 |---|---|---|
 | [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; provider and research destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-18 |
-| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | replay floors and Snapshot semantics; Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18 |
+| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18 |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin/bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-18 |
 | [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-18 |
 

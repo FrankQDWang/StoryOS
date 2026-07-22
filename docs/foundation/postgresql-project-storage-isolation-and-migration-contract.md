@@ -6,6 +6,7 @@
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research input: [PostgreSQL Project Storage, Isolation, and Migration Source Audit](../research/postgresql-project-storage-isolation-and-migration-source-audit.md)
 - Parent semantic contracts: [Artifact domain model](artifact-domain-model.md), [Manuscript state machine](manuscript-revision-proposal-state-machine.md), [Fiction memory and research provenance](fiction-memory-and-research-provenance-semantics.md), and [Context assembly and disclosure](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
+- Operational lifecycle contract: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
 
 ## 1. Scope and authority
 
@@ -395,7 +396,7 @@ Canonical payload rows are insert-only until a separately authorized retention
 purge is due. Correction appends a new Revision or fact. Purge never mutates a
 historical digest into a digest of replacement text; it leaves the required
 Tombstone, lifecycle decision, provenance gap, and historical evidence defined
-by the retention contract.
+by the [operational retention contract](run-event-mailbox-snapshot-retention-and-archival-semantics.md).
 
 ## 7. Retrieval, cache, read-model, and embedding projections
 
@@ -577,7 +578,7 @@ replay to a chosen point, run schema and invariant validation, and record a
 successful `restore_proof`. A backup file without a completed restore proof is
 not recovery evidence.
 
-Retention duration belongs to the downstream retention contract. Whatever
+Retention duration belongs to the [operational retention contract](run-event-mailbox-snapshot-retention-and-archival-semantics.md). Whatever
 window it declares must keep at least one complete base-backup/WAL chain and
 must be continuously checked for gaps. The Foundation does not require a
 synchronous replica, automatic failover, or high-availability cluster. A later
@@ -597,7 +598,8 @@ constraints, canonical data, operational evidence, and projection metadata;
 validates migration checksums, scoped referential closure, payload digests,
 Heads, sequences, idempotency, manifests, and outbox fences; rebuilds or drops
 disposable projections as required; rotates runtime and maintenance
-credentials; then enables traffic. OutcomeUnknown work remains uncertain and
+credentials; then enables traffic only after the operational contract's
+Recovery Visibility Proof succeeds. OutcomeUnknown work remains uncertain and
 is reconciled, never silently replayed.
 
 ### 10.3 Project Export Archive and Project Restore

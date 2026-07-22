@@ -80,6 +80,9 @@
 | `PER-003` | Run Lease 时长、续期间隔和接管宽限期 | Worker 延迟、暂停模式、存储后端、网络故障模型 | 注入进程暂停、网络分区和旧 Worker 复活，比较接管时延、误接管和 stale-write 拒绝率 | 待故障注入 |
 | `PER-004` | Transcript、章节树和 MCP App read model/cache 的刷新、失效和容量阈值 | 大型小说项目 | 测量冷启动、增量更新、内存占用和陈旧读取风险 | 待负载测试 |
 | `PER-005` | Run Wakeup 的调度扫描间隔、领取批量大小、投递重试退避和过期清理阈值 | 本地与服务端部署、Wakeup 密度、存储后端 | 注入重启、重复投递、时钟跳变和积压，比较唤醒延迟、重复 no-op、遗漏率和扫描负载 | 待故障注入 |
+| `PER-006` | Compactable Operational Payload 的 hot/archive/compaction 窗口、Command Idempotency Fence 容量与 Snapshot 有效期 | 长期小说项目、命令密度、设备与部署档位 | 回放重复提交、cursor 过期、长 Run 与高频命令，比较磁盘上界、作者历史可检查性、错误拒绝率与恢复延迟；不得忘记已知 key 或语义删除 Event | 待负载测试 |
+| `PER-007` | Recovery Copy 保留窗口、WAL 轮换、Physical Deletion Completion 上界 | 本地与受控云恢复档位、Project 大小、删除/Redaction 密度 | 注入主机丢失、RPO 链缺口、Redaction 与删除，验证恢复链、recovery hold、物理清理时延和 RPO/RTO；不得开放缺少 lifecycle proof 的旧 Scope | 待故障注入 |
+| `PER-008` | Diagnostic Projection 的保留窗口、容量与支持关联限额 | 错误率、Project 活跃度、部署档位 | 压力和隐私审计下比较诊断可用性、存储、误删率与泄露面；不得保留原稿、prompt、原始外部 payload 或 Credential | 待负载测试 |
 
 ### MCP Apps Host
 
