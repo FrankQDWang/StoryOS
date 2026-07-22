@@ -1300,8 +1300,8 @@ An optional, Project Scope-bound collection of explicitly selected Eval Cases fo
 _Avoid_: Default Run archive, automatic dataset, author setup requirement
 
 **Eval Evidence View**:
-A read-only, Project Scope-bound, redacted projection of exact settled evidence for one Eval Case. It supports observation and explanation without becoming a new truth store, changing normal writing behavior, or claiming a model internally used supplied content.
-_Avoid_: Eval truth store, prompt dump, runtime control panel, model-use proof
+A read-only, Project Scope-bound, redacted projection of exact settled evidence for one Eval Case. Its requester-specific Query/read authorization and visibility/redaction profile govern presentation only; opening or refreshing it is not a Processing Destination, Outbound Disclosure, or model-use proof. It supports observation and explanation without becoming a new truth store or changing normal writing behavior.
+_Avoid_: Eval truth store, prompt dump, runtime control panel, model-use proof, Outbound Disclosure
 
 **Eval Surface**:
 A standalone, author-facing advisory product surface for observing Project Scope-bound Eval evidence and assessments. It is neither the main writing interface nor a Transcript MCP App, backend monitoring service, hidden telemetry channel, or control plane.
@@ -1312,8 +1312,8 @@ An author-visible, view-specific explanation of whether referenced evidence can 
 _Avoid_: Hidden gap, raw-data reveal, fabricated completeness, silent substitute
 
 **Eval Author Feedback**:
-An author-originated, case-scoped advisory annotation of one Eval Case or its assessment. It can qualify that assessment but never automatically becomes an Author Preference, instruction, routing rule, score baseline, or Authoritative State.
-_Avoid_: Implicit preference update, chat instruction, global quality rule, acceptance
+An author-originated, case-scoped advisory Analysis Report Artifact Revision that qualifies one Eval Case or its assessment. It is not a Message or Transcript contribution, and never automatically becomes an Author Preference, instruction, routing rule, score baseline, or Authoritative State.
+_Avoid_: Transcript Message, implicit preference update, chat instruction, global quality rule, acceptance
 
 **Eval Reproducibility Status**:
 A Project Scope-bound declaration of whether the exact settled evidence for an Eval Case can be reopened and inspected. It never promises that an external Provider, judge, cache, or opaque mechanism can be rerun to produce the same output; every later assessment is a distinct advisory observation.

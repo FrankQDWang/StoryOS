@@ -57,7 +57,8 @@ ordinary author configuration burden.
 
 The following product boundaries are fixed:
 
-1. Opening Eval is a read of existing Project Scope-bound evidence. It does
+1. Opening Eval is an authorized, redacted Query/read of existing Project
+   Scope-bound evidence. It does
    not itself dispatch a model request, call a judge, upload project content,
    change the manuscript, create an Eval Case, add a corpus row, or emit
    background-monitoring data.
@@ -121,7 +122,7 @@ For every referenced item, the closure records or can resolve:
 | Exact revision or snapshot | A historical reference pins the specific Artifact Revision, Context Source Version, manifest revision, protocol record, or committed Snapshot rather than a mutable latest view. |
 | Provenance | The closed relation, creation record, or operation boundary that explains why the item is present. Selection is not silently promoted into evidentiary support. |
 | Time and causality | Creation and settlement time, relevant Project Activity position or Snapshot, and available cause/correlation relation. An item created later is never presented as earlier evidence. |
-| Availability and redaction | Current lifecycle, authorization, redaction/disclosure profile, and an explicit explanation when the item cannot be shown in full. |
+| Availability and redaction | Current lifecycle, read authorization, read-view visibility/redaction profile, and an explicit explanation when the item cannot be shown in full. |
 | Stability | Whether the fact is immutable, append-only operational history, a rebuildable projection, host-observed, provider-reported, or provider-opaque. |
 | Explainability limit | What the item proves and the next fact it does not prove. |
 
@@ -155,14 +156,14 @@ tables, wire shapes, aggregate ownership, or UI components.
 |---|---|---|---|
 | Eval Case selection | Operational Record | Explicit selector, Project Scope, selection time/cause, and exact settled evidence closure | An automatic Run archive, benchmark row, or Authoritative State |
 | Evaluation Corpus membership | Operational Record | Explicit case membership and its selection/revision identity, all in one Project Scope | A cross-Project dataset or required author setup |
-| Eval Evidence View | Read-only projection | Source boundary, authorized view/redaction profile, freshness or Snapshot information, and exact case references | A canonical truth store, hidden telemetry, or prompt dump |
+| Eval Evidence View | Read-only projection | Source boundary, authorized read-view visibility/redaction profile, freshness or Snapshot information, and exact case references | A canonical truth store, hidden telemetry, or prompt dump |
 | Metric or rubric application | Operational input record | Exact metric/rubric definition identity, version or digest, evaluator identity when applicable, and the case/result it qualifies | An implicit global quality target or author instruction |
 | Eval Assessment Attempt | Operational Record using the normal run/attempt boundary | Explicit initiator, purpose, case closure, authorization, disclosure, destination Attempt, certainty, and Receipts as applicable | A page-load action or ambient external-processing grant |
 | Usage, cost, latency, route, and cache observations | Operational Record or rebuildable operational projection | Observation source, measured interval or provider report, associated operation/Attempt, and certainty | A semantic quality fact or proof of model attention |
 | Eval Judgment and Eval Result | Analysis Report Artifact Revision | Exact case, metric/rubric input, assessment Attempt or human origin, evidence closure, and provenance to any cited facts | Authoritative State, a Proposal, Acceptance, or a hidden score authority |
 | Eval Baseline selection | Operational Record | Explicit selected case/result revisions and exact metric/rubric definition | A default project score or global benchmark |
 | Eval Comparison conclusion | Analysis Report Artifact Revision | Explicit baseline selection, compared exact revisions, metric compatibility statement, and limitations | A routing rule, author goal, or verdict on unselected work |
-| Eval Author Feedback | Message Artifact when durable text is saved, plus its case-scoped association record | Author identity, exact case/result target, time, and advisory relationship | An automatic Author Preference, instruction, acceptance, or state change |
+| Eval Author Feedback | Analysis Report Artifact Revision when durable text is saved, plus its case-scoped association Operational Record | Author identity, exact case/result target, time, and advisory relationship | An automatic Author Preference, instruction, acceptance, or state change |
 
 An Analysis Report remains advisory even if it contains a numerical metric, a
 human opinion, or output from a trusted Skill. A score is content inside an
@@ -299,7 +300,7 @@ Each view is bound to:
 
 - the requester's current authorized Project Scope;
 - the exact Eval Case selection;
-- an authorized redaction/disclosure profile;
+- an authorized read-view visibility/redaction profile;
 - its source Snapshot, projection watermark, and generation time when the
   data is projection-backed; and
 - the current availability state of every material referenced source.
@@ -309,11 +310,13 @@ case or result. It does not automatically expose full transcripts, all
 project prose, raw prompts, credential-bearing transport details, unrelated
 Run history, raw logs, or another Project's matching content.
 
-Opening or refreshing the view is not an Eval Assessment Attempt and produces
-no ambient external request. A product implementation may create ordinary
-access auditing where independently required by the established platform, but
-such auditing is not Eval evidence, does not alter the case, and must not
-become hidden author monitoring.
+Opening or refreshing the view is a Query/read-authorization and redaction
+operation only. It is not an Eval Assessment Attempt, does not treat Eval as a
+Processing Destination, creates no Destination Context Manifest or Outbound
+Disclosure Manifest, and produces no ambient external request or egress. A
+product implementation may create ordinary access auditing where independently
+required by the established platform, but such auditing is not Eval evidence,
+does not alter the case, and must not become hidden author monitoring.
 
 ### 6.2 Availability, redaction, and evidence gaps
 
@@ -322,7 +325,8 @@ unavailable, archived, expired, permission-limited, tombstoned, suppressed,
 or otherwise incomplete, the authorized view must show:
 
 1. that the referenced evidence exists or historically existed, where
-   disclosure policy permits that fact;
+   current read authorization and the visibility/redaction profile permit that
+   fact;
 2. the applicable non-sensitive reason category and view limitation;
 3. the exact historical identity or a safe non-oracular substitute when the
    identity itself cannot be disclosed; and
@@ -457,6 +461,10 @@ automatically update Author Preferences, Project Instructions, corpus
 membership, future metrics, a baseline, model routing, an Agent request, or
 Authoritative State.
 
+Durable feedback is an author-created advisory Analysis Report Artifact
+Revision with a case-scoped association Operational Record. It is not a
+Message Artifact or Transcript contribution.
+
 If the author wants a feedback statement to become an actual preference,
 instruction, or creative change, they use that domain's separate, explicit
 operation. The Eval record remains evidence of the original observation, not
@@ -506,9 +514,12 @@ application of it remains scoped and access-controlled.
 
 ### 10.2 Minimum necessary and permissions
 
-Eval follows the same minimum-necessary rule as every other StoryOS
-destination and read surface. The view is authorized per requester and current
-Project Scope, and its redaction profile applies before presentation.
+Eval follows the same minimum-necessary rule as other StoryOS read surfaces.
+The view is authorized per requester and current Project Scope, and its
+read-view visibility/redaction profile applies before presentation. It is a
+Query/read authorization boundary, not a Processing Destination or outbound
+disclosure: opening or refreshing it creates neither a Destination Context
+Manifest nor an Outbound Disclosure Manifest and causes no egress.
 
 An Eval Result may cite a protected source without turning the citation into
 permission to reveal it. The view exposes only what the requester may inspect,
@@ -554,7 +565,8 @@ the following remain true:
 3. An Eval Case and Evaluation Corpus are explicit selections, never default
    capture of ordinary writing or Agent Runs.
 4. An Eval Evidence View is author-facing, read-only, minimum-necessary, and
-   non-authoritative; opening it causes no external processing.
+   non-authoritative; opening it is Query/read authorization with redaction,
+   not a Processing Destination, outbound disclosure, or external processing.
 5. Every case reference pins an exact settled identity, revision or Snapshot,
    provenance, time/causal relation where available, availability state, and
    explainability limit.
@@ -576,9 +588,10 @@ the following remain true:
 12. A metric, score, baseline, comparison, judgment, or result remains
     advisory and explicitly scoped; there is no automatic project score or
     hidden creative target.
-13. Author feedback is case-scoped and does not automatically mutate
-    preferences, instructions, routing, corpus membership, evaluation
-    configuration, or Authoritative State.
+13. Author feedback is case-scoped advisory Analysis Report evidence, not a
+    Transcript Message, and does not automatically mutate preferences,
+    instructions, routing, corpus membership, evaluation configuration, or
+    Authoritative State.
 14. Any creative effect prompted by Eval follows the ordinary editor command,
     Proposal, validation, and Author Acceptance boundaries.
 15. Retention, redaction, export, restore, verification implementation, and
