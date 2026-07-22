@@ -1168,6 +1168,35 @@ GlobalExternalContractRegistrationRevision {
   created_at
 }
 
+ProcessingDestinationIdentityRecord {
+  processing_destination_identity
+  project_scope
+  service_surface_identity
+  actual_processor_identity
+  actual_endpoint_boundary
+  actual_account_boundary
+  control_classification
+  intake_or_disclosure_boundary
+  identity_schema_revision
+  identity_establishment_evidence:
+    ContractBoundaryEvidence {
+      evidence_profile
+      evidence_revision
+      evidence_digest
+    }
+    | ProjectCredentialAccountBoundaryEvidence {
+        project_scope
+        credential_binding_revision
+        credential_reference_id
+        credential_binding_generation
+        verified_account_boundary
+        evidence_profile
+        evidence_revision
+        evidence_digest
+      }
+  established_at
+}
+
 ProjectExternalUseBindingRevision {
   project_scope
   binding_revision_id
@@ -1184,6 +1213,7 @@ ProjectExternalUseBindingRevision {
       }
   allowed_purposes
   processing_destination_identity
+  processing_destination_identity_evidence_revision
   effect_ceiling
   lifecycle
   created_at
@@ -1196,6 +1226,7 @@ ExternalContractCompatibilityDecision {
   registration_revision
   adapter_revision
   processing_destination_identity
+  processing_destination_identity_evidence_revision
   observed_contract_evidence
   decision_result
   reason
@@ -1210,10 +1241,40 @@ only while it is free of project-derived content and authority.
 `service_surface_identity` names only the project-free Provider API, protocol,
 or Adapter service surface declared by that contract; neither it nor
 `source_identity` is an actual Processing Destination Identity, resolved
-endpoint/account boundary, Credential binding, or disclosure destination. The
-separate use binding is exact Project Scope-bound enablement plus any
-Credential Reference binding, actual Processing Destination Identity, and
-non-widening bounds; a Credential Reference never occupies a global namespace.
+endpoint/account boundary, Credential binding, or disclosure destination.
+
+The Host establishes `ProcessingDestinationIdentityRecord` independently under
+one exact Project Scope before any Project Destination Grant, external-use
+binding, or compatibility Decision may reference it. The record connects the
+project-free service surface to the actual processor, endpoint, account,
+control classification, and governing intake or disclosure boundary under one
+versioned identity schema and immutable evidence digest. When account identity
+cannot be established without a Project Credential Binding, the closed
+credential-evidence variant repeats complete Scope and records only the
+non-secret binding generation and verified boundary evidence; the Credential
+value, locator similarity, or credential configuration supplies neither
+identity proof nor authority. The Identity record contains no Grant, use
+binding, compatibility Decision, Capability, Approval, or execution authority.
+The initial evidence revision is owned by the record; later re-verification
+appends immutable same-Scope evidence revisions that reference the Identity but
+never mutate it or point to a Grant or use binding.
+
+A new Registration, Adapter, serialization, or model revision may reuse the
+same Identity only when the project-free service surface and a current
+immutable evidence revision prove that every actual boundary named by the
+Identity is unchanged. Credential rotation may also reuse it only after a new
+evidence revision verifies the same actual account boundary; a matching
+Credential Reference, locator, Provider alias, or hostname is insufficient. A
+processor, endpoint, account, control
+classification, or intake/disclosure-boundary change requires a new Identity
+record before any new Grant or use binding.
+
+The separate use binding pins one already-established Identity and the exact
+current Identity evidence revision together with exact Project Scope-bound
+enablement, any Credential Reference binding, and non-widening bounds; it does
+not resolve or create the Identity, and a Credential Reference never occupies
+a global namespace.
+
 `project_use_authorization_revision` is a closed surface-specific reference,
 such as a Project Tool Enablement or Project Destination Grant, rather than a
 universal authority record. A credential-bearing variant repeats the complete
@@ -1222,8 +1283,21 @@ credential fields are forbidden.
 Neither discovery, enablement, model-visible exposure, a handshake, a name, a
 semver range, nor Credential configuration grants invocation authority.
 
-The Project External Use Binding is created first and contains no compatibility
-Decision or forward reference to one. The Host then creates an immutable
+The immutable construction order is global Registration/service surface,
+optional Project Credential Binding as non-authorizing identity evidence,
+independent scoped Processing Destination Identity, Project Destination Grant
+or other owning use authorization, `ProjectExternalUseBindingRevision`, and
+then `ExternalContractCompatibilityDecision`. The Grant references the
+already-established Identity; the use binding references that authorization,
+Identity, Registration, and Credential binding when required; the Decision
+references the already-established use binding and repeats the exact Identity
+evidence revision. No earlier record points forward to a later record in this
+chain. Operational Snapshots, Route Decisions, Invocations, and Attempts are
+downstream evidence that pins the
+Identity, binding, and Decision together; none establishes an earlier member.
+
+The Project External Use Binding contains no compatibility Decision or forward
+reference to one. The Host then creates an immutable
 External Contract Compatibility Decision over that exact binding plus its
 global Registration and Adapter revision. A rejected Decision leaves the
 binding inspectable but ineligible; changing the Registration, Adapter,
@@ -1262,6 +1336,7 @@ ModelRouteUseEvidence {
   external_compatibility_decision
   model_operational_snapshot
   processing_destination_identity
+  processing_destination_identity_evidence_revision
   effective_bounds
 }
 ```
@@ -1269,9 +1344,11 @@ ModelRouteUseEvidence {
 For a model surface, the referenced `ProjectExternalUseBindingRevision` is the
 Project Model Use Binding. It is the same record and generated shape, not a
 model-specific second binding. It contains use authorization, Credential
-binding when required, exact Processing Destination Identity, and bounds, but
-not `external_compatibility_decision`. The separate Decision is created after
-the binding and evaluates it with the global Registration and Adapter. Each
+binding when required, one already-established exact Processing Destination
+Identity and its exact current evidence revision, and bounds, but does not
+resolve that Identity or contain `external_compatibility_decision`. The
+separate Decision is created after the binding and evaluates it with the global
+Registration and Adapter. Each
 Model Operational Snapshot repeats both records. A Model Route Decision
 evaluates and selects a Registration/use-binding/compatibility-Decision tuple,
 and the Model Invocation, Model Attempt Request, every Model Attempt, and its
@@ -1580,6 +1657,7 @@ DestinationManifestBinding {
   requester_user_id
   purpose
   processing_destination_identity
+  processing_destination_identity_evidence_revision
   registration_revision
   project_external_use_binding_revision
   adapter_revision
@@ -1635,6 +1713,7 @@ StoryOS versions these axes independently:
 | archive profile | export manifest and portable representation | reader compatibility or explicit import refusal |
 | Archive Path Profile | entry-name encoding, identity, collision, ordering, and directory rules | new profile and explicit import compatibility decision |
 | Protocol Limit Profile | public validity ceilings, counting rules, and interpretation | every numeric or semantic change creates a new profile revision; no silent narrowing or widening |
+| Processing Destination Identity schema | exact scoped processor, endpoint, account, control, intake/disclosure boundary, and establishment evidence | new schema revision for representation changes; new Identity when an actual boundary changes |
 | external Registration revision | pinned third-party observation and Host mapping | new scoped use binding for work that selects it, followed by a new External Contract Compatibility Decision |
 
 An API major is not reused as a payload, Event, Core, Adapter, or external
@@ -1859,6 +1938,7 @@ TokenCountingProfile {
 ProviderTokenMappingEvidence {
   project_scope
   processing_destination_identity
+  processing_destination_identity_evidence_revision
   registration_revision
   project_external_use_binding_revision
   adapter_revision
@@ -2004,6 +2084,13 @@ The eventual repository verification command must fail when:
   selected with its global non-authorizing Model Registration, embeds the
   Decision in the binding, or resolves an actual endpoint/account from the
   global Registration alone;
+- a Processing Destination Identity lacks exact Project Scope or versioned
+  boundary evidence, contains a Grant, use binding, compatibility Decision, or
+  execution authority, is created by its use binding, or violates the required
+  Identity-before-Grant-before-binding-before-Decision reference order; or a
+  binding, Decision, manifest, Snapshot, Route, or Attempt omits or mismatches
+  the exact current Identity evidence revision; or a Credential rotation reuses
+  one without verified same-account evidence;
 - an archive entry fails its pinned Archive Path Profile, path ordering differs
   from that Profile's unsigned canonical UTF-8 byte order, or the root input
   omits the Profile revision;
@@ -2071,7 +2158,14 @@ signed or integrity-protected archive. The negative corpus includes at least:
     missing seven-gate manifest, widened effect, hidden SDK retry, result reuse
     without reassembly, and incompatible cancellation/error mapping; plus a
     Model Registration carrying Project, Credential, actual endpoint/account,
-    or disclosure-destination data; a use binding containing or pointing
+    or disclosure-destination data; a Processing Destination Identity with
+    missing/mismatched Scope or identity evidence, a Grant/use/compatibility or
+    execution-authority back-reference, a Grant that names a not-yet-established
+    Identity, a use binding that creates rather than pins an Identity, or
+    Credential rotation that assumes account continuity from locator or alias;
+    a binding or downstream record with a missing, stale, cross-Scope, or
+    mismatched Identity evidence revision;
+    a use binding containing or pointing
     forward to a compatibility Decision; a Decision that predates or names a
     different binding; and a Model Snapshot, Route Decision, Invocation,
     Attempt, or fallback whose Project Model Use Binding, compatibility
@@ -2410,6 +2504,11 @@ An implementation conforms only if all of these remain true:
     exact pinning, Project Scope-bound use and Credential bindings,
     compatibility decisions, drift quarantine, and fresh authorization for
     widening. Global registrations contain no Project data or credentials;
+    every actual Processing Destination Identity is an independently established,
+    scoped, immutable, non-authorizing record, and references proceed only from
+    Identity to Grant to use binding to compatibility Decision without a reverse
+    authority edge; every binding and downstream record pins the exact current
+    same-Scope Identity evidence revision;
     every model Snapshot, Route Decision, Invocation, Attempt, and fallback
     proves both the exact Project Model Use Binding selected for that route and
     the separate subsequent compatibility Decision over that binding.

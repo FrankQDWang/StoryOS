@@ -153,8 +153,9 @@ Requirement. It binds at least:
 - the intended result and completion criteria;
 - one exact destination requirement, initially naming either a Processing
   Destination Identity or a closed allowed destination class;
-- the immutable destination-resolution decision that selects one exact
-  Processing Destination Identity before gate one completes;
+- one independently established, immutable, non-authorizing Processing
+  Destination Identity record under the same Project Scope, selected before
+  gate one completes;
 - destination intake and disclosure policy boundaries;
 - Mandatory Context obligations and their degradation policy;
 - permitted dynamic source classes and retrieval modes;
@@ -179,16 +180,26 @@ Model Route Request and derives the Model Route Decision from hard Purpose,
 capability, context-bound, disclosure, authorization, and budget requirements
 inside gate one after the candidate sequence below. Other destination kinds use
 their owning immutable Registration or routing decision.
-For each candidate, the Host first resolves one exact Project Scope-bound
-Project Model Use Binding that pins project use authorization, Credential
-Reference binding when required, the actual Processing Destination Identity,
-and hard bounds. The binding contains no compatibility Decision. The Host then
-creates or resolves a separate immutable External Contract Compatibility
-Decision over that already-existing binding plus the globally reusable,
-non-authorizing Model Registration and Adapter; the Model Route Decision may
-select only an admitted Registration/binding/compatibility-Decision tuple. A
-Registration or project-free Provider observation cannot satisfy either
-scope-bound record.
+For each candidate, the Host starts with one global project-free Registration
+and service surface. It then establishes or reuses one independent, exact
+Project Scope-bound Processing Destination Identity; a Project Credential
+Binding may supply non-authorizing account-boundary evidence when required, but
+credential configuration or locator similarity grants nothing and cannot by
+itself prove identity continuity. Establishment and every later
+re-verification append an immutable same-Scope Identity evidence revision. The
+Host next resolves the Project Destination Grant or other owning use
+authorization for that already-existing
+Identity, creates one Project Model Use Binding that pins the Registration,
+authorization, Credential binding when required, Identity, its exact current
+evidence revision, and hard bounds, and only then creates or resolves the
+separate immutable External Contract
+Compatibility Decision over that binding plus the Registration and Adapter.
+The binding does not create the Identity and contains no compatibility
+Decision. A Model Operational Snapshot then repeats the Identity, binding, and
+Decision under complete Scope; a Model Route Decision may select only an
+admitted Registration/Identity/authorization/binding/compatibility-Decision
+tuple. A Registration or project-free Provider observation cannot satisfy any
+scoped record in that chain.
 No source content is disclosed during resolution. Gate one cannot complete,
 and Candidate Discovery cannot begin, until one exact Processing Destination
 Identity, endpoint or account boundary, and governing intake contract are
@@ -604,8 +615,10 @@ One immutable DestinationContextManifest binds:
 
 - its ContextAssemblyManifest;
 - exact requester User and Project Scope;
-- one exact Processing Destination Identity resolved by the scoped use binding
-  and that binding's referenced project-free Registration Revision;
+- one exact, independently established Processing Destination Identity under
+  the same Project Scope, pinned by the scoped use binding together with that
+  binding's exact current Identity evidence revision and referenced project-free
+  Registration Revision;
 - the exact Project Scope-bound external-use binding, the separate subsequent
   compatibility Decision over that binding, and Credential binding generation
   when the destination requires one;
@@ -632,8 +645,9 @@ Every concrete planned destination execution, including an initial submission,
 physical resend, retry, repair, fallback, or destination change, owns a distinct
 Destination Attempt even when it settles before dispatch. It is durably
 established before outbound I/O and binds its exact Processing Destination
-Identity, Project Scope-bound external-use binding, separate compatibility
-Decision, manifests, and semantic request. Model Attempt and the owning
+Identity and current evidence revision, Project Scope-bound external-use
+binding, separate compatibility Decision, manifests, and semantic request.
+Model Attempt and the owning
 destination-specific Tool or service attempt refine this common boundary.
 
 When exact destination disclosure approval is required, the Host first creates
@@ -650,8 +664,9 @@ Destination Attempt Admission Decision over current Project Scope, every source
 and Projection dependency, Lifecycle, applicable Memory Suppression for a
 memory-derived or ordinary-recall dependency, Context Exclude, requester
 permission, grants and exact Tool or Destination Disclosure Approval when
-required, destination identity and Registration status, governing intake
-contract, policy, and budget. Only an admitted Decision may submit.
+required, destination identity and current evidence revision, Registration
+status, governing intake contract, policy, and budget. Only an admitted
+Decision may submit.
 
 Any changed, revoked, expired, mismatched, or unverifiable dependency preserves
 the committed manifests, settles or cancels the unsubmitted Destination
@@ -693,15 +708,20 @@ Project Model Use Binding, subsequent compatibility Decision, destination and
 disclosure manifests, and Destination Attempt. It cannot carry the prior
 route's Credential Reference binding or compatibility Decision forward. If the
 actual processor, endpoint/account, control classification, or
-intake/disclosure boundary changes, it also resolves a new Processing
-Destination Identity and requires authority for that identity. A Registration,
-Adapter, serialization, or model revision change that preserves those
+intake/disclosure boundary changes, the Host first establishes a new Processing
+Destination Identity and then requires authority for that identity. A
+Registration, Adapter, serialization, or model revision change that preserves
+those
 boundaries retains the same Processing Destination Identity and may use its
 still-effective Project Destination Grant, but it requires a new Project Model
 Use Binding when its pinned contract changes, then a separate compatibility
 Decision plus fresh intake, wire, cache, and admission evidence. Either form
 creates a new disclosure occurrence and Event only if its Destination Attempt
-reaches the durable dispatch claim.
+reaches the durable dispatch claim. Credential rotation may retain the same
+Identity only when fresh evidence is appended immutably under the same Scope
+and verifies the same actual account
+boundary; the new use binding pins that evidence revision, while a matching
+Credential Reference, locator, or Provider alias is insufficient.
 It may proceed only inside current destination and budget authority. An
 uncertain prior Destination Attempt remains OutcomeUnknown and retains
 conservative usage and disclosure evidence; a successor cannot convert it to
@@ -917,10 +937,11 @@ Memory Admission.
 Suppression applies when content is memory-derived or enters through ordinary
 memory recall. It does not ban direct governed use of the unchanged raw source.
 An author who wants to bar a source, fragment, provenance closure, data
-category, or its use at a destination scope uses Context Exclude. Disabling a
-Processing Destination Identity itself changes or revokes its Project
-Destination Grant or governing policy. A hard policy or Tombstone continues
-through its owning domain command.
+category, or its use at a destination scope uses Context Exclude. Disabling use
+of a Processing Destination Identity changes or revokes its Project Destination
+Grant or governing policy while preserving the immutable Identity record as
+non-authorizing evidence. A hard policy or Tombstone continues through its
+owning domain command.
 
 ### 11.6 Control precedence
 

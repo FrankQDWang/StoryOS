@@ -74,14 +74,14 @@ The ticket should settle the provider-neutral semantics of:
 5. provider-produced tool requests as model output handed to the existing Tool Gateway, never adapter-executed local authority;
 6. usage and cost evidence, including provider-reported versus estimated versus unknown values, per-attempt aggregation, budget settlement, and reconciliation;
 7. retry and fallback eligibility, revalidation, idempotency limitations, ambiguous timeouts, partial output, and prevention of hidden SDK/provider fallback;
-8. observability semantics: exact project-free registration, scoped use-binding, subsequent compatibility-decision, and route-decision references; request/response IDs, request digest, actual Processing Destination Identity and provider endpoint/account boundary, attempt ordinal, timings, finish/error categories, stream progress, usage, and disclosure evidence.
+8. observability semantics: exact project-free registration, scoped use-binding, subsequent compatibility-decision, and route-decision references; request/response IDs, request digest, actual Processing Destination Identity and current evidence revision, provider endpoint/account boundary, attempt ordinal, timings, finish/error categories, stream progress, usage, and disclosure evidence.
 
 These are the semantics of the Host-owned infrastructure even if their eventual implementation spans several crates or services.
 
 ### Adjacent but not owned here
 
 - [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) owns which project information enters a Model Invocation, how it is minimized, and how the author inspects it. This ticket still needs to require an exact context/disclosure reference on every outbound attempt.
-- [Specify the Self-Contained Project Storage and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) owns SQLite/filesystem layout, secret storage, migrations, backup, and restore. This ticket should state what must be durable, not choose tables.
+- [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) owns the authoritative PostgreSQL boundary, exact Project Scope isolation, non-secret Credential Reference storage, migrations, backup, and restore. This ticket should state what must be durable, not choose tables.
 - [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) owns exact external envelopes, DTOs, cursors, and compatibility. This ticket supplies their semantic invariants.
 - [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) owns the fake-provider, retry, replay, and crash test matrix. This ticket defines the behaviors those tests must prove.
 - [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) owns long-term retention and compaction of the resulting Run evidence.
@@ -122,7 +122,7 @@ Model Attempt
   ordered stream evidence, usage, partial output, and one terminal attempt outcome
 ```
 
-A Model Registration is a globally reusable, non-authorizing contract and Adapter mapping over a project-free Provider API or service surface; it contains no Project data, Credential Reference, actual endpoint/account or disclosure destination, or use admission. The exact Project Model Use Binding—the model use of the single shared `ProjectExternalUseBindingRevision` shape—is created separately with Project Scope, use/Credential authorization, actual Processing Destination Identity, and bounds; only afterward does an immutable External Contract Compatibility Decision evaluate that binding with the Registration and Adapter. A retry that preserves the same exact Registration, binding, compatibility Decision, and request digest appends a new Model Attempt and may reference the same still-valid Model Route Decision after live revalidation. A fallback to another Registration appends both a new Model Route Decision and a new Model Attempt under the same Invocation, with that route's own exact binding and subsequent compatibility Decision, provided the logical RunStep objective and Model Route Request remain unchanged. If the prompt, required capability, authority, disclosure destination set, or intended Agent Decision changes materially, that is a new Invocation rather than a retry.
+A Model Registration is a globally reusable, non-authorizing contract and Adapter mapping over a project-free Provider API or service surface; it contains no Project data, Credential Reference, actual endpoint/account or disclosure destination, or use admission. Before project use, the Host independently establishes or reuses one exact Project Scope-bound, non-authorizing Processing Destination Identity from that service surface and append-only versioned boundary evidence, using a Project Credential Binding only as non-authorizing account-identification evidence when needed; it then resolves the Project Destination Grant or other use authorization. The exact Project Model Use Binding—the model use of the single shared `ProjectExternalUseBindingRevision` shape—subsequently pins that already-established Identity and its exact current evidence revision together with Project Scope, use/Credential authorization, Registration, and bounds; only afterward does an immutable External Contract Compatibility Decision evaluate that binding with the Registration and Adapter. A retry that preserves the same exact Registration, binding, compatibility Decision, and request digest appends a new Model Attempt and may reference the same still-valid Model Route Decision after live revalidation. A fallback to another Registration appends both a new Model Route Decision and a new Model Attempt under the same Invocation, with that route's own exact binding and subsequent compatibility Decision, provided the logical RunStep objective and Model Route Request remain unchanged. If the prompt, required capability, authority, disclosure destination set, or intended Agent Decision changes materially, that is a new Invocation rather than a retry.
 
 The existing generic `Execution Attempt` vocabulary can remain the common super-concept; `Model Attempt` is the model-specific contract because it has provider IDs, route-decision binding, streams, model usage, and disclosure evidence that generic attempts do not name.
 
@@ -160,8 +160,9 @@ For every Model Attempt, preserve at minimum:
 - exact Project Scope, Model Route Decision, global Model Registration revision,
   Project Model Use Binding, and the separate subsequent compatibility Decision
   with Credential binding generation when required;
-- actual Processing Destination Identity, provider endpoint/account boundary,
-  requested model identifier, and actual served-model evidence;
+- actual Processing Destination Identity and current Identity evidence
+  revision, provider endpoint/account boundary, requested model identifier,
+  and actual served-model evidence;
 - attempt ordinal, causal retry/fallback reason, request digest, and idempotency token if any;
 - disclosure record, context-manifest reference, and transmitted data categories;
 - provider request/response IDs and Host correlation ID;

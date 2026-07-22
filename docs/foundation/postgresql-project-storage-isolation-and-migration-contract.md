@@ -136,7 +136,8 @@ generic EAV/event bucket, or remove Project Scope from a project-bearing row.
 |---|---|---|
 | Identity and Project | `users`, `projects` | `users` is User-scoped; `projects` owns the exact Project Scope and immutable Project Author |
 | Project policy | `project_instruction_revisions`, `project_instruction_heads`, `author_preference_revisions`, `project_policy_revisions`, `project_destination_grants`, `project_tool_enablements`, `context_controls`, `proactive_trigger_revisions`, `trigger_occurrences`, `trigger_admission_decisions` | immutable revisions and decisions plus narrow current Heads; no mutable JSON settings bag |
-| Credential binding | `credential_references`, `project_credential_bindings` | non-secret resolver metadata and exact project-use authorization only |
+| Credential binding | `credential_references`, `project_credential_bindings` | non-secret resolver, availability, and scoped binding evidence only; identity establishment may consume it, but neither the Reference nor binding grants destination use |
+| Processing destination identity | `processing_destination_identities`, `processing_destination_identity_evidence_revisions` | canonical immutable Project Scope-bound, non-authorizing identity of the actual processor, endpoint, account, control class, intake/disclosure boundary, and append-only versioned establishment or re-verification evidence; evidence may reference project-free service-surface identity and optional scoped Credential-binding inputs, never a Grant, use binding, compatibility Decision, or execution authority |
 | Authoritative State | `authoritative_objects`, `authoritative_revisions`, `authoritative_payloads`, `authoritative_heads`, `authoritative_commits`, `authoritative_commit_members`, `author_action_entries` | immutable revisions and commits; normalized Heads are the current authority pointer |
 | Manuscript subtype | `manuscript_objects`, `manuscript_blocks`, `manuscript_revision_members`, `revision_anchors` | subtype rows reference Authoritative identities and exact revisions in the same Scope |
 | Artifact | `artifacts`, `artifact_revisions`, `artifact_payloads`, `artifact_heads`, `artifact_lifecycle_events`, `artifact_provenance_edges` | never shares a Head or payload identity with Authoritative State |
@@ -145,9 +146,9 @@ generic EAV/event bucket, or remove Project Scope from a project-bearing row.
 | Agent execution | `agent_runs`, `subruns`, `subrun_joins`, `run_grant_revisions`, `subrun_capability_grants`, `run_plans`, `run_steps`, `run_lanes`, `run_events`, `run_mailbox_messages`, `run_mailbox_deliveries`, `run_waits`, `wait_resolutions`, `run_holds`, `run_wakeups`, `run_leases`, `run_execution_attempts`, `run_budget_accounts`, `run_budget_reservations`, `usage_records` | normalized live state is backed by immutable events and receipts; mailbox delivery is durable and leases and budget claims are fenced |
 | Transcript and approval | `transcript_items`, `approval_waits`, `approval_decisions`, `steering_inputs`, `run_checkpoints` | Transcript items and decisions are canonical Operational Records; checkpoints are disposable projections |
 | Tool, MCP, and Skill | `tool_specs`, `tool_registration_revisions`, `tool_registration_heads`, `tool_registration_status_events`, `tool_calls`, `tool_attempts`, `mcp_server_registration_revisions`, `mcp_server_registration_heads`, `mcp_app_artifacts`, `skill_package_revisions`, `skill_package_heads`, `skill_activations` | reusable non-project definitions are unscoped only when content-free of project data; calls, activations, Apps, and status evidence are scoped |
-| Model Gateway | `model_registration_revisions`, `model_registration_heads`, `model_registration_status_events`, `model_capability_profiles`, `model_operational_snapshots`, `model_routing_policy_revisions`, `model_route_requests`, `model_route_decisions`, `model_invocations`, `model_attempts`, `model_usage_settlements` | Registration/capability contracts are unscoped only while free of Project data, Credential References, actual endpoint/account or disclosure destinations, and authority; the model surface uses the shared scoped external-use-binding shape to pin Project Scope, use/Credential authorization, Processing Destination Identity, and bounds, while a separate later compatibility Decision evaluates that binding; every snapshot, route decision, invocation, attempt, and fallback pins both records; Provider-neutral columns and versioned Adapter payload add no Provider-specific authority table |
+| Model Gateway | `model_registration_revisions`, `model_registration_heads`, `model_registration_status_events`, `model_capability_profiles`, `model_operational_snapshots`, `model_routing_policy_revisions`, `model_route_requests`, `model_route_decisions`, `model_invocations`, `model_attempts`, `model_usage_settlements` | Registration/capability contracts are unscoped only while free of Project data, Credential References, actual endpoint/account or disclosure destinations, and authority; the model surface uses the shared scoped external-use-binding shape to pin Project Scope, use/Credential authorization, one already-established Processing Destination Identity and exact evidence revision, and bounds, while a separate later compatibility Decision evaluates that binding; every snapshot, route decision, invocation, attempt, and fallback pins both records; Provider-neutral columns and versioned Adapter payload add no Provider-specific authority table |
 | Memory and research | `memory_candidates`, `memory_admissions`, `memory_suppressions`, `research_claims`, `research_evidence_edges`, `source_snapshots` | source Revisions and provenance remain canonical; retrieval projections remain separate |
-| Context and disclosure | `operation_requirements`, `context_candidates`, `context_eligibility_decisions`, `context_selection_decisions`, `context_projections`, `context_assembly_manifests`, `context_manifest_members`, `project_external_use_binding_revisions`, `external_contract_compatibility_decisions`, `destination_attempts`, `wire_payload_projections`, `outbound_disclosure_events`, `destination_attempt_settlements` | Model, Tool, MCP, Provider, and research surfaces share one scoped external-use-binding shape; a compatibility Decision follows and references one already-existing binding; the Manifest and exact non-secret wire evidence commit before external dispatch claim |
+| Context and disclosure | `operation_requirements`, `context_candidates`, `context_eligibility_decisions`, `context_selection_decisions`, `context_projections`, `context_assembly_manifests`, `context_manifest_members`, `project_external_use_binding_revisions`, `external_contract_compatibility_decisions`, `destination_attempts`, `wire_payload_projections`, `outbound_disclosure_events`, `destination_attempt_settlements` | Model, Tool, MCP, Provider, and research surfaces share one scoped external-use-binding shape that pins an already-existing Processing Destination Identity, exact evidence revision, and owning authorization; a compatibility Decision follows and references one already-existing binding; the Manifest and exact non-secret wire evidence commit before external dispatch claim |
 | Durable work delivery | `outbox_entries`, `worker_fences` | outbox intent commits with its owning transition; a worker generation fences all settlements |
 | Disposable retrieval | `retrieval_documents`, `retrieval_fragments`, `retrieval_terms`, `embedding_projections`, `projection_dependencies`, `projection_invalidations`, `projection_generations`, `context_cache_entries`, `context_cache_dependencies`, `read_model_checkpoints` | all rows are scoped, dependency-complete, immediately disqualifiable, and rebuildable |
 | Storage administration | `schema_migrations`, `migration_phases`, `restore_proofs`, `project_export_manifests`, `project_restore_staging` | maintenance-only metadata; staging is never visible as a live Project |
@@ -199,6 +200,22 @@ Foreign keys are non-deferrable by default. A cyclic aggregate or staged
 Project Restore may use `DEFERRABLE INITIALLY IMMEDIATE` only when the
 transaction explicitly defers it and validates the full graph before atomic
 visibility. Production runtime commands cannot disable constraints or RLS.
+
+Destination references are deliberately acyclic. A
+`processing_destination_identities` row owns its initial boundary evidence;
+later `processing_destination_identity_evidence_revisions` rows reference only that
+same-Scope Identity plus project-free service-surface and optional same-Scope
+`project_credential_bindings` inputs, but no Grant, use binding, compatibility
+Decision, Snapshot, route, or Attempt. A
+`project_destination_grants` row references an already-existing same-Scope
+Identity; a `project_external_use_binding_revisions` row references that
+Identity, its exact current evidence revision, its Grant or other owning
+authorization, Registration, and optional Credential binding; and an
+`external_contract_compatibility_decisions` row
+references the already-existing binding. Snapshot, route, invocation, and
+Attempt rows then reference both binding and Decision. Every project-bearing
+join uses the full composite Scope, so no reverse or unscoped foreign key can
+turn Identity evidence into authority.
 
 ### 4.3 Required uniqueness and checks
 
@@ -392,8 +409,9 @@ generation. Lexical term rows and any physical indexes are disposable.
 
 `embedding_projections` stores scope, exact source fragment, source digest,
 embedding input profile and digest, exact Model Registration and capability
-profile, exact Project Scope-bound model-use/Credential/destination binding,
-and the separate subsequent compatibility Decision, vector dimension,
+profile, one already-established Processing Destination Identity, the exact
+Project Scope-bound model-use/Credential binding that pins it, and the separate
+subsequent compatibility Decision, vector dimension,
 observed vector values, generation, and status. A
 Foundation implementation may use a PostgreSQL-native array and exact scan;
 an optional later in-database vector extension and ANN index remain disposable
