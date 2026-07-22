@@ -1291,6 +1291,42 @@ _Avoid_: Canon, unsourced note
 A Core Artifact containing a derived evaluation or interpretation of project state, Artifacts, or evidence. It remains advisory even when produced by a trusted Skill.
 _Avoid_: Decision, authoritative assessment
 
+**Eval Case**:
+An explicitly selected, Project Scope-bound advisory evaluation sample that references exact settled StoryOS evidence for later assessment. Ordinary writing and AgentRuns never create one automatically, and an Eval Case grants no authority, authorization, or routine author configuration burden.
+_Avoid_: Automatic Run capture, benchmark row, authoritative score, required writing setup
+
+**Evaluation Corpus**:
+An optional, Project Scope-bound collection of explicitly selected Eval Cases for comparative or experimental assessment. It is not a hidden copy of ordinary Runs or a prerequisite for using the writing Agent.
+_Avoid_: Default Run archive, automatic dataset, author setup requirement
+
+**Eval Evidence View**:
+A read-only, Project Scope-bound, redacted projection of exact settled evidence for one Eval Case. It supports observation and explanation without becoming a new truth store, changing normal writing behavior, or claiming a model internally used supplied content.
+_Avoid_: Eval truth store, prompt dump, runtime control panel, model-use proof
+
+**Eval Surface**:
+A standalone, author-facing advisory product surface for observing Project Scope-bound Eval evidence and assessments. It is neither the main writing interface nor a Transcript MCP App, backend monitoring service, hidden telemetry channel, or control plane.
+_Avoid_: Admin dashboard, ambient monitoring, authoring surface, MCP App authority
+
+**Eval Evidence Availability**:
+An author-visible, view-specific explanation of whether referenced evidence can be inspected and why it is redacted, unavailable, expired, or otherwise limited. It preserves the limitation without disclosing protected content, silently omitting it, or substituting unproven material.
+_Avoid_: Hidden gap, raw-data reveal, fabricated completeness, silent substitute
+
+**Eval Author Feedback**:
+An author-originated, case-scoped advisory annotation of one Eval Case or its assessment. It can qualify that assessment but never automatically becomes an Author Preference, instruction, routing rule, score baseline, or Authoritative State.
+_Avoid_: Implicit preference update, chat instruction, global quality rule, acceptance
+
+**Eval Reproducibility Status**:
+A Project Scope-bound declaration of whether the exact settled evidence for an Eval Case can be reopened and inspected. It never promises that an external Provider, judge, cache, or opaque mechanism can be rerun to produce the same output; every later assessment is a distinct advisory observation.
+_Avoid_: Deterministic model rerun, Provider replay guarantee, overwritten result, hidden missing evidence
+
+**Eval Baseline**:
+An explicitly selected, Project Scope-bound reference to exact Eval Cases or Results and their declared metric definition, used only for an advisory comparison. No project-wide score, default baseline, or hidden creative target is inferred from ordinary evaluation observations.
+_Avoid_: Automatic benchmark, global quality score, Agent instruction, author goal
+
+**Eval Assessment Attempt**:
+An explicitly initiated advisory evaluation operation. Opening an Eval Evidence View causes no outbound call; an external judge or Provider assessment uses the ordinary current-run authorization, minimum disclosure, Attempt, and Receipt boundaries.
+_Avoid_: Page-load invocation, invisible upload, unreceipted judge call, ambient authorization
+
 **Tool Artifact**:
 A Core Artifact envelope for durable Tool or Service output that has no more specific Core Artifact kind, including permitted namespaced extension schemas. A domain-recognized result uses its specific kind with the ToolCall as Creator rather than adding a duplicate Tool Artifact wrapper.
 _Avoid_: Tool result event, direct write
