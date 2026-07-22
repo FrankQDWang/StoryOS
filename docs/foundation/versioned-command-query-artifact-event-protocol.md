@@ -1161,7 +1161,7 @@ GlobalExternalContractRegistrationRevision {
   trusted_contract_digest
   protocol_revision
   adapter_revision
-  destination_identity
+  service_surface_identity
   effect_ceiling
   intake_contract
   lifecycle
@@ -1183,9 +1183,22 @@ ProjectExternalUseBindingRevision {
         credential_binding_generation
       }
   allowed_purposes
-  allowed_destination_identity
+  processing_destination_identity
   effect_ceiling
   lifecycle
+  created_at
+}
+
+ExternalContractCompatibilityDecision {
+  external_compatibility_decision_id
+  project_scope
+  project_external_use_binding_revision
+  registration_revision
+  adapter_revision
+  processing_destination_identity
+  observed_contract_evidence
+  decision_result
+  reason
   created_at
 }
 ```
@@ -1193,9 +1206,14 @@ ProjectExternalUseBindingRevision {
 `registration_kind` distinguishes built-in Tool, MCP Tool, MCP Resource, MCP
 Prompt, MCP App UI Resource, Model Provider, embedding Provider, and research
 Adapter contracts. The global Registration is reusable Host mapping evidence
-only while it is free of project-derived content and authority. The separate
-use binding is exact Project Scope-bound enablement plus any Credential
-Reference binding; a Credential Reference never occupies a global namespace.
+only while it is free of project-derived content and authority.
+`service_surface_identity` names only the project-free Provider API, protocol,
+or Adapter service surface declared by that contract; neither it nor
+`source_identity` is an actual Processing Destination Identity, resolved
+endpoint/account boundary, Credential binding, or disclosure destination. The
+separate use binding is exact Project Scope-bound enablement plus any
+Credential Reference binding, actual Processing Destination Identity, and
+non-widening bounds; a Credential Reference never occupies a global namespace.
 `project_use_authorization_revision` is a closed surface-specific reference,
 such as a Project Tool Enablement or Project Destination Grant, rather than a
 universal authority record. A credential-bearing variant repeats the complete
@@ -1204,40 +1222,43 @@ credential fields are forbidden.
 Neither discovery, enablement, model-visible exposure, a handshake, a name, a
 semver range, nor Credential configuration grants invocation authority.
 
+The Project External Use Binding is created first and contains no compatibility
+Decision or forward reference to one. The Host then creates an immutable
+External Contract Compatibility Decision over that exact binding plus its
+global Registration and Adapter revision. A rejected Decision leaves the
+binding inspectable but ineligible; changing the Registration, Adapter,
+project use authorization, Credential binding or generation, allowed Purpose,
+Processing Destination Identity, effect ceiling, or other binding field
+requires a new binding and then a new Decision. New observed protocol, schema,
+capability, or wire evidence that leaves the pinned binding and
+Registration/Adapter tuple unchanged creates a new Decision only. Neither path
+mutates a record or creates an in-place cycle.
+
 Before each new use the Host verifies the exact active Registration revision,
-trusted contract digest, Adapter revision, external compatibility decision,
-destination, effect ceiling, Credential Reference availability and binding
-generation, project enablement, caller route, Capability, Approval when
-required, and limits. Every use, Attempt, and External Contract Compatibility
-Decision repeats and validates both members of the Project Scope and pins the
+trusted contract digest, Adapter revision, exact use binding, subsequent
+external compatibility Decision, destination, effect ceiling, Credential
+Reference availability and binding generation, project enablement, caller
+route, Capability, Approval when required, and limits. Every Decision, use, and
+Attempt repeats and validates both members of the Project Scope and pins the
 exact `ProjectExternalUseBindingRevision`; no global Registration, credential
 identifier, or compatibility cache may satisfy that join. Drift quarantines
 the Registration for new work and clears derived exposure. Historical work
-remains inspectable against its pinned revisions.
+remains inspectable against its pinned binding and Decision revisions.
 
 For a model surface, `ModelRegistrationRevision` is one
 `GlobalExternalContractRegistrationRevision` variant: it owns the stable
-provider-neutral model contract, Model Provider Adapter, endpoint/account
-boundary, provider model identifier, and Model Capability Profile, but no
-Project or Credential Reference. Routing composes this exact scope-bound
-evidence instead:
+provider-neutral model contract, Model Provider Adapter, project-free Provider
+API or service surface, provider model identifier, and Model Capability
+Profile, but no Project, Credential Reference, actual processor endpoint or
+account boundary, or disclosure destination. Routing composes this exact
+scope-bound evidence instead:
 
 ```text
 ModelRouteUseEvidence {
   project_scope
   requester_user_id
   model_registration_revision
-  project_model_use_binding_revision
-  project_use_authorization_revision
-  credential_binding:
-    NoCredentialBinding { binding_kind: "none" }
-    | ProjectCredentialBindingRef {
-        binding_kind: "project_credential"
-        project_scope
-        credential_binding_revision
-        credential_reference_id
-        credential_binding_generation
-      }
+  project_external_use_binding_revision
   external_compatibility_decision
   model_operational_snapshot
   processing_destination_identity
@@ -1245,18 +1266,22 @@ ModelRouteUseEvidence {
 }
 ```
 
-`project_model_use_binding_revision` is the model-specific typed reference to
-the same Project Scope-bound contract represented generically by
-`ProjectExternalUseBindingRevision`. Each Model Operational Snapshot repeats
-it. A Model Route Decision evaluates and selects Registration/use-binding
-pairs, and the Model Invocation, Model Attempt Request, every Model Attempt,
-and its destination/admission evidence repeat the selected pair and complete
-Scope. Same-route retry revalidates the same binding; fallback creates a new
-Route Decision and uses the selected route's own binding and Credential
-generation. No route, Snapshot, fallback, Provider alias, or globally cached
-compatibility result can create or inherit a credential namespace. These are
-Host contracts beneath the zero-configuration author experience; Bailian
-remains only a test Adapter choice.
+For a model surface, the referenced `ProjectExternalUseBindingRevision` is the
+Project Model Use Binding. It is the same record and generated shape, not a
+model-specific second binding. It contains use authorization, Credential
+binding when required, exact Processing Destination Identity, and bounds, but
+not `external_compatibility_decision`. The separate Decision is created after
+the binding and evaluates it with the global Registration and Adapter. Each
+Model Operational Snapshot repeats both records. A Model Route Decision
+evaluates and selects a Registration/use-binding/compatibility-Decision tuple,
+and the Model Invocation, Model Attempt Request, every Model Attempt, and its
+destination/admission evidence repeat that tuple and complete Scope.
+Same-route retry revalidates the same binding and Decision; fallback creates a
+new Route Decision and uses the selected route's own binding, Credential
+generation, and compatibility Decision. No route, Snapshot, fallback, Provider
+alias, or globally cached compatibility result can create or inherit a
+credential namespace. These are Host contracts beneath the zero-configuration
+author experience; Bailian remains only a test Adapter choice.
 
 ### 13.4 Tool and MCP invocation
 
@@ -1610,7 +1635,7 @@ StoryOS versions these axes independently:
 | archive profile | export manifest and portable representation | reader compatibility or explicit import refusal |
 | Archive Path Profile | entry-name encoding, identity, collision, ordering, and directory rules | new profile and explicit import compatibility decision |
 | Protocol Limit Profile | public validity ceilings, counting rules, and interpretation | every numeric or semantic change creates a new profile revision; no silent narrowing or widening |
-| external Registration revision | pinned third-party observation and Host mapping | new External Contract Compatibility Decision |
+| external Registration revision | pinned third-party observation and Host mapping | new scoped use binding for work that selects it, followed by a new External Contract Compatibility Decision |
 
 An API major is not reused as a payload, Event, Core, Adapter, or external
 version. A single release catalog records the exact compatible combination.
@@ -1709,12 +1734,14 @@ Event or invents a default enum.
 ### 14.5 External Provider, Tool, MCP, and MCP App compatibility
 
 External contracts receive no StoryOS N/N-1 promise. Each use pins one exact
-Registration and Adapter revision plus an immutable External Contract
-Compatibility Decision. The decision records the observed protocol/capability
-exchange, trusted schema or ToolSpec digest, wire mapping, actual Processing
-Destination Identity, effect ceiling, disclosure categories, Credential
-binding generation, admitted StoryOS contract releases, decision result, and
-reason.
+project-free Registration and Adapter revision, one exact Project Scope-bound
+`ProjectExternalUseBindingRevision`, and the immutable External Contract
+Compatibility Decision created after and over that binding. The decision
+records the binding and Registration/Adapter revisions, observed
+protocol/capability exchange, trusted schema or ToolSpec digest, wire mapping,
+actual Processing Destination Identity, effect ceiling, disclosure categories,
+Credential binding generation, admitted StoryOS contract releases, decision
+result, and reason. The binding contains no Decision reference.
 
 Semver, Provider aliases, MCP protocol negotiation, JSON-RPC method discovery,
 Tool names, resource URIs, SDK types, and successful handshakes are evidence,
@@ -1723,13 +1750,15 @@ reviewed Adapter update may declare compatibility only after mapping every
 input, output, error, effect, cancellation, retry, and streaming semantic.
 Changing actual processor, endpoint/account boundary, effect, destination,
 data category, Credential binding, or capability ceiling requires new
-authorization in addition to a new compatibility decision.
+authorization as applicable, a new scoped use binding, and then a new
+compatibility Decision.
 
 Every compatibility decision used for project work is bound to the exact
-Project Scope and `ProjectExternalUseBindingRevision`. A global contract or
-Adapter compatibility observation may be reused only as non-authorizing input;
-it cannot carry a Credential Reference, satisfy project enablement, or admit an
-Attempt without the scope-bound decision.
+Project Scope and already-existing `ProjectExternalUseBindingRevision`. A
+global contract or Adapter compatibility observation may be reused only as
+non-authorizing input; it cannot carry a Credential Reference, actual
+endpoint/account or disclosure destination, satisfy project enablement, or
+admit an Attempt without the scope-bound binding and its subsequent Decision.
 
 This rule resolves the parent-map fog item about Provider/MCP version
 compatibility. No separate follow-up ticket is needed.
@@ -1831,7 +1860,7 @@ ProviderTokenMappingEvidence {
   project_scope
   processing_destination_identity
   registration_revision
-  project_model_use_binding_revision
+  project_external_use_binding_revision
   adapter_revision
   external_compatibility_decision
   provider_model_identity
@@ -1971,7 +2000,10 @@ The eventual repository verification command must fail when:
   admission reference, or an external invocation omits disclosure/wire evidence;
 - a Model Operational Snapshot, Route Decision, Invocation, Attempt Request,
   Attempt, or fallback lacks the exact Project Scope-bound Project Model Use
-  Binding selected with its global non-authorizing Model Registration;
+  Binding and separate subsequent External Contract Compatibility Decision
+  selected with its global non-authorizing Model Registration, embeds the
+  Decision in the binding, or resolves an actual endpoint/account from the
+  global Registration alone;
 - an archive entry fails its pinned Archive Path Profile, path ordering differs
   from that Profile's unsigned canonical UTF-8 byte order, or the root input
   omits the Profile revision;
@@ -2038,9 +2070,12 @@ signed or integrity-protected archive. The negative corpus includes at least:
     Credential Reference or compatibility cache, cross-Scope enablement/use,
     missing seven-gate manifest, widened effect, hidden SDK retry, result reuse
     without reassembly, and incompatible cancellation/error mapping; plus a
-    Model Registration carrying Project or Credential data, and a Model
-    Snapshot, Route Decision, Invocation, Attempt, or fallback whose Project
-    Model Use Binding, Scope, compatibility decision, or Credential generation
+    Model Registration carrying Project, Credential, actual endpoint/account,
+    or disclosure-destination data; a use binding containing or pointing
+    forward to a compatibility Decision; a Decision that predates or names a
+    different binding; and a Model Snapshot, Route Decision, Invocation,
+    Attempt, or fallback whose Project Model Use Binding, compatibility
+    Decision, Scope, Processing Destination Identity, or Credential generation
     differs from the selected route;
 16. spoofed App window, wrong Instance or Artifact Revision, absent/mismatched,
     numeric, null, overlength, or non-ASCII bridge request ID, semantic
@@ -2376,7 +2411,8 @@ An implementation conforms only if all of these remain true:
     compatibility decisions, drift quarantine, and fresh authorization for
     widening. Global registrations contain no Project data or credentials;
     every model Snapshot, Route Decision, Invocation, Attempt, and fallback
-    proves the exact Project Model Use Binding selected for that route.
+    proves both the exact Project Model Use Binding selected for that route and
+    the separate subsequent compatibility Decision over that binding.
 14. Historical Application Wire Records and domain history are immutable;
     upgrades append projections and migration evidence.
 15. Every operation freezes named effective bounds no wider than its immutable

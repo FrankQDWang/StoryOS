@@ -175,15 +175,20 @@ creates a new Operation Requirement; it never mutates the original one.
 
 An allowed destination class is a routing bound, not an executable
 destination. For a model operation, the Host creates or binds the immutable
-Model Route Request and creates the Model Route Decision from hard Purpose,
-capability, context-bound,
-disclosure, authorization, and budget requirements inside gate one. Other
-destination kinds use their owning immutable Registration or routing decision.
-The Decision selects a globally reusable, non-authorizing Model Registration
-only together with one exact Project Scope-bound Project Model Use Binding that
-pins project use authorization, Credential Reference binding when required,
-external compatibility, destination, and hard bounds. A Registration or
-project-free Provider observation cannot satisfy this binding.
+Model Route Request and derives the Model Route Decision from hard Purpose,
+capability, context-bound, disclosure, authorization, and budget requirements
+inside gate one after the candidate sequence below. Other destination kinds use
+their owning immutable Registration or routing decision.
+For each candidate, the Host first resolves one exact Project Scope-bound
+Project Model Use Binding that pins project use authorization, Credential
+Reference binding when required, the actual Processing Destination Identity,
+and hard bounds. The binding contains no compatibility Decision. The Host then
+creates or resolves a separate immutable External Contract Compatibility
+Decision over that already-existing binding plus the globally reusable,
+non-authorizing Model Registration and Adapter; the Model Route Decision may
+select only an admitted Registration/binding/compatibility-Decision tuple. A
+Registration or project-free Provider observation cannot satisfy either
+scope-bound record.
 No source content is disclosed during resolution. Gate one cannot complete,
 and Candidate Discovery cannot begin, until one exact Processing Destination
 Identity, endpoint or account boundary, and governing intake contract are
@@ -599,9 +604,11 @@ One immutable DestinationContextManifest binds:
 
 - its ContextAssemblyManifest;
 - exact requester User and Project Scope;
-- one exact Processing Destination Identity and its owning Registration Revision;
-- the exact Project Scope-bound external-use binding, compatibility decision,
-  and Credential binding generation when the destination requires one;
+- one exact Processing Destination Identity resolved by the scoped use binding
+  and that binding's referenced project-free Registration Revision;
+- the exact Project Scope-bound external-use binding, the separate subsequent
+  compatibility Decision over that binding, and Credential binding generation
+  when the destination requires one;
 - one Purpose and the applicable owning intake contract: Model Capability
   Profile plus Model Attempt Request for a model, or Destination Context Intake
   Contract for a non-model destination;
@@ -625,8 +632,8 @@ Every concrete planned destination execution, including an initial submission,
 physical resend, retry, repair, fallback, or destination change, owns a distinct
 Destination Attempt even when it settles before dispatch. It is durably
 established before outbound I/O and binds its exact Processing Destination
-Identity, Project Scope-bound external-use binding, manifests, and semantic
-request. Model Attempt and the owning
+Identity, Project Scope-bound external-use binding, separate compatibility
+Decision, manifests, and semantic request. Model Attempt and the owning
 destination-specific Tool or service attempt refine this common boundary.
 
 When exact destination disclosure approval is required, the Host first creates
@@ -682,17 +689,19 @@ Destination Attempt or Disclosure Event as current execution evidence.
 
 A fallback to another Model Registration, endpoint, or account boundary always
 requires a new Operation Requirement, Context Assembly, route decision,
-Project Model Use Binding, destination and disclosure manifests, and
-Destination Attempt. It cannot carry the prior route's Credential Reference
-or compatibility binding forward. If the actual
-processor, endpoint/account, control classification, or intake/disclosure
-boundary changes, it also resolves a new Processing Destination Identity and
-requires authority for that identity. A Registration, Adapter, serialization,
-or model revision change that preserves those boundaries retains the same
-Processing Destination Identity and may use its still-effective Project
-Destination Grant, but it still requires fresh Registration, intake, wire,
-cache, and admission evidence. Either form creates a new disclosure occurrence
-and Event only if its Destination Attempt reaches the durable dispatch claim.
+Project Model Use Binding, subsequent compatibility Decision, destination and
+disclosure manifests, and Destination Attempt. It cannot carry the prior
+route's Credential Reference binding or compatibility Decision forward. If the
+actual processor, endpoint/account, control classification, or
+intake/disclosure boundary changes, it also resolves a new Processing
+Destination Identity and requires authority for that identity. A Registration,
+Adapter, serialization, or model revision change that preserves those
+boundaries retains the same Processing Destination Identity and may use its
+still-effective Project Destination Grant, but it requires a new Project Model
+Use Binding when its pinned contract changes, then a separate compatibility
+Decision plus fresh intake, wire, cache, and admission evidence. Either form
+creates a new disclosure occurrence and Event only if its Destination Attempt
+reaches the durable dispatch claim.
 It may proceed only inside current destination and budget authority. An
 uncertain prior Destination Attempt remains OutcomeUnknown and retains
 conservative usage and disclosure evidence; a successor cannot convert it to
@@ -1078,9 +1087,10 @@ Downstream implementation and verification must cover at least:
 14. Model Fallback reruns all seven gates for the newly resolved route while
     preserving the same Model Invocation, Route Request, semantic request
     digest, and Effective Model Context; it uses the new route's exact Project
-    Model Use Binding rather than inheriting the prior credential/compatibility
-    binding. A dispatched fallback creates a new Destination Attempt, wire
-    projection, and Disclosure Event, while semantic drift refuses fallback.
+    Model Use Binding and subsequent compatibility Decision rather than
+    inheriting the prior Credential binding or Decision. A dispatched fallback
+    creates a new Destination Attempt, wire projection, and Disclosure Event,
+    while semantic drift refuses fallback.
 15. An OutcomeUnknown Destination Attempt remains visible and budgeted when a
     successor is admitted.
 16. Inspection distinguishes the exact non-secret wire delta and opaque

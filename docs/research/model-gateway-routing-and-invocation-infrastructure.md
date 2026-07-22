@@ -74,7 +74,7 @@ The ticket should settle the provider-neutral semantics of:
 5. provider-produced tool requests as model output handed to the existing Tool Gateway, never adapter-executed local authority;
 6. usage and cost evidence, including provider-reported versus estimated versus unknown values, per-attempt aggregation, budget settlement, and reconciliation;
 7. retry and fallback eligibility, revalidation, idempotency limitations, ambiguous timeouts, partial output, and prevention of hidden SDK/provider fallback;
-8. observability semantics: exact registration and route-decision references, request/response IDs, request digest, provider endpoint/account boundary, attempt ordinal, timings, finish/error categories, stream progress, usage, and disclosure evidence.
+8. observability semantics: exact project-free registration, scoped use-binding, subsequent compatibility-decision, and route-decision references; request/response IDs, request digest, actual Processing Destination Identity and provider endpoint/account boundary, attempt ordinal, timings, finish/error categories, stream progress, usage, and disclosure evidence.
 
 These are the semantics of the Host-owned infrastructure even if their eventual implementation spans several crates or services.
 
@@ -113,7 +113,8 @@ Model Invocation
 
 Model Attempt
   one admitted concrete try under one exact Model Route Decision and its
-  exact Project Scope-bound Project Model Use Binding
+  exact Project Scope-bound Project Model Use Binding plus the separate
+  subsequent External Contract Compatibility Decision over that binding
   created durably before outbound I/O
   one exact request/context digest and disclosure destination
   one adapter/provider submission lifecycle
@@ -121,7 +122,7 @@ Model Attempt
   ordered stream evidence, usage, partial output, and one terminal attempt outcome
 ```
 
-A Model Registration is a globally reusable, non-authorizing contract and Adapter mapping; it contains no Project data, Credential Reference, or use admission. A retry that preserves the same exact Registration, Project Model Use Binding, and request digest appends a new Model Attempt and may reference the same still-valid Model Route Decision after live revalidation. A fallback to another Registration appends both a new Model Route Decision and a new Model Attempt under the same Invocation, with that route's own exact Project Model Use Binding, provided the logical RunStep objective and Model Route Request remain unchanged. If the prompt, required capability, authority, disclosure destination set, or intended Agent Decision changes materially, that is a new Invocation rather than a retry.
+A Model Registration is a globally reusable, non-authorizing contract and Adapter mapping over a project-free Provider API or service surface; it contains no Project data, Credential Reference, actual endpoint/account or disclosure destination, or use admission. The exact Project Model Use Binding—the model use of the single shared `ProjectExternalUseBindingRevision` shape—is created separately with Project Scope, use/Credential authorization, actual Processing Destination Identity, and bounds; only afterward does an immutable External Contract Compatibility Decision evaluate that binding with the Registration and Adapter. A retry that preserves the same exact Registration, binding, compatibility Decision, and request digest appends a new Model Attempt and may reference the same still-valid Model Route Decision after live revalidation. A fallback to another Registration appends both a new Model Route Decision and a new Model Attempt under the same Invocation, with that route's own exact binding and subsequent compatibility Decision, provided the logical RunStep objective and Model Route Request remain unchanged. If the prompt, required capability, authority, disclosure destination set, or intended Agent Decision changes materially, that is a new Invocation rather than a retry.
 
 The existing generic `Execution Attempt` vocabulary can remain the common super-concept; `Model Attempt` is the model-specific contract because it has provider IDs, route-decision binding, streams, model usage, and disclosure evidence that generic attempts do not name.
 
@@ -157,9 +158,10 @@ For every Model Invocation, expose its RunStep, Model Route Request, current sta
 For every Model Attempt, preserve at minimum:
 
 - exact Project Scope, Model Route Decision, global Model Registration revision,
-  and Project Model Use Binding with its compatibility decision and Credential
-  binding generation when required;
-- provider, endpoint/account boundary, requested model identifier, and actual served-model evidence;
+  Project Model Use Binding, and the separate subsequent compatibility Decision
+  with Credential binding generation when required;
+- actual Processing Destination Identity, provider endpoint/account boundary,
+  requested model identifier, and actual served-model evidence;
 - attempt ordinal, causal retry/fallback reason, request digest, and idempotency token if any;
 - disclosure record, context-manifest reference, and transmitted data categories;
 - provider request/response IDs and Host correlation ID;
@@ -175,7 +177,7 @@ OpenTelemetry GenAI and nested HTTP spans should be emitted as projections of th
 
 1. A Model Invocation succeeds only after the Host validates and durably records one typed Agent Decision; provider completion terminates only its Model Attempt.
 2. Retryability is a Host Recovery Decision after live revalidation. Confirmed transient failures may retry within policy and budget, deterministic invalid requests may not retry unchanged, and ambiguous submission follows the OutcomeUnknown rules.
-3. A same-Registration retry may reuse a still-valid Model Route Decision only after live revalidation of the same exact Project Model Use Binding and creates a new Attempt with the same semantic request digest. Fallback always creates a new Decision and uses the newly selected route's own binding; it never inherits the prior credential or compatibility evidence.
+3. A same-Registration retry may reuse a still-valid Model Route Decision only after live revalidation of the same exact Project Model Use Binding and separate compatibility Decision, and creates a new Attempt with the same semantic request digest. Fallback always creates a new Route Decision and uses the newly selected route's own binding plus a compatibility Decision produced after that binding; it never inherits the prior Credential or compatibility evidence.
 4. Partial text and Tool arguments remain ordered Attempt evidence projected to the Author UI. They cannot silently enter normal model history, become an Agent Decision, or reach the Tool Gateway.
 5. Provider- or SDK-managed model routing and fallback are forbidden in the first slice. Any future composite router requires a separately specified Registration contract.
 6. OutcomeUnknown retains enforceable worst-case reservation. A successor requires authorization for another disclosure and budget for both Attempts; late usage reconciles the reservation and never rewrites earlier evidence.
