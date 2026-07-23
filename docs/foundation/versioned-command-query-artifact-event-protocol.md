@@ -1061,6 +1061,9 @@ StoryOSProblem {
   correlation_id
   project_scope | null
   command_id | null
+  author_command_admission_id | null
+  settlement_query | null
+  recovery_disposition: "reconciliation_required" | null
   safe_conflict | null
   resync | null
   limit_profile_revision
@@ -1073,6 +1076,9 @@ human-safe display text and are never parsed. `instance` is an opaque safe
 diagnostic reference, not a database key. `retryability` is one of
 `never`, `same_request`, `after_condition`, or `outcome_unknown`; it is advice,
 not authorization to bypass idempotency, expected Revision, or current grants.
+The admission identity, settlement Query, and recovery disposition are
+non-null together only for an authorized caller observing `outcome_unknown`
+after Author Command Admission; they do not grant invocation authority.
 
 ### 11.2 Required error semantics
 
@@ -1129,8 +1135,8 @@ The caller must use the settlement Query or an explicitly authorized fenced
 recovery Command. For an Author Command Admission it returns the same
 `command_id`, `author_command_admission_id`, Project Scope, and
 `settlement_query`, exposes no `ReceiptRef`, and records a
-`reconciliation_required` disposition until authoritative evidence settles
-the original admission.
+`recovery_disposition` of `reconciliation_required` until authoritative
+evidence settles the original admission.
 
 ## 12. Concurrency, Attempts, and recovery
 

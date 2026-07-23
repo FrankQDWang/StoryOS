@@ -382,7 +382,7 @@ known failure.
 
 | Situation | Required gate result | Required StoryOS evidence |
 | --- | --- | --- |
-| Invalid/missing/foreign scope, session, authority, Capability, Approval, manifest, profile, compatible contract, or schema before admission | `expected_refusal` | Safe typed refusal/no-change Receipt where the owning command contract requires one; zero unauthorized authority/egress/effect and Negative Evidence Closure. |
+| Invalid/missing/foreign scope, session, authority, Capability, Approval, manifest, profile, compatible contract, or schema before admission | `expected_refusal` | Safe typed pre-admission refusal evidence; no admission or Receipt; zero unauthorized authority/egress/effect and Negative Evidence Closure. |
 | Core transition fails before commit | `expected_refusal` or normal recovery re-execution as the owning command permits | No partial domain effect; no acknowledged success. |
 | Core transition commits but acknowledgement is lost | `passed` after recovery | Exact same scoped idempotent acknowledgement/Receipt; no duplicate transition. |
 | Author Command Admission exists but authoritative settlement cannot yet be proven | `expected_outcome_unknown` | Same admission and idempotency evidence, last provable boundary, no terminal settlement, no blind invocation, and an author-visible reconciliation requirement. |

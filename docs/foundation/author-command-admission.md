@@ -150,7 +150,7 @@ AuthorCommandAdmissionSettlement =
     settled_at
   }
   | RequiresReconfirmation {
-      reason:
+      reconfirmation_reason:
         explicit_command_recovery
         | admission_expired
         | binding_changed
