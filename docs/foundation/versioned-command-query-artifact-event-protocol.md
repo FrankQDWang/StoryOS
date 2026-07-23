@@ -522,9 +522,14 @@ reference, or reconfirmation disposition, and commit time.
   `command_in_progress` without starting a second attempt.
 - A crash before the admission transaction commits leaves no effect or
   acknowledgement. After an author-command admission commits, recovery first
-  resolves an existing Receipt. With no Receipt, an exact
-  `direct_editor_action` may resume automatically; an explicit editor or
-  project command settles as `requires_reconfirmation` without Core execution.
+  resolves an existing Receipt. When validated storage proves that no Receipt
+  exists, only the same unexpired `direct_editor_action` admission with every
+  binding still equal and complete journal intent still recoverable may invoke
+  automatically; an expired, changed, or intent-unrecoverable direct action,
+  explicit editor command, or explicit project command settles as
+  `requires_reconfirmation` without Core execution. When settlement cannot yet
+  be proven, the same admission remains `outcome_unknown` and
+  reconciliation-required rather than authorizing another invocation.
 - A physical external resend always creates another Attempt and never reuses
   an earlier Destination Attempt merely because the logical command is the
   same.
@@ -553,7 +558,8 @@ precondition.
 
 ### 7.5 Command Acknowledgement
 
-Every admitted submission or recovered admission produces exactly one of:
+Every terminally settled admitted submission or recovered admission produces
+exactly one immutable acknowledgement:
 
 ```text
 CommandAcknowledgement =
@@ -587,6 +593,11 @@ CommandAcknowledgement =
     project_scope
     correlation_id
     author_command_admission_id
+    reconfirmation_reason:
+      "explicit_command_recovery"
+      | "admission_expired"
+      | "binding_changed"
+      | "direct_edit_intent_unrecoverable"
     recovery_draft_ref: DraftId | null
     recorded_at
     limit_profile_revision
@@ -623,10 +634,12 @@ the named Canonical Query and Project Activity Stream, never by holding the
 HTTP response open or treating process state as truth.
 
 `RequiresReconfirmation` is the immutable recovery acknowledgement for an
-admitted explicit command that has no Core Receipt, or for an expired pending
-direct edit. It creates no Core effect and carries no `ReceiptRef`. Exact retry
-returns the same acknowledgement; only a newly confirmed command with a new
-idempotency key, nonce, and Author Command Admission may proceed.
+admitted explicit command that has no Core Receipt, or for an expired,
+binding-changed, or intent-unrecoverable pending direct edit. Its reason is the
+same closed reason stored by the Author Command Admission settlement. It
+creates no Core effect and carries no `ReceiptRef`. Exact retry returns the same
+acknowledgement; only a newly confirmed command with a new idempotency key,
+nonce, and Author Command Admission may proceed.
 
 An operation that can settle entirely in its owning short transaction uses
 `Committed`; it is not arbitrarily downgraded to `Accepted` after a timeout.
@@ -636,8 +649,12 @@ Long work is modeled as an asynchronous operation before admission.
 
 Malformed JSON, duplicate keys, unsupported schemas, invalid session,
 anti-forgery failure, cross-scope access, and authorization failure occur before
-a domain attempt and create no Domain Receipt. Safe Problem Details and
-security diagnostics may be retained without the rejected body.
+a domain attempt and create no Author Command Admission or Domain Receipt. The
+Server retains only a durable, bounded, sanitized refusal record and safe
+Problem Details: correlation, reached validation boundary, safe typed reason,
+applicable server-derived in-Scope identities, contract/profile identities,
+and audit time, without the rejected body, nonce, session handle, foreign
+identity, or existence-bearing detail.
 
 Once a schema-valid authorized command enters its first domain attempt, every
 success, refusal, invalidity, conflict, and no-effect settlement creates one
@@ -1109,7 +1126,11 @@ prove whether an external or authoritative effect occurred. It includes the
 logical command/operation and exact Attempt references the caller is allowed
 to inspect, consumes conservative budgets, and forbids blind resubmission.
 The caller must use the settlement Query or an explicitly authorized fenced
-recovery Command.
+recovery Command. For an Author Command Admission it returns the same
+`command_id`, `author_command_admission_id`, Project Scope, and
+`settlement_query`, exposes no `ReceiptRef`, and records a
+`reconciliation_required` disposition until authoritative evidence settles
+the original admission.
 
 ## 12. Concurrency, Attempts, and recovery
 

@@ -806,8 +806,10 @@ For a command idempotency key:
 - a Receipt proves the Transition committed and the UI replays that result;
 - with validated storage and no Receipt, the Transition did not commit;
 - an uncommitted direct author edit preserved in the Local Edit Journal may be
-  retried idempotently; stale or unprovable intent becomes a non-authoritative
-  Recovery Draft requiring explicit retry or discard;
+  invoked idempotently only through the same unexpired Author Command Admission
+  while all admission bindings still match; stale, changed, expired, or
+  unprovable intent becomes a non-authoritative Recovery Draft requiring
+  explicit retry or discard;
 - Acceptance and Undo without a Receipt are shown as not committed and are
   settled as requiring reconfirmation and never automatically executed after
   restart.
