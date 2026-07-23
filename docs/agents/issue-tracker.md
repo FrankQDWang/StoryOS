@@ -18,18 +18,29 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 
 ## Publishing and fetching
 
-- When a skill says to publish to the issue tracker, create a GitHub issue in `FrankQDWang/StoryOS`.
-- When a skill says to fetch a ticket, read the issue body, labels, assignees, dependencies, and resolution comments.
+- Publish StoryOS tickets as GitHub issues in `FrankQDWang/StoryOS`.
+- Fetch a ticket by reading its current body, labels, assignees, native dependencies, and resolution comments.
 
-## Wayfinding operations
+## Current map operations
 
 - **Current map:** [Map the StoryOS Editor-First Product and Production Delivery Contract](https://github.com/FrankQDWang/StoryOS/issues/1) is the repository's permanent design-map entry point and the sole issue labelled `wayfinder:map`.
-- **Map body:** maintain Destination, Current product contract, Current design index, Current evidence, Current planning frontier, and Completion gate as a living current-state view. Edit these sections in place as the product contract advances.
-- **Contract ownership:** each current design topic has one owning tracked file or section named in the map's Current design index. Cross-references link to that owner. The root `DELIVERY.md` compiles the closed-world Release 1 implementation contract and binds one exact `main` commit.
+- **Map body:** maintain Destination, Current product contract, Current design index, Current evidence, Current planning frontier, Issue-native execution contract, and Completion gate as a living current-state view. Edit these sections in place as the product contract advances.
+- **Contract ownership:** each current design topic has one owning tracked file or section named in the map's Current design index. Cross-references link to that owner. Each requirement and implementation surface has one current issue owner.
 - **Child ticket:** create a positive current-state question with exactly one type label: `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, or `wayfinder:task`. Link it directly to the current map using GitHub's sub-issues API.
 - **Blocking:** use GitHub's native issue dependencies. Add blockers through `repos/FrankQDWang/StoryOS/issues/<child>/dependencies/blocked_by` using the blocker's numeric database `id`, not its issue number or GraphQL node ID.
-- **Frontier:** the current map's open, unassigned direct sub-issues with every blocker closed, in map order.
-- **Claim:** assign the selected frontier issue to the current developer before investigation or mutation.
+- **Frontier:** native dependencies form a serial chain with exactly one open, unassigned direct sub-issue whose blockers are closed.
+- **Refresh gate:** before claim, read the current map, current `main`, owning tracked contracts, and affected downstream issue bodies. Align scope, Requirement ownership, wording, ordering, and native dependencies so the selected issue is the sole owner of its question.
+- **Claim:** assign the selected frontier issue, then record its Contract revision, exact `main` Baseline, and SHA-256 of the UTF-8/LF-normalized issue body in a claim comment.
 - **Resolve:** update the owning tracked contract, add a resolution comment that links the exact files and commit, refresh the map's current-state sections, and close the child.
-- **Review:** express every newly sharp design problem as a focused direct sub-issue of the current map, wire its native dependencies, and update the current map and owning tracked contract through that ticket.
-- **Charting:** create the required issues first and wire sub-issue and blocking relations in a second pass.
+- **Review:** express every newly sharp design problem as one focused direct sub-issue, insert it at its exact serial position, and refresh downstream issue bodies and dependencies.
+- **Charting:** create the required issues first and wire sub-issue and blocking relations in a second pass, producing one frontier issue.
+
+## Issue-native implementation
+
+- **Single current issue:** after planning closes, the current map contains exactly one open implementation issue. Its body is the complete contract for that implementation slice.
+- **Required body:** include Contract revision, exact `Baseline: main@<commit>`, stable Requirement IDs, exact Authoritative inputs, Goal, Scope, owning modules, data flow, acceptance criteria, author journey, red tests, deterministic fault points, migration and generated artifacts, final verification, PR gate, and merge gate.
+- **Execution input:** execute from the locked current implementation issue, its exact Baseline commit, the applicable `AGENTS.md` files at that commit, and the tracked files explicitly named by the issue.
+- **Contract revision:** a contract change produces a refreshed issue body, a new Baseline, a new Contract revision, and a new claim lock before implementation resumes.
+- **Completion:** merge the implementation PR into `main`, record the exact merge commit and verification evidence in the resolution comment, refresh the current map, and close the issue.
+- **Continuation:** create the next implementation issue from the resulting `main` only after its predecessor completes. The new issue becomes the map's sole open implementation issue.
+- **Audit:** closed issues preserve the reasoning, exact commits, PRs, and verification evidence for completed work.
