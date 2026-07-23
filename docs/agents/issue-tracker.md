@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and Wayfinder maps for this repository live in the public GitHub repository `FrankQDWang/StoryOS`. Use the `gh` CLI for tracker operations.
+Issues and the StoryOS design map live in the public GitHub repository `FrankQDWang/StoryOS`. Use the `gh` CLI for tracker operations.
 
 ## Conventions
 
@@ -23,10 +23,13 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 
 ## Wayfinding operations
 
-- **Map:** one issue labelled `wayfinder:map`. Its body contains Destination, Notes, Decisions so far, Not yet specified, and Out of scope.
-- **Child ticket:** create an issue with exactly one type label: `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, or `wayfinder:task`. Link it to the map using GitHub's sub-issues API. If sub-issues are unavailable, use a map task list and put `Part of <linked map title>` in the child body.
-- **Blocking:** use GitHub's native issue dependencies. Add blockers through `repos/FrankQDWang/StoryOS/issues/<child>/dependencies/blocked_by` using the blocker's numeric database `id`, not its issue number or GraphQL node ID. If native dependencies are unavailable, put a `Blocked by:` line in the child body.
-- **Frontier:** the map's open, unassigned child issues with no open blockers, in map order.
+- **Current map:** [Map the StoryOS Editor-First Product and Production Delivery Contract](https://github.com/FrankQDWang/StoryOS/issues/1) is the repository's permanent design-map entry point and the sole issue labelled `wayfinder:map`.
+- **Map body:** maintain Destination, Current product contract, Current design index, Current evidence, Current planning frontier, and Completion gate as a living current-state view. Edit these sections in place as the product contract advances.
+- **Contract ownership:** each current design topic has one owning tracked file or section named in the map's Current design index. Cross-references link to that owner. The root `DELIVERY.md` compiles the closed-world Release 1 implementation contract and binds one exact `main` commit.
+- **Child ticket:** create a positive current-state question with exactly one type label: `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, or `wayfinder:task`. Link it directly to the current map using GitHub's sub-issues API.
+- **Blocking:** use GitHub's native issue dependencies. Add blockers through `repos/FrankQDWang/StoryOS/issues/<child>/dependencies/blocked_by` using the blocker's numeric database `id`, not its issue number or GraphQL node ID.
+- **Frontier:** the current map's open, unassigned direct sub-issues with every blocker closed, in map order.
 - **Claim:** assign the selected frontier issue to the current developer before investigation or mutation.
-- **Resolve:** add the decision or result as a resolution comment, close the child, and append only a linked one-line gist to the map's Decisions so far. The full decision lives in exactly one child issue.
-- **Charting:** create all issues first, wire sub-issue and blocking relations in a second pass, then stop without resolving a newly opened ticket in the same charting session.
+- **Resolve:** update the owning tracked contract, add a resolution comment that links the exact files and commit, refresh the map's current-state sections, and close the child.
+- **Review:** express every newly sharp design problem as a focused direct sub-issue of the current map, wire its native dependencies, and update the current map and owning tracked contract through that ticket.
+- **Charting:** create the required issues first and wire sub-issue and blocking relations in a second pass.
