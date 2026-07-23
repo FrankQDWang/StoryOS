@@ -413,7 +413,7 @@ AcceptProposal {
   validation_receipt_id
   selected_operation_ids
   expected_target_revisions
-  author_intent_id
+  author_command_admission_id
   idempotency_key
 }
 ```
@@ -434,7 +434,7 @@ For a domain Proposal, the selected operations are atomic: all succeed or none a
 
 ### 8.4 Undo Acceptance
 
-`UndoAcceptance` takes an Acceptance Receipt identity, exact current target Revisions, expected Proposal head, Author Intent, and an idempotency key.
+`UndoAcceptance` takes an Acceptance Receipt identity, exact current target Revisions, expected Proposal head, Author Command Admission, and an idempotency key.
 
 Direct compensation is allowed only when the Acceptance is the current Author Undo Frontier, has not already been compensated, and every affected target's current Head and payload digest exactly match the resulting Authoritative Revision in the Acceptance Receipt. It atomically:
 
@@ -447,11 +447,11 @@ When the Proposal head advanced incompatibly, was withdrawn or superseded, Story
 
 ### 8.5 Unified author undo order
 
-Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Intent caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
+Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
 
 ### 8.6 Domain Receipts
 
-Validation, Acceptance, and Undo Acceptance Receipts are immutable StoryOS Core Operational Records, not Artifacts. A Receipt records a Core validation or domain-command attempt, including attempts that are refused, redirected, or make no Authoritative State change. Every Receipt links directly to its exact causal Author Intent, RunEvent, or other typed Core cause. An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision, Validation Receipt, selected operations, expected targets, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused | NoEffect` result. An Undo Acceptance Receipt records the original Acceptance Receipt, command digest, idempotency key, and an outcome union:
+Validation, Acceptance, and Undo Acceptance Receipts are immutable StoryOS Core Operational Records, not Artifacts. A Receipt records a Core validation or domain-command attempt, including attempts that are refused, redirected, or make no Authoritative State change. Every Receipt links directly to its exact exhaustive producer cause: Author Command Admission, Editor Input Fence, AgentRunStep, or ToolCall. An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision, Validation Receipt, selected operations, expected targets, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused | NoEffect` result. An Undo Acceptance Receipt records the original Acceptance Receipt, command digest, idempotency key, and an outcome union:
 
 ```text
 Compensated { authoritative_commit_ref, proposal_ref? }

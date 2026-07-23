@@ -12,5 +12,5 @@ StoryOS keeps its Rust workspace, production Web Client, external contracts crat
 
 ## Consequences
 
-- This decision does not select a directory tree, generator implementation, process topology, deployment layout, or first production slice.
+- This decision does not select a directory tree, generator implementation, process topology, deployment layout, or editor-first release stage.
 - Disposable prototypes and `.reference/**` remain outside production workspace, dependency, build, test, package, release, and runtime boundaries.

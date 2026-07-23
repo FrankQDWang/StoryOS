@@ -9,8 +9,8 @@ A stable StoryOS principal identified by one durable `UserId`. The Foundation Va
 _Avoid_: Operating-system current user, global singleton, login session, pen name, account feature set
 
 **Client Session Binding**:
-The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, command kind, idempotency key and record, and canonical command digest; only an exact retry may resolve that same record with its consumed nonce, while a new key cannot reuse it. The Binding is never User identity, Author Intent, Capability, Approval, Acceptance, or a URL bearer credential.
-_Avoid_: Login session as User identity, client-asserted role, CORS as CSRF protection, URL access token, reusable command nonce
+The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, command kind, idempotency record, and canonical command digest; the Binding is an authenticated input to Author Command Admission.
+_Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
 **Project Author**:
 The one User who owns a Project and may exercise its author-only intents, settings, Acceptance, and other creative-authority commands. `Author` names this project-scoped role rather than a second durable person identity; shared ownership, collaborators, ownership transfer, and multi-author editing require a separate later contract.
@@ -31,9 +31,9 @@ _Avoid_: Canon (too narrow), accepted artifact, Agent memory
 **Discovery Writing**:
 The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
 
-**First Production Writing Loop**:
-The smallest author-visible Discovery Writing journey selected for initial production delivery: from a current passage in an existing Project, the author may directly edit, ask the adjacent Agent for bounded help, review its editable Proposal, and explicitly accept or reject it. It completes when the author's explicit, durable Applied Acceptance or Proposal Rejection is recorded; only an Applied Acceptance creates the resulting Authoritative Revision and Acceptance Receipt, while Proposal Rejection is non-destructive and leaves Authoritative State unchanged. Project setup, story outlining, configuration, Eval, Tools, Skills, research, and long-term memory are not prerequisites.
-_Avoid_: Chat-only demo, automatic rewrite, Agent-authored outline, setup wizard
+**AI-Independent Editor Baseline**:
+The first author-visible StoryOS release capability: from a new or controlled Project initialization, the author can organize volumes and chapters, write and revise manually, see save state, recover after reload or crash, navigate, search and replace, inspect basic writing statistics, use supported keyboard, clipboard, IME and undo behavior, sustain long sessions, and create a human-readable export without an available Agent or model.
+_Avoid_: Chat-only demo, AI-dependent editor, pre-seeded current-passage demo
 
 **Author Preference**:
 An explicit, future-facing, scope-bounded author-owned creative or working constraint within Authoritative State. When an unambiguous author instruction maps deterministically to its domain action, that instruction is its authorization; local or ambiguous feedback cannot create one and may only source an Inferred Preference.
@@ -172,15 +172,15 @@ The compact Project Scope-bound continuation of one settled command's idempotenc
 _Avoid_: Expired key reuse, response-cache entry, new command with old key, best-effort duplicate filter
 
 **Protocol Compatibility Profile**:
-The direction-aware N/N-1 wire-evolution rule under which command and control inputs are closed against unknown fields, duplicate names, discriminators, and control enums, while public Query, Artifact, and Event outputs may add ignorable fields. A new Event or value that changes authority, lifecycle, settlement, Approval, or security meaning requires a compatible projection or an explicit upgrade-required outcome before consumption; only presentation-safe unknowns may use a generic fallback and advance the cursor.
-_Avoid_: Ignore-all parsing, reject-all evolution, client-guessed safety semantics, silent control-enum fallback
+The pre-1.0 same-release contract that binds one deployed Web Client, Server, Worker, generated client, public schemas, Event catalog, and Protocol Limit Profile. A release mismatch produces `upgrade_required` before domain admission or cursor advancement, while stored historical facts retain their own schema identity and project through the active release.
+_Avoid_: Mixed-release runtime, ambient compatibility window, client-guessed safety semantics
 
 **External Contract Compatibility Decision**:
-The immutable Host result created only after one exact Project Scope-bound external-use binding exists, admitting or rejecting that binding against its global Registration and Adapter revision, protocol, schema or Tool digest, capability snapshot, wire mapping, exact Processing Destination Identity, Credential binding generation when applicable, and effect ceiling. It references but never creates, contains, or mutates the use binding; the binding never points forward to a Decision. Changing any binding field creates a new binding and then a new Decision, while changed observed protocol, schema, capability, or wire evidence that leaves the pinned binding and Registration/Adapter tuple unchanged creates only a new Decision. A global contract or Adapter observation contains no Project data, Credential Reference, actual account, or disclosure destination and cannot itself admit use. External versions receive no N/N-1 promise, handshake or semver grants no compatibility or authority, drift quarantines new use, and any widening of destination, disclosure, Credential binding, effect, or capability requires new authorization as applicable plus the corresponding new binding and Decision, while historical work remains bound to both original records.
+The immutable Host result created only after one exact Project Scope-bound external-use binding exists, admitting or rejecting that binding against its global Registration and Adapter revision, protocol, schema or Tool digest, capability snapshot, wire mapping, exact Processing Destination Identity, Credential binding generation when applicable, and effect ceiling. It references but never creates, contains, or mutates the use binding; the binding never points forward to a Decision. Changing any binding field creates a new binding and then a new Decision, while changed observed protocol, schema, capability, or wire evidence that leaves the pinned binding and Registration/Adapter tuple unchanged creates only a new Decision. A global contract or Adapter observation contains no Project data, Credential Reference, actual account, or disclosure destination and cannot itself admit use. Every external use pins one exact observed contract and Adapter mapping; drift quarantines new use, and any widening of destination, disclosure, Credential binding, effect, or capability requires new authorization as applicable plus the corresponding new binding and Decision, while historical work remains bound to both original records.
 _Avoid_: Semver-range trust, Provider alias compatibility, handshake as authorization, silent SDK upgrade, permanent external-version support
 
 **Protocol Limit Profile**:
-An immutable versioned contract fixing public validity ceilings and counting meaning for byte, item, depth, time, token, attempt, replay, expansion, rate, and concurrency at every public and external protocol crossing. Every numeric or semantic change creates a new Profile Revision; supported N/N-1 inputs cannot be silently narrowed under the same revision, and dynamic resource pressure may only produce temporary rate or concurrency admission. Each Receipt, Attempt, Snapshot, and limit outcome binds both the Profile Revision and the actual effective bounds frozen from exact policy, grant, destination, and counting-profile inputs, while authors receive no routine limit configuration burden.
+An immutable versioned contract fixing public validity ceilings and counting meaning for byte, item, depth, time, token, attempt, replay, expansion, rate, and concurrency at every public and external protocol crossing. Every numeric or semantic change creates a new Profile Revision activated with its matching StoryOS release, and dynamic resource pressure may only produce temporary rate or concurrency admission. Each Receipt, Attempt, Snapshot, and limit outcome binds both the Profile Revision and the actual effective bounds frozen from exact policy, grant, destination, and counting-profile inputs, while authors receive no routine limit configuration burden.
 _Avoid_: Scattered magic limit, client-requested expansion, same-revision narrowing, unversioned token counting, author-facing protocol tuning
 
 **Retention Profile**:
@@ -220,16 +220,28 @@ A deterministic, immediately visible change caused through the author's own edit
 _Avoid_: Author-triggered automation, silent bulk edit
 
 **Author Edit**:
-One complete normalized editor intent submitted with Author Intent for whole-command ownership classification by StoryOS Core. It produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries; raw editor transactions remain diagnostic evidence rather than the domain command.
+One complete normalized editor intent submitted with an Author Command Admission for whole-command ownership classification by StoryOS Core. It produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries; raw editor transactions remain diagnostic evidence rather than the domain command.
 _Avoid_: Client-selected write path, ProseMirror transaction as authority, partial mixed edit
 
 **Editor Verification Split**:
-The two non-substitutable deterministic gates for an Author Edit. Browser integration verifies that one physical author input, including a complete IME composition, normalizes to exactly one `ApplyAuthorEdit` without a client-selected authority path; Core state-machine, transaction, and recovery verification proves the resulting normalized command's whole-command classification, atomic durable settlement, and exact Receipt. Browser events are not the Core oracle, and a Core-only command fixture cannot prove client input cardinality.
-_Avoid_: UI-only transaction proof, server-only input proof, split mixed edit, raw editor event as command truth
+The two complementary deterministic gates for an Author Edit. Browser integration verifies complete IME and editor intent capture, local journal durability, pending projection, and recovery continuity; Core verification proves command ownership classification, atomic durable settlement, and the exact Receipt.
+_Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
-**Author Intent**:
-The immutable Host-attested evidence that one explicit author interaction authorized one exact author-owned Core command, including authoritative, Proposal, lifecycle, and undo decisions. It binds the author, project, and command input without becoming a reusable capability, and cannot be asserted by an Agent, Tool, MCP server, extension, or untrusted client.
-_Avoid_: Client-supplied actor, session role, Approval, reusable authorization token
+**Author Command Admission**:
+The immutable StoryOS record identified by `AuthorCommandAdmissionId` that binds one authenticated User, exact existing or Server-allocated prospective Project Scope, trusted Web Client session, applicable Editor Session and writer generation, explicit action class, canonical command digest, target, expected Heads, nonce, idempotency record, bounded lifetime, and exactly one typed terminal settlement. It admits one author-owned command for Core evaluation and is not reusable; an unsettled explicit command requires author reconfirmation after recovery.
+_Avoid_: Client-supplied actor, session role as authority, Approval, reusable authorization token
+
+**Editor Session**:
+One browser editing session for an exact User and Project Scope, identified by `EditorSessionId` and governed by the current Project writer generation. It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority.
+_Avoid_: Browser tab as authority, Project identity, server transaction
+
+**Local Edit Journal**:
+The Project Scope-bound IndexedDB record of ordered, unsettled author editor intents for one Editor Session and writer generation. It preserves reload and crash continuity while remaining a non-authoritative input to Author Command Admission and Core settlement.
+_Avoid_: Autosaved Authoritative State, server event log, ProseMirror history as truth
+
+**Pending Edit Projection**:
+The immediate author-facing editor view composed from one durable Server Snapshot plus the active Local Edit Journal. It exposes saving, saved, and needs-attention states without becoming an authoritative manuscript or Proposal Head.
+_Avoid_: Optimistic authority, hidden pending state, network acknowledgement as domain truth
 
 **Operational Record**:
 A durable record of execution, context, authorization, usage, validation, or a state transition, such as an AgentRun, RunStep, RunPlan, Context Assembly Manifest, ToolCall, Approval, Artifact Lifecycle Event, Domain Receipt, or Run Event. It can reference and produce Artifacts but does not inherit Artifact lifecycle or authority.
@@ -936,7 +948,7 @@ The non-secret, reproducible output of one deterministic gate, containing its sy
 _Avoid_: Passed-only log line, raw crash dump, unreproducible randomized failure, production telemetry record
 
 **Foundation Contract Walk**:
-A small synthetic end-to-end conformance path that crosses selected accepted StoryOS boundaries and compares its durable facts with the Deterministic Verification Oracle. A walk may cover editor input, Run and fake destination use, Proposal and Acceptance, replay, crash recovery, or adversarial denial, but it is not a realistic-product mega-test and does not choose the first production vertical slice, UI scope, or handoff criteria owned by the vertical-slice decision.
+A small synthetic end-to-end conformance path that crosses selected accepted StoryOS boundaries and compares its durable facts with the Deterministic Verification Oracle. A walk may cover editor input, Run and fake destination use, Proposal and Acceptance, replay, crash recovery, or adversarial denial, but it is not a realistic-product mega-test and does not choose the editor-first release stage, UI scope, or handoff criteria owned by the release baseline.
 _Avoid_: Product-slice selection, monolithic UI journey, isolated unit test as end-to-end proof, real Provider dependency
 
 **Fail-Closed Verification Gate**:
@@ -1268,8 +1280,12 @@ One durably identified Agent production attempt for a Proposal, owning a strictl
 _Avoid_: Network stream, resumable socket, mutable generator session
 
 **Proposal Pause Fence**:
-The immutable boundary that ends one Proposal Generation at an exact Proposal Revision and digest, admitted-through batch sequence, projection checkpoint, and author-edit cause. Later batches remain Run evidence but are permanently ineligible for Proposal or editor replay.
+The immutable boundary that ends one Proposal Generation at an exact Proposal Revision and digest, admitted-through batch sequence, projection checkpoint, and Editor Input Fence. Later batches remain Run evidence but are permanently ineligible for Proposal or editor replay.
 _Avoid_: Network cancellation, UI pause flag, queued late delta
+
+**Editor Input Fence**:
+The immutable automatic safety cause identified by `EditorInputFenceId` that binds the first completed author-input signal to one exact Editor Session, writer generation, local intent range, and active Proposal Generation before semantic command admission. It closes the Agent write gate but grants no author-command authority and receives no Author Action Sequence.
+_Avoid_: Author Command Admission, browser event as domain command, reusable write permission
 
 **Proposal State Axes**:
 The orthogonal generation (`generating | ready_partial | ready`), validation (`pending | valid | invalid | conflicted`), closure (`open | withdrawn | superseded`), and per-Operation resolution (`pending | applied | rejected`) facts of a Proposal. Completion, partial application, and Acceptance Eligibility are derived projections rather than additional states, while Retention State remains separate.
@@ -1300,7 +1316,7 @@ A non-authoritative Draft created when an author edit is atomically refused for 
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
-A non-authoritative Draft preserving a complete author-edit intent that appeared in an editor checkpoint but has no committed Domain Receipt after recovery. It requires an explicit author retry or discard and is never automatically applied to Authoritative State or a Proposal.
+A non-authoritative Draft preserving a complete author-edit intent from the Local Edit Journal or in-memory recovery boundary that has no committed Domain Receipt after reconciliation. It requires an explicit author retry or discard and is never automatically applied to Authoritative State or a Proposal.
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
@@ -1364,7 +1380,7 @@ An author redo of a successfully undone Acceptance is a new Acceptance attempt a
 _Avoid_: Redo Acceptance, Receipt replay, status rollback
 
 **Author Action Sequence**:
-The Project Scope-local continuous order assigned once to every successfully committed author-owned Core Transition, spanning authoritative changes, Proposal edits, resolutions, lifecycle decisions, and successful compensations. Automatic producer, validation, and input-safety transitions do not become author actions merely because they are visible or cite an Author Intent. The sequence binds the Transition's canonical Revision, Receipt, or Commit plus either a typed Forward disposition or a Compensation disposition naming the exact earlier action it settled; exact retries reuse it, while refused and no-effect attempts receive none.
+The Project Scope-local continuous order assigned once to every successfully committed author-owned Core Transition, spanning authoritative changes, Proposal edits, resolutions, lifecycle decisions, and successful compensations. Automatic producer, validation, and input-safety transitions do not become author actions merely because they are visible or causally follow an Author Command Admission. The sequence binds the Transition's canonical Revision, Receipt, or Commit plus either a typed Forward disposition or a Compensation disposition naming the exact earlier action it settled; exact retries reuse it, while refused and no-effect attempts receive none.
 _Avoid_: UUID order, wall-clock order, mutable action ledger, editor-history index
 
 **Author Undo Frontier**:
@@ -1376,7 +1392,7 @@ A single newest-first order over uncompensated Forward author-owned actions, reg
 _Avoid_: Independent undo stacks, editor-first undo, silent history skip
 
 **Author Undo**:
-An Author Intent-bound request to reverse the exact Author Undo Frontier through its registered typed Core handler and record one immutable routing Receipt. A successful compensation appends its own Author Action Sequence entry naming that source, but is never a later undo target. Author Undo never skips a Barrier, applies a generic inverse patch, depends on editor history as truth, or creates a durable generic redo.
+An explicit-editor-command Author Command Admission that requests reversal of the exact Author Undo Frontier through its registered typed Core handler and records one immutable routing Receipt. A successful compensation appends its own Author Action Sequence entry naming that source, but is never a later undo target. Author Undo never skips a Barrier, applies a generic inverse patch, depends on editor history as truth, or creates a durable generic redo.
 _Avoid_: Editor-only undo, arbitrary history rollback, universal inverse, redo stack
 
 **Reversal Proposal**:
@@ -1556,7 +1572,7 @@ The creation of a new Artifact from exact source Artifact Revisions while preser
 _Avoid_: Conversion, type mutation
 
 **Acceptance**:
-An Author Intent-bound action that applies a nonempty selection of pending Operations from an exact eligible Proposal Revision and current Validation Receipt through a StoryOS-owned domain handler. Domain Proposal selections are atomic, while Proposal Bundles obey their explicit atomic or ordered-independent policy.
+An explicit-editor-command Author Command Admission that applies a nonempty selection of pending Operations from an exact eligible Proposal Revision and current Validation Receipt through a StoryOS-owned domain handler. Domain Proposal selections are atomic, while Proposal Bundles obey their explicit atomic or ordered-independent policy.
 _Avoid_: Promotion, status flip, overwrite
 
 **Acceptance Attempt**:

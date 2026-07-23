@@ -12,6 +12,7 @@
 - Tool, MCP, and model boundary: [Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47), [ToolSpec, Capability, Tool Gateway, MCP, and Skill Semantics](https://github.com/FrankQDWang/StoryOS/issues/48), and [ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50)
 - Memory and research boundary: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md)
 - Storage and recovery boundary: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
+- Web editor boundary: [Web Editor Session, Synchronization, and Recovery Semantics](web-editor-session-synchronization-and-recovery-semantics.md)
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
 - Eval boundary: [Foundation Evidence for the Standalone Eval Surface](eval-evidence-foundation.md)
 - Repository and delivery boundary: [Modular-Monolith and Repository Governance Boundaries](modular-monolith-and-repository-governance-boundaries.md)
@@ -47,7 +48,7 @@ This specification does not select:
   performance default;
 - a real Provider, embedding service, model, Tool, MCP server, account, or
   deployment destination;
-- a production UI flow, first production vertical slice, or its acceptance
+- a production UI flow, editor-first release stage, or its acceptance
   scope; or
 - a new source of truth, test-only authority path, Provider assurance, or
   exception to Context Assembly, Proposal/Acceptance, Project Isolation, or
@@ -55,9 +56,9 @@ This specification does not select:
 
 The modular-monolith governance contract owns repository verification command
 mechanics, test framework choice, dependency direction, and CI wiring. The
-vertical-slice ticket owns which coherent product subset first ships and its
+editor-first baseline owns which coherent product subset first ships and its
 product acceptance criteria. This contract supplies neither a hidden product
-slice nor a way around those owners.
+slice nor a way around that owner.
 
 ## 2. Fixed verification architecture
 
@@ -200,7 +201,7 @@ conformance.
 | Fault-point family | Required cuts | Required recovered proof | Semantics owner |
 | --- | --- | --- | --- |
 | `core.transition` | before commit; after commit before acknowledgement | Before: no partial domain effect. After: all Revisions, Heads, Receipts, Events, sequences, and outbox intents are one settled transition; exact idempotent retry returns the same acknowledgement. | Manuscript/Proposal, Artifact, PostgreSQL, Protocol |
-| `editor.input` | before normalized command admission; after accepted input before client acknowledgement | One physical intent has at most one command; a lost acknowledgement cannot turn retry into a second edit. | Manuscript/Proposal, Protocol |
+| `editor.input` | before local journal durability; before and after Editor Input Fence and Proposal Pause Fence commit; before and after grouped command admission; after settlement before client acknowledgement or Project Activity | Every completed local intent has exact, non-overlapping coverage by one unsettled journal range until settlement or Draft recovery; an Agent batch cannot cross a committed input fence, and a lost acknowledgement, resync, or regrouping cannot lose or duplicate prose. | Web Editor Session, Author Command Admission, Manuscript/Proposal, Protocol, PostgreSQL |
 | `outbox.delivery` | before claim; after claim before consumer acknowledgement; duplicate delivery | Intent is not business settlement; consumer deduplicates and validates the current fence. | Run/Mailbox, PostgreSQL |
 | `external.dispatch` | before durable dispatch claim; after claim before/after bytes or response; reconciliation arrival | Before claim proves no external I/O or Disclosure Event. After claim remains `OutcomeUnknown` until ordinary immutable evidence settles it. | Context/Disclosure, Model Gateway, Tool/MCP, PostgreSQL, Protocol |
 | `lease.fence` | old lease expiry; recovery fence; late worker/result | Old, duplicate, cancelled, or superseded worker cannot settle, publish, consume authority, or create new effects. | Run/Subrun/Mailbox, PostgreSQL |
@@ -288,15 +289,15 @@ Service Profile retain their own accepted meanings and proofs.
 Every row is a required gate family for the matching implementation surface.
 The listed contracts own the semantics; this catalogue owns the deterministic
 proof, failure schedule, and evidence requirement. A surface not yet in a
-selected vertical slice is not implemented merely because this document names
-its eventual gate, and the vertical-slice decision alone selects when a
-coherent subset is first delivered.
+selected editor-first release stage is not implemented merely because this
+document names its eventual gate; the baseline alone selects when a coherent
+subset is first delivered.
 
 | Gate ID | Required proof and adversarial cases | Required evidence and passing disposition | Semantic owner |
 | --- | --- | --- | --- |
-| `DVG-01` Contract-source, generated-schema, and golden-wire consistency | Regeneration/diff gates for Rust contract source, OpenAPI, JSON Schema, TypeScript, catalogs, examples, N/N-1 projections, limit profiles, Application Wire Records, and SSE frames. Execute the protocol's canonical positive and all 20 adversarial fixture families, including closed inputs, duplicate names, unknown control values, schema/limit drift, archive path/profile, and compatibility fixtures. | Generated corpus digest, selected release/profile, safe positive/negative result, and exact drift classification. Any uncontrolled worktree drift, unsafe compatibility projection, or fixture mismatch is `failed`. | Protocol; repository governance owns command mechanics. |
-| `DVG-02` Request, Query, cursor, and scope isolation | Generate Session/Origin/Host/nonce/idempotency substitutions, wrong owner/Project/object/cursor/Snapshot/Capability/Approval/Credential references, stale/wrong replay cursors, and projection lag. Run direct non-owner runtime/RLS probes with missing, partial, stale, and cross-Scope transaction-local settings. Verify exact scope joins, non-oracular error classes, required canonical snapshots, exclusive resume, bounded at-least-once duplicate handling, and no cache/projection shortcut. | Multi-Scope trace, forced-RLS/runtime-role posture, public safe result, zero unauthorized effect/egress, and relevant Snapshot/cursor evidence. Expected refusal may pass only with Negative Evidence Closure. | Protocol; PostgreSQL; trust model. |
-| `DVG-03` Author edit and Proposal transaction | Browser integration proves one physical input/complete IME composition becomes one `ApplyAuthorEdit`; Core properties generate authoritative, Proposal, mixed, stale, concurrent, retry, crash, undo, and conflict edits. Generate proposal validation, selected operation, exact-head, dry-run, acceptance, no-effect, and post-commit-ack-loss traces. | Editor fixture plus Core oracle facts: whole-command outcome, current Heads, exact Revisions/Commit where applicable, Acceptance/Domain Receipt, Event/outbox intent, idempotent replay. A mixed edit must create only the refused draft. | Manuscript/Proposal; Artifact; Protocol; PostgreSQL. |
+| `DVG-01` Contract-source, generated-schema, and golden-wire consistency | Regeneration/diff gates for Rust contract source, OpenAPI, JSON Schema, TypeScript, catalogs, examples, the active same-release corpus, historical projections, limit profiles, Application Wire Records, and SSE frames. Execute the protocol's canonical positive and all adversarial fixture families, including closed inputs, duplicate names, unknown control values, schema/limit drift, archive path/profile, release mismatch, and cache-refresh fixtures. | Generated corpus digest, active release/profile, safe positive/negative result, and exact drift classification. Any uncontrolled worktree drift, mixed-release activation, unsafe historical projection, or fixture mismatch is `failed`. | Protocol; repository governance owns command mechanics. |
+| `DVG-02` Request, Query, cursor, and scope isolation | Generate Session/Origin/Host/nonce/idempotency substitutions, prospective-Project creation replay or substitution, wrong owner/Project/object/cursor/Snapshot/Capability/Approval/Credential references, stale Editor Session or writer generation, stale/wrong replay cursors, and projection lag. Run direct non-owner runtime/RLS probes with missing, partial, stale, and cross-Scope transaction-local settings. Verify exact scope joins, non-oracular error classes, required canonical snapshots, exclusive resume, bounded at-least-once duplicate handling, and no cache/projection shortcut. | Multi-Scope trace, forced-RLS/runtime-role posture, public safe result, zero unauthorized effect/egress, and relevant admission/Snapshot/cursor evidence. Expected refusal may pass only with Negative Evidence Closure. | Author Command Admission; Web Editor Session; Protocol; PostgreSQL; trust model. |
+| `DVG-03` Author edit, Web Editor Session, and Proposal transaction | Browser integration proves complete IME and editor-intent capture, journal-before-submission durability, immediate pending projection, bounded command grouping, writer-generation fencing, acknowledgement/Event convergence, resync, and recovery without loss or duplication. Core properties generate authoritative, Proposal, mixed, stale, concurrent, retry, crash, undo, and conflict edits. Crash schedules distinguish unexpired direct-edit resume from expired or explicit-command `requires_reconfirmation`. Generate Proposal validation, selected operation, exact-head, dry-run, Acceptance, no-effect, and post-commit-ack-loss traces. | Editor Session fixture plus Core oracle facts: complete settled-or-recoverable input, Author Command Admission, one terminal settlement, whole-command outcome, current Heads, exact Revisions/Commit where applicable, Acceptance/Domain Receipt, Event/outbox intent, idempotent replay, and journal collection only after convergence. A mixed edit must create only the complete refused Draft; Acceptance or Undo without a Receipt must never execute automatically. | Web Editor Session; Author Command Admission; Manuscript/Proposal; Artifact; Protocol; PostgreSQL. |
 | `DVG-04` Context Assembly, retrieval, Memory, and disclosure | For every source role, test all seven gates, eligibility-before-ranking, source revision/suppression/redaction changes, deterministic excerpt/summary boundaries, dynamic retrieval, cache/provider-continuity non-bypass, and re-entry of Tool/MCP/Provider/research output. Include hostile content in every source class and cross-Scope retrieval/index/cache rows. | Context and destination manifests, candidate/selection/refusal reasons, exact source revisions, safe egress capture, and zero use of ineligible content. Missing evidence or a widening is `failed`; absent proof of safe recovery is `unverified`. | Context/Disclosure; Memory/Research; trust model. |
 | `DVG-05` Model Gateway, Provider, Tool, MCP, and App mediation | Drive Contract-Faithful Fakes through registration/use-binding/identity/compatibility/admission, adapter wire mapping, Credential generation, cancellation, repair/retry/fallback, Tool effect ceilings, MCP discovery drift, App bridge spoof/replay/sequence/termination, SSRF/redirect/DNS/private-address cases, and hostile external output. Verify controlled and external destinations separately. | Pinned non-secret registration/binding/identity evidence, manifests, Attempt/fence/admission record, wire digest, scripted observation, validated/quarantined result, and disclosure evidence. Direct Core shortcut, hidden SDK retry, missing seven-gate reference, or drift reuse is `failed`. | Tool/MCP; Model Gateway; Context/Disclosure; Protocol; trust model. |
 | `DVG-06` Run, Subrun, Mailbox, and finalization state machines | Generate parent/child Run and Subrun traces with message duplicates, reordering, loss/restart, direct-child delivery, waits/holds, finalization intent, terminal result, seal, late message, parent recovery, and cancellation. Exercise stale lease/fence and resource/budget accounting schedules. | Run/Step/Subrun identities, directional high-watermarks, deduplication and Seal facts, Result/Outcome, terminal Events, delivery intent, and quarantine evidence. A terminal Run cannot reopen or claim success with unresolved uncertainty. | Persistent Run; Subrun/Mailbox; Retention; PostgreSQL. |
@@ -312,17 +313,20 @@ coherent subset is first delivered.
 
 These walks are conformance witnesses. They intentionally use synthetic prose
 and fake destinations; they are not a claim that the complete product UI or a
-specific first vertical slice exists.
+specific editor-first release stage exists.
 
 ### 6.1 Current-passage author edit and acceptance
 
-An author makes one complete editor input against a current passage. The
-browser emits exactly one normalized Author Edit; Core classifies it wholly.
-The walk covers authoritative edit, Proposal revision, mixed-target refusal,
-exact idempotent retry, stale Head conflict, Proposal validation, selected
-Acceptance, and a crash before/after the Core commit. It proves no direct
-Agent/Tool write, no partial mixed change, and exact recovery of Receipt and
-current Heads.
+An author makes complete editor input against a current passage. The browser
+durably journals the input, projects it immediately, and submits the bounded
+semantic command units selected by the production editor-session contract.
+The walk covers Author Command Admission, authoritative edit, Proposal
+revision, mixed-target refusal, exact idempotent retry, stale Head conflict,
+Proposal validation, selected Acceptance, writer takeover, resync, and crash
+cuts before and after journal, admission, Core commit, acknowledgement, and
+Project Activity. It proves no direct Agent/Tool write, no partial mixed
+change, no lost or duplicated input, and exact settlement or recovery of every
+journaled intent.
 
 ### 6.2 Agent request, external dispatch, and unknown recovery
 
@@ -461,12 +465,12 @@ deletion settlement into an apparently current Project.
 | Context, Model Gateway, Tool/MCP, Memory/Research | Contract-faithful fake, seven-gate, manifest, egress, drift, result-reentry, and unknown-outcome tests | Eligibility, disclosure, destination, routing, ToolSpec, capability, and source semantics |
 | Trust model | Negative-evidence corpus and scan/assertion obligations | Attack-path catalog, risk treatment, threat boundaries |
 | Eval | No-egress read-only and advisory-assessment gates | Eval product semantics, evidence model, later UX/datasets/metrics |
-| First production vertical slice | The complete menu of gates relevant to the slice it selects | Which coherent implementation ships first, concrete author journey, effective operating defaults, product acceptance and handoff scope |
+| AI-independent editor-first release baseline | The complete menu of gates relevant to each selected stage | Delivery order, concrete author journey, effective operating defaults, product acceptance, and handoff scope |
 
 No owner may cite this test catalogue to weaken another accepted contract. In
 particular, a passing fake result does not grant authority, a passing replay
 test does not revive payload, a passing Eval test does not make Eval a control
-plane, and a future vertical slice cannot call a missing required gate
+plane, and a future release stage cannot call a missing required gate
 "implemented later" while claiming the covered contract is complete.
 
 ## 11. Acceptance and change rules

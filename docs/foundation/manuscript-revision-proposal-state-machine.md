@@ -44,8 +44,9 @@ ProposalId                   ProposalRevisionId
 ProposalOperationId          ProposalGenerationId
 DomainReceiptId              ValidationReceiptId
 AcceptanceReceiptId          UndoAcceptanceReceiptId
-AuthorUndoReceiptId          AuthorIntentId
+AuthorUndoReceiptId          AuthorCommandAdmissionId
 EditorSessionId              ProjectionCheckpointId
+EditorInputFenceId
 DraftId                      IdempotencyKey
 DomainEventId
 ```
@@ -357,26 +358,25 @@ only when semantic identity is proven unchanged.
 
 Every schema-valid domain command has a version, exact Project Scope, typed
 cause, and idempotency key. Author commands additionally carry an immutable
-Host-attested `AuthorIntentId` bound to the owning User, Project, and exact command
-input. Agents, Tools, MCP servers, extensions, and untrusted clients cannot
-self-assert Author Intent.
+`AuthorCommandAdmissionId` governed by
+[Author Command Admission](author-command-admission.md).
 
 The trusted requester User and command Project Scope must match every input,
 Head, Revision, Receipt, checkpoint, idempotency record, and producer cause.
 Scope validation precedes lookup and mutation so an opaque ID cannot become a
 cross-project existence oracle.
 
-The v1 producer cause is exhaustive and Host-attested:
+The v1 producer cause is exhaustive:
 
 ```text
 ProducerCause =
-  AuthorIntent { author_intent_id }
+  AuthorCommandAdmission { author_command_admission_id }
+  | EditorInputFence { editor_input_fence_id }
   | AgentRunStep { run_step_id }
   | ToolCall { tool_call_id }
 ```
 
-MCP servers and extensions can produce through a ToolCall but cannot add a
-parallel producer identity or claim Author Intent.
+MCP servers and extensions produce through a ToolCall cause.
 
 Core computes the command digest; a caller-provided digest is never trusted.
 Within one Core Transition:
@@ -393,19 +393,21 @@ produce one immutable Receipt.
 
 ### 7.2 ApplyAuthorEdit
 
-All editor input uses one command; the client cannot choose an authoritative or
-Proposal write endpoint.
+Every submitted semantic editor unit uses this command kind; the client cannot
+choose an authoritative or Proposal write endpoint. The Web Editor Session
+contract owns how completed local intents are grouped into bounded submissions.
 
 ```text
 ApplyAuthorEdit {
   command_schema_version
   project_scope
   editor_session_id
+  writer_generation
   normalized_edit_intent
   selection_snapshot
   expected_authoritative_heads
   expected_proposal_heads
-  author_intent_id
+  author_command_admission_id
   idempotency_key
 }
 ```
@@ -421,8 +423,10 @@ RetypeBlock
 ```
 
 Typing, deletion, cut, paste, drop, and IME output normalize to
-`ReplaceSelection`; an empty replacement deletes. One browser input intent,
-including one complete IME composition, remains one command.
+`ReplaceSelection`; an empty replacement deletes. The Local Edit Journal
+preserves completed browser intents in order. The production editor-session
+prototype selects the bounded submission cadence that preserves complete IME
+input, author-visible undo, crash recovery, and the performance envelope.
 
 Core recomputes ownership from current Heads, Anchors, and reservations. Raw
 ProseMirror Steps and browser events may be retained as bounded diagnostics but
@@ -486,7 +490,10 @@ PauseProposalGeneration {
   expected_candidate_digest
   last_applied_stream_seq
   projection_checkpoint_id
-  author_intent_id
+  editor_input_fence_id
+  editor_session_id
+  writer_generation
+  local_intent_range
   idempotency_key
 }
 ```
@@ -497,10 +504,11 @@ Receipt/event. It never promotes provisional, unadmitted editor bytes into a
 Revision. Batches above the fence remain Run evidence and are permanently
 ineligible for Proposal or editor replay. `compositionend` never resumes
 generation. Explicit continuation creates a new Generation ID. This automatic
-safety Transition is linked to Author Intent but does not independently
-allocate an Author Action Sequence; the eventual successful `ApplyAuthorEdit`
-is the gesture's one Forward action. A crash after the fence but before that
-edit leaves the safety fact intact without inventing an author action.
+safety Transition uses an `EditorInputFence` cause and does not allocate an
+Author Action Sequence or consume an Author Command Admission. The eventual
+successful `ApplyAuthorEdit` has its own admission and is the gesture's one
+Forward action. A crash after the fence but before that edit leaves the safety
+fact intact without inventing an author action.
 
 ### 7.4 Validate and replan
 
@@ -545,7 +553,7 @@ AcceptProposal {
   validation_receipt_id
   selected_operation_ids
   expected_target_revisions
-  author_intent_id
+  author_command_admission_id
   idempotency_key
 }
 ```
@@ -558,7 +566,7 @@ duplicate-free, and canonically ordered by typed target identity.
 After current access validation, Acceptance executes in this order:
 
 1. Compute the canonical command digest and resolve idempotency.
-2. Validate exact Author Intent for a first attempt.
+2. Validate the exact Author Command Admission for a first attempt.
 3. Require the named Proposal Revision to be current, retained, `ready`, and
    `open`.
 4. Require the named Validation Receipt to be `valid` for that exact Revision
@@ -589,8 +597,8 @@ ContinueProposalGeneration
 Each carries exact Project Scope, exact Proposal ID and Revision, complete selected
 Operation IDs when applicable, current target expectations, a typed producer
 cause, and an idempotency key. Reject, author reopen, supersede, explicit
-completion, and continuation require Author Intent. Withdrawal accepts either
-Author Intent or the exact current producer cause. Rejection preserves a typed
+completion, and continuation require Author Command Admission. Withdrawal accepts
+either Author Command Admission or the exact current producer cause. Rejection preserves a typed
 author reason. Supersession binds the replacing Proposal and is terminal for
 the replaced Proposal. Reopen and continuation append a Revision or lifecycle
 event under the exhaustive state table and require validation again where
@@ -635,7 +643,7 @@ AcceptanceReceipt {
   project_scope
   command_digest
   idempotency_key
-  author_intent_id
+  author_command_admission_id
   proposal_id
   proposal_revision_id
   validation_receipt_id
@@ -686,7 +694,7 @@ UndoLatestAuthorAction {
   command_schema_version
   project_scope
   expected_author_undo_frontier_sequence
-  author_intent_id
+  author_command_admission_id
   idempotency_key
 }
 ```
@@ -719,7 +727,7 @@ UndoAcceptance {
   acceptance_receipt_id
   expected_current_target_revisions
   expected_current_proposal_head
-  author_intent_id
+  author_command_admission_id
   idempotency_key
 }
 ```
@@ -754,8 +762,8 @@ UndoAcceptanceResult =
 ```
 
 There is no durable generic redo and no `RedoAcceptance`. Reapplication is a
-new Author Edit, reopen, or Acceptance against current state with new Author
-Intent, idempotency key, Commit, and Receipts.
+new Author Edit, reopen, or Acceptance against current state with a new Author
+Command Admission, idempotency key, Commit, and Receipts.
 
 ## 11. Editor ownership and support boundary
 
@@ -771,9 +779,10 @@ and sequence checks provide correctness.
 
 Native undo/redo, UniqueID repair, paste, cut, drop, drag, deletion, and IME
 output all re-enter the same ownership classifier. Agent batches remain outside
-ProseMirror history. Editor content never changes authoritative or Proposal
-projections before the corresponding durable success is known; an optimistic
-unacknowledged display is disposable and recoverable only as a Draft.
+ProseMirror history. Immediate browser display, IndexedDB journal continuity,
+writer generation, acknowledgement/Event convergence, and resynchronization
+are owned by
+[Web Editor Session, Synchronization, and Recovery Semantics](web-editor-session-synchronization-and-recovery-semantics.md).
 
 ## 12. Recovery
 
@@ -787,18 +796,21 @@ Recovery trusts only validated durable Core facts:
 
 An editor projection checkpoint is a cache keyed by every exact Head, digest,
 and contract version used to build it. A full match permits reuse; any mismatch
-discards the whole checkpoint and rebuilds from Core. DOM, Selection,
-Decorations, NodeViews, plugin state, and ProseMirror history are not restored
-as domain truth.
+discards the whole checkpoint and rebuilds from Core. The Local Edit Journal
+separately owns unsettled browser intents. DOM, Selection, Decorations,
+NodeViews, plugin state, and ProseMirror history are not restored as domain
+truth.
 
 For a command idempotency key:
 
 - a Receipt proves the Transition committed and the UI replays that result;
 - with validated storage and no Receipt, the Transition did not commit;
-- an uncommitted author edit preserved in a complete checkpoint becomes a
-  non-authoritative Recovery Draft requiring explicit retry or discard;
+- an uncommitted direct author edit preserved in the Local Edit Journal may be
+  retried idempotently; stale or unprovable intent becomes a non-authoritative
+  Recovery Draft requiring explicit retry or discard;
 - Acceptance and Undo without a Receipt are shown as not committed and are
-  never automatically executed after restart.
+  settled as requiring reconfirmation and never automatically executed after
+  restart.
 
 For a streaming Proposal:
 
@@ -866,8 +878,9 @@ available.
 9. One Author Edit is classified and committed as a whole.
 10. Author input permanently fences the current Agent generation before the
     candidate is edited.
-11. Acceptance binds exact author intent, Proposal Revision, Validation Receipt,
-    pending selection, target Revisions, and idempotency input.
+11. Acceptance binds exact Author Command Admission, Proposal Revision,
+    Validation Receipt, pending selection, target Revisions, and idempotency
+    input.
 12. Direct Undo Acceptance requires exact resulting target Heads; otherwise it
     creates a Reversal Proposal or returns unavailable.
 13. Unified undo acts only on the exact Author Undo Frontier; Compensation

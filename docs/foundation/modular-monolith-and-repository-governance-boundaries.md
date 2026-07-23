@@ -17,7 +17,7 @@ prototype into a second source of creative authority.
 It is normative for later implementation planning. It does not scaffold a Rust
 workspace, Web Client, database, generator, CI pipeline, deployment, or test
 suite. It does not select a production process manager, cloud topology, broker,
-or first vertical slice.
+or editor-first release stage.
 
 The following inputs are settled and are not reopened here:
 
@@ -118,7 +118,7 @@ own every mechanism convenient to its current caller.
 | **Adapters** | Concrete PostgreSQL, Provider, Tool/MCP, secret-resolver, research-fetch, telemetry, filesystem, and browser mechanics for owner-defined ports | Business/domain policy, new authority paths, a public API, or independently selected Project Scope |
 | **Server** | Versioned HTTP/SSE transport, trusted requester/session admission, public DTO mapping, and invocation of application use cases | Direct-SQL domain mutation or background external work without durable admission |
 | **Worker** | Fenced claims of durable work, bounded asynchronous execution, external dispatch after admission, and settlement through application/Core | A private canonical store, direct client transport, unfenced settlement, or SDK-hidden retry truth |
-| **Web Client** | Editor, conversational Agent, Transcript, App rendering, Eval page, generated-client consumption, and local presentation state | Authority, scope attestation, acceptance validation, durable Run truth, generated-contract editing, or prototype/reference dependencies |
+| **Web Client** | Editor, conversational Agent, Transcript, App rendering, Eval page, generated-client consumption, trusted author-action capture, Editor Session, IndexedDB Local Edit Journal, and Pending Edit Projection | Core authority, Server-created Author Command Admission, final scope or settlement decisions, durable Run truth, generated-contract editing, or prototype/reference dependencies |
 
 `Core`, `Agent Kernel`, `Context`, `Tool/MCP`, `Model Gateway`, `Transcript`,
 and `Eval evidence` are architectural owners, not a demand for one crate per
@@ -157,8 +157,8 @@ moving files must not conceal a cross-zone merge.
 ```
 
 The exact first-slice set of crates, binaries, Web routes, migrations, and
-generated artifacts belongs to [Lock the First Production Vertical Slice and
-Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62). This
+generated artifacts belongs to [Define the AI-Independent Editor-First Release
+Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62). This
 topology is a governance target, not authorization to create empty crates now.
 
 ### 4.1 Zone-to-crate mapping rules
@@ -241,7 +241,7 @@ The following reverse dependencies are prohibited:
 
 | Surface | Canonical owner | Consumers | Compatibility and review boundary |
 | --- | --- | --- | --- |
-| **Public**: HTTP Commands/Queries, Project Activity SSE, Problem Details, public Artifacts, archive/import schema | Contracts crate | Web Client and future authorized external consumers | Versioned N/N-1 public contract; generated OpenAPI, JSON Schema, TypeScript client/types, fixtures, and catalog are checked in |
+| **Public**: HTTP Commands/Queries, Project Activity SSE, Problem Details, public Artifacts, archive/import schema | Contracts crate | Web Client and future authorized external consumers | One coordinated same-release public contract; generated OpenAPI, JSON Schema, TypeScript client/types, fixtures, and catalog are checked in |
 | **Core**: domain commands, Revisions, Receipts, expected-head checks, validation, and Acceptance results | Core | Application and owner zones | Closed domain semantics; public transport maps to it but cannot redefine it |
 | **Internal**: Worker intent, fence/lease, outbox, port calls, Adapter mapping, operational snapshots | Owning Kernel/zone plus Contracts when persisted or cross-process | Application, Worker, selected Adapter | Never exported in public OpenAPI or browser package; persisted/cross-process shapes have a versioned owner and migration review |
 | **External**: Provider, embedding, Tool, MCP, App protocol, secret resolver, research fetch, telemetry | Owning Gateway/Tooling/Transcript/Context zone and its Adapter | Selected external destination | Exact Registration/Adapter and Destination Identity binding; no external semver, SDK, or handshake grants StoryOS compatibility or authority |
@@ -273,8 +273,8 @@ is fixed here and in the accepted protocol contract.
 Every public or persisted contract change must name its canonical source owner,
 surface class, compatibility classification (`additive`, `breaking`,
 `representation-only`, or `security-sensitive`), affected generated artifacts,
-supported N/N-1 projection, and required storage/replay/historical-record or
-Adapter migration.
+coordinated release activation, and required storage/replay/historical-record
+or Adapter migration.
 
 The zone owner supplies domain meaning and migration intent. The contracts
 owner supplies schema/generation/compatibility classification. The PostgreSQL
@@ -410,9 +410,9 @@ receives these requirements:
 This ticket does not choose a test framework, fake-destination implementation,
 fault scheduler, CI provider, or exact command runner.
 
-### 8.3 Handoff to the first production slice
+### 8.3 Handoff to the first editor-first release stage
 
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
 receives a stable implementation envelope:
 
 - select the smallest coherent subset of zones/contracts that demonstrates

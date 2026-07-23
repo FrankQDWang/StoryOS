@@ -8,6 +8,7 @@
 - Context and disclosure boundary: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
 - Eval evidence boundary: [Foundation Evidence for the Standalone Eval Surface](eval-evidence-foundation.md)
+- Measurement input: [Representative Writing-Path Performance and Storage-Growth Envelope](https://github.com/FrankQDWang/StoryOS/issues/76)
 - Decisions: [ADR 0008](../adr/0008-allow-policy-governed-post-seal-operational-compaction.md), [ADR 0009](../adr/0009-require-snapshot-resync-at-replay-generation-boundaries.md), [ADR 0010](../adr/0010-require-lifecycle-proof-before-recovery-visibility.md), and [ADR 0011](../adr/0011-require-explicit-project-deletion-settlement.md)
 
 ## 1. Purpose and authority
@@ -83,8 +84,11 @@ An unknown or unclassified record role fails closed to the Operational Evidence
 Floor. One exact record may carry both a retained fact envelope and a separately
 classified payload; retaining the former does not falsely claim that the latter
 is still byte-available. Exact windows and capacities remain versioned policy
-values to be calibrated through [PER-002](../../EXPERIMENTAL-TUNING-REGISTER.md),
-not an implicit per-Run TTL.
+values. [Measure the Representative Writing-Path Performance and Storage-Growth Envelope](https://github.com/FrankQDWang/StoryOS/issues/76)
+owns representative measurements only; this specification adopts their
+accepted retention, checkpoint, compaction, and storage-growth consequences
+through [PER-002](../../EXPERIMENTAL-TUNING-REGISTER.md).
+Measurements alone never change a profile or authorize cleanup.
 
 ### 2.2 Retention Profile and non-retroactive decisions
 
