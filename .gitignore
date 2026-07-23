@@ -1,4 +1,5 @@
 .superpowers/
+.reference/
 
 # Local machine and environment files
 .DS_Store
