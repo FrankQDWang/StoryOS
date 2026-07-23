@@ -31,6 +31,10 @@ _Avoid_: Canon (too narrow), accepted artifact, Agent memory
 **Discovery Writing**:
 The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
 
+**First Production Writing Loop**:
+The smallest author-visible Discovery Writing journey selected for initial production delivery: from a current passage in an existing Project, the author may directly edit, ask the adjacent Agent for bounded help, review its editable Proposal, and explicitly accept or reject it. It completes only when Acceptance creates the resulting Authoritative Revision and Receipt; project setup, story outlining, configuration, Eval, Tools, Skills, research, and long-term memory are not prerequisites.
+_Avoid_: Chat-only demo, automatic rewrite, Agent-authored outline, setup wizard
+
 **Author Preference**:
 An explicit, future-facing, scope-bounded author-owned creative or working constraint within Authoritative State. When an unambiguous author instruction maps deterministically to its domain action, that instruction is its authorization; local or ambiguous feedback cannot create one and may only source an Inferred Preference.
 _Avoid_: Inferred Preference, hidden rule, globalized feedback, memory confirmation
