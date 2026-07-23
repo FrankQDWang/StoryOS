@@ -142,7 +142,9 @@ generic EAV/event bucket, or remove Project Scope from a project-bearing row.
 | Authoritative State | `authoritative_objects`, `authoritative_revisions`, `authoritative_payloads`, `authoritative_heads`, `authoritative_commits`, `authoritative_commit_members`, `author_action_entries` | immutable revisions and commits; normalized Heads are the current authority pointer |
 | Manuscript subtype | `manuscript_objects`, `manuscript_blocks`, `manuscript_revision_members`, `revision_anchors` | subtype rows reference Authoritative identities and exact revisions in the same Scope |
 | Artifact | `artifacts`, `artifact_revisions`, `artifact_payloads`, `artifact_heads`, `artifact_lifecycle_events`, `artifact_provenance_edges` | never shares a Head or payload identity with Authoritative State |
-| Proposal | `proposals`, `proposal_revisions`, `proposal_heads`, `proposal_operations`, `proposal_operation_resolutions`, `proposal_generations`, `proposal_stream_events`, `proposal_pause_fences`, `validation_receipts`, `acceptance_receipts`, `undo_receipts` | Proposal state axes and receipts remain immutable evidence; current Head is normalized separately |
+| Proposal | `proposals`, `proposal_revisions`, `proposal_heads`, `proposal_operations`, `proposal_operation_resolutions`, `proposal_generations`, `proposal_stream_events`, `editor_input_fences`, `proposal_pause_fences`, `validation_receipts`, `acceptance_receipts`, `undo_receipts` | Editor Input Fence identity and exact session/generation/local-intent binding precede the associated immutable Proposal Pause Fence; Proposal state axes and receipts remain immutable evidence; current Head is normalized separately |
+| Author command admission | `author_command_admissions`, `author_command_admission_settlements` | immutable User, exact existing or Server-allocated prospective Project Scope, trusted-client and Editor Session, writer generation, action class, command digest, target, one-use nonce/idempotency, lifetime, and one typed terminal settlement |
+| Web editor coordination | `editor_sessions`, `project_writer_generations` | one current Project writer generation; stale generations are fenced; the IndexedDB Local Edit Journal remains non-authoritative client continuity data |
 | Domain command evidence | `domain_receipts`, `domain_events`, `command_idempotency`, `scope_counters`, `aggregate_counters` | one committed outcome per command key and transactional committed-domain order |
 | Agent execution | `agent_runs`, `subruns`, `subrun_joins`, `run_grant_revisions`, `subrun_capability_grants`, `run_plans`, `run_steps`, `run_lanes`, `run_events`, `run_mailbox_messages`, `run_mailbox_deliveries`, `run_waits`, `wait_resolutions`, `run_holds`, `run_wakeups`, `run_leases`, `run_execution_attempts`, `run_budget_accounts`, `run_budget_reservations`, `usage_records` | normalized live state is backed by immutable events and receipts; mailbox delivery is durable and leases and budget claims are fenced |
 | Transcript and approval | `transcript_items`, `approval_waits`, `approval_decisions`, `steering_inputs`, `run_checkpoints` | Transcript items and decisions are canonical Operational Records; checkpoints are disposable projections |
@@ -227,6 +229,16 @@ At minimum, constraints enforce:
 - one immutable Revision identity and one payload binding per Revision;
 - one committed domain sequence value per Project Scope and sequence kind;
 - one command outcome per `(scope, command_kind, idempotency_key)`;
+- one Author Command Admission per author-owned idempotency record and one
+  terminal settlement per admission;
+- one-use anti-forgery nonce binding per Client Session generation, exact
+  existing or prospective Scope, route, command kind, digest, and idempotency
+  record;
+- one current writer generation per Project Scope and exact generation binding
+  on every editor-bound admission;
+- one Editor Input Fence per scoped Editor Session, writer generation, local
+  intent range, and active Proposal Generation, with at most one associated
+  Proposal Pause Fence;
 - one immutable attempt sequence per Run lane, ToolCall, Model Invocation, and
   Destination operation as required by their owning semantics;
 - one active lease generation per fenced resource;
@@ -314,12 +326,32 @@ exact Receipt or result reference, and committed time. Its unique composite key
 arbitrates concurrent first attempts.
 
 - same key, kind, scope, and digest returns the immutable original outcome;
-- same key with a different digest, kind, or scope is a typed misuse and
-  changes nothing;
-- a crash before commit leaves neither domain effect nor outcome;
-- a crash after commit is recovered from the outcome without re-execution;
+- same scope and kind with a different digest is a typed misuse and changes
+  nothing;
+- the same opaque key value in another Scope or command kind addresses an
+  independent composite namespace and neither locates nor conflicts with this
+  record;
+- a crash before the admission transaction commits leaves no admission, nonce
+  consumption, domain effect, or outcome;
+- a crash after terminal Core settlement is recovered from the outcome without
+  re-execution;
 - idempotency never suppresses a new physical external retry, which receives a
   new attempt identity and disclosure evidence.
+
+For an author-owned command, the admission transaction atomically claims the
+pre-domain idempotency record, consumes its one-use nonce, and inserts the
+immutable `author_command_admission`. The Core transaction atomically writes
+the typed Receipt, command outcome, Project Activity intent, and the admission's
+terminal Receipt settlement.
+
+A crash after admission but before Core settlement leaves one inspectable
+pending admission. Recovery first queries the idempotency and Receipt facts.
+If no Receipt exists, only an unexpired `direct_editor_action` may resume the
+exact admitted command automatically. An expired admission,
+`explicit_editor_command`, or
+`explicit_project_command` receives a terminal `requires_reconfirmation`
+settlement; a later author confirmation uses a new idempotency record, nonce,
+and admission.
 
 ### 5.5 Leases and fencing
 
@@ -518,7 +550,7 @@ does not resurrect purged payload or pretend a known gap is complete.
 ### 9.1 Migration ledger and runner
 
 `schema_migrations` records a monotonic schema version, immutable migration ID,
-checksum, required application compatibility interval, runner version, start
+checksum, required StoryOS release identity, runner version, start
 and finish evidence, and final status. `migration_phases` records each
 transactional or nontransactional phase and its verified postcondition. The
 migrator acquires one database-level advisory lock only to exclude another
@@ -531,31 +563,25 @@ backfill is scoped, bounded, idempotent, restartable, and followed by constraint
 validation. Migration code never disables Project constraints to make runtime
 writes succeed.
 
-### 9.2 Expand, migrate, switch, contract
+### 9.2 Prepare, migrate, activate, verify
 
-Breaking storage changes use these phases:
+Every storage release uses an exclusive controlled activation:
 
-1. expand with additive nullable structures or `NOT VALID` constraints while
-   enforcing the new rule for new writes where PostgreSQL permits;
-2. backfill in bounded resumable batches with scope and digest checks;
-3. validate constraints, indexes, and canonical equivalence;
-4. switch readers and writers only after the declared binary and schema
-   compatibility gates pass;
-5. contract obsolete structures in a later release after no supported binary
-   reads or writes them and a recovery point exists.
+1. stop new author and Worker writes and settle or fence in-flight work;
+2. create and verify the required Recovery Copy;
+3. apply additive structures and bounded, resumable, Scope-checked backfills;
+4. validate constraints, indexes, digests, canonical equivalence, and restore
+   preconditions;
+5. activate the one matching Server, Worker, Web Client, generated contract,
+   and schema release;
+6. run post-activation contract and author-journey verification; and
+7. contract obsolete structures only after the recovery point and verification
+   evidence are durable.
 
-The declared rolling compatibility window is current release `N` and immediate
-predecessor `N-1` only, and only during an upgrade. A binary declares minimum
-read schema, minimum write schema, and maximum understood schema. Startup and
-write admission fail when the database lies outside that interval. The local
-Foundation deployment may use an exclusive maintenance window and run only
-`N`, but it follows the same phased schema contract so cloud deployment does
-not require a different data model.
-
-Rollback within the window means returning to a compatible binary and schema
-phase. Once new incompatible writes or contract DDL occur, recovery uses a
-verified backup/PITR path or a forward repair; destructive down-migrations are
-not assumed safe.
+Runtime startup and write admission require the exact active schema release.
+Recovery uses the verified Recovery Copy, PITR, or a forward repair. Migration
+history, historical payload schema identities, Receipts, Events, and archive
+profiles remain interpretable without running an older application binary.
 
 ## 10. Backup, restore, export, and deployment migration
 
@@ -653,8 +679,10 @@ covers at least:
    RLS, transaction-local scope, and no pooled-scope leakage;
 3. every Core and Run transition crash cut exposes either the complete Receipt,
    sequence, Heads, events, invalidations, and outbox intent or none of them;
-4. concurrent identical command retries produce one immutable outcome, while a
-   changed digest or Scope is refused;
+4. concurrent identical retries in one composite namespace produce one
+   immutable outcome; a changed digest in that namespace and an unauthorized
+   cross-Scope substitution are refused, while an independently authorized
+   command in another Scope uses its own namespace;
 5. rolled-back and conflicting transitions consume no committed-domain order,
    and counter overflow fails closed;
 6. stale lease generations cannot settle work, charge budget, append output,
@@ -677,7 +705,7 @@ covers at least:
     ranking, without treating refreshed embedding bytes as canonical;
 13. a migration survives a crash in every transactional and nontransactional
     phase, detects checksum drift and invalid indexes, validates backfills, and
-    enforces the `N`/`N-1` window;
+    enforces exact active StoryOS release identity;
 14. physical base backup plus WAL restores selected crash points with zero
     acknowledged loss for ordinary crashes and proves the declared disaster
     RPO and RTO in an isolated environment;
@@ -718,8 +746,8 @@ covers at least:
 11. Lifecycle changes invalidate future use without rewriting historical
     evidence; retention purge preserves required Tombstones and provenance
     gaps.
-12. Migration compatibility is declared and verified; schema drift and partial
-    phase completion block startup or writes.
+12. Migration release identity is declared and verified; schema drift and
+    partial phase completion block startup or writes.
 13. Backup success means a verified restore, and Project import means exact
     restoration without merge, remap, overwrite, or ownership transfer.
 14. Local and cloud deployments preserve the same Project Isolation and
@@ -730,5 +758,6 @@ values while preserving every key, scope, digest, and compatibility field in
 this contract. The deterministic verification ticket owns executable crash,
 concurrency, isolation, migration, export, and recovery harnesses. The
 retention ticket owns durations and final compaction policy without weakening
-historical evidence or immediate invalidation. The first production slice owns
-implementation only after these proof gates are represented in its plan.
+historical evidence or immediate invalidation. The first editor-first
+implementation stage begins only after these proof gates are represented in
+its issue.

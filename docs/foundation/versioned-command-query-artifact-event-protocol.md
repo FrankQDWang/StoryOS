@@ -68,7 +68,7 @@ This ticket does not own:
 - retention duration, compaction, archival, tombstone payload policy, backup
   retention, or the materialization policy for Snapshots;
 - executable verification suites, Eval evidence requirements, or the first
-  production vertical slice.
+  editor-first release stage.
 
 ## 3. Protocol surface inventory
 
@@ -77,11 +77,11 @@ are composed into surface-specific contracts.
 
 | Surface | Stability owner | Contract shape | Must not contain |
 | --- | --- | --- | --- |
-| Client to StoryOS Server | public API N/N-1 | resource-specific HTTP Commands and Queries, Project Activity SSE, RFC 9457 Problem Details | database rows, lease claim tokens, credentials, raw Provider messages |
+| Client to StoryOS Server | one active same-release public API | resource-specific HTTP Commands and Queries, Project Activity SSE, RFC 9457 Problem Details | database rows, lease claim tokens, credentials, raw Provider messages |
 | StoryOS Server to Core | Core contract revision | typed domain commands, exact preconditions, trusted Request Context, typed Receipts | cookies, Origin strings as authority, public error prose |
 | Core to Worker | internal contract revision | immutable work intent, Attempt identity, current fence generation, payload references, budgets | reusable author authority, mutable latest contract, raw secret |
 | Worker to Adapter | exact Adapter contract revision | semantic request plus wire projection and destination admission references | independent Project selection, SDK retry ownership, hidden fallback |
-| Tool/MCP/Provider result to Host | exact Registration and Adapter revision | untrusted bounded result/evidence mapped to a typed Attempt | Author Intent, Acceptance, automatic instruction authority |
+| Tool/MCP/Provider result to Host | exact Registration and Adapter revision | untrusted bounded result/evidence mapped to a typed Attempt | Author Command Admission, Acceptance, automatic instruction authority |
 | MCP App View to Host bridge | MCP Apps profile plus StoryOS bridge revision | JSON-RPC transport inside an Instance-bound StoryOS bridge envelope | ambient Project context, credential, originating Run authority, direct Tool client |
 | Project archive import/export | archive profile revision | self-describing manifest plus allowlisted entries and digests | SQL dump, executable entry, Credential value, new ownership claim |
 
@@ -129,7 +129,7 @@ AuthorUndoReceiptId            ToolCallId
 DestinationAttemptAdmissionDecisionId
 AgentRunId                     RunStepId
 ExecutionAttemptId             DestinationAttemptId
-CorrelationId                  AuthorIntentId
+CorrelationId                  AuthorCommandAdmissionId
 ApprovalId                     CapabilityGrantId
 AppViewInstanceId              AppActionRequestId
 CredentialReferenceId          RegistrationId
@@ -168,8 +168,8 @@ ReceiptRef =
 
 This union is extensible only through the Rust contracts source graph: the
 contract that owns a new Receipt identity contributes a new typed variant and
-the generator emits a new payload/Event schema plus required N/N-1 projection
-or `upgrade_required` behavior. There is no opaque catch-all, stringly typed
+the generator emits a new payload/Event schema plus required historical
+projection or `upgrade_required` behavior. There is no opaque catch-all, stringly typed
 ID, or fallback to `DomainReceiptId` for an unknown Receipt kind. `Committed`,
 idempotency replay, Queries, and `ProjectActivityEvent.receipt_ref` use this
 same generated union for their selected schema release.
@@ -255,7 +255,8 @@ Records.
 The Server owns an opaque Client Session Binding created either by trusted
 local bootstrap or a future identity flow. It binds one server-derived User,
 allowed first-party Origin, allowed Host, session generation, issued and expiry
-times, and a browser-held opaque session handle.
+times, exact Web Client contract revision, exact security-policy revision, and
+a browser-held opaque session handle.
 
 The browser handle is carried in an `HttpOnly`, `SameSite=Strict` cookie;
 controlled-cloud transport additionally requires TLS and `Secure`. The local
@@ -268,12 +269,19 @@ Every request:
 2. validates the exact allowed Origin when a browser Origin is expected;
 3. resolves the Client Session Binding and its current generation;
 4. derives the requester User;
-5. resolves and validates the Project Scope;
+5. resolves and validates the existing Project Scope, or follows the sole
+   prospective-Scope flow for `CreateProject`;
 6. applies method, content-type, size, and schema gates;
 7. performs operation-specific authorization.
 
 CORS is deny-by-default and permits credentials only for the exact first-party
 Origin. CORS is not anti-forgery or authorization.
+
+`GET /api/v1/protocol` is the project-free public contract query.
+`CreateProject` is the only state-changing exception to an existing Project
+row: its challenge allocates one prospective `ProjectId` under the
+authenticated User and idempotency record, after which every check and durable
+fact binds that exact prospective `ProjectScope`.
 
 ### 5.2 State-changing requests
 
@@ -282,12 +290,28 @@ Origin, current Client Session Binding generation, non-simple content type,
 and the command-bound anti-forgery challenge below. No one input substitutes
 for the others, and CORS remains only a browser response-sharing policy.
 
-The first-party client obtains an anti-forgery challenge through:
+The first-party client obtains an anti-forgery challenge through one of:
 
 ```text
+POST /api/v1/anti-forgery-challenges
+
+CreateProjectChallengeRequest {
+  command_schema
+  create_project_input
+  idempotency_key
+}
+
+CreateProjectChallenge {
+  prospective_project_id: ProjectId
+  canonical_command_digest
+  nonce
+  expires_at
+  limit_profile_revision
+}
+
 POST /api/v1/projects/{project_id}/anti-forgery-challenges
 
-AntiForgeryChallengeRequest {
+ProjectCommandChallengeRequest {
   method
   route_template
   command_schema
@@ -295,22 +319,30 @@ AntiForgeryChallengeRequest {
   idempotency_key
 }
 
-AntiForgeryChallenge {
+ProjectCommandChallenge {
   nonce
   expires_at
   limit_profile_revision
 }
 ```
 
-This preflight validates exact Host, first-party Origin, current Client Session
-generation, resolved Project Scope, non-simple content type, closed schema,
-digest syntax, and admission rate. It resolves one pre-domain idempotency record
-under the exact arbitration tuple from section 7.3 and binds the challenge to
-that record identity, its `idempotency_key`, and its canonical command digest.
-It creates no Command, Receipt, domain Attempt, or authority and exposes no
-target-object existence. The returned nonce is sent only in the command header,
-never a URL or log. The client performs this automatically; it is not an author
-setting or confirmation step.
+The project-free endpoint admits only the closed `CreateProject` command
+schema. It allocates one prospective `ProjectId`, computes the canonical
+command digest from that ID plus the closed create input, and returns both; the
+later command includes and must reproduce them exactly. Every other command
+uses the project-scoped endpoint and an existing Project row.
+
+The preflight validates exact Host, first-party Origin, current Client Session
+generation, Web Client contract revision, security-policy revision, exact
+existing or prospective Project Scope, non-simple content type, closed schema,
+digest syntax, and admission rate. It resolves one pre-domain idempotency
+record under the exact arbitration tuple from section 7.3 and binds the
+challenge to that record identity, its `idempotency_key`, canonical command
+digest, client contract, and security policy. It creates no Command, Receipt,
+domain Attempt, or authority and exposes no target-object existence. The
+returned nonce is sent only in the command header, never a URL or log. The
+client performs this automatically; it is not an author setting or
+confirmation step.
 
 Every state-changing request:
 
@@ -321,8 +353,13 @@ Every state-changing request:
   Client Session Binding generation, Project Scope, method, route template,
   command kind, `idempotency_key`, canonical command digest, and exact
   pre-domain idempotency record;
-- validates any required Author Intent, Approval, Acceptance, Capability, and
-  expected Revision independently.
+- for editor-bound commands, carries and validates the exact
+  `editor_session_id` and current or expected Project writer generation;
+- validates the command's author action class, trusted client-contract and
+  security-policy identities, Approval, Acceptance, Capability, and expected
+  Revision as applicable;
+- creates one durable Author Command Admission before invoking an author-owned
+  Core command.
 
 Nonce consumption is recorded atomically against that same idempotency record.
 The anti-forgery nonce grants no reusable authority: the same digest under a
@@ -330,8 +367,8 @@ new `idempotency_key` is a different record and cannot reuse the nonce. An exact
 transport retry may present an already consumed nonce only to resolve the same
 record, key, and digest to its in-progress or immutable prior result; it cannot
 start another admission. Another method, target, body, scope, command kind, key,
-or record conflicts. Author Intent remains Host-attested evidence for the exact
-author gesture and is never created by accepting a cookie or nonce.
+or record conflicts. A cookie or nonce is one validated input to the Server-created
+Author Command Admission.
 
 ### 5.3 Reads and SSE
 
@@ -349,7 +386,7 @@ envelope_version: 1
 problem_profile: storyos.problem.v1
 activity_profile: storyos.project-activity.v1
 limit_profile: storyos.foundation.absolute.v1
-compatibility_profile: storyos.public.n-n-minus-1.v1
+compatibility_profile: storyos.public.same-release.v1
 ```
 
 Public HTTP routes are rooted at `/api/v1`. API-major changes are breaking and
@@ -358,9 +395,9 @@ because they remain within the `u32` range. Payload and Event schemas have
 independent identifiers such as `storyos.command.accept-proposal.v1` or
 `storyos.event.proposal-conflict-detected.v1`.
 
-The Server declares its current public release `N`, supported previous release
-`N-1`, supported API majors, public envelope profiles, payload schemas,
-activity profiles, and supported Protocol Limit Profile revisions through:
+The Server declares its one active public release, API major, public envelope
+profiles, payload schemas, activity profile, and Protocol Limit Profile
+revision through:
 
 ```text
 GET /api/v1/protocol
@@ -371,16 +408,32 @@ Provider, or Capability access.
 
 ## 7. Command protocol
 
-### 7.1 Resource-specific Commands
+### 7.1 Canonical Release 1 command routes
 
 Public Commands use resource-specific routes and schemas. StoryOS does not
-accept a generic `{ command_type, payload }` mutation endpoint. Representative
-families are:
+accept a generic `{ command_type, payload }` mutation endpoint. The complete
+Release 1 public command inventory is:
 
 ```text
+POST /api/v1/projects
+PATCH /api/v1/projects/{project_id}
+PUT /api/v1/projects/{project_id}/archival
+DELETE /api/v1/projects/{project_id}
+POST /api/v1/projects/{project_id}/editor-sessions
+POST /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers
+POST /api/v1/projects/{project_id}/volumes
+PATCH /api/v1/projects/{project_id}/volumes/{volume_id}
+DELETE /api/v1/projects/{project_id}/volumes/{volume_id}
+POST /api/v1/projects/{project_id}/volumes/{volume_id}/chapters
+PATCH /api/v1/projects/{project_id}/chapters/{chapter_id}
+DELETE /api/v1/projects/{project_id}/chapters/{chapter_id}
 POST /api/v1/projects/{project_id}/manuscript/author-edits
+POST /api/v1/projects/{project_id}/manuscript/replacement-proposals
 POST /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances
 POST /api/v1/projects/{project_id}/proposals/{proposal_id}/rejections
+POST /api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals
+POST /api/v1/projects/{project_id}/proposals/{proposal_id}/replans
+POST /api/v1/projects/{project_id}/author-actions/undo
 POST /api/v1/projects/{project_id}/agent-runs
 POST /api/v1/projects/{project_id}/agent-runs/{run_id}/pause
 POST /api/v1/projects/{project_id}/agent-runs/{run_id}/resume
@@ -392,9 +445,10 @@ POST /api/v1/projects/{project_id}/imports
 POST /api/v1/projects/{project_id}/exports
 ```
 
-Core, Tool, Model, Subrun, Memory, Skill, App, and disclosure domains retain
-their own exact command families. A new family is a contract addition and must
-name its authority and transaction owner.
+No other Release 1 public mutation route exists. Tool, MCP, Skill, Memory,
+Subrun, Eval, and App execution are not public Release 1 surfaces. A later
+route is a protocol-contract addition and must name its authority and
+transaction owner before generation.
 
 ### 7.2 Shared command metadata
 
@@ -404,21 +458,41 @@ Every public command body composes, rather than wraps, this metadata:
 CommandMeta {
   command_schema: string
   expected: command-specific closed preconditions
-  author_intent_id: AuthorIntentId | null
+  author_action_class: AuthorCommandActionClass | null
+  editor_session_id: EditorSessionId | null
+  writer_generation: uint64 | null
+  client_contract_revision: ClientContractRevision
+  security_policy_revision: SecurityPolicyRevision
   correlation_id: CorrelationId
 }
 ```
+
+The Editor Session fields are both present or both absent. A normal editor
+command must name the active generation; takeover names the observed generation
+it intends to fence and returns the new one. A stale generation cannot create
+an Author Command Admission.
+
+The client-contract and security-policy revisions are closed equality claims
+from the deployed application assets. The Server derives their accepted values
+from the Client Session Binding; client fields never select or downgrade them.
+
+After public admission, the internal Core command metadata adds the immutable
+`author_command_admission_id: AuthorCommandAdmissionId` for an author-owned
+command. Agent, Tool, Worker, and recovery commands carry their own closed
+producer cause instead.
 
 The route and body determine the command kind. The Server assigns `CommandId`
 on the first committed admission. The `Idempotency-Key` header is a UUIDv7
 newtype generated before first submission. The canonical command digest covers:
 
 - API major, route template, method, command schema, and command kind;
-- resolved Project Scope;
+- resolved existing or prospective Project Scope;
 - all target identities and expected Revisions/Heads;
 - the exact typed body after closed-schema validation;
-- Author Intent, Approval, and exact typed Receipt identities where applicable,
-  including Validation, Acceptance, Undo Acceptance, and Author Undo Receipts.
+- author action class, Editor Session and writer generation, Web Client
+  contract revision, security-policy revision, Approval, and exact typed
+  Receipt identities where applicable, including Validation, Acceptance, Undo
+  Acceptance, and Author Undo Receipts.
 
 It excludes session cookies, anti-forgery material, trace headers, audit time,
 and transport framing.
@@ -432,8 +506,8 @@ The idempotency arbitration key is:
 ```
 
 Its record stores the command digest/profile, Command ID, admission state,
-immutable acknowledgement, exact typed `ReceiptRef` or asynchronous result
-reference, and commit time.
+immutable acknowledgement, exact typed `ReceiptRef`, asynchronous result
+reference, or reconfirmation disposition, and commit time.
 
 - Same scope, kind, key, and digest returns the original acknowledgement and
   references byte-for-byte under the same negotiated representation.
@@ -447,7 +521,10 @@ reference, and commit time.
   if the first transaction has not committed, it returns
   `command_in_progress` without starting a second attempt.
 - A crash before the admission transaction commits leaves no effect or
-  acknowledgement. A crash after commit resolves from the immutable record.
+  acknowledgement. After an author-command admission commits, recovery first
+  resolves an existing Receipt. With no Receipt, an exact
+  `direct_editor_action` may resume automatically; an explicit editor or
+  project command settles as `requires_reconfirmation` without Core execution.
 - A physical external resend always creates another Attempt and never reuses
   an earlier Destination Attempt merely because the logical command is the
   same.
@@ -476,7 +553,7 @@ precondition.
 
 ### 7.5 Command Acknowledgement
 
-Every successful submission produces exactly one of:
+Every admitted submission or recovered admission produces exactly one of:
 
 ```text
 CommandAcknowledgement =
@@ -501,6 +578,17 @@ CommandAcknowledgement =
     settlement_query
     admitted_activity_position
     accepted_at
+    limit_profile_revision
+  }
+  | RequiresReconfirmation {
+    acknowledgement_kind: "requires_reconfirmation"
+    envelope_version
+    command_id
+    project_scope
+    correlation_id
+    author_command_admission_id
+    recovery_draft_ref: DraftId | null
+    recorded_at
     limit_profile_revision
   }
 ```
@@ -534,6 +622,12 @@ succeed, fail, cancel, or remain OutcomeUnknown. Settlement is observed through
 the named Canonical Query and Project Activity Stream, never by holding the
 HTTP response open or treating process state as truth.
 
+`RequiresReconfirmation` is the immutable recovery acknowledgement for an
+admitted explicit command that has no Core Receipt, or for an expired pending
+direct edit. It creates no Core effect and carries no `ReceiptRef`. Exact retry
+returns the same acknowledgement; only a newly confirmed command with a new
+idempotency key, nonce, and Author Command Admission may proceed.
+
 An operation that can settle entirely in its owning short transaction uses
 `Committed`; it is not arbitrarily downgraded to `Accepted` after a timeout.
 Long work is modeled as an asynchronous operation before admission.
@@ -552,23 +646,33 @@ domain result.
 
 ## 8. Query protocol
 
-### 8.1 Resource-specific Queries
+### 8.1 Canonical Release 1 query routes
 
 Queries use resource-specific GET or bounded POST-search routes. A POST Query
 is safe by contract, creates no domain effect, and never shares an idempotency
-namespace with Commands. Representative families are:
+namespace with Commands. The complete Release 1 public query inventory is:
 
 ```text
-GET  /api/v1/projects/{project_id}/manuscript/...
+GET  /api/v1/projects
+GET  /api/v1/projects/{project_id}
+GET  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}
+GET  /api/v1/projects/{project_id}/manuscript/tree
+GET  /api/v1/projects/{project_id}/chapters/{chapter_id}
+GET  /api/v1/projects/{project_id}/manuscript/statistics
 GET  /api/v1/projects/{project_id}/proposals/{proposal_id}
 GET  /api/v1/projects/{project_id}/artifacts/{artifact_id}
 GET  /api/v1/projects/{project_id}/agent-runs/{run_id}
 GET  /api/v1/projects/{project_id}/commands/{command_id}
 GET  /api/v1/projects/{project_id}/receipts/{receipt_id}
 GET  /api/v1/projects/{project_id}/snapshots/{snapshot_id}
+POST /api/v1/projects/{project_id}/queries/manuscript-search
 POST /api/v1/projects/{project_id}/queries/retrieval
 POST /api/v1/projects/{project_id}/queries/history
 ```
+
+`GET /api/v1/protocol`, both anti-forgery challenge routes in section 5.2, and
+the Project Activity route in section 10.3 complete the public route catalog.
+No second Release 1 route inventory is maintained by a product-slice document.
 
 The Server assigns one `QueryId` when the first qualified evaluation begins.
 Every page cursor binds and reuses that Query identity, normalized request, and
@@ -1131,7 +1235,7 @@ OperationAuthorityEvidence {
   approval_id | null
   approval_kind | null
   approval_request_digest | null
-  author_intent_id | null
+  author_command_admission_id | null
   evaluated_policy_revision
   effective_bounds
 }
@@ -1703,7 +1807,7 @@ StoryOS versions these axes independently:
 | Axis | Identifies | Breaking change response |
 | --- | --- | --- |
 | API major | HTTP route and method semantics | new `/api/v{major}` root |
-| public protocol release | one generated public contract set | publish `N+1`, retain `N` while it is N-1 |
+| public protocol release | one generated public contract set | coordinated hard cut to the new release |
 | envelope version | shared structural fields for one surface | new envelope schema and projection |
 | payload schema | typed Command, Query item, Artifact payload, error extension, or bridge body | new schema identifier and migration/projection rule |
 | Event schema | durable Event meaning and payload | new schema identifier; never rewrite history |
@@ -1719,64 +1823,45 @@ StoryOS versions these axes independently:
 An API major is not reused as a payload, Event, Core, Adapter, or external
 version. A single release catalog records the exact compatible combination.
 
-### 14.2 Public N/N-1 contract
+### 14.2 Same-release public contract
 
-A Server release `N` supports exactly its current generated public release and
-the immediately preceding supported release `N-1` for the same API major. The
-client sends `StoryOS-Protocol-Release` on ordinary public requests; the Server
-echoes the selected value. Because the browser `EventSource` API cannot set an
-arbitrary request header, the SSE endpoint uses the closed, non-secret
-`protocol_release` query parameter instead. No session handle, cursor, or
-Capability enters that URL. Omission selects the current release only for the
-first-party client shipped with that Server and is never used by an unknown
-external client. `/api/v1/protocol` advertises the exact support window.
+Before 1.0, one deployed StoryOS release activates one exact compatible set of
+Web Client assets, Server, Worker, Rust contract source, generated TypeScript
+client/types, OpenAPI, JSON Schema, fixtures, route catalog, Event schemas, and
+Protocol Limit Profile. Every public request and SSE connection carries or
+derives that release identity. A mismatch returns `upgrade_required` before a
+domain attempt, cursor advancement, or external effect.
 
-For both N and N-1:
+Deployment uses a coordinated hard cut:
 
-- Commands, command preconditions, control messages, import manifests, and App
-  bridge inputs are closed. Unknown members, duplicate names, unknown
-  discriminators, and unknown control enums are rejected.
-- Query, Artifact, Problem Details extension, and Event outputs may add fields
-  whose omission preserves meaning. Clients ignore unknown presentation-safe
-  fields while retaining the enclosing typed identity.
-- Unknown values that may change authority, lifecycle, settlement, Approval,
-  Acceptance, replay, security, or side-effect meaning are not generic
-  fallbacks. The Server produces a known compatible projection or returns
-  `upgrade_required` before the client consumes or advances past them.
-- Removing a field, changing its type or meaning, narrowing a previously valid
-  input, adding a required input, changing digest coverage, changing default
-  authority, reusing an enum value, or changing cursor interpretation is
-  breaking.
+1. complete and verify required PostgreSQL migrations and Recovery Copy;
+2. activate the Server and Worker contract release;
+3. publish the matching immutable Web Client assets;
+4. invalidate prior application caches and service-worker assets;
+5. require stale browser sessions to reload before new commands or replay; and
+6. advertise the one active release from `/api/v1/protocol`.
 
-The Server generates public Events for every supported release. Before an SSE
-stream starts or resumes it verifies that the requested replay interval and
-live projection can be represented in the selected release. If not, it returns
-`upgrade_required` before opening the stream. A later projection failure closes
-at the last safely delivered cursor and records a compatibility diagnostic; the
-client must not advance past an unrecognized control event.
+Commands, command preconditions, control messages, import manifests, and App
+bridge inputs remain closed. Query, Artifact, Problem Details extension, and
+Event outputs may add presentation-safe fields within the active release
+catalog. Authority, lifecycle, settlement, replay, security, and side-effect
+meaning always use known closed variants.
 
-Supporting N/N-1 does not require one binary to understand arbitrary older
-clients, old API majors, or every historical payload as a current mutable
-input. Removing N-1 support is a declared release event and cannot occur in a
-patch to N.
-
-The release catalog maps each supported public release to an exact Protocol
-Limit Profile revision. A client selecting release N-1 thereby selects its
-advertised profile; while N-1 is supported, the Server must continue to admit
-an N-1 input that was valid under that profile unless an independent current
-authorization or temporary admission condition refuses it. A narrower profile
-requires a newly negotiated release/profile and cannot be imposed under the
-same revision. Every response echoes the selected profile revision.
+Historical canonical facts, Event payloads, archive profiles, digests, and
+Receipts retain their stored schema identity. PostgreSQL migration, backup,
+restore, and replay readers preserve those durable facts and project them into
+the one active public release without running an older Client, Server, or
+Worker contract.
 
 ### 14.3 Additive and breaking examples
 
-Additive within a public release family:
+Additive within the active public release:
 
 - an optional output field with presentation-only meaning;
 - a new resource-specific Query route;
-- a new Artifact kind that an old client can preserve and show through the
-  bounded generic read-only renderer;
-- a new Event with an N-1 projection to already understood lifecycle meaning;
+- a new Artifact kind whose bounded generic read-only renderer is generated
+  into the matching Web Client;
+- a new Event whose closed meaning is generated into the matching Web Client;
 - a temporary `429 rate_limited` response that changes no content-validity
   rule or supported Profile revision.
 
@@ -1805,15 +1890,15 @@ key, current admission, exact provenance to the historical record, and any
 required new Author evidence.
 
 Historical Event bytes remain inspectable even when their schema is no longer
-current. Replay to a supported client uses a generated compatibility projection
+current. Replay to the active client uses a generated historical projection
 whose provenance pins the original Event and mapping revision. If no safe
-projection exists, replay stops with `upgrade_required`; it never drops the
-Event or invents a default enum.
+projection exists, replay stops with an explicit unavailable or migration
+failure; it never drops the Event or invents a default enum.
 
 ### 14.5 External Provider, Tool, MCP, and MCP App compatibility
 
-External contracts receive no StoryOS N/N-1 promise. Each use pins one exact
-project-free Registration and Adapter revision, one exact Project Scope-bound
+Each external use pins one exact project-free Registration and Adapter
+revision, one exact Project Scope-bound
 `ProjectExternalUseBindingRevision`, and the immutable External Contract
 Compatibility Decision created after and over that binding. The decision
 records the binding and Registration/Adapter revisions, observed
@@ -1988,7 +2073,7 @@ convert an uncertain external effect to failure or authorize another Attempt.
 
 Effective defaults, replay retention windows, UI behavior near limits,
 backpressure tuning, model context allocation, Subrun/Mailbox quotas, and
-first-slice operating values remain empirical items in
+first-stage operating values remain empirical items in
 [EXPERIMENTAL-TUNING-REGISTER.md](../../EXPERIMENTAL-TUNING-REGISTER.md). They
 must fit inside this profile and cannot weaken its semantics.
 
@@ -1999,7 +2084,7 @@ must fit inside this profile and cannot weaken its semantics.
 The StoryOS Rust contracts crate is the sole editable source for external
 contract shapes. It owns the typed Rust public API DTOs, schema identifiers,
 field requirements, discriminators, control enums, validation annotations,
-digest coverage descriptors, compatibility projections, and Protocol Limit
+digest coverage descriptors, historical projections, and Protocol Limit
 Profiles. Generated artifacts are reviewed and checked in, but never edited as
 independent truth.
 
@@ -2009,7 +2094,7 @@ The generator emits, from the same contract graph:
   Problem Details, and examples;
 - JSON Schema 2020-12 for every public payload, Event, Artifact, archive,
   bridge, and exposed compatibility profile;
-- TypeScript client operations and types for every public release N and N-1;
+- TypeScript client operations and types for the one active public release;
 - a schema catalog mapping every schema ID to its Rust owner and generated
   artifact;
 - canonical positive and negative fixtures; and
@@ -2046,11 +2131,12 @@ body. Retention owns how long eligible records remain; while retained they are
 immutable and exportable as historical evidence.
 
 The golden corpus is distinct from production records. It contains synthetic,
-non-secret fixtures for current N and N-1 and fixes exact bytes, including UTF-8,
-number/string form, field order chosen by the serializer, escaping, media type,
-digest, SSE line framing, and expected parse result. JCS semantic-digest
-fixtures are paired with differently serialized but semantically equal JSON to
-prove that the digest does not claim original bytes.
+non-secret fixtures for the active public release plus retained historical
+fixtures and fixes exact bytes, including UTF-8, number/string form, field
+order chosen by the serializer, escaping, media type, digest, SSE line framing,
+and expected parse result. JCS semantic-digest fixtures are paired with
+differently serialized but semantically equal JSON to prove that the digest
+does not claim original bytes.
 
 ### 16.3 Required drift gates
 
@@ -2065,15 +2151,14 @@ The eventual repository verification command must fail when:
 - an input schema accidentally permits unknown members or duplicate-name
   parsing differs between public entry points;
 - an output change is classified additive but changes control meaning;
-- the N/N-1 corpus cannot be parsed and projected by its advertised client;
+- the active same-release corpus cannot be parsed by its generated client;
 - a stored historical wire fixture is reserialized after upgrade;
 - generated `ReceiptRef` variants differ between Committed acknowledgements,
   idempotency replay, Query results, or Events, omit an owning Receipt identity,
   or introduce a generic/string fallback;
 - a digest coverage fixture changes without a new Digest Profile;
 - any Profile numeric value changes without a new Protocol Limit Profile
-  revision, or N/N-1 enforcement rejects an input valid under its selected
-  supported revision without an independent temporary or authorization cause;
+  revision and coordinated release identity;
 - a token-limited fixture lacks an exact Token Counting Profile and verified
   Provider mapping evidence;
 - a Tool/MCP invocation omits a mandatory context or Destination Attempt
@@ -2180,8 +2265,8 @@ signed or integrity-protected archive. The negative corpus includes at least:
     through arguments, output, logs, wire records, archives, and App messages;
 18. Provider redirect, DNS rebinding, private/link-local address, ambient proxy
     or metadata credential, destination fallback, and disclosure widening;
-19. unknown historical Event control semantics with and without a compatible
-    N-1 projection; and
+19. unknown historical Event control semantics with and without a safe
+    historical projection into the active release; and
 20. query/cache/projection rows that are stale, partially rebuilt, cross-Scope,
     below a required watermark, or falsely empty.
 
@@ -2444,7 +2529,7 @@ to Ed25519 public key `xSMHMLALUXpg9LlfOQL8DeaYJMyYIa2szZuBOlUk3og`
 | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | Project Activity envelope, Snapshot/cursor identity, replay generation, Application Wire Record class, handoff failures | retention durations, compaction/archive mechanics, Mailbox and internal Run Event detail |
 | [Define Foundation Evidence for the Standalone Eval Surface](https://github.com/FrankQDWang/StoryOS/issues/61) | inspectable typed protocol evidence and profile identities | Eval claims, datasets, scoring, evidence acceptance |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | required drift/adversarial families, fences, Attempts, commit and OutcomeUnknown invariants | executable tests, crash schedules, CI gates, fake destinations |
-| [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | complete contract menu and absolute ceilings | which coherent subset ships first, effective defaults, acceptance gate |
+| [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | complete contract menu and absolute ceilings | which coherent subset ships first, effective defaults, acceptance gate |
 
 The PostgreSQL storage contract continues to own physical tables, RLS,
 migrations, roles, payload placement, and deployment upgrade sequencing. The
@@ -2458,7 +2543,7 @@ This is a pre-implementation Foundation decision, so it requires no production
 data migration now. Its first implementation is nevertheless a new public and
 persisted contract and must establish API release 1, schema catalog, wire
 corpus, and limit profile atomically. Later changes apply the classifications
-in section 14 and the database N/N-1 expand/migrate/contract discipline.
+in section 14 and the database migration, backup, restore, and validation discipline.
 
 No new ADR is required: this specification is the designated owner of the
 wire protocol detail, while the durable architectural premises are already
@@ -2500,8 +2585,8 @@ An implementation conforms only if all of these remain true:
     egress, and only Host/Core authority can change authoritative state.
 12. Commands and control inputs are closed; public outputs evolve additively
     only where unknown meaning is presentation-safe.
-13. Public N/N-1 support uses generated projections; external contracts use
-    exact pinning, Project Scope-bound use and Credential bindings,
+13. The public runtime uses one coordinated same-release contract; external
+    contracts use exact pinning, Project Scope-bound use and Credential bindings,
     compatibility decisions, drift quarantine, and fresh authorization for
     widening. Global registrations contain no Project data or credentials;
     every actual Processing Destination Identity is an independently established,

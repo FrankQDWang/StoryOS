@@ -7,6 +7,7 @@
 - Approved by the author as the default visual reference on 2026-07-13.
 - The editor Proposal contract was validated and closed in [Validate the Editable Proposal Contract in Tiptap](https://github.com/FrankQDWang/StoryOS/issues/45); its reproducible evidence remains in the [Tiptap Proposal lab](../../prototypes/tiptap-proposal-lab/NOTES.md).
 - The complete shell and dynamic-surface boundary were validated and closed in [Prototype the Fixed Workspace Shell and Dynamic Surface Boundary](https://github.com/FrankQDWang/StoryOS/issues/55); the current evidence is the [fixed workspace shell conclusion](../../prototypes/fixed-workspace-shell/NOTES.md) and [design QA record](../../prototypes/fixed-workspace-shell/design-qa.md).
+- Production browser state, local continuity, writer takeover, synchronization, and recovery are governed by [Web Editor Session, Synchronization, and Recovery Semantics](../foundation/web-editor-session-synchronization-and-recovery-semantics.md).
 - These disposable prototypes validate interaction feasibility and surface ownership. They are not a production frontend or proof that production runtime, persistence, recovery, or backend integration has been implemented.
 
 ## Non-negotiable workspace structure
@@ -14,7 +15,7 @@
 The primary writing workspace is a fixed three-column shell:
 
 1. The left column is a hierarchical manuscript tree. A novel contains volumes, and each volume contains chapters. Volumes can be expanded and collapsed; the active chapter is visibly selected.
-2. The center column is the manuscript editor. It is the authoritative surface for prose proposals, editing, acceptance, rejection, and conflict handling.
+2. The center column is the author-facing surface for manuscript editing, prose Proposals, acceptance, rejection, and conflict recovery. StoryOS Core remains the authority and the editor projects its current Heads, Receipts, pending local work, and Drafts.
 3. The right column is a normal Agent conversation panel. It contains the author-Agent transcript, compact tool or run summaries, and future transcript-native MCP Apps. The whole column can be collapsed.
 
 ## Proposal presentation

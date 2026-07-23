@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57)
-- Repository baseline: `4d54099a211b4a9f6df437f4c749bd1256eb5e8d`
+- Repository baseline: `b944540936b0ea762e6c35f7b340d399b3124171`
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Storage contract: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
 - Context and egress contract: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
@@ -63,9 +63,10 @@ The Foundation must preserve these security objectives:
 1. **Exact Project Isolation.** Every project-bearing operation, record,
    reference, cursor, index, cache, idempotency fact, recovery fact, and
    disclosure binds the exact pair { owner_user_id, project_id }.
-2. **Author authority.** A Client, model, Tool, MCP server, MCP App, imported
-   file, external source, worker, or Provider cannot manufacture Author Intent,
-   Approval, Acceptance, or a Direct Author Action.
+2. **Author authority.** The trusted StoryOS Web Client requests
+   Author Command Admission for one exact authenticated author command. Models,
+   Tools, MCP servers, MCP Apps, imported files, external sources, Workers, and
+   Providers use their own typed causes and remain outside that admission path.
 3. **Durable truth.** PostgreSQL canonical facts, immutable payloads, exact
    Revisions, Receipts, manifests, Attempts, and uncertainty records outrank
    network, browser, process, cache, projection, and Provider state.
@@ -111,7 +112,7 @@ The Foundation must preserve these security objectives:
 | Project Author/User | supplies prose, instructions, URLs, files, settings, Approvals, and Acceptance; may make mistakes but owns only exact authorized Projects |
 | Other User in a future cloud deployment | has a valid principal and their own Projects; may guess IDs, forge scope fields, race requests, and probe errors or cursors |
 | Untrusted web origin or page script | can cause browser requests allowed by the web platform, open EventSource connections where policy permits, and send postMessage traffic to reachable windows |
-| Compromised or malicious first-party Client state | can alter DTO fields, replay requests, cursors, and bridge messages; it still cannot attest Author Intent or trusted requester scope |
+| Trusted deployed first-party Web Client | runs the controlled StoryOS application assets, captures explicit author action classes, maintains the Editor Session and Local Edit Journal, and requests Server-created Author Command Admission |
 | Malicious model output or Provider response | can emit persuasive text, malformed streams, forged Tool requests, oversized output, or misleading identity/usage evidence |
 | Malicious Tool, MCP server, or MCP App | controls discovered metadata, schemas, results, HTML, bridge messages, redirects, and declared annotations within its reachable Registration |
 | Malicious research source or author-provided file | controls content, imperative text, URLs, parser inputs, archive entries, compression ratio, and embedded metadata |
@@ -145,7 +146,7 @@ primitive failure are residual platform risks rather than Foundation features.
 
 | Boundary | Data crossing it | Required invariant |
 |---|---|---|
-| TB-1 Client ↔ StoryOS Server HTTP | commands, queries, files, Author Intent evidence, Approvals, Acceptance | Server derives requester and scope from trusted context; DTO fields are validation input only |
+| TB-1 Client ↔ StoryOS Server HTTP | commands, queries, files, Author Command Admission inputs, Approvals, Acceptance | Server derives requester and scope from trusted context and creates the durable admission for exact validated command bytes |
 | TB-2 StoryOS Server → Client SSE | scoped immutable events, cursors, replay and resync signals | current authorization plus exact stream/scope/sequence binding on every connect and replay |
 | TB-3 Server/runtime ↔ PostgreSQL | canonical facts, payloads, scope settings, projections, outbox | non-owner runtime, forced RLS, composite scope constraints, atomic transitions |
 | TB-4 Maintenance ↔ PostgreSQL | migrations, whole-service backup/restore, role/grant manifests | separate non-request credentials, isolated execution, checksum and restore validation |
@@ -208,7 +209,7 @@ can still defeat application isolation. Exact envelopes and errors belong to
 adversarial proof belongs to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the minimum enforcement slice belongs to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 10. AP-02: RLS, role, migration, or backup authority bypass
 
@@ -253,15 +254,15 @@ database, and role connections fail before any scoped query.
 retains its intended broad blast radius. Protocol exposes no such route;
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 owns posture and isolation gates, and
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
 must include role separation before validation data is trusted.
 
 ## 11. AP-03: Localhost or cloud HTTP request forgery
 
 **Source to sink.** A malicious web origin induces a browser to send a simple
 GET or form-like POST to a local StoryOS port, exploits permissive CORS,
-forges Host or Origin, reuses an ambient cookie/token, or submits Author Intent
-fields. Browsers can send simple cross-origin requests without preflight, so
+forges Host or Origin, or reuses an ambient cookie/token. Browsers can send
+simple cross-origin requests without preflight, so
 CORS response blocking is not a CSRF defense. Credentialed CORS also requires
 an explicit origin rather than a wildcard. [W1] A forged request could create
 a Run, Approval, Acceptance, credential rebind, export, or other effect.
@@ -269,9 +270,13 @@ a Run, Approval, Acceptance, credential rebind, export, or other effect.
 **Affected assets.** Author authority, Project data, outbound grants,
 credentials, and external effects.
 
-**Accepted controls.** Author Intent is Host-attested and command-specific;
-Approval and Acceptance bind exact immutable inputs; a Client cannot
-self-assert requester identity or scope.
+**Accepted controls.** Release 1 trusts the controlled StoryOS Web Client.
+The Server creates a command-specific Author Command Admission only after
+deriving requester identity and exact existing or Server-allocated prospective
+Project Scope and validating the exact client contract, Client Session,
+applicable Editor Session and writer generation, action class, command digest,
+target, nonce, and idempotency record. Approval and Acceptance bind exact
+immutable inputs.
 
 **Required structural mitigation.** The protocol must define one concrete
 request-authentication and anti-forgery binding for both the trusted local
@@ -285,16 +290,24 @@ loopback exception is allowed. Cloud transport requires TLS. Local network
 binding and browser private-network behavior are defense in depth, not
 authorization.
 
+The deployed client uses exact immutable assets, a restrictive content security
+policy, no ambient third-party script, and version-matched generated contracts.
+IndexedDB journal content, browser extension input, restored local state, and
+all client-supplied identities are still structurally validated at the Server
+and Core boundaries. A stale writer generation or modified command digest
+cannot create an admission.
+
 **Verifiable evidence.** Browser integration tests originate requests from
 malicious HTTPS and local pages, forms, fetch modes, null Origin, forged Host,
 stale tokens, another Project, and preflight variants; all mutations and
 sensitive reads fail before a domain attempt or disclosure.
 
-**Residual risk and owner.** XSS or a fully compromised first-party Client can
-act inside its granted browser session, so command-specific Author Intent and
-Approval remain necessary. Exact auth, Origin, CSRF, command, and error
-contracts belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
-browser adversarial tests belong to
+**Residual risk and owner.** Integrity of the deployed StoryOS Web Client is
+part of the Release 1 trusted computing boundary. Controlled assets,
+restrictive browser security policy, dependency governance, exact auth,
+Origin, CSRF, command, and error contracts belong to
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+browser and asset-integrity adversarial tests belong to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
 
 ## 12. AP-04: SSE replay, cursor confusion, or stale authorization
@@ -321,7 +334,7 @@ range, validates the cursor against that exact stream, returns a typed resync
 or cursor-expired outcome when history is unavailable, and hard-bounds each
 page and backlog. Duplicate delivery is harmless and Client projections dedupe
 by the scoped durable event identity. Event data, event names, and cursor
-values never create Author Intent, resolve a Wait, or select another Project.
+values never create Author Command Admission, resolve a Wait, or select another Project.
 
 **Verifiable evidence.** Tests use arbitrary UTF-8 cursor strings, another
 Project cursor, forged aggregate IDs, old retention generations, duplicates,
@@ -450,8 +463,8 @@ it through delimiters, signatures, ownership, or a trusted transport. The Host
 validates the complete model decision and Tool-request batch against the exact
 Step Snapshot, Tool Exposure, schemas, scope, grants, and effects; one invalid
 member rejects the batch. Non-model destinations receive no Ambient Context.
-No output can attest Author Intent, Approval, Acceptance, Credential Reference
-selection, or destination grant.
+No output can create an Author Command Admission, Approval, Acceptance,
+Credential Reference selection, or destination grant.
 
 **Verifiable evidence.** A versioned adversarial corpus places equivalent
 instructions in every source class, encoding, nested summary, Tool field,
@@ -512,7 +525,7 @@ contracts belong to
 SSRF and parser tests belong to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the isolated minimal fetcher belongs to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 17. AP-09: Provider or embedding disclosure escapes its admitted manifest
 
@@ -556,7 +569,7 @@ retention evidence to
 adapter proofs to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and the first admitted Provider path to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 18. AP-10: Credential Reference resolution leaks or crosses authority
 
@@ -599,7 +612,7 @@ retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](r
 leak and rotation gates to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and resolver integration to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 19. AP-11: Logs, telemetry, support evidence, or error surfaces leak data
 
@@ -640,7 +653,7 @@ classification and expiry to
 leak testing to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and production-safe defaults to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 20. AP-12: Backup, WAL, or restore leaks or silently changes authority
 
@@ -681,7 +694,7 @@ risk. Retention/archival policy and restore evidence belong to
 gates belong to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60);
 the first operational recovery proof belongs to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 21. AP-13: Import archives or author files escape scope or parser bounds
 
@@ -727,7 +740,7 @@ retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](r
 the corpus to
 [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
 and the narrow importer to
-[Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 22. AP-14: Retry or OutcomeUnknown duplicates an external or authoritative effect
 
@@ -762,7 +775,7 @@ uncertainty may remain permanently visible. Envelope/idempotency contracts
 belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), durable
 Attempt/outbox retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 fault injection to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
-the first end-to-end recovery path to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+the first end-to-end recovery path to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 23. AP-15: Retrieval, embedding, or cache poisoning changes eligible context
 
@@ -795,7 +808,7 @@ model quality, but cannot obtain authority. Projection schemas belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), invalidation and
 retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md), adversarial
 rebuild proof to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
-the first bounded retrieval slice to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+the first bounded retrieval slice to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 24. AP-16: Historical evidence or provenance is rewritten after the fact
 
@@ -829,7 +842,7 @@ facts and ordinary checks, so independent recovery evidence is needed for
 detection. Historical wire schemas belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
 compaction/redaction/tombstones to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 rebuild and tamper gates to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
-and minimum audit lineage to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+and minimum audit lineage to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 25. AP-17: A stale lease or fence completes work after recovery
 
@@ -862,7 +875,7 @@ OutcomeUnknown even though stale local writes are fenced. Fence/event contracts
 belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), lease and
 snapshot retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
 race tests to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and the
-first crash-safe worker path to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+first crash-safe worker path to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 ## 26. AP-18: Untrusted input or replay exhausts bounded service resources
 
@@ -896,7 +909,7 @@ protection or billing policy. Budget/error contracts belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), expiry/Snapshot/replay
 floors to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md), stress gates
 to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and bounded default
-configuration to [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+configuration to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
 # Severity Calibration
 
@@ -926,18 +939,17 @@ Wayfinder owner:
 
 | Downstream owner | Security obligations received from this model | Attack paths |
 |---|---|---|
+| [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | exact trusted-client claim; existing or prospective Project Scope; command digest; action class; nonce/idempotency; Editor Session/writer generation; expiry; one terminal settlement; direct-versus-explicit recovery | AP-01, AP-03, AP-14, AP-17, AP-18 |
+| [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | IndexedDB journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; Draft preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18 |
 | [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; provider and research destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-18 |
 | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18 |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin/bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-18 |
-| [Lock the First Production Vertical Slice and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-18 |
+| [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-18 |
 
-No separate security implementation, cloud-operations, identity-system, or
-provider-specific Wayfinder ticket follows from this research. No unresolved
-product tradeoff was exposed: the accepted Project Scope, PostgreSQL authority,
-Author authority, Proposal/Acceptance, Capability/Approval, minimum-necessary
-disclosure, and one-service deployment boundaries answer the architectural
-questions. The parent map's remaining fog therefore stays unchanged; only the
-existing downstream owners above receive sharper, testable obligations.
+No separate parallel security map or security runtime follows from this threat
+model. The current owners above must close their assigned controls and
+deterministic negative evidence in the map's single serial chain before the
+editor-first implementation handoff.
 
 # Source Index
 
@@ -1007,4 +1019,4 @@ for this resolution on 2026-07-21.
 
 Repository: FrankQDWang/StoryOS
 
-Version: 4d54099a211b4a9f6df437f4c749bd1256eb5e8d
+Version: b944540936b0ea762e6c35f7b340d399b3124171
