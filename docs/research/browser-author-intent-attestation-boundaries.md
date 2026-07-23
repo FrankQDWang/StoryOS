@@ -15,9 +15,13 @@
 
 ## Executive finding
 
-No surveyed general-purpose Web primitive lets a pure Web Client prove that one
+No **current portable browser baseline** lets a pure Web Client prove that one
 physical author interaction approved the semantic content of one exact StoryOS
-Core command when first-party page script is compromised.
+Core command when first-party page script is compromised. WebAuthn Level 1's
+historical optional transaction-authorization extensions were a real
+general-purpose trusted-display mechanism, but they were omitted from the
+Level 2 and Level 3 defined extensions and cannot be assumed across current
+clients and authenticators.
 
 The available primitives prove narrower facts:
 
@@ -27,12 +31,12 @@ The available primitives prove narrower facts:
 - Session, Origin, Host, CSRF, TLS, digest, and idempotency controls can bind
   requester context and exact bytes. A compromised same-origin client can still
   use the legitimate session and ask the Server to admit attacker-chosen bytes.
-- WebAuthn can prove that a registered credential made an assertion for an RP,
-  Origin, and server challenge, with signed user-presence and optionally
-  user-verification flags. Plain WebAuthn does not specify trusted display of
-  command data placed behind that challenge. Its specification warns that
-  malicious code in the credential's RP-origin scope can invalidate all
-  WebAuthn security guarantees.
+- Current plain WebAuthn can prove that a registered credential made an
+  assertion for an RP, Origin, and server challenge, with signed user-presence
+  and optionally user-verification flags. Without a supported transaction
+  extension, it does not specify trusted display of command data placed behind
+  that challenge. Its specification warns that malicious code in the
+  credential's RP-origin scope can invalidate all WebAuthn security guarantees.
 - WebCrypto, HTTP Message Signatures, DPoP, app/key attestation, and request
   integrity can prove key use, message integrity, client/app provenance, or
   possession. None of those facts is human command authorization.
@@ -54,19 +58,30 @@ Under the accepted combination of:
 
 1. a pure first-party Web Client,
 2. a fully compromised first-party page remaining in scope, and
-3. no general-purpose browser transaction-confirmation API or trusted
-   native/editor surface in the selected delivery boundary,
+3. no currently portable general-purpose browser transaction-confirmation API
+   or trusted native/editor surface in the selected delivery boundary,
 
 the current **Host-attested, exact-command Author Intent** claim is
 **not implementable by that boundary**. This is not merely missing code. The
 component that observes the interaction and constructs the command is the
 compromised component, while the general-purpose trusted browser/authenticator
-surfaces do not display and attest the StoryOS command semantics.
+surfaces available in the current portable baseline do not display and attest
+the StoryOS command semantics. WebAuthn Level 1's historical transaction
+extensions do not change this delivery verdict because support was optional
+and they are no longer among the Level 2/3 defined extensions.
 
 This does not decide Release 1. The downstream decision must either change the
 delivery/trust boundary, narrow the claim for a precisely named command class,
 or change the accepted attacker model; primary sources cannot select among
 those product/security choices.
+
+The implementation-status terms should remain precise:
+
+| Classification | StoryOS meaning under this research |
+| --- | --- |
+| **Impossible in the selected boundary** | The current strong claim: compromised-page-resistant, Host-attested authorization of the semantic content of one exact command, using only the current portable pure-Web delivery boundary described above |
+| **Unimplemented** | A future design that adds a trusted confirmation/editor surface to the delivery boundary and implements end-to-end display, confirmation, signature, freshness, verification, and settlement binding; the surveyed examples show that shape is technically possible, but StoryOS has neither selected nor implemented it |
+| **Narrowable** | Server proof of exact canonical bytes, session/Project scope, freshness, replay resistance, and settlement, optionally accompanied by browser-observed input evidence or a reauthentication ceremony; this is useful lower-assurance evidence, explicitly **not** exact-command Author Intent under a compromised page |
 
 ## The proof obligations are different
 
@@ -158,7 +173,7 @@ allowing compromised script to invoke `sign()` on attacker-selected command
 bytes. A valid signature proves use of that key. It does not prove user
 presence, verification, trusted display, or consent.
 
-### 4. Plain WebAuthn can bind a credential ceremony to a challenge, not display an arbitrary command
+### 4. Current plain WebAuthn can bind a credential ceremony to a challenge, not display an arbitrary command
 
 **External facts.**
 
@@ -186,9 +201,9 @@ presence, verification, trusted display, or consent.
    data, but the ordinary authenticator input has no general field requiring a
    human-readable command to be displayed.
    ([FIDO CTAP 2.2, `authenticatorGetAssertion`](https://fidoalliance.org/specs/fido-v2.2-ps-20250714/fido-client-to-authenticator-protocol-v2.2-ps-20250714.html#authenticatorGetAssertion))
-5. WebAuthn's security considerations state that malicious code executing on
-   an Origin within an RP credential's scope can invalidate any and all
-   WebAuthn security guarantees.
+5. WebAuthn Level 3 §13.4.8 states that malicious code executing on an Origin
+   within an RP credential's scope has the potential to invalidate “any and
+   all” WebAuthn security guarantees.
    ([WebAuthn Level 3, code injection attacks](https://www.w3.org/TR/webauthn-3/#sctn-code-injection))
 
 **Boundary.** A Server can mint a unique challenge whose server-side record
@@ -211,7 +226,47 @@ ceremony bound to a command challenge. It cannot call the ceremony proof that
 the physical Project Author saw and authorized the exact command under the
 compromised-page threat model.
 
-### 5. WebAuthn attestation is credential provenance, not per-command intent
+### 5. WebAuthn Level 1 had transaction-display extensions, but they are not a current portable baseline
+
+**External facts.** The 2019 WebAuthn Level 1 Recommendation defined two
+general transaction-authorization extensions:
+
+- `txAuthSimple` took a prompt string intended for display on a trusted device
+  on the authenticator. A supporting authenticator had to display that prompt
+  before user verification or presence, and its signed extension output
+  returned the prompt as actually displayed, including inserted line breaks.
+  ([WebAuthn Level 1, `txAuthSimple`](https://www.w3.org/TR/webauthn-1/#sctn-simple-txauth-extension))
+- `txAuthGeneric` took a MIME type and content, including images. A supporting
+  authenticator had to display the content unchanged inside its content
+  boundary before user verification or presence, and its signed extension
+  output returned a hash of the displayed content.
+  ([WebAuthn Level 1, `txAuthGeneric`](https://www.w3.org/TR/webauthn-1/#sctn-generic-txauth-extension))
+
+The IANA WebAuthn Extension Identifiers registry still contains both identifiers
+and points to the Level 1 Recommendation.
+([IANA WebAuthn Extension Identifiers](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids))
+However, neither the WebAuthn Level 2 nor Level 3 **Defined Extensions** section
+defines either transaction extension.
+([Level 2 defined extensions](https://www.w3.org/TR/webauthn-2/#sctn-defined-extensions);
+[Level 3 defined extensions](https://www.w3.org/TR/webauthn-3/#sctn-defined-extensions))
+WebAuthn extensions are optional for both clients and authenticators, and the RP
+must handle none or only some requested extensions being acted upon.
+([WebAuthn Level 3 assertion verification](https://www.w3.org/TR/webauthn-3/#sctn-verifying-assertion))
+
+**Boundary.** These historical extensions disprove an absolute claim that Web
+standards never specified general non-payment transaction confirmation. They
+also validate the same trusted-display-plus-signed-output shape seen in SPC and
+Android Protected Confirmation.
+
+They do not supply a deployable StoryOS baseline: IANA registration is not an
+implementation-support guarantee; the extension mechanism is optional; and
+current Level 2/3 no longer define these extensions. StoryOS could rely on them
+only after proving the exact client and authenticator support matrix, requiring
+the extension output, and failing closed when it is absent. No such requirement
+can be made for the selected portable pure-Web delivery boundary from the
+current specifications alone.
+
+### 6. WebAuthn attestation is credential provenance, not per-command intent
 
 **External facts.** WebAuthn attestation statements concern the public-key
 credential and authenticator that created it. Their assurance depends on
@@ -231,14 +286,15 @@ credential key was generated by an accepted authenticator class.” It is not a
 per-command trusted display, UP/UV event, or Author Intent record. The word
 “attestation” must not collapse these different statements.
 
-### 6. Secure Payment Confirmation shows what browser transaction confirmation adds
+### 7. Secure Payment Confirmation shows what browser transaction confirmation adds
 
-**External facts.** Secure Payment Confirmation (SPC) adds payment-specific
-data structures and a browser-controlled transaction-confirmation UX to
-WebAuthn. The user agent must communicate defined fields such as payee, amount,
-and instrument, collect consent, and include the displayed payment data in
-signed client data. The specification says this prevents a malicious website
-or injected JavaScript from bypassing the payment-specific display.
+**External facts.** Secure Payment Confirmation (SPC), currently published as
+a W3C Candidate Recommendation Draft, adds payment-specific data structures and
+a browser-controlled transaction-confirmation UX to WebAuthn. The user agent
+must communicate defined fields such as payee, amount, and instrument, collect
+consent, and include the displayed payment data in signed client data. The
+specification says this prevents a malicious website or injected JavaScript
+from bypassing the payment-specific display.
 ([SPC introduction](https://www.w3.org/TR/secure-payment-confirmation/#sctn-intro);
 [transaction confirmation UX](https://www.w3.org/TR/secure-payment-confirmation/#sctn-transaction-confirmation-ux);
 [assertion verification](https://www.w3.org/TR/secure-payment-confirmation/#sctn-verifying-assertion))
@@ -248,7 +304,7 @@ It is evidence that a browser-owned display-plus-signature design can bind
 human confirmation to displayed semantic data. It is not a general Web API for
 confirming StoryOS commands and must not be disguised as one.
 
-### 7. Android Protected Confirmation provides a native trusted-display example
+### 8. Android Protected Confirmation provides a native trusted-display example
 
 **External facts.** Android Protected Confirmation is designed so trusted
 firmware protects display integrity, confirmation input, and their atomicity
@@ -257,10 +313,12 @@ UI prompt and returns a confirmation token only after confirmation.
 ([AOSP Protected Confirmation implementation](https://source.android.com/docs/security/features/protected-confirmation/implementation))
 
 The relying party verifies the signing-key attestation, signature, prompt text,
-fresh extra-data nonce, and replay state. Android stresses that only
-`promptText` was actually confirmed: undisplayed `extraData` must never be
-assumed equivalent to what the user saw. A key configured to require trusted
-confirmation can sign only the returned confirmed-data structure.
+fresh extra-data nonce, and replay state. Both `promptText` and `extraData` are
+inside the returned signed confirmed-data structure, but Android stresses that
+only `promptText` was actually confirmed by the user. Signed, undisplayed
+`extraData` must never be treated as hidden command semantics equivalent to
+what the user saw. A key configured to require trusted confirmation can sign
+only that returned confirmed-data structure.
 ([Android Protected Confirmation guide](https://developer.android.com/privacy-and-security/security-android-protected-confirmation))
 
 **Boundary.** This is the strongest surveyed directly relevant model for
@@ -270,7 +328,7 @@ server-side verification. It is not available to a portable pure Web Client.
 It also proves why hiding a StoryOS digest or command in nondisplayed metadata
 is insufficient.
 
-### 8. App/device integrity is useful evidence but still not intent
+### 9. App/device integrity is useful evidence but still not intent
 
 **External facts.** Apple App Attest can attest a key associated with a
 legitimate app instance and later sign assertions over app-supplied
@@ -296,7 +354,7 @@ app-supplied reason is not documented as a signed exact-transaction
 confirmation. These mechanisms can complement a trusted confirmation
 implementation but cannot replace one.
 
-### 9. A native bridge is transport until the native side enforces a trust boundary
+### 10. A native bridge is transport until the native side enforces a trust boundary
 
 **External facts.** Chrome native messaging is an extension API: an extension
 with `nativeMessaging` permission can exchange JSON with a registered native
@@ -330,6 +388,7 @@ automatically.
 | DPoP | Yes | Method/URI, not body | No | No | No |
 | Plain WebAuthn assertion with `UP` | Yes | Challenge or server mapping | presence only | RP/credential ceremony, not command | No |
 | Plain WebAuthn assertion with required `UV` | Yes | Challenge or server mapping | authenticator user verified | RP/credential ceremony, not command | No |
+| Historical WebAuthn L1 `txAuthSimple` / `txAuthGeneric` | Yes, when acted upon | Displayed string or content hash plus assertion | `UP` or `UV` | Yes, on supporting authenticator | Potentially for a profiled support matrix; not a current portable baseline |
 | WebAuthn authenticator attestation | Registration-time | Credential creation client data | registration ceremony only | Not per command | No |
 | App/device/key integrity attestation | Yes | Often request hash/data | Not inherently | No | No |
 | SPC | Yes | Signed payment-specific data | WebAuthn UP/UV | Yes, payment fields | Yes for the specified payment ceremony; not usable for StoryOS |
@@ -360,8 +419,8 @@ automatically.
 - “WebAuthn `UP` proves the Project Author acted.”
 - “WebAuthn `UV` proves a uniquely identified natural person approved the
   command.”
-- “The WebAuthn challenge or signed digest was shown to or understood by the
-  user.”
+- “A plain WebAuthn challenge or signed digest, without a verified
+  transaction-display extension, was shown to or understood by the user.”
 - “Authenticator attestation proves per-command author intent.”
 - “A non-extractable WebCrypto key means compromised script cannot sign.”
 - “Origin, SameSite, CORS, CSRF, TLS, DPoP, a digest, or an idempotency key
@@ -415,6 +474,9 @@ to
 
 - [WHATWG HTML: Tracking user activation](https://html.spec.whatwg.org/multipage/interaction.html#tracking-user-activation)
 - [W3C Web Authentication Level 3](https://www.w3.org/TR/webauthn-3/)
+- [W3C Web Authentication Level 2](https://www.w3.org/TR/webauthn-2/)
+- [W3C Web Authentication Level 1 transaction authorization extensions](https://www.w3.org/TR/webauthn-1/#sctn-simple-txauth-extension)
+- [IANA WebAuthn Extension Identifiers](https://www.iana.org/assignments/webauthn/webauthn.xhtml#webauthn-extension-ids)
 - [FIDO Client to Authenticator Protocol 2.2](https://fidoalliance.org/specs/fido-v2.2-ps-20250714/fido-client-to-authenticator-protocol-v2.2-ps-20250714.html)
 - [W3C Secure Payment Confirmation](https://www.w3.org/TR/secure-payment-confirmation/)
 - [W3C Web Cryptography Level 2](https://www.w3.org/TR/webcrypto-2/)
