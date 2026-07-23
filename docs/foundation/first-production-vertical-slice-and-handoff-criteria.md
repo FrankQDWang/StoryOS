@@ -10,21 +10,31 @@
 ## 1. Purpose and authority
 
 This specification selects the smallest real, end-to-end StoryOS production
-slice and the evidence required before implementation planning begins. It
-composes accepted author-authority, manuscript/Proposal, AgentRun, Context
-Assembly, Model Gateway, protocol, PostgreSQL, recovery, retention, trust, and
-verification contracts; it does not reopen their semantics.
+slice and separates the implementation-planning handoff from later product
+validation. It composes accepted author-authority, manuscript/Proposal,
+AgentRun, Context Assembly, Model Gateway, protocol, PostgreSQL, recovery,
+retention, trust, and verification contracts; it does not reopen their
+semantics.
 
 The selected slice proves author value, not the breadth of infrastructure. Its
-first successful path is a real author advancing one current passage with the
+first completed path is a real author advancing one current passage with the
 adjacent Agent, reviewing a bounded editable Proposal, and retaining the final
-creative decision. A Provider response, browser state, worker process, cache,
+creative decision through Applied Acceptance or Proposal Rejection. A Provider
+response, browser state, worker process, cache,
 or external API is never the authoritative creative state.
 
 This decision does not implement Rust, a Web Client, Tiptap, PostgreSQL
 migrations, a Provider Adapter, a deterministic fake, CI, deployment, or a
-real Provider call. Those are the next planning and implementation work under
-the acceptance gate in this document.
+real Provider call. Superpowers implementation planning may now sequence that
+work; implementation must later satisfy the separate Foundation Validation and
+release-to-real-author gate in this document.
+
+### 1.1 Two distinct gates
+
+| Gate | Timing and required evidence | What it does not claim or block |
+| --- | --- | --- |
+| Superpowers implementation-planning handoff | Available now with this accepted scope, the selected contract closure, selected DVG proof plan, named ownership, and the evidence obligations that implementation must later satisfy. | It does not claim that any selected DVG has run or passed, or that a real-author product-acceptance session has occurred. An unrun future gate does not block planning. |
+| Foundation Validation / release-to-real-author gate | Applies after the selected implementation exists. It requires every selected DVG's actual replayable non-secret evidence bundle and the real-author product-acceptance evidence in [section 8](#8-subsequent-foundation-validation-user-acceptance-evidence). | A failed, unrun, unreplayable, evidence-incomplete, or `unverified` selected gate blocks this later release gate; it never retroactively blocks the planning handoff. |
 
 ## 2. Confirmed author-visible value loop
 
@@ -52,14 +62,19 @@ One successful loop has this exact shape:
    manuscript Revision. A transcript explanation may accompany it, but is not
    an authoritative change and is not a substitute for the Proposal.
 4. The author reviews and may edit the Proposal in the editor, then explicitly
-   accepts or rejects it. Acceptance creates the resulting Authoritative
-   Revision and Acceptance Receipt atomically; rejection is non-destructive.
+   accepts or rejects it. The durable Applied Acceptance or Proposal Rejection
+   completes the author-visible loop. Only an Applied Acceptance creates the
+   resulting Authoritative Revision and Acceptance Receipt atomically;
+   Proposal Rejection is non-destructive and leaves Authoritative State
+   unchanged.
 
 The loop is incomplete when the Agent merely replies in chat, auto-replaces
 prose, produces an unreviewable draft, or turns the request into a story
-outline. Author-provided outlines remain Data-only Context when explicitly
-eligible; no Agent-authored outline, Author Plan, or preplanned story structure
-enters this path.
+outline, or leaves an editable Proposal without an explicit durable author
+decision. A durable Proposal Rejection is a completed loop, not a failure.
+Author-provided outlines remain Data-only Context when explicitly eligible; no
+Agent-authored outline, Author Plan, or preplanned story structure enters this
+path.
 
 ### 2.2 Product defaults
 
@@ -118,8 +133,8 @@ cache, Provider, or process state is not permitted.
 | Fact family | Minimum durable fact for the selected loop |
 | --- | --- |
 | Identity and scope | User, Project, Project Scope, Client Session Binding admission evidence, command identity/digest/idempotency, and non-oracular refusal outcome |
-| Authoritative writing | Manuscript identity, current passage/block identity, expected and resulting Authoritative Revisions/Heads, Authoritative Commit when authority changes, and Domain/Acceptance Receipts |
-| Author conversation and Proposal | Exact author Message, Workspace Context, Working Target, Proposal identity/Revision/Anchor/state axes, Validation Receipt, selected Operations, Acceptance or Rejection fact, and safe conflict/refusal record |
+| Authoritative writing | Manuscript identity, current passage/block identity, expected and resulting Authoritative Revisions/Heads, and an Authoritative Commit only when a Direct Author Edit or Applied Acceptance changes authority |
+| Author conversation and Proposal | Exact author Message, Workspace Context, Working Target, Proposal identity/Revision/Anchor/state axes, Validation Receipt, selected Operations, an Applied Acceptance Receipt or durable Proposal Rejection fact with its typed reason, and safe conflict/refusal record |
 | Run and recovery | AgentRun, RunStep/Step Snapshot, ordered Run events, author steering/pause when used, lease/fence generation, outbox/wakeup intent, terminal outcome, and recovery decision where needed |
 | Context and egress | Operation Requirement, exact Context Source Versions, eligibility/selection/projection evidence, Context Assembly Manifest, Processing Destination Identity, Project Destination Grant, Project Model Use Binding, External Contract Compatibility Decision, Wire Payload Projection, Destination/Model Attempt, dispatch claim, Outbound Disclosure Event, and settlement certainty |
 | Model result | Route Request/Decision, registration/capability evidence, immutable Attempt request and stream/result evidence, host validation disposition, and the resulting Proposal provenance rather than a direct manuscript write |
@@ -177,20 +192,23 @@ deterministic test pass.
 | Author-facing retention configuration, archive/export/import/deletion UX, or complete recovery administration | Retention/archival and PostgreSQL contracts; selected redaction/non-revival and physical restore proof remain required evidence |
 | Performance targets, throughput/latency claims, token-cost targets, benchmark corpus, creative-quality score, or CI/deployment implementation | Existing Protocol limits and recovery commitments remain applicable; no new numerical claim is made here |
 
-## 7. Deterministic evidence gate
+## 7. Selected deterministic proof plan and subsequent Foundation Validation gate
 
-The implementation may be handed to Superpowers planning only with a concrete
-gate plan for the following selected portions of the accepted Deterministic
-Verification Gate catalogue. Every selected proof uses the independent oracle,
-contract-faithful fake destinations, virtual monotonic scheduler, named fault
-points, multi-Scope adversarial world, and replayable non-secret evidence
+The Superpowers implementation-planning handoff requires a concrete proof plan
+for the following selected portions of the accepted Deterministic Verification
+Gate catalogue: a named owner, contract boundary, fault coverage, fixture and
+oracle obligation, and required replayable non-secret evidence bundle for each
+row. It requires no executed result at planning time and makes no claim that a
+selected DVG has passed. Every later selected proof uses the independent
+oracle, contract-faithful fake destinations, virtual monotonic scheduler, named
+fault points, multi-Scope adversarial world, and replayable non-secret evidence
 bundles required by [Deterministic Verification and Failure-Recovery Gates](deterministic-verification-and-failure-recovery-gates.md).
 
 | Gate | Required selected proof |
 | --- | --- |
 | `DVG-01` | Release-1 contracts crate, generated OpenAPI/JSON Schema/TypeScript client, selected command/query/SSE wire corpus, limit profile, and applicable closed-input/schema-drift fixtures match their source; unsupported surface is absent rather than represented by permissive placeholders. |
 | `DVG-02` | Session/Origin/Host/nonce/idempotency substitutions, foreign User/Project/object/cursor/Snapshot references, stale scope settings, and direct forced-RLS runtime probes fail closed with no authority, disclosure, cache shortcut, or existence oracle. |
-| `DVG-03` | Browser proof for one physical Chinese or English author input and Core proof for whole-command Author Edit classification; direct edit, editable Proposal, conflict/refusal, validation, acceptance, rejection, idempotent retry, and acknowledgement-loss recovery settle with exact Heads, Revisions, Receipts, and events. |
+| `DVG-03` | Browser proof for one physical Chinese or English author input and Core proof for whole-command Author Edit classification; direct edit, editable Proposal, conflict/refusal, validation, Applied Acceptance, durable Proposal Rejection, idempotent retry, and acknowledgement-loss recovery settle with exact Heads, Revisions, applicable Receipts or rejection facts, and events. |
 | `DVG-04` | The current author request, Working Target, bounded local manuscript context, optional Project Instruction, and resulting Proposal provenance cross all seven gates. Ineligible, stale, redacted, foreign, injected, cached, or widened sources cannot reach the Model Attempt. No retrieval, memory, or Tool result is silently invented to satisfy the operation. |
 | `DVG-05` | A contract-faithful external-model fake and the real Adapter mapping both use the selected Processing Destination Identity, Project Destination Grant, Project Model Use Binding, External Contract Compatibility Decision, Credential Reference, manifests, Attempt admission, non-secret wire capture, and validated response boundary. Tool/MCP/App request modes are absent or refused before any Tool exposure or egress. |
 | `DVG-06` | The root AgentRun/RunStep/Run Lane portion proves ordered author steering, pause, finalization, and terminal outcome from durable facts. No Subrun or Mailbox capability is claimed delivered. |
@@ -199,22 +217,27 @@ bundles required by [Deterministic Verification and Failure-Recovery Gates](dete
 | `DVG-09` | Selected historical activity replay and a redaction/tombstone of selected loop payload demonstrate an explicit safe availability gap and non-revival through canonical query, editor/transcript projection, context selection, cache, replay, export-facing representation, or Provider continuity. |
 | `DVG-10` | The existing physical PostgreSQL recovery contract is demonstrated at the selected slice scope: a verified restore starts isolated, preserves roles/RLS and exact scope facts, rebuilds the selected projection, and withholds ordinary visibility or execution until Recovery Visibility Proof is complete. Author-facing archive/import/deletion features are not claimed. |
 | `DVG-11` | The selected hostile corpus covers forged client admission, scope/RLS, prompt/content injection, Provider disclosure widening, Credential/log/telemetry leakage, stale Worker, replay, bounded input, and denied Tool/MCP/App attempts. Each expected denial supplies Negative Evidence Closure over authority, context, egress, Attempt, budget, secret, and foreign-identity effects. |
-| `DVG-13` | Foundation Contract Walks for current-passage author edit/Proposal acceptance and Agent request/external dispatch/unknown recovery are executed as synthetic witnesses. They supplement, and do not replace, this product's browser and real-author acceptance evidence. |
+| `DVG-13` | Foundation Contract Walks for current-passage author edit/Proposal settlement and Agent request/external dispatch/unknown recovery are executed as synthetic witnesses. They supplement, and do not replace, this product's browser and real-author product-acceptance evidence. |
 
 `DVG-12` is not selected because no Eval surface ships. The Subrun/Mailbox,
 archive-import/deletion, Tool/MCP execution, research-fetch, embedding, and
 full retention parts of other gate families remain unimplemented and must not
 be described as passed by this slice.
 
-Any selected gate that is failed, unrun, unreplayable, evidence-incomplete, or
-`unverified` blocks the handoff. An expected refusal or
-`expected_outcome_unknown` passes only with its required durable evidence; a
-real Provider observation, retry-until-green outcome, benchmark, or manual
-assertion cannot substitute for a deterministic gate.
+No selected gate is claimed executed or passed at the implementation-planning
+handoff. After implementation, the Foundation Validation / release-to-real-
+author gate requires actual execution and replayable evidence for every
+selected row. Any selected gate that is failed, unrun, unreplayable,
+evidence-incomplete, or `unverified` blocks that later release gate, not
+Superpowers planning. An expected refusal or `expected_outcome_unknown` passes
+only with its required durable evidence; a real Provider observation,
+retry-until-green outcome, benchmark, or manual assertion cannot substitute for
+a deterministic gate.
 
-## 8. User acceptance evidence
+## 8. Subsequent Foundation Validation user-acceptance evidence
 
-The first real-author acceptance session occurs on a local StoryOS Server and
+After implementation, the Foundation Validation / release-to-real-author gate
+requires a real-author product-acceptance session on a local StoryOS Server and
 PostgreSQL database using a separately admitted external model API. It must
 show, without exposing credentials or raw secret-bearing wire data, that:
 
@@ -222,8 +245,9 @@ show, without exposing credentials or raw secret-bearing wire data, that:
    revise the current passage;
 2. the author sends a current-passage request and the Agent produces an
    editable, anchored Proposal rather than an automatic prose write or outline;
-3. the author can modify, accept, and reject Proposals, with Acceptance alone
-   changing Authoritative State and producing its inspectable Receipt;
+3. the author can modify, accept, and reject Proposals, with only an Applied
+   Acceptance changing Authoritative State and producing its inspectable
+   Acceptance Receipt, while a durable Proposal Rejection is non-destructive;
 4. the ordinary path requires no author Provider, role, policy, Skill, Pin,
    retention, or Eval configuration;
 5. the run's safe inspection view distinguishes selected context, manifest
@@ -233,18 +257,22 @@ show, without exposing credentials or raw secret-bearing wire data, that:
    authoritative facts recoverable and truthful, including a visible
    `OutcomeUnknown` when that is the only honest state.
 
-This evidence establishes that a real author can use the loop for a novel. It
-does not assert response quality, provider reliability, benchmark performance,
-provider retention, or a release-scale capacity number.
+This later evidence establishes that a real author can use the loop for a
+novel. It is not required for, and is not claimed by, the Superpowers
+implementation-planning handoff. It does not assert response quality, provider
+reliability, benchmark performance, provider retention, or a release-scale
+capacity number.
 
 ## 9. Superpowers implementation-planning handoff
 
-Superpowers planning receives this specification as a fixed scope boundary,
-not permission to broaden it. The first plan must preserve all accepted
-contracts and produce a small sequence of implementation stages, each with
-red tests before the smallest corresponding implementation. It must neither
-start a second product design nor treat a prototype or `.reference/**` source
-as production code.
+Superpowers planning is available now from this accepted specification. It
+receives a fixed scope boundary, selected contract closure, DVG proof plan,
+ownership, and future evidence obligations—not an assertion that deterministic
+verification or real-author product acceptance has already occurred. The first
+plan must preserve all accepted contracts and produce a small sequence of
+implementation stages, each with red tests before the smallest corresponding
+implementation. It must neither start a second product design nor treat a
+prototype or `.reference/**` source as production code.
 
 ### 9.1 Initial ownership roots and process entries
 
@@ -321,25 +349,28 @@ output is never hand-edited or used as domain truth.
 An implementation plan is ready to begin only when it names, for each selected
 route and migration, its owning zone, Core command/query, transaction/outbox
 boundary, exact Project Scope and RLS posture, context/destination boundary,
-recovery/fence behavior, generated-contract change, deterministic gate,
-real-author acceptance evidence, and explicit excluded capability. The plan
-must also provide a non-mutating final `verify` entrypoint design and exact
-checks that exclude `prototypes/**` and `.reference/**` from every production
-workspace, dependency, build, test, package, release, and runtime path.
+recovery/fence behavior, generated-contract change, selected DVG proof-plan
+ownership, later real-author product-acceptance evidence obligation, and
+explicit excluded capability. No selected DVG result or real-author session is
+required or claimed at this planning gate. The plan must also provide a
+non-mutating final `verify` entrypoint design and exact checks that exclude
+`prototypes/**` and `.reference/**` from every production workspace,
+dependency, build, test, package, release, and runtime path.
 
 ## 10. Map disposition
 
 No additional Wayfinder ticket is created from this decision. The parent map's
 remaining performance-budget and benchmark-corpus fog does not block the
-Foundation Design Package or this handoff: accepted Protocol limit profiles and
-the Recovery Service Profile continue to constrain safety, while no performance
-or quality claim is required for the selected first loop. A future measurement
-or benchmark question remains separate advisory planning rather than a hidden
-acceptance gate.
+Foundation Design Package or the implementation-planning handoff: accepted
+Protocol limit profiles and the Recovery Service Profile continue to constrain
+safety, while no performance or quality claim is required for the selected
+first loop. A future measurement or benchmark question remains separate
+advisory planning rather than a hidden acceptance gate.
 
 With this specification, the Foundation Design Package has a selected first
 production vertical slice, explicit exclusions, selected deterministic and
-user-acceptance evidence, and a bounded implementation-planning handoff.
+user-acceptance evidence obligations for later Foundation Validation, and a
+bounded implementation-planning handoff available now.
 
 ## 11. Accepted inputs
 

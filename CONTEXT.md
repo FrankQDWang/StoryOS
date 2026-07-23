@@ -32,7 +32,7 @@ _Avoid_: Canon (too narrow), accepted artifact, Agent memory
 The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
 
 **First Production Writing Loop**:
-The smallest author-visible Discovery Writing journey selected for initial production delivery: from a current passage in an existing Project, the author may directly edit, ask the adjacent Agent for bounded help, review its editable Proposal, and explicitly accept or reject it. It completes only when Acceptance creates the resulting Authoritative Revision and Receipt; project setup, story outlining, configuration, Eval, Tools, Skills, research, and long-term memory are not prerequisites.
+The smallest author-visible Discovery Writing journey selected for initial production delivery: from a current passage in an existing Project, the author may directly edit, ask the adjacent Agent for bounded help, review its editable Proposal, and explicitly accept or reject it. It completes when the author's explicit, durable Applied Acceptance or Proposal Rejection is recorded; only an Applied Acceptance creates the resulting Authoritative Revision and Acceptance Receipt, while Proposal Rejection is non-destructive and leaves Authoritative State unchanged. Project setup, story outlining, configuration, Eval, Tools, Skills, research, and long-term memory are not prerequisites.
 _Avoid_: Chat-only demo, automatic rewrite, Agent-authored outline, setup wizard
 
 **Author Preference**:
