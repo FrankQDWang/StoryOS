@@ -96,10 +96,12 @@ On reload or process restart, the client:
 2. obtains the current writer generation or performs explicit takeover;
 3. fetches a bounded Server Snapshot and replay position;
 4. reconciles every journal idempotency key with its admission and Receipt;
-5. automatically retries only exact, unexpired, unsettled
-   `direct_editor_action` commands through normal admission;
-6. surfaces any unsettled explicit editor decision as
-   `requires_reconfirmation` and never executes it automatically;
+5. automatically invokes only the same exact, unexpired, unsettled
+   `direct_editor_action` admission while every admission binding still
+   matches;
+6. surfaces every `requires_reconfirmation` settlement for an explicit,
+   expired, binding-changed, or intent-unrecoverable command and never executes
+   it automatically;
 7. projects committed results in Server order; and
 8. converts expired, stale, or unprovable intent into a Recovery Draft.
 

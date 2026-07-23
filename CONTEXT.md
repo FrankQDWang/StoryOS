@@ -228,8 +228,8 @@ The two complementary deterministic gates for an Author Edit. Browser integratio
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
-The immutable StoryOS record identified by `AuthorCommandAdmissionId` that binds one authenticated User, exact existing or Server-allocated prospective Project Scope, trusted Web Client session, applicable Editor Session and writer generation, explicit action class, canonical command digest, target, expected Heads, nonce, idempotency record, bounded lifetime, and exactly one typed terminal settlement. It admits one author-owned command for Core evaluation and is not reusable; an unsettled explicit command requires author reconfirmation after recovery.
-_Avoid_: Client-supplied actor, session role as authority, Approval, reusable authorization token
+The immutable StoryOS record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; recovery may invoke only the same unexpired, fully matching direct edit, while an explicit, expired, or changed command requires author reconfirmation.
+_Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token
 
 **Editor Session**:
 One browser editing session for an exact User and Project Scope, identified by `EditorSessionId` and governed by the current Project writer generation. It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority.
