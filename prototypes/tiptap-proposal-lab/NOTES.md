@@ -36,6 +36,57 @@ npm run dev
 - a hidden prototype harness behind the lower-left settings control for stream,
   conflict, reload, reset, inline ownership, Safe Mode, and Block ID scenarios.
 
+## Issue #45 production UX matrix
+
+The production-shaped pass keeps the approved writing workspace and adds the
+author-facing refusal, conflict, and recovery states directly after the affected
+manuscript content. The harness remains hidden; each state is also reproducible
+with `?scenario=<id>`.
+
+| Scenario | Result | Preserved artifact | Available author actions |
+| --- | --- | --- | --- |
+| `authoritative` | authoritative | — | none |
+| `proposal` | Proposal | editable Proposal | accept, reject |
+| `refused` | refused | Refused Edit Draft | narrow, copy, expand into a Proposal, discard |
+| `conflicted` | conflicted | Proposal Conflict | replan from current authority, copy, reject |
+| `no-effect` | no-effect | — | none |
+| `recovery-draft` | recovery | Recovery Draft | retry, copy, discard |
+| `proposal-recovery-conflict` | recovery | Proposal Recovery Conflict | replan from current authority, copy, withdraw |
+
+The Refused Edit Draft preserves all 50 characters across three lines. The
+Recovery Draft preserves all 41 characters across three lines. Both Proposal
+conflict paths display the same complete eight-paragraph, 287-character Proposal
+that remains visible in the editor. No recovery surface exposes a stale accept
+control.
+
+The real Chrome interaction pass proved these transitions without a hidden or
+partial write:
+
+- copy reported an author-visible confirmation, and native `Meta-v` pasted the
+  exact 50-character Refused Edit Draft into the narrowing editor while the
+  immutable full attempt remained visible;
+- narrowing retains the complete Refused Edit Draft while the author selects a
+  smaller retry, and the selected text becomes one fresh Proposal;
+- expanding a Refused Edit Draft creates a fresh Proposal containing all three
+  preserved lines;
+- retrying a Recovery Draft appends all three lines exactly once, then settles
+  to authoritative with no recovery controls;
+- replanning a Proposal Conflict creates one fresh Proposal containing the exact
+  eight preserved paragraphs;
+- rejecting, withdrawing, or discarding settles to no-effect, removes the
+  candidate artifact, and leaves authoritative prose unchanged;
+- accepting a fresh Proposal writes its complete text atomically and removes all
+  Proposal controls.
+
+Tracked evidence:
+
+- [approved source beside the Refused Edit Draft](artifacts/issue-45-approved-refused-comparison.png)
+- [Refused Edit Draft](artifacts/issue-45-refused-edit-draft.png)
+- [Proposal Conflict](artifacts/issue-45-proposal-conflict.png)
+- [Recovery Draft](artifacts/issue-45-recovery-draft.png)
+- [Proposal Recovery Conflict](artifacts/issue-45-proposal-recovery-conflict.png)
+- [machine-readable matrix](artifacts/issue-45-production-ux-matrix.json)
+
 ## Package baseline
 
 - Tiptap React / StarterKit / UniqueID: `3.27.3`
@@ -86,8 +137,9 @@ npm run dev
   make the non-authoritative result understandable, and expose the same applicable
   next actions as other refused edits.
 
-## Deferred beyond this browser/editor prototype
+## Boundary beyond this disposable browser/editor prototype
 
-- crash-window reconciliation is intentionally out of this browser/editor ticket:
-  it requires the Core state machine and durable storage boundary from issues #46
-  and #56, and should be tracked as a later disposable prototype before final gates.
+- This pass validates the author-facing Recovery Draft and Proposal Recovery
+  Conflict presentation, complete-text preservation, and action semantics. It
+  does not implement or redesign the durable Core reconciliation owned by issues
+  #46 and #70.

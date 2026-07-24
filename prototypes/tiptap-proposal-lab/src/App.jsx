@@ -19,6 +19,7 @@ import {
 import {
   chapterDocuments,
   chapterTitles,
+  chapterTwelveAuthorityDocument,
   chapterTwelveDocument,
   initialMessages,
   initialProposal,
@@ -42,6 +43,14 @@ import {
   savePrototypeState,
 } from "./prototype-storage.js";
 import { ContractProbe } from "./ContractProbe.jsx";
+import {
+  countCharacters,
+  getUxScenario,
+  preservedTextToParagraphs,
+  resolveUxAction,
+  UX_ACTIONS,
+  UX_SCENARIO_IDS,
+} from "./recovery-ux.js";
 
 const STREAM_CHUNKS = [
   "可那行字像一根细针，",
@@ -56,6 +65,46 @@ function timestamp() {
     minute: "2-digit",
     hour12: false,
   }).format(new Date());
+}
+
+function readRequestedUxScenario() {
+  const requested = new URLSearchParams(window.location.search).get("scenario");
+  return UX_SCENARIO_IDS.includes(requested) ? requested : "proposal";
+}
+
+function writeUxScenarioToUrl(scenarioId) {
+  const url = new URL(window.location.href);
+  if (scenarioId === "proposal") url.searchParams.delete("scenario");
+  else url.searchParams.set("scenario", scenarioId);
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function chapterDocumentForScenario(scenarioId) {
+  return ["proposal", "conflicted", "proposal-recovery-conflict"].includes(
+    scenarioId,
+  )
+    ? chapterTwelveDocument
+    : chapterTwelveAuthorityDocument;
+}
+
+function proposalForScenario(scenarioId) {
+  if (scenarioId === "authoritative") {
+    return { ...initialProposal, blockIds: [], resolution: "applied" };
+  }
+  if (["no-effect", "recovery-draft"].includes(scenarioId)) {
+    return { ...initialProposal, blockIds: [] };
+  }
+  if (["conflicted", "proposal-recovery-conflict"].includes(scenarioId)) {
+    return {
+      ...initialProposal,
+      validation: "conflicted",
+      conflictReason:
+        scenarioId === "conflicted"
+          ? "target_revision_changed"
+          : "pause_fence_ambiguous",
+    };
+  }
+  return initialProposal;
 }
 
 function proposalStatusLabel(proposal) {
@@ -178,6 +227,97 @@ function ProposalActions({ proposal, onAccept, onReject, onCompletePartial }) {
   );
 }
 
+function RecoverySurface({
+  scenario,
+  phase,
+  attemptedText,
+  narrowedText,
+  outcomeDetail,
+  onNarrowedTextChange,
+  onAction,
+}) {
+  if (scenario.id === "proposal") return null;
+
+  const hasPreservedText = Boolean(attemptedText);
+  const isNarrowing = phase === "narrowing";
+  const canRetryNarrowed =
+    isNarrowing &&
+    narrowedText.trim().length > 0 &&
+    narrowedText.trim() !== attemptedText.trim();
+
+  return (
+    <section
+      className={`recovery-surface ${scenario.tone}`}
+      aria-labelledby="recovery-surface-title"
+      data-result-kind={scenario.result}
+      data-artifact-kind={scenario.artifactKind ?? undefined}
+      data-testid="recovery-surface"
+    >
+      <div className="recovery-heading">
+        <span>{scenario.eyebrow}</span>
+        <h2 id="recovery-surface-title">{scenario.title}</h2>
+        <p>{outcomeDetail ?? scenario.description}</p>
+      </div>
+
+      {hasPreservedText && (
+        <div className="preserved-copy">
+          <div className="preserved-copy-heading">
+            <strong>{scenario.textLabel}</strong>
+            <span>全文 · {countCharacters(attemptedText)} 字</span>
+          </div>
+          <pre
+            aria-label={scenario.textLabel}
+            data-testid="preserved-text"
+          >
+            {attemptedText}
+          </pre>
+        </div>
+      )}
+
+      {isNarrowing && (
+        <div className="narrowing-editor">
+          <label htmlFor="narrowed-retry-text">
+            选出只属于正文或提案的一段，再作为新尝试提交
+          </label>
+          <textarea
+            id="narrowed-retry-text"
+            value={narrowedText}
+            onChange={(event) => onNarrowedTextChange(event.target.value)}
+            aria-label="要重试的较小范围"
+          />
+        </div>
+      )}
+
+      {scenario.actions.length > 0 && (
+        <div className="recovery-actions" aria-label="可用操作">
+          {scenario.actions
+            .filter((actionId) => !(isNarrowing && actionId === "narrow"))
+            .map((actionId) => (
+              <button
+                key={actionId}
+                type="button"
+                data-action={actionId}
+                onClick={() => onAction(actionId)}
+              >
+                {UX_ACTIONS[actionId].label}
+              </button>
+            ))}
+          {canRetryNarrowed && (
+            <button
+              type="button"
+              className="primary"
+              data-action="retry-narrowed"
+              onClick={() => onAction("retry-narrowed")}
+            >
+              重试这段
+            </button>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function AgentPanel({
   collapsed,
   messages,
@@ -263,11 +403,13 @@ function AgentPanel({
 function PrototypeLab({
   proposal,
   refusedDraft,
+  uxScenarioId,
   onClose,
   onStream,
   onConflict,
   onReload,
   onReset,
+  onSelectUxScenario,
 }) {
   return (
     <div className="lab-backdrop" role="presentation" onMouseDown={onClose}>
@@ -307,6 +449,26 @@ function PrototypeLab({
           <button type="button" className="quiet" onClick={onReset}>重置原型</button>
         </div>
 
+        <section className="ux-matrix-controls" aria-label="Issue 45 UX 场景">
+          <div>
+            <span>Issue 45</span>
+            <strong>production UX matrix</strong>
+          </div>
+          <div className="ux-scenario-buttons">
+            {UX_SCENARIO_IDS.map((scenarioId) => (
+              <button
+                key={scenarioId}
+                type="button"
+                className={scenarioId === uxScenarioId ? "active" : ""}
+                data-testid={`ux-scenario-${scenarioId}`}
+                onClick={() => onSelectUxScenario(scenarioId)}
+              >
+                {scenarioId}
+              </button>
+            ))}
+          </div>
+        </section>
+
         <p>
           流式续写期间在提案内输入，RunWriteGate 会先同步关闭，晚到的 Agent
           片段不会进入编辑器。跨越正文与提案的替换会整体拒绝。
@@ -326,19 +488,30 @@ function PrototypeLab({
 }
 
 export function App() {
-  const saved = useMemo(loadPrototypeState, []);
+  const bootScenarioId = useMemo(readRequestedUxScenario, []);
+  const saved = useMemo(
+    () => (bootScenarioId === "proposal" ? loadPrototypeState() : null),
+    [bootScenarioId],
+  );
   const [activeChapter, setActiveChapter] = useState("chapter-12");
   const [expandedVolumes, setExpandedVolumes] = useState(
     () => new Set(["volume-1", "volume-2"]),
   );
   const [agentCollapsed, setAgentCollapsed] = useState(false);
-  const [proposal, setProposal] = useState(saved?.proposal ?? initialProposal);
+  const [proposal, setProposal] = useState(
+    saved?.proposal ?? proposalForScenario(bootScenarioId),
+  );
   const [messages, setMessages] = useState(saved?.messages ?? initialMessages);
   const [draft, setDraft] = useState("");
   const [labOpen, setLabOpen] = useState(false);
   const [notice, setNotice] = useState("");
   const [refusedDraft, setRefusedDraft] = useState(null);
   const [documentEpoch, setDocumentEpoch] = useState(0);
+  const [uxScenarioId, setUxScenarioId] = useState(bootScenarioId);
+  const [uxPhase, setUxPhase] = useState("review");
+  const [uxAttemptOverride, setUxAttemptOverride] = useState(null);
+  const [uxOutcomeDetail, setUxOutcomeDetail] = useState(null);
+  const [narrowedText, setNarrowedText] = useState("");
 
   const proposalRef = useRef(proposal);
   const activeChapterRef = useRef(activeChapter);
@@ -346,7 +519,8 @@ export function App() {
   const streamTimerRef = useRef(null);
   const chapterDocumentsRef = useRef({
     ...chapterDocuments,
-    "chapter-12": saved?.document ?? chapterTwelveDocument,
+    "chapter-12":
+      saved?.document ?? chapterDocumentForScenario(bootScenarioId),
   });
 
   proposalRef.current = proposal;
@@ -416,6 +590,11 @@ export function App() {
         ? "已作为一次新的接受尝试重新应用提案；新的 Command、Commit 与 Receipt 已生成。"
         : "提案已写入当前章节。接受记录已保留，你仍可以安全撤销这次接受。",
     );
+    setUxScenarioId("authoritative");
+    setUxPhase("review");
+    setUxAttemptOverride(null);
+    setUxOutcomeDetail("提案全文已作为一次原子接受写入正文，没有留下部分结果。");
+    writeUxScenarioToUrl("authoritative");
     setNotice(source === "redo" ? "已重新接受提案（新 Receipt）" : "已接受提案");
     return true;
   }, [addAgentMessage]);
@@ -444,6 +623,11 @@ export function App() {
       authorAction: { kind: "undo_acceptance", safe: true },
     }));
     addAgentMessage("已补偿刚才的接受，并用一个新修订重新打开提案；原接受记录没有被改写。");
+    setUxScenarioId("proposal");
+    setUxPhase("review");
+    setUxAttemptOverride(null);
+    setUxOutcomeDetail(null);
+    writeUxScenarioToUrl("proposal");
     setNotice("已撤销接受并重新打开提案");
     return true;
   }, [addAgentMessage]);
@@ -460,6 +644,12 @@ export function App() {
 
   const onRefusedTransaction = useCallback((nextDraft) => {
     setRefusedDraft(nextDraft);
+    setUxScenarioId("refused");
+    setUxPhase("review");
+    setUxAttemptOverride(nextDraft.attemptedText);
+    setUxOutcomeDetail(null);
+    setNarrowedText("");
+    writeUxScenarioToUrl("refused");
     setNotice("这次编辑跨越正文与提案，已整笔拒绝并保存 Refused Edit Draft");
   }, []);
 
@@ -476,7 +666,7 @@ export function App() {
   );
 
   const editor = useEditor({
-    content: saved?.document ?? chapterTwelveDocument,
+    content: saved?.document ?? chapterDocumentForScenario(bootScenarioId),
     extensions: [
       StarterKit.configure({ heading: false }),
       UniqueID.configure({
@@ -576,7 +766,13 @@ export function App() {
   }, [notice]);
 
   useEffect(() => {
-    if (!editor || activeChapter !== "chapter-12") return undefined;
+    if (
+      !editor ||
+      activeChapter !== "chapter-12" ||
+      uxScenarioId !== "proposal"
+    ) {
+      return undefined;
+    }
     const timer = window.setTimeout(() => {
       savePrototypeState({
         document: editor.getJSON(),
@@ -585,7 +781,14 @@ export function App() {
       });
     }, 200);
     return () => window.clearTimeout(timer);
-  }, [activeChapter, documentEpoch, editor, messages, proposal]);
+  }, [
+    activeChapter,
+    documentEpoch,
+    editor,
+    messages,
+    proposal,
+    uxScenarioId,
+  ]);
 
   useEffect(
     () => () => {
@@ -593,6 +796,200 @@ export function App() {
     },
     [],
   );
+
+  const setUxResult = ({
+    scenarioId,
+    attemptedText = null,
+    outcomeDetail = null,
+  }) => {
+    setUxScenarioId(scenarioId);
+    setUxPhase("review");
+    setUxAttemptOverride(attemptedText);
+    setUxOutcomeDetail(outcomeDetail);
+    setNarrowedText("");
+    writeUxScenarioToUrl(scenarioId);
+  };
+
+  const selectUxScenario = (scenarioId) => {
+    if (!editor) return;
+    if (streamTimerRef.current) window.clearInterval(streamTimerRef.current);
+    streamTimerRef.current = null;
+    runGateRef.current = false;
+
+    const document = chapterDocumentForScenario(scenarioId);
+    replaceEditorDocument(editor, document, `ux_scenario_${scenarioId}`);
+    chapterDocumentsRef.current["chapter-12"] = document;
+    setActiveChapter("chapter-12");
+    setProposal(proposalForScenario(scenarioId));
+    setRefusedDraft(null);
+    setUxResult({ scenarioId });
+    setLabOpen(false);
+    setNotice(`已切换到 ${scenarioId} 场景`);
+  };
+
+  const materializeTextAsProposal = (text, source) => {
+    if (!editor) return;
+    const suffix = `${Date.now()}`;
+    const paragraphs = preservedTextToParagraphs(
+      text,
+      `proposal-recovery-${suffix}`,
+    );
+    const blockIds = paragraphs.map((paragraph) => paragraph.attrs.blockId);
+    const candidate = editor.schema.nodeFromJSON({
+      type: "doc",
+      content: paragraphs,
+    });
+    const envelope = findProposalEnvelope(
+      editor.state.doc,
+      proposalRef.current.blockIds,
+    );
+    const from = envelope?.from ?? editor.state.doc.content.size;
+    const to = envelope?.to ?? from;
+    const transaction = editor.state.tr
+      .replaceWith(from, to, candidate.content)
+      .setMeta(PROPOSAL_META, { allow: true, source })
+      .setMeta("addToHistory", false);
+    editor.view.dispatch(transaction);
+    setProposal((previous) => ({
+      ...previous,
+      revision: previous.revision + 1,
+      blockIds,
+      resolution: "pending",
+      generation: "ready",
+      validation: "pending",
+      conflictReason: null,
+      creator: "author",
+    }));
+  };
+
+  const appendRecoveryTextToAuthority = (text) => {
+    if (!editor) return;
+    const suffix = `${Date.now()}`;
+    const recovered = editor.schema.nodeFromJSON({
+      type: "doc",
+      content: preservedTextToParagraphs(
+        text,
+        `recovered-authority-${suffix}`,
+      ),
+    });
+    const position = editor.state.doc.content.size;
+    const transaction = editor.state.tr
+      .replaceWith(position, position, recovered.content)
+      .setMeta(PROPOSAL_META, { allow: true, source: "retry_recovery_draft" })
+      .setMeta("addToHistory", false);
+    editor.view.dispatch(transaction);
+    setProposal((previous) => ({
+      ...previous,
+      blockIds: [],
+      resolution: "applied",
+      validation: "valid",
+    }));
+  };
+
+  const removeCurrentProposal = (source) => {
+    if (!editor) return;
+    const envelope = findProposalEnvelope(
+      editor.state.doc,
+      proposalRef.current.blockIds,
+    );
+    if (!envelope) return;
+    const transaction = editor.state.tr
+      .delete(envelope.from, envelope.to)
+      .setMeta(PROPOSAL_META, { allow: true, source })
+      .setMeta("addToHistory", false);
+    editor.view.dispatch(transaction);
+    setProposal((previous) => ({
+      ...previous,
+      blockIds: [],
+      resolution: "rejected",
+      conflictReason: null,
+    }));
+  };
+
+  const handleUxAction = async (actionId) => {
+    const scenario = getUxScenario(uxScenarioId);
+    const attemptedText =
+      uxAttemptOverride ?? scenario.attemptedText ?? "";
+
+    if (actionId === "retry-narrowed") {
+      const retryText = narrowedText;
+      if (!retryText.trim() || retryText.trim() === attemptedText.trim()) return;
+      materializeTextAsProposal(retryText, "narrowed_refused_edit_retry");
+      setUxResult({
+        scenarioId: "proposal",
+        outcomeDetail: "较小范围已作为一份新的 Proposal 提交检查。",
+      });
+      setNotice("较小范围已转为 Proposal");
+      return;
+    }
+
+    const transition = resolveUxAction({
+      scenarioId: uxScenarioId,
+      actionId,
+      attemptedText,
+    });
+
+    if (actionId === "copy") {
+      try {
+        await navigator.clipboard.writeText(transition.preservedText);
+        setUxOutcomeDetail(
+          "完整编辑尝试已复制；原文仍完整保留在这里，没有被清空或截断。",
+        );
+        setNotice("完整文本已复制");
+      } catch {
+        setUxOutcomeDetail(
+          "浏览器没有完成复制。完整编辑尝试仍保留在这里，你可以直接选择文本。",
+        );
+        setNotice("复制未完成，原文仍保留");
+      }
+      return;
+    }
+
+    if (actionId === "narrow") {
+      setUxPhase("narrowing");
+      setNarrowedText(transition.preservedText);
+      setNotice("完整尝试仍保留；请选择要重试的较小范围");
+      return;
+    }
+
+    if (transition.nextScenarioId === "authoritative") {
+      appendRecoveryTextToAuthority(transition.preservedText);
+      setUxResult({
+        scenarioId: "authoritative",
+        outcomeDetail:
+          "恢复草稿已作为一次新的显式尝试完整写入正文，没有拆分或重复。",
+      });
+      setNotice("恢复草稿已完整保存");
+      return;
+    }
+
+    if (transition.nextScenarioId === "proposal") {
+      materializeTextAsProposal(
+        transition.preservedText,
+        actionId === "expand" ? "expand_proposal_retry" : "replan_proposal",
+      );
+      setUxResult({
+        scenarioId: "proposal",
+        outcomeDetail: "完整文本已进入一份新的 Proposal，正在检查当前目标。",
+      });
+      setNotice("完整文本已转为新的 Proposal");
+      return;
+    }
+
+    if (actionId === "reject" || actionId === "withdraw") {
+      removeCurrentProposal(
+        actionId === "reject" ? "reject_conflicted_proposal" : "withdraw_proposal",
+      );
+    }
+    const detail =
+      actionId === "discard"
+        ? "草稿已由作者明确丢弃；正文和提案没有发生变化。"
+        : actionId === "reject"
+          ? "冲突提案已由作者拒绝；当前正文没有发生变化。"
+          : "恢复冲突中的提案已由作者撤回；当前正文没有发生变化。";
+    setUxResult({ scenarioId: "no-effect", outcomeDetail: detail });
+    setNotice("没有内容写入正文");
+  };
 
   const toggleVolume = (volumeId) => {
     setExpandedVolumes((current) => {
@@ -632,6 +1029,7 @@ export function App() {
         conflictReason: captured.reason ?? "proposal_envelope_missing",
       }));
       addAgentMessage("当前提案片段不完整，StoryOS 没有执行破坏性删除；需要先重新规划提案范围。");
+      setUxResult({ scenarioId: "conflicted" });
       setNotice("提案范围已变化，未执行拒绝");
       return;
     }
@@ -649,6 +1047,10 @@ export function App() {
       rejectedRevision: captured.revision,
     }));
     addAgentMessage("已拒绝这次提案，章节正文没有被改写。你可以从这里重新打开它。");
+    setUxResult({
+      scenarioId: "no-effect",
+      outcomeDetail: "提案已由作者拒绝；当前章节正文没有发生变化。",
+    });
     setNotice("已拒绝提案");
   };
 
@@ -677,6 +1079,7 @@ export function App() {
         conflictReason: reopened.reason,
       }));
       addAgentMessage("当前章节的提案锚点已经变化，StoryOS 没有猜测插入位置；需要基于现有正文重新规划。");
+      setUxResult({ scenarioId: "conflicted" });
       setNotice("提案位置已变化，需要重新规划");
       return;
     }
@@ -694,6 +1097,7 @@ export function App() {
       creator: "author",
     }));
     addAgentMessage("已从被拒绝的历史内容创建新修订并重新打开，正在重新检查当前目标。");
+    setUxResult({ scenarioId: "proposal" });
     setNotice("已重新打开提案");
   };
 
@@ -741,6 +1145,7 @@ export function App() {
       pauseFence: null,
       creator: "agent",
     }));
+    setUxResult({ scenarioId: "proposal" });
 
     let index = 0;
     streamTimerRef.current = window.setInterval(() => {
@@ -781,6 +1186,8 @@ export function App() {
       validation: "conflicted",
       authorAction: { kind: "conflict", safe: false },
     }));
+    setUxResult({ scenarioId: "conflicted" });
+    setLabOpen(false);
     setNotice("目标修订已变化，提案不能静默重基或接受");
   };
 
@@ -796,6 +1203,7 @@ export function App() {
     setMessages(initialMessages);
     setDraft("");
     setRefusedDraft(null);
+    setUxResult({ scenarioId: "proposal" });
     setLabOpen(false);
     setNotice("原型已重置");
   };
@@ -826,6 +1234,10 @@ export function App() {
 
   if (!editor) return null;
 
+  const uxScenario = getUxScenario(uxScenarioId);
+  const attemptedText =
+    uxAttemptOverride ?? uxScenario.attemptedText ?? null;
+
   return (
     <main className={`workspace ${agentCollapsed ? "agent-is-collapsed" : ""}`}>
       <TreePanel
@@ -843,12 +1255,24 @@ export function App() {
               <h1>{chapterTitles[activeChapter]}</h1>
             </header>
             <EditorContent editor={editor} />
-            {activeChapter === "chapter-12" && (
+            {activeChapter === "chapter-12" &&
+              uxScenarioId === "proposal" && (
               <ProposalActions
                 proposal={proposal}
                 onAccept={acceptProposal}
                 onReject={rejectProposal}
                 onCompletePartial={completePartial}
+              />
+            )}
+            {activeChapter === "chapter-12" && (
+              <RecoverySurface
+                scenario={uxScenario}
+                phase={uxPhase}
+                attemptedText={attemptedText}
+                narrowedText={narrowedText}
+                outcomeDetail={uxOutcomeDetail}
+                onNarrowedTextChange={setNarrowedText}
+                onAction={handleUxAction}
               />
             )}
           </article>
@@ -883,11 +1307,13 @@ export function App() {
         <PrototypeLab
           proposal={proposal}
           refusedDraft={refusedDraft}
+          uxScenarioId={uxScenarioId}
           onClose={() => setLabOpen(false)}
           onStream={startStream}
           onConflict={simulateConflict}
           onReload={() => window.location.reload()}
           onReset={resetPrototype}
+          onSelectUxScenario={selectUxScenario}
         />
       )}
     </main>

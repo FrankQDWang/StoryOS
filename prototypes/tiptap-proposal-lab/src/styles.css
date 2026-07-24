@@ -379,6 +379,139 @@ textarea:focus-visible {
   cursor: not-allowed;
 }
 
+.recovery-surface {
+  margin: 18px -12px 0 -16px;
+  border-left: 1px solid #9a958d;
+  background: #f7f5f2;
+  padding: 20px 24px 18px 28px;
+  color: #45423c;
+}
+
+.recovery-surface.settled {
+  border-left-color: #8f9c8a;
+  background: #f6f7f3;
+}
+
+.recovery-surface.neutral {
+  border-left-color: #aaa69f;
+  background: #f7f6f4;
+}
+
+.recovery-heading {
+  display: grid;
+  gap: 7px;
+}
+
+.recovery-heading > span {
+  color: #817d75;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.recovery-heading h2 {
+  margin: 0;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 17px;
+  line-height: 1.55;
+  font-weight: 600;
+  color: #302e29;
+}
+
+.recovery-heading p {
+  max-width: 610px;
+  margin: 0;
+  color: #716d66;
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.preserved-copy {
+  margin-top: 17px;
+  border-top: 1px solid rgba(78, 73, 66, 0.1);
+  padding-top: 14px;
+}
+
+.preserved-copy-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  color: #77736b;
+  font-size: 11px;
+}
+
+.preserved-copy-heading strong {
+  color: #4d4942;
+  font-weight: 500;
+}
+
+.preserved-copy pre {
+  margin: 10px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  line-height: 1.95;
+  letter-spacing: 0.025em;
+  color: #35322d;
+}
+
+.narrowing-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 17px;
+  border-top: 1px solid rgba(78, 73, 66, 0.1);
+  padding-top: 14px;
+}
+
+.narrowing-editor label {
+  color: #69655e;
+  font-size: 11px;
+}
+
+.narrowing-editor textarea {
+  min-height: 112px;
+  resize: vertical;
+  border: 1px solid #d8d3cc;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  padding: 11px 12px;
+  color: #35322d;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 16px;
+}
+
+.recovery-actions button {
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  padding: 4px 0;
+  color: #5b5750;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.recovery-actions button:hover {
+  border-bottom-color: #8b867e;
+  color: #26241f;
+}
+
+.recovery-actions button.primary {
+  border: 1px solid #4b4841;
+  border-radius: 7px;
+  background: #4b4841;
+  padding: 6px 10px;
+  color: white;
+}
+
 .agent-panel {
   background: var(--assistant-panel);
   border-left: 1px solid var(--line);
@@ -703,6 +836,53 @@ textarea:focus-visible {
 .lab-actions button.quiet {
   background: transparent;
   color: #55524c;
+}
+
+.ux-matrix-controls {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+  border-top: 1px solid #dedad2;
+  padding-top: 16px;
+}
+
+.ux-matrix-controls > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.ux-matrix-controls span {
+  color: #99958d;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ux-matrix-controls strong {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ux-scenario-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ux-scenario-buttons button {
+  border: 1px solid #d7d3cb;
+  border-radius: 999px;
+  background: transparent;
+  padding: 6px 9px;
+  color: #67635c;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.ux-scenario-buttons button.active {
+  border-color: #4e4a43;
+  background: #4e4a43;
+  color: white;
 }
 
 .prototype-lab > p {
