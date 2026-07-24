@@ -377,6 +377,8 @@ export function App() {
       journalMetrics: () => sessionRef.current.journal.metrics(),
       focus: () => editor.chain().focus().run(),
       selectAll: () => editor.chain().focus().selectAll().run(),
+      setCursor: (position) =>
+        editor.chain().focus().setTextSelection(position).run(),
       selection: () => ({
         from: editor.state.selection.from,
         to: editor.state.selection.to,

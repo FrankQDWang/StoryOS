@@ -359,6 +359,14 @@ try {
     await page.keyboard.type("English typing");
     await page.waitForTimeout(280);
     await page.evaluate(() => window.storyosLab.flush());
+    await page.keyboard.press("Backspace");
+    await page.waitForTimeout(280);
+    await page.evaluate(() => window.storyosLab.flush());
+    await page.evaluate(() => window.storyosLab.setCursor(1));
+    await page.keyboard.press("Delete");
+    await page.waitForTimeout(280);
+    await page.evaluate(() => window.storyosLab.flush());
+    await editor.click();
     await page.keyboard.press("Meta+A");
     await page.waitForFunction(
       () => window.storyosLab.selection().empty === false,
@@ -395,6 +403,8 @@ try {
     check(sources.has("native-beforeinput"), "native beforeinput was not used");
     check(sources.has("native-clipboard"), "native clipboard path was not used");
     check(kinds.has("selection_replace"), "selection replace was not classified");
+    check(kinds.has("delete_backward"), "backward delete was not classified");
+    check(kinds.has("delete_forward"), "forward delete was not classified");
     check(kinds.has("cut"), "native cut was not classified");
     check(kinds.has("drop"), "native drop was not classified");
     check(
