@@ -3,14 +3,24 @@
 Source run: `issue69-2026-07-24T07-24-28-542Z`
 
 Primary-source harness:
-[`codex/issue-69-editor-session-harness@0e188f3`](https://github.com/FrankQDWang/StoryOS/commit/0e188f3)
+[`codex/issue-69-editor-session-harness@d994d25`](https://github.com/FrankQDWang/StoryOS/commit/d994d25d95ea635ebd33ae871c86704eda4c5377)
 
-Executable harness source:
+Unchanged executable harness source:
 [`2c67c9abe126a17c6c02fb66ab63b843ecfb4a63`](https://github.com/FrankQDWang/StoryOS/commit/2c67c9abe126a17c6c02fb66ab63b843ecfb4a63)
 
 The three automated files below are byte-for-byte copies from the frozen
 harness run. The representative trace is a bounded 450-line extract; the full
 2,100-line trace remains on the harness branch.
+
+Trace Stream identity is at least
+`{run_id, scenario_id, editor_session_id}`. `seq` and `at_ms` are
+recorder-local ordering and elapsed-time fields inside one stream. A multi-tab
+export deterministically concatenates multiple streams; file position does not
+prove cross-browser chronological or Project authority order. The frozen
+`secondary-tab-takeover-stale-writer` scenario intentionally contains
+`writer-a` `seq` 1–12 followed by `writer-b` `seq` 1–15. Cross-session
+authority order must be read from Core-owned Author Action, Activity, Head, and
+writer-generation fields.
 
 ```text
 abcbe8061ca56fcb5b5473eea060d428521c9527e6b2e10ebf39ae8760ef181c  automated-scenario-results.json
