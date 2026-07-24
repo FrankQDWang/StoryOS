@@ -87,12 +87,12 @@ Every JSONL record has:
 | Field | Meaning |
 | --- | --- |
 | `trace_schema` | Frozen schema identifier `storyos.issue69.trace.v1` |
-| `run_id` / `scenario_id` | Stable run and scenario identity |
-| `seq` / `at_ms` | Monotonic trace order and elapsed time |
+| `run_id` / `scenario_id` / `editor_session_id` | Trace Stream identity; the minimum stream key is this exact tuple |
+| `seq` / `at_ms` | Recorder-local monotonic order and elapsed time within one Trace Stream |
 | `actor` | `browser`, `journal`, `projection`, `transport`, `core`, `activity`, or `recovery` |
 | `stage` | Exact lifecycle stage, never an overloaded “saved” flag |
 | `chapter_id` / `target_id` | Scope of the observation |
-| `editor_session_id` / `writer_generation` | Session fence |
+| `writer_generation` | Core-owned writer fence |
 | `intent_id` / `intent_kind` / `undo_group` | Browser-semantic identity |
 | `journal_id` / `local_order` | Local durability identity |
 | `command_id` / `idempotency_key` / `payload_digest` | Submission identity |
@@ -102,6 +102,20 @@ Every JSONL record has:
 | `activity_position` / `projection_position` | Convergence and gap detection |
 | `text_sha256` / `utf8_bytes` | Byte-exact content observation |
 | `details` | Bounded stage-specific typed fields |
+
+Each browser context owns one `sessionStorage` TraceRecorder with its own
+sequence and elapsed-time origin. A multi-tab scenario exports those Trace
+Streams as a deterministic concatenation in runner collection order. The
+resulting JSONL may therefore contain repeated `seq` values and overlapping or
+reset `at_ms` values when the stream key changes. The concatenated file is not
+evidence of one global chronological order or one Project authority order.
+
+Lifecycle validation partitions records by
+`{run_id, scenario_id, editor_session_id}` before comparing `seq`. Across
+Editor Sessions, authority order must instead be derived from Core-owned
+`author_action_seq`, `activity_position`, expected/resulting Heads, and
+`writer_generation`. File position, recorder-local `seq`, and recorder-local
+`at_ms` must not be used as cross-session ordering keys.
 
 Lifecycle stage values used by the gate:
 

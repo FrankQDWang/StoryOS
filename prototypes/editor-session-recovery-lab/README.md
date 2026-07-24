@@ -30,11 +30,21 @@ npm run evidence
 Google Chrome, runs the deterministic scenario matrix, and writes bounded
 primary-source outputs beneath `artifacts/latest/`:
 
-- `trace.jsonl` — ordered browser, journal, Core, Receipt, Activity, projection,
-  recovery, and GC observations;
+- `trace.jsonl` — deterministically concatenated browser, journal, Core,
+  Receipt, Activity, projection, recovery, and GC Trace Streams; `seq` and
+  `at_ms` are ordered only within one
+  `{run_id, scenario_id, editor_session_id}` stream, not globally across the
+  exported file;
 - `scenario-results.json` — acceptance results and fault-window outcomes;
 - `measurements.csv` — latency, command-count, payload, and journal-growth data;
 - `environment.json` — exact tool, browser, schema, and source versions.
+
+Each browser context owns its own `sessionStorage` TraceRecorder. Multi-tab
+scenarios therefore export multiple recorder-local streams in a deterministic
+concatenation and may repeat `seq` values or overlap `at_ms` values. File
+position does not prove cross-context chronological or Project authority
+order. Compare Core-owned `author_action_seq`, `activity_position`, Heads, and
+`writer_generation` when reasoning across Editor Sessions.
 
 For an interactive inspection session:
 
