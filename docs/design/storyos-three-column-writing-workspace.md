@@ -5,7 +5,7 @@
 ## Status
 
 - Approved by the author as the default visual reference on 2026-07-13.
-- The editor Proposal contract was validated and closed in [Validate the Editable Proposal Contract in Tiptap](https://github.com/FrankQDWang/StoryOS/issues/45); its reproducible evidence remains in the [Tiptap Proposal lab](../../prototypes/tiptap-proposal-lab/NOTES.md).
+- The earlier editable-Proposal mechanism checkpoint remains validated in the [Tiptap Proposal lab](../../prototypes/tiptap-proposal-lab/NOTES.md). [Validate Production Proposal Refusal, Conflict, and Recovery UX](https://github.com/FrankQDWang/StoryOS/issues/45) is open again for production-shaped refusal, conflict, and recovery evidence; it does not reopen this approved visual direction or the accepted native-input mechanisms.
 - The complete shell and dynamic-surface boundary were validated and closed in [Prototype the Fixed Workspace Shell and Dynamic Surface Boundary](https://github.com/FrankQDWang/StoryOS/issues/55); the current evidence is the [fixed workspace shell conclusion](../../prototypes/fixed-workspace-shell/NOTES.md) and [design QA record](../../prototypes/fixed-workspace-shell/design-qa.md).
 - Production browser state, local continuity, writer takeover, synchronization, and recovery are governed by [Web Editor Session, Synchronization, and Recovery Semantics](../foundation/web-editor-session-synchronization-and-recovery-semantics.md).
 - These disposable prototypes validate interaction feasibility and surface ownership. They are not a production frontend or proof that production runtime, persistence, recovery, or backend integration has been implemented.
