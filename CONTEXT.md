@@ -8,8 +8,12 @@ StoryOS is a novel-project workspace in which the author retains authority over 
 A stable StoryOS principal identified by one durable `UserId`. The Foundation Validation Deployment bootstraps one local User without requiring a login or account-management product, while the same identity contract permits a later StoryOS service to host many isolated Users; credentials, display names, pen names, and billing accounts are not the User's domain identity.
 _Avoid_: Operating-system current user, global singleton, login session, pen name, account feature set
 
+**Protected Web Client**:
+The exact controlled StoryOS Web application build whose immutable asset set, client-contract identity, security-policy identity, and current Client Session Binding generation place it inside the Release 1 author-command trust boundary. Rendered or imported content, model, Tool, MCP, or App output, browser extensions, third-party scripts, browser-local caches, journals, and projections remain outside that claim, which proves an exact protected-client submission rather than a physical human gesture, trusted display, user presence, or user verification.
+_Avoid_: Any browser page, browser as author, trusted human gesture, local editor authority
+
 **Client Session Binding**:
-The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, command kind, idempotency record, and canonical command digest; the Binding is an authenticated input to Author Command Admission.
+The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, current session generation, accepted Protected Web Client contract and security-policy identities, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, command kind, idempotency record, and canonical command digest; the Binding is an authenticated input to Author Command Admission.
 _Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
 **Project Author**:
