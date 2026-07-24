@@ -59,23 +59,42 @@ The trace never overloads “saved.” It names these distinct observations:
 Recovery Draft preservation, and submission reauthorization are separate
 recovery stages.
 
+### Trace Stream ordering
+
+The minimum Trace Stream identity is
+`{run_id, scenario_id, editor_session_id}`. Each browser context owns a
+`sessionStorage` TraceRecorder, so `seq` is monotonic and `at_ms` is relative
+only within that stream. Multi-tab exports deterministically concatenate whole
+streams in runner collection order; file position, repeated `seq`, and
+overlapping or reset `at_ms` values do not establish a global chronological or
+Project authority order.
+
+The frozen `secondary-tab-takeover-stale-writer` export demonstrates this
+limit directly: the `writer-a` stream contains `seq` 1–12 and is followed by
+the `writer-b` stream containing `seq` 1–15. Cross-session authority ordering
+must instead use Core-owned `author_action_seq`, `activity_position`,
+expected/resulting Heads, and `writer_generation`.
+
 Across all 2,100 automated trace records, the independent lifecycle gate
-confirmed:
+partitioned records by Trace Stream and confirmed:
 
 - every network submission followed durable journal persistence for all
   included intents;
 - every journal collection followed a durable Receipt, projection convergence,
   and an explicit GC-eligibility observation;
-- no trace exceeded the 5,000-record per-scenario bound.
+- no recorder-local Trace Stream exceeded the 5,000-record bound.
 
 ## Disposable apparatus
 
 The primary-source harness is retained at
-[`codex/issue-69-editor-session-harness@0e188f3`](https://github.com/FrankQDWang/StoryOS/commit/0e188f3)
+[`codex/issue-69-editor-session-harness@d994d25`](https://github.com/FrankQDWang/StoryOS/commit/d994d25d95ea635ebd33ae871c86704eda4c5377)
 and is not part of this evidence branch.
 
 Its executable source is
 [`2c67c9abe126a17c6c02fb66ab63b843ecfb4a63`](https://github.com/FrankQDWang/StoryOS/commit/2c67c9abe126a17c6c02fb66ab63b843ecfb4a63).
+The later harness commit only clarifies documentation; executable source,
+trace schema version, frozen JSONL, manual checkpoint, screenshots, and all
+recorded hashes remain unchanged.
 It contains:
 
 - a real Tiptap `3.27.3` contenteditable input surface;
@@ -143,7 +162,7 @@ structural operation, and explicit command.
 | authoritative outcome | typed Receipt with Author Action sequence `1` | committed |
 | Proposal/refused/conflicted/no-effect | typed Receipt, null Author Action sequence | complete Draft retained; journal not GC'd |
 | long session | 240 intents, one bounded-idle command | zero lost, duplicated, or reordered characters |
-| lifecycle audit | 2,100 ordered records | persist-before-network and settlement/convergence-before-GC verified |
+| lifecycle audit | 2,100 records partitioned into recorder-local monotonic Trace Streams | persist-before-network and settlement/convergence-before-GC verified per stream |
 
 ## Real desktop input evidence
 
@@ -289,8 +308,9 @@ interaction, copy, layout, or final editor UI recommendation.
   binds the source commit, browser, operating system, and expected fault
   signals.
 - [`representative-trace.jsonl`](evidence/issue-69/representative-trace.jsonl)
-  is a bounded extract of lifecycle and fault-window records. The harness
-  branch retains the complete trace.
+  is a bounded extract of lifecycle and fault-window records in deterministic
+  concatenation order. The harness branch retains the complete trace; neither
+  file claims a cross-stream global chronological order.
 - [`manual-real-ime-checkpoint.json`](evidence/issue-69/manual-real-ime-checkpoint.json)
   binds the human input, exact states, Core snapshots, assertions, and
   normative handoffs.
@@ -305,6 +325,8 @@ interaction, copy, layout, or final editor UI recommendation.
   it is not a recommended wire or journal representation.
 - Headless measurements do not predict production latency.
 - Automated composition is not real IME evidence.
+- Concatenated JSONL position and recorder-local `seq`/`at_ms` do not establish
+  cross-session chronological or Project authority order.
 - The apparatus does not establish final UI behavior, visual design, refusal
   copy, product dependencies, configuration, migration, or release thresholds.
 - No StoryOS product Rust or TypeScript code, implementation issue, or
