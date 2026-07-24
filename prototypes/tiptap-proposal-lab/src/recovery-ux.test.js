@@ -3,27 +3,39 @@ import test from "node:test";
 import {
   getUxScenario,
   preservedTextToParagraphs,
+  resolveNarrowedRetry,
   resolveUxAction,
+  settleWithoutProposalCandidate,
   UX_ACTIONS,
   UX_SCENARIO_IDS,
 } from "./recovery-ux.js";
 import { proposalText } from "./data.js";
 
-test("covers the complete production result matrix and recovery artifacts", () => {
+test("covers the result matrix with exactly two Draft Artifacts", () => {
   assert.deepEqual(
     UX_SCENARIO_IDS.slice(0, 5).map((id) => getUxScenario(id).result),
     ["authoritative", "proposal", "refused", "conflicted", "no-effect"],
   );
   assert.deepEqual(
     UX_SCENARIO_IDS.slice(2)
-      .map((id) => getUxScenario(id).artifactKind)
+      .map((id) => getUxScenario(id).draftArtifact)
       .filter(Boolean),
+    ["Refused Edit Draft", "Recovery Draft"],
+  );
+  assert.deepEqual(
     [
-      "Refused Edit Draft",
-      "Proposal Conflict",
-      "Recovery Draft",
-      "Proposal Recovery Conflict",
+      getUxScenario("conflicted").condition,
+      getUxScenario("proposal-recovery-conflict").condition,
     ],
+    ["Proposal Conflict", "Proposal Recovery Conflict"],
+  );
+  assert.deepEqual(
+    [
+      getUxScenario("proposal").preservedSurface,
+      getUxScenario("conflicted").preservedSurface,
+      getUxScenario("proposal-recovery-conflict").preservedSurface,
+    ],
+    ["Proposal", "Proposal", "Proposal"],
   );
 });
 
@@ -121,6 +133,99 @@ test("maps actions to a fresh result and rejects stale controls", () => {
     /not available/,
   );
   assert.equal(UX_ACTIONS.replan.label, "基于当前正文重新规划");
+});
+
+test("keeps narrowed authoritative retry distinct from Proposal expansion", () => {
+  const scenario = getUxScenario("refused");
+  const narrowed = resolveNarrowedRetry({
+    scenarioId: scenario.id,
+    attemptedText: scenario.attemptedText,
+    retryText: scenario.narrowedRetry.initialText,
+  });
+  const expanded = resolveUxAction({
+    scenarioId: scenario.id,
+    actionId: "expand",
+  });
+
+  assert.deepEqual(narrowed, {
+    preservedDraftText: scenario.attemptedText,
+    retryText: scenario.narrowedRetry.initialText,
+    target: {
+      initialText: scenario.narrowedRetry.initialText,
+      targetId: "chapter-12-authority-end",
+      targetLabel: "当前章节正文 · 第十二章末尾",
+      authorLabel: "第十二章末尾 · 仅正文",
+      ownership: "authoritative-only",
+      representativeResult: "authoritative",
+    },
+    nextScenarioId: "authoritative",
+  });
+  assert.equal(expanded.preservedText, scenario.attemptedText);
+  assert.equal(expanded.nextScenarioId, "proposal");
+  assert.notEqual(narrowed.retryText, expanded.preservedText);
+});
+
+test("refuses an empty, unchanged, or unsupported narrowed retry", () => {
+  const scenario = getUxScenario("refused");
+  for (const retryText of ["", scenario.attemptedText]) {
+    assert.throws(
+      () =>
+        resolveNarrowedRetry({
+          scenarioId: scenario.id,
+          attemptedText: scenario.attemptedText,
+          retryText,
+        }),
+      /smaller nonempty edit/,
+    );
+  }
+  assert.throws(
+    () =>
+      resolveNarrowedRetry({
+        scenarioId: "recovery-draft",
+        retryText: "较小文本",
+      }),
+    /not available/,
+  );
+});
+
+test("authoritative retries settle without fabricating Proposal acceptance", () => {
+  const proposal = {
+    id: "proposal-rain-night-continuation",
+    blockIds: ["proposal-block-1"],
+    validation: "conflicted",
+    resolution: "pending",
+    closure: "open",
+    acceptance: { receiptId: "stale-receipt" },
+    acceptanceRedoAvailable: true,
+    editorHistoryDepth: 2,
+    rejectedRevision: 2,
+    conflictReason: "target_revision_changed",
+    creator: "agent",
+    authorAction: { kind: "acceptance", safe: true },
+  };
+
+  for (const authorActionKind of [
+    "narrowed_refused_edit_retry_authoritative",
+    "retry_recovery_draft",
+  ]) {
+    assert.deepEqual(
+      settleWithoutProposalCandidate(proposal, authorActionKind),
+      {
+        ...proposal,
+        blockIds: [],
+        validation: "valid",
+        resolution: "none",
+        closure: "closed",
+        acceptance: null,
+        acceptanceRedoAvailable: false,
+        editorHistoryDepth: 0,
+        rejectedRevision: null,
+        conflictReason: null,
+        creator: "author",
+        authorAction: { kind: authorActionKind, safe: true },
+      },
+    );
+  }
 });
 
 test("keeps blank lines when preserved text becomes editor paragraphs", () => {

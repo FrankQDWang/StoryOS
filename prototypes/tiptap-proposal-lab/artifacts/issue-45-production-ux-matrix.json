@@ -1,7 +1,7 @@
 {
   "issue": 45,
   "contractRevision": "canonical-map-2026-07-23",
-  "sourceBaseline": "1e14735f970a466eb4c111ce04f391bd4058478d",
+  "sourceBaseline": "84d449e1813d32e7e72767ff443781a25cb78742",
   "browser": {
     "product": "desktop Google Chrome",
     "viewport": {
@@ -13,13 +13,12 @@
     {
       "id": "authoritative",
       "result": "authoritative",
-      "artifact": null,
       "actions": []
     },
     {
       "id": "proposal",
       "result": "proposal",
-      "artifact": "Proposal",
+      "preservedSurface": "Proposal",
       "actions": [
         "accept",
         "reject"
@@ -28,9 +27,17 @@
     {
       "id": "refused",
       "result": "refused",
-      "artifact": "Refused Edit Draft",
+      "draftArtifact": "Refused Edit Draft",
+      "preservedSurface": "Refused Edit Draft",
       "preservedCharacters": 50,
       "preservedLines": 3,
+      "narrowedRetry": {
+        "targetId": "chapter-12-authority-end",
+        "targetLabel": "当前章节正文 · 第十二章末尾",
+        "authorLabel": "第十二章末尾 · 仅正文",
+        "ownership": "authoritative-only",
+        "representativeResult": "authoritative"
+      },
       "actions": [
         "narrow",
         "copy",
@@ -41,7 +48,8 @@
     {
       "id": "conflicted",
       "result": "conflicted",
-      "artifact": "Proposal Conflict",
+      "condition": "Proposal Conflict",
+      "preservedSurface": "Proposal",
       "preservedCharacters": 287,
       "preservedLines": 8,
       "actions": [
@@ -53,13 +61,13 @@
     {
       "id": "no-effect",
       "result": "no-effect",
-      "artifact": null,
       "actions": []
     },
     {
       "id": "recovery-draft",
       "result": "recovery",
-      "artifact": "Recovery Draft",
+      "draftArtifact": "Recovery Draft",
+      "preservedSurface": "Recovery Draft",
       "preservedCharacters": 41,
       "preservedLines": 3,
       "actions": [
@@ -71,7 +79,8 @@
     {
       "id": "proposal-recovery-conflict",
       "result": "recovery",
-      "artifact": "Proposal Recovery Conflict",
+      "condition": "Proposal Recovery Conflict",
+      "preservedSurface": "Proposal",
       "preservedCharacters": 287,
       "preservedLines": 8,
       "actions": [
@@ -82,18 +91,34 @@
     }
   ],
   "verifiedTransitions": [
-    "refused.narrow -> proposal",
+    "refused.narrow[chapter-12-authority-end, authoritative-only] -> authoritative (representative Core reclassification, no Proposal Acceptance)",
     "refused.expand -> proposal",
     "refused.discard -> no-effect",
     "conflicted.replan -> proposal",
     "conflicted.reject -> no-effect",
-    "recovery-draft.retry -> authoritative",
+    "recovery-draft.retry -> authoritative (no Proposal Acceptance)",
     "recovery-draft.discard -> no-effect",
     "proposal-recovery-conflict.replan -> proposal",
     "proposal-recovery-conflict.withdraw -> no-effect",
     "proposal.accept -> authoritative",
     "proposal.reject -> no-effect"
   ],
+  "classificationBoundary": {
+    "uiSelectsProductionWriteRoute": false,
+    "narrowedRetryDemo": "The displayed authoritative-only target has one representative authoritative settlement.",
+    "productionRule": "Issue #46 Core recomputes current Heads, Anchors, and ownership for every ApplyAuthorEdit and may return authoritative, Proposal revised, refused, conflicted, or no-effect."
+  },
+  "authoritativeSettlementProjection": {
+    "appliesTo": [
+      "refused.narrow[chapter-12-authority-end, authoritative-only]",
+      "recovery-draft.retry"
+    ],
+    "proposalCandidate": null,
+    "proposalResolution": "none",
+    "proposalAcceptanceUndoVisible": false,
+    "recoveryControlsVisible": false,
+    "proposalAcceptRetainsAcceptanceUndo": true
+  },
   "inputMechanismEvidence": {
     "source": "PR #87 and the prior contract pass",
     "reused": [
