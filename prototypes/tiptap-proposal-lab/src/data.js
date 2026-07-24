@@ -67,6 +67,10 @@ export const proposalParagraphs = [
   ),
 ];
 
+export const proposalText = proposalParagraphs
+  .map((node) => node.content?.map((content) => content.text).join("") ?? "")
+  .join("\n");
+
 export const proposalBlockIds = proposalParagraphs.map(
   (node) => node.attrs.blockId,
 );
@@ -89,6 +93,11 @@ export const chapterTwelveDocument = {
     ),
     ...proposalParagraphs,
   ],
+};
+
+export const chapterTwelveAuthorityDocument = {
+  type: "doc",
+  content: chapterTwelveDocument.content.slice(0, 4),
 };
 
 export const chapterDocuments = Object.fromEntries(

@@ -1,0 +1,106 @@
+{
+  "issue": 45,
+  "contractRevision": "canonical-map-2026-07-23",
+  "sourceBaseline": "1e14735f970a466eb4c111ce04f391bd4058478d",
+  "browser": {
+    "product": "desktop Google Chrome",
+    "viewport": {
+      "width": 1487,
+      "height": 1058
+    }
+  },
+  "scenarios": [
+    {
+      "id": "authoritative",
+      "result": "authoritative",
+      "artifact": null,
+      "actions": []
+    },
+    {
+      "id": "proposal",
+      "result": "proposal",
+      "artifact": "Proposal",
+      "actions": [
+        "accept",
+        "reject"
+      ]
+    },
+    {
+      "id": "refused",
+      "result": "refused",
+      "artifact": "Refused Edit Draft",
+      "preservedCharacters": 50,
+      "preservedLines": 3,
+      "actions": [
+        "narrow",
+        "copy",
+        "expand",
+        "discard"
+      ]
+    },
+    {
+      "id": "conflicted",
+      "result": "conflicted",
+      "artifact": "Proposal Conflict",
+      "preservedCharacters": 287,
+      "preservedLines": 8,
+      "actions": [
+        "replan",
+        "copy",
+        "reject"
+      ]
+    },
+    {
+      "id": "no-effect",
+      "result": "no-effect",
+      "artifact": null,
+      "actions": []
+    },
+    {
+      "id": "recovery-draft",
+      "result": "recovery",
+      "artifact": "Recovery Draft",
+      "preservedCharacters": 41,
+      "preservedLines": 3,
+      "actions": [
+        "retry",
+        "copy",
+        "discard"
+      ]
+    },
+    {
+      "id": "proposal-recovery-conflict",
+      "result": "recovery",
+      "artifact": "Proposal Recovery Conflict",
+      "preservedCharacters": 287,
+      "preservedLines": 8,
+      "actions": [
+        "replan",
+        "copy",
+        "withdraw"
+      ]
+    }
+  ],
+  "verifiedTransitions": [
+    "refused.narrow -> proposal",
+    "refused.expand -> proposal",
+    "refused.discard -> no-effect",
+    "conflicted.replan -> proposal",
+    "conflicted.reject -> no-effect",
+    "recovery-draft.retry -> authoritative",
+    "recovery-draft.discard -> no-effect",
+    "proposal-recovery-conflict.replan -> proposal",
+    "proposal-recovery-conflict.withdraw -> no-effect",
+    "proposal.accept -> authoritative",
+    "proposal.reject -> no-effect"
+  ],
+  "inputMechanismEvidence": {
+    "source": "PR #87 and the prior contract pass",
+    "reused": [
+      "desktop Chrome Chinese Pinyin",
+      "native paste and cut",
+      "real cross-owner drag and drop"
+    ],
+    "repeatedGenericGate": false
+  }
+}

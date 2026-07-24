@@ -1,14 +1,68 @@
 # Design QA — StoryOS Tiptap Proposal Lab
 
-- Source visual truth: `/Users/frankqdwang/MLE/StoryOS/docs/design/storyos-three-column-writing-workspace.png`
+- Source visual truth: [approved StoryOS three-column writing workspace](../../docs/design/storyos-three-column-writing-workspace.png)
 - Bottom-control component reference: `/var/folders/ns/k10qv8w14s3c6kfkgp_xk3z00000gn/T/codex-clipboard-9b374641-729f-464b-aec5-91dd1c65b747.png`
 - Fixed-boundary and transcript reference: `/var/folders/ns/k10qv8w14s3c6kfkgp_xk3z00000gn/T/codex-clipboard-208a99d8-15ba-45ef-b3b3-2f63d1bccc7d.png`
 - Latest left fixed-chrome and rejected-Proposal reference: `/var/folders/ns/k10qv8w14s3c6kfkgp_xk3z00000gn/T/codex-clipboard-291e9b34-c2e3-4426-9b27-ce75ff765695.png`
-- Latest interaction override: `/Users/frankqdwang/MLE/StoryOS/prototypes/tiptap-proposal-lab/AGENTS.md` specifies a 44 px collapsed rail and one 36 px workspace-level toggle whose screen position is identical in expanded and collapsed states.
-- Implementation screenshots: `/Users/frankqdwang/MLE/StoryOS/prototypes/tiptap-proposal-lab/artifacts/prototype-default.png` and `/Users/frankqdwang/MLE/StoryOS/prototypes/tiptap-proposal-lab/artifacts/prototype-fixed-chrome-reopen.png`
-- Latest color-calibrated implementation screenshot: `/Users/frankqdwang/MLE/StoryOS/prototypes/tiptap-proposal-lab/artifacts/prototype-color-calibration.png` at `1329 × 768`, captured in Chrome after a full reload.
+- Latest interaction override: [nested prototype instructions](AGENTS.md) specify a 44 px collapsed rail and one 36 px workspace-level toggle whose screen position is identical in expanded and collapsed states.
+- Implementation screenshots: [default workspace](artifacts/prototype-default.png) and [fixed-chrome reopen](artifacts/prototype-fixed-chrome-reopen.png)
+- Latest color-calibrated implementation screenshot: [color calibration](artifacts/prototype-color-calibration.png) at `1329 × 768`, captured in Chrome after a full reload.
 - Viewport: `1487 × 1058`
 - State: default desktop workspace; volume two expanded; chapter twelve active; editable Proposal ready and valid; 写作助手 panel expanded. The collapsed state is captured separately in `artifacts/prototype-collapsed.png`.
+
+## Issue #45 production refusal, conflict, and recovery pass — 2026-07-24
+
+The pass starts from the same approved three-column visual direction. Issue #69
+is reused only for accepted input-mechanism evidence; none of its lab layout or
+debug styling appears in the production-shaped author surface.
+
+### Same-frame visual comparison
+
+[The approved source and current Refused Edit Draft](artifacts/issue-45-approved-refused-comparison.png)
+are paired at the same `1487 × 1058` viewport. The current state preserves the
+source column boundaries, manuscript measure, warm-neutral palette, thin
+Proposal-style marker, low-chrome controls, conversation hierarchy, and fixed
+composer. The recovery surface reads as manuscript-adjacent writing work rather
+than a separate inspector or dashboard. No actionable P0, P1, or P2 visual
+difference was found.
+
+### Production-state captures
+
+- [Refused Edit Draft](artifacts/issue-45-refused-edit-draft.png): the complete
+  three-line, 50-character attempt and only narrow, copy, expand, and discard.
+- [Proposal Conflict](artifacts/issue-45-proposal-conflict.png): the complete
+  eight-paragraph, 287-character Proposal and only replan, copy, and reject.
+- [Recovery Draft](artifacts/issue-45-recovery-draft.png): the complete
+  three-line, 41-character draft and only retry, copy, and discard.
+- [Proposal Recovery Conflict](artifacts/issue-45-proposal-recovery-conflict.png):
+  the same complete eight-paragraph Proposal and only replan, copy, and withdraw.
+- [Machine-readable UX matrix](artifacts/issue-45-production-ux-matrix.json):
+  the result, artifact, action, and transition expectations exercised in Chrome.
+
+### Chrome interaction evidence
+
+- Refused copy reports a persistent author-visible confirmation while retaining
+  the full source text. Native `Meta-v` then pasted the exact 50-character value
+  into the narrowing editor. Narrowing starts with an exact editable copy while
+  the immutable full attempt remains visible; no retry control appears until
+  the author makes the range smaller.
+- Narrow retry and expand each produce one fresh Proposal with exact preserved
+  text. The only new controls are the normal accept and reject actions.
+- Recovery retry writes all three lines exactly once and settles to
+  authoritative. Proposal replan preserves all eight paragraphs exactly and
+  produces one fresh Proposal.
+- Reject, withdraw, and discard each settle to no-effect, remove the candidate,
+  expose no stale recovery action, and leave the four authoritative paragraphs
+  unchanged.
+- Accept preserves the complete Proposal text, removes its projection styling,
+  and settles to authoritative with no partial result.
+- Fresh full reloads produced no application console errors. The one React
+  warning observed during implementation came from a Vite hot-update boundary
+  and did not recur after reload.
+- The accepted desktop Chrome Chinese Pinyin, native paste/cut, and real
+  cross-owner drag/drop mechanism evidence from the prior contract pass was not
+  repeated. Its refused result now uses this same production-shaped Refused Edit
+  Draft and recovery action surface.
 
 ## Full-view comparison evidence
 
