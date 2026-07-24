@@ -661,7 +661,7 @@ Long work is modeled as an asynchronous operation before admission.
 
 Malformed JSON, duplicate keys, unsupported schemas, invalid session,
 anti-forgery failure, cross-scope access, and authorization failure occur before
-a domain attempt and create no Author Command Admission or Domain Receipt. The
+a domain attempt and create no Author Command Admission or typed Receipt. The
 Server retains only a durable, bounded, sanitized refusal record and safe
 Problem Details: correlation, reached validation boundary, safe typed reason,
 applicable server-derived in-Scope identities, contract/profile identities,

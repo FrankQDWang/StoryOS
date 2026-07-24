@@ -674,7 +674,7 @@ One logical Core Transition performs the complete write set:
 4. Allocate an Author Action Sequence for a successful author-owned change.
 5. Append Operation-resolution and lifecycle events.
 6. Advance normalized current Heads and derived projections.
-7. Append the immutable Domain Receipt.
+7. Append the immutable typed Receipt selected by the owning command contract.
 8. Persist required outbox or wakeup intent.
 9. Commit once and publish success only afterward.
 

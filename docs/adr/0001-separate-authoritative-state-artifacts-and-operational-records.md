@@ -18,5 +18,11 @@ StoryOS separates author-owned Authoritative State, inspectable Artifacts, and e
 
 - Acceptance creates new Authoritative Revisions and an Authoritative Commit; it never promotes an Artifact in place.
 - Artifact and authoritative histories remain independently versioned and are joined by exact provenance and immutable Receipts.
+- Author Command Admission issuance, sanitized pre-admission refusal,
+  OutcomeUnknown and reconciliation observations, terminal settlement,
+  Editor Input Fences, Author Actions, and typed Receipts are Operational
+  Records. Refused Edit Drafts and Recovery Drafts are non-authoritative Draft
+  Artifacts, while Proposal Conflict is a Proposal validation-axis condition;
+  none is another authority level or reusable authorization.
 - Extensions may add safely preservable views and data, but authoritative mutations always return to closed StoryOS Core Proposal kinds and validators.
 - Authoritative State, Artifacts, Operational Records, their references, and their derived projections cannot cross a Project Scope.
