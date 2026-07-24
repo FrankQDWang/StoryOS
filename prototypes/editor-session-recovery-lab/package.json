@@ -1,0 +1,30 @@
+{
+  "name": "storyos-editor-session-recovery-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lab": "node scripts/run-lab.mjs",
+    "evidence": "node scripts/run-evidence.mjs",
+    "build": "vite build",
+    "check": "node --test"
+  },
+  "dependencies": {
+    "@tiptap/core": "3.27.3",
+    "@tiptap/extension-bubble-menu": "3.27.3",
+    "@tiptap/extension-floating-menu": "3.27.3",
+    "@tiptap/pm": "3.27.3",
+    "@tiptap/react": "3.27.3",
+    "@tiptap/starter-kit": "3.27.3",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2"
+  },
+  "devDependencies": {
+    "playwright": "1.55.1"
+  }
+}
