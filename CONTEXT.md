@@ -136,7 +136,7 @@ The holder or in-fiction source and epistemic relation that frames a Proposition
 _Avoid_: Belief owner only, narrator truth, automatic knowledge propagation
 
 **Authoritative Revision**:
-An immutable version of one authoritative domain object, created through a Direct Author Action, Acceptance, or safe compensation and guarded by an expected prior revision.
+An immutable version of one authoritative domain object, appended only by StoryOS Core through a Direct Author Action, Acceptance, or safe compensation and guarded by an expected prior revision.
 _Avoid_: Artifact Revision, mutable row
 
 **Authoritative Commit**:
@@ -228,8 +228,16 @@ The two complementary deterministic gates for an Author Edit. Browser integratio
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
-The immutable StoryOS record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; recovery may invoke only the same unexpired, fully matching direct edit, while an explicit, expired, or changed command requires author reconfirmation.
+The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; recovery may invoke only the same unexpired, fully matching direct edit, while an explicit, expired, or changed command requires author reconfirmation.
 _Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token
+
+**Editor Recovery Creator**:
+The closed StoryOS Host Artifact Creator used only for a Recovery Draft, binding one exact Editor Session, writer generation, complete recovered intent, and its Local Edit Journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It causes no Core invocation or Author Action, turns no browser cache into authority, and grants no reusable authorization.
+_Avoid_: Author Command Admission, automatic edit replay, browser cache as truth, generic System
+
+**Pre-Admission Refusal Record**:
+An immutable, bounded, sanitized Operational Record created when StoryOS refuses an author command before Author Command Admission, carrying only the safe reached boundary, typed reason, applicable server-derived in-Scope identity, contract identities, correlation, and audit time. It proves there is no Admission, Command, nonce consumption, Receipt, or Core effect and is not an Admission lifecycle state.
+_Avoid_: Author Command Admission, rejected request copy, foreign-object audit oracle
 
 **Editor Session**:
 One browser editing session for an exact User and Project Scope, identified by `EditorSessionId` and governed by the current Project writer generation. It owns local continuity and projection state while StoryOS Core and PostgreSQL retain authority.
@@ -244,7 +252,7 @@ The immediate author-facing editor view composed from one durable Server Snapsho
 _Avoid_: Optimistic authority, hidden pending state, network acknowledgement as domain truth
 
 **Operational Record**:
-A durable record of execution, context, authorization, usage, validation, or a state transition, such as an AgentRun, RunStep, RunPlan, Context Assembly Manifest, ToolCall, Approval, Artifact Lifecycle Event, Domain Receipt, or Run Event. It can reference and produce Artifacts but does not inherit Artifact lifecycle or authority.
+A durable record of execution, context, authorization, usage, validation, or a state transition, including Author Command Admission evidence, Pre-Admission Refusal Records, Editor Input Fences, Author Actions, typed Receipts, AgentRuns, ToolCalls, Approvals, Artifact Lifecycle Events, and Run Events. It can reference or produce Artifacts but has no Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
 _Avoid_: Artifact, temporary log
 
 **Agent Memory**:
@@ -1200,8 +1208,8 @@ A typed relationship from an Artifact Revision to an exact source or cause. Its 
 _Avoid_: Source list, citation text
 
 **Creator**:
-The single actor or causal execution step that directly produced an Artifact Revision. Earlier authorship and contributions remain visible through Provenance Edges rather than a mutable contributors list.
-_Avoid_: Contributors array, original creator only
+The single closed producer identity that directly created an Artifact Revision: exact admitted Author, AgentRunStep, ToolCall, Import Operational Record, Core Transition Receipt, or Editor Recovery Creator. MCP and extension work resolves through ToolCall, model work through AgentRunStep, and raw browser-local state is never a Creator; earlier contributions remain visible through Provenance Edges.
+_Avoid_: Generic System, browser event, model, MCP App, contributors array
 
 **External Source Snapshot**:
 A Research Artifact Revision containing an immutable captured version of externally retrieved evidence, including when and where it was obtained and an integrity digest of the captured content. Re-fetching creates a new Snapshot, while annotation or correction creates a derived Research Artifact; a live URL alone is not a Snapshot.
@@ -1284,7 +1292,7 @@ The immutable boundary that ends one Proposal Generation at an exact Proposal Re
 _Avoid_: Network cancellation, UI pause flag, queued late delta
 
 **Editor Input Fence**:
-The immutable automatic safety cause identified by `EditorInputFenceId` that binds the first completed author-input signal to one exact Editor Session, writer generation, local intent range, and active Proposal Generation before semantic command admission. It closes the Agent write gate but grants no author-command authority and receives no Author Action Sequence.
+The immutable Operational Record and automatic safety cause identified by `EditorInputFenceId` that binds the first completed author-input signal to one exact Editor Session, writer generation, local intent range, and active Proposal Generation before semantic command admission. It closes the Agent write gate but grants no author-command authority and receives no Author Action Sequence.
 _Avoid_: Author Command Admission, browser event as domain command, reusable write permission
 
 **Proposal State Axes**:
@@ -1312,11 +1320,11 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A non-authoritative Draft created when an author edit is atomically refused for crossing Authoritative State and Proposal ownership. It preserves the attempted payload, exact selection snapshot, and edit intent for an explicit narrowed retry, Proposal expansion, or discard without mutating either target.
+A non-authoritative Draft Core Artifact created by the refused `ApplyAuthorEdit` Core Transition when one author edit crosses Authoritative State and Proposal ownership. It preserves the attempted payload, exact selection snapshot, and edit intent under ordinary Artifact revision, retention, and Draft-closure rules for an explicit narrowed retry, Proposal expansion, or discard without mutating either target.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
-A non-authoritative Draft preserving a complete author-edit intent from the Local Edit Journal or in-memory recovery boundary that has no committed Domain Receipt after reconciliation. It requires an explicit author retry or discard and is never automatically applied to Authoritative State or a Proposal.
+A non-authoritative Draft Core Artifact created by an Editor Recovery Creator from one complete author-edit intent and its exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It follows ordinary Artifact revision, retention, and Draft-closure rules, requires an explicit author retry or discard, and is never automatically applied to Authoritative State or a Proposal.
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
@@ -1356,7 +1364,7 @@ The condition in which an exact Proposal Revision violates its own schema, Opera
 _Avoid_: Proposal Conflict, creator error message, low confidence
 
 **Proposal Conflict**:
-The condition in which an internally well-formed Proposal Revision's exact target, base Revision, Anchor, or preconditions cannot be proven against current Authoritative State. Any referenced target Revision change conflicts even outside the proposed range; recovery appends an explicitly replanned Proposal Revision rather than rebasing or revalidating the old Revision in place.
+The Core-produced `conflicted` condition on an internally well-formed Proposal Revision's validation axis when its exact target, base Revision, Anchor, or preconditions cannot be proven against current Authoritative State; the detecting Receipt or Event is separate Operational evidence. Any referenced target Revision change conflicts even outside the proposed range, and recovery appends an explicitly replanned Proposal Revision rather than creating another Artifact, mutating the old Revision, or rebasing it in place.
 _Avoid_: Proposal Invalidity, stale warning, automatic merge, silent anchor repair
 
 **Proposal Rejection**:
@@ -1378,6 +1386,10 @@ _Avoid_: History deletion, editor-only undo
 **Acceptance Reapplication**:
 An author redo of a successfully undone Acceptance is a new Acceptance attempt against the exact reopened Proposal Revision under current Acceptance Eligibility. It uses new command identity, Commit, and Receipt records, never restores the prior attempt, and becomes unavailable after relevant state drift.
 _Avoid_: Redo Acceptance, Receipt replay, status rollback
+
+**Author Action**:
+The immutable `AuthorActionRef` Operational Record created atomically for one successfully committed author-owned Core Transition, binding its Author Action Sequence, canonical Revision, Receipt, or Commit, and `Forward | Compensation` disposition. Admission, Editor Input Fence, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create no Author Action.
+_Avoid_: Author Command Admission, physical-human gesture, browser history item, attempted command
 
 **Author Action Sequence**:
 The Project Scope-local continuous order assigned once to every successfully committed author-owned Core Transition, spanning authoritative changes, Proposal edits, resolutions, lifecycle decisions, and successful compensations. Automatic producer, validation, and input-safety transitions do not become author actions merely because they are visible or causally follow an Author Command Admission. The sequence binds the Transition's canonical Revision, Receipt, or Commit plus either a typed Forward disposition or a Compensation disposition naming the exact earlier action it settled; exact retries reuse it, while refused and no-effect attempts receive none.
@@ -1432,7 +1444,7 @@ A source-bearing Candidate that generalizes one bounded, reusable execution less
 _Avoid_: Procedural memory, single-failure rule, executable instruction, promoted Skill
 
 **Draft**:
-A Core Artifact containing editable work that has not been expressed as validated domain changes. It can serve as a source for a Proposal but cannot be accepted directly.
+A non-authoritative Core Artifact containing editable work that has not been expressed as validated domain changes, including Plan, Refused Edit, and Recovery Drafts. It follows Artifact revisions, common retention, and reversible Draft closure, may source a Proposal, and cannot be accepted directly.
 _Avoid_: Proposal, authoritative draft
 
 **Message**:
@@ -1583,16 +1595,20 @@ _Avoid_: Acceptance retry, button click, Receipt lookup
 The exhaustive settlement of one Acceptance Attempt as Applied, Invalid, Conflicted, Refused, or NoEffect. Only Applied changes Authoritative State and resolves selected Operations as applied; infrastructure uncertainty is not a Result and is reconciled through the command's idempotency key.
 _Avoid_: Success boolean, exception text, accepted Proposal state, unknown as failure
 
+**Receipt**:
+An immutable Operational Record produced only by StoryOS Core for one validation or domain-command attempt, carrying one exact typed Receipt identity and exactly one `AuthorCommandAdmission | EditorInputFence | AgentRunStep | ToolCall` producer cause. Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt identities remain distinct, and no Receipt has Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
+_Avoid_: Generic receipt ID, Artifact, log text, producer assertion
+
 **Acceptance Receipt**:
 The durable outcome of one Acceptance attempt, identifying its command digest and idempotency key, exact Proposal Revision and selected operations, prior and resulting Authoritative Revisions, zero or more Authoritative Commits, child Receipts, and result. Bundle progress may be derived across linked attempt Receipts.
 _Avoid_: Success message, accepted Artifact
 
 **Domain Receipt**:
-An immutable StoryOS Core record of a validation or domain-command attempt, including success, refusal, redirection, and outcomes with no Authoritative State change. A Domain Receipt is neither an Artifact nor Authoritative State and has no revision, derivation, retention, or Acceptance lifecycle.
-_Avoid_: Artifact, log text
+The typed Receipt kind for a Core domain-command attempt whose owning result contract does not define a more specific Validation, Acceptance, Undo Acceptance, or Author Undo Receipt identity. It records success, refusal, redirection, conflict, and no-effect outcomes without serving as a generic fallback for another Receipt kind.
+_Avoid_: Generic Receipt, Validation Receipt, Acceptance Receipt, unknown-receipt fallback
 
 **Undo Acceptance Receipt**:
-The immutable, idempotent Domain Receipt produced by an Undo Acceptance attempt, identifying the original Acceptance Receipt, command digest, and one outcome: compensated with a Commit, reversal required with a Reversal Proposal, or unavailable with a reason.
+The immutable, idempotent typed Receipt produced by an Undo Acceptance attempt, identifying the original Acceptance Receipt, command digest, and one outcome: compensated with a Commit, reversal required with a Reversal Proposal, or unavailable with a reason.
 _Avoid_: Compensation Receipt, undo message
 
 **Validation Receipt**:
