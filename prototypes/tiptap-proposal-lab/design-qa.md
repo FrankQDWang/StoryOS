@@ -26,43 +26,74 @@ composer. The recovery surface reads as manuscript-adjacent writing work rather
 than a separate inspector or dashboard. No actionable P0, P1, or P2 visual
 difference was found.
 
+[The approved source and narrowed retry target](artifacts/issue-45-approved-narrowed-comparison.png)
+repeat that same-frame comparison for the added interaction state. The target
+stays inside the manuscript column, keeps the complete Refused Edit Draft above
+the editable selection, and does not add technical controls or lab styling.
+
 ### Production-state captures
 
 - [Refused Edit Draft](artifacts/issue-45-refused-edit-draft.png): the complete
   three-line, 50-character attempt and only narrow, copy, expand, and discard.
+- [Authoritative-only narrowed retry target](artifacts/issue-45-narrowed-authoritative-target.png):
+  the complete Refused Edit Draft remains visible above the author-facing
+  `第十二章末尾 · 仅正文` target, its smaller retry text, and the applicable
+  retry action. Classifier details remain outside this default author surface.
+- [Narrowed authoritative settlement](artifacts/issue-45-narrowed-authoritative-settled.png):
+  the selected line is present once, the run summary is the neutral
+  `没有待处理提案`, and no Proposal Acceptance undo or recovery action remains.
 - [Proposal Conflict](artifacts/issue-45-proposal-conflict.png): the complete
-  eight-paragraph, 287-character Proposal and only replan, copy, and reject.
+  eight-paragraph, 287-character Proposal, projected as a validation-axis
+  condition rather than an Artifact, and only replan, copy, and reject.
 - [Recovery Draft](artifacts/issue-45-recovery-draft.png): the complete
   three-line, 41-character draft and only retry, copy, and discard.
+- [Recovery Draft authoritative settlement](artifacts/issue-45-recovery-draft-settled.png):
+  all three lines are present once, the run summary is neutral, and no Proposal
+  Acceptance undo or recovery action remains.
 - [Proposal Recovery Conflict](artifacts/issue-45-proposal-recovery-conflict.png):
-  the same complete eight-paragraph Proposal and only replan, copy, and withdraw.
+  the same complete eight-paragraph Proposal, projected as a fail-closed
+  condition rather than an Artifact, and only replan, copy, and withdraw.
 - [Machine-readable UX matrix](artifacts/issue-45-production-ux-matrix.json):
-  the result, artifact, action, and transition expectations exercised in Chrome.
+  the result, two Draft Artifacts, condition, preserved-surface, action, and
+  transition expectations exercised in Chrome.
 
 ### Chrome interaction evidence
 
 - Refused copy reports a persistent author-visible confirmation while retaining
   the full source text. Native `Meta-v` then pasted the exact 50-character value
-  into the narrowing editor. Narrowing starts with an exact editable copy while
-  the immutable full attempt remains visible; no retry control appears until
-  the author makes the range smaller.
-- Narrow retry and expand each produce one fresh Proposal with exact preserved
-  text. The only new controls are the normal accept and reject actions.
+  into the narrowing editor while the immutable full attempt remained visible.
+- Narrowing displays a known `authoritative-only` target and starts with one
+  smaller selected line. Retrying appends that exact line to the named current
+  chapter target and settles to authoritative; the complete Refused Edit Draft
+  remains visible until the action settles.
+- Expand remains separate: it produces one fresh Proposal containing the exact
+  complete Refused Edit Draft and exposes only the normal accept and reject
+  actions.
 - Recovery retry writes all three lines exactly once and settles to
-  authoritative. Proposal replan preserves all eight paragraphs exactly and
+  authoritative. It does not mark an unrelated Proposal accepted or expose an
+  Acceptance undo. Proposal replan preserves all eight paragraphs exactly and
   produces one fresh Proposal.
 - Reject, withdraw, and discard each settle to no-effect, remove the candidate,
   expose no stale recovery action, and leave the four authoritative paragraphs
   unchanged.
 - Accept preserves the complete Proposal text, removes its projection styling,
-  and settles to authoritative with no partial result.
-- Fresh full reloads produced no application console errors. The one React
-  warning observed during implementation came from a Vite hot-update boundary
-  and did not recur after reload.
+  and settles to authoritative with no partial result. This remains the only
+  path in the matrix that exposes Proposal Acceptance undo.
+- Fresh full reloads across the matrix produced no application console errors or
+  warnings.
 - The accepted desktop Chrome Chinese Pinyin, native paste/cut, and real
   cross-owner drag/drop mechanism evidence from the prior contract pass was not
   repeated. Its refused result now uses this same production-shaped Refused Edit
   Draft and recovery action surface.
+
+The authoritative narrowed-retry settlement is a representative UX example for
+one already-known single-ownership target. It does not select the production
+write route. Every production narrowed retry remains one `ApplyAuthorEdit` whose
+Issue #46 Core classifier recomputes current Heads, Anchors, and ownership and
+may settle as authoritative, Proposal revised, refused, conflicted, or no-effect.
+The DOM projects `data-draft-artifact` only for Refused Edit Draft and Recovery
+Draft, `data-condition` for both Proposal conflict conditions, and
+`data-preserved-surface="Proposal"` for the Proposal review surface.
 
 ## Full-view comparison evidence
 

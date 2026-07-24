@@ -47,7 +47,9 @@ import {
   countCharacters,
   getUxScenario,
   preservedTextToParagraphs,
+  resolveNarrowedRetry,
   resolveUxAction,
+  settleWithoutProposalCandidate,
   UX_ACTIONS,
   UX_SCENARIO_IDS,
 } from "./recovery-ux.js";
@@ -88,11 +90,15 @@ function chapterDocumentForScenario(scenarioId) {
 }
 
 function proposalForScenario(scenarioId) {
-  if (scenarioId === "authoritative") {
-    return { ...initialProposal, blockIds: [], resolution: "applied" };
-  }
-  if (["no-effect", "recovery-draft"].includes(scenarioId)) {
-    return { ...initialProposal, blockIds: [] };
+  if (
+    ["authoritative", "refused", "no-effect", "recovery-draft"].includes(
+      scenarioId,
+    )
+  ) {
+    return settleWithoutProposalCandidate(
+      initialProposal,
+      `ux_${scenarioId.replaceAll("-", "_")}`,
+    );
   }
   if (["conflicted", "proposal-recovery-conflict"].includes(scenarioId)) {
     return {
@@ -109,6 +115,7 @@ function proposalForScenario(scenarioId) {
 
 function proposalStatusLabel(proposal) {
   if (proposal.resolution === "applied") return "已接受";
+  if (proposal.resolution === "none") return "没有待处理提案";
   if (proposal.validation === "conflicted") return "需要重新规划";
   if (proposal.resolution === "rejected") return "已拒绝";
   if (proposal.generation === "generating") return "正在生成";
@@ -243,14 +250,17 @@ function RecoverySurface({
   const canRetryNarrowed =
     isNarrowing &&
     narrowedText.trim().length > 0 &&
-    narrowedText.trim() !== attemptedText.trim();
+    countCharacters(narrowedText.trim()) <
+      countCharacters(attemptedText.trim());
 
   return (
     <section
       className={`recovery-surface ${scenario.tone}`}
       aria-labelledby="recovery-surface-title"
       data-result-kind={scenario.result}
-      data-artifact-kind={scenario.artifactKind ?? undefined}
+      data-draft-artifact={scenario.draftArtifact ?? undefined}
+      data-condition={scenario.condition ?? undefined}
+      data-preserved-surface={scenario.preservedSurface ?? undefined}
       data-testid="recovery-surface"
     >
       <div className="recovery-heading">
@@ -276,8 +286,18 @@ function RecoverySurface({
 
       {isNarrowing && (
         <div className="narrowing-editor">
+          <div
+            className="narrowing-target"
+            data-testid="narrowed-retry-target"
+          >
+            <span>重试位置</span>
+            <strong>{scenario.narrowedRetry.authorLabel}</strong>
+            <small>
+              StoryOS 会重新检查当前位置；确认后只提交下面这段。
+            </small>
+          </div>
           <label htmlFor="narrowed-retry-text">
-            选出只属于正文或提案的一段，再作为新尝试提交
+            在这个单一正文目标中重试的较小范围
           </label>
           <textarea
             id="narrowed-retry-text"
@@ -862,7 +882,7 @@ export function App() {
     }));
   };
 
-  const appendRecoveryTextToAuthority = (text) => {
+  const appendTextToAuthority = (text, source) => {
     if (!editor) return;
     const suffix = `${Date.now()}`;
     const recovered = editor.schema.nodeFromJSON({
@@ -875,15 +895,12 @@ export function App() {
     const position = editor.state.doc.content.size;
     const transaction = editor.state.tr
       .replaceWith(position, position, recovered.content)
-      .setMeta(PROPOSAL_META, { allow: true, source: "retry_recovery_draft" })
+      .setMeta(PROPOSAL_META, { allow: true, source })
       .setMeta("addToHistory", false);
     editor.view.dispatch(transaction);
-    setProposal((previous) => ({
-      ...previous,
-      blockIds: [],
-      resolution: "applied",
-      validation: "valid",
-    }));
+    setProposal((previous) =>
+      settleWithoutProposalCandidate(previous, source),
+    );
   };
 
   const removeCurrentProposal = (source) => {
@@ -912,14 +929,29 @@ export function App() {
       uxAttemptOverride ?? scenario.attemptedText ?? "";
 
     if (actionId === "retry-narrowed") {
-      const retryText = narrowedText;
-      if (!retryText.trim() || retryText.trim() === attemptedText.trim()) return;
-      materializeTextAsProposal(retryText, "narrowed_refused_edit_retry");
-      setUxResult({
-        scenarioId: "proposal",
-        outcomeDetail: "较小范围已作为一份新的 Proposal 提交检查。",
+      if (
+        !narrowedText.trim() ||
+        countCharacters(narrowedText.trim()) >=
+          countCharacters(attemptedText.trim())
+      ) {
+        return;
+      }
+      const retry = resolveNarrowedRetry({
+        scenarioId: uxScenarioId,
+        attemptedText,
+        retryText: narrowedText,
       });
-      setNotice("较小范围已转为 Proposal");
+      appendTextToAuthority(
+        retry.retryText,
+        "narrowed_refused_edit_retry_authoritative",
+      );
+      setUxResult({
+        scenarioId: retry.nextScenarioId,
+        outcomeDetail:
+          `较小范围已写入“${retry.target.authorLabel}”。StoryOS 已重新检查当前位置，只提交了你确认的这段。` +
+          "完整 Refused Edit Draft 在结算前始终保留。",
+      });
+      setNotice("较小范围已写入当前正文");
       return;
     }
 
@@ -947,13 +979,16 @@ export function App() {
 
     if (actionId === "narrow") {
       setUxPhase("narrowing");
-      setNarrowedText(transition.preservedText);
-      setNotice("完整尝试仍保留；请选择要重试的较小范围");
+      setNarrowedText(scenario.narrowedRetry.initialText);
+      setNotice("完整尝试仍保留；已选择单一正文目标");
       return;
     }
 
     if (transition.nextScenarioId === "authoritative") {
-      appendRecoveryTextToAuthority(transition.preservedText);
+      appendTextToAuthority(
+        transition.preservedText,
+        "retry_recovery_draft",
+      );
       setUxResult({
         scenarioId: "authoritative",
         outcomeDetail:

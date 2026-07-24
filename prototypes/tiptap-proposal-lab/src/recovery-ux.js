@@ -34,6 +34,15 @@ const recoveryAttempt = [
   "门后的脚步停住了。",
 ].join("\n");
 
+const refusedNarrowedRetry = Object.freeze({
+  initialText: refusedAttempt.split("\n")[0],
+  targetId: "chapter-12-authority-end",
+  targetLabel: "当前章节正文 · 第十二章末尾",
+  authorLabel: "第十二章末尾 · 仅正文",
+  ownership: "authoritative-only",
+  representativeResult: "authoritative",
+});
+
 const scenarios = Object.freeze({
   authoritative: Object.freeze({
     id: "authoritative",
@@ -48,6 +57,7 @@ const scenarios = Object.freeze({
   proposal: Object.freeze({
     id: "proposal",
     result: "proposal",
+    preservedSurface: "Proposal",
     tone: "proposal",
     eyebrow: null,
     title: null,
@@ -58,7 +68,8 @@ const scenarios = Object.freeze({
   refused: Object.freeze({
     id: "refused",
     result: "refused",
-    artifactKind: "Refused Edit Draft",
+    draftArtifact: "Refused Edit Draft",
+    preservedSurface: "Refused Edit Draft",
     tone: "attention",
     eyebrow: "未写入 · Refused Edit Draft",
     title: "这次编辑跨过了正文和提案边界",
@@ -66,12 +77,14 @@ const scenarios = Object.freeze({
       "StoryOS 没有写入其中任何一部分。完整尝试已保存在下面，你可以先缩小范围，或把它扩展为一份提案。",
     attemptedText: refusedAttempt,
     textLabel: "完整编辑尝试",
+    narrowedRetry: refusedNarrowedRetry,
     actions: Object.freeze(["narrow", "copy", "expand", "discard"]),
   }),
   conflicted: Object.freeze({
     id: "conflicted",
     result: "conflicted",
-    artifactKind: "Proposal Conflict",
+    condition: "Proposal Conflict",
+    preservedSurface: "Proposal",
     tone: "attention",
     eyebrow: "目标已变化 · Proposal Conflict",
     title: "这份提案不能按原位置接受",
@@ -94,7 +107,8 @@ const scenarios = Object.freeze({
   "recovery-draft": Object.freeze({
     id: "recovery-draft",
     result: "recovery",
-    artifactKind: "Recovery Draft",
+    draftArtifact: "Recovery Draft",
+    preservedSurface: "Recovery Draft",
     tone: "attention",
     eyebrow: "上次编辑未写入 · Recovery Draft",
     title: "这段文字还没有保存到正文",
@@ -107,7 +121,8 @@ const scenarios = Object.freeze({
   "proposal-recovery-conflict": Object.freeze({
     id: "proposal-recovery-conflict",
     result: "recovery",
-    artifactKind: "Proposal Recovery Conflict",
+    condition: "Proposal Recovery Conflict",
+    preservedSurface: "Proposal",
     tone: "attention",
     eyebrow: "恢复需要决定 · Proposal Recovery Conflict",
     title: "无法确认续写暂停前的最后位置",
@@ -140,6 +155,50 @@ export function resolveUxAction({
     preservedText,
     nextScenarioId: action.nextScenarioId ?? scenario.id,
     nextPhase: action.nextPhase ?? "review",
+  };
+}
+
+export function resolveNarrowedRetry({
+  scenarioId,
+  attemptedText,
+  retryText,
+}) {
+  const scenario = getUxScenario(scenarioId);
+  if (!scenario.narrowedRetry) {
+    throw new Error(`Narrowed retry is not available for ${scenario.id}`);
+  }
+
+  const preservedDraftText = attemptedText ?? scenario.attemptedText ?? "";
+  if (
+    !retryText?.trim() ||
+    countCharacters(retryText.trim()) >=
+      countCharacters(preservedDraftText.trim())
+  ) {
+    throw new Error("Narrowed retry must contain a smaller nonempty edit");
+  }
+
+  return {
+    preservedDraftText,
+    retryText,
+    target: scenario.narrowedRetry,
+    nextScenarioId: scenario.narrowedRetry.representativeResult,
+  };
+}
+
+export function settleWithoutProposalCandidate(proposal, authorActionKind) {
+  return {
+    ...proposal,
+    blockIds: [],
+    validation: "valid",
+    resolution: "none",
+    closure: "closed",
+    acceptance: null,
+    acceptanceRedoAvailable: false,
+    editorHistoryDepth: 0,
+    rejectedRevision: null,
+    conflictReason: null,
+    creator: "author",
+    authorAction: { kind: authorActionKind, safe: true },
   };
 }
 

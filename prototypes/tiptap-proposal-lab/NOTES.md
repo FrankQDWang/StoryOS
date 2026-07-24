@@ -43,21 +43,24 @@ author-facing refusal, conflict, and recovery states directly after the affected
 manuscript content. The harness remains hidden; each state is also reproducible
 with `?scenario=<id>`.
 
-| Scenario | Result | Preserved artifact | Available author actions |
-| --- | --- | --- | --- |
-| `authoritative` | authoritative | — | none |
-| `proposal` | Proposal | editable Proposal | accept, reject |
-| `refused` | refused | Refused Edit Draft | narrow, copy, expand into a Proposal, discard |
-| `conflicted` | conflicted | Proposal Conflict | replan from current authority, copy, reject |
-| `no-effect` | no-effect | — | none |
-| `recovery-draft` | recovery | Recovery Draft | retry, copy, discard |
-| `proposal-recovery-conflict` | recovery | Proposal Recovery Conflict | replan from current authority, copy, withdraw |
+| Scenario | Result | Draft Artifact | Condition | Preserved surface | Available author actions |
+| --- | --- | --- | --- | --- | --- |
+| `authoritative` | authoritative | — | — | manuscript | none |
+| `proposal` | Proposal | — | — | editable Proposal | accept, reject |
+| `refused` | refused | Refused Edit Draft | — | complete Refused Edit Draft | narrow, copy, expand into a Proposal, discard |
+| `conflicted` | conflicted | — | Proposal Conflict | complete Proposal | replan from current authority, copy, reject |
+| `no-effect` | no-effect | — | — | none | none |
+| `recovery-draft` | recovery | Recovery Draft | — | complete Recovery Draft | retry, copy, discard |
+| `proposal-recovery-conflict` | recovery | — | Proposal Recovery Conflict | complete Proposal | replan from current authority, copy, withdraw |
 
 The Refused Edit Draft preserves all 50 characters across three lines. The
 Recovery Draft preserves all 41 characters across three lines. Both Proposal
 conflict paths display the same complete eight-paragraph, 287-character Proposal
 that remains visible in the editor. No recovery surface exposes a stale accept
-control.
+control. Refused Edit Draft and Recovery Draft are the matrix's only Draft
+Artifacts. Proposal Conflict is a validation-axis condition and Proposal
+Recovery Conflict is a fail-closed recovery condition; both remain conditions
+on the preserved Proposal surface rather than new Artifacts.
 
 The real Chrome interaction pass proved these transitions without a hidden or
 partial write:
@@ -66,7 +69,9 @@ partial write:
   exact 50-character Refused Edit Draft into the narrowing editor while the
   immutable full attempt remained visible;
 - narrowing retains the complete Refused Edit Draft while the author selects a
-  smaller retry, and the selected text becomes one fresh Proposal;
+  smaller retry. The demonstration names the known single target
+  `current chapter manuscript · chapter 12 end`, marks it authoritative-only,
+  and shows one representative Core-reclassified authoritative settlement;
 - expanding a Refused Edit Draft creates a fresh Proposal containing all three
   preserved lines;
 - retrying a Recovery Draft appends all three lines exactly once, then settles
@@ -74,16 +79,38 @@ partial write:
 - replanning a Proposal Conflict creates one fresh Proposal containing the exact
   eight preserved paragraphs;
 - rejecting, withdrawing, or discarding settles to no-effect, removes the
-  candidate artifact, and leaves authoritative prose unchanged;
+  applicable candidate or recovery surface, and leaves authoritative prose
+  unchanged;
 - accepting a fresh Proposal writes its complete text atomically and removes all
   Proposal controls.
+
+Narrowed retry and Proposal expansion deliberately do not share a result.
+Expansion creates a Proposal. The authoritative-only narrowed example is
+representative UX evidence, not a client-selected write route: every production
+retry remains one `ApplyAuthorEdit` that Issue #46 Core reclassifies from current
+Heads, Anchors, and ownership as authoritative, Proposal revised, refused,
+conflicted, or no-effect.
+
+The author-facing narrowed state uses only product language: `重试位置`,
+`第十二章末尾 · 仅正文`, and an explanation that StoryOS will recheck the
+current location before submitting the selected text. Classifier and prototype
+boundary details remain in this evidence and the hidden harness, not in the
+default writing surface. The narrowed authoritative settlement and Recovery
+Draft retry both project `没有待处理提案`; neither fabricates Proposal
+Acceptance, exposes `撤销接受并重新打开提案`, or retains recovery controls.
+The ordinary Proposal accept path still records Acceptance and exposes its
+applicable undo.
 
 Tracked evidence:
 
 - [approved source beside the Refused Edit Draft](artifacts/issue-45-approved-refused-comparison.png)
+- [approved source beside the narrowed retry target](artifacts/issue-45-approved-narrowed-comparison.png)
 - [Refused Edit Draft](artifacts/issue-45-refused-edit-draft.png)
+- [authoritative-only narrowed retry target](artifacts/issue-45-narrowed-authoritative-target.png)
+- [narrowed authoritative settlement](artifacts/issue-45-narrowed-authoritative-settled.png)
 - [Proposal Conflict](artifacts/issue-45-proposal-conflict.png)
 - [Recovery Draft](artifacts/issue-45-recovery-draft.png)
+- [Recovery Draft authoritative settlement](artifacts/issue-45-recovery-draft-settled.png)
 - [Proposal Recovery Conflict](artifacts/issue-45-proposal-recovery-conflict.png)
 - [machine-readable matrix](artifacts/issue-45-production-ux-matrix.json)
 
