@@ -558,8 +558,10 @@ precondition.
 
 ### 7.5 Command Acknowledgement
 
-Every terminally settled admitted submission or recovered admission produces
-exactly one immutable acknowledgement:
+Public-command responses that are acknowledgements use the closed union below.
+`StoryOSProblem`, including post-admission `outcome_unknown`, is separate.
+`CommandAcknowledgement` is a transport response union, not the
+`AuthorCommandAdmissionSettlement` state:
 
 ```text
 CommandAcknowledgement =
@@ -604,6 +606,12 @@ CommandAcknowledgement =
   }
 ```
 
+This union is shared across public commands and does not make every variant
+terminal. For an Author Command Admission, Receipt-backed `Committed` maps to
+`ReceiptSettled`, while `RequiresReconfirmation` maps to the same-named
+terminal settlement. `Accepted` is not an Author Command Admission terminal
+settlement and cannot add a third terminal state.
+
 `Committed` is returned only after the complete Core Transition, including a
 no-change transition, its Receipt, required Events and sequence facts,
 invalidation, and outbox intent commit. It means that settlement evidence
@@ -621,11 +629,15 @@ An applied action on an existing resource, a domain refusal, invalidity,
 conflict, or no-effect settlement returns HTTP `200` with `Committed`; creation
 of a durable resource may return `201`. The Receipt carries the closed domain
 disposition and only scope-safe conflict or refusal evidence. Exact idempotent
-replay returns the same acknowledgement and Receipt reference. A committed
-domain outcome is never replaced by Problem Details, because that would hide
-its stable Receipt path; Problem Details represents a pre-attempt admission,
-transport, query, or infrastructure failure for which no domain Receipt was
-committed.
+replay returns the same acknowledgement and Receipt reference. Once a committed
+domain outcome is known at the responding boundary, it uses `Committed` rather
+than Problem Details so its stable Receipt path remains visible. A
+pre-admission Problem proves that no Author Command Admission or Receipt
+exists. A post-admission `outcome_unknown` Problem makes no claim whether the
+original admitted command has a committed Receipt: the current response
+provides no `ReceiptRef` and requires reconciliation through the same
+`settlement_query`. Other Problem responses carry only the semantics of their
+code and owning section; they do not globally assert Receipt absence.
 
 `Accepted` uses HTTP `202`. It means only that asynchronous work and its
 recovery identity are durable. Completion may later succeed, partially
@@ -1114,10 +1126,13 @@ that the requester may already inspect. It never returns another User,
 Project, hidden Artifact, Capability, Credential Reference, or registration
 identity.
 
-Problem Details never stands in for or creates a domain Receipt. A domain
-command's committed refusal, conflict, invalidity, or no-effect outcome uses
-the `Committed` acknowledgement and its mandatory `receipt_ref`; a Problem
-means the current request has no committed domain Receipt path.
+Problem Details never creates or serves as a domain Receipt. A pre-admission
+Problem proves that no Author Command Admission or Receipt exists. After
+durable admission, `outcome_unknown` does not prove either Receipt presence or
+absence: the current response provides no `ReceiptRef`, forbids blind
+resubmission, and carries the same `settlement_query`. Once a domain Receipt is
+known to be committed, refusal, conflict, invalidity, or no effect uses the
+`Committed` acknowledgement and its mandatory `receipt_ref`.
 
 ### 11.3 Non-oracular failures and OutcomeUnknown
 
