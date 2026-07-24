@@ -75,6 +75,17 @@ npm run dev
   ID. The StoryOS copy command must clear identity and record provenance before
   insertion so `UniqueID` can allocate the new Block ID.
 
+## Reuse by the current production UX validation
+
+- The real Chrome evidence above closes the generic input-mechanism questions for
+  Chinese Pinyin, native paste and cut, and cross-owner text drag/drop. The
+  reopened production UX validation must reuse this evidence rather than repeat
+  event-capture tests.
+- The remaining drag/drop work is the production-shaped refusal and recovery
+  experience around the accepted mechanism: preserve the complete attempted text,
+  make the non-authoritative result understandable, and expose the same applicable
+  next actions as other refused edits.
+
 ## Deferred beyond this browser/editor prototype
 
 - crash-window reconciliation is intentionally out of this browser/editor ticket:
