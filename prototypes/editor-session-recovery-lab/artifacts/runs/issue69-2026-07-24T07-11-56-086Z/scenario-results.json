@@ -1,0 +1,329 @@
+{
+  "run_id": "issue69-2026-07-24T07-11-56-086Z",
+  "results": [
+    {
+      "scenario_id": "candidate-policy-boundaries",
+      "status": "passed",
+      "duration_ms": 821.953,
+      "evidence": {
+        "groups": {
+          "transaction": 7,
+          "semantic-intent": 6,
+          "bounded-idle": 5,
+          "fixed-window": 1
+        },
+        "violations": {
+          "transaction": [
+            "composition_fragmented"
+          ],
+          "semantic-intent": [],
+          "bounded-idle": [],
+          "fixed-window": [
+            "fixed_window_crossed_contract_boundary",
+            "fixed_window_crossed_contract_boundary",
+            "fixed_window_crossed_contract_boundary",
+            "fixed_window_crossed_contract_boundary"
+          ]
+        }
+      }
+    },
+    {
+      "scenario_id": "binding-boundary-matrix",
+      "status": "passed",
+      "duration_ms": 0.737,
+      "evidence": {
+        "verified_boundaries": [
+          "project",
+          "chapter",
+          "target",
+          "ownership",
+          "expected_head",
+          "writer_generation",
+          "admission_id",
+          "admission_expiry",
+          "editor_contract",
+          "undo_group",
+          "composition",
+          "paste",
+          "cut",
+          "drop",
+          "structural",
+          "explicit_command"
+        ]
+      }
+    },
+    {
+      "scenario_id": "native-input-clipboard-drop-undo",
+      "status": "passed",
+      "duration_ms": 1717.861,
+      "evidence": {
+        "intent_kinds": [
+          "typing",
+          "selection_replace",
+          "paste",
+          "cut",
+          "drop",
+          "explicit_command"
+        ],
+        "evidence_sources": [
+          "native-beforeinput",
+          "native-keyboard-selection",
+          "native-clipboard",
+          "native-drag-drop",
+          "native-keyboard"
+        ],
+        "final_text_sha256": "edf9a2b4f5969d115fff38e66a700ebf9e21ac51a1b7d8a89cefa9f64d03575a"
+      }
+    },
+    {
+      "scenario_id": "delivery-order-http-first",
+      "status": "passed",
+      "duration_ms": 362.921,
+      "evidence": {
+        "receipt_trace_index": 9,
+        "activity_trace_index": 10
+      }
+    },
+    {
+      "scenario_id": "delivery-order-event-first",
+      "status": "passed",
+      "duration_ms": 366.438,
+      "evidence": {
+        "receipt_trace_index": 10,
+        "activity_trace_index": 8
+      }
+    },
+    {
+      "scenario_id": "duplicate-delivery-and-idempotency",
+      "status": "passed",
+      "duration_ms": 365.901,
+      "evidence": {
+        "receipt_id": "e31edd5f-630e-4730-bfad-1e99e374a20f",
+        "author_actions": 1
+      }
+    },
+    {
+      "scenario_id": "ack-loss-reconciliation",
+      "status": "passed",
+      "duration_ms": 345.571,
+      "evidence": {
+        "reconciliation": [
+          {
+            "status": "settled"
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "sequence-gap",
+      "status": "passed",
+      "duration_ms": 315.51,
+      "evidence": {
+        "projection_position": 1,
+        "head": "revision-262cfe345c3029c2"
+      }
+    },
+    {
+      "scenario_id": "replay-floor",
+      "status": "passed",
+      "duration_ms": 275.967,
+      "evidence": {
+        "projection_position": 1,
+        "head": "revision-7e3192d65fd351ad"
+      }
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "status": "passed",
+      "duration_ms": 3568.753,
+      "evidence": {
+        "first_reconciliation": [
+          {
+            "status": "requires_reauthorization"
+          }
+        ],
+        "second_reconciliation": [
+          {
+            "status": "settled_after_reauthorization"
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "status": "passed",
+      "duration_ms": 700.372,
+      "evidence": {
+        "first_reconciliation": [],
+        "second_reconciliation": []
+      }
+    },
+    {
+      "scenario_id": "reload-after-journal-durable",
+      "status": "passed",
+      "duration_ms": 391.285,
+      "evidence": {
+        "journal_before_reload": {
+          "records": 1,
+          "bytes": 898,
+          "unresolved": 1
+        }
+      }
+    },
+    {
+      "scenario_id": "reload-binding-mismatch-preserves-draft",
+      "status": "passed",
+      "duration_ms": 667.87,
+      "evidence": {
+        "recovery_draft_sha256": "beef6523d2b9608f08dd5843f4dbd8f81aa52809cf534f3a491b65882d8403fc",
+        "active_writer_generation": 2
+      }
+    },
+    {
+      "scenario_id": "reload-after-receipt-before-activity",
+      "status": "passed",
+      "duration_ms": 356.009,
+      "evidence": {
+        "author_actions": 1,
+        "projection_position": 1
+      }
+    },
+    {
+      "scenario_id": "secondary-tab-takeover-stale-writer",
+      "status": "passed",
+      "duration_ms": 3470.319,
+      "evidence": {
+        "fenced_outcome": "refused",
+        "active_writer_generation": 2
+      }
+    },
+    {
+      "scenario_id": "typed-outcome-authoritative",
+      "status": "passed",
+      "duration_ms": 276.06,
+      "evidence": {
+        "receipt_id": "c5fe7b03-195e-411c-b3db-2c020c50b9c9",
+        "outcome": "authoritative",
+        "author_action_seq": 1
+      }
+    },
+    {
+      "scenario_id": "typed-outcome-proposal",
+      "status": "passed",
+      "duration_ms": 3265.837,
+      "evidence": {
+        "receipt_id": "aa871509-6634-44ee-b7c6-ff82696dc83d",
+        "outcome": "proposal",
+        "author_action_seq": null
+      }
+    },
+    {
+      "scenario_id": "typed-outcome-refused",
+      "status": "passed",
+      "duration_ms": 3250.957,
+      "evidence": {
+        "receipt_id": "4a1c52a1-83ce-4d6b-8437-c16c4e47995f",
+        "outcome": "refused",
+        "author_action_seq": null
+      }
+    },
+    {
+      "scenario_id": "typed-outcome-conflicted",
+      "status": "passed",
+      "duration_ms": 3259.137,
+      "evidence": {
+        "receipt_id": "a9ba162d-6eba-4a70-8eb4-65a82c3cf908",
+        "outcome": "conflicted",
+        "author_action_seq": null
+      }
+    },
+    {
+      "scenario_id": "typed-outcome-no_effect",
+      "status": "passed",
+      "duration_ms": 3283.342,
+      "evidence": {
+        "receipt_id": "76ab44e3-581b-48e4-b778-c75e3ef18efc",
+        "outcome": "no_effect",
+        "author_action_seq": null
+      }
+    },
+    {
+      "scenario_id": "chapter-switch-persistence",
+      "status": "passed",
+      "duration_ms": 296.247,
+      "evidence": {
+        "heads": {
+          "chapter-alpha": "revision-d29f467ee28a58d8",
+          "chapter-beta": "revision-8abadb6500611f1f"
+        }
+      }
+    },
+    {
+      "scenario_id": "long-session-journal-growth",
+      "status": "passed",
+      "duration_ms": 6085.072,
+      "evidence": {
+        "intents": 240,
+        "commands": 1,
+        "growth_samples": [
+          {
+            "intents": 1,
+            "records": 1,
+            "bytes": 910,
+            "unresolved": 1
+          },
+          {
+            "intents": 40,
+            "records": 40,
+            "bytes": 37983,
+            "unresolved": 40
+          },
+          {
+            "intents": 80,
+            "records": 80,
+            "bytes": 79183,
+            "unresolved": 80
+          },
+          {
+            "intents": 120,
+            "records": 120,
+            "bytes": 123625,
+            "unresolved": 120
+          },
+          {
+            "intents": 180,
+            "records": 180,
+            "bytes": 196345,
+            "unresolved": 180
+          },
+          {
+            "intents": 240,
+            "records": 240,
+            "bytes": 276265,
+            "unresolved": 240
+          }
+        ]
+      }
+    },
+    {
+      "scenario_id": "synthetic-composition-boundary-only",
+      "status": "passed",
+      "duration_ms": 265.12,
+      "evidence": {
+        "transaction_count": 4,
+        "real_os_ime_evidence": false
+      }
+    },
+    {
+      "scenario_id": "global-lifecycle-invariants",
+      "status": "passed",
+      "duration_ms": 13.035,
+      "evidence": {
+        "trace_records": 2076,
+        "submission_durability_order": "verified",
+        "gc_settlement_convergence_order": "verified",
+        "bounded_trace": "verified"
+      }
+    }
+  ]
+}
