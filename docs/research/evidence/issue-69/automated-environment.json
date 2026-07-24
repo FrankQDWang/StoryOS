@@ -1,0 +1,99 @@
+{
+  "run_id": "issue69-2026-07-24T07-24-28-542Z",
+  "generated_at": "2026-07-24T07:25:03.642Z",
+  "node": "v24.16.0",
+  "platform": "darwin",
+  "architecture": "arm64",
+  "os_release": "24.6.0",
+  "chrome": "150.0.7871.182",
+  "trace_schema": "storyos.issue69.trace.v1",
+  "core_schema": "storyos.issue69.fake-core.v1",
+  "journal_schema": "storyos.issue69.local-edit-journal.v1",
+  "source_head": "2c67c9abe126a17c6c02fb66ab63b843ecfb4a63",
+  "scenario_count": 24,
+  "passed": 24,
+  "failed": 0,
+  "expected_fault_console_errors": [
+    {
+      "scenario_id": "ack-loss-reconciliation",
+      "text": "Failed to load resource: net::ERR_EMPTY_RESPONSE"
+    },
+    {
+      "scenario_id": "replay-floor",
+      "text": "Failed to load resource: the server responded with a status of 409 (Conflict)"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_EMPTY_RESPONSE"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "scenario_id": "core-crash-before_commit",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_EMPTY_RESPONSE"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "scenario_id": "core-crash-after_commit_before_response",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    }
+  ],
+  "unexpected_console_errors": []
+}
