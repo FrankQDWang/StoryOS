@@ -2,8 +2,14 @@
 
 - Status: accepted
 - Wayfinder resolution: [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57)
-- Repository baseline: `b944540936b0ea762e6c35f7b340d399b3124171`
+- Repository baseline: `15a6c4d343145c9f825d52067f13d09eec6ead37`
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
+- Protected-client decision: [ADR 0013](../adr/0013-trust-the-storyos-web-client-for-author-command-admission.md)
+- Author-command admission: [Author Command Admission](author-command-admission.md)
+- Evidence classification: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
+- Web editor continuity: [Web Editor Session, Synchronization, and Recovery Semantics](web-editor-session-synchronization-and-recovery-semantics.md)
+- Public protocol: [Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md)
+- Security verification: [Deterministic Verification and Failure-Recovery Gates](deterministic-verification-and-failure-recovery-gates.md)
 - Storage contract: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
 - Context and egress contract: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - MCP App lifecycle: [ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md)
@@ -49,6 +55,16 @@ controlled cloud deployment for many mutually isolated Users. Model and
 embedding inference always use external APIs. Bailian is one current test
 Provider, not an architectural dependency.
 
+Release 1 has one Protected Web Client: the exact controlled StoryOS Web
+application build named by its immutable asset set, accepted client-contract
+identity, security-policy identity, and current Client Session Binding
+generation. Only that controlled application code and its admitted browser
+platform boundary participate in the author-command trust claim. Rendered or
+imported content, model, Tool, MCP, or App output, browser extensions,
+third-party scripts, stale application/service-worker caches, Local Edit
+Journal content, and browser projections remain untrusted inputs or
+non-authoritative continuity state.
+
 PostgreSQL is the authoritative database. A Project is never identified by a
 directory, database file, or filesystem path. Project Export Archives and
 author-provided files are untrusted inputs or portable evidence, not alternate
@@ -63,10 +79,13 @@ The Foundation must preserve these security objectives:
 1. **Exact Project Isolation.** Every project-bearing operation, record,
    reference, cursor, index, cache, idempotency fact, recovery fact, and
    disclosure binds the exact pair { owner_user_id, project_id }.
-2. **Author authority.** The trusted StoryOS Web Client requests
-   Author Command Admission for one exact authenticated author command. Models,
-   Tools, MCP servers, MCP Apps, imported files, external sources, Workers, and
-   Providers use their own typed causes and remain outside that admission path.
+2. **Bounded protected-client claim.** Author Command Admission may assert only
+   that the exact Protected Web Client submitted one exact digest-covered
+   command for the Server-derived User and existing or prospective Project
+   Scope while every protected-client, session, contract, editor, writer,
+   action, nonce/idempotency, target/Head, and lifetime input matched. It never
+   attests one physical human gesture, trusted display, user presence, or user
+   verification.
 3. **Durable truth.** PostgreSQL canonical facts, immutable payloads, exact
    Revisions, Receipts, manifests, Attempts, and uncertainty records outrank
    network, browser, process, cache, projection, and Provider state.
@@ -87,6 +106,10 @@ The Foundation must preserve these security objectives:
 8. **Bounded execution.** Untrusted resources, messages, files, archives,
    fetched content, model output, and replay ranges cannot grow without
    explicit hard limits and backpressure.
+9. **Protected-client integrity.** Untrusted content, external output,
+   dependency or asset substitution, third-party script, browser extension,
+   stale tab, or stale cached build cannot silently become the admitted
+   Protected Web Client or widen its current command authority.
 
 # Threat Model, Trust Boundaries, and Assumptions
 
@@ -103,6 +126,8 @@ The Foundation must preserve these security objectives:
 | PostgreSQL schema, roles, constraints, and migration ledger | least privilege, forced RLS, same-scope references, checksum and compatibility integrity |
 | Project Export Archives, backups, and WAL | confidentiality, integrity, complete recovery chain, exact-scope restore, and no secret material |
 | App UI resources and bridge state | exact resource identity, sandbox integrity, origin/source binding, revocation, and no ambient authority |
+| Protected Web Client build and admission context | exact immutable asset/build identity, matching client-contract and security-policy identities, current Client Session and writer generations, and no false physical-human attestation |
+| Admission and editor evidence | exact positive class, owning lifecycle, source attribution, immutable settlement, and no promotion of an Operational Record, Draft, journal, cache, projection, or missing response into authority |
 | Availability and resource budgets | one malicious input cannot exhaust the host, critical recovery capacity, or another Project |
 
 ## 5. Principals and attacker capabilities
@@ -112,7 +137,8 @@ The Foundation must preserve these security objectives:
 | Project Author/User | supplies prose, instructions, URLs, files, settings, Approvals, and Acceptance; may make mistakes but owns only exact authorized Projects |
 | Other User in a future cloud deployment | has a valid principal and their own Projects; may guess IDs, forge scope fields, race requests, and probe errors or cursors |
 | Untrusted web origin or page script | can cause browser requests allowed by the web platform, open EventSource connections where policy permits, and send postMessage traffic to reachable windows |
-| Trusted deployed first-party Web Client | runs the controlled StoryOS application assets, captures explicit author action classes, maintains the Editor Session and Local Edit Journal, and requests Server-created Author Command Admission |
+| Protected Web Client | runs the exact controlled StoryOS application build admitted by matching asset, client-contract, security-policy, Client Session, Editor Session, and writer-generation evidence; it requests but never creates or supplies Author Command Admission identity |
+| Untrusted browser-side influence | controls rendered/imported content, model/Tool/MCP/App output, third-party script or dependency input, browser extensions, cached or stale client state, and DOM/bridge messages without gaining a trusted-client identity |
 | Malicious model output or Provider response | can emit persuasive text, malformed streams, forged Tool requests, oversized output, or misleading identity/usage evidence |
 | Malicious Tool, MCP server, or MCP App | controls discovered metadata, schemas, results, HTML, bridge messages, redirects, and declared annotations within its reachable Registration |
 | Malicious research source or author-provided file | controls content, imperative text, URLs, parser inputs, archive entries, compression ratio, and embedded metadata |
@@ -142,11 +168,19 @@ and model attention remain outside StoryOS durable truth. Browser or sandbox
 zero-days, OS credential theft after full host compromise, and cryptographic
 primitive failure are residual platform risks rather than Foundation features.
 
+A pure browser claim is intentionally narrower than physical-human
+attestation. Browser-observed input, user activation, a valid session,
+anti-forgery evidence, a command digest, or even a credential ceremony does
+not by itself prove what one physical person saw or meant. A stronger claim
+requires a separately trusted display and confirmation surface that is outside
+the selected Release 1 boundary.
+
 ## 7. Trust boundaries and data flows
 
 | Boundary | Data crossing it | Required invariant |
 |---|---|---|
-| TB-1 Client ↔ StoryOS Server HTTP | commands, queries, files, Author Command Admission inputs, Approvals, Acceptance | Server derives requester and scope from trusted context and creates the durable admission for exact validated command bytes |
+| TB-0 Build/release → Protected Web Client | immutable first-party assets, dependency graph, client-contract and security-policy identities, service-worker/application-cache activation | only one exact reviewed asset graph is executable as the admitted client; stale, substituted, third-party, or mismatched code cannot inherit the protected-client claim |
+| TB-1 Client ↔ StoryOS Server HTTP | commands, queries, files, protected-client and Author Command Admission inputs, Approvals, Acceptance | Server derives requester and scope, validates every exact protected-client/session/editor/digest/lifetime input, and creates the durable admission identity for the exact command |
 | TB-2 StoryOS Server → Client SSE | scoped immutable events, cursors, replay and resync signals | current authorization plus exact stream/scope/sequence binding on every connect and replay |
 | TB-3 Server/runtime ↔ PostgreSQL | canonical facts, payloads, scope settings, projections, outbox | non-owner runtime, forced RLS, composite scope constraints, atomic transitions |
 | TB-4 Maintenance ↔ PostgreSQL | migrations, whole-service backup/restore, role/grant manifests | separate non-request credentials, isolated execution, checksum and restore validation |
@@ -157,7 +191,50 @@ primitive failure are residual platform risks rather than Foundation features.
 | TB-9 Research fetcher ↔ network | generated or supplied URL/query, redirects, response bytes | public-network-only policy, no ambient credentials, bounded capture and exact provenance |
 | TB-10 Import/export ↔ author-provided bytes | Project Export Archive or imported source | stage and validate without authority, path, parser, secret, or scope escape |
 | TB-11 PostgreSQL ↔ backup/WAL store | whole-service canonical data and recovery metadata | independent restricted failure domain, confidentiality, integrity, gap detection, restore proof |
-| TB-12 Durable store ↔ projections/caches/UI | indexed, summarized, replayed, or displayed views | current eligibility and exact dependency closure; projection never becomes truth or authorization |
+| TB-12 Durable store ↔ journals/projections/caches/UI | journaled, indexed, summarized, replayed, cached, or displayed views | current scope, generation, eligibility, and exact dependency closure; browser state and projections never become truth, authorization, settlement, or a recovery oracle |
+
+### 7.1 Exact Release 1 protected-client trust inputs
+
+The threat model consumes, but does not redefine, the admission fields owned by
+[Author Command Admission](author-command-admission.md). The trusted claim is
+eligible only when all of these inputs are present and equal at the applicable
+boundary:
+
+| Input | Threat-model requirement |
+|---|---|
+| exact Protected Web Client build | the immutable reviewed asset graph named by the accepted client-contract and security-policy identities; a different or stale build is not trusted |
+| Client Session Binding | exact opaque Server-held binding identity, current `session_generation`, allowed Host and first-party Origin, Server-derived User, and bounded session lifetime |
+| client and policy identities | exact accepted `client_contract_revision` and `security_policy_revision`; neither the Client nor a cache may select, downgrade, or alias them |
+| requester and Project | Server-derived `requester_user_id` plus one exact existing or Server-allocated prospective `ProjectScope { owner_user_id, project_id }` |
+| editor binding | exact `editor_session_id` and Project `writer_generation` when editor-bound, or explicit not-applicable values |
+| action and request contract | one closed author action class plus API major, method, route template, command schema, and command kind |
+| command meaning | Server-recomputed canonical command digest and Digest Profile covering exact targets, expected Heads or Revisions, and every typed command field |
+| replay protection | exact pre-domain idempotency-record identity and key plus the consumed one-use anti-forgery nonce-record identity; a nonce value is never durable authority |
+| lifetime and invocation | Server-clock `issued_at` and `expires_at`, with first invocation admitted only within the owned lifetime and recovery limited to the contract's exact direct-edit branch |
+| settlement | one append-only Admission lifecycle with read-only reconciliation and exactly one `ReceiptSettled` or `RequiresReconfirmation` terminal settlement |
+
+Release 1 therefore claims only: the exact Protected Web Client submitted this
+digest-covered command for this Server-derived User and Project Scope, and the
+Server admitted that one command for Core evaluation. It makes no claim about
+browser-event cardinality, physical-human identity, user presence, user
+verification, or a trusted display of command semantics.
+
+### 7.2 Security-relevant evidence classes are fixed inputs
+
+This threat model assesses spoofing, tampering, replay, disclosure, recovery,
+and availability attacks against the positive classes below. It does not
+create another class or lifecycle:
+
+| Evidence or content | Fixed classification consumed here |
+|---|---|
+| Admission issuance, `outcome_unknown`, reconciliation observations, terminal settlement, sanitized pre-admission refusal, Editor Input Fence, Author Action, and every typed Receipt | Operational Records under their owning contracts |
+| `RefusedEditDraft` and `RecoveryDraft` | non-authoritative Draft Artifacts with Artifact revisions, retention, and reversible Draft closure |
+| Proposal Conflict | the `conflicted` condition on one exact Proposal Revision's validation axis, projected from immutable Core evidence |
+
+An identity or evidence record is not reusable authority. Browser cache,
+Local Edit Journal, Pending Edit Projection, process state, network state,
+missing response, Artifact, Operational Record, external output, or repeated
+observation never becomes Authoritative State merely because it exists.
 
 ## 8. Entry points
 
@@ -257,7 +334,7 @@ owns posture and isolation gates, and
 [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
 must include role separation before validation data is trusted.
 
-## 11. AP-03: Localhost or cloud HTTP request forgery
+## 11. AP-03: Origin, Host, or CSRF request forgery
 
 **Source to sink.** A malicious web origin induces a browser to send a simple
 GET or form-like POST to a local StoryOS port, exploits permissive CORS,
@@ -270,12 +347,15 @@ a Run, Approval, Acceptance, credential rebind, export, or other effect.
 **Affected assets.** Author authority, Project data, outbound grants,
 credentials, and external effects.
 
-**Accepted controls.** Release 1 trusts the controlled StoryOS Web Client.
+**Accepted controls.** Release 1 trusts only the exact Protected Web Client
+defined in section 7.1.
 The Server creates a command-specific Author Command Admission only after
 deriving requester identity and exact existing or Server-allocated prospective
-Project Scope and validating the exact client contract, Client Session,
-applicable Editor Session and writer generation, action class, command digest,
-target, nonce, and idempotency record. Approval and Acceptance bind exact
+Project Scope and validating the exact Protected Web Client build,
+client-contract and security-policy identities, Client Session Binding and
+generation, applicable Editor Session and writer generation, action class,
+canonical command digest, target and expected Heads, one-use nonce record,
+idempotency record, and admission lifetime. Approval and Acceptance bind exact
 immutable inputs.
 
 **Required structural mitigation.** The protocol must define one concrete
@@ -294,21 +374,22 @@ The deployed client uses exact immutable assets, a restrictive content security
 policy, no ambient third-party script, and version-matched generated contracts.
 IndexedDB journal content, browser extension input, restored local state, and
 all client-supplied identities are still structurally validated at the Server
-and Core boundaries. A stale writer generation or modified command digest
-cannot create an admission.
+and Core boundaries. A stale build, session or writer generation, mismatched
+contract or policy identity, reused nonce, changed idempotency digest, or
+expired admission cannot create or invoke an admission.
 
 **Verifiable evidence.** Browser integration tests originate requests from
 malicious HTTPS and local pages, forms, fetch modes, null Origin, forged Host,
 stale tokens, another Project, and preflight variants; all mutations and
 sensitive reads fail before a domain attempt or disclosure.
 
-**Residual risk and owner.** Integrity of the deployed StoryOS Web Client is
-part of the Release 1 trusted computing boundary. Controlled assets,
-restrictive browser security policy, dependency governance, exact auth,
-Origin, CSRF, command, and error contracts belong to
-[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
-browser and asset-integrity adversarial tests belong to
-[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
+**Residual risk and owner.** Integrity of the exact Protected Web Client is
+part of the Release 1 trusted computing boundary, but a valid protected-client
+submission does not prove a physical human gesture or trusted display.
+Controlled assets, exact auth, Origin, Host, CSRF, command, and error contracts
+belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+`DVG-02`, `DVG-03`, and `DVG-11` own hostile-origin, binding-substitution, and
+zero-effect evidence.
 
 ## 12. AP-04: SSE replay, cursor confusion, or stale authorization
 
@@ -745,37 +826,57 @@ and the narrow importer to
 ## 22. AP-14: Retry or OutcomeUnknown duplicates an external or authoritative effect
 
 **Source to sink.** A disconnect or crash occurs before, during, or after a
-database commit or external side effect. A Client, worker, outbox dispatcher,
-or recovery loop retries without an exact-scoped idempotency fact, or converts
-uncertainty into failure. The same Acceptance, proposal transition, Tool call,
-Provider request, notification, or export may run twice, while a response from
-an older Attempt may settle the newer one.
+database commit, author-command Receipt, SSE observation, HTTP acknowledgement,
+or external side effect. A stale tab, Client, worker, outbox dispatcher, or
+recovery loop treats a missing response, local journal entry, Pending Edit
+Projection, cache, or process observation as an oracle, retries without an
+exact-scoped idempotency fact, or converts uncertainty into failure. The same
+Acceptance, edit, proposal transition, Tool call, Provider request,
+notification, or export may run twice, while a response from an older Attempt
+or Admission may settle the newer one.
 
 **Affected assets.** Author authority, immutable history, external accounts,
 Attempt truth, ordering, and replay-safe recovery.
 
-**Accepted controls.** Canonical state, immutable payloads, durable Attempts,
-outbox facts, and OutcomeUnknown outrank process and network observations.
+**Accepted controls.** Canonical state, immutable payloads, durable Admissions,
+Receipts, Attempts, outbox facts, and OutcomeUnknown outrank browser, process,
+network, cache, journal, projection, Artifact, Operational Record, and external
+output observations.
 
 **Required structural mitigation.** Every command and external effect binds
 { owner_user_id, project_id }, operation identity, canonical request digest,
-Attempt, idempotency key, and expected version. The durable
-transition and outbox record commit atomically; the Attempt exists before
-egress. Same key plus different digest conflicts. A missing observation after
-possible egress becomes OutcomeUnknown and requires destination-specific
-reconciliation or author-visible resolution, never blind retry or invented
-success. Late results can settle only their exact still-current Attempt.
+Attempt or Admission identity, idempotency record, and expected version. The
+durable transition and outbox record commit atomically; the Attempt exists
+before egress, and an Author Command Admission has one append-only lifecycle
+and one terminal settlement. Same key plus different digest conflicts.
+
+A missing acknowledgement after possible author-command invocation enters
+read-only reconciliation. Recovery may invoke only the same unexpired,
+fully-matching direct edit when the authoritative check proves no Receipt;
+explicit commands, expired Admissions, changed bindings or digest, or
+unrecoverable intent require visible reconfirmation and a new Admission.
+A missing observation after possible external egress becomes OutcomeUnknown
+and requires destination-specific reconciliation or author-visible resolution,
+never blind retry or invented success. Late results can settle only their exact
+still-current Attempt or Admission under its owning contract.
 
 **Verifiable evidence.** Crash injection at every durability/egress/response
-edge plus duplicated, reordered, and delayed deliveries proves one canonical
-effect, stable replay, preserved uncertainty, and no cross-scope key collision.
+edge plus acknowledgement-before/after-SSE permutations, tab reload, stale
+writer takeover, duplicated, reordered, and delayed deliveries proves one
+canonical effect, stable replay, preserved uncertainty, exactly one terminal
+Admission settlement, Draft preservation where required, and no cross-scope
+key collision.
 
 **Residual risk and owner.** Some destinations offer no authoritative lookup;
-uncertainty may remain permanently visible. Envelope/idempotency contracts
-belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), durable
-Attempt/outbox retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
-fault injection to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
-the first end-to-end recovery path to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+uncertainty may remain permanently visible, and a lost human intention cannot
+be reconstructed from browser state. Admission semantics remain owned by
+[Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68),
+editor reconciliation by
+[Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70),
+wire/idempotency by
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
+and `DVG-03`, `DVG-07`, `DVG-08`, and `DVG-11` own fault, replay, and
+zero-duplicate evidence.
 
 ## 23. AP-15: Retrieval, embedding, or cache poisoning changes eligible context
 
@@ -911,6 +1012,202 @@ floors to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-
 to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and bounded default
 configuration to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
+## 27. AP-19: Browser code or content escapes into the protected-client boundary
+
+**Source to sink.** Hostile manuscript, imported, model, Tool, MCP, App, or
+external content reaches an unsafe DOM or script sink; a compromised dependency,
+build artifact, separately fetched asset, service worker, or third-party script
+executes under the first-party origin; or a browser extension interferes with
+the DOM, events, storage, messages, or requests. The executing code can spoof
+what the author sees, read disclosed Project content, reuse the current session,
+or submit an attacker-selected command that appears to satisfy the same-origin
+client path. Browser platform controls reduce these paths but do not turn a
+successful same-origin compromise into proof of physical-human intent. [S6]
+
+**Affected assets.** Author authority, Project confidentiality, exact command
+meaning, Protected Web Client integrity, credentials available to the current
+origin, and trustworthy admission evidence.
+
+**Accepted controls.** Only the exact controlled build and immutable asset graph
+named by the accepted client-contract, security-policy, and current Client
+Session Binding generation participates in the Release 1 claim. All rendered
+or imported content and external output are data, not executable client code;
+browser extensions and third-party scripts remain outside the trusted claim.
+
+**Required structural mitigation.** The release bundles or self-hosts the
+minimum executable asset graph, locks and reviews dependencies, records build
+provenance and asset digests, and permits no ambient third-party runtime script.
+A strict CSP disallows unapproved script execution and dangerous fallback
+sources; context-safe rendering and Trusted Types enforcement protect supported
+DOM injection sinks. If a separately fetched immutable asset is ever necessary,
+its exact digest and origin are pinned, including Subresource Integrity where
+the browser contract supports it, without making that origin authoritative.
+Application and service-worker updates activate atomically under the exact
+release identity; an old or mixed asset graph is refused rather than silently
+upgraded. Client content never renders as trusted executable HTML, and Server
+admission still recomputes every protected-client, scope, digest, nonce, and
+lifetime input.
+
+**Verifiable evidence.** The hostile-browser corpus covers stored and reflected
+script payloads at every renderer, unsafe DOM sinks, policy bypass attempts,
+dependency and asset substitution, mixed-release assets, stale service-worker
+activation, third-party network/script requests, and extension-like DOM,
+storage, event, and message interference. A mismatched build, client contract,
+security policy, or session generation cannot receive an Admission; a
+successful same-origin execution path is classified as a critical failure, not
+as a protected-client success.
+
+**Residual risk and owner.** A browser, extension, or dependency zero-day, or a
+successful compromise of the exact trusted asset graph, can defeat the
+Release 1 client claim while Server evidence still proves only the submitted
+bytes. Stronger human-intent attestation requires a separately trusted display
+and confirmation surface and is not selected here. Asset, contract, and policy
+wire identities belong to
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
+`DVG-01`, `DVG-02`, `DVG-03`, and `DVG-11` own release-drift, substitution,
+browser-integrity, and claim-ceiling evidence.
+
+## 28. AP-20: A stale tab or local continuity state survives writer takeover
+
+**Source to sink.** A suspended, restored, duplicated, or offline tab retains an
+old Client Session, Editor Session, writer generation, nonce, Admission,
+Local Edit Journal entry, Pending Edit Projection, cached Receipt, or rendered
+Head. After another tab takes over, the stale tab resumes and submits, replays,
+discards, or presents that local state as if it were current authority. A lost
+acknowledgement can make both tabs attempt recovery and duplicate or overwrite
+the author's work.
+
+**Affected assets.** Author prose, writer ownership, command order, current
+Heads, Receipt convergence, Draft preservation, and truthful recovery.
+
+**Accepted controls.** There is one current writer generation per Project.
+The Local Edit Journal and Pending Edit Projection preserve continuity but are
+never authority, settlement, or evidence that no Server effect occurred.
+Admission and Receipt lifecycles remain durable Operational Records; refused
+or unrecoverable text remains a Draft Artifact.
+
+**Required structural mitigation.** Writer takeover monotonically advances the
+Project writer generation and makes every older editor read-only. Every
+submission and reconciliation binds the current Protected Web Client, Client
+Session, client-contract, security-policy, Editor Session, writer generation,
+scope, action class, digest, target/Heads, nonce/idempotency identities, and
+lifetime. Reload and reconnect use authoritative snapshots and typed Receipts;
+local cache, journal, projection, missing HTTP response, and SSE ordering cannot
+settle or retry a command. Recovery follows AP-14: only the exact eligible
+direct-edit branch may reuse its still-live Admission after read-only proof;
+otherwise the author receives preserved Draft content and visibly reconfirms a
+new command.
+
+**Verifiable evidence.** Two-tab and multi-device fixtures pause at every
+journal, submission, commit, acknowledgement, Event, takeover, reload, and
+reconciliation edge. Old generations cannot mutate; duplicates converge to one
+Receipt; changed or expired commands require reconfirmation; corrupt or missing
+local state cannot delete canonical prose; and all refused or unrecoverable
+content remains inspectable and copyable under its fixed Draft classification.
+
+**Residual risk and owner.** A currently admitted writer or compromised browser
+can submit commands within its bounded client claim, and local storage
+compromise can expose content already present on that device. Editor and
+recovery semantics remain owned by
+[Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70),
+Admission lifecycle by
+[Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68),
+wire shape by
+[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
+and `DVG-02`, `DVG-03`, `DVG-07`, and `DVG-11` own takeover and recovery
+evidence.
+
+## 29. AP-21: Controlled-cloud classification collapses an external boundary
+
+**Source to sink.** Deployment code treats a shared hostname, private network,
+cloud account, operator, Provider brand, VPC endpoint, or service location as
+proof that a destination is StoryOS-controlled. A shared connection pool,
+cache, queue, telemetry sink, credential, maintenance path, or external service
+then receives another User's Project data, bypasses an Outbound Disclosure
+manifest, or gains runtime or maintenance authority.
+
+**Affected assets.** Project Isolation, User identity, Project data,
+credentials, disclosure provenance, maintenance authority, and the meaning of
+the StoryOS Controlled Processing Boundary.
+
+**Accepted controls.** “Controlled” is a registered StoryOS contract about the
+exact processor, identity, data path, policy, Project Scope, and operator
+authority. Network proximity, provider ownership, account membership, or
+deployment topology is never authorization or proof of Project Isolation.
+
+**Required structural mitigation.** Every processing destination and transport
+has one exact registered identity, control classification, allowed purpose,
+credential generation, TLS peer identity, policy revision, and Project-scoped
+data path. Controlled services preserve server-derived User and Project Scope
+through scope-keyed pools, queues, caches, storage, logs, and support evidence,
+with runtime and maintenance roles separated. Any destination lacking that
+complete controlled registration is external and must pass the seven disclosure
+gates, manifest-before-egress, Credential Resolver, and ordinary
+OutcomeUnknown handling. Shared infrastructure never aliases User, Project,
+credential, cache, or idempotency identities.
+
+**Verifiable evidence.** Multi-User deployment fixtures vary hostname, region,
+VPC/private link, provider/account ownership, shared pool/queue/cache,
+maintenance credential, TLS identity, telemetry route, and registration
+revision independently. Only exact controlled registrations retain the
+classification; every other path either preserves complete Project Isolation
+under its controlled contract or emits an authorized external-disclosure
+manifest before bytes leave.
+
+**Residual risk and owner.** A privileged cloud control-plane or platform
+administrator remains capable of violating its intended boundary and requires
+operational and recovery evidence beyond application isolation. Controlled
+destination and disclosure semantics remain with their existing Context,
+Provider, Tool/MCP, Protocol, PostgreSQL, and retention owners; `DVG-02`,
+`DVG-04`, `DVG-05`, `DVG-10`, and `DVG-11` own classification, isolation,
+egress, credential, and restore evidence.
+
+# Attack-Path Completeness and Deterministic Gate Handoff
+
+The required Foundation surfaces are closed by credible source-to-sink paths,
+not by generic control labels:
+
+| Required surface | Credible source to sink | Owning paths | Deterministic handoff |
+|---|---|---|---|
+| Origin, Host, and CSRF | hostile origin or forged routing/session input → state-changing HTTP command | AP-03 | `DVG-02`, `DVG-03`, `DVG-11` |
+| XSS and dependency/supply-chain compromise | hostile content or substituted executable asset → first-party DOM/session/command authority | AP-19 | `DVG-01`–`DVG-03`, `DVG-11` |
+| browser extensions and third-party scripts | outside browser code → DOM, storage, display, or request manipulation | AP-19 | `DVG-02`, `DVG-03`, `DVG-11` |
+| stale tab, service worker, or writer takeover | old build/generation/local continuity state → current edit or recovery sink | AP-19, AP-20 | `DVG-01`–`DVG-03`, `DVG-07`, `DVG-11` |
+| replay | old command, cursor, bridge message, result, or fence → current authority or projection | AP-03–AP-05, AP-14, AP-17, AP-20 | `DVG-02`, `DVG-03`, `DVG-05`, `DVG-07`–`DVG-09`, `DVG-11` |
+| acknowledgement loss and OutcomeUnknown | missing HTTP/SSE/external observation → blind retry, invented settlement, or duplicate effect | AP-14, AP-17, AP-20 | `DVG-03`, `DVG-06`–`DVG-08`, `DVG-11` |
+| reconciliation and recovery | browser/process/external observation → unauthorized authority, destructive loss, or stale settlement | AP-12, AP-14, AP-16–AP-20 | `DVG-03`, `DVG-06`–`DVG-11` |
+| disclosure and external destinations | eligible or hostile content → model, Tool/MCP/App, research, telemetry, support, export, or Provider sink | AP-05–AP-11, AP-13, AP-15, AP-18, AP-21 | `DVG-04`, `DVG-05`, `DVG-08`–`DVG-11` |
+| credentials | opaque or cross-scope reference/secret-bearing diagnostics → wrong destination or disclosure channel | AP-02, AP-05, AP-08–AP-11, AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
+| Tool, MCP, and App authority | untrusted schema/result/App bridge → Tool execution, context, credential, or author-state sink | AP-05–AP-07, AP-09–AP-10, AP-14, AP-18 | `DVG-04`, `DVG-05`, `DVG-08`, `DVG-11` |
+| controlled cloud | topology/account/provider inference or shared runtime state → cross-Project access or unmanifested egress | AP-01–AP-03, AP-08–AP-12, AP-16, AP-18, AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
+| Project isolation | client, runtime, DB, cache, cursor, archive, backup, destination, or recovery input → another User/Project | AP-01–AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-07`–`DVG-11` |
+
+Every path also has one explicit deterministic proof owner:
+
+| Attack path | Deterministic gate handoff |
+|---|---|
+| AP-01 | `DVG-02`, `DVG-11` |
+| AP-02 | `DVG-02`, `DVG-07`, `DVG-10`, `DVG-11` |
+| AP-03 | `DVG-02`, `DVG-03`, `DVG-11` |
+| AP-04 | `DVG-02`, `DVG-09`, `DVG-11` |
+| AP-05 | `DVG-05`, `DVG-11` |
+| AP-06 | `DVG-05`, `DVG-11` |
+| AP-07 | `DVG-04`, `DVG-05`, `DVG-11` |
+| AP-08 | `DVG-05`, `DVG-11` |
+| AP-09 | `DVG-04`, `DVG-05`, `DVG-08`, `DVG-11` |
+| AP-10 | `DVG-02`, `DVG-05`, `DVG-11` |
+| AP-11 | `DVG-11` |
+| AP-12 | `DVG-10`, `DVG-11` |
+| AP-13 | `DVG-10`, `DVG-11` |
+| AP-14 | `DVG-03`, `DVG-07`, `DVG-08`, `DVG-11` |
+| AP-15 | `DVG-04`, `DVG-11` |
+| AP-16 | `DVG-07`, `DVG-09`, `DVG-10`, `DVG-11` |
+| AP-17 | `DVG-06`, `DVG-07`, `DVG-08`, `DVG-11` |
+| AP-18 | `DVG-01`, `DVG-04`, `DVG-05`, `DVG-09`, `DVG-10`, `DVG-11` |
+| AP-19 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-11` |
+| AP-20 | `DVG-02`, `DVG-03`, `DVG-07`, `DVG-11` |
+| AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
+
 # Severity Calibration
 
 Severity is based on the impact to accepted StoryOS invariants and a credible
@@ -920,8 +1217,8 @@ must lower severity only with tested controls, not with intended behavior.
 
 | Severity | StoryOS calibration | Representative paths |
 |---|---|---|
-| Critical | cross-User/Project disclosure or authoritative mutation at service scale; Credential value disclosure; unmanifested external disclosure; App/Tool-created Acceptance; backup/restore compromise that silently changes canonical truth | AP-01, AP-02, AP-05–AP-06, AP-09–AP-10, AP-12, AP-16 |
-| High | forged author command; SSRF into a protected service; archive host escape; duplicate non-idempotent effect; stale worker overriding current truth; persistent cross-scope retrieval | AP-03, AP-08, AP-13–AP-15, AP-17 |
+| Critical | cross-User/Project disclosure or authoritative mutation at service scale; Credential value disclosure; unmanifested external disclosure; App/Tool-created Acceptance; backup/restore compromise that silently changes canonical truth; compromise of the exact Protected Web Client asset graph; controlled-cloud boundary collapse | AP-01, AP-02, AP-05–AP-06, AP-09–AP-10, AP-12, AP-16, AP-19, AP-21 |
+| High | forged author command; SSRF into a protected service; archive host escape; duplicate non-idempotent effect; stale worker or writer overriding current truth; persistent cross-scope retrieval | AP-03, AP-08, AP-13–AP-15, AP-17, AP-20 |
 | Medium | scoped replay or presentation confusion without authority; bounded sensitive operational metadata; one-Project resource exhaustion with recovery preserved | AP-04, AP-11, AP-18 |
 | Low | safely denied malformed input or intentionally sanitized operational metadata with no meaningful confidentiality, integrity, authority, or availability effect | evidence-only unless it composes with another path |
 
@@ -939,23 +1236,29 @@ Wayfinder owner:
 
 | Downstream owner | Security obligations received from this model | Attack paths |
 |---|---|---|
-| [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | exact trusted-client claim; existing or prospective Project Scope; command digest; action class; nonce/idempotency; Editor Session/writer generation; expiry; one terminal settlement; direct-versus-explicit recovery | AP-01, AP-03, AP-14, AP-17, AP-18 |
-| [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | IndexedDB journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; Draft preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18 |
-| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; provider and research destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-18 |
-| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18 |
-| [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin/bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-18 |
-| [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-18 |
+| [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | exact protected-client, User, existing/prospective Project Scope, editor/writer, action, digest, nonce/idempotency, and lifetime binding; bounded claim ceiling; one append-only lifecycle and terminal settlement; direct-versus-explicit recovery | AP-01, AP-03, AP-14, AP-20 |
+| [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | Local Edit Journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; Draft preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18, AP-20 |
+| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact protected-client/requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; build, client-contract, security-policy and session identities; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; controlled/external destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-21 |
+| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Admission/Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18, AP-20–AP-21 |
+| [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin, XSS/DOM, asset/dependency, third-party-script, extension, stale-build/tab, controlled-cloud, bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; claim-ceiling checks; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-21 |
+| [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates exact Protected Web Client release identity, non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-21 |
 
 No separate parallel security map or security runtime follows from this threat
-model. The current owners above must close their assigned controls and
+model. This contract owns trusted-computing boundaries, source-to-sink attack
+analysis, structural mitigations, and residual risks. It does not re-own the
+evidence classification fixed by the Artifact contract, Admission
+identity/lifecycle/settlement fixed by issue #68, Core effects, editor
+recovery fixed by issue #70, wire shapes fixed by issue #58, or gate selection
+fixed by issue #60. Those owners must close their assigned contracts and
 deterministic negative evidence in the map's single serial chain before the
 editor-first implementation handoff.
 
 # Source Index
 
 Repository sources are fixed StoryOS facts; external sources establish only
-the cited platform or protocol behavior. All external sources were accessed
-for this resolution on 2026-07-21.
+the cited platform or protocol behavior. Existing external sources were
+accessed for the original model on 2026-07-21; the protected-client primary
+source review records its own 2026-07-24 access date.
 
 - **[S1]** [StoryOS repository instructions](../../AGENTS.md): product,
   authority, Project Scope, disclosure, durability, and App/editor invariants.
@@ -967,6 +1270,10 @@ for this resolution on 2026-07-21.
 - **[S5]** [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md):
   seven gates, retrieval/projection provenance, manifest-before-egress,
   Attempt, OutcomeUnknown, and destination contracts.
+- **[S6]** [Protected Web Client Security Boundary: Primary-Source Evidence](../research/protected-web-client-security-boundary-primary-sources.md):
+  browser-enforced script, DOM-injection, asset-integrity, extension, and
+  update/cache limits used to calibrate AP-19 without upgrading platform
+  guidance into StoryOS authority.
 - **[P1]** [PostgreSQL Row Security Policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html):
   policy combination, owner/superuser/BYPASSRLS behavior, FORCE RLS, and
   operations outside row-security policy control.
@@ -1019,4 +1326,4 @@ for this resolution on 2026-07-21.
 
 Repository: FrankQDWang/StoryOS
 
-Version: b944540936b0ea762e6c35f7b340d399b3124171
+Version: 15a6c4d343145c9f825d52067f13d09eec6ead37
