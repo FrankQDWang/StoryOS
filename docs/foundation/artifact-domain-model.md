@@ -100,8 +100,9 @@ typed producer cause is closed in section 8.6.
 | `AuthorActionRef` | Immutable Author Action Operational Record created only for a successfully committed author-owned Core Transition, with one Project Scope-local sequence and `Forward \| Compensation` disposition | StoryOS Core, atomically with the successful Transition | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | typed Receipt | Immutable Operational Record for one Core validation or domain-command attempt; it has no Artifact revision, derivation, retention, or Acceptance lifecycle | StoryOS Core only | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) for the current closed Receipt kinds |
 | `RefusedEditDraft` | `Draft` Core Artifact with Artifact revisions, common retention, and reversible Draft closure | the refused `ApplyAuthorEdit` Core Transition and its Receipt | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
-| `RecoveryDraft` | `Draft` Core Artifact with Artifact revisions, common retention, and reversible Draft closure | StoryOS Host-assigned `EditorRecovery` bound to one exact Editor Session, writer generation, complete recovered intent, and journal, admission-settlement, takeover, or in-memory recovery evidence as applicable | [Web Editor Session, Synchronization, and Recovery Semantics](web-editor-session-synchronization-and-recovery-semantics.md) |
+| `RecoveryDraft` | `Draft` Core Artifact with Artifact revisions, common retention, and reversible Draft closure; it preserves complete author text without proving invocation or commit | StoryOS Host-assigned `EditorRecovery` bound to one exact Editor Session, writer generation, complete recovered intent, and journal, admission-settlement, takeover, or in-memory recovery evidence as applicable | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns recovery evidence and presentation |
 | `ProposalConflict` | The `conflicted` condition on an exact Proposal Revision's validation axis, projected from immutable Core Receipt/Event evidence; the condition is not a fourth durable space, another Artifact, or the Operational Record that detected it | StoryOS Core validation or target-drift detection | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
+| `ProposalRecoveryConflict` | Fail-closed recovery condition on a preserved Proposal surface when exact Heads, stream/fence order, Anchors, digests, or checkpoint evidence cannot prove one review projection; it is neither an Artifact nor a Receipt | StoryOS Core recovery classification over exact durable Core and Host recovery evidence | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns journal, checkpoint, and takeover evidence |
 | `Proposal` | `Proposal` Core Artifact with immutable revisions, retention, and the orthogonal generation, validation, closure, and per-Operation resolution axes | `Author \| AgentRunStep \| ToolCall`, plus `CoreTransition` only for a typed Reversal Proposal | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `AuthoritativeRevision` | Immutable version of an authoritative domain object in Authoritative State, guarded by an expected prior Revision and selected through current Heads | StoryOS Core in a committed Direct Author Action, Acceptance, or safe compensation | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `Acceptance` | Author-admitted Core command and attempt over one exact eligible Proposal Revision; its durable admission, Command, Author Action when applied, and Receipt evidence are Operational Records, while its result may create new Authoritative Revisions | StoryOS Core under one exact Author Command Admission | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
@@ -161,6 +162,10 @@ ResearchArtifactKind
 ├── ResearchNote
 └── ResearchSynthesis
 ```
+
+`RefusedEditDraft` and `RecoveryDraft` are the only Draft kinds in the
+manuscript editor refusal/recovery flow. `PlanDraft` belongs to plan authoring
+and is not an alternative outcome for an Author Edit.
 
 One Candidate represents one independently reviewable semantic candidate. A batch extraction creates multiple Candidate Artifacts and may create an Analysis Report that organizes them.
 
@@ -282,13 +287,16 @@ Each revision has one direct Creator. There is no generic `System`, browser,
 model, MCP, extension, or local-projection Creator: MCP and extension
 production resolves through `ToolCall`; model production resolves through
 `AgentRunStep`; author production binds the exact Author Command Admission;
-Core-produced recovery or refusal Artifacts bind the exact Receipt or recovery
-Operational Record. `RefusedEditDraft` uses `CoreTransition`, while a durably
-created `RecoveryDraft` uses Host-assigned `EditorRecovery`, whose evidence
+Core-produced refusal and Host-produced recovery Artifacts bind the exact
+Receipt or recovery Operational Record respectively. `RefusedEditDraft` uses
+`CoreTransition`, while a durably created `RecoveryDraft` uses Host-assigned
+`EditorRecovery`, whose evidence
 reference binds the complete journal, admission settlement, takeover, or
-in-memory recovery boundary owned by the Web Editor Session contract. If an
-author edits an Agent-produced revision, the new revision's Creator is the
-Author and a `derived_from` edge preserves the Agent-produced source.
+in-memory recovery boundary owned by the Web Editor Session contract. The
+manuscript state machine owns their Retry and Draft-closure semantics plus
+Refused Edit Draft Proposal expansion. If an author edits an Agent-produced
+revision, the new revision's Creator is the Author and a `derived_from` edge
+preserves the Agent-produced source.
 Contributor history is derived from the provenance graph rather than stored as
 a mutable list.
 
@@ -349,7 +357,12 @@ Candidate, Draft, and Proposal workflow never grants authority and does not repl
 
 Candidate and Draft use a simple reversible `open | closed` closure. A close event records exactly one closed reason from `dismissed | superseded | abandoned`.
 
-Deriving a Proposal does not close the source Candidate or Draft. One source may produce multiple Proposals. Supersession is an explicit provenance relationship and does not rewrite either history.
+Derivation alone does not close a source Candidate or Draft, and one source may
+produce multiple Proposals unless the owning contract defines a typed
+source-consuming transition. The editor-flow state machine does so for
+`ExpandRefusedEditDraftToProposal`: it atomically closes the exact source Draft
+as `superseded` while preserving both immutable histories. Supersession is an
+explicit provenance relationship and does not rewrite either history.
 
 Messages, Research Artifacts, Analysis Reports, Tool Artifacts, and App View Artifacts have no type-specific workflow; they use revisions, provenance, supersession where needed, and the common retention axis.
 
@@ -469,7 +482,16 @@ An author may directly change Authoritative State without a Proposal only when t
 
 Typing, deleting, manually pasting, and moving a directly manipulated block qualify. Bulk, cross-location, or not-fully-previsible transformations remain Proposal-gated even when implemented by StoryOS Core and initiated by an author click. An Agent-, Tool-, MCP-, or extension-issued insertion command is likewise Proposal-gated. The causal command path and scope, not the textual origin alone, define the boundary.
 
-All editor input enters Core through one `ApplyAuthorEdit` command. Core recomputes ownership from durable Heads and Proposal Anchors and returns one whole-command result: authoritative applied, Proposal revised, refused to Draft, conflicted, or no effect. The client cannot select an authoritative or Proposal write route, and one mixed-ownership input is never split.
+All editor input enters Core through one `ApplyAuthorEdit` command. Its
+conservative commit unit is one completed semantic intent; bounded idle
+coalescing is allowed only before Admission issuance while every pre-issuance
+input that the Admission contract will bind and every manuscript semantic
+field remain equal. The final body and digest receive one Admission and are
+never merged afterward. Core recomputes ownership from durable Heads, Proposal
+Anchors, and reservations and returns one whole-command result: authoritative
+applied, Proposal revised, refused to Draft, conflicted, or no effect. The
+client cannot select an authoritative or Proposal write route, and one
+mixed-ownership input is never split.
 
 ### 8.2 Acceptance
 
@@ -503,9 +525,26 @@ For a domain Proposal, the selected operations are atomic: all succeed or none a
 - rejected historical incarnations never change; reopen creates a new Proposal Revision, preserves the operation ID only when target and semantic identity are unchanged, resets validation to pending, and then requires Core validation.
 - applied operations cannot use reopen; they require Undo Acceptance or a new Reversal Proposal.
 
+The state machine's closed per-command payload and applied-result matrices
+define the exact source/current/replacing Proposal Revisions, selections,
+typed reasons, generations, Draft revision/digest/range, close reason, and
+result references consumed here. This model does not reinterpret absent fields
+or serialize those contracts.
+
+Its source-consuming rules are equally closed: successful Draft retry, retry
+replacement by a new Refused Edit Draft, and Refused Edit Draft expansion each
+close the exact source Draft as `superseded` in the same Transition. Conflict
+or no effect creates no source lifecycle event, and exact retry reuses the
+original Receipt and event identities.
+
 ### 8.4 Undo Acceptance
 
-`UndoAcceptance` takes an Acceptance Receipt identity, exact current target Revisions, expected Proposal head, Author Command Admission, and an idempotency key.
+`UndoAcceptance` is the typed Core handler reached only through
+`UndoLatestAuthorAction`. Its input takes the source Acceptance Receipt
+identity, exact current target Revisions, expected Proposal Head, and root
+Author Undo command reference. The root Author Undo admission, digest, and
+idempotency boundary cover the handler; it cannot receive a second Admission or
+be retried independently.
 
 Direct compensation is allowed only when the Acceptance is the current Author Undo Frontier, has not already been compensated, and every affected target's current Head and payload digest exactly match the resulting Authoritative Revision in the Acceptance Receipt. It atomically:
 
@@ -518,7 +557,7 @@ When the Proposal head advanced incompatibly, was withdrawn or superseded, Story
 
 ### 8.5 Unified author undo order
 
-Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
+Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. This includes a successful author-authored Proposal Revision even though it creates no Authoritative Commit; refused, conflicted, and no-effect edits receive no action. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. A reversible source-consuming retry or expansion handler must compensate its content or derived Proposal effect together with reopening the exact retained source Draft; it never performs only half of that reversal. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
 
 ### 8.6 Typed Receipts
 
@@ -546,13 +585,20 @@ actors, and raw external results are not producer-cause variants. A new variant
 is a coordinated contract change owned by the Manuscript/Proposal state
 machine, not an untyped fallback.
 
-An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision, Validation Receipt, selected operations, expected targets, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused | NoEffect` result. An Undo Acceptance Receipt records the original Acceptance Receipt, command digest, idempotency key, and an outcome union:
+An Acceptance Receipt records one attempt's command digest and idempotency key, exact Proposal Revision, Validation Receipt, selected operations, expected targets, prior and resulting Authoritative Revisions, zero or more Authoritative Commit references, child Receipts, and the exhaustive `Applied | Invalid | Conflicted | Refused | NoEffect` result. An Undo Acceptance Receipt records the original Acceptance Receipt, root Author Undo command digest and idempotency key, and an outcome union:
 
 ```text
 Compensated { authoritative_commit_ref, proposal_ref? }
 ReversalRequired { reversal_proposal_ref }
 Unavailable { reason }
 ```
+
+A Domain Receipt records the exact command kind, digest, idempotency key,
+producer cause, Admission when author-caused, prior/resulting Heads, result, and
+every allocated Authoritative Revision, Proposal Revision, Authoritative
+Commit, Author Action, Draft Artifact, Artifact lifecycle event, or Proposal
+condition reference. The state-machine allocation matrix is authoritative;
+allocation presence never replaces its exhaustive result.
 
 Receipts are displayable in the Run Timeline and future Eval surface, but they cannot be revised, derived, accepted, archived, or tombstoned as content.
 
@@ -655,7 +701,7 @@ author-owned creative state.
 20. No cross-Project Scope reference, join, retrieval result, cache reuse, or disclosure is valid merely because an opaque ID or content digest matches.
 21. Admission issuance, pre-admission refusal, OutcomeUnknown, reconciliation, terminal settlement, Editor Input Fences, Author Actions, and typed Receipts remain Operational Records; none can be promoted into Authoritative State or reused as authority.
 22. `RefusedEditDraft` and `RecoveryDraft` are Draft Artifacts; their payload existence never proves or applies an author-owned Core Transition.
-23. Proposal Conflict is a validation-axis condition projected from Core evidence, never a new Artifact, Receipt, or authority state.
+23. Proposal Conflict and Proposal Recovery Conflict are conditions on preserved Proposal surfaces projected from exact evidence, never new Artifacts, Receipts, or authority states.
 24. Artifact Creator and Core `ProducerCause` are separate closed unions with no generic `System`, browser, model, MCP, extension, or local-projection fallback.
 
 ## 13. Deferred to later Wayfinder tickets
