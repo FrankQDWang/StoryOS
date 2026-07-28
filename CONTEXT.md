@@ -224,7 +224,7 @@ A deterministic, immediately visible change caused through the author's own edit
 _Avoid_: Author-triggered automation, silent bulk edit
 
 **Author Edit**:
-One completed semantic editor intent, or a bounded idle-coalesced sequence of completed intents whose Scope, chapter, target, ownership, Heads, writer generation, Admission, editor-contract, and undo bindings are all equal, submitted with one Author Command Admission for whole-command ownership classification by StoryOS Core. It produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries; raw editor transactions and browser undo grouping remain diagnostic or presentation evidence rather than the domain command.
+One completed semantic editor intent, or a bounded idle-coalesced sequence formed before Admission issuance while every pre-issuance input that the Admission contract will bind and every manuscript semantic field remain equal, submitted with one Author Command Admission for whole-command ownership classification by StoryOS Core. The final body and digest are never merged after Admission; Core produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries, while raw editor transactions and browser undo grouping remain diagnostic or presentation evidence rather than the domain command.
 _Avoid_: Client-selected write path, ProseMirror transaction as authority, fixed-window batching, partial mixed edit
 
 **Editor Verification Split**:
@@ -1392,7 +1392,7 @@ An author redo of a successfully undone Acceptance is a new Acceptance attempt a
 _Avoid_: Redo Acceptance, Receipt replay, status rollback
 
 **Author Action**:
-The immutable `AuthorActionRef` Operational Record created atomically for one successfully committed author-owned Core Transition, binding its Author Action Sequence, canonical Revision, Receipt, or Commit, and `Forward | Compensation` disposition. Admission, Editor Input Fence, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create no Author Action.
+The immutable `AuthorActionRef` Operational Record created atomically for one successfully committed author-owned Core Transition, binding its Author Action Sequence, canonical Revision, Receipt, or Commit, and `Forward | Compensation` disposition. A successful author-authored Proposal Revision receives one Forward Author Action even without an Authoritative Commit; Admission, Editor Input Fence, refused, conflicted, invalid, no-effect, and recovery-Draft evidence create none.
 _Avoid_: Author Command Admission, physical-human gesture, browser history item, attempted command
 
 **Author Action Sequence**:

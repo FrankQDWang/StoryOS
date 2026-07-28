@@ -479,13 +479,14 @@ Typing, deleting, manually pasting, and moving a directly manipulated block qual
 
 All editor input enters Core through one `ApplyAuthorEdit` command. Its
 conservative commit unit is one completed semantic intent; bounded idle
-coalescing is allowed only while every frozen Scope, chapter, target, ownership,
-Head, writer, Admission, editor-contract, and undo binding remains equal. Core
-recomputes ownership from durable Heads, Proposal Anchors, and reservations and
-returns one whole-command result: authoritative applied, Proposal revised,
-refused to Draft, conflicted, or no effect. The client cannot select an
-authoritative or Proposal write route, and one mixed-ownership input is never
-split.
+coalescing is allowed only before Admission issuance while every pre-issuance
+input that the Admission contract will bind and every manuscript semantic
+field remain equal. The final body and digest receive one Admission and are
+never merged afterward. Core recomputes ownership from durable Heads, Proposal
+Anchors, and reservations and returns one whole-command result: authoritative
+applied, Proposal revised, refused to Draft, conflicted, or no effect. The
+client cannot select an authoritative or Proposal write route, and one
+mixed-ownership input is never split.
 
 ### 8.2 Acceptance
 
@@ -519,6 +520,12 @@ For a domain Proposal, the selected operations are atomic: all succeed or none a
 - rejected historical incarnations never change; reopen creates a new Proposal Revision, preserves the operation ID only when target and semantic identity are unchanged, resets validation to pending, and then requires Core validation.
 - applied operations cannot use reopen; they require Undo Acceptance or a new Reversal Proposal.
 
+The state machine's closed per-command payload and applied-result matrices
+define the exact source/current/replacing Proposal Revisions, selections,
+typed reasons, generations, Draft revision/digest/range, close reason, and
+result references consumed here. This model does not reinterpret absent fields
+or serialize those contracts.
+
 ### 8.4 Undo Acceptance
 
 `UndoAcceptance` is the typed Core handler reached only through
@@ -539,7 +546,7 @@ When the Proposal head advanced incompatibly, was withdrawn or superseded, Story
 
 ### 8.5 Unified author undo order
 
-Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
+Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. This includes a successful author-authored Proposal Revision even though it creates no Authoritative Commit; refused, conflicted, and no-effect edits receive no action. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
 
 ### 8.6 Typed Receipts
 
