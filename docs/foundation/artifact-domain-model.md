@@ -357,7 +357,12 @@ Candidate, Draft, and Proposal workflow never grants authority and does not repl
 
 Candidate and Draft use a simple reversible `open | closed` closure. A close event records exactly one closed reason from `dismissed | superseded | abandoned`.
 
-Deriving a Proposal does not close the source Candidate or Draft. One source may produce multiple Proposals. Supersession is an explicit provenance relationship and does not rewrite either history.
+Derivation alone does not close a source Candidate or Draft, and one source may
+produce multiple Proposals unless the owning contract defines a typed
+source-consuming transition. The editor-flow state machine does so for
+`ExpandRefusedEditDraftToProposal`: it atomically closes the exact source Draft
+as `superseded` while preserving both immutable histories. Supersession is an
+explicit provenance relationship and does not rewrite either history.
 
 Messages, Research Artifacts, Analysis Reports, Tool Artifacts, and App View Artifacts have no type-specific workflow; they use revisions, provenance, supersession where needed, and the common retention axis.
 
@@ -526,6 +531,12 @@ typed reasons, generations, Draft revision/digest/range, close reason, and
 result references consumed here. This model does not reinterpret absent fields
 or serialize those contracts.
 
+Its source-consuming rules are equally closed: successful Draft retry, retry
+replacement by a new Refused Edit Draft, and Refused Edit Draft expansion each
+close the exact source Draft as `superseded` in the same Transition. Conflict
+or no effect creates no source lifecycle event, and exact retry reuses the
+original Receipt and event identities.
+
 ### 8.4 Undo Acceptance
 
 `UndoAcceptance` is the typed Core handler reached only through
@@ -546,7 +557,7 @@ When the Proposal head advanced incompatibly, was withdrawn or superseded, Story
 
 ### 8.5 Unified author undo order
 
-Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. This includes a successful author-authored Proposal Revision even though it creates no Authoritative Commit; refused, conflicted, and no-effect edits receive no action. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
+Every successfully committed author-owned Core Transition receives one Project Scope-local `AuthorActionSequence`, independent of `AuthoritativeCommit.sequence`. This includes a successful author-authored Proposal Revision even though it creates no Authoritative Commit; refused, conflicted, and no-effect edits receive no action. Automatic producer, validation, and input-safety transitions may be visible but do not become author actions merely because an Author Command Admission caused or preceded them. Each author action is either a `Forward` action carrying a typed reversible or Barrier disposition, or a `Compensation` naming the exact earlier Forward action it settled. A reversible source-consuming retry or expansion handler must compensate its content or derived Proposal effect together with reopening the exact retained source Draft; it never performs only half of that reversal. The derived Author Undo Frontier is the latest Forward action not named by a successful Compensation; Compensation entries remain auditable but are never undo candidates, and at most one may name a given source. `UndoLatestAuthorAction` names that exact Frontier and routes through its registered typed Core handler; a mismatch conflicts and a Barrier stops undo without skipping to older work. A Reversal Proposal is a new Forward action and does not compensate its source. ProseMirror history remains a session-local inverse candidate rather than ordering truth, and reapplication is always a fresh Forward domain command rather than generic durable redo.
 
 ### 8.6 Typed Receipts
 
@@ -585,9 +596,9 @@ Unavailable { reason }
 A Domain Receipt records the exact command kind, digest, idempotency key,
 producer cause, Admission when author-caused, prior/resulting Heads, result, and
 every allocated Authoritative Revision, Proposal Revision, Authoritative
-Commit, Author Action, Draft Artifact, or Proposal condition reference. The
-state-machine allocation matrix is authoritative; allocation presence never
-replaces its exhaustive result.
+Commit, Author Action, Draft Artifact, Artifact lifecycle event, or Proposal
+condition reference. The state-machine allocation matrix is authoritative;
+allocation presence never replaces its exhaustive result.
 
 Receipts are displayable in the Run Timeline and future Eval surface, but they cannot be revised, derived, accepted, archived, or tombstoned as content.
 

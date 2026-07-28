@@ -432,6 +432,29 @@ DraftRetryPayloadRange =
       slice_digest
     }
 
+SourceDraftDisposition =
+  NotApplicable
+  | Unchanged {
+      source_draft_kind: RefusedEditDraft | RecoveryDraft
+      source_draft_id
+      requested_source_draft_revision_id
+      current_source_draft_revision_id
+      current_source_draft_payload_digest
+      current_closure:
+        open
+        | closed { close_reason, closure_event_ref }
+    }
+  | ClosedSuperseded {
+      source_draft_kind: RefusedEditDraft | RecoveryDraft
+      source_draft_id
+      source_draft_revision_id
+      source_draft_payload_digest
+      prior_closure: open
+      resulting_closure: closed
+      close_reason: superseded
+      closure_event_ref
+    }
+
 ApplyAuthorEdit {
   command_schema_version
   project_scope
@@ -450,8 +473,11 @@ ApplyAuthorEdit {
   retry_source:
     FreshEditorIntent
     | DraftRetry {
-        draft_id
-        draft_revision_id
+        source_draft_kind: RefusedEditDraft | RecoveryDraft
+        source_draft_id
+        source_current_draft_revision_id
+        source_draft_payload_digest
+        expected_source_draft_closure: open
         selected_payload_range: DraftRetryPayloadRange
       }
   author_command_admission_id
@@ -517,30 +543,36 @@ Heads, Anchors, unresolved reservations, and the closed Direct Author Action
 rules. The exhaustive result is:
 
 ```text
-ApplyAuthorEditResult =
-  AuthoritativeApplied {
-    authoritative_revisions
-    authoritative_commit_id
-    author_action_sequence
-  }
-  | ProposalRevised {
-      proposal_revision_id
+ApplyAuthorEditResult {
+  effect:
+    AuthoritativeApplied {
+      authoritative_revisions
+      authoritative_commit_id
       author_action_sequence
-      resulting_validation:
-        Pending
-        | StructuralReshapeConflict { proposal_conflict_ref }
     }
-  | RefusedToDraft {
-      refused_edit_draft_id
-      refused_edit_draft_revision_id
-    }
-  | Conflicted {
-      current_authoritative_heads
-      current_proposal_heads
-      reasons
-      proposal_conflict_ref | None
-    }
-  | NoEffect { reason }
+    | ProposalRevised {
+        proposal_revision_id
+        author_action_sequence
+        resulting_validation:
+          Pending
+          | StructuralReshapeConflict { proposal_conflict_ref }
+      }
+    | RefusedToDraft {
+        refused_edit_draft_id
+        refused_edit_draft_revision_id
+        refusal_origin:
+          FreshEditorIntent
+          | DraftRetryReplacement { replacement_provenance_edge_ref }
+      }
+    | Conflicted {
+        current_authoritative_heads
+        current_proposal_heads
+        reasons
+        proposal_conflict_ref | None
+      }
+    | NoEffect { reason }
+  source_draft_disposition: SourceDraftDisposition
+}
 ```
 
 One command is never split or partially applied. Core selects exactly one result
@@ -548,10 +580,11 @@ in this order:
 
 1. Validate the command's exact expected Authoritative and Proposal Heads,
    writer generation, editor contract, current retained/open Proposal
-   eligibility, target Revisions, Anchors, reservations, and observed ownership
-   precondition against current facts. Any stale, mismatched, missing, or failed
-   exact proof returns `Conflicted`; it appends no Authoritative or Proposal
-   Revision and allocates no Author Action.
+   eligibility, `DraftRetry` source Revision/digest/closure when present, target
+   Revisions, Anchors, reservations, and observed ownership precondition against
+   current facts. Any stale, mismatched, missing, or failed exact proof returns
+   `Conflicted`; it appends no Authoritative or Proposal Revision and allocates
+   no Author Action.
 2. With all preconditions proven, recompute ownership from those current facts.
    Mixed authoritative/Proposal ownership returns `RefusedToDraft`, changes
    neither target, and preserves the complete attempted structured payload in
@@ -588,12 +621,24 @@ is required so a successful Proposal edit has a durable Author Undo Frontier.
 
 Narrowing a Refused Edit Draft or retrying a Recovery Draft always constructs a
 new `ApplyAuthorEdit` with `DraftRetry`; it uses the same classifier and never
-preselects the authoritative route demonstrated by the prototype. A successful
-`AuthoritativeApplied` or `ProposalRevised` result may close the exact source
-Draft as `superseded` in the same Transition. `RefusedToDraft` may close it only
-when the newly created Draft preserves the complete retried payload.
-`Conflicted` and `NoEffect` leave it open. Copying Draft text is a read action,
-not a Core command.
+preselects the authoritative route demonstrated by the prototype. The command
+binds the exact current source Draft Revision, payload digest, and `open`
+closure. Its source disposition is closed and exhaustive:
+
+| Retry source | Effect | Required source-Draft disposition | Active recovery surface after settlement |
+| --- | --- | --- | --- |
+| `FreshEditorIntent` | any of the five effects | `NotApplicable` | only a newly allocated Refused Edit Draft when the effect is `RefusedToDraft` |
+| `DraftRetry` | `AuthoritativeApplied` or `ProposalRevised` | `ClosedSuperseded`; same Transition records prior `open`, resulting `closed`, reason `superseded`, and one closure event | none on the source Draft |
+| `DraftRetry` | `RefusedToDraft` | `ClosedSuperseded`; the new Refused Edit Draft preserves the complete selected retry payload, records `DraftRetryReplacement` provenance, and is the sole open recovery surface | exactly the new Refused Edit Draft |
+| `DraftRetry` | `NoEffect` | `Unchanged` with exact current `Open` closure and no new event | the exact source Draft |
+| `DraftRetry` | `Conflicted` after the source precondition matched | `Unchanged` with exact current `Open` closure and no new event | the exact source Draft |
+| `DraftRetry` | `Conflicted` because the source Revision, digest, or closure no longer matches | `Unchanged` with the exact observed current source Revision, digest, and open-or-closed closure; no new event | no new recovery surface |
+
+The original source Draft remains immutable and inspectable after
+`ClosedSuperseded`; closure consumes only its active controls. An exact retry
+returns the same Receipt, closure-event identity, replacement Draft or Proposal,
+and Author Action without closing or creating anything again. Copying Draft
+text is a read action, not a Core command.
 
 ### 7.3 Proposal generation
 
@@ -782,7 +827,7 @@ ProposalWithdrawalReason =
 | `ReopenRejectedOperations` | `proposal_id`, `source_current_proposal_revision_id`, `selected_rejected_operation_ids`, matching `rejection_event_refs`, complete `expected_target_revisions` |
 | `CompleteReadyPartialProposal` | `proposal_id`, `source_current_proposal_revision_id`, `generation_id`, `expected_generation_state: ready_partial`, `expected_candidate_digest`, `last_applied_stream_seq`, complete `expected_target_revisions` |
 | `ContinueProposalGeneration` | `proposal_id`, `source_current_proposal_revision_id`, `prior_generation_id`, `expected_generation_state: ready_partial \| ready`, `expected_candidate_digest`, `selected_pending_operation_ids`, complete `expected_target_revisions` |
-| `ExpandRefusedEditDraftToProposal` | `draft_id`, `source_draft_revision_id`, `source_draft_payload_digest`, `selected_payload_range: WholeDraftPayload`, `proposal_kind`, complete `target_refs`, complete `expected_target_revisions` |
+| `ExpandRefusedEditDraftToProposal` | `source_draft_id`, `source_current_draft_revision_id`, `source_draft_payload_digest`, `expected_source_draft_closure: open`, `selected_payload_range: WholeDraftPayload`, `proposal_kind`, complete `target_refs`, complete `expected_target_revisions` |
 | `CloseEditorFlowDraft` | `draft_kind: RefusedEditDraft \| RecoveryDraft`, `draft_id`, `source_current_draft_revision_id`, `source_draft_payload_digest`, `expected_closure: open`, `close_reason: dismissed \| superseded \| abandoned` |
 
 All commands except `WithdrawProposal` require
@@ -929,11 +974,10 @@ ProposalOrDraftDecisionResult =
       action: AuthorForwardAllocation
     }
   | ProposalCreatedFromDraft {
-      draft_id
-      source_draft_revision_id
+      source_draft_id
+      source_current_draft_revision_id
       source_draft_payload_digest
       selected_payload_range: WholeDraftPayload
-      source_draft_closure: open
       proposal_id
       proposal_revision_id
       resulting_generation: ready
@@ -941,6 +985,7 @@ ProposalOrDraftDecisionResult =
       resulting_closure: open
       resulting_operation_resolutions: all pending
       provenance_edge_ref
+      source_draft_disposition: ClosedSuperseded
       action: AuthorForwardAllocation
     }
   | DraftClosureChanged {
@@ -979,7 +1024,7 @@ the enclosing Receipt also binds the command payload and prior/resulting Heads.
 | `ReopenRejectedOperations` | `ProposalRevisionAppended.ReopenRejected`, selected Operations `pending`, validation `pending` | 0 | 1 Forward |
 | `CompleteReadyPartialProposal` | `ProposalGenerationCompleted`, generation `ready`; current Proposal Revision and every other axis are preserved | 0 | 1 Forward |
 | `ContinueProposalGeneration` | `ProposalGenerationStarted` with a newly allocated Generation ID; current Proposal Revision and every other axis are preserved until a content batch appends a Revision | 0 | 1 Forward |
-| `ExpandRefusedEditDraftToProposal` | `ProposalCreatedFromDraft` from `WholeDraftPayload`; source Draft remains open | 0 | 1 Forward |
+| `ExpandRefusedEditDraftToProposal` | `ProposalCreatedFromDraft` from `WholeDraftPayload`; exact source Draft becomes `closed/superseded` with the returned closure event | 0 | 1 Forward |
 | `CloseEditorFlowDraft` | `DraftClosureChanged` with the exact close reason | 0 | 1 Forward |
 
 `ReplanProposal` uses the exact fields in section 7.4 and returns
@@ -997,7 +1042,15 @@ Narrowed retry and Recovery Draft retry are not additional command kinds: they
 are new `ApplyAuthorEdit` commands as specified in section 7.2, and only that
 `DraftRetry` payload may select an `ExactStructuredRange`.
 `ExpandRefusedEditDraftToProposal` always carries every preserved line through
-`WholeDraftPayload`. Copy is a read.
+`WholeDraftPayload`, requires the exact source Refused Edit Draft to remain
+`open`, and atomically creates the fresh Proposal plus
+`ClosedSuperseded`. Its exact retry returns the same Proposal, closure event,
+and Forward action; a distinct command against the now-closed source cannot
+create another Proposal. After idempotency resolution, a mismatched source
+Revision or digest returns `Conflicted`, while an exact current source whose
+closure is not `open` returns
+`Refused { reason: SourceDraftNotOpen }`; both return the current Draft target
+and allocate no Proposal, Author Action, or lifecycle event. Copy is a read.
 An explicit Draft discard is `CloseEditorFlowDraft { reason: abandoned }`.
 These mappings let the complete author-facing text and actions remain
 inspectable without making UI labels or prototype state a second Core contract.
@@ -1070,7 +1123,7 @@ ordered-independent Bundle policy.
 
 ### 8.2 Acceptance Receipt
 
-Every first Acceptance attempt produces:
+Every first Acceptance domain attempt produces:
 
 ```text
 AcceptanceReceipt {
@@ -1119,6 +1172,7 @@ DomainReceipt {
   authoritative_commit_ids
   author_action_sequence | None
   draft_artifact_refs
+  artifact_lifecycle_event_refs
   condition_refs
   result
   created_at
@@ -1128,23 +1182,24 @@ DomainReceipt {
 The result variant, not a nullable allocation, explains why each collection is
 empty. The closed allocation matrix is:
 
-| First-attempt result | Receipt | Authoritative Commit | Author Action | Draft Artifact | Proposal condition |
-| --- | --- | ---: | ---: | ---: | ---: |
-| `ApplyAuthorEdit.AuthoritativeApplied` | `DomainReceipt` | exactly 1 | exactly 1 Forward | 0 | 0 |
-| `ApplyAuthorEdit.ProposalRevised.Pending` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | 0 |
-| `ApplyAuthorEdit.ProposalRevised.StructuralReshapeConflict` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | exactly 1 `ProposalConflict` caused by the newly appended Revision's structural shape |
-| `ApplyAuthorEdit.RefusedToDraft` | `DomainReceipt` | 0 | 0 | exactly 1 `RefusedEditDraft` | 0 |
-| `ApplyAuthorEdit.Conflicted` | `DomainReceipt` | 0 | 0 | 0 | exactly 1 `ProposalConflict` only when an exact Proposal Revision is the affected surface; otherwise 0 |
-| `ApplyAuthorEdit.NoEffect` | `DomainReceipt` | 0 | 0 | 0 | 0 |
-| applied author Proposal decision, replan, expand, or Draft close | `DomainReceipt` | 0 | exactly 1 Forward | 0 new Draft | only the condition explicitly named by its closed result variant |
-| applied producer withdrawal or replan | `DomainReceipt` | 0 | 0 | 0 | only the condition explicitly named by its closed result variant |
-| refused, conflicted, or no-effect Proposal/Draft decision | `DomainReceipt` | 0 | 0 | 0 | conflict condition only when returned |
-| generation batch or pause attempt | `DomainReceipt` | 0 | 0 | 0 | 0 |
-| validation attempt | `ValidationReceipt` | 0 | 0 | 0 | `ProposalConflict` exactly when result is `conflicted` |
-| `AcceptProposal.Applied` for an ordinary domain Proposal | `AcceptanceReceipt` | exactly 1 | exactly 1 Forward | 0 | 0 |
-| `AcceptProposal.Invalid` | `AcceptanceReceipt` | 0 | 0 | 0 | validation becomes `invalid` |
-| `AcceptProposal.Conflicted` | `AcceptanceReceipt` | 0 | 0 | 0 | exactly 1 `ProposalConflict` |
-| `AcceptProposal.Refused` or `.NoEffect` | `AcceptanceReceipt` | 0 | 0 | 0 | 0 |
+| First-attempt result | Receipt | Authoritative Commit | Author Action | New Draft Artifact | Source Draft lifecycle | Proposal condition |
+| --- | --- | ---: | ---: | ---: | --- | ---: |
+| `ApplyAuthorEdit.AuthoritativeApplied` | `DomainReceipt` | exactly 1 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | 0 |
+| `ApplyAuthorEdit.ProposalRevised.Pending` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | 0 |
+| `ApplyAuthorEdit.ProposalRevised.StructuralReshapeConflict` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | Fresh N/A; `DraftRetry` exact source closes `superseded` | exactly 1 `ProposalConflict` caused by the newly appended Revision's structural shape |
+| `ApplyAuthorEdit.RefusedToDraft` | `DomainReceipt` | 0 | 0 | exactly 1 `RefusedEditDraft` | Fresh N/A; `DraftRetry` exact source closes `superseded` and the new Draft replaces it as the sole open surface | 0 |
+| `ApplyAuthorEdit.Conflicted` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source is unchanged and creates no lifecycle event | exactly 1 `ProposalConflict` only when an exact Proposal Revision is the affected surface; otherwise 0 |
+| `ApplyAuthorEdit.NoEffect` | `DomainReceipt` | 0 | 0 | 0 | Fresh N/A; `DraftRetry` source remains `open` with no lifecycle event | 0 |
+| applied author Proposal decision, replan, or Draft close | `DomainReceipt` | 0 | exactly 1 Forward | 0 new Draft | N/A | only the condition explicitly named by its closed result variant |
+| `ExpandRefusedEditDraftToProposal` applied | `DomainReceipt` | 0 | exactly 1 Forward | 0 | exact source closes `superseded` | 0 |
+| applied producer withdrawal or replan | `DomainReceipt` | 0 | 0 | 0 | N/A | only the condition explicitly named by its closed result variant |
+| refused, conflicted, or no-effect Proposal/Draft decision | `DomainReceipt` | 0 | 0 | 0 | unchanged when one is named | conflict condition only when returned |
+| generation batch or pause attempt | `DomainReceipt` | 0 | 0 | 0 | N/A | 0 |
+| validation attempt | `ValidationReceipt` | 0 | 0 | 0 | N/A | `ProposalConflict` exactly when result is `conflicted` |
+| `AcceptProposal.Applied` for an ordinary domain Proposal | `AcceptanceReceipt` | exactly 1 | exactly 1 Forward | 0 | N/A | 0 |
+| `AcceptProposal.Invalid` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | validation becomes `invalid` |
+| `AcceptProposal.Conflicted` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | exactly 1 `ProposalConflict` |
+| `AcceptProposal.Refused` or `.NoEffect` | `AcceptanceReceipt` | 0 | 0 | 0 | N/A | 0 |
 
 Bundle Acceptance retains its declared atomic or ordered-independent policy:
 the parent Acceptance Receipt records the exact child Receipts and committed
@@ -1178,6 +1233,11 @@ commit only its no-change Receipt and conflict projection. A failure before
 commit exposes no partial domain effect. External notification is delivered
 from durable outbox intent and is never transaction truth.
 
+For a source-consuming `DraftRetry` or
+`ExpandRefusedEditDraftToProposal`, source closure, replacement provenance,
+new Draft or Proposal allocation, lifecycle event, result, Receipt, and Author
+Action when applicable are one write set. None may become visible alone.
+
 `RequiresReconfirmation` is not a Core result and has no Receipt. It is the
 Admission boundary's terminal proof that the admitted command will create no
 Core effect. `outcome_unknown` is nonterminal recovery evidence and cannot be
@@ -1206,11 +1266,23 @@ action routes to its registered typed handler:
 
 - Direct Author Action -> compensating Authoritative Revision and Commit;
 - author Proposal edit -> restoration in a new Proposal Revision;
+- DraftRetry-backed Direct Author Action or Proposal edit -> the same typed
+  content compensation plus exact source-Draft reopen;
+- Refused Edit Draft expansion -> exact derived-Proposal withdrawal plus exact
+  source-Draft reopen;
 - Acceptance -> `UndoAcceptance`;
 - rejection -> rejected-operation reopen;
 - withdrawal -> typed Proposal reopen;
 - Draft close -> typed Draft reopen while retained;
 - any action without a registered exact handler -> Barrier.
+
+A handler that reopens a consumed source Draft requires the exact retained
+`ClosedSuperseded` event from its source Receipt and the exact current
+Draft/Proposal or Authoritative Heads produced by that Forward action. It
+reverses all of those effects atomically or returns `Conflicted`/`Unavailable`
+without a partial reopen or content compensation. `DraftRetry.RefusedToDraft`
+has no Forward Author Action: its old closed Draft and new sole open
+replacement remain the positive refusal settlement.
 
 Every first attempt records:
 
@@ -1294,8 +1366,12 @@ undo-allocation matrix is:
 
 | Undo result | Handler Receipt | Authoritative Commit | Author Action | Proposal/Draft effect |
 | --- | --- | ---: | ---: | --- |
-| compensate Direct Author Action | `DomainReceipt` | exactly 1 | exactly 1 Compensation | none |
-| compensate author Proposal edit, rejection, withdrawal, or Draft close | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision, resolution/lifecycle event, or Draft reopen |
+| compensate ordinary Direct Author Action | `DomainReceipt` | exactly 1 | exactly 1 Compensation | none |
+| compensate `DraftRetry.AuthoritativeApplied` | `DomainReceipt` | exactly 1 | exactly 1 Compensation | exact source Draft reopen |
+| compensate ordinary author Proposal edit | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision |
+| compensate `DraftRetry.ProposalRevised` | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision plus exact source Draft reopen |
+| compensate rejection, withdrawal, or explicit Draft close | `DomainReceipt` | 0 | exactly 1 Compensation | exact resolution/lifecycle event or Draft reopen |
+| compensate Refused Edit Draft expansion | `DomainReceipt` | 0 | exactly 1 Compensation | withdraw exact derived Proposal and reopen exact source Draft |
 | `UndoAcceptance.Compensated` | `UndoAcceptanceReceipt` | exactly 1 | exactly 1 Compensation | safe Proposal reopening Revision when available |
 | `UndoAcceptance.ReversalRequired` or another handler's `ReversalRequired` | owning typed Receipt | 0 | exactly 1 Forward | exactly 1 Reversal Proposal; source remains uncompensated |
 | `Unavailable` | owning typed Receipt or no child when the root is a Barrier | 0 | 0 | none |
@@ -1413,10 +1489,10 @@ these one-to-one semantics:
 
 | Command or decision | Durable event or record |
 | --- | --- |
-| apply an Author Edit to authority | `AuthoritativeAuthorEditApplied` |
-| apply an Author Edit to a Proposal | `ProposalAuthorEditApplied` |
-| refuse mixed ownership | `RefusedEditDraftCreated` |
-| expand a Refused Edit Draft | `ProposalCreatedFromRefusedEditDraft` |
+| apply an Author Edit to authority | `AuthoritativeAuthorEditApplied`; also `EditorFlowDraftClosed` for `DraftRetry` |
+| apply an Author Edit to a Proposal | `ProposalAuthorEditApplied`; also `EditorFlowDraftClosed` for `DraftRetry` |
+| refuse mixed ownership | `RefusedEditDraftCreated`; also `EditorFlowDraftClosed` when replacing a `DraftRetry` source |
+| expand a Refused Edit Draft | `ProposalCreatedFromRefusedEditDraft`, `EditorFlowDraftClosed` |
 | close or reopen an editor-flow Draft | `EditorFlowDraftClosed`, `EditorFlowDraftReopened` |
 | start or continue generation | `ProposalGenerationStarted` |
 | admit a generation batch | `ProposalGenerationBatchAdmitted` |
@@ -1486,3 +1562,7 @@ available.
 19. Refused Edit Draft and Recovery Draft are the only Draft Artifact kinds in
     this editor flow. Proposal Conflict and Proposal Recovery Conflict remain
     conditions on preserved Proposal surfaces.
+20. A source-consuming Draft retry or expansion closes its exact source once as
+    `superseded` in the same Transition as its replacement result. Exact retry
+    replays those identities; conflict or no effect creates no source lifecycle
+    event.

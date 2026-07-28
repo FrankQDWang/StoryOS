@@ -1264,7 +1264,7 @@ The type-specific progress of a Core Artifact through its own review or producti
 _Avoid_: Authority level, retention status
 
 **Artifact Closure**:
-The reversible open or closed disposition used only by Candidates and Drafts, with the closed reason `dismissed`, `superseded`, or `abandoned`. Deriving a Proposal does not close its source Artifact.
+The reversible open or closed disposition used only by Candidates and Drafts, with the closed reason `dismissed`, `superseded`, or `abandoned`. Derivation alone does not close a source Artifact, but an owning typed source-consuming transition may atomically close the exact source as `superseded` while preserving its immutable history.
 _Avoid_: Proposal resolution, archive
 
 **Supersession**:
@@ -1324,11 +1324,11 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A non-authoritative Draft Core Artifact created by the refused `ApplyAuthorEdit` Core Transition when one author edit crosses Authoritative State and Proposal ownership. It preserves the complete attempted structured payload, exact selection snapshot, and edit intent under ordinary Artifact revision, retention, and Draft-closure rules for an explicit narrowed retry through the same classifier, Proposal expansion, copy, or discard without mutating either target or preselecting a future write route.
+A non-authoritative Draft Core Artifact created by the refused `ApplyAuthorEdit` Core Transition when one author edit crosses Authoritative State and Proposal ownership. It preserves the complete attempted structured payload, exact selection snapshot, and edit intent for narrowed retry, Proposal expansion, copy, or discard; a retry replacement or expansion closes the exact source as `superseded`, while no effect or a non-source conflict leaves it open and a source-binding conflict leaves its observed closure unchanged.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
-A non-authoritative Draft Core Artifact created by an Editor Recovery Creator from one complete author-edit intent and its exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It follows ordinary Artifact revision, retention, and Draft-closure rules, requires an explicit author retry through a new `ApplyAuthorEdit` Admission or discard, and is never automatically applied to Authoritative State or a Proposal. It is neither a Receipt nor a Proposal condition and does not prove that Core was invoked.
+A non-authoritative Draft Core Artifact created by an Editor Recovery Creator from one complete author-edit intent and its exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It requires explicit retry or discard and never applies automatically; a successful or replacement retry closes the exact source as `superseded`, while no effect or a non-source conflict leaves it open and a source-binding conflict leaves its observed closure unchanged, without turning any of those facts into a Receipt, Proposal condition, or proof of prior Core invocation.
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
