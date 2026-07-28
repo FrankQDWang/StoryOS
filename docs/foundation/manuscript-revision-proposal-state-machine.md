@@ -393,9 +393,11 @@ produce one immutable Receipt.
 
 ### 7.2 ApplyAuthorEdit
 
-Every submitted semantic editor unit uses this command kind; the client cannot
-choose an authoritative or Proposal write endpoint. The Web Editor Session
-contract owns how completed local intents are grouped into bounded submissions.
+Every submitted Author Edit uses this command kind; the client cannot choose an
+authoritative or Proposal write endpoint. The Core contract owns the semantic
+submission boundary. The Web Editor Session contract owns journal persistence,
+dispatch, projection, acknowledgement ordering, and takeover, but may not alter
+this boundary.
 
 ```text
 ApplyAuthorEdit {
@@ -403,16 +405,31 @@ ApplyAuthorEdit {
   project_scope
   editor_session_id
   writer_generation
-  normalized_edit_intent
-  selection_snapshot
-  expected_authoritative_heads
-  expected_proposal_heads
+  chapter_object_id
+  author_edit_units
+  submission_bindings {
+    target_refs
+    observed_ownership_partition
+    expected_authoritative_heads
+    expected_proposal_heads
+    editor_contract_revision
+    undo_group_binding
+  }
+  retry_source:
+    FreshEditorIntent
+    | DraftRetry { draft_id, draft_revision_id, selected_payload_range }
   author_command_admission_id
   idempotency_key
 }
+
+AuthorEditUnit {
+  normalized_primitives
+  selection_snapshot
+}
 ```
 
-The v1 normalized intent is an ordered nonempty list of these typed primitives:
+`author_edit_units` is an ordered nonempty list of completed semantic editor
+intents. Each unit's `normalized_primitives` is an ordered nonempty list of:
 
 ```text
 ReplaceSelection { exact structured slice }
@@ -422,28 +439,74 @@ MoveBlock
 RetypeBlock
 ```
 
-Typing, deletion, cut, paste, drop, and IME output normalize to
-`ReplaceSelection`; an empty replacement deletes. The Local Edit Journal
-preserves completed browser intents in order. The production editor-session
-prototype selects the bounded submission cadence that preserves complete IME
-input, author-visible undo, crash recovery, and the performance envelope.
+Typing, deletion, cut, paste, drop, and completed IME output normalize to
+`ReplaceSelection`; an empty replacement deletes. Raw ProseMirror transactions,
+Steps, and browser events may be retained as bounded diagnostics but are not
+command semantics.
 
-Core recomputes ownership from current Heads, Anchors, and reservations. Raw
-ProseMirror Steps and browser events may be retained as bounded diagnostics but
-are not command semantics. The exhaustive result is:
+One command per completed semantic intent is the conservative correctness
+boundary. Bounded idle coalescing may place consecutive completed intents in one
+command only while Project Scope, chapter, target, observed ownership, every
+expected Head, writer generation, prospective admission binding,
+admission-expiry boundary, editor-contract revision, and author-visible undo
+group are exactly equal. Composition, paste, cut, drop, every structural
+primitive, an explicit command, or any unequal binding flushes the current
+unit. A current Protocol Limit Profile supplies the maximum idle time, intent
+count, operation count, and payload; absence of a proven bound falls back to one
+intent per command. Coalescing occurs before admission issuance. The final
+combined command receives one Admission over its exact digest; no post-admission
+merge may change that digest. Browser history grouping is independent and never
+changes this commit boundary.
+
+Core treats `observed_ownership_partition` as a stale-detection precondition,
+not a grant. At the first domain attempt it recomputes ownership from current
+Heads, Anchors, unresolved reservations, and the closed Direct Author Action
+rules. The exhaustive result is:
 
 ```text
-AuthoritativeApplied { revisions, commit, author_action_sequence }
-ProposalRevised { proposal_revision, author_action_sequence }
-RefusedToDraft { refused_edit_draft }
-Conflicted { current_heads, reasons }
-NoEffect { reason }
+ApplyAuthorEditResult =
+  AuthoritativeApplied {
+    authoritative_revisions
+    authoritative_commit_id
+    author_action_sequence
+  }
+  | ProposalRevised {
+      proposal_revision_id
+      author_action_sequence
+    }
+  | RefusedToDraft {
+      refused_edit_draft_id
+      refused_edit_draft_revision_id
+    }
+  | Conflicted {
+      current_authoritative_heads
+      current_proposal_heads
+      reasons
+      proposal_conflict_ref | None
+    }
+  | NoEffect { reason }
 ```
 
-One command is never split. A mixed Authoritative/Proposal edit changes neither
-target and creates a `RefusedEditDraft`. A Proposal edit appends a Revision and
-resets validation. An authoritative edit appends Revisions and exactly one
-Commit.
+One command is never split or partially applied. All primitives classified as
+Direct Author Action append the required Authoritative Revisions and exactly
+one Authoritative Commit. All primitives classified inside one exact pending
+Proposal ownership region append one Proposal Revision and reset validation to
+`pending`; Core may project `conflicted` in the same Transition when the exact
+target proof has already failed. A mixed authoritative/Proposal edit changes
+neither target and creates one `RefusedEditDraft` containing the complete
+attempted structured payload. A stale Head, Anchor, reservation, writer
+generation, editor contract, or ownership binding conflicts without creating a
+Draft. A well-formed edit whose normalized result equals current durable content
+is `NoEffect`.
+
+Narrowing a Refused Edit Draft or retrying a Recovery Draft always constructs a
+new `ApplyAuthorEdit` with `DraftRetry`; it uses the same classifier and never
+preselects the authoritative route demonstrated by the prototype. A successful
+`AuthoritativeApplied` or `ProposalRevised` result may close the exact source
+Draft as `superseded` in the same Transition. `RefusedToDraft` may close it only
+when the newly created Draft preserves the complete retried payload.
+`Conflicted` and `NoEffect` leave it open. Copying Draft text is a read action,
+not a Core command.
 
 ### 7.3 Proposal generation
 
@@ -520,7 +583,7 @@ ValidateProposal {
   proposal_revision_id
   expected_target_revisions
   validator_contract_version
-  cause
+  producer_cause
   idempotency_key
 }
 
@@ -540,7 +603,9 @@ ReplanProposal {
 Only Core produces a Validation Receipt. It binds the exact Proposal Revision,
 target Revisions, schema checks, domain invariants, preconditions, validator
 version, and result. Replan appends a new pending Revision; it never edits the
-old conflict or Receipt.
+old conflict or Receipt. The named source may carry either Proposal Conflict or
+Proposal Recovery Conflict; Replan must resolve the exact preserved surface and
+current targets without collapsing those condition kinds.
 
 ### 7.5 AcceptProposal
 
@@ -582,7 +647,8 @@ Acceptance never automatically replans or replaces a Validation Receipt.
 
 ### 7.6 Other Proposal decisions
 
-The remaining Proposal decisions are exact-head, idempotent commands:
+The remaining Proposal and editor-flow Draft decisions are exact-head,
+idempotent commands:
 
 ```text
 RejectProposalOperations
@@ -592,19 +658,103 @@ SupersedeProposal
 ReopenRejectedOperations
 CompleteReadyPartialProposal
 ContinueProposalGeneration
+ExpandRefusedEditDraftToProposal
+CloseEditorFlowDraft
 ```
 
-Each carries exact Project Scope, exact Proposal ID and Revision, complete selected
-Operation IDs when applicable, current target expectations, a typed producer
-cause, and an idempotency key. Reject, author reopen, supersede, explicit
-completion, and continuation require Author Command Admission. Withdrawal accepts
-either Author Command Admission or the exact current producer cause. Rejection preserves a typed
-author reason. Supersession binds the replacing Proposal and is terminal for
-the replaced Proposal. Reopen and continuation append a Revision or lifecycle
-event under the exhaustive state table and require validation again where
-specified.
+Each Proposal command carries exact Project Scope, Proposal ID and Revision,
+complete selected Operation IDs when applicable, current target expectations,
+one exact producer cause, and an idempotency key. Each Draft command binds one
+exact retained open Draft Revision. An author-caused first attempt requires an
+Author Command Admission over the entire command digest. `WithdrawProposal` and
+`ReplanProposal` may instead use the exact current `AgentRunStep` or `ToolCall`
+cause; that producer-owned transition allocates no Author Action. No other
+command in this list accepts a non-author cause.
 
-## 8. Acceptance and Receipts
+All first attempts produce one `DomainReceipt`. The exhaustive common outcome is
+closed as:
+
+```text
+ProposalOrDraftDecisionResult =
+  TransitionApplied {
+    prior_and_resulting_proposal_heads
+    proposal_or_draft_lifecycle_event_refs
+    created_proposal_ref | None
+    author_action_sequence | None
+  }
+  | Refused { reason }
+  | Conflicted { current_heads, reasons, proposal_conflict_ref | None }
+  | NoEffect { reason }
+```
+
+Command-specific applied payloads below determine which references are present.
+Refusal, conflict, and no effect append only the Receipt and applicable Proposal
+condition projection, allocate no Authoritative Commit or Author Action, and do
+not close a Draft.
+
+| Command | Exact applied effect | Authoritative Commit | Author Action on author cause |
+| --- | --- | ---: | ---: |
+| `RejectProposalOperations` | selected pending Operations become `rejected`; typed author reason is preserved | 0 | 1 Forward |
+| `WithdrawProposal` | closure becomes `withdrawn` without changing Operation resolution | 0 | 1 Forward; 0 for current producer |
+| `ReopenWithdrawnProposal` | new open Proposal Revision against the exact withdrawn Head | 0 | 1 Forward |
+| `SupersedeProposal` | closure becomes terminal `superseded` and binds the replacing Proposal Revision | 0 | 1 Forward |
+| `ReopenRejectedOperations` | new Proposal Revision reopens the exact rejected Operations as `pending` and validation as `pending` | 0 | 1 Forward |
+| `CompleteReadyPartialProposal` | generation becomes `ready` for the exact current content; validation remains or becomes `pending` as required | 0 | 1 Forward |
+| `ContinueProposalGeneration` | a new Generation ID starts from the exact `ready_partial` or `ready` Head | 0 | 1 Forward |
+| `ExpandRefusedEditDraftToProposal` | new Proposal and first Proposal Revision derive from the complete Refused Edit Draft Revision; the Draft stays open until a separate close | 0 | 1 Forward |
+| `CloseEditorFlowDraft` | exact `RefusedEditDraft` or `RecoveryDraft` becomes `closed` with `dismissed`, `superseded`, or `abandoned` reason | 0 | 1 Forward |
+
+`ReplanProposal` follows the same result and Receipt contract: applied appends
+one new pending Proposal Revision against current targets, with one Forward
+Author Action for an author cause and none for an AgentRunStep or ToolCall cause.
+Rejection never means withdrawal. Supersession never rewrites Operation
+resolution. Reopen, replan, and continuation never reuse a prior Validation
+Receipt or Generation ID.
+
+Narrowed retry and Recovery Draft retry are not additional command kinds: they
+are new `ApplyAuthorEdit` commands as specified in section 7.2. Copy is a read.
+An explicit Draft discard is `CloseEditorFlowDraft { reason: abandoned }`.
+These mappings let the complete author-facing text and actions remain
+inspectable without making UI labels or prototype state a second Core contract.
+
+The accepted prototype's transitions map one-to-one as follows:
+
+| Author-facing transition | Core command and positive semantic result |
+| --- | --- |
+| narrow Refused Edit Draft; retry Recovery Draft | new `ApplyAuthorEdit`; any of its five results remains possible |
+| expand Refused Edit Draft | `ExpandRefusedEditDraftToProposal.TransitionApplied` |
+| discard either Draft | `CloseEditorFlowDraft.TransitionApplied { reason: abandoned }` |
+| replan Proposal Conflict or Proposal Recovery Conflict | `ReplanProposal.TransitionApplied` |
+| reject conflicted or ordinary Proposal Operations | `RejectProposalOperations.TransitionApplied` |
+| withdraw a Proposal Recovery Conflict surface | `WithdrawProposal.TransitionApplied` |
+| accept ordinary Proposal Operations | `AcceptProposal.Applied` |
+| copy any preserved text | read-only projection; no Core command or Receipt |
+
+The prototype label `no-effect` after reject, withdraw, or Draft discard means
+no manuscript authority was changed and no candidate remains active on that
+surface. It does not replace the positive Core lifecycle/result Receipt with
+`NoEffect`. Complete Draft payloads and preserved Proposal content remain
+recoverable from their Core Artifact Revisions; UI character or line counts are
+evidence, not schema fields.
+
+### 7.7 Non-author production and validation settlement
+
+`AppendProposalGenerationBatch`, `PauseProposalGeneration`, and
+`ValidateProposal` are not author commands. Their first domain attempts produce
+a `DomainReceipt`, `DomainReceipt`, and `ValidationReceipt` respectively.
+Generation batch admission uses the exact `AgentRunStep` or `ToolCall` cause;
+pause uses `EditorInputFence`; validation retains the exact cause of the command
+or committed transition that requested validation. None allocates an
+Authoritative Commit or Author Action. Exact duplicate batches and exact command
+retries return their existing Receipt; sequence gaps and digest mismatch settle
+as typed conflict without another Proposal Revision.
+
+Automatic target-drift projection is caused by the exact authority-changing
+Transition that made a Proposal's proof non-current. It appends condition/event
+evidence but no extra Author Action. Producer cause never defaults to browser,
+network, model, extension, Artifact, or generic `System`.
+
+## 8. Outcomes, Acceptance, and Receipts
 
 ### 8.1 Acceptance result
 
@@ -662,6 +812,63 @@ AcceptanceReceipt {
 An exact retry returns this object unchanged. Infrastructure failure or lost
 acknowledgement is not an Acceptance Result.
 
+### 8.3 Domain Receipt and allocation matrix
+
+Every first domain attempt whose command contract does not name a more specific
+Receipt produces:
+
+```text
+DomainReceipt {
+  receipt_id
+  project_scope
+  command_kind
+  command_digest
+  idempotency_key
+  producer_cause
+  author_command_admission_id | None
+  expected_heads
+  prior_heads
+  resulting_heads
+  authoritative_revision_ids
+  proposal_revision_ids
+  authoritative_commit_ids
+  author_action_sequence | None
+  draft_artifact_refs
+  condition_refs
+  result
+  created_at
+}
+```
+
+The result variant, not a nullable allocation, explains why each collection is
+empty. The closed allocation matrix is:
+
+| First-attempt result | Receipt | Authoritative Commit | Author Action | Draft Artifact | Proposal condition |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `ApplyAuthorEdit.AuthoritativeApplied` | `DomainReceipt` | exactly 1 | exactly 1 Forward | 0 | 0 |
+| `ApplyAuthorEdit.ProposalRevised` | `DomainReceipt` | 0 | exactly 1 Forward | 0 | 0 or the same Revision's immediately proven `ProposalConflict` |
+| `ApplyAuthorEdit.RefusedToDraft` | `DomainReceipt` | 0 | 0 | exactly 1 `RefusedEditDraft` | 0 |
+| `ApplyAuthorEdit.Conflicted` | `DomainReceipt` | 0 | 0 | 0 | exactly 1 `ProposalConflict` only when an exact Proposal Revision is the affected surface; otherwise 0 |
+| `ApplyAuthorEdit.NoEffect` | `DomainReceipt` | 0 | 0 | 0 | 0 |
+| applied author Proposal decision, replan, expand, or Draft close | `DomainReceipt` | 0 | exactly 1 Forward | 0 new Draft | only the command-specific validation projection |
+| applied producer withdrawal or replan | `DomainReceipt` | 0 | 0 | 0 | only the command-specific validation projection |
+| refused, conflicted, or no-effect Proposal/Draft decision | `DomainReceipt` | 0 | 0 | 0 | conflict condition only when returned |
+| generation batch or pause attempt | `DomainReceipt` | 0 | 0 | 0 | 0 |
+| validation attempt | `ValidationReceipt` | 0 | 0 | 0 | `ProposalConflict` exactly when result is `conflicted` |
+| `AcceptProposal.Applied` for an ordinary domain Proposal | `AcceptanceReceipt` | exactly 1 | exactly 1 Forward | 0 | 0 |
+| `AcceptProposal.Invalid` | `AcceptanceReceipt` | 0 | 0 | 0 | validation becomes `invalid` |
+| `AcceptProposal.Conflicted` | `AcceptanceReceipt` | 0 | 0 | 0 | exactly 1 `ProposalConflict` |
+| `AcceptProposal.Refused` or `.NoEffect` | `AcceptanceReceipt` | 0 | 0 | 0 | 0 |
+
+Bundle Acceptance retains its declared atomic or ordered-independent policy:
+the parent Acceptance Receipt records the exact child Receipts and committed
+child Commit references. It does not weaken the one-Commit rule for any
+ordinary domain Proposal child, and an exact retry never creates another child
+Receipt, Commit, Author Action, Draft, or condition.
+
+No author-facing outcome is inferred from allocation presence. The immutable
+typed Receipt is the settlement authority and carries every created identity.
+
 ## 9. Core Transition atomicity
 
 One logical Core Transition performs the complete write set:
@@ -675,13 +882,21 @@ One logical Core Transition performs the complete write set:
 5. Append Operation-resolution and lifecycle events.
 6. Advance normalized current Heads and derived projections.
 7. Append the immutable typed Receipt selected by the owning command contract.
-8. Persist required outbox or wakeup intent.
-9. Commit once and publish success only afterward.
+8. For an author command, atomically link that Receipt through the owning
+   Admission's terminal `ReceiptSettled` record.
+9. Persist required outbox or wakeup intent.
+10. Commit once and publish success only afterward.
 
 All effects become visible together. A validation refusal or conflict may
 commit only its no-change Receipt and conflict projection. A failure before
 commit exposes no partial domain effect. External notification is delivered
 from durable outbox intent and is never transaction truth.
+
+`RequiresReconfirmation` is not a Core result and has no Receipt. It is the
+Admission boundary's terminal proof that the admitted command will create no
+Core effect. `outcome_unknown` is nonterminal recovery evidence and cannot be
+linked as a command result, Receipt, Commit, Author Action, Draft, or Proposal
+condition.
 
 ## 10. Undo and reapplication
 
@@ -707,28 +922,51 @@ action routes to its registered typed handler:
 - author Proposal edit -> restoration in a new Proposal Revision;
 - Acceptance -> `UndoAcceptance`;
 - rejection -> rejected-operation reopen;
-- withdrawal -> typed Proposal reopen.
+- withdrawal -> typed Proposal reopen;
+- Draft close -> typed Draft reopen while retained;
+- any action without a registered exact handler -> Barrier.
+
+Every first attempt records:
+
+```text
+AuthorUndoReceipt {
+  receipt_id
+  project_scope
+  command_digest
+  idempotency_key
+  author_command_admission_id
+  expected_author_undo_frontier_sequence
+  source_author_action_ref
+  handler_receipt_ref | None
+  authoritative_commit_ids
+  author_action_sequence | None
+  result:
+    Compensated
+    | ReversalRequired { reversal_proposal_ref }
+    | Unavailable { reason }
+    | Conflicted { current_author_undo_frontier_sequence }
+  created_at
+}
+```
 
 When a typed handler directly reverses its source, the same Transition records
-an immutable `AuthorUndoReceipt` and appends a `Compensation` Author Action
-entry naming the source sequence and exact domain Receipt. That Compensation
-is never a future undo candidate. If the handler instead returns
-`ReversalRequired`, creation of the Reversal Proposal is a new `Forward`
-action and the source remains uncompensated. ProseMirror history may supply a
-session-local inverse candidate only for the exact Frontier; Core still
-verifies durable history. A handlerless action is a Barrier.
+the handler's typed Receipt, the `AuthorUndoReceipt`, and one `Compensation`
+Author Action entry naming the source sequence and handler Receipt. That
+Compensation is never a future undo candidate. If the handler instead returns
+`ReversalRequired`, creation of the Reversal Proposal and its first Revision is
+one new `Forward` action and the source remains uncompensated. ProseMirror
+history may supply a session-local inverse candidate only for the exact
+Frontier; Core still verifies durable history.
 
 ### 10.2 UndoAcceptance
 
 ```text
-UndoAcceptance {
-  command_schema_version
+UndoAcceptanceHandlerInput {
   project_scope
   acceptance_receipt_id
   expected_current_target_revisions
   expected_current_proposal_head
-  author_command_admission_id
-  idempotency_key
+  source_author_undo_command_ref
 }
 ```
 
@@ -760,6 +998,28 @@ UndoAcceptanceResult =
   | ReversalRequired { reversal_proposal_ref }
   | Unavailable { reason }
 ```
+
+`UndoAcceptance` is the typed handler reached through the exact
+`UndoLatestAuthorAction` admission, not a second public author command. Its
+input is covered by the root command's digest and exact Frontier. It produces
+one `UndoAcceptanceReceipt` referenced by the root `AuthorUndoReceipt` and
+cannot receive a separate Admission, idempotency key, or retry. The closed
+undo-allocation matrix is:
+
+| Undo result | Handler Receipt | Authoritative Commit | Author Action | Proposal/Draft effect |
+| --- | --- | ---: | ---: | --- |
+| compensate Direct Author Action | `DomainReceipt` | exactly 1 | exactly 1 Compensation | none |
+| compensate author Proposal edit, rejection, withdrawal, or Draft close | `DomainReceipt` | 0 | exactly 1 Compensation | exact new Proposal Revision, resolution/lifecycle event, or Draft reopen |
+| `UndoAcceptance.Compensated` | `UndoAcceptanceReceipt` | exactly 1 | exactly 1 Compensation | safe Proposal reopening Revision when available |
+| `UndoAcceptance.ReversalRequired` or another handler's `ReversalRequired` | owning typed Receipt | 0 | exactly 1 Forward | exactly 1 Reversal Proposal; source remains uncompensated |
+| `Unavailable` | owning typed Receipt or no child when the root is a Barrier | 0 | 0 | none |
+| root Frontier `Conflicted` | no child; `AuthorUndoReceipt` only | 0 | 0 | none |
+
+The root `AuthorUndoReceipt` is always the public settlement. Its exact retry
+returns the same root and child Receipt references. A crash before the atomic
+Transition exposes neither compensation nor Reversal Proposal; a crash after
+commit reconciles to those same Receipts and never creates a second Author
+Action.
 
 There is no durable generic redo and no `RedoAcceptance`. Reapplication is a
 new Author Edit, reopen, or Acceptance against current state with a new Author
@@ -801,18 +1061,35 @@ separately owns unsettled browser intents. DOM, Selection, Decorations,
 NodeViews, plugin state, and ProseMirror history are not restored as domain
 truth.
 
-For a command idempotency key:
+Missing response is never evidence that a Core Transition did not commit.
+Recovery follows the Author Command Admission lifecycle and the following
+closed matrix:
 
-- a Receipt proves the Transition committed and the UI replays that result;
-- with validated storage and no Receipt, the Transition did not commit;
-- an uncommitted direct author edit preserved in the Local Edit Journal may be
-  invoked idempotently only through the same unexpired Author Command Admission
-  while all admission bindings still match; stale, changed, expired, or
-  unprovable intent becomes a non-authoritative Recovery Draft requiring
-  explicit retry or discard;
-- Acceptance and Undo without a Receipt are shown as not committed and are
-  settled as requiring reconfirmation and never automatically executed after
-  restart.
+| Last proven boundary | Authoritative evidence | Required settlement or action | New Core allocation |
+| --- | --- | --- | --- |
+| pre-admission validation refused | immutable `PreAdmissionRefusalRecord` | display the typed refusal; a changed request starts a fresh challenge | no Admission, command, Receipt, Commit, Author Action, Draft, or condition |
+| admission issuance transaction did not commit | validated absence of the Admission and nonce consumption | the client may begin a fresh admission flow | none |
+| Admission is `pending` and authoritative storage cannot be validated | no safe positive or negative Receipt proof | append or retain `outcome_unknown`; perform read-only reconciliation and block invocation | none |
+| exact typed Receipt is found | Receipt, idempotency record, and command digest match the Admission | atomically settle or observe `ReceiptSettled`; replay the immutable acknowledgement | only the allocations already named by that Receipt |
+| validated storage proves no Receipt; action is the same unexpired `direct_editor_action`; complete intent, Project Scope, chapter, targets, ownership, Heads, writer generation, Admission, editor contract, and undo binding all match | exact Admission, idempotency record, current Core facts, and complete journal intent | invoke the already-admitted command once under the same Command, Admission, nonce, and idempotency key | exactly the owning command's eventual Receipt matrix; never a second Author Action |
+| validated storage proves no Receipt; action is explicit, Admission expired, any binding changed, or complete intent is not recoverable | exact negative Receipt proof plus the mismatching or unrecoverable fact | terminal `RequiresReconfirmation`; this Admission can never later settle to a Receipt | no Core command effect; create one `RecoveryDraft` only when complete author-edit payload can be preserved |
+| Core Transition committed before acknowledgement | Receipt and `ReceiptSettled` exist atomically with all effects | replay the same Receipt and converge projection | no new allocation |
+
+Acceptance, rejection, withdrawal, Draft closure, Author Undo, and every other
+explicit command in the reconfirmation row are never automatically invoked
+after restart. A later confirmation creates a new idempotency record, nonce,
+Command, Admission, and eventual Receipt. A direct edit's new explicit Retry
+does the same and re-enters `ApplyAuthorEdit`; the old Admission remains
+terminal.
+
+A `RecoveryDraft` is created only by Host-assigned `EditorRecovery`, contains
+the complete recoverable author-edit payload and exact evidence reference, and
+is the only new Draft Artifact in this recovery flow. It is not a Receipt,
+condition, or proof that the edit was attempted or committed. A later Retry
+uses a new Admission unless the automatic same-Admission row above still
+applies. Journal mechanics, Snapshot transport, writer takeover, local
+projection, and garbage collection remain owned by the Web Editor Session
+contract.
 
 For a streaming Proposal:
 
@@ -820,9 +1097,15 @@ For a streaming Proposal:
 - `generating` may rebuild only from an exact Head, digest, contiguous sequence,
   compatible checkpoint, and no ambiguous runtime-gate window;
 - ambiguity between a closed runtime gate and a durable fence creates a
-  Proposal Recovery Conflict;
+  Proposal Recovery Conflict condition on the preserved Proposal surface;
 - missing sequences, digest mismatch, invalid Anchors, duplicate Block IDs, or
   unsupported contracts select Proposal Safe Mode and disable Acceptance.
+
+Proposal Conflict and Proposal Recovery Conflict are conditions on a preserved
+Proposal surface. Neither is a Draft Artifact. When recovery can preserve
+complete author text but cannot prove a Proposal projection, it may create one
+Recovery Draft for that text and independently project Proposal Recovery
+Conflict; the two facts remain orthogonal.
 
 Recovery never infers success from a network process, model stream, editor
 cache, timestamp, or absent error. Physical corruption detection and store
@@ -839,6 +1122,8 @@ these one-to-one semantics:
 | apply an Author Edit to authority | `AuthoritativeAuthorEditApplied` |
 | apply an Author Edit to a Proposal | `ProposalAuthorEditApplied` |
 | refuse mixed ownership | `RefusedEditDraftCreated` |
+| expand a Refused Edit Draft | `ProposalCreatedFromRefusedEditDraft` |
+| close or reopen an editor-flow Draft | `EditorFlowDraftClosed`, `EditorFlowDraftReopened` |
 | start or continue generation | `ProposalGenerationStarted` |
 | admit a generation batch | `ProposalGenerationBatchAdmitted` |
 | pause generation | `ProposalGenerationPaused`, `ProposalPauseFenceRecorded` |
@@ -893,3 +1178,16 @@ available.
 15. Every entity, command, reference, Head, Receipt, event, sequence,
     idempotency record, and recovery projection validates one exact Project
     Scope; no opaque ID, digest, or client assertion permits cross-scope access.
+16. The conservative Author Edit commit boundary is one completed semantic
+    intent; bounded idle coalescing is valid only while every frozen Scope,
+    chapter, target, ownership, Head, writer, Admission, editor-contract, and
+    undo binding remains equal.
+17. Every first domain attempt settles through its owning typed Receipt; only
+    the exhaustive result variant allocates the Commit, Author Action, Draft, or
+    Proposal condition named by its matrix.
+18. A missing response or temporarily unavailable store never proves
+    non-commit. Post-admission uncertainty remains `outcome_unknown` until
+    authoritative reconciliation reaches exactly one terminal settlement.
+19. Refused Edit Draft and Recovery Draft are the only Draft Artifact kinds in
+    this editor flow. Proposal Conflict and Proposal Recovery Conflict remain
+    conditions on preserved Proposal surfaces.

@@ -164,7 +164,7 @@ The exact immutable content owned by an Authoritative Revision, Artifact Revisio
 _Avoid_: Blob cache, derived projection, Provider-held source of truth
 
 **Core Transition**:
-The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, lifecycle events, and required follow-up intent become visible together, while refusal or conflict records only its no-change Receipt and no partial domain effect.
+The single logical atomic boundary in which StoryOS Core validates one idempotent domain command and durably records its complete outcome. Revisions, Commits, resolutions, heads, Receipts, Author Actions, lifecycle events, the author command Admission's `ReceiptSettled` link when applicable, and required follow-up intent become visible together. A refusal or conflict records no partial domain effect and only the no-authority Receipt, Refused Edit Draft, or Proposal condition allocated by its exhaustive result.
 _Avoid_: Partial commit, database rollback as undo, external effect as transaction truth
 
 **Command Acknowledgement**:
@@ -224,16 +224,16 @@ A deterministic, immediately visible change caused through the author's own edit
 _Avoid_: Author-triggered automation, silent bulk edit
 
 **Author Edit**:
-One complete normalized editor intent submitted with an Author Command Admission for whole-command ownership classification by StoryOS Core. It produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries; raw editor transactions remain diagnostic evidence rather than the domain command.
-_Avoid_: Client-selected write path, ProseMirror transaction as authority, partial mixed edit
+One completed semantic editor intent, or a bounded idle-coalesced sequence of completed intents whose Scope, chapter, target, ownership, Heads, writer generation, Admission, editor-contract, and undo bindings are all equal, submitted with one Author Command Admission for whole-command ownership classification by StoryOS Core. It produces an authoritative change, a Proposal Revision, a Refused Edit Draft, a conflict, or no effect without splitting one input across authority boundaries; raw editor transactions and browser undo grouping remain diagnostic or presentation evidence rather than the domain command.
+_Avoid_: Client-selected write path, ProseMirror transaction as authority, fixed-window batching, partial mixed edit
 
 **Editor Verification Split**:
 The two complementary deterministic gates for an Author Edit. Browser integration verifies complete IME and editor intent capture, local journal durability, pending projection, and recovery continuity; Core verification proves command ownership classification, atomic durable settlement, and the exact Receipt.
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
-The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; recovery may invoke only the same unexpired, fully matching direct edit, while an explicit, expired, or changed command requires author reconfirmation.
-_Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token
+The immutable Operational Record identified by `AuthorCommandAdmissionId` that binds one server-derived User, exact existing or Server-allocated prospective Project Scope, protected Client Session Binding, accepted client-contract and security-policy identities, applicable Editor Session and writer generation, action class, exact command digest, targets, expected Heads, nonce, idempotency record, bounded lifetime, and one terminal settlement. It admits one author-owned Core command without proving a physical-human gesture or granting reusable authority; post-admission uncertainty remains nonterminal `outcome_unknown`, recovery may invoke only the same unexpired fully matching direct edit, and an explicit, expired, changed, or unrecoverable command requires author reconfirmation. Missing response never proves non-commit.
+_Avoid_: Physical-human attestation, client-supplied actor, session role as authority, Approval, reusable authorization token, missing response as failure
 
 **Editor Recovery Creator**:
 The closed StoryOS Host Artifact Creator used only for a Recovery Draft, binding one exact Editor Session, writer generation, complete recovered intent, and its Local Edit Journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It causes no Core invocation or Author Action, turns no browser cache into authority, and grants no reusable authorization.
@@ -1324,11 +1324,11 @@ An author edit inside a pending Proposal Operation that splits, joins, moves, re
 _Avoid_: Automatic anchor repair, rejected author input, silent Operation split
 
 **Refused Edit Draft**:
-A non-authoritative Draft Core Artifact created by the refused `ApplyAuthorEdit` Core Transition when one author edit crosses Authoritative State and Proposal ownership. It preserves the attempted payload, exact selection snapshot, and edit intent under ordinary Artifact revision, retention, and Draft-closure rules for an explicit narrowed retry, Proposal expansion, or discard without mutating either target.
+A non-authoritative Draft Core Artifact created by the refused `ApplyAuthorEdit` Core Transition when one author edit crosses Authoritative State and Proposal ownership. It preserves the complete attempted structured payload, exact selection snapshot, and edit intent under ordinary Artifact revision, retention, and Draft-closure rules for an explicit narrowed retry through the same classifier, Proposal expansion, copy, or discard without mutating either target or preselecting a future write route.
 _Avoid_: Toast-only rejection, partial application, failed Direct Author Action
 
 **Recovery Draft**:
-A non-authoritative Draft Core Artifact created by an Editor Recovery Creator from one complete author-edit intent and its exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It follows ordinary Artifact revision, retention, and Draft-closure rules, requires an explicit author retry or discard, and is never automatically applied to Authoritative State or a Proposal.
+A non-authoritative Draft Core Artifact created by an Editor Recovery Creator from one complete author-edit intent and its exact journal, admission-settlement, takeover, or in-memory recovery evidence as applicable. It follows ordinary Artifact revision, retention, and Draft-closure rules, requires an explicit author retry through a new `ApplyAuthorEdit` Admission or discard, and is never automatically applied to Authoritative State or a Proposal. It is neither a Receipt nor a Proposal condition and does not prove that Core was invoked.
 _Avoid_: Autosaved truth, automatic crash replay, Refused Edit Draft
 
 **Composition Edit**:
@@ -1340,8 +1340,8 @@ A per-editor-session fallback used when the environment cannot uphold lossless P
 _Avoid_: Weakened authority mode, blocked manuscript editor, silent compatibility downgrade
 
 **Proposal Recovery Conflict**:
-The fail-closed recovery condition in which durable Proposal Heads, stream sequences, Pause Fences, Anchors, digests, or an editor checkpoint cannot prove one unambiguous review projection. Agent replay and Acceptance remain disabled until explicit reconciliation; no cache or network order may fill the uncertainty.
-_Avoid_: Best-effort replay, hidden repair, ordinary validation pending
+The fail-closed condition on a preserved Proposal surface in which durable Proposal Heads, stream sequences, Pause Fences, Anchors, digests, or an editor checkpoint cannot prove one unambiguous review projection. Agent replay and Acceptance remain disabled until explicit reconciliation; no cache or network order may fill the uncertainty. A separately preserved complete author intent may become a Recovery Draft, but the condition and Draft remain orthogonal.
+_Avoid_: Best-effort replay, hidden repair, ordinary validation pending, Draft Artifact
 
 **Editor Support Profile**:
 The explicit product promise for manuscript editing environments and author input languages. StoryOS currently supports desktop Chrome with Chinese and English author input; behavior observed in other browsers or input languages is exploratory evidence, not a release gate or an implied support promise.
@@ -1384,8 +1384,8 @@ The condition in which an Applied Acceptance is the current Author Undo Frontier
 _Avoid_: Non-overlapping guess, inverse patch on a later Head, storage rollback
 
 **Undo Acceptance**:
-An author-authorized action that appends compensating Authoritative Revisions only against a Safe Compensation Head and, when retained source content and a safe Proposal lineage allow it, a new Proposal Revision containing the previously applied content against the compensated base. Proposal lineage drift may derive a new Proposal but never blocks otherwise safe authoritative compensation; target Head drift instead requires a Reversal Proposal or unavailable outcome.
-_Avoid_: History deletion, editor-only undo
+The typed Core handler reached only through `UndoLatestAuthorAction` when the exact Author Undo Frontier is an Acceptance. It appends compensating Authoritative Revisions only against a Safe Compensation Head and, when retained source content and a safe Proposal lineage allow it, a new Proposal Revision containing the previously applied content against the compensated base. Proposal lineage drift may derive a new Proposal but never blocks otherwise safe authoritative compensation; target Head drift instead requires a Reversal Proposal or unavailable outcome. It receives no second Admission or independently retryable command identity.
+_Avoid_: Second undo command, history deletion, editor-only undo
 
 **Acceptance Reapplication**:
 An author redo of a successfully undone Acceptance is a new Acceptance attempt against the exact reopened Proposal Revision under current Acceptance Eligibility. It uses new command identity, Commit, and Receipt records, never restores the prior attempt, and becomes unavailable after relevant state drift.
@@ -1600,7 +1600,7 @@ The exhaustive settlement of one Acceptance Attempt as Applied, Invalid, Conflic
 _Avoid_: Success boolean, exception text, accepted Proposal state, unknown as failure
 
 **Receipt**:
-An immutable Operational Record produced only by StoryOS Core for one validation or domain-command attempt, carrying one exact typed Receipt identity and exactly one `AuthorCommandAdmission | EditorInputFence | AgentRunStep | ToolCall` producer cause. Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt identities remain distinct, and no Receipt has Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
+An immutable Operational Record produced only by StoryOS Core for one validation or domain-command attempt, carrying one exact typed Receipt identity and exactly one `AuthorCommandAdmission | EditorInputFence | AgentRunStep | ToolCall` producer cause. Its exhaustive result names every allocated Authoritative Revision, Proposal Revision, Commit, Author Action, Draft Artifact, or Proposal condition; an exact retry returns the same identities. Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt identities remain distinct, and no Receipt has Artifact revision, derivation, retention, Acceptance, or authority lifecycle.
 _Avoid_: Generic receipt ID, Artifact, log text, producer assertion
 
 **Acceptance Receipt**:
