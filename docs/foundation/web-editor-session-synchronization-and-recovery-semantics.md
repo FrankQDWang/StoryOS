@@ -95,10 +95,10 @@ Writer takeover is the explicit browser/session command
 `explicit_editor_command` group under sections 3 and 4. Its final request
 binds the requesting Editor Session, protected Client Session generation,
 observed current writer generation, current Project Scope, request contract,
-idempotency key, and final body/digest. Its nonce is held only in the protected
-request path described in section 3.5. A valid admitted attempt receives an
-Author Command Admission and is never automatically invoked or recovered
-after uncertainty.
+idempotency key, and final body/digest. Its exact-retry material is held only
+in the protected short-lived capsule described in section 3.5. A valid
+admitted attempt receives an Author Command Admission and is never
+automatically invoked or recovered after uncertainty.
 
 The Server compares the observed generation and performs one closed transition:
 
@@ -141,17 +141,18 @@ The returned Snapshot must project at or beyond that settlement position and
 never replaces it. Pre-admission validation failure has no Admission or
 Receipt.
 `RequiresReconfirmation` has an Admission but no Receipt or takeover effect.
-Missing acknowledgement follows the same settlement query as every other
-admitted group. Neither takeover result creates a manuscript Core effect or
-Author Action.
+Missing acknowledgement first permits only exact transport replay from the
+protected capsule; a settlement query exists only when the received
+`Accepted` or `outcome_unknown` variant supplies it. Neither takeover result
+creates a manuscript Core effect or Author Action.
 
 After `TakeoverApplied`, the prior session becomes read-only. The winner opens
 a new Local Edit Journal partition bound to the resulting generation; neither
 the winner's nor the prior session's older partition is rebound. Their complete
 local payload remains non-authoritative and must not be deleted or resubmitted
 merely because takeover occurred. If StoryOS must preserve that payload outside
-the local journal, it follows the exact `RecoveryDraft` creation rule in
-section 9.
+the local journal, it remains local-only until a future wire owner adds an
+explicit ingress; takeover carries no hidden recovery-payload channel.
 
 A stale writer fails closed before Admission issuance. If an Admission was
 already issued, the client follows the Admission reconciliation matrix in
@@ -343,7 +344,7 @@ In-memory or copyable text remains plainly labelled local payload. It is not a
 `RecoveryDraft`, Artifact, Snapshot, or successful save. StoryOS may create a
 durable `RecoveryDraft` only through section 9.
 
-### 3.5 Frozen submission groups and reconciliation attachment
+### 3.5 Frozen groups, transport attempts, and browser evidence
 
 Network submission is owned by a separate group identity:
 
@@ -377,45 +378,59 @@ JournalSubmissionGroup {
   frozen_at
 }
 
-GroupTransport =
-  FrozenNotSubmitted
-  | InFlight
-  | ResponseObserved { observation_ref }
-  | DeliveryUnknown { delivery_evidence_ref }
-
 GroupReconciliation =
-  NotRequired
-  | Required {
-      reason:
-        awaiting_terminal_settlement
-        | delivery_unknown
-        | admission_attachment_missing
-        | outcome_unknown
-      settlement_query | None
+  NoReconciliationNeeded {
+    basis:
+      frozen_not_submitted
+      | active_attempt {
+          transport_attempt_id
+          prior_no_admission_proof_observation_id | null
+        }
+  }
+  | TransportOrAdmissionUnknown {
+      transport_attempt_id
+      exact_transport_retry_capsule_id
     }
-  | Resolved { terminal_settlement_ref }
+  | KnownSettlementQuery {
+      source_observation_id
+      settlement_query
+    }
+  | ProvenNoAdmission {
+      proof_observation_id
+      disposition:
+        terminal_pre_admission_refusal
+        | fresh_challenge_permitted
+    }
+  | TerminalResolved {
+      terminal_observation:
+        PreAdmissionProblem { protocol_observation_id }
+        | Committed { protocol_observation_id }
+        | RequiresReconfirmation { protocol_observation_id }
+    }
 
 GroupSettlement =
   Unsettled
-  | PreAdmissionRefused { refusal_record_ref }
+  | PreAdmissionRefused {
+      pre_admission_problem_observation_id
+    }
   | ReceiptSettled {
-      terminal_settlement_ref
+      committed_observation_id
       receipt_ref: ReceiptRef
       project_activity_position
-      settled_at
+      committed_at
     }
   | RequiresReconfirmation {
+      requires_reconfirmation_observation_id
       author_command_admission_id
-      terminal_settlement_ref
       reconfirmation_reason
       recovery_draft_ref | null
-      settled_at
+      recorded_at
     }
 
 AuthorSurfaceConvergence =
   Pending
   | ReceiptBackedConverged {
-      terminal_settlement_ref
+      committed_observation_id
       receipt_ref: ReceiptRef
       project_activity_position
       projection_proof:
@@ -430,22 +445,22 @@ AuthorSurfaceConvergence =
       resulting_surface_refs
     }
   | PreAdmissionRefusalConverged {
-      refusal_record_ref
-      refusal_surface_ref
-      preserved_payload_ref
+      pre_admission_problem_observation_id
+      local_refusal_surface_id
+      preserved_local_payload_ref
     }
   | ReconfirmationConverged {
+      requires_reconfirmation_observation_id
       author_command_admission_id
-      terminal_settlement_ref
       preserved_local_payload_ref
-      recovery_draft_ref | None
-      reconfirmation_surface_ref
+      recovery_draft_ref | null
+      local_reconfirmation_surface_id
     }
 
 AuthorAttention =
   None
-  | Required { reason, author_surface_ref }
-  | Resolved { decision_receipt_ref | read_only_resolution_ref }
+  | Required { reason, local_author_surface_id }
+  | Resolved { decision_receipt_ref | local_resolution_observation_id }
 
 GroupPayloadRetention =
   Retained
@@ -465,139 +480,358 @@ collection lifecycle. Its transport, reconciliation, settlement, convergence,
 attention, and retention axes advance only through the positive transitions
 below.
 
-The Web Client appends only this browser-safe Server attachment:
+Before each physical send, the Protected Web Client durably commits one
+short-lived exact-retry capsule in a protected IndexedDB store:
 
 ```text
-AdmissionAttachmentLocalState =
-  Missing
-  | Durable { admission_reconciliation_attachment_ref }
-
-AdmissionReconciliationAttachment {
+ProtectedExactTransportRetryCapsule {
+  exact_transport_retry_capsule_id
   journal_submission_group_id
-  command_ref
-  author_command_admission_id
-  settlement_query
-  issued_at
-  expires_at
-  idempotency_binding {
-    idempotency_key
-    canonical_command_digest
-    digest_profile
+  project_scope
+  client_session_binding_ref
+  client_session_generation
+  request_identity {
+    api_major
+    method
+    route_template
+    command_schema
+    command_kind
   }
-  protocol_observations: AppendOnlyList<AdmissionProtocolObservation>
+  exact_request_body_ref
+  canonical_command_digest
+  digest_profile
+  exact_client_controlled_headers {
+    "Idempotency-Key": idempotency_key
+    "X-StoryOS-Anti-Forgery": anti_forgery_nonce
+    "Content-Type": content_type
+  }
+  challenge_expires_at
+  committed_before_send_at
+  disposition:
+    Available
+    | Collected {
+        reason:
+          replayable_response_evidence_durable
+          | original_attempt_proven_no_admission
+      }
 }
+```
 
-AdmissionProtocolObservation =
-  AcceptedObservation {
-    operation_ref
-    settlement_query
-    admitted_activity_position
-    accepted_at
+The capsule contains only the exact request and client-controlled header
+material required by #58 to replay the same Scope, method, route, kind, key,
+body, and digest, including the returned nonce. It is never exposed to the
+editor DOM, diagnostics, logs, export, clipboard, extension, Tool, or MCP
+surface and is never authority. The protected Client Session credential
+remains owned by its normal binding; the capsule cannot replace or renew it.
+`challenge_expires_at` is the challenge response's public expiry, not an
+Admission issuance time or lifetime.
+Exact replay revalidates the same protected Host, Origin, and Client Session
+binding at send time. If any is invalid or expired, the original delivery
+remains unknown and the client never sends blindly.
+
+Physical delivery is an append-only attempt log:
+
+```text
+PhysicalTransportAttempt {
+  transport_attempt_id
+  journal_submission_group_id
+  attempt_ordinal
+  attempt_kind:
+    Initial
+    | ExactTransportReplay {
+        replay_of_transport_attempt_id
+      }
+    | FreshChallengeAfterProvenNoAdmission {
+        proof_observation_id
+      }
+  exact_transport_retry_capsule_id
+  started_at
+  outcome:
+    InFlight
+    | ResponseObserved { protocol_observation_id }
+    | DeliveryUnknown {
+        observed_at
+        evidence:
+          connection_lost
+          | process_crashed
+          | response_unreadable
+      }
+}
+```
+
+Every send names a capsule already committed before `started_at`. An initial
+or fresh-challenge attempt owns a new capsule; an exact replay reuses the
+original capsule byte-for-byte. A fresh-challenge attempt is legal only after
+positive no-Admission proof and commits a new capsule with the new nonce but
+the same frozen Scope, method, route, kind, key, body, and digest. The latest
+attempt's `InFlight` record is durably appended before the network send and
+derives the current transport view; the append-only log makes a second
+`InFlight` reachable without rewriting an earlier attempt.
+
+The Web Client stores no universal Admission attachment. It appends only
+locally identified observations whose protocol fields are copied from the
+exact received #58 variant:
+
+```text
+BrowserProtocolObservation =
+  PreAdmissionProblemObservation {
+    protocol_observation_id
+    local_problem_payload_ref
+    exact_problem_payload_digest
+    type
+    status
+    code
+    retryability
+    correlation_id
+    project_scope | null
+    command_id: null
+    author_command_admission_id: null
+    settlement_query: null
+    recovery_disposition: null
+    safe_conflict | null
+    resync | null
+    limit_profile_revision
+    observed_at
   }
+  | UnresolvedTransportProblemObservation {
+      protocol_observation_id
+      local_problem_payload_ref
+      exact_problem_payload_digest
+      type
+      status
+      code
+      retryability
+      correlation_id
+      project_scope | null
+      command_id | null
+      author_command_admission_id: null
+      settlement_query: null
+      recovery_disposition: null
+      safe_conflict | null
+      resync | null
+      limit_profile_revision
+      observed_at
+    }
+  | AcceptedObservation {
+      protocol_observation_id
+      acknowledgement_kind: "accepted"
+      envelope_version
+      command_id
+      project_scope
+      correlation_id
+      operation_ref
+      settlement_query
+      admitted_activity_position
+      accepted_at
+      limit_profile_revision
+    }
   | CommittedObservation {
+      protocol_observation_id
+      acknowledgement_kind: "committed"
+      envelope_version
+      command_id
+      project_scope
+      correlation_id
       receipt_ref: ReceiptRef
       project_activity_position
       committed_at
+      limit_profile_revision
     }
   | RequiresReconfirmationObservation {
+      protocol_observation_id
+      acknowledgement_kind: "requires_reconfirmation"
+      envelope_version
+      command_id
+      project_scope
+      correlation_id
+      author_command_admission_id
       reconfirmation_reason
       recovery_draft_ref | null
       recorded_at
+      limit_profile_revision
     }
   | OutcomeUnknownProblemObservation {
+      protocol_observation_id
+      local_problem_payload_ref
+      exact_problem_payload_digest
+      type
+      status
+      code
+      retryability: outcome_unknown
+      correlation_id
+      project_scope
+      command_id
+      author_command_admission_id
       settlement_query
-      observation_evidence
+      recovery_disposition: reconciliation_required
+      safe_conflict | null
+      resync | null
+      limit_profile_revision
       observed_at
     }
 ```
 
-`AcceptedObservation` has no Receipt. `CommittedObservation` maps to
-`ReceiptSettled`. `RequiresReconfirmationObservation` has no Receipt.
-`OutcomeUnknownProblemObservation` records a separate `StoryOSProblem` and
-makes no Receipt-presence claim; it is not an acknowledgement. These are
-protocol-owned meanings and field names, not a second serialization contract.
-Every observation carrying `settlement_query` must equal the attachment's one
-immutable query.
+`protocol_observation_id`, `local_problem_payload_ref`,
+`exact_problem_payload_digest`, and `observed_at` are browser-local envelope
+facts. Every other field in an observation is copied only when its named #58
+variant supplies it.
 
-The attachment is append-only observation, not a client-owned Server record.
-It never contains a nonce value or secret, never creates a Command or
-Admission identity, and never substitutes a browser timestamp for Server
-issuance, expiry, Receipt, or settlement. Only the Server creates and returns
-the Command/Admission references after the final request and canonical digest
-exist. Its `settlement_query` is immutable, and every uncertainty or
-acknowledgement observation for the group reconciles through that same query.
+`PreAdmissionProblemObservation` is classified only when the exact #58 Problem
+semantics positively prove that the observed attempt created no Admission or
+Receipt. Its payload reference is local storage for the received sanitized
+Problem representation, not a Server refusal-record reference.
+`UnresolvedTransportProblemObservation` preserves an exact safe Problem such
+as a concurrent `command_in_progress` or a replay attempted after Client
+Session invalidation; it makes no Admission/Receipt/settlement claim and leaves
+the group `TransportOrAdmissionUnknown`.
+`AcceptedObservation` proves only the fields in `Accepted`; it does not prove
+an Author Command Admission identity or terminal state.
+`CommittedObservation` maps to `ReceiptSettled`.
+`RequiresReconfirmationObservation` has no Receipt or settlement query.
+`OutcomeUnknownProblemObservation` records a separate `StoryOSProblem`, makes
+no Receipt-presence claim, and carries the exact non-null settlement query
+supplied by #58. No observation fabricates issuance/expiry, a
+client-addressable Admission/refusal/settlement record, or a field absent from
+its protocol variant.
 
-The anti-forgery nonce returned by #58 is never persisted in the group,
-partition, intent record, or attachment. It is held only in the protected
-request path and sent in the command header. The Server alone binds its
-nonce-record identity when Admission commits.
+The client-observable versus Server-only audit is closed:
 
-The legal positive axis transitions are:
+| Authoritative Server fact | Permitted browser-local evidence |
+| --- | --- |
+| `PreAdmissionRefusalRecord` identity and audit fields | no record reference; only the exact sanitized Problem observation and local correlation |
+| Author Command Admission record, issuance time, and expiry | no universal local copy; Admission ID only when `RequiresReconfirmation` or `outcome_unknown` actually supplies it |
+| Admission settlement record/reference | no local record reference; only `CommittedObservation` or `RequiresReconfirmationObservation` |
+| settlement Query | only the non-null value supplied by `Accepted` or `outcome_unknown`; absent in every other variant |
+| idempotency and nonce record identities | no Server-record references; only frozen local key/digest plus the protected exact-retry capsule |
+| typed Receipt and Project Activity position | only the exact pair supplied by `Committed` |
+
+The Server-side Admission, refusal, idempotency, nonce, and settlement records
+remain authoritative and need not be client-addressable.
+
+The legal positive state paths are:
 
 ```text
-GroupTransport:
-  FrozenNotSubmitted -> InFlight
-  InFlight -> ResponseObserved | DeliveryUnknown
-  DeliveryUnknown -> ResponseObserved
-  ResponseObserved -> ResponseObserved
+frozen group
+  -> NoReconciliationNeeded { frozen_not_submitted }
+  -> attempt Initial / NoReconciliationNeeded { active_attempt }
 
-GroupReconciliation:
-  NotRequired -> Required
-  NotRequired -> Resolved
-  Required -> Required
-  Required -> Resolved
+attempt DeliveryUnknown
+  -> TransportOrAdmissionUnknown
+  -> attempt ExactTransportReplay using the same available capsule
+
+unresolved transport Problem
+  -> TransportOrAdmissionUnknown
+
+exact replay or initial response Accepted
+  -> KnownSettlementQuery { exact Accepted.settlement_query }
+
+response OutcomeUnknown Problem
+  -> KnownSettlementQuery { exact StoryOSProblem.settlement_query }
+
+KnownSettlementQuery
+  -> KnownSettlementQuery { repeated Accepted | outcome_unknown }
+     | TerminalResolved { Committed | RequiresReconfirmation }
+
+positive no-Admission Problem proof for the original attempt
+  -> ProvenNoAdmission
+  -> TerminalResolved { PreAdmissionProblem }
+     | attempt FreshChallengeAfterProvenNoAdmission /
+       NoReconciliationNeeded {
+         active_attempt { prior_no_admission_proof_observation_id }
+       }
+
+fresh-challenge attempt
+  -> DeliveryUnknown | PreAdmissionProblem | Accepted | Committed
+     | RequiresReconfirmation
+
+response Committed
+  -> TerminalResolved { Committed }
+
+response RequiresReconfirmation
+  -> TerminalResolved { RequiresReconfirmation }
 ```
 
-`AcceptedObservation`, delivery uncertainty, a locally missing attachment, or
-`OutcomeUnknownProblemObservation` enters/remains `Required`. A synchronous
-`CommittedObservation` or `RequiresReconfirmationObservation` may move
-directly from `NotRequired` to `Resolved`; later authoritative reconciliation
-moves `Required` to `Resolved`. `Resolved` is terminal and names the exact
-terminal settlement. A pre-admission refusal needs no Admission reconciliation.
+Each reconciliation transition is appended to the group's local state log;
+the current state is the latest valid transition and earlier proof is never
+rewritten or discarded.
 
-A crash after the Server commits Admission but before the browser durably
-appends the attachment leaves `AdmissionAttachmentLocalState.Missing`.
-Local absence proves neither that Admission is absent nor that it committed.
-The client resolves the exact frozen group through #58's existing
-same-Scope/kind/idempotency-key/canonical-digest transport-resolution path; it
-does not invent a route or request new author confirmation. That resolution
-returns the original Command/Admission/settlement-query binding when that
-record exists and may also return its original terminal acknowledgement. The
-client first appends the recovered attachment and any returned observation
-durably. If the path cannot prove the record or terminal state, transport
-remains `DeliveryUnknown`, reconciliation remains `Required`, and the group
-remains `outcome_unknown`.
+`KnownSettlementQuery` always contains the query from its named observation;
+there is no nullable query state. Query observation may later append a
+`CommittedObservation`, `RequiresReconfirmationObservation`, or another
+`OutcomeUnknownProblemObservation`. A locally known `AcceptedObservation`
+still makes no claim about Admission existence. Any repeated query-bearing
+observation for the same group must carry the same query; mismatch fails closed
+into resync rather than selecting one.
 
-Transport resolution never invokes an explicit editor command. When validated
-Server evidence instead proves that the Admission transaction never committed,
-the still-unadmitted frozen group may obtain a fresh anti-forgery challenge for
-the same Scope, kind, key, body, and digest and re-enter Admission without
-changing the author's command. No nonce or nonce-record reference is recovered
-from IndexedDB.
+The attempt-to-GC closure matrix is:
 
-`PreAdmissionRefused` proves there is no Admission or Receipt. `InFlight` is
-not settlement. `GroupReconciliation.Required` authorizes only the applicable
-read-only settlement/transport resolution; after it finds a terminal fact,
-`Resolved` preserves that exact settlement reference. `ReceiptSettled` covers
-every typed Core result, including refusal, conflict, and no effect.
-Convergence, attention, and payload retention remain separate axes and never
-override settlement.
+| Durable response observation | Reconciliation / settlement | Capsule and journal consequence |
+| --- | --- | --- |
+| unresolved transport Problem | `TransportOrAdmissionUnknown` / `Unsettled` | keep capsule and all payload; no GC |
+| `Accepted` | `KnownSettlementQuery` / `Unsettled` | response makes exact replay unnecessary, but payload remains GC-ineligible |
+| `outcome_unknown` Problem | `KnownSettlementQuery` / `Unsettled` | no Receipt claim; payload remains GC-ineligible |
+| positive no-Admission Problem, fresh challenge still permitted | `ProvenNoAdmission` / `Unsettled` | collect the old capsule, retain all payload, and commit the new capsule before resend |
+| terminal pre-admission Problem, including after fresh-challenge resend | `TerminalResolved { PreAdmissionProblem }` / `PreAdmissionRefused` | collect the attempt capsule; journal GC still requires refusal-surface convergence and an exact complete successor |
+| `Committed`, including after exact replay or fresh-challenge resend | `TerminalResolved { Committed }` / `ReceiptSettled` | collect the attempt capsule; journal GC waits for Receipt projection and successor proof |
+| `RequiresReconfirmation`, including after a supplied settlement query | `TerminalResolved { RequiresReconfirmation }` / matching terminal settlement | collect the attempt capsule; journal GC waits for the visible terminal surface and section 9's exact successor rule |
+
+The original capsule is collected only after a replayable response observation
+is durable or the original attempt has positive no-Admission proof. A crash
+before capsule commit sends nothing. A crash after capsule commit but before
+send leaves an unused replayable capsule. A crash after send but before
+response durability reopens the capsule and permits only `ExactTransportReplay`
+of the same request. Missing/corrupt capsule, invalid or expired Client Session
+binding, or unverifiable request equality remains
+`TransportOrAdmissionUnknown`; it never permits a new challenge, changed
+request, or blind repeat.
+
+Here, replayable response evidence means an exact durable `Accepted`,
+`Committed`, `RequiresReconfirmation`, `outcome_unknown` Problem with its
+query, or terminal pre-admission Problem observation. An
+`UnresolvedTransportProblemObservation` is not sufficient and keeps the
+capsule `Available`.
+
+An exact replay is the same logical submission, not a new command invocation.
+If the nonce was already consumed, #58 permits it only to resolve the same
+record, key, and digest to its in-progress or immutable prior response and it
+can never create a second Admission. If the original send never consumed the
+nonce, normal admission may process that one original submission once. If the
+protocol instead positively proves that the original attempt created no
+Admission, the same still-unadmitted frozen group may obtain a fresh
+challenge. That is a new physical attempt, not recovery invocation of an
+admitted command.
+For a capsule whose attempt was never appended or started, the journal's
+atomic persist-before-attempt order itself is positive proof that nothing was
+sent; this is the only local no-Admission proof that does not require a Server
+response.
+
+`ReceiptSettled` covers every typed Core result, including refusal, conflict,
+and no effect. Settlement, convergence, attention, and payload retention
+remain separate axes and never override one another.
 
 ## 4. Completed intent and pre-Admission coalescing
 
-One `CompletedIntentRecord` is the conservative direct-edit unit. Composition
-completion, paste, cut, drop, and every structural primitive are unconditional
-record boundaries. Every explicit editor command is instead one
-`ExplicitEditorCommandRecord` and one single-record submission group.
+One `CompletedIntentRecord` is the conservative direct-edit unit. Distinct
+records retain distinct `AuthorEditUnit.normalized_primitives` and
+`selection_snapshot` values and enter a group in local-intent order; their
+semantic payloads are not required to be equal.
+
+Composition completion, paste, cut, drop, every structural primitive, and
+every explicit editor command are unconditional **group flush boundaries**.
+The boundary record is isolated from records on both sides: the earlier group
+freezes before it, and it freezes no later than its own completion. Every
+explicit editor command is one `ExplicitEditorCommandRecord` and one
+single-record submission group.
 
 Before Admission issuance, adjacent completed `direct_editor_action` intents
 may be coalesced only while:
 
 - every admission-preparation input named by Author Command Admission
   sections 3 and 5 is present and equal;
-- every `ApplyAuthorEdit` semantic field, chapter, selection, retry source,
+- every shared `ApplyAuthorEdit` binding—Project Scope, chapter, retry source,
   target, ownership observation, Authoritative and Proposal Head, Anchor,
-  editor-contract revision, and author-visible undo-group binding is equal;
+  reservation, editor-contract revision, and author-visible undo-group
+  binding—is equal;
 - the current writer generation remains current;
 - none of the candidate records belongs to a frozen group; and
 - the applicable idle, intent, operation, and payload bounds remain proven.
@@ -605,11 +839,17 @@ may be coalesced only while:
 Any difference or unverifiable fact freezes the earlier direct-edit group.
 Coalescing chooses the ordered coverage of one `JournalSubmissionGroup`; it
 never mutates or combines the immutable source intent records. One group-level
-idempotency key applies only to the final combined request, and the protected
-request path obtains the matching ephemeral challenge, so no per-intent
-idempotency identity can conflict. Coalescing never
+idempotency key applies only to the final combined request, and its physical
+attempt commits the matching short-lived protected retry capsule, so no
+per-intent idempotency identity can conflict. Coalescing never
 alters local undo grouping, crosses a partition, includes an explicit command,
 or applies to `explicit_editor_command`.
+
+The positive long-session case is therefore reachable: 240 consecutive typing
+intents with distinct ordered `AuthorEditUnit` payloads/selections but equal
+shared bindings may form one bounded group. Changing any shared binding or
+encountering composition completion, paste, cut, drop, a structural primitive,
+or an explicit command freezes the group immediately.
 
 After the final body is frozen, the Server recomputes its canonical digest,
 validates all bindings, claims idempotency, consumes the nonce record, and
@@ -634,9 +874,9 @@ The author-facing save state is derived:
 | `saved` | a Receipt-backed terminal result has converged through its exact Activity/Snapshot position and the resulting current surface requires no attention |
 | `needs_attention` | a converged refusal, reconfirmation, conflict, Draft, or other typed result requires an author decision, or current evidence cannot safely reconstruct/converge the surface |
 
-`Accepted` HTTP acknowledgement, an idempotency record without terminal
-settlement, a Receipt without author-facing convergence, and an Event without
-matching settlement remain `saving` or `needs_attention`; none is `saved`.
+`Accepted` HTTP acknowledgement, an exact replay that remains in progress, a
+Receipt without author-facing convergence, and an Event without matching
+settlement remain `saving` or `needs_attention`; none is `saved`.
 
 Selection, Decorations, NodeViews, editor history, and cursor position are
 presentation state. The exact `AuthorEditUnit.selection_snapshot` and
@@ -693,37 +933,42 @@ ordered only by Core Heads, Author Action Sequence, and Project Activity.
 
 | Boundary | Proven fact | Client projection and next action |
 | --- | --- | --- |
-| pre-admission Problem | sanitized `PreAdmissionRefusalRecord`; no Admission, nonce consumption, Command, Receipt, or Core effect | retain complete payload; show typed refusal; a changed request starts a fresh challenge |
-| frozen group with locally missing attachment after delivery loss | no local claim about whether Admission committed | set transport `DeliveryUnknown` and reconciliation `Required`; resolve only through the exact existing Scope/kind/key/digest path |
-| Admission attachment durable, no response proving settlement | one known pending Admission | pause dependent submission; use only its `settlement_query` |
-| HTTP `Accepted` | durable asynchronous operation reference only | nonterminal `saving`; observe the named settlement query and applicable Project Activity/Snapshot result |
+| capsule durable, before physical send | exact replay material exists; no delivery or Server fact | append the initial attempt and send once |
+| attempt `DeliveryUnknown`, capsule available, Client Session binding still exact | no claim whether Admission or Receipt exists | set `TransportOrAdmissionUnknown`; permit only byte-identical `ExactTransportReplay` with the stored nonce |
+| attempt `DeliveryUnknown`, capsule missing/corrupt or Client Session invalid/expired | no safe exact replay and no claim whether Admission or Receipt exists | remain `TransportOrAdmissionUnknown`; block blind repeat, fresh challenge, and dependent submission |
+| pre-admission Problem | exact safe `PreAdmissionProblemObservation`; no Admission or Receipt for the proven attempt | retain complete payload; either terminally show the typed refusal or, only when the exact Problem permits and the frozen request remains equal, enter `ProvenNoAdmission` before a fresh challenge |
+| HTTP `Accepted` | exact asynchronous operation reference and settlement query; no browser-visible Admission identity or terminal fact | enter `KnownSettlementQuery`; remain nonterminal `saving` and observe only the named query and applicable Project Activity/Snapshot result |
 | HTTP `Committed` | terminal `ReceiptSettled` and exact typed Receipt | project the Receipt result; wait for author-facing projection convergence if not already observed |
 | HTTP `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | show the exact reconfirmation reason and applicable preserved payload/Draft; a later author confirmation creates a new command and Admission |
-| post-admission `outcome_unknown` Problem | no claim about Receipt presence; same Admission and settlement query | set reconciliation `Required`; forbid blind retry or a new command derived from the uncertain one |
+| post-admission `outcome_unknown` Problem | exact Admission identity and settlement query from that Problem; no claim about Receipt presence | enter `KnownSettlementQuery`; forbid blind retry or a new command derived from the uncertain one |
 | Project Activity before HTTP `Committed` | committed Event position, not necessarily the client's matching acknowledgement observation | retain/deduplicate the Event, query settlement, and converge only after the exact Receipt/result is known |
 | HTTP `Committed` before projection reaches `project_activity_position` | Receipt settlement known, author-facing projection not yet converged | retain payload and wait/replay/query until Event processing or a Snapshot proves a position at or beyond the settlement |
 
 `Accepted` never carries or implies a typed Receipt and is not an Admission
-terminal state. A pre-admission Problem alone proves Receipt absence.
-Post-admission uncertainty never does.
+terminal state; it also does not prove an Admission identity. A qualifying
+pre-admission Problem proves Receipt and Admission absence only for the
+attempt it positively classifies. Post-admission uncertainty never proves
+Receipt absence.
 
 ### 6.2 Reconciliation matrix
 
-When the attachment is locally missing, section 3.5's exact-tuple transport
-resolution runs first; the client does not guess a `settlement_query`. Once
-the original attachment is durable, reconciliation uses that exact
-Admission's `settlement_query` and validated authoritative storage. It never
-consults journal presence, cache, process state, missing HTTP, or Event arrival
-as an effect oracle.
+When delivery is unknown, section 3.5's exact transport replay runs first
+through the original command route with the original capsule; #70 adds no
+query or resolution route. When `Accepted` or an `outcome_unknown` Problem
+actually supplies a settlement query, reconciliation uses that exact query.
+In every other state the browser has no query and never invents one. Journal
+presence, cache, process state, missing HTTP, or Event arrival is never an
+effect oracle.
 
 | Authoritative finding | Required client behavior |
 | --- | --- |
-| exact typed Receipt and matching idempotency/digest | observe or replay `ReceiptSettled`, project only its immutable result, and never invoke again |
-| storage is unavailable or Receipt presence cannot be proven | retain `outcome_unknown`, block invocation and dependent submissions, and repeat only bounded read-only reconciliation |
-| validated no-Receipt proof; same unexpired `direct_editor_action`; every Admission section 3/5 binding and every complete Core/journal field equal | the Server may invoke once under the same Command, Admission, nonce-consumption record, and idempotency key |
-| validated no-Receipt proof; explicit command, expired Admission, changed/missing/unverifiable binding, or incomplete intent | settle `RequiresReconfirmation`; the old Admission can never later receive a Receipt |
+| exact replay returns `PreAdmissionProblemObservation` that positively proves the original attempt created no Admission | enter `ProvenNoAdmission`; either terminally resolve that refusal or, only when its retry semantics and every frozen local fact allow, obtain a fresh challenge and append a fresh physical attempt |
+| exact replay or settlement Query returns `Committed` | append `CommittedObservation`, enter terminal `ReceiptSettled`, project only its immutable Receipt result, and never invoke again |
+| settlement Query returns `RequiresReconfirmation` | append that exact observation, enter the terminal no-Receipt settlement, and never invoke the old command |
+| exact replay or Query remains in progress/`Accepted`/`outcome_unknown` | retain `TransportOrAdmissionUnknown` or `KnownSettlementQuery` as applicable; block blind invocation and dependent submissions |
+| authoritative Server recovery finds validated no Receipt for an already admitted command | the Server applies #68's same-Admission rule; the browser neither reconstructs Server records nor supplies an Admission lifetime, and observes only the eventual #58 response |
 
-The automatic branch requires equality of Project Scope, protected Client
+The Server-side automatic branch requires equality of Project Scope, protected Client
 Session binding/generation, client/security contracts, Editor Session, writer
 generation, action class, request contract, final digest/profile and covered
 fields, targets/Heads/Revisions, idempotency and nonce records, complete
@@ -756,8 +1001,8 @@ Resync:
    position and replay generation;
 3. discards browser checkpoints whose complete Head/digest/contract key does
    not match;
-4. reconciles every admitted group by its
-   `AdmissionReconciliationAttachment`;
+4. replays only an available exact-transport capsule or follows a
+   `KnownSettlementQuery` actually supplied by #58;
 5. rebuilds each visible chapter from the Snapshot plus still-valid local
    intent records/groups; and
 6. resumes strictly after the Snapshot position.
@@ -771,9 +1016,9 @@ Convergence is positive and branches by settlement kind:
 
 | Settlement | Required convergence proof |
 | --- | --- |
-| `ReceiptSettled` | the exact `ReceiptRef`, terminal-settlement reference, and canonical `project_activity_position`; processed Project Activity or a Snapshot must prove projection at or beyond that same position, including no-change results such as `TakeoverCompareFailed`; exact resulting Heads and every Receipt-allocated Draft, Proposal, lifecycle, condition, Author Action, and control are reflected |
-| `PreAdmissionRefused` | the exact `PreAdmissionRefusalRecord`, typed refusal surface, and complete preserved local payload are visible; no Activity position or resulting Head is required or fabricated |
-| `RequiresReconfirmation` | the exact Admission terminal-settlement reference, reason, and applicable retained payload or resulting `RecoveryDraft` plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
+| `ReceiptSettled` | the exact `CommittedObservation`, `ReceiptRef`, and canonical `project_activity_position`; processed Project Activity or a Snapshot must prove projection at or beyond that same position, including no-change results such as `TakeoverCompareFailed`; exact resulting Heads and every Receipt-allocated Draft, Proposal, lifecycle, condition, Author Action, and control are reflected |
+| `PreAdmissionRefused` | the exact `PreAdmissionProblemObservation`, typed refusal surface, and complete preserved local payload are visible; no Activity position or resulting Head is required or fabricated |
+| `RequiresReconfirmation` | the exact `RequiresReconfirmationObservation`, reason, and applicable retained payload or returned `recovery_draft_ref` plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
 
 Receipt-backed manuscript convergence additionally requires no unresolved
 earlier Activity gap. A no-Receipt refusal/reconfirmation surface may converge
@@ -885,9 +1130,19 @@ command with a new Admission.
 
 ## 9. RecoveryDraft and local recovery
 
-`EditorRecoveryEvidenceId` identifies one immutable Host-owned Operational
-Record created only when the Host can positively bind a complete recovery
-payload:
+Release 1 has exactly one reachable browser-to-Host ingress for recovered
+author-edit bytes: the existing
+`POST /api/v1/projects/{project_id}/manuscript/author-edits` route carrying the
+complete `ApplyAuthorEdit.author_edit_units` and submission bindings. Once that
+request is admitted, the Host already retains the exact command body and can
+create a `RecoveryDraft` while settling `RequiresReconfirmation`; the exact
+#58 response returns `recovery_draft_ref` when creation occurred, and the
+existing `GET /api/v1/projects/{project_id}/artifacts/{artifact_id}` projection
+exposes its `EditorRecovery.recovery_evidence_ref`. #70 adds no route, request
+field, upload, or hidden browser-to-Host channel.
+
+`EditorRecoveryEvidenceId` identifies the immutable Host-owned Operational
+Record for only that reachable path:
 
 ```text
 EditorRecoveryEvidenceRecord {
@@ -895,46 +1150,23 @@ EditorRecoveryEvidenceRecord {
   project_scope
   editor_session_id
   writer_generation
-  journal_partition_id | None
 
-  source_boundary:
-    Journal {
-      ordered_intent_record_refs
-      covered_sequence_range
-      journal_submission_group_id | None
-      checkpoint_ref
-    }
-    | ExplicitInMemoryBoundary {
-        in_memory_boundary_id
-        capture_reason
-        captured_at
-      }
-
-  complete_structured_payload_ref
+  admitted_apply_author_edit {
+    route_template:
+      /api/v1/projects/{project_id}/manuscript/author-edits
+    command_id
+    author_command_admission_id
+    canonical_command_digest
+    digest_profile
+    server_retained_request_body_ref
+  }
+  complete_author_edit_units_ref
   complete_payload_digest
   editor_contract_revision
-
-  admission_evidence:
-    NotApplicable
-    | PreAdmissionRefusal { refusal_record_ref }
-    | AdmissionSettlement {
-        command_ref
-        author_command_admission_id
-        terminal_settlement_ref
-      }
-  takeover_evidence:
-    NotApplicable
-    | TakeoverSettlement {
-        receipt_ref: DomainReceiptRef
-        project_activity_position
-        result: TakeoverApplied | TakeoverCompareFailed
-      }
-
-  creation_reason:
-    RequiresReconfirmationPreservation
-    | WriterTakeoverPreservation
-    | JournalSchemaOrPersistenceRecovery
-    | ExplicitDurablePreservation
+  requires_reconfirmation {
+    reconfirmation_reason
+    recorded_at
+  }
   host_created_at
   resulting_recovery_draft_ref
 }
@@ -942,38 +1174,42 @@ EditorRecoveryEvidenceRecord {
 
 The Host writes the evidence record and resulting `RecoveryDraft` revision in
 one durable operation, so the record never points to a missing result and the
-Draft Creator's `recovery_evidence_ref` resolves to this exact identity. A
-journal source must name an ordered, non-overlapping, complete intent range and
-its checkpoint. An explicit in-memory source must name the one positively
-captured boundary and complete payload; merely finding DOM or clipboard text
-does not create such evidence. Admission and takeover variants are populated
-only when applicable and never claim a Receipt or effect absent from their
-named records.
+Draft Creator's `recovery_evidence_ref` resolves to this exact identity. The
+evidence binds only Server-retained fields from the admitted `ApplyAuthorEdit`
+body and its real Admission settlement; it does not claim that browser journal,
+checkpoint, in-memory, or takeover bytes crossed an interface.
 
 A `RecoveryDraft` exists only when the StoryOS Host durably creates one Core
 Draft Artifact with:
 
 - Host-assigned `EditorRecovery` Creator;
 - exact Project Scope, Editor Session, and writer generation;
-- the complete structured author-edit payload and digest;
-- exact journal record/group/range and checkpoint evidence when available;
-- exact `EditorRecoveryEvidenceId`, including its Admission settlement,
-  takeover, journal, or in-memory boundary as applicable; and
+- the complete structured author-edit payload and digest already retained from
+  the admitted `ApplyAuthorEdit` request;
+- exact `EditorRecoveryEvidenceId` and `RequiresReconfirmation` settlement; and
 - one immutable Artifact Revision and provenance closure.
 
 Creation causes no Core edit invocation and no Author Action. A browser-local
-record/group, in-memory text, copyable text, clipboard content, checkpoint, or pending
-projection is never a `RecoveryDraft` or another Artifact.
+record/group, in-memory text, copyable text, clipboard content, checkpoint, or
+pending projection is never a `RecoveryDraft` or another Artifact.
 
-StoryOS creates a `RecoveryDraft` only when the complete payload is available
-and durable preservation is required because the healthy local continuation
-cannot safely remain the sole recovery surface, such as terminal
-`RequiresReconfirmation` with recoverable author-edit payload, takeover or
-journal/schema recovery that must cross the local session boundary, or
-explicit durable preservation before local collection. It does not create one
-for every expired, stale, conflicted, no-effect, or unverifiable group.
-Incomplete or unverifiable text remains visibly incomplete local recovery
-material and cannot be promoted into an Artifact.
+The ingress matrix is closed:
+
+| Recovery source | Release-1 Host ingress and result |
+| --- | --- |
+| admitted `ApplyAuthorEdit` body reaches terminal `RequiresReconfirmation` and the Host retains its complete verified payload | the existing author-edits command/settlement may atomically create the evidence record and `RecoveryDraft`; #58 returns non-null `recovery_draft_ref` |
+| the same settlement cannot verify a complete retained payload | `recovery_draft_ref: null`; preserve any complete browser copy locally |
+| frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission uncertainty | local journal/capsule only; no Host Artifact ingress and no `RecoveryDraft` claim |
+| takeover, fenced-writer journal payload, journal schema/persistence recovery, or explicit local preservation | local-only until a future wire owner adds an explicit semantic command and schema; takeover does not carry those bytes |
+| DOM, clipboard, or surviving in-memory text | copyable local material only; no Artifact or recovery-evidence record |
+
+This contract therefore does not make journal, in-memory, or takeover evidence
+Host-creatable in Release 1. The broader Artifact classification remains
+reserved, but reachability requires a future public-protocol owner to add a
+real ingress before any such source may allocate `EditorRecovery`.
+A complete local journal group may still enter the ordinary
+author-confirmed/current-binding `ApplyAuthorEdit` flow; that is a normal edit
+attempt, not a RecoveryDraft-preservation channel.
 
 A `RecoveryDraft` Retry is a new `ApplyAuthorEdit`/`DraftRetry` with an
 explicit author confirmation and new Admission unless section 6's exact
@@ -986,9 +1222,13 @@ result and closure follow section 8.2.
 | --- | --- |
 | before intent-record transaction commit | no durable record; any surviving in-memory text is copyable local payload, not saved or a Draft |
 | intent record committed, before group freeze/Admission | rebuild complete intent; current writer may freeze a new group after all bindings revalidate |
-| group frozen, validated Admission issuance did not commit | no durable nonce exists locally; obtain a fresh challenge for the same Scope/kind/key/body/digest and submit the still-unadmitted group |
-| Server Admission may have committed, crash before attachment durability | attachment absence proves nothing; set `DeliveryUnknown`/`Required` and use only #58's existing exact-tuple transport resolution |
-| Admission attachment recorded, settlement unverifiable | `outcome_unknown`; read-only reconciliation through the same `settlement_query`; no blind invocation |
+| group frozen, before capsule transaction commit | no send was permitted; obtain a challenge, commit the capsule, and append the initial attempt |
+| capsule committed, no attempt appended or send started | local atomic order positively proves no delivery/Admission; if the challenge remains valid append/send the initial attempt, otherwise collect the unused capsule and obtain a fresh challenge for the same frozen group |
+| send may have occurred, crash before response observation commits | reopen the exact capsule and append only `ExactTransportReplay` through the original command route |
+| delivery unknown and Client Session binding is invalid/expired or capsule/request equality is unverifiable | remain `TransportOrAdmissionUnknown`; no exact replay, fresh challenge, changed request, or blind repeat |
+| exact replay positively proves no Admission | enter `ProvenNoAdmission`; either converge the pre-admission refusal or, only when its exact retry semantics permit, commit a fresh-challenge capsule and append a new physical attempt |
+| `Accepted` observation recorded | `KnownSettlementQuery` from the exact response; no Admission identity is inferred |
+| `outcome_unknown` Problem recorded | `KnownSettlementQuery` from the exact Problem; no Receipt-presence claim and no blind invocation |
 | validated no-Receipt after Admission | follow only section 6.2's direct-edit equality or `RequiresReconfirmation` branch |
 | Core committed before HTTP or Activity observation | exact Receipt/settlement/Heads survive; replay them and converge without another invocation |
 | Receipt observed before matching Activity | retain payload and replay/query from the required Activity position |
@@ -997,21 +1237,29 @@ result and closure follow section 8.2.
 | convergence proven before payload collection | group becomes GC-eligible only if section 11's successor proof also holds |
 | payload collected before reload | reconstruct from the recorded durable successor and retained collection fence; never from missing bytes |
 | reload in stale writer generation | read-only; reconcile admitted groups, preserve unsubmitted payload, and require explicit takeover for new writing |
-| `TakeoverApplied` during unsettled work | open the exact new-generation partition; older partitions remain read-only; every admitted group reconciles by its own Admission; unsubmitted payload remains local or becomes a `RecoveryDraft` only under section 9 |
+| `TakeoverApplied` during unsettled work | open the exact new-generation partition; older partitions remain read-only; every group follows its own observed response/query/capsule state; unsubmitted or browser-only payload remains local |
 | `TakeoverCompareFailed` | retain the current read-only projection, `DomainReceiptRef`, canonical settlement Activity position, and returned Snapshot at or beyond it; do not advance generation, rebind a partition, or retry automatically |
-| takeover Admission uncertain or `RequiresReconfirmation` | reconcile only through its attachment or expose visible reconfirmation; never repeat the explicit takeover automatically |
+| takeover delivery unknown | exact transport replay is allowed only with its available capsule and current binding; never obtain a fresh challenge until positive no-Admission proof |
+| takeover `Accepted`, `outcome_unknown`, or `RequiresReconfirmation` | use only the actually supplied query or visible reconfirmation fields; never repeat the explicit takeover automatically |
 
 ## 11. Deterministic journal garbage collection
 
 ### 11.1 Eligibility
 
+Secret capsule collection is separate from journal-payload collection. An
+`Available` capsule is retained while exact replay may still be required and
+is collected only under section 3.5's two positive reasons. Its attempt
+identity, frozen request digest, and collection reason remain; its nonce and
+exact header bytes do not.
+
 Journal intent payload bytes, group payload coverage, and patch/checkpoint
 dependencies are eligible for collection only when all of these are proven:
 
 1. the group has terminal `ReceiptSettled`, `RequiresReconfirmation`, or
-   `PreAdmissionRefused` evidence as applicable; it is neither `Unsettled` nor
-   paired with `GroupReconciliation.Required`: an admitted terminal is
-   `Resolved`, while pre-admission refusal is `NotRequired`;
+   `PreAdmissionRefused` evidence as applicable and
+   `GroupReconciliation.TerminalResolved` names the exact matching protocol
+   observation; `TransportOrAdmissionUnknown`, `KnownSettlementQuery`,
+   `ProvenNoAdmission`, and `Unsettled` are ineligible;
 2. the author-facing surface has converged through the applicable branch:
    Receipt-backed results include their required Activity/Snapshot position,
    while pre-admission refusal and `RequiresReconfirmation` include their exact
@@ -1037,6 +1285,9 @@ Revision, a `RefusedEditDraft` or `RecoveryDraft` Artifact Revision, or another
 typed retained Core payload that contains the complete intent. `NoEffect` may
 use the exact digest-equal current durable Revision. A conflict or
 `RequiresReconfirmation` with only one local complete copy is never eligible.
+Only section 9's admitted-`ApplyAuthorEdit` ingress can make a
+`RecoveryDraft` successor in Release 1; local-only takeover, journal, or
+in-memory payload does not.
 Clipboard copy, DOM text, cached response, Event payload, and an author-visible
 label are not durable successors.
 
@@ -1050,19 +1301,21 @@ Collection is a batched IndexedDB transaction. It:
 2. marks the exact groups, intent records, and patch/checkpoint ranges
    `Eligible`;
 3. writes one immutable local `collection_fence` containing group/record/range
-   identities, payload digests, successor references, Admission/Receipt or
-   refusal/reconfirmation references, the exact branch-shaped convergence
-   evidence, and reason;
+   identities, payload digests, successor references, exact protocol
+   observation identities and fields, the branch-shaped convergence evidence,
+   and reason;
 4. deletes only the covered payload bytes and now-unreferenced checkpoint or
    patch material; and
 5. marks those ranges `Collected`.
 
-The compact group and intent identities, command digest/idempotency binding, Admission
-identity and lifecycle, typed Receipt or refusal/reconfirmation evidence,
-reconciliation observations, successor references, projection convergence,
-and collection fence remain inspectable under their owning retention
-contracts. GC never silently erases evidence needed to reject an exact
-duplicate, explain a result, or reconstruct why payload collection was safe.
+The compact group and intent identities, command digest/idempotency binding,
+attempt log, typed Receipt or refusal/reconfirmation observations,
+reconciliation states, successor references, projection convergence, and
+collection fence remain inspectable under their owning retention contracts.
+Browser evidence retains an Admission identity only when the exact
+`RequiresReconfirmation` or `outcome_unknown` variant supplied it. GC never
+silently erases evidence needed to reject an exact duplicate, explain a
+result, or reconstruct why payload collection was safe.
 
 A crash before the collection transaction commits leaves all payloads
 retained. A crash after commit exposes the complete fence and no partial
@@ -1079,31 +1332,34 @@ Browser integration and the deterministic oracle cover:
   checkpoint durability before submission and complete reconstruction after
   every local fault cut;
 - non-overlapping complete group coverage; group-level idempotency/body/digest;
-  request-path-only nonce handling; exactly one record per explicit-command
-  group; and no per-intent request identity;
-- every coalescing equality and unconditional flush boundary, including no
-  post-Admission merge;
+  protected short-lived exact-retry capsule handling; exactly one record per
+  explicit-command group; and no per-intent request identity;
+- 240 distinct ordered typing intents coalescing under equal shared bindings;
+  every composition/paste/cut/drop/structural/explicit-command group flush
+  boundary; and no post-Admission merge;
 - exact Protected Web Client, Client Session, Editor Session, writer
   generation, Project Scope, request, digest, Head/Anchor, nonce/idempotency,
-  and lifetime substitutions;
+  capsule, and challenge-expiry substitutions;
 - pre-admission refusal, `Accepted`, `Committed`,
   `RequiresReconfirmation`, post-admission `outcome_unknown`, validated
   no-Receipt recovery, and exact retry;
-- the closed `AcceptedObservation`, `CommittedObservation`,
+- the closed `PreAdmissionProblemObservation`,
+  `UnresolvedTransportProblemObservation`, `AcceptedObservation`,
+  `CommittedObservation`,
   `RequiresReconfirmationObservation`, and
-  `OutcomeUnknownProblemObservation` field prohibitions, including no Receipt
-  on Accepted, reconfirmation, or outcome-unknown;
+  `OutcomeUnknownProblemObservation` field matrix, including no invented
+  Admission identity/query/lifetime and no Receipt on Accepted,
+  reconfirmation, or outcome-unknown;
 - HTTP-before-Activity, Activity-before-HTTP, acknowledgement loss,
   duplicates, older-cursor overlap, gaps, replay-floor misses, Snapshot/resync,
   and projection convergence;
-- crash cuts before/after journal commit, request-path nonce acquisition,
-  Admission issuance, attachment durability, first Core invocation, Core
-  commit, acknowledgement, Activity, convergence, GC eligibility, and
-  collection;
-- locally missing attachment resolution through the exact existing
-  Scope/kind/key/digest path, including original Admission recovery,
-  unprovable `DeliveryUnknown`/`Required`, and proven-no-Admission fresh
-  challenge without explicit-command invocation;
+- crash cuts before/after journal commit, capsule commit, physical send,
+  response-observation durability, capsule collection, first Core invocation,
+  Core commit, Activity, convergence, GC eligibility, and collection;
+- initial, exact-replay, and proven-no-Admission fresh-challenge physical
+  attempts; invalid/expired Client Session fail-closed behavior; and paths from
+  delivery unknown to pre-admission refusal, settlement, and GC without a new
+  route or second explicit-command invocation;
 - chapter switching with pending records/groups, one current-writer queue, and
   the separately fenced takeover coordination lane;
 - secondary read-only sessions; exact `TakeoverApplied`,
@@ -1117,16 +1373,19 @@ Browser integration and the deterministic oracle cover:
 - positive classification of Admission/refusal/reconciliation evidence,
   Receipts, Draft Artifacts, Proposal conditions, local payload, projections,
   and authority;
-- `RecoveryDraft` creation only from complete payload plus one exact
-  `EditorRecoveryEvidenceRecord`, including journal and explicit in-memory
-  boundaries; and
+- the Release-1 `RecoveryDraft` ingress matrix: only an admitted
+  `ApplyAuthorEdit` body's terminal `RequiresReconfirmation` may return a
+  Host-created Draft; journal, takeover, and in-memory sources remain
+  local-only; and
 - Receipt-backed versus no-Receipt convergence, including proof that refusal
   and reconfirmation require no fabricated Activity position or resulting
   Heads;
 - GC refusal for unknown, unsettled, unconverged, dependency-bearing, or
   only-complete-copy payloads, plus atomic batched collection and retained
-  evidence fences; and `Required -> Resolved -> eligible` acknowledgement-loss
-  recovery across both current and correctly fenced old partitions.
+  evidence fences; and
+  `TransportOrAdmissionUnknown/KnownSettlementQuery/ProvenNoAdmission ->
+  TerminalResolved -> eligible` recovery across both current and correctly
+  fenced old partitions.
 
 Passing evidence uses the virtual clock, explicit interleaving schedule,
 contract fault points, Multi-Scope adversarial world, and replayable
@@ -1145,17 +1404,22 @@ advisory until their numerical values are accepted by the appropriate owner.
    generation are distinct typed orders and never substitute for one another.
 4. One frozen submission group owns ordered non-overlapping complete record
    coverage plus one action class, request contract, idempotency key, final
-   body/digest, Admission, settlement, and reconciliation lifecycle; no nonce
-   or nonce-record reference is a durable browser field.
+   body/digest, transport-attempt, settlement, and reconciliation lifecycle.
+   The nonce exists durably only inside its short-lived protected exact-retry
+   capsule and is never browser authority or general journal evidence.
 5. The Web Client never generates or supplies an
    `AuthorCommandAdmissionId`; the Server issues and attaches it only after
    the final request and digest are fixed.
-6. Coalescing is pre-Admission, bounded, equal-binding-only, direct-edit-only,
-   and never crosses a semantic, partition, or explicit-command boundary.
+6. Coalescing is pre-Admission, bounded, shared-binding-equality-only, and
+   direct-edit-only. It preserves distinct ordered Author Edit Units and never
+   crosses composition, paste, cut, drop, structural, partition, or
+   explicit-command group flush boundaries.
 7. HTTP `Accepted` is nonterminal. Only `Committed` with a typed Receipt or
-   `RequiresReconfirmation` closes an Admission.
+   `RequiresReconfirmation` closes an Admission, and `Accepted` itself proves
+   no browser-visible Admission identity.
 8. Post-admission uncertainty claims neither Receipt presence nor absence,
-   forbids blind retry, and reconciles through the same settlement query.
+   forbids blind retry, and uses a settlement query only when the exact
+   received `Accepted` or `outcome_unknown` Problem supplied it.
 9. Automatic recovery invocation requires validated no-Receipt evidence, the
    same unexpired direct edit, and equality of every Admission, Core, and
    journal binding.
@@ -1176,15 +1440,20 @@ advisory until their numerical values are accepted by the appropriate owner.
     and an applied result opens a new generation partition without rebinding an
     old one.
 14. A `RecoveryDraft` is a durable Core Draft Artifact created only by
-    Host-assigned `EditorRecovery` from complete payload and one exact
-    `EditorRecoveryEvidenceRecord`.
+    Host-assigned `EditorRecovery` from a complete Server-retained admitted
+    `ApplyAuthorEdit` body and one exact `EditorRecoveryEvidenceRecord`.
+    Browser-only journal, takeover, and in-memory bytes have no Release-1 Host
+    ingress.
 15. Journal payload collection requires terminal settlement, author-facing
     convergence, an exact durable complete successor, and no remaining
     dependency; unknown, unsettled, or only-complete-copy payloads remain
     retained.
-16. Local attachment absence never proves Admission absence. Exact-tuple
-    transport resolution recovers the original record or remains
-    `DeliveryUnknown`/`Required`; it never invokes an explicit command.
-17. An admitted group's reconciliation reaches `Resolved` before GC. A fenced
-    old partition may collect after exact successor and disposition proof
-    without pretending its generation is current.
+16. Delivery uncertainty permits only exact transport replay through the
+    original command route using the protected capsule. Missing capsule or an
+    invalid/expired Client Session remains `TransportOrAdmissionUnknown`; it
+    never creates a second Admission or blindly re-invokes an admitted explicit
+    command.
+17. Journal GC requires `TerminalResolved` with its exact
+    pre-admission/Committed/reconfirmation observation. A fenced old partition
+    may collect after exact successor and disposition proof without pretending
+    its generation is current.
