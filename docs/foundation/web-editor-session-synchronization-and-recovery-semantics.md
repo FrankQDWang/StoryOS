@@ -415,9 +415,17 @@ GroupSettlement =
 AuthorSurfaceConvergence =
   Pending
   | ReceiptBackedConverged {
-      receipt_ref
+      terminal_settlement_ref
+      receipt_ref: ReceiptRef
       project_activity_position
-      snapshot_or_processed_activity_position
+      projection_proof:
+        ProcessedProjectActivity {
+          processed_through_project_activity_position
+        }
+        | SnapshotProjection {
+            snapshot_id
+            snapshot_activity_position
+          }
       resulting_heads
       resulting_surface_refs
     }
