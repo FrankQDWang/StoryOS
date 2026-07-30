@@ -1,0 +1,50 @@
+{
+  "schema": "storyos.issue76.workload.v1",
+  "seed": 7601,
+  "browser": {
+    "warmup_samples": 5,
+    "measured_samples": 30,
+    "chapter_utf8_bytes": [10000, 50000, 200000],
+    "novel_chapters": 120,
+    "novel_chapter_utf8_bytes": 20000,
+    "chapter_switch_samples": 40,
+    "cold_open_samples": 20,
+    "journal_intents": 1000,
+    "journal_patch_utf8_bytes": 32,
+    "journal_checkpoint_every": 100,
+    "network_profiles": [
+      {"name": "loopback", "ack_delay_ms": 0, "event_delay_ms": 5},
+      {"name": "event_first_30", "ack_delay_ms": 30, "event_delay_ms": 10},
+      {"name": "ack_first_30", "ack_delay_ms": 10, "event_delay_ms": 30},
+      {"name": "event_first_100", "ack_delay_ms": 100, "event_delay_ms": 30},
+      {"name": "ack_first_100", "ack_delay_ms": 30, "event_delay_ms": 100},
+      {"name": "event_first_250", "ack_delay_ms": 250, "event_delay_ms": 75},
+      {"name": "ack_first_250", "ack_delay_ms": 75, "event_delay_ms": 250}
+    ]
+  },
+  "postgres": {
+    "image": "postgres:16",
+    "measured_runs": 3,
+    "profiles": [
+      {"name": "local_4vcpu_4gib", "cpus": 4, "memory": "4g"},
+      {"name": "controlled_cloud_surrogate_2vcpu_2gib", "cpus": 2, "memory": "2g"}
+    ],
+    "record_counts": [1000, 10000, 50000],
+    "payload_bytes": {
+      "revision": 1024,
+      "receipt": 640,
+      "activity_event": 768,
+      "application_wire_record": 1024,
+      "payload_shape_probe": 4096,
+      "compactable_event_payload": 2048,
+      "checkpoint": 65536
+    },
+    "compaction_keep_fraction": 0.1,
+    "replay_events_without_checkpoint": 50000,
+    "replay_events_after_checkpoint": 5000
+  },
+  "modeled_project_years": [
+    {"name": "steady_personal", "author_commands_per_year": 20000},
+    {"name": "intensive_personal", "author_commands_per_year": 60000}
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "name": "storyos-issue-76-browser-benchmark",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "benchmark": "node browser-benchmark.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.55.1"
+  }
+}

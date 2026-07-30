@@ -1,0 +1,16 @@
+{
+  "schema": "storyos.issue76.environment.v1",
+  "python": "3.14.4 (main, Apr  7 2026, 13:13:20) [Clang 17.0.0 (clang-1700.6.4.2)]",
+  "platform": "macOS-15.6.1-arm64-arm-64bit-Mach-O",
+  "machine": "arm64",
+  "host_cpu": "Apple M4",
+  "host_logical_cpus": 10,
+  "host_memory_bytes": 34359738368,
+  "docker_server": "29.4.0",
+  "postgres_image": "postgres:16",
+  "postgres_image_id": "sha256:88777d7cb0db2e0160fcf36277608f42920e517409316e2dbeafe6c844cb08ca",
+  "postgres_version": "postgres (PostgreSQL) 16.14 (Debian 16.14-1.pgdg13+1)",
+  "workload_sha256": "17aafdb9ea79c6c36c8b0d90ee69b73709d2c8a62e69c84a0ae375e1927b0bc5",
+  "apparatus_process_max_rss_bytes": 19480576,
+  "note": "Host serial numbers, usernames, and credential material intentionally excluded."
+}
