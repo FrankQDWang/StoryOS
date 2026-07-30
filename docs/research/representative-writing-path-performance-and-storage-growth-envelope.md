@@ -61,7 +61,7 @@ The current instrument ran on macOS 15.6.1, Apple M4, 10 logical CPUs, 32 GiB
 host memory, Chrome `150.0.7871.187`, Python `3.14.4`, Docker server `29.4.0`,
 and PostgreSQL `16.14` from image ID
 `sha256:88777d7cb0db2e0160fcf36277608f42920e517409316e2dbeafe6c844cb08ca`.
-The Chrome run exposed a 4.0 GiB JavaScript heap limit and recorded one final
+The Chrome run exposed a 4.1 GiB JavaScript heap limit and recorded one final
 used-heap observation; it did not measure peak browser or container resident
 memory.
 
@@ -81,6 +81,13 @@ Percentiles use the nearest-rank method. Browser groups retain 20-40 measured
 samples after five warm-ups where applicable; PostgreSQL profiles retain three
 independent container samples. With `n=30`, p99 is the maximum, not a stable
 population-tail estimate. With `n=3`, PostgreSQL p95 is also the maximum.
+
+`summary.json` now carries 71 raw-derived report fragments. The non-mutating
+verifier rebuilds the complete summary, then checks those fragments against
+every current-run browser and PostgreSQL measurement table and associated
+numeric narrative in this report. Other numeric text is classified separately
+as a workload input, environment identity, frozen Issue #69 fact, existing
+contract bound, identifier, or explicitly non-normative recommendation band.
 
 External measurement boundaries and primary sources are recorded separately in
 [Representative Writing-Path Performance: Primary-Source Measurement Boundaries](representative-writing-path-performance-primary-sources.md).
@@ -152,12 +159,12 @@ compositions are mechanism evidence, not an IME latency distribution.
 | 250 ms | acknowledgement first | 30 | 252.7 ms | 254.2 ms | 255.9 ms |
 | 250 ms | Event first | 30 | 252.6 ms | 253.4 ms | 253.6 ms |
 
-The measured pair converges only after both responses, and added harness
-overhead remained under about 7 ms in this run. This proves that the local
-projection can be tested independently of delayed settlement and that order
-must not be assumed. It does not measure DNS, TLS, loss, bandwidth, server
-queueing, PostgreSQL commit, Core behavior, reconnect, or a real Event stream.
-No timeout or cloud latency value can be derived from it.
+The measured pair converges only after both responses, and configured-delay
+overhead ranged `0.3-5.9 ms` in this run. This proves that the local projection
+can be tested independently of delayed settlement and that order must not be
+assumed. It does not measure DNS, TLS, loss, bandwidth, server queueing,
+PostgreSQL commit, Core behavior, reconnect, or a real Event stream. No timeout
+or cloud latency value can be derived from it.
 
 Issue #69 separately froze exact mechanism outcomes for Event gaps,
 replay-floor misses, Snapshot resynchronization, pre-commit and
@@ -171,15 +178,21 @@ The 1,000-intent run wrote one actual 33-byte UTF-8 patch per intent and a full
 text checkpoint every 100 intents:
 
 - attributable serialized journal records: `274,373 bytes`;
-- hypothetical before-plus-after full-document copies: `33,033,000 bytes`;
+- hypothetical before-plus-after full-document copies: `33,000,000 bytes`;
 - amplification avoided by the sampled patch/checkpoint representation:
-  `120.4×` relative to that deliberately naive comparator.
+  `120.3×` relative to that deliberately naive comparator.
 
 The ratio is not a production database compression ratio. Only one checkpoint
 cadence and one patch size were sampled. `navigator.storage.estimate().usage`
 fell from `288,658` to `136,689` bytes after the preceding clear/rewrite cycle,
 which demonstrates why the rough origin-level estimate cannot be attributed as
 physical journal growth.
+
+The comparator was deterministically corrected after independent review:
+[`browser-evidence-correction.json`](evidence/issue-76/browser-evidence-correction.json)
+binds the original `main@61593be` raw SHA-256, formula, prior and corrected
+values, corrected line, and an aggregate SHA-256 for the other 421 byte-identical
+rows. No timing observation was resampled.
 
 Issue #69's different 240-intent long session retained `276,265` serialized
 bytes before settlement, then coalesced all 240 one-character intents into one
@@ -266,13 +279,14 @@ from the pre-compaction Event file size. The 45,000 retained compaction-floor
 records occupied another `7,626,752` bytes, so Event plus floor fell from
 `148,176,896` to `22,470,656` bytes, an `84.84%` net reduction rather than
 `89.98%`. Across three runs per profile, delete/floor work ranged
-`218.3-761.2 ms`, rewrite ranged `160.8-227.6 ms`, loading generated
-`184,967,424` WAL bytes, and compaction generated `34,812,696` WAL bytes.
+`181.5-761.2 ms`, rewrite ranged `136.7-227.6 ms`, loading generated
+`184,967,424` WAL bytes, and compaction generated
+`34,812,464-34,812,696` WAL bytes.
 `VACUUM FULL` takes an exclusive lock and needs rewrite scratch space; the
 apparatus did not capture peak scratch bytes or concurrent-author disruption.
 
 After compaction, the source database was `82,484,247` bytes. Six custom-format
-logical dumps were `60,269,273-60,272,182` bytes. Dump duration was
+logical dumps were `60,268,999-60,272,182` bytes. Dump duration was
 `2.667-3.216 s`; restore was `1.118-2.112 s`. Every fresh restore reproduced
 exactly 50,000 Event rows and sequence sum `1,250,025,000`.
 
@@ -283,7 +297,7 @@ test, fifteen-minute RPO, or two-hour RTO evidence.
 
 ### Bounded resources
 
-All six database samples completed inside the declared 4-vCPU/4-GiB and
+All 6 database samples completed inside the declared 4-vCPU/4-GiB and
 2-vCPU/2-GiB container caps. This is an upper admission fact for this disposable
 workload, not a peak-use measurement and not a minimum deployment size. Both
 profiles ran on the same local virtualized host; the second is a
@@ -316,12 +330,12 @@ planning band; it is not accepted merely by appearing here.
 | Strict IndexedDB p95 `0.3-1.4 ms`; real Pinyin samples `2.7-4.6 ms` | Trial a product-backed journal target band of p95 `≤5-10 ms` and p99 `≤10-20 ms` at 10/50/200 KB, with failures counted | [Web Editor Session owner #70](https://github.com/FrankQDWang/StoryOS/issues/70) | Reopen only if adopting; run real Tiptap/IME/browser-profile trials and write or reject one value in the session contract |
 | 240 intents coalesced safely once; 1,000-intent run sampled checkpoint-every-100 only | Do not adopt `240` or `100`; sweep `64/128/256` intents, `64/128/256 KiB`, and `250/500/750 ms` idle independently | [Web Editor Session owner #70](https://github.com/FrankQDWang/StoryOS/issues/70) | Select only after lossless undo/reload/crash trials, or record that cadence remains implementation policy |
 | Double-rAF p95 `7.4-14.3 ms`, switch p95 `16.7 ms`, cold reload p95 `12.9 ms`, all on a disposable editor | Trial product author-experience bands of input-to-visible p95 `≤16-33 ms`, chapter switch p95 `≤100-250 ms`, and cold open p95 `≤500-1,000 ms` | [AI-independent release owner #62](https://github.com/FrankQDWang/StoryOS/issues/62) | Measure trusted product interactions with censored Event Timing and semantic paint assertions; accept, tighten, widen, or reject per release stage |
-| Delayed loopback convergence followed the slower channel plus `~2-7 ms`; no real network/Core | Reject any absolute timeout or cloud latency derived here; trial reporting as `slower observed channel + 25-100 ms` local processing budget only after real Core instrumentation | [Versioned Protocol owner #58](https://github.com/FrankQDWang/StoryOS/issues/58) | Decide whether a versioned convergence/timeout field is needed; validate on real route and never turn timeout into truth |
+| Delayed loopback convergence followed the slower channel plus `~0.3-5.9 ms`; no real network/Core | Reject any absolute timeout or cloud latency derived here; trial reporting as `slower observed channel + 25-100 ms` local processing budget only after real Core instrumentation | [Versioned Protocol owner #58](https://github.com/FrankQDWang/StoryOS/issues/58) | Decide whether a versioned convergence/timeout field is needed; validate on real route and never turn timeout into truth |
 | Four small families model `4,866.048 B/command`; 4-KiB sensitivity implies up to `5,791.744 B/record` | Capacity sensitivity band: `5-24 KiB/command` for these four families only, before explicit headroom | [PostgreSQL storage owner #56](https://github.com/FrankQDWang/StoryOS/issues/56) | Replace synthetic shapes with exact schema/DTO corpus, add all relations/WAL/backups/bloat, and accept or reject a planning band—not a hard payload limit |
 | 20K/60K commands model `92.8/278.4 MiB/year`, excluding major classes | Use `0.1-0.3 GiB/project-year` only as the small-envelope baseline term in a multi-term capacity model | [PostgreSQL storage owner #56](https://github.com/FrankQDWang/StoryOS/issues/56) | Add observed project cardinalities and recovery-chain footprint before declaring deployment capacity |
 | 90% delete + ordinary vacuum did not shrink files; rewrite reduced sampled Event relation `89.98%` with exclusive lock | Do not adopt 90%; sweep live fractions `10/25/50%` and replay tails `1K/5K/10K` under concurrent load | [Retention/archival owner #64](https://github.com/FrankQDWang/StoryOS/issues/64) | Choose retention/replay/compaction semantics only after proving floors, archive chain, lock/scratch budget, and reader safety |
 | Browser distributions have n=20-40; database distributions n=3 | For performance evidence, retain `100-300` samples per browser/environment path after warm-up; use at least `3-10` independent database/restore runs, while semantic gates remain deterministic | [Deterministic verification owner #60](https://github.com/FrankQDWang/StoryOS/issues/60) | Adopt or reject evidence-volume rules and required percentile method; never make wall-clock timing decide semantic correctness |
-| Six logical restores matched count and sequence sum; no physical/WAL recovery | Reject these timings as RPO/RTO evidence | [Deterministic verification owner #60](https://github.com/FrankQDWang/StoryOS/issues/60) | Require the storage owner's exact physical backup/WAL restore drill and Recovery Visibility Proof for the release profile |
+| 6 logical restores matched count and sequence sum; no physical/WAL recovery | Reject these timings as RPO/RTO evidence | [Deterministic verification owner #60](https://github.com/FrankQDWang/StoryOS/issues/60) | Require the storage owner's exact physical backup/WAL restore drill and Recovery Visibility Proof for the release profile |
 
 The suggested sweep points are deliberately sparse logarithmic or staged
 experiment inputs. They are not disguised defaults. A rejected recommendation
@@ -377,8 +391,11 @@ The following claims are explicitly unsupported:
   generated WAL, logical archive bytes, durations, and restored identities are
   separate observations.
 - **Reproducibility:** workload, source, dependency lock, environment, raw rows,
-  derivation, commands, and SHA-256 manifest are checked in; usernames,
-  credentials, serial numbers, and `.reference/**` are excluded.
+  derivation, commands, and SHA-256 manifest are checked in. The verifier
+  rebuilds all of `summary.json` from raw inputs, checks every machine-derived
+  report fragment, and requires exact equality between the manifest key set and
+  the includable file set; usernames, credentials, serial numbers, and
+  `.reference/**` are excluded.
 
 ## Handoff
 

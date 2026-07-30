@@ -1,0 +1,14 @@
+{
+  "corrected_before_plus_after_bytes": 33000000,
+  "corrected_raw_sha256": "6dcb781f61856e0c45a0dc76f6811b07bfbb0feb4a8a71b2aad7a9424a6879f7",
+  "formula": "sum_i(((i - 1) * patch_utf8_bytes_actual) + (i * patch_utf8_bytes_actual))",
+  "intent_count": 1000,
+  "patch_utf8_bytes_actual": 33,
+  "previous_twice_post_edit_bytes": 33033000,
+  "schema": "storyos.issue76.browser_evidence_correction.v1",
+  "source_main_commit": "61593be96d7915db13772b0dff5618c31a088dae",
+  "source_raw_sha256": "ba416e5e0bcc76a6e61adc988e6f4e5348200a913522808b52d24996471d59d5",
+  "target_zero_based_line": 180,
+  "unaffected_rows_sha256": "51f0e727c963028dd59ad9d5399008f44bc313491c5a74cbb689f35c918831cb",
+  "unchanged_row_count": 421
+}

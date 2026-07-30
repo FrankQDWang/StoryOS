@@ -6,11 +6,19 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import re
+import subprocess
 from pathlib import Path
+
+from evidence_files import included_evidence_paths
+from summarize import build_summary
 
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent
+REPORT = OUT.parent.parent / (
+    "representative-writing-path-performance-and-storage-growth-envelope.md"
+)
 
 
 def json_lines(path: Path) -> list[dict[str, object]]:
@@ -79,13 +87,151 @@ environment_rows = [
 assert len(environment_rows) == 1
 assert environment_rows[0]["event_timing_entries"] == []
 
+errors: list[str] = []
+
+rebuilt_summary = build_summary(OUT)
+if summary != rebuilt_summary:
+    errors.append("summary.json is inconsistent with a full rebuild from raw evidence")
+
+journal_rows = [row for row in browser if row["kind"] == "journal_growth"]
+assert len(journal_rows) == 1
+journal = journal_rows[0]
+expected_naive_bytes = (
+    int(journal["patch_utf8_bytes_actual"]) * int(journal["intent_count"]) ** 2
+)
+if journal["naive_before_after_full_copy_bytes"] != expected_naive_bytes:
+    errors.append(
+        "journal comparator mismatch: "
+        f"raw={journal['naive_before_after_full_copy_bytes']} "
+        f"expected_before_plus_after={expected_naive_bytes}"
+    )
+
+compaction_rows = [
+    row for row in operations if row["operation"] == "compaction"
+]
+assert len(compaction_rows) == 6
+critical_claims = {
+    "journal_naive_before_after_full_copy_bytes": expected_naive_bytes,
+    "journal_naive_amplification": expected_naive_bytes
+    / int(journal["logical_serialized_bytes"]),
+    "delete_and_floor_ms": {
+        "min": min(row["delete_and_floor_ms"] for row in compaction_rows),
+        "max": max(row["delete_and_floor_ms"] for row in compaction_rows),
+    },
+    "vacuum_full_ms": {
+        "min": min(row["vacuum_full_ms"] for row in compaction_rows),
+        "max": max(row["vacuum_full_ms"] for row in compaction_rows),
+    },
+    "compaction_wal_delta_bytes": {
+        "min": min(row["compaction_wal_delta_bytes"] for row in compaction_rows),
+        "max": max(row["compaction_wal_delta_bytes"] for row in compaction_rows),
+    },
+    "dump_bytes": {
+        "min": min(row["dump_bytes"] for row in restore_rows),
+        "max": max(row["dump_bytes"] for row in restore_rows),
+    },
+}
+if summary.get("critical_claims") != critical_claims:
+    errors.append("summary critical_claims missing or inconsistent with raw evidence")
+
+report = REPORT.read_text(encoding="utf-8")
+normalized_report = re.sub(r"\s+", " ", report)
+for claim, fragment in rebuilt_summary["report_fragments"].items():
+    if re.sub(r"\s+", " ", fragment) not in normalized_report:
+        errors.append(f"report {claim} missing derived fragment: {fragment}")
+
+provenance = json.loads(
+    (OUT / "browser-evidence-correction.json").read_text(encoding="utf-8")
+)
+source_bytes = subprocess.run(
+    [
+        "git",
+        "show",
+        (
+            f"{provenance['source_main_commit']}:"
+            "docs/research/evidence/issue-76/browser-measurements.jsonl"
+        ),
+    ],
+    check=True,
+    capture_output=True,
+).stdout
+current_bytes = (OUT / "browser-measurements.jsonl").read_bytes()
+source_lines = source_bytes.splitlines()
+current_lines = current_bytes.splitlines()
+target_index = int(provenance["target_zero_based_line"])
+source_target = json.loads(source_lines[target_index])
+current_target = json.loads(current_lines[target_index])
+source_expected_twice_post_edit = (
+    int(source_target["patch_utf8_bytes_actual"])
+    * int(source_target["intent_count"])
+    * (int(source_target["intent_count"]) + 1)
+)
+if hashlib.sha256(source_bytes).hexdigest() != provenance["source_raw_sha256"]:
+    errors.append("browser correction source SHA-256 does not match source main")
+if hashlib.sha256(current_bytes).hexdigest() != provenance["corrected_raw_sha256"]:
+    errors.append("browser correction output SHA-256 does not match current raw")
+if len(source_lines) != len(current_lines) or any(
+    source_line != current_lines[index]
+    for index, source_line in enumerate(source_lines)
+    if index != target_index
+):
+    errors.append("browser correction changed rows outside journal_growth")
+unaffected_bytes = b"\n".join(
+    line for index, line in enumerate(current_lines) if index != target_index
+) + b"\n"
+if (
+    hashlib.sha256(unaffected_bytes).hexdigest()
+    != provenance["unaffected_rows_sha256"]
+):
+    errors.append("browser correction unaffected-row aggregate SHA-256 mismatch")
+if provenance["unchanged_row_count"] != len(current_lines) - 1:
+    errors.append("browser correction unchanged-row count mismatch")
+if (
+    source_target["naive_before_after_full_copy_bytes"]
+    != source_expected_twice_post_edit
+    or provenance["previous_twice_post_edit_bytes"]
+    != source_expected_twice_post_edit
+):
+    errors.append("browser correction source is not the known twice-post-edit value")
+if (
+    current_target["naive_before_after_full_copy_bytes"]
+    != expected_naive_bytes
+    or provenance["corrected_before_plus_after_bytes"] != expected_naive_bytes
+):
+    errors.append("browser correction target is not the before-plus-after value")
+if (
+    provenance["intent_count"] != journal["intent_count"]
+    or provenance["patch_utf8_bytes_actual"]
+    != journal["patch_utf8_bytes_actual"]
+):
+    errors.append("browser correction formula inputs do not match the raw row")
+
 manifest_entries = {}
 for line in (OUT / "MANIFEST.sha256").read_text(encoding="utf-8").splitlines():
     digest, relative = line.split("  ", 1)
+    if relative in manifest_entries:
+        errors.append(f"manifest contains duplicate entry: {relative}")
     manifest_entries[relative] = digest
 assert all(".reference" not in relative for relative in manifest_entries)
+expected_manifest_entries = {
+    str(path.relative_to(OUT)) for path in included_evidence_paths(OUT)
+}
+if set(manifest_entries) != expected_manifest_entries:
+    errors.append(
+        "manifest file set mismatch: "
+        f"missing={sorted(expected_manifest_entries - set(manifest_entries))} "
+        f"extra={sorted(set(manifest_entries) - expected_manifest_entries)}"
+    )
 for relative, digest in manifest_entries.items():
-    assert hashlib.sha256((OUT / relative).read_bytes()).hexdigest() == digest
+    actual_digest = hashlib.sha256((OUT / relative).read_bytes()).hexdigest()
+    if actual_digest != digest:
+        errors.append(
+            f"manifest digest mismatch for {relative}: "
+            f"manifest={digest} actual={actual_digest}"
+        )
+
+if errors:
+    raise AssertionError("\n".join(errors))
 
 print(
     json.dumps(
@@ -94,6 +240,8 @@ print(
             "postgres_relation_rows": len(relations),
             "postgres_operation_rows": len(operations),
             "validated_restores": len(restore_rows),
+            "unchanged_browser_rows": provenance["unchanged_row_count"],
+            "report_fragments": len(rebuilt_summary["report_fragments"]),
             "manifest_entries": len(manifest_entries),
         },
         sort_keys=True,

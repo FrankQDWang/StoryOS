@@ -6,17 +6,12 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
+from evidence_files import included_evidence_paths
+
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE.parent
-paths = sorted(
-    path
-    for path in OUT.rglob("*")
-    if path.is_file()
-    and path.name != "MANIFEST.sha256"
-    and "node_modules" not in path.parts
-    and "__pycache__" not in path.parts
-)
+paths = included_evidence_paths(OUT)
 lines = [
     f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(OUT)}"
     for path in paths

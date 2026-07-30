@@ -174,7 +174,9 @@ window.issue76 = {
     for (let i = 1; i <= intentCount; i++) {
       const patch = "字".repeat(Math.ceil(patchBytes / 3)).slice(0, patchBytes);
       actualPatchBytes = encoder.encode(patch).length;
+      const beforeBytes = encoder.encode(text).length;
       text += patch;
+      const afterBytes = encoder.encode(text).length;
       const record = {
         sequence: i,
         kind: "patch",
@@ -182,7 +184,7 @@ window.issue76 = {
         checkpoint: i % checkpointEvery === 0 ? text : null
       };
       logicalBytes += encoder.encode(JSON.stringify(record)).length;
-      naiveFullCopyBytes += encoder.encode(text).length * 2;
+      naiveFullCopyBytes += beforeBytes + afterBytes;
       await persist("journal", record);
     }
     const usageAfter = await navigator.storage.estimate();
