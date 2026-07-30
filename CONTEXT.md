@@ -35,6 +35,14 @@ _Avoid_: Canon (too narrow), accepted artifact, Agent memory
 **Discovery Writing**:
 The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
 
+**Discovery Assistance Intent**:
+The bounded author-facing meaning of one current request for help with discovery writing, expressed as present-passage discussion, explanation, research, brainstorming, limited alternatives, a Prose Change Request, or an explicit combination of those intents. It governs the assistance and handoff for that request but grants no authority, Capability, disclosure permission, lasting preference, or permission to expand the Working Target.
+_Avoid_: Hidden router, inferred authorization, task-specific workflow, conversational momentum
+
+**Prose Change Request**:
+The exact part of a current author instruction that unambiguously asks StoryOS to prepare a change to identified prose or the current Working Target. It authorizes creation or revision of an inspectable Proposal for only that target and scope; it is never a Direct Author Action, Acceptance, authority change, permission to edit elsewhere, or authorization carried forward from an earlier request.
+_Avoid_: Vague discomfort, discussion, automatic edit, implicit Acceptance, standing permission
+
 **AI-Independent Editor Baseline**:
 The first author-visible StoryOS release capability: from a new or controlled Project initialization, the author can organize volumes and chapters, write and revise manually, see save state, recover after reload or crash, navigate, search and replace, inspect basic writing statistics, use supported keyboard, clipboard, IME and undo behavior, sustain long sessions, and create a human-readable export without an available Agent or model.
 _Avoid_: Chat-only demo, AI-dependent editor, pre-seeded current-passage demo
