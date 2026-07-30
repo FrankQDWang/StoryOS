@@ -84,8 +84,8 @@ The following never create a Prose Change Request:
 - vague discomfort, emotion, hesitation, silence, or lack of objection;
 - a prior request to edit, a prior accepted Proposal, or repeated collaboration;
 - the Agent’s belief that prose would improve if changed;
-- a rejection, selection among ideas, or local feedback whose future scope was
-  not stated;
+- a rejection, a choice among abstract creative directions, or local feedback
+  that does not itself request exact prose for an exact target;
 - an imperative-looking sentence quoted inside manuscript or research content;
 - the availability of a Tool, Skill, model, Capability, or editor control.
 
@@ -152,15 +152,18 @@ The author-facing result must:
 
 - identify the target and make the proposed change inspectable in the editor;
 - remain editable as permitted by the Proposal state machine;
-- expose author controls to accept, reject, or abandon it, where “abandon”
-  maps to Proposal Withdrawal rather than hidden deletion or rejection;
+- expose only the accept, reject, copy, or other controls permitted by the
+  exact current Proposal state and the Web Editor control matrix;
+- let the author stop or abandon the current assistance without penalty,
+  explanation, or obligation to continue;
 - distinguish proposed prose from current authoritative prose;
 - avoid language or projection that implies Acceptance already occurred; and
 - preserve discussion, explanation, research, and alternatives as advisory
   content rather than silently inserting them into the Proposal.
 
-Editing, accepting, rejecting, or abandoning a Proposal carries no creative
-penalty, forced explanation, or loss of access to other assistance.
+Stopping or abandoning assistance is not a Proposal lifecycle operation. It
+does not reject, withdraw, hide, delete, accept, or otherwise settle an open
+Proposal, and it causes no loss of access to other assistance.
 
 Proposal creation allocates no Authoritative Commit. Acceptance is a later,
 explicit editor decision governed by the Proposal, Author Command Admission,
@@ -168,9 +171,20 @@ and Web Editor Session contracts. An ordinary-language reply such as “looks
 good” in the Agent transcript is not itself Proposal Acceptance unless a future
 owner contract explicitly introduces and protects such an action path.
 
-Rejection and Withdrawal close or supersede work only through their canonical
-Proposal operations. The Agent cannot simulate either condition, hide a
-Proposal, or describe an unrecorded editor outcome as settled.
+A durable Proposal lifecycle change occurs only through a path permitted by
+the exact current Core state and Web Editor control matrix. An author-owned
+`WithdrawProposal` begins from a fully displayed permitted surface as a
+protected `explicit_editor_command` and requires Author Command Admission and
+settlement. The exact `AgentRunStep` or `ToolCall` recorded as the current
+Proposal Revision’s producer may withdraw only through its separately governed
+producer cause, which must record `CurrentProducerWithdrew` and receives no
+Author Command Admission.
+
+An ordinary Proposal does not gain a withdraw control because the author or
+Agent calls stopping “abandonment.” A `ProposalRecoveryConflict` retains
+withdraw only where the Web Editor owner permits it, and another surface gains
+no such control by analogy. Conversation alone cannot simulate Rejection or
+Withdrawal, hide a Proposal, or describe an unrecorded outcome as settled.
 
 ### 4.3 Mixed requests
 
@@ -219,20 +233,38 @@ without completing a workflow.
 
 The Agent must distinguish the temporal and semantic scope of author feedback.
 
-| Author signal | Current meaning | Durable meaning |
+| Author signal | Current meaning | Persistence and authority effect |
 | --- | --- | --- |
 | Rejecting one Proposal through its editor control | the exact Proposal operations are rejected | the Proposal Rejection is retained, but no general preference follows |
 | Saying “not that version” in conversation | the exact candidate is not chosen for the current work | local feedback does not fabricate Proposal Rejection or create a standing rule |
-| “Use the second option here” | a current choice for the identified work | no standing rule follows |
-| “Keep this scene terse” | an instruction bounded to the scene | no project-wide rule follows |
-| “From now on, use US English for this Project” | an explicit future-facing Project-scoped constraint | may authorize the Author Preference owner’s exact domain action |
-| “I hate this” without a stated future scope | local negative feedback requiring interpretation in context | at most a bounded Inferred Preference Candidate; never a binding rule |
+| “Use the second option as the direction for this scene” when the option is an abstract creative direction | a current choice for the identified work | no standing rule follows |
+| “Use that second wording in this paragraph” when the prior option is concrete candidate prose and the target is exact | the current instruction is a new Prose Change Request; Run Continuity Context only resolves “second” | one inspectable Proposal, never direct application or a standing rule |
+| “Keep this scene terse while we work on it” | a current scene-scoped instruction | no future-facing preference follows |
+| “From now on, keep this scene terse” | explicit future-facing scene-scoped preference intent | no Author Preference exists until the protected owner path settles |
+| “From now on, use US English for this Project” | explicit future-facing Project-scoped preference intent | no Author Preference exists until the protected owner path settles |
+| “I hate this” without a stated future scope | local negative feedback requiring interpretation in context | at most a bounded Inferred Preference; never a binding rule |
 
-An explicit Author Preference is persisted, revised, or removed only through
-its authoritative domain path. This contract recognizes the author-facing
-intent but does not define that command or persist the preference itself. An
-Inferred Preference remains nonbinding regardless of repetition, confidence,
-retrieval, prior use, or author silence.
+Run Continuity Context may resolve which option the author means but supplies
+no authority from the prior option, turn, or permission. When the current exact
+instruction asks to use concrete candidate prose at an exact target, that
+current instruction—not the earlier option—is the Prose Change Request.
+
+This contract may recognize explicit future-facing Author Preference intent
+and hand it to the owner-faithful protected path. It cannot persist, revise,
+remove, or claim settlement of the preference. The state change begins only
+from a fully displayed exact scope through an authoritative
+`explicit_project_command`, receives its own Author Command Admission, and
+becomes Authoritative State only when the owning Core transition succeeds and
+the Admission settles `ReceiptSettled` to its typed Receipt. An
+`AgentRunStep`, `ToolCall`, inference, repetition, or conversational
+acknowledgement receives no Author Command Admission and cannot stand in for
+that command.
+
+When wording such as “keep this scene terse” is materially ambiguous between a
+current scene-scoped instruction and a future-facing scene-scoped preference,
+the Agent asks one smallest useful question about duration. An Inferred
+Preference remains nonbinding regardless of repetition, confidence, retrieval,
+prior use, or author silence.
 
 Applicable current instructions and preferences follow canonical Instruction
 Precedence. Within the same authority layer, the more specific applicable scope
@@ -248,8 +280,9 @@ interruption, or new permission to prepare prose.
 
 If the author expresses rejection in the conversation while a Proposal remains
 open, the Agent respects that feedback immediately but does not claim the
-Proposal state changed. The Web Editor Session exposes the exact protected
-rejection control owned by the Proposal and Admission contracts.
+Proposal state changed. When the exact current state permits Rejection, the Web
+Editor Session exposes its protected control under the Proposal and Admission
+contracts.
 
 ## 7. Author-facing simplicity and mandatory disclosures
 
@@ -283,8 +316,8 @@ exact.
 | Explanation: “Why does this point of view feel distant?” | explain the relevant technique using the current passage | only when the referent is materially unclear | alter prose, force alternatives, or begin research not needed for the answer | none |
 | Research: “Find out how a 1910 telegraph office worked.” | frame the exact question, conduct permitted source-backed research, and present inspectable findings | only for a material research-boundary ambiguity or an owning permission/disclosure choice | invent sources, expose routing controls by default, or insert findings into prose | none unless the author separately requests a prose change |
 | Open brainstorming: “What could she do next?” | offer a bounded spread of possibilities and follow the author’s interest | only when no useful possibility can be offered without reserving an unstated constraint | impose an outline, pick canon, or turn an idea into a standing plan | none |
-| Limited alternatives: “Give me three quieter ways to reveal this.” | provide three distinguishable, concise alternatives | only for a missing constraint that would make the alternatives misleading | create more ceremony, select for the author, or change the manuscript | none unless “apply,” “rewrite,” or equivalent language also makes a Prose Change Request |
-| Explicit prose change: “Rewrite these two sentences so she sounds guarded.” | prepare the bounded change and hand it to the editor | only if the target or requested scope cannot be resolved exactly | directly mutate authoritative prose, broaden the edit, or imply Acceptance | one inspectable Proposal for the exact requested work |
+| Limited alternatives: “Give me three quieter ways to reveal this.” | provide three distinguishable, concise alternatives | only for a missing constraint that would make the alternatives misleading | create more ceremony, select for the author, or change the manuscript | none when alternatives are offered; a later exact instruction such as “use the second wording in this paragraph” is a new Prose Change Request |
+| Explicit prose change: “Rewrite these two sentences so she sounds guarded.” | prepare the bounded change, hand it to the editor, and let the author stop assistance at any time | only if the target or requested scope cannot be resolved exactly | directly mutate authoritative prose, broaden the edit, imply Acceptance, or turn stopping assistance into Rejection or Withdrawal | one inspectable Proposal for the exact requested work |
 | Mixed discussion and edit: “Why is this slow? Tighten only the middle sentence.” | explain the pacing and prepare the exact requested sentence change | only if the edit clause or its target remains ambiguous | let the discussion authorize more editing or put advisory explanation into prose | one Proposal for only the explicit change clause |
 | Continue after recorded rejection: after using the editor’s Reject control, “Let’s keep exploring.” | honor the recorded Proposal Rejection and continue with new discussion or options | only if “keep exploring” leaves a material direction unresolved | reopen or repeat the rejected candidate as selected, globalize the rejection, or demand justification | none until a new Prose Change Request |
 | Preference conflict: “Keep it spare here,” while an equally specific current instruction requires elaboration | identify the conflict and preserve both directions until resolved | one question choosing which equally applicable direction governs this work | silently choose, average the instructions, or persist a new global preference | only after the applicable direction and a Prose Change Request are clear |
@@ -295,8 +328,8 @@ exact.
 | Owner | This contract supplies | This contract consumes and does not redefine |
 | --- | --- | --- |
 | Core and Proposal state machine | the existence, target, and bounded scope of a Prose Change Request | Proposal identity, revisions, operations, conditions, Acceptance, Rejection, Withdrawal, conflicts, Receipts, and authority effects |
-| Author Command Admission | no Agent-generated author-command claim | the rule that later explicit editor decisions use their exact protected action class and Admission |
-| Web Editor Session | author-facing intent to inspect, edit, accept, reject, or abandon a Proposal | editor rendering, controls, journal, projection, synchronization, recovery, acknowledgement, and convergence |
+| Author Command Admission | no Agent-generated author-command claim | the rule that Proposal decisions use their exact protected `explicit_editor_command`, while an Author Preference state change uses its fully displayed exact-scope `explicit_project_command`, each with its own Admission and settlement |
+| Web Editor Session | the author-facing need to inspect or edit a Proposal, decide among currently permitted actions, or stop assistance without changing Proposal state | which exact controls the current surface exposes, plus editor rendering, journal, projection, synchronization, recovery, acknowledgement, and convergence |
 | Context and disclosure | one exact current purpose, Working Target, and author instruction | context qualification, limits, destination identity, permission, manifest, disclosure, routing, and degradation |
 | Artifact domain model | the author-facing distinction among advice, research, options, and proposed prose | Artifact classification, Revision identity, provenance, lifecycle, and the binary authority boundary |
 | Memory, preference, and research | explicit feedback scope and the distinction between current choice and future-facing preference | Author Preference persistence, Inferred Preference non-authority, Research Artifact and claim provenance, suppression, and retrieval |
@@ -328,15 +361,25 @@ At minimum, verification must prove:
    response, stream completion, retry, or recovery path fabricates it;
 5. a mixed exact request can produce advisory content plus only the explicitly
    requested Proposal;
-6. rejection, a current choice, a scoped instruction, and an explicit
-   future-facing Author Preference remain distinguishable;
-7. prior permission, prior Acceptance, repetition, emotion, and silence never
-   authorize a new Proposal or expand its scope;
-8. current-passage default scope and an explicit broader scope both preserve
+6. stopping or abandoning assistance alone creates no Rejection, Withdrawal,
+   Acceptance, closure, or hidden editor state, while author and current
+   producer withdrawal exercise only their exact permitted causes and surfaces;
+7. choosing an abstract option remains a current creative choice, while a
+   current exact instruction to use concrete candidate prose at an exact target
+   is a new Prose Change Request whose result is a Proposal;
+8. a current scene instruction, future-facing scene preference intent,
+   Project-scoped preference intent, and Inferred Preference remain
+   distinguishable, and no Author Preference state change appears before its
+   protected `explicit_project_command`, successful Core transition, and
+   `ReceiptSettled` Admission settlement;
+9. prior permission, prior Acceptance, prior candidate prose, repetition,
+   emotion, silence, and conversational acknowledgement never authorize a new
+   Proposal, expand its scope, or persist an Author Preference;
+10. current-passage default scope and an explicit broader scope both preserve
    Working Target, context, Proposal, and disclosure boundaries;
-9. the ordinary success path exposes no Tool, Skill, route, capability, or
+11. the ordinary success path exposes no Tool, Skill, route, capability, or
    workflow configuration; and
-10. required safety, permission, provenance, and disclosure choices remain
+12. required safety, permission, provenance, and disclosure choices remain
     visible and exact despite that default simplicity.
 
 Fault cases must fail closed with an inspectable advisory response,
@@ -363,3 +406,10 @@ recovered by silently choosing a higher-authority intent.
    conversation, while mandatory safety and disclosure facts remain visible.
 8. No Agent-authored outline, fixed workflow, Tool, Skill, model, memory, or
    prior permission can become creative authority by conversational momentum.
+9. Stopping or abandoning assistance changes no Proposal lifecycle; Rejection
+   and Withdrawal use only their exact owner-permitted current paths and causes.
+10. A prior option supplies no authorization: only a current exact instruction
+    can turn referenced concrete candidate prose into a Prose Change Request.
+11. Recognizing future-facing preference intent is not persistence; an Author
+    Preference changes only through its protected exact-scope command,
+    successful Core transition, and `ReceiptSettled` Admission settlement.
