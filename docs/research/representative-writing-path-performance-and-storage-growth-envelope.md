@@ -74,6 +74,15 @@ cd docs/research/evidence/issue-76/apparatus
 ./run.sh
 ```
 
+That command creates a new observation population and finishes with fresh-mode
+raw/summary/schema/restore/manifest validation; it does not validate this
+frozen report or its one-time correction provenance. Audit the checked-in
+bundle and report non-destructively with the default frozen mode:
+
+```sh
+python3 verify-evidence.py
+```
+
 The apparatus uses a fixed workload seed, but wall-clock timings, browser quota
 estimates, randomized low-compressibility payloads, and dump bytes will vary.
 The raw files, not the rounded tables below, are authoritative observations.
@@ -82,12 +91,14 @@ samples after five warm-ups where applicable; PostgreSQL profiles retain three
 independent container samples. With `n=30`, p99 is the maximum, not a stable
 population-tail estimate. With `n=3`, PostgreSQL p95 is also the maximum.
 
-`summary.json` now carries 71 raw-derived report fragments. The non-mutating
-verifier rebuilds the complete summary, then checks those fragments against
-every current-run browser and PostgreSQL measurement table and associated
-numeric narrative in this report. Other numeric text is classified separately
-as a workload input, environment identity, frozen Issue #69 fact, existing
-contract bound, identifier, or explicitly non-normative recommendation band.
+`summary.json` now carries 71 raw-derived report fragments. The default frozen
+audit rebuilds the complete summary, then checks those fragments against every
+checked-in browser and PostgreSQL measurement table and associated numeric
+narrative in this report. Fresh mode deliberately omits report and historical
+correction-provenance checks, so it cannot approve this frozen report. Other
+numeric text is classified separately as a workload input, environment
+identity, frozen Issue #69 fact, existing contract bound, identifier, or
+explicitly non-normative recommendation band.
 
 External measurement boundaries and primary sources are recorded separately in
 [Representative Writing-Path Performance: Primary-Source Measurement Boundaries](representative-writing-path-performance-primary-sources.md).
