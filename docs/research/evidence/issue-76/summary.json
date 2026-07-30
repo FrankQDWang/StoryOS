@@ -419,14 +419,14 @@
     {
       "group": "all",
       "kind": "journal_growth",
-      "max": 33033000.0,
-      "mean": 33033000.0,
+      "max": 33000000.0,
+      "mean": 33000000.0,
       "metric": "naive_before_after_full_copy_bytes",
-      "min": 33033000.0,
+      "min": 33000000.0,
       "n": 1,
-      "p50": 33033000.0,
-      "p95": 33033000.0,
-      "p99": 33033000.0,
+      "p50": 33000000.0,
+      "p95": 33000000.0,
+      "p99": 33000000.0,
       "source": "browser"
     },
     {
@@ -1002,6 +1002,26 @@
       "source": "browser"
     }
   ],
+  "critical_claims": {
+    "compaction_wal_delta_bytes": {
+      "max": 34812696,
+      "min": 34812464
+    },
+    "delete_and_floor_ms": {
+      "max": 761.243375018239,
+      "min": 181.50033301208168
+    },
+    "dump_bytes": {
+      "max": 60272182,
+      "min": 60268999
+    },
+    "journal_naive_amplification": 120.27422523353245,
+    "journal_naive_before_after_full_copy_bytes": 33000000,
+    "vacuum_full_ms": {
+      "max": 227.56525001022965,
+      "min": 136.71529100975022
+    }
+  },
   "postgres_4k_payload_shape_probe_bytes_per_record": [
     {
       "bytes_per_record": 299.008,
@@ -2312,6 +2332,79 @@
       "source": "postgres"
     }
   ],
+  "report_fragments": {
+    "browser_chapter_switch": "| 20 KB chapter switch \u2192 double rAF | 40 | 15.7 ms | 16.7 ms | 17.0 ms | IndexedDB lookup plus replacement |",
+    "browser_cold_open": "| 20 KB cold reload/open \u2192 double rAF | 20 | 9.0 ms | 12.9 ms | 13.0 ms | Warm browser/profile, page reload |",
+    "browser_input_10k": "| 10 KB input \u2192 double `requestAnimationFrame` | 30 | 11.6 ms | 14.3 ms | 14.8 ms | Frame-boundary surrogate |",
+    "browser_input_200k": "| 200 KB input \u2192 double `requestAnimationFrame` | 30 | 4.7 ms | 7.4 ms | 7.5 ms | Non-monotonic phase/cache evidence |",
+    "browser_input_50k": "| 50 KB input \u2192 double `requestAnimationFrame` | 30 | 11.2 ms | 13.0 ms | 13.3 ms | Frame-boundary surrogate |",
+    "browser_journal_10k": "| 10 KB strict IndexedDB `complete` | 30 | 0.2 ms | 0.3 ms | 1.2 ms | Browser-visible strict-hint transaction completion |",
+    "browser_journal_200k": "| 200 KB strict IndexedDB `complete` | 30 | 1.0 ms | 1.4 ms | 1.4 ms | Same |",
+    "browser_journal_50k": "| 50 KB strict IndexedDB `complete` | 30 | 0.2 ms | 0.8 ms | 1.0 ms | Same |",
+    "browser_offline_journal": "| Offline journal `complete` | 30 | 0.2 ms | 0.5 ms | 0.8 ms | Unreachable loopback, journal still local |",
+    "browser_synthetic_composition_journal": "| Synthetic composition journal `complete` | 30 | 0.2 ms | 0.8 ms | 0.9 ms | Not OS IME |",
+    "browser_synthetic_composition_paint": "| Synthetic composition \u2192 double rAF | 30 | 10.5 ms | 13.5 ms | 14.6 ms | Not OS IME |",
+    "compaction_delete_range": "`181.5-761.2 ms`",
+    "compaction_event_rewrite": "`VACUUM FULL` rewrote it to `14,843,904` bytes, a `89.98%` reduction",
+    "compaction_event_sizes": "changed total relation bytes from `148,160,512` to `148,176,896`",
+    "compaction_floor_size": "records occupied another `7,626,752` bytes",
+    "compaction_load_wal": "`184,967,424` WAL bytes",
+    "compaction_net_size": "Event plus floor fell from `148,176,896` to `22,470,656` bytes, an `84.84%` net reduction",
+    "compaction_vacuum_range": "`136.7-227.6 ms`",
+    "compaction_wal_range": "`34,812,464-34,812,696` WAL bytes",
+    "environment_browser_heap": "a 4.1 GiB JavaScript heap limit",
+    "environment_postgres_image": "`sha256:88777d7cb0db2e0160fcf36277608f42920e517409316e2dbeafe6c844cb08ca`",
+    "environment_runtime": "macOS 15.6.1, Apple M4, 10 logical CPUs, 32 GiB host memory, Chrome `150.0.7871.187`, Python `3.14.4`, Docker server `29.4.0`, and PostgreSQL `16.14`",
+    "executive_shape_sensitivity": "a 4 KiB payload sensitivity probe ranged from `299.008` to `5,791.744` total-relation bytes per record",
+    "executive_storage_models": "about `92.8 MiB` for 20,000 annual commands and `278.4 MiB` for 60,000 annual commands",
+    "journal_amplification": "`120.3\u00d7` relative to that deliberately naive comparator.",
+    "journal_naive_bytes": "- hypothetical before-plus-after full-document copies: `33,000,000 bytes`;",
+    "journal_serialized_bytes": "- attributable serialized journal records: `274,373 bytes`;",
+    "journal_storage_estimate": "fell from `288,658` to `136,689` bytes",
+    "network_ack_first_100": "| 100 ms | acknowledgement first | 30 | 102.9 ms | 103.8 ms | 103.8 ms |",
+    "network_ack_first_250": "| 250 ms | acknowledgement first | 30 | 252.7 ms | 254.2 ms | 255.9 ms |",
+    "network_ack_first_30": "| 30 ms | acknowledgement first | 30 | 31.9 ms | 32.7 ms | 33.3 ms |",
+    "network_event_first_100": "| 100 ms | Event first | 30 | 102.3 ms | 103.6 ms | 104.1 ms |",
+    "network_event_first_250": "| 250 ms | Event first | 30 | 252.6 ms | 253.4 ms | 253.6 ms |",
+    "network_event_first_30": "| 30 ms | Event first | 30 | 31.8 ms | 32.6 ms | 32.7 ms |",
+    "network_loopback": "| 5 ms | loopback acknowledgement first | 30 | 6.4 ms | 6.8 ms | 7.0 ms |",
+    "network_overhead_narrative": "configured-delay overhead ranged `0.3-5.9 ms` in this run",
+    "postgres_relation_event": "| Activity Event, 768 B | 45,514,752 B | 5,947,392 B | 51,503,104 B | 1,030.062 B at 50K |",
+    "postgres_relation_receipt": "| Receipt, 640 B | 40,960,000 B | 5,947,392 B | 46,948,352 B | 938.967 B at 50K |",
+    "postgres_relation_revision": "| Revision, 1,024 B | 58,515,456 B | 5,947,392 B | 64,503,808 B | 1,290.076 B at 50K |",
+    "postgres_relation_wire": "| Application Wire Record, 1,024 B | 58,515,456 B | 5,947,392 B | 64,503,808 B | 1,290.076 B at 50K |",
+    "postgres_shape_range": "ranged from `299.008` for highly compressible values to `5,791.744` for low-compressibility values",
+    "postgres_shape_ratio": "`19.37\u00d7` span",
+    "postgres_upper_slopes": "`1,368.064`, `1,015.808`, `1,114.112`, and `1,368.064` bytes/record",
+    "recommendation_compaction_evidence": "90% delete + ordinary vacuum did not shrink files; rewrite reduced sampled Event relation `89.98%`",
+    "recommendation_journal_evidence": "Strict IndexedDB p95 `0.3-1.4 ms`",
+    "recommendation_network_evidence": "Delayed loopback convergence followed the slower channel plus `~0.3-5.9 ms`",
+    "recommendation_paint_evidence": "Double-rAF p95 `7.4-14.3 ms`, switch p95 `16.7 ms`, cold reload p95 `12.9 ms`",
+    "recommendation_restore_evidence": "6 logical restores matched count and sequence sum",
+    "recommendation_sample_evidence": "Browser distributions have n=20-40; database distributions n=3",
+    "recommendation_storage_models": "20K/60K commands model `92.8/278.4 MiB/year`",
+    "recommendation_storage_slope": "Four small families model `4,866.048 B/command`; 4-KiB sensitivity implies up to `5,791.744 B/record`",
+    "replay_controlled_cloud_surrogate_2vcpu_2gib": "| 2 vCPU / 2 GiB surrogate | 3 | 7.600/7.918 ms | 6.510/6.705 ms |",
+    "replay_local_4vcpu_4gib": "| 4 vCPU / 4 GiB | 3 | 7.603/13.283 ms | 5.934/10.728 ms |",
+    "resource_samples": "All 6 database samples completed inside the declared 4-vCPU/4-GiB and 2-vCPU/2-GiB container caps",
+    "restore_dump_range": "logical dumps were `60,268,999-60,272,182` bytes",
+    "restore_dump_time": "Dump duration was `2.667-3.216 s`",
+    "restore_identity": "exactly 50,000 Event rows and sequence sum `1,250,025,000`",
+    "restore_source_size": "source database was `82,484,247` bytes",
+    "restore_time": "restore was `1.118-2.112 s`",
+    "storage_model_20000": "| 20,000 | 26.09 MiB | 19.38 MiB | 21.25 MiB | 26.09 MiB | 92.81 MiB |",
+    "storage_model_60000": "| 60,000 | 78.28 MiB | 58.13 MiB | 63.75 MiB | 78.28 MiB | 278.44 MiB |",
+    "verification_coverage": "`summary.json` now carries 71 raw-derived report fragments",
+    "wal_1000": "| 1,000 | no | 9,736,352 B |",
+    "wal_10000": "| 10,000 | 10K rows \u00d7 two shapes | 150,234,888 B |",
+    "wal_50000": "| 50,000 | no | 486,853,520-486,853,576 B |",
+    "workload_browser_input": "into 10/50/200 KB `contenteditable`; 5 warm-ups then 30 samples per chapter size",
+    "workload_compaction": "50K 2-KiB Event payloads; delete 90%",
+    "workload_journal": "1,000 sequential 33-byte UTF-8 patches with a full checkpoint every 100 intents",
+    "workload_novel": "120 decimal-text chapters \u00d7 20 KB = 2.4 MB; 40 switches and 20 page reload/cold opens",
+    "workload_postgres_growth": "1K/10K/50K records per Revision, Receipt, Activity Event, and Application Wire Record family",
+    "workload_replay": "50K Event scan versus 5K Event tail after one checkpoint"
+  },
   "schema": "storyos.issue76.summary.v1",
   "storage_models": [
     {
