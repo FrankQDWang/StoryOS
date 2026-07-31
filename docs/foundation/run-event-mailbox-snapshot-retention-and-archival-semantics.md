@@ -2,7 +2,6 @@
 
 - Status: current
 - Contract revision: `release1-retention-contract-2026-07-31`
-- Canonical baseline: `main@47a644056ca951c7c21f7c4ce81089fd66e2b08c` (tree `22f7ae2133f18f2800c384528388b19550552aca`)
 - Wayfinder resolution: [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64)
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Storage and isolation boundary: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
@@ -200,8 +199,6 @@ crosswalk is the complete quantitative adoption boundary for this contract:
 | Versioned Protocol absolute ceilings, including 1 MiB public JSON body, 64 MiB referenced payload, 8 MiB upload chunk, 4 MiB query page, 1,000 Events or 8 MiB per SSE reconnect replay, and 4 MiB queued SSE bytes | Accepted hard wire-validity ceilings from the Release 1 protocol profile; public route/event workload and same-release compatibility boundary. | They are safety ceilings, not throughput, retention, replay-SLA, or capacity targets; effective product values may be lower only under the protocol owner’s revision. | #58 owns the ceilings and error meaning. #64 must not derive retention windows or deletion deadlines from them. |
 | Issue 76 observations: 50,000-event scan versus 5,000-event tail after checkpoint; 90% synthetic deletion/rewrite observation; local 4-vCPU/4-GiB and 2-vCPU/2-GiB profiles | Controlled synthetic PostgreSQL workload and local bounded environment; not production/cloud evidence and not a full persistence-family workload. | No production headroom, WAL/lock/scratch margin, or recovery proof was established. These values are candidate experiment points only. | #76 owns the measurements. #64 may use them to request calibration, never as an effective profile value. |
 | Issue 76 model: 20,000 and 60,000 annual commands projected to 92.81 MiB and 278.44 MiB across four small families | Modelled projection with excluded major families and local schema assumptions; not a deployment capacity or retention forecast. | No observed project cardinality, recovery-chain footprint, growth margin, or multi-tenant headroom. | #76 owns the model; #56 owns capacity adoption if later accepted. It creates no deletion or archive deadline here. |
-| Persistence catalog derives 21 families, 169 unique table families, 16 Project-scoped families, and 5 projection families | Mechanically derived repository-baseline coverage from the #56 JSON catalog and its existing verifier; not a workload measurement or policy value. | Headroom is not applicable; these counts change only when the catalog changes and must never be copied into a second ledger. | #56 catalog/verifier owns the derivation; #64 only crosswalks logical treatment. |
-| Protocol catalog derives 58 operations and 53 public Event schemas | Mechanically derived repository-baseline coverage from the #58 route catalog and its existing verifier; not a retention or throughput target. | Headroom is not applicable; the route catalog remains the sole route/Event truth and no count authorizes cleanup. | #58 catalog/verifier owns the derivation; #64 only consumes settlement and Activity/Snapshot/cursor meaning. |
 | `PER-001`, `PER-002`, `PER-006`, `PER-007`, and `PER-008` | Unresolved tuning questions covering checkpoint cadence, Run Event hot/archive windows, compactable payload/Fence/Snapshot validity, Recovery Copy deletion, and diagnostics; no accepted workload/environment result. | No headroom and no effective value. Any proposed band must remain pending until its named owner accepts it in a Profile revision. | #64 owns retention-policy adoption for the relevant rows; #56/#60 own physical recovery or executable proof dependencies. |
 
 No duration, byte limit, count, percentage, CPU/memory profile, RPO/RTO,
@@ -647,7 +644,7 @@ obligations without creating a second physical-table, route, or Event ledger.
 | RET-011 | Archive/export manifest, root digest, provenance closure, known gaps, and integrity proof stay distinct from Recovery Copy and Project Restore; restore validates lifecycle before visibility. | #56 physical restore, #58 archive wire, #64 lifecycle inclusion. |
 | RET-012 | Author inspection reports retained/archived/compacted/redacted/tombstoned/recovery-hold/deletion state without inventing completeness or dispatch. | #64 and the editor-first author journey. |
 | RET-013 | Every numeric input is classified as accepted hard contract, observation, controlled synthetic result, modelled projection, or candidate band with workload/environment/headroom/owner; unmeasured values remain unresolved. | #64 adoption rule; #76 evidence only. |
-| RET-014 | Existing PostgreSQL and protocol catalogs/verifiers provide physical-family, route/settlement, public Event, Activity/Snapshot/cursor, and owner-boundary consistency without a second ledger. | Existing verifiers; #60 later supplies executable proof. |
+| RET-014 | The #56/#58 catalogs and their verifiers remain the mechanical source for physical-family, route/settlement, public Event, and Activity/Snapshot/cursor consistency; this document adds only a reviewable retention crosswalk and owner boundary, not a second ledger or verifier claim. | Existing catalog verifiers for mechanical facts; review of this crosswalk for retention semantics; #60 later supplies executable proof. |
 
 ### 14.2 Required invariants and completion constraints
 
@@ -694,22 +691,20 @@ consumes the finalized semantics, and the terminal audit remains downstream.
 
 ### 14.4 Catalog and public-protocol consistency check
 
-The PostgreSQL family crosswalk above is checked against the single #56 JSON
-catalog; its verifier derives the family and table coverage. The public
-protocol remains checked against the single #58 route/Event catalog; its
-verifier derives operation and Event coverage. Retention semantics do not add
-or rename a route, DTO, Event, or physical family.
+The logical record-class table above is a reviewable crosswalk: each referenced
+family identifier is checked against the single #56 JSON catalog at review
+time, but the existing persistence verifier does not parse this Markdown or
+mechanically verify its classifications. The #56 catalog and verifier remain
+the mechanical source for physical-family coverage and owner anchors.
 
-The #58 Accepted settlement query identity remains unchanged for these
-asynchronous operations: `deleteProject` uses `getCommand`,
-`createReplacementProposal` uses `getProposal`, `createAgentRun` uses
-`getAgentRun`, `importProjectArchive` uses `getImportOperation`,
-`exportProjectArchive` uses `getExportOperation`, and
-`exportHumanReadableManuscript` uses
-`getHumanReadableManuscriptExport`. The Activity stream continues to use the
-existing generation/floor/Snapshot and `activity_cursor_too_old` semantics;
-this contract only supplies the lifecycle evidence and availability transition
-that those public meanings inspect.
+The #58 route/Event catalog and its verifier remain the mechanical source for
+operations, Event schemas, and exact Accepted settlement query identities.
+This document does not repeat those operation-to-query mappings; it only
+preserves their owner boundary and consumes the established Activity,
+Snapshot, cursor-floor, and `activity_cursor_too_old` meanings for lifecycle
+availability. Retention semantics do not add or rename a route, DTO, Event, or
+physical family. A future catalog change requires a fresh review of this
+crosswalk; the existing verifiers may pass without reading this document.
 
 Exact quantitative values remain Retention Profile inputs calibrated through
 [PER-001, PER-002, and PER-006 through PER-008](../../EXPERIMENTAL-TUNING-REGISTER.md). They
