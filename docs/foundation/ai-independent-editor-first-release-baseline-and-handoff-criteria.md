@@ -133,7 +133,7 @@ Stage 1 is intentionally the smallest production-shaped manual-editor slice.
 It is a risk slice for the real authority and recovery boundary, not a
 prototype, a complete editor, or a disguised product launch.
 
-### 3.1 Required capabilities and owners
+### 4.1 Required capabilities and owners
 
 | ID | Required capability | Normative owner |
 | --- | --- | --- |
@@ -144,7 +144,7 @@ prototype, a complete editor, or a disguised product launch.
 | S1-REQ-005 | Enforce exact User and Project Scope, protected Host/Origin/session identity, input bounds, forced-RLS authority, and no credential or cross-Scope leakage on the exercised path. | Trust-boundary, PostgreSQL, Protocol, and Admission owners |
 | S1-REQ-006 | Produce attributable evidence that the exercised browser, Server, Core, and PostgreSQL path is the production-shaped path and that no disposable substitute is being treated as authority. | Repository governance and all exercised semantic owners |
 
-### 3.2 Explicitly absent or prohibited
+### 4.2 Explicitly absent or prohibited
 
 Stage 1 does not claim or require:
 
@@ -165,7 +165,7 @@ The exclusions are release boundaries, not permissions to weaken the
 production-shaped path. A missing Stage 1 capability cannot be hidden by
 calling a prototype or test substitute a successful implementation.
 
-### 3.3 Entry, author journey, and completion
+### 4.3 Entry, author journey, and completion
 
 **Entry condition.** The exact planning baseline is current; the preceding
 design contracts and deterministic-proof handoff are closed as required by the
@@ -196,7 +196,7 @@ path, every S1 evidence obligation is current and replayable where applicable,
 and all required negative boundaries fail closed. Passing Stage 1 does not
 authorize any Stage 2 capability or AI work.
 
-### 3.4 Mandatory evidence
+### 4.4 Mandatory evidence
 
 | ID | Mandatory evidence category |
 | --- | --- |
@@ -217,7 +217,7 @@ Stage 2 is the complete standalone editor promised by REL-001. It is strictly
 larger than Stage 1: it must be useful for ordinary novel work from
 initialization through export, not merely prove one write path.
 
-### 4.1 Required capabilities and owners
+### 5.1 Required capabilities and owners
 
 | ID | Required capability | Normative owner |
 | --- | --- | --- |
@@ -225,12 +225,12 @@ initialization through export, not merely prove one write path.
 | S2-REQ-002 | Create, open, rename, and archive the Project through the existing typed author-command and persistence paths, with exact User and Project Scope binding. | Project domain, Admission, Core, Protocol, and PostgreSQL owners |
 | S2-REQ-003 | Create, rename, reorder, remove, and navigate volumes and chapters without losing pending editor work; reopen the Project and display the current chapter and save state from an authorized Snapshot. | Web Editor Session, Protocol, Core, and PostgreSQL owners |
 | S2-REQ-004 | Directly write and revise supported manuscript blocks with typing, paste, cut, selection replacement, split, join, move, retype, keyboard navigation, clipboard, undo, and Chinese and English IME behavior. | Web Editor Session, Admission, Core, Artifact, and Protocol owners |
-| S2-REQ-005 | Show durable saving, saved, and needs-attention states; preserve input through network delay, acknowledgement/Event ordering, reload, Web Client crash, Server restart, Project Activity replay-floor resynchronization, writer takeover, and recovery-draft/reconfirmation paths. | Web Editor Session, Protocol, Core, PostgreSQL, and retention owners |
+| S2-REQ-005 | Show durable saving, saved, and needs-attention states; preserve input through network delay, acknowledgement/Event ordering, reload, Web Client crash, Server restart, Project Activity replay-floor resynchronization, writer takeover, and recovery-draft/reconfirmation paths. In an isolated verification environment, also exercise the applicable Recovery Copy/PITR restore path, validate the runtime roles and forced RLS, rebuild disposable projections from canonical facts, apply the applicable lifecycle ranges and gaps, and expose ordinary reads or execution only after Recovery Visibility Proof succeeds. | Web Editor Session, Protocol, Core, PostgreSQL, and retention owners |
 | S2-REQ-006 | Search the current chapter and full manuscript with bounded results; perform direct replacement of one visible match; keep selected multi-match or cross-location replacement on the existing Proposal-gated path rather than silently bulk-writing. | Protocol, Web Editor Session, Core/Proposal, and search projection owners |
 | S2-REQ-007 | Show basic word, character, chapter, and manuscript progress statistics and export a deterministic, human-readable manuscript in volume/chapter order with explicit representation of unavailable content. Produce the versioned Project Export Archive only through its existing owner contracts. | Protocol, Web Editor Session, PostgreSQL, retention, and Artifact owners |
 | S2-REQ-008 | Sustain a long writing session with responsive local input, repeated chapter switches, reload, controlled upgrade, and the measured cold-open, search, journal, Snapshot, replay, storage, and restore envelope adopted by the relevant owner. | Web Editor Session, PostgreSQL, retention, protocol, and measurement owners |
 
-### 4.2 Explicitly absent or prohibited
+### 5.2 Explicitly absent or prohibited
 
 Stage 2 requires no Agent, model, Provider, Tool, MCP server, Skill,
 research/embedding service, Memory, Subrun, Eval, outbound disclosure, or
@@ -249,7 +249,7 @@ The existing Core Proposal boundary still applies when a manual command is
 bulk, cross-location, or otherwise not fully previsible. AI being disabled
 does not authorize a second direct-write path.
 
-### 4.3 Entry, author journey, and completion
+### 5.3 Entry, author journey, and completion
 
 **Entry condition.** Stage 1 has passed its author journey and mandatory
 evidence on one exact main. A later implementation issue may be created only
@@ -270,30 +270,43 @@ does not create it.
 5. Reload or crash/restart the Web Client with both saved and unsettled edits,
    recover the unsettled text, then restart the Server and PostgreSQL and
    verify the existing recovery and visibility rules before ordinary reading.
-6. Open a second tab, observe the writer disposition, perform explicit
+6. In an isolated verification environment, restore the applicable Recovery
+   Copy/PITR through the PostgreSQL physical-recovery owner’s existing path.
+   Validate the runtime roles and forced RLS, rebuild disposable projections
+   from canonical facts, and apply the applicable lifecycle ranges and gaps.
+   Wait for Recovery Visibility Proof to succeed; only then open ordinary
+   reading and execution, and continue writing to confirm that the restored
+   Project remains usable. #56 owns the physical restore mechanism and #64
+   owns lifecycle visibility; this journey adds no RPO, RTO, retention, or
+   cleanup value.
+7. Open a second tab, observe the writer disposition, perform explicit
    takeover, and preserve the prior tab's unsettled text through the existing
    recovery path.
-7. Search the current chapter and full manuscript, replace one visible match
+8. Search the current chapter and full manuscript, replace one visible match
    directly, and verify that any selected multi-match or cross-location
    operation remains inspectable and Proposal-gated.
-8. Navigate among chapters, inspect word, character, chapter, and manuscript
+9. Navigate among chapters, inspect word, character, chapter, and manuscript
    statistics, and continue writing after repeated chapter switches.
-9. Exercise the replay-floor boundary through the existing typed Snapshot/resync
+10. Exercise the replay-floor boundary through the existing typed Snapshot/resync
    path; an old cursor must not be silently translated into a new generation.
-10. Export a human-readable manuscript in deterministic order and create or
+11. Export a human-readable manuscript in deterministic order and create or
     inspect the versioned Project Export Archive through its existing
     lifecycle and portability contract.
-11. Continue a long session, reload once more, and verify that no acknowledged
+12. Continue a long session, reload once more, and verify that no acknowledged
     author work is lost, duplicated, or made authoritative by a disposable
     projection.
 
 **Completion condition.** Every step in S2-JRN-001 passes with AI fully
 disabled; all S2 evidence obligations are current, attributable, and
 replayable where applicable; and no excluded AI or collaboration capability is
-required. Only this condition establishes the complete AI-independent editor
-promise.
+required. Completion additionally requires the isolated Recovery Copy/PITR
+restore, role and forced-RLS validation, disposable-projection rebuild,
+lifecycle-range/gap application, successful Recovery Visibility Proof before
+ordinary read or execution, and continued writing after that proof; an ordinary
+process restart alone is insufficient. Only this condition establishes the
+complete AI-independent editor promise.
 
-### 4.4 Mandatory evidence
+### 5.4 Mandatory evidence
 
 | ID | Mandatory evidence category |
 | --- | --- |
@@ -301,7 +314,7 @@ promise.
 | S2-EVD-002 | Initialization, Project, volume, chapter, navigation, reopen, and authorized Snapshot evidence. |
 | S2-EVD-003 | Browser input evidence for IME, keyboard, clipboard, undo, block operations, local continuity, and responsive long-session editing. |
 | S2-EVD-004 | Durable save/settlement evidence for pending, saved, needs-attention, Admission, Core, Receipt, Event, and idempotent convergence states. |
-| S2-EVD-005 | Reload, crash, restart, writer-takeover, replay-floor, Snapshot/resync, recovery-draft, and Recovery Visibility Proof evidence, including lifecycle gaps where applicable. |
+| S2-EVD-005 | Reload, crash, restart, writer-takeover, replay-floor, Snapshot/resync, and recovery-draft evidence, plus an isolated Recovery Copy/PITR restore; runtime-role and forced-RLS validation; disposable-projection rebuild; applicable lifecycle ranges and gaps; successful Recovery Visibility Proof before ordinary read or execution; and continued writing after the verified restore. #56 owns the physical recovery mechanism and #64 owns lifecycle visibility. |
 | S2-EVD-006 | Search/replace, statistics, navigation, and explicit Proposal-gated multi-location operation evidence. |
 | S2-EVD-007 | Human-readable export and Project Export Archive evidence, including deterministic order, unavailable-content representation, scope, provenance, and lifecycle treatment. |
 | S2-EVD-008 | Long-session and storage-growth evidence using only measured values adopted by their named owner; no measurement is silently promoted to a new retention default or SLA. |
@@ -316,7 +329,7 @@ Stage 3 adds adjacent assistance after the editor is independently complete.
 The fake destination is a deterministic implementation of the real model-path
 contracts, not a shortcut around them.
 
-### 5.1 Required capabilities and owners
+### 6.1 Required capabilities and owners
 
 | ID | Required capability | Normative owner |
 | --- | --- | --- |
@@ -328,16 +341,18 @@ contracts, not a shortcut around them.
 | S3-REQ-006 | Record a bounded, inspectable fake-model result and uncertainty/recovery evidence without claiming model understanding, literary quality, Provider behavior, or external retention. | Model Gateway, Context/Disclosure, deterministic verification, and retention owners |
 | S3-REQ-007 | Preserve the Stage 2 AI-independent journey as a release requirement even when the fake path is unavailable. | AI-independent editor owners and repository governance |
 
-### 5.2 Explicitly absent or prohibited
+### 6.2 Explicitly absent or prohibited
 
-Stage 3 does not include a real external model, a second model route, an
-unbounded Tool/MCP/research/embedding/Memory workflow, a new task-specific
-workflow runtime, an Agent-authored outline, automatic Acceptance, automatic
-authoritative write, or a Proposal editor outside the main StoryOS editor.
-Any attempted mode that would require those absent capabilities fails closed
-without authority or disclosure.
+Stage 3 does not include a real external model, a second model route, any
+Tool, MCP, research, embedding, Memory, Skill, Subrun, or Eval execution,
+including bounded request variants or any other execution mode for those
+surfaces. It also does not include a new task-specific workflow runtime, an
+Agent-authored outline, automatic Acceptance, automatic authoritative write, or
+a Proposal editor outside the main StoryOS editor. Any attempted Tool-request mode fails closed,
+as do MCP-request, research, embedding, Memory, Skill,
+Subrun, or Eval execution modes, without authority or disclosure.
 
-### 5.3 Entry, author journey, and completion
+### 6.3 Entry, author journey, and completion
 
 **Entry condition.** Stage 2 is released on one exact main with its
 AI-disabled journey and evidence complete. A later Stage 3 implementation issue
@@ -365,7 +380,7 @@ required of the real path, every S3 evidence obligation passes, Acceptance and
 Rejection remain distinct durable outcomes, and the Stage 2 journey still
 passes with the fake destination unavailable.
 
-### 5.4 Mandatory evidence
+### 6.4 Mandatory evidence
 
 | ID | Mandatory evidence category |
 | --- | --- |
@@ -387,7 +402,7 @@ Stage 4 adds exactly one separately admitted real external-model operation. It
 does not make the Provider a StoryOS authority and does not weaken the
 AI-independent editor.
 
-### 6.1 Required capabilities and owners
+### 7.1 Required capabilities and owners
 
 | ID | Required capability | Normative owner |
 | --- | --- | --- |
@@ -399,17 +414,22 @@ AI-independent editor.
 | S4-REQ-006 | Include a real-author session that can write manually, request bounded assistance, inspect/edit a Proposal, Accept and Reject it, and recover the Run, Proposal, disclosure, and authoritative facts. | Web Editor Session, Core/Proposal, Context/Disclosure, and AgentRun owners |
 | S4-REQ-007 | Limit the claim to StoryOS-owned disclosure and recovery evidence; do not claim Provider attention, Provider retention/training, hidden SDK behavior, or literary quality. | Context/Disclosure, Model Gateway, trust-boundary, and deterministic verification owners |
 
-### 6.2 Explicitly absent or prohibited
+### 7.2 Explicitly absent or prohibited
 
 Stage 4 does not add a second Provider, provider-specific authority, local
-inference fallback, hidden SDK retry, unbounded external Tool/MCP workflow,
-automatic authority, Agent-authored outline, or a cloud implementation stage.
-Provider availability is not allowed to become a dependency of the complete
+inference fallback, hidden SDK retry, or any Tool, MCP, research, embedding,
+Memory, Skill, Subrun, or Eval execution or execution mode, including bounded
+request variants or any other execution mode for those surfaces. It also does
+not add automatic authority, an Agent-authored outline,
+or a cloud implementation stage. Stage 4 adds only one real external-model
+path. Any attempted Tool-request mode fails closed, as do MCP-request,
+research, embedding, Memory, Skill, Subrun, or Eval execution modes. Provider
+availability is not allowed to become a dependency of the complete
 AI-independent editor. A Provider result that cannot satisfy the existing Host,
 disclosure, Attempt, fence, recovery, or Proposal contract is rejected or held
 without an authority effect.
 
-### 6.3 Entry, author journey, and completion
+### 7.3 Entry, author journey, and completion
 
 **Entry condition.** Stage 3 is released on one exact main with its fake path,
 Proposal, Acceptance/Rejection, recovery, and AI-independent regression
@@ -440,7 +460,7 @@ current disclosure and uncertainty evidence, every S4 obligation passes, the
 author can Accept or Reject through the editor, and all Provider-opaque claims
 remain explicitly out of scope.
 
-### 6.4 Mandatory evidence
+### 7.4 Mandatory evidence
 
 | ID | Mandatory evidence category |
 | --- | --- |
