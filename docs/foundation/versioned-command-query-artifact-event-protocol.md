@@ -2,6 +2,8 @@
 
 Status: accepted Foundation protocol specification
 
+Contract revision: `release1-wire-catalog-2026-07-31`
+
 Decision owner: [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58)
 
 Primary-source evidence: [Versioned HTTP, SSE, schema, digest, and MCP protocol primary sources](../research/versioned-http-sse-protocol-primary-sources.md)
@@ -406,49 +408,87 @@ GET /api/v1/protocol
 This query contains no project data and grants no session, Project, Tool,
 Provider, or Capability access.
 
+Every deployment also exposes one `Release1CompatibilityIdentity` whose closed
+schema is `storyos.compatibility.release-identity.v1`. It includes the API
+major, public protocol release, envelope profile, contract-graph revision and
+digest, Web Client, Server, and Worker contract revisions, generated-client
+revision, OpenAPI digest, JSON Schema catalog digest, TypeScript artifact
+digest, fixture/golden-wire corpus digest, activity profile, and Protocol Limit
+Profile revision. The same identity is derived from the protected Web Client,
+Server, Worker, Rust contract graph, and generated client artifacts; none of
+those components may advertise an independently compatible release. A mismatch
+returns `upgrade_required` before a domain attempt, cursor advancement, or
+external effect.
+
 ## 7. Command protocol
 
 ### 7.1 Canonical Release 1 command routes
 
 Public Commands use resource-specific routes and schemas. StoryOS does not
 accept a generic `{ command_type, payload }` mutation endpoint. The complete
-Release 1 public command inventory is:
+machine-readable command, challenge, query, and stream catalog is the tracked
+[Release 1 route catalog](versioned-protocol-release-1-route-catalog.json),
+owned by this protocol specification. It is the only route inventory; product
+slice documents do not maintain a parallel list. The catalog's operation array
+is intentionally exhaustive and its count is derived by verification rather
+than fixed to the former illustrative route count.
 
-```text
-POST /api/v1/projects
-PATCH /api/v1/projects/{project_id}
-PUT /api/v1/projects/{project_id}/archival
-DELETE /api/v1/projects/{project_id}
-POST /api/v1/projects/{project_id}/editor-sessions
-POST /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers
-POST /api/v1/projects/{project_id}/volumes
-PATCH /api/v1/projects/{project_id}/volumes/{volume_id}
-DELETE /api/v1/projects/{project_id}/volumes/{volume_id}
-POST /api/v1/projects/{project_id}/volumes/{volume_id}/chapters
-PATCH /api/v1/projects/{project_id}/chapters/{chapter_id}
-DELETE /api/v1/projects/{project_id}/chapters/{chapter_id}
-POST /api/v1/projects/{project_id}/manuscript/author-edits
-POST /api/v1/projects/{project_id}/manuscript/replacement-proposals
-POST /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances
-POST /api/v1/projects/{project_id}/proposals/{proposal_id}/rejections
-POST /api/v1/projects/{project_id}/proposals/{proposal_id}/withdrawals
-POST /api/v1/projects/{project_id}/proposals/{proposal_id}/replans
-POST /api/v1/projects/{project_id}/author-actions/undo
-POST /api/v1/projects/{project_id}/agent-runs
-POST /api/v1/projects/{project_id}/agent-runs/{run_id}/pause
-POST /api/v1/projects/{project_id}/agent-runs/{run_id}/resume
-POST /api/v1/projects/{project_id}/agent-runs/{run_id}/cancel
-POST /api/v1/projects/{project_id}/waits/{wait_id}/resolutions
-POST /api/v1/projects/{project_id}/approvals/{approval_id}/decisions
-POST /api/v1/projects/{project_id}/context-controls
-POST /api/v1/projects/{project_id}/imports
-POST /api/v1/projects/{project_id}/exports
-```
+The catalog covers Project lifecycle, volume/chapter structure, one editor
+session and writer takeover, direct author editing, search and replacement,
+statistics, human-readable and portable archive import/export, Snapshot and
+resync, Proposal and Draft lifecycle, Agent-run control, and Project Activity.
+Each entry names one stable `operation_id`, method/path, resource/action shape,
+semantic owner, wire owner, request/response schema IDs, action/admission
+class, Editor Session and writer-generation rule, idempotency and
+preconditions, settlement/status profile, stable error profile, Project
+Activity mapping, positive/negative golden fixture IDs, and OpenAPI, JSON
+Schema, and TypeScript generated-operation coverage.
 
-No other Release 1 public mutation route exists. Tool, MCP, Skill, Memory,
-Subrun, Eval, and App execution are not public Release 1 surfaces. A later
-route is a protocol-contract addition and must name its authority and
-transaction owner before generation.
+The only browser author-edit ingress is
+`POST /api/v1/projects/{project_id}/manuscript/author-edits`
+(`applyAuthorEdit`). Core classifies the entire command. A single visible
+replacement may settle as a direct typed author outcome; a selected
+multi-match or cross-location replacement remains the same ingress and is
+classified into a Core Proposal. The Web Client never chooses an
+authoritative-vs-Proposal route. The separate `createReplacementProposal`
+operation is reserved for an Agent-produced inspectable Proposal from an exact
+plain-language Prose Change Request; it is not an alternate author-edit path.
+
+The catalog also records the exact public exclusions. Internal
+`AppendProposalGenerationBatch`, `PauseProposalGeneration`, and
+`ValidateProposal` operations remain producer/Core contracts, while
+Tool/MCP/Skill/App execution and Provider/embedding/research dispatch remain
+Host/Worker/Adapter contracts. None receives a public `/api/v1` route in
+Release 1.
+
+### 7.1.1 Command settlement and Proposal/Draft coverage
+
+The route catalog maps the accepted Core actions without re-owning their
+meaning:
+
+| Wire operation | Semantic command owner | Public route placement | Release 1 settlement rule |
+| --- | --- | --- | --- |
+| `ApplyAuthorEdit` | Manuscript Revision and Proposal State Machine | one `/manuscript/author-edits` ingress | `Committed` or `RequiresReconfirmation`; never `Accepted`; all five Core outcomes remain possible |
+| `AcceptProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/acceptances` | explicit protected editor command; typed Acceptance Receipt stays distinct |
+| `RejectProposalOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/rejections` | exact selected pending operations and rejection events |
+| `WithdrawProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/withdrawals` | author cause or exact current-producer cause only |
+| `ReopenWithdrawnProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/reopenings` | exact withdrawal event and `withdrawn` closure precondition |
+| `SupersedeProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/supersessions` | exact replacing Proposal and current head; terminal `superseded` closure |
+| `ReopenRejectedOperations` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/operation-reopenings` | exact rejection event references; validation returns to `pending` |
+| `ReplanProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/replans` | exact Proposal Conflict or Proposal Recovery Conflict source |
+| `CompleteReadyPartialProposal` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-completions` | exact `ready_partial` generation and candidate digest |
+| `ContinueProposalGeneration` | Manuscript Revision and Proposal State Machine | `/proposals/{proposal_id}/generation-continuations` | synchronous generation-axis transition; a fresh generation ID is returned |
+| `ExpandRefusedEditDraftToProposal` | Manuscript Revision and Proposal State Machine | `/drafts/{draft_id}/proposal-expansions` | `WholeDraftPayload` only; source Draft closes once as `superseded` |
+| `CloseEditorFlowDraft` | Manuscript Revision and Proposal State Machine | `/drafts/{draft_id}/closures` | exact `dismissed`, `superseded`, or `abandoned` closure |
+| `UndoLatestAuthorAction` | Manuscript Revision and Proposal State Machine | `/author-actions/undo` | one unified newest-first frontier; compensation or reversal remains typed |
+
+All exact retries return the original typed settlement and event identities.
+`RecoveryDraft` has no upload or browser-cache route: only the admitted
+`ApplyAuthorEdit` body may return `recovery_draft_ref` when it reaches terminal
+`RequiresReconfirmation`. Every Release 1 editor command in the catalog
+excludes `Accepted` from its acknowledgement union; `Accepted` remains an
+asynchronous-operation acknowledgement for the catalogued long-running
+Agent-run, deletion, Proposal production, import, and export operations.
 
 ### 7.2 Shared command metadata
 
@@ -679,29 +719,12 @@ domain result.
 
 Queries use resource-specific GET or bounded POST-search routes. A POST Query
 is safe by contract, creates no domain effect, and never shares an idempotency
-namespace with Commands. The complete Release 1 public query inventory is:
-
-```text
-GET  /api/v1/projects
-GET  /api/v1/projects/{project_id}
-GET  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}
-GET  /api/v1/projects/{project_id}/manuscript/tree
-GET  /api/v1/projects/{project_id}/chapters/{chapter_id}
-GET  /api/v1/projects/{project_id}/manuscript/statistics
-GET  /api/v1/projects/{project_id}/proposals/{proposal_id}
-GET  /api/v1/projects/{project_id}/artifacts/{artifact_id}
-GET  /api/v1/projects/{project_id}/agent-runs/{run_id}
-GET  /api/v1/projects/{project_id}/commands/{command_id}
-GET  /api/v1/projects/{project_id}/receipts/{receipt_id}
-GET  /api/v1/projects/{project_id}/snapshots/{snapshot_id}
-POST /api/v1/projects/{project_id}/queries/manuscript-search
-POST /api/v1/projects/{project_id}/queries/retrieval
-POST /api/v1/projects/{project_id}/queries/history
-```
-
-`GET /api/v1/protocol`, both anti-forgery challenge routes in section 5.2, and
-the Project Activity route in section 10.3 complete the public route catalog.
-No second Release 1 route inventory is maintained by a product-slice document.
+namespace with Commands. The complete Query, Snapshot, operation-status, and
+Project Activity inventory is the same [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json);
+there is no second query list here or in the AI-independent release contract.
+The catalog includes `getSnapshot`, `queryHistory`, and the explicit import and
+export status reads needed to settle asynchronous routes without treating
+process state as truth.
 
 The Server assigns one `QueryId` when the first qualified evaluation begins.
 Every page cursor binds and reuses that Query identity, normalized request, and
@@ -1002,6 +1025,29 @@ redaction profile, filter digest, and compatibility profile. The Event's
 durable `event_id` remains inside `data`; SSE `id` is not the Event identity.
 The client reconnects with the standard `Last-Event-ID` header. StoryOS does
 not place a cursor or session token in the URL.
+
+The route catalog's `events` array is the complete Release 1 public Event
+schema catalog. Each command entry names every possible Project Activity Event
+schema for its successful or Receipt-backed no-effect settlement; query,
+challenge, and stream entries name no produced Event. The generic
+`storyos.event.domain-receipt-settled.v1` projection carries the already-owned
+typed Receipt reference and disposition without redefining Core result meaning.
+Core-only records that have no public Event schema, such as
+`AuthorActionRecorded`, are listed explicitly under `non_public_events` rather
+than being silently omitted. Internal producer operations may still emit
+publicly projected generation, validation, or conflict Events only through the
+typed Project Activity profile.
+Core event semantics remain owned by [Specify the Manuscript Revision and
+Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46),
+editor/session event semantics by [Specify Web Editor Session, Local Journal,
+Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70),
+archive/deletion semantics by [Specify the PostgreSQL Project Storage,
+Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56),
+[Specify Run Event, Mailbox, Snapshot, Retention, and Archival
+Semantics](https://github.com/FrankQDWang/StoryOS/issues/64), and [ADR
+0011](../adr/0011-require-explicit-project-deletion-settlement.md). This
+protocol owns only the public Event schema, route mapping, profile identity,
+redaction, and generated coverage.
 
 Filters use closed query parameters naming public view kinds and exact
 in-scope identities. The Server normalizes them into the cursor binding.
@@ -1874,6 +1920,14 @@ Protocol Limit Profile. Every public request and SSE connection carries or
 derives that release identity. A mismatch returns `upgrade_required` before a
 domain attempt, cursor advancement, or external effect.
 
+The Release 1 identity is the catalogued
+`storyos.compatibility.release-identity.v1` schema. The checked-in
+[route catalog](versioned-protocol-release-1-route-catalog.json) names its
+required component fields and digests but does not invent deployment values.
+The protected Web Client, Server, Worker, contract graph, generated client,
+OpenAPI, JSON Schema catalog, and golden corpus all participate in one hard-cut
+identity; a matching semantic version alone is insufficient.
+
 Deployment uses a coordinated hard cut:
 
 1. complete and verify required PostgreSQL migrations and Recovery Copy;
@@ -2113,6 +2167,14 @@ Timeout stops waiting, not truth. After durable admission, timeout reports the
 known asynchronous operation or `outcome_unknown` as appropriate. It does not
 convert an uncertain external effect to failure or authorize another Attempt.
 
+The [Representative Writing-Path Performance and Storage-Growth Envelope](../research/representative-writing-path-performance-and-storage-growth-envelope.md)
+is evidence only. Its delayed loopback samples establish ordering and local
+projection behavior, not a production network, cloud, Core, or PostgreSQL
+latency distribution. Release 1 therefore defines no absolute public timeout,
+cloud-latency guarantee, or `timeout_ms` request field from that evidence. A
+future versioned convergence or budget field requires real-route evidence and
+must preserve the rule that timeout stops waiting, not truth.
+
 Effective defaults, replay retention windows, UI behavior near limits,
 backpressure tuning, model context allocation, Subrun/Mailbox quotas, and
 first-stage operating values remain empirical items in
@@ -2129,6 +2191,16 @@ field requirements, discriminators, control enums, validation annotations,
 digest coverage descriptors, historical projections, and Protocol Limit
 Profiles. Generated artifacts are reviewed and checked in, but never edited as
 independent truth.
+
+Before the Rust contracts crate exists, this ticket's
+[Release 1 route catalog](versioned-protocol-release-1-route-catalog.json) is
+the review manifest for the public wire surface. It is deliberately limited to
+route placement, compatibility identity, schema naming, generated coverage,
+fixture identity, and Project Activity/Event mapping; its `owners` references
+point back to the semantic contracts and do not create a second domain owner.
+The eventual generator consumes the Rust source and regenerates this manifest
+and all listed artifacts rather than treating the JSON file as a permanent
+hand-maintained source.
 
 The generator emits, from the same contract graph:
 
@@ -2183,6 +2255,16 @@ does not claim original bytes.
 ### 16.3 Required drift gates
 
 The eventual repository verification command must fail when:
+
+- the review-time verifier at
+  `docs/foundation/verify-versioned-protocol-route-catalog.py` cannot parse the
+  Release 1 catalog, finds a duplicate operation or method/path, finds a
+  missing schema/error/Event/fixture/generated-operation reference, finds a
+  broken semantic-owner source path, or finds an editor command that exposes
+  `Accepted`;
+- a catalog operation's route, operation ID, request/response schema, error
+  profile, Project Activity mapping, golden fixture, or generated OpenAPI/
+  JSON-Schema/TypeScript coverage is not one-to-one and explicit; and
 
 - regenerating OpenAPI, JSON Schema, TypeScript, schema catalog, examples, or
   golden corpus changes the worktree;
