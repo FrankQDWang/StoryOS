@@ -1,12 +1,71 @@
 # PostgreSQL Project Storage, Isolation, and Migration Contract
 
 - Status: accepted
+- Contract revision: `release1-storage-contract-2026-07-31`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Research input: [PostgreSQL Project Storage, Isolation, and Migration Source Audit](../research/postgresql-project-storage-isolation-and-migration-source-audit.md)
 - Parent semantic contracts: [Artifact domain model](artifact-domain-model.md), [Manuscript state machine](manuscript-revision-proposal-state-machine.md), [Fiction memory and research provenance](fiction-memory-and-research-provenance-semantics.md), and [Context assembly and disclosure](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Operational lifecycle contract: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
+- Release 1 persistence catalog: [`postgresql-release-1-persistence-catalog.json`](postgresql-release-1-persistence-catalog.json)
+- Review-time catalog verifier entry: [`verify-postgresql-release-1-persistence-catalog.py`](verify-postgresql-release-1-persistence-catalog.py)
+- Verifier modules: [`postgresql_persistence_verifier_common.py`](postgresql_persistence_verifier_common.py), [`postgresql_persistence_verifier_storage.py`](postgresql_persistence_verifier_storage.py), and [`postgresql_persistence_verifier_route.py`](postgresql_persistence_verifier_route.py)
+
+## 0. Release 1 closure and compatibility identity
+
+Sections 1–12 preserve the accepted Foundation decisions. This Release 1
+revision closes the physical gaps exposed by the completed Core, Author Command
+Admission, Web Editor Session, and public protocol contracts. The JSON catalog
+is part of this contract: it is not production DDL and it does not create a
+second semantic owner. A table family, schema identity, migration edge, or
+projection not represented there is not an admitted Release 1 persistence
+surface.
+
+The active storage identity is the exact tuple below:
+
+```text
+StorageCompatibilityIdentity {
+  database_schema_identity: storyos.postgresql.schema.v1
+  active_schema_version: storyos.persistence.release-1.v1
+  persisted_format_catalog_id: storyos.persistence.catalog.release-1.v1
+  migration_chain_id: storyos.persistence.bootstrap.release-1.v1
+  migration_chain_digest: sha256 over the catalogued migration chain
+  public_release: storyos.public.release.1
+  route_catalog_id: storyos.public.route-catalog.release-1.v1
+  route_catalog_contract_revision: release1-wire-catalog-2026-07-31
+  route_catalog_sha256: sha256 over the LF-normalized Release 1 route catalog
+  compatibility_profile: storyos.public.same-release.v1
+  release_identity_schema_id: storyos.compatibility.release-identity.v1
+}
+```
+
+The public protocol's `Release1CompatibilityIdentity` remains owned by
+[Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md).
+Storage contributes the complete persistence tuple through the protocol's
+contract-graph/release identity; it does not invent a parallel public release
+or route. The Server, Worker, protected Web Client, generated contracts, route
+catalog, Event catalog, migration ledger, and active schema must compare the
+same values. A mismatch returns `upgrade_required` before a domain attempt,
+Project Activity cursor advancement, external effect, or reopening live
+traffic. A matching semantic version alone is never sufficient.
+
+Release 1 is the initial persisted baseline. It has no supported stored
+predecessor and no migration edge: a new installation creates the schema,
+catalog, roles, forced-RLS policies, constraints, and administrative records in
+one atomic bootstrap before verification and activation. The empty migration
+chain identity and digest remain part of the same-release identity so a future
+Release 2 can add a real edge only with a source-backed predecessor catalog,
+schema, persisted rows, and checksums. A semantic version or invented
+predecessor name never creates compatibility.
+
+The entry verifier above remains the only public review command:
+`python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py
+--self-test`. It delegates shared source/link/digest helpers, storage and
+physical-ledger validation, and route/settlement/Activity coverage to the
+three sibling modules named in the header. Those modules are review-time
+implementation detail, not additional catalog or contract authorities and have
+no independent CLI or alternate validation path.
 
 ## 1. Scope and authority
 
@@ -126,42 +185,78 @@ PayloadRow         = owner_user_id, project_id, payload_id, payload_family,
 Audit timestamps are evidence only. Freshness, ordering, locking, idempotency,
 and authorization never depend on wall time.
 
-### 3.2 Normative table catalog
+### 3.2 Normative aggregate and family boundary
 
-The following catalog fixes physical ownership boundaries. An implementation
-may add narrow subtype tables or split a family for size and access patterns,
-but it cannot merge disjoint durable spaces, replace typed relations with a
-generic EAV/event bucket, or remove Project Scope from a project-bearing row.
+The JSON persistence catalog linked in the header is the sole exhaustive
+Release 1 physical table-family ledger. This prose section intentionally names
+only catalog family identities and aggregate rules; it is not a second table
+list. An implementation may add narrow subtype tables or split a catalog family
+for size and access patterns only when the family identity, authority class,
+durability class, Scope, and dependency rules remain unchanged. It cannot merge
+disjoint durable spaces, replace typed relations with a generic EAV/event
+bucket, or remove Project Scope from a project-bearing row.
 
-| Aggregate owner | Canonical `storyos` table families | Physical rule |
+| Aggregate or durable boundary | Catalog family IDs | Physical rule |
 |---|---|---|
-| Identity and Project | `users`, `projects` | `users` is User-scoped; `projects` owns the exact Project Scope and immutable Project Author |
-| Project policy | `project_instruction_revisions`, `project_instruction_heads`, `author_preference_revisions`, `project_policy_revisions`, `project_destination_grants`, `project_tool_enablements`, `context_controls`, `proactive_trigger_revisions`, `trigger_occurrences`, `trigger_admission_decisions` | immutable revisions and decisions plus narrow current Heads; no mutable JSON settings bag |
-| Credential binding | `credential_references`, `project_credential_bindings` | non-secret resolver, availability, and scoped binding evidence only; identity establishment may consume it, but neither the Reference nor binding grants destination use |
-| Processing destination identity | `processing_destination_identities`, `processing_destination_identity_evidence_revisions` | canonical immutable Project Scope-bound, non-authorizing identity of the actual processor, endpoint, account, control class, intake/disclosure boundary, and append-only versioned establishment or re-verification evidence; evidence may reference project-free service-surface identity and optional scoped Credential-binding inputs, never a Grant, use binding, compatibility Decision, or execution authority |
-| Authoritative State | `authoritative_objects`, `authoritative_revisions`, `authoritative_payloads`, `authoritative_heads`, `authoritative_commits`, `authoritative_commit_members`, `author_action_entries` | immutable revisions and commits; normalized Heads are the current authority pointer |
-| Manuscript subtype | `manuscript_objects`, `manuscript_blocks`, `manuscript_revision_members`, `revision_anchors` | subtype rows reference Authoritative identities and exact revisions in the same Scope |
-| Artifact | `artifacts`, `artifact_revisions`, `artifact_payloads`, `artifact_heads`, `artifact_lifecycle_events`, `artifact_provenance_edges` | never shares a Head or payload identity with Authoritative State |
-| Proposal | `proposals`, `proposal_revisions`, `proposal_heads`, `proposal_operations`, `proposal_operation_resolutions`, `proposal_generations`, `proposal_stream_events`, `editor_input_fences`, `proposal_pause_fences`, `validation_receipts`, `acceptance_receipts`, `undo_receipts` | Editor Input Fence identity and exact session/generation/local-intent binding precede the associated immutable Proposal Pause Fence; Proposal state axes and receipts remain immutable evidence; current Head is normalized separately |
-| Author command admission | `author_command_admissions`, `author_command_admission_settlements` | immutable User, exact existing or Server-allocated prospective Project Scope, trusted-client and Editor Session, writer generation, action class, command digest, target, one-use nonce/idempotency, lifetime, and one typed terminal settlement |
-| Web editor coordination | `editor_sessions`, `project_writer_generations` | one current Project writer generation; stale generations are fenced; the IndexedDB Local Edit Journal remains non-authoritative client continuity data |
-| Domain command evidence | `domain_receipts`, `domain_events`, `command_idempotency`, `scope_counters`, `aggregate_counters` | one committed outcome per command key and transactional committed-domain order |
-| Agent execution | `agent_runs`, `subruns`, `subrun_joins`, `run_grant_revisions`, `subrun_capability_grants`, `run_plans`, `run_steps`, `run_lanes`, `run_events`, `run_mailbox_messages`, `run_mailbox_deliveries`, `run_waits`, `wait_resolutions`, `run_holds`, `run_wakeups`, `run_leases`, `run_execution_attempts`, `run_budget_accounts`, `run_budget_reservations`, `usage_records` | normalized live state is backed by immutable events and receipts; mailbox delivery is durable and leases and budget claims are fenced |
-| Transcript and approval | `transcript_items`, `approval_waits`, `approval_decisions`, `steering_inputs`, `run_checkpoints` | Transcript items and decisions are canonical Operational Records; checkpoints are disposable projections |
-| Tool, MCP, and Skill | `tool_specs`, `tool_registration_revisions`, `tool_registration_heads`, `tool_registration_status_events`, `tool_calls`, `tool_attempts`, `mcp_server_registration_revisions`, `mcp_server_registration_heads`, `mcp_app_artifacts`, `skill_package_revisions`, `skill_package_heads`, `skill_activations` | reusable non-project definitions are unscoped only when content-free of project data; calls, activations, Apps, and status evidence are scoped |
-| Model Gateway | `model_registration_revisions`, `model_registration_heads`, `model_registration_status_events`, `model_capability_profiles`, `model_operational_snapshots`, `model_routing_policy_revisions`, `model_route_requests`, `model_route_decisions`, `model_invocations`, `model_attempts`, `model_usage_settlements` | Registration/capability contracts are unscoped only while free of Project data, Credential References, actual endpoint/account or disclosure destinations, and authority; the model surface uses the shared scoped external-use-binding shape to pin Project Scope, use/Credential authorization, one already-established Processing Destination Identity and exact evidence revision, and bounds, while a separate later compatibility Decision evaluates that binding; every snapshot, route decision, invocation, attempt, and fallback pins both records; Provider-neutral columns and versioned Adapter payload add no Provider-specific authority table |
-| Memory and research | `memory_candidates`, `memory_admissions`, `memory_suppressions`, `research_claims`, `research_evidence_edges`, `source_snapshots` | source Revisions and provenance remain canonical; retrieval projections remain separate |
-| Context and disclosure | `operation_requirements`, `context_candidates`, `context_eligibility_decisions`, `context_selection_decisions`, `context_projections`, `context_assembly_manifests`, `context_manifest_members`, `project_external_use_binding_revisions`, `external_contract_compatibility_decisions`, `destination_attempts`, `wire_payload_projections`, `outbound_disclosure_events`, `destination_attempt_settlements` | Model, Tool, MCP, Provider, and research surfaces share one scoped external-use-binding shape that pins an already-existing Processing Destination Identity, exact evidence revision, and owning authorization; a compatibility Decision follows and references one already-existing binding; the Manifest and exact non-secret wire evidence commit before external dispatch claim |
-| Durable work delivery | `outbox_entries`, `worker_fences` | outbox intent commits with its owning transition; a worker generation fences all settlements |
-| Disposable retrieval | `retrieval_documents`, `retrieval_fragments`, `retrieval_terms`, `embedding_projections`, `projection_dependencies`, `projection_invalidations`, `projection_generations`, `context_cache_entries`, `context_cache_dependencies`, `read_model_checkpoints` | all rows are scoped, dependency-complete, immediately disqualifiable, and rebuildable |
-| Storage administration | `schema_migrations`, `migration_phases`, `restore_proofs`, `project_export_manifests`, `project_restore_staging` | maintenance-only metadata; staging is never visible as a live Project |
+| User and Authoritative State | `identity-user`, `project-canonical` | User identity, exact Project Scope, policy, manuscript authority, immutable Revisions/Payloads, Heads, Commits, and scoped counters remain canonical and separate from every Artifact or Operational family |
+| Artifact and Proposal | `artifact-proposal-draft` | Artifact, Proposal, Draft, memory, research, provenance, and source histories never share a Head or canonical payload identity with Authoritative State |
+| Operational command and execution evidence | `operational-receipts-actions`, `operational-admission-editor`, `operational-run-mailbox`, `operational-context-disclosure`, `operational-lifecycle` | Typed Receipts, Author Actions, Admission, Editor, Run, Mailbox, disclosure, lifecycle, and outbox facts are durable Operational Records with their own identities and transaction groups |
+| Historical wire and replay evidence | `operational-wire-history`, `operational-project-activity`, `operational-snapshot-replay` | Application Wire Records, public Event representations, Project Activity positions, Snapshots, cursors, replay floors, and handoffs are immutable or explicitly versioned history, never disposable query materialization |
+| Disposable projection boundary | `projection-generation-control`, `projection-retrieval`, `projection-embedding`, `projection-context-cache`, `projection-read-model` | Every projection is scoped, dependency-complete, generation/watermark-bound, invalidatable, rebuildable, and excluded or metadata-only in Project portability as declared by the JSON catalog |
+| Global definitions and credential references | `global-definitions`, `credential-references` | Global definitions are project-free; Credential References are opaque, scoped, non-secret binding metadata and never an authorization or secret store |
+| Migration, recovery, and portability administration | `admin-migration`, `admin-recovery-copy`, `admin-project-portability` | Maintenance records are isolated from the request path; Recovery Copy, restore proof, export manifests, and restore staging never become live Project authority |
 
-Tables whose logical facts already belong to an Artifact or Operational Record
-may use a typed subtype relation referencing that owner rather than duplicating
-payload. The one-to-one relationship and same-space ownership must be enforced
-by a scoped foreign key. Globally reusable ToolSpecs, schemas, mapping profiles,
+The JSON catalog's unique table-family check is the only exhaustive physical
+ownership proof. Logical facts that belong to an Artifact or Operational Record
+may use typed subtype relations referencing that catalog family rather than
+duplicating payload. Globally reusable ToolSpecs, schemas, mapping profiles,
 and adapter definitions use content-addressed or versioned global identities;
 their project enablement, use, evidence, and cached effects remain scoped.
+The catalog's `table_family_registry` digest mechanically binds each physical
+table-family name to its family ID, semantic owner, authority class, and
+durability class; changing, inventing, moving, or omitting a table family
+without changing the checked-in contract revision and digest is rejected.
+
+### 3.3 Release 1 family responsibility map
+
+The catalog remains the sole physical ledger. This responsibility map explains
+the semantic boundary of the same family identities; it does not enumerate
+tables or create an additional physical source of truth. Families are
+deliberately coarse enough to keep ownership reviewable and narrow enough that
+no one family crosses an authority or durability boundary:
+
+| Catalog family | Durable space | Physical responsibility | Public or internal boundary |
+|---|---|---|---|
+| `identity-user` | User identity | User rows and forced User-level access | Project creation/listing input; never a Project export payload |
+| `project-canonical` | Authoritative State | Project policy, manuscript objects, immutable Revisions/Payloads, Heads, Commits, and scoped counters | Core and Release 1 manuscript/project routes |
+| `artifact-proposal-draft` | Artifacts | Artifact, Proposal, Draft, provenance, memory, research, and source Revision histories | Proposal/Artifact routes; never a Canonical Head |
+| `operational-receipts-actions` | Operational Records | All typed Receipt kinds, Author Actions, idempotency, and domain evidence | Settlement queries and Receipt-backed Activity |
+| `operational-admission-editor` | Operational Records | Admission, nonce/challenge, Editor Session, writer-generation, Input Fence, and Pause Fence records | Admission and editor-session routes |
+| `operational-run-mailbox` | Operational Records | Run, Subrun, Step, Mailbox, Transcript, Approval, budget, lease, fence, and outbox evidence | Agent/run routes and downstream retention owner |
+| `operational-context-disclosure` | Operational Records | Processing Destination Identity, requirement/selection, Manifest, binding, Decision, Attempt, wire projection, and disclosure evidence | Context, model, Tool, and MCP boundaries |
+| `operational-wire-history` | Historical Operational Records | Immutable Application Wire Records and first materialized public Event representations | Public commands/Events are represented; query-response bytes and transport framing are not |
+| `operational-project-activity` | Historical Operational Records | Project Activity Events, positions, replay generations, replay floors, and handoff evidence | One canonical Project Activity stream |
+| `operational-snapshot-replay` | Historical Operational Records | Authorized Snapshot reading boundaries, cursor evidence, and generation handoffs | Snapshot/resync/query-history routes |
+| `operational-lifecycle` | Operational Records | Archive, Tombstone, Suppression, retention, and deletion decisions | Lifecycle owner; physical cleanup remains downstream policy |
+| `projection-generation-control` | Disposable projections | Dependency closure, invalidations, generation pointers, and source watermarks | Internal rebuild control; never an authority source |
+| `projection-retrieval` | Disposable projections | Retrieval documents, fragments, and lexical terms | Search/retrieval read path; rebuildable |
+| `projection-embedding` | Disposable projections | Scope-bound embedding observations and their exact external-use dependencies | Retrieval acceleration; unavailable is explicit |
+| `projection-context-cache` | Disposable projections | Context projections, cache entries, and dependency rows | Context continuity; rebuilt from canonical inputs |
+| `projection-read-model` | Disposable projections | Read-model checkpoints and other current-only materializations | Current view only; never history or authority |
+| `global-definitions` | Global definitions | Project-free versioned Tool, MCP, Skill, Model, schema, and capability definitions | Explicit global grants; no project-derived bytes |
+| `credential-references` | Scoped Operational Records | Opaque resolver references, binding generations, and availability evidence | Reference-only in backups/exports; never a secret store |
+| `admin-migration` | Maintenance records | Schema ledger, phase checkpoints, and checksums | Migrator only; no request-path grant |
+| `admin-recovery-copy` | Maintenance records | Recovery Copy, base-backup/WAL evidence, restore proof, and visibility proof | Backup/restore roles only |
+| `admin-project-portability` | Maintenance records | Project Export manifests/entries and isolated restore staging/validation | Exact-scope archive/restore; staging never live |
+
+`Authoritative State`, `Artifacts`, and `Operational Records` therefore remain
+three disjoint durable spaces even when one Core Transition writes all three.
+`Receipt`, `Author Action`, `Author Command Admission`, `Application Wire
+Record`, and `Project Activity` are not additional authority levels. A
+projection may reference any of them through exact scoped dependencies, but it
+cannot become their source, and a projection family cannot be included in a
+Project Export as a substitute for canonical or historical evidence. The
+catalog's table-family uniqueness check rejects accidental merging.
 
 ## 4. Keys, constraints, and fail-closed references
 
@@ -267,6 +362,54 @@ The Foundation starts without per-Project partitions. Later measured
 partitioning may use scope hash, lifecycle, or time only when every partition
 preserves the parent constraints and RLS and runtime roles have no direct
 partition grants. Partitioning never changes aggregate or Project identity.
+
+### 4.5 Release 1 atomic write sets and physical record mapping
+
+The Core Transition is the physical boundary for a successful author-owned
+command. In one scoped transaction it resolves the idempotency arbiter, locks
+the exact Heads and counters, appends any immutable Canonical or Artifact
+Revision, writes the selected typed Receipt, writes the Author Action when the
+result allocates one, advances normalized Heads, appends the required Project
+Activity position/Event, records projection invalidations, and inserts the
+outbox or wakeup intent. For an admitted command it also settles the
+`AuthorCommandAdmission` with `ReceiptSettled` in that same write set. No row
+from that set is published as committed before the transaction commits.
+
+The physical mapping is closed as follows:
+
+| Logical record | Catalog family | Required physical rule |
+|---|---|---|
+| Authoritative State, Authoritative Revision, Authoritative Commit, Head, and canonical payload | `project-canonical` | Immutable Revision/Payload and Commit rows plus one scoped current Head; Commit and counter sequence are gapless on commit |
+| Artifact, Proposal, Draft, provenance, lifecycle source, and source Snapshot | `artifact-proposal-draft` | Immutable Artifact/Proposal/Draft revisions and typed lifecycle/provenance edges; no shared Head or payload identity with Canonical State |
+| Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt | `operational-receipts-actions` | One typed immutable Receipt identity per first attempt; exact retry returns the same row and every allocation is explained by its result variant |
+| Author Action and Author Undo Frontier evidence | `operational-receipts-actions` | One independent scoped Author Action sequence; successful author Proposal edits receive a Forward action, while Admission/Fence/refusal/conflict/no-effect evidence does not |
+| Author Command Admission, terminal settlement, anti-forgery challenge, and idempotency | `operational-admission-editor` and `operational-receipts-actions` | Exact User, Project Scope, client/session/writer generation, action class, digest, target, nonce, lifetime, and one terminal settlement; `outcome_unknown` is nonterminal |
+| Editor Session, current writer generation, Input Fence, and Proposal Pause Fence | `operational-admission-editor` | Scope-bound operational evidence; stale generations are fenced and no browser Local Edit Journal row becomes PostgreSQL authority |
+| Application Wire Record | `operational-wire-history` | Store exact accepted schema-valid message-content bytes once with route, method, release, schema, content type, digest profile, idempotency/Command reference, and resulting identity; never store cookies, headers, nonces, secrets, malformed bodies, or query-response archives |
+| Public Event wire representation | `operational-wire-history` | Store the first compact JSON representation with Event identity, Activity profile, schema, redaction profile, and representation digest; duplicate delivery is not another Wire Record |
+| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position`; bind replay generation, Event schema, typed Receipt reference, cause, resulting Heads, and redaction profile |
+| Snapshot, cursor, replay floor, generation, and handoff evidence | `operational-snapshot-replay` and `operational-project-activity` | Snapshot is an authorized Server reading boundary; cursor is bound to Scope/requester/filter/profile/generation; old generation either has exact verified handoff or returns `activity_cursor_too_old` |
+| Run Event, Mailbox, Transcript, Approval, Attempt, budget, lease, and outbox evidence | `operational-run-mailbox` and `operational-context-disclosure` | Immutable events and delivery evidence plus fenced live state; retention/compaction semantics remain owned by [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) |
+| Context Assembly Manifest, external-use binding, compatibility Decision, Destination Attempt, disclosure, and external wire projection | `operational-context-disclosure` | Manifest and exact non-secret wire projection commit before dispatch claim; OutcomeUnknown disclosure is durable before possible I/O; binding and Decision are separate records |
+| Retrieval, embedding, context cache, and read-model rows | `projection-retrieval`, `projection-embedding`, `projection-context-cache`, `projection-read-model` | Disposable, scoped, dependency-complete, generation-bound, invalidatable, and rebuildable; none is canonical, historical Wire evidence, or sole content copy |
+| Projection generation, invalidation, and watermark | `projection-generation-control` | Canonical transition appends invalidation atomically; a staged generation becomes visible only after dependency closure and watermark validation |
+| Credential Reference and Project-use binding | `credential-references` | Opaque locator/reference, generation, status, and availability evidence only; a restore marks unresolved bindings `Unbound` and never carries secret material |
+| Migration ledger, Recovery Copy, restore proof, Project Export manifest, and restore staging | `admin-migration`, `admin-recovery-copy`, and `admin-project-portability` | Maintenance-only roles and isolated staging; staging is never a live Project and proof is required before activation or visibility |
+
+Every project-bearing row in these mappings repeats the exact Scope in its
+primary/unique key and every project-bearing reference repeats Scope in a
+`MATCH FULL` composite foreign key. A physical implementation may split one
+catalog family into narrower tables, but it must preserve the family identity,
+transaction group, immutable/head/projection property, and all catalogued
+dependencies.
+
+An external model, Tool, MCP server, embedding service, Keychain, filesystem,
+or network is never part of the Core transaction. Before external I/O the
+Context Assembly Manifest, non-secret Application Wire Record/Projection,
+pending Destination Attempt, fenced dispatch claim, and OutcomeUnknown
+Disclosure Event must be committed in the order already specified in section
+5.6. A lost acknowledgement is reconciled from the typed Receipt, idempotency,
+Activity, and Attempt records; it is never interpreted as a negative outcome.
 
 ## 5. Transactions, concurrency, and recovery cuts
 
@@ -502,6 +645,73 @@ ranking within one fixed generation; it does not fabricate byte equality from
 a Provider. If the exact embedding route is unavailable, the generation stays
 Unavailable and retrieval falls back only to an independently admitted mode.
 
+### 7.5 Release 1 generation, watermark, and recovery visibility contract
+
+Every disposable or historical projection family carries the following
+identity, whether the physical implementation stores the fields in one row or
+in a typed side relation:
+
+```text
+ProjectionIdentity {
+  owner_user_id, project_id
+  projection_family
+  projection_profile_revision
+  projection_generation
+  source_watermark_kind
+  source_watermark
+  dependency_closure_digest
+  state: building | ready | unavailable | invalidated
+}
+```
+
+The dependency closure includes every source identity and exact Revision or
+payload digest, Project Scope, lifecycle/retention and suppression facts,
+authorization/grant and destination facts when applicable, external
+Registration/Adapter/Model profiles when applicable, and the canonical input
+projection. A cache key, Event position, or source ID without this closure is
+not a valid projection row. `projection_generation` is scoped and monotonic;
+the `source_watermark` is the exact canonical Commit or Project Activity
+position that the generation has processed. It is not a wall-clock timestamp,
+UUID order, or browser local sequence.
+
+The owning canonical transaction appends an invalidation or advances the
+scoped generation epoch before commit. Readers compare the full closure,
+generation, watermark, and current lifecycle eligibility. An invalidated,
+unknown, stale, cross-scope, or partially populated row is invisible even if
+its index returns a hit. Historical Application Wire Records and public Event
+representations are immutable evidence and are never silently invalidated or
+rewritten; a current view may report that their source is no longer eligible.
+
+A rebuild follows one positive sequence:
+
+1. fence the old generation for writes and mark the new generation `building`;
+2. enumerate canonical and historical sources in a deterministic Scope-bound
+   order, reapply current qualification, and record the job manifest;
+3. write rows only into the staged generation with complete dependency closure;
+4. validate every scope, foreign reference, digest, invalidation, projection
+   profile, index, and watermark postcondition;
+5. mark the generation `ready` and atomically advance the scoped generation
+   pointer; and
+6. drop or quarantine the old generation and invalid indexes only after the
+   new pointer and recovery evidence are durable.
+
+An interrupted build is resumable from its last verified batch or discarded
+without changing canonical state. An invalid index is dropped and rebuilt; it
+is never treated as a valid empty result. A missing external embedding route
+marks that generation `unavailable`, and the read path uses only an explicitly
+admitted fallback. No partial generation serves a Snapshot or query.
+
+After a whole-service or Project Restore, traffic remains fenced until all of
+the following are true: canonical facts, typed Receipts, Heads, sequences,
+idempotency, Activity positions, and lifecycle records validate; each required
+projection is `ready` at or beyond the required watermark or has a typed
+`unavailable` fallback; a fresh authorized Snapshot/resync boundary is
+available; the replay floor and cursor generation are coherent; and the
+Recovery Visibility Proof demonstrates that later Redaction, Tombstone,
+Archive, Suppression, retention, and availability facts have been applied. A
+database that is physically restorable but fails any lifecycle or projection
+proof remains in `recovery_hold` or `read_only`; it is not exposed as current.
+
 ## 8. Credentials, lifecycle, and retention handoff
 
 ### 8.1 Credential Reference persistence
@@ -549,12 +759,14 @@ does not resurrect purged payload or pretend a known gap is complete.
 
 ### 9.1 Migration ledger and runner
 
-`schema_migrations` records a monotonic schema version, immutable migration ID,
-checksum, required StoryOS release identity, runner version, start
-and finish evidence, and final status. `migration_phases` records each
-transactional or nontransactional phase and its verified postcondition. The
-migrator acquires one database-level advisory lock only to exclude another
-migrator, verifies the entire applied checksum chain, and refuses drift.
+`schema_migrations` records a monotonic schema version, immutable bootstrap or
+migration ID, checksum, required StoryOS release identity, runner version,
+start and finish evidence, and final status. `migration_phases` records each
+future transactional or nontransactional migration phase and its verified
+postcondition; the initial Release 1 bootstrap has the separate catalogued
+`bootstrap_phases` contract. The migrator acquires one database-level advisory
+lock only to exclude another migrator, verifies the entire applied checksum
+chain, and refuses drift.
 
 Transactional DDL commits atomically. Operations such as concurrent index
 builds run as explicit resumable phases, detect and remove invalid remnants,
@@ -565,7 +777,7 @@ writes succeed.
 
 ### 9.2 Prepare, migrate, activate, verify
 
-Every storage release uses an exclusive controlled activation:
+Every forward storage migration uses an exclusive controlled activation:
 
 1. stop new author and Worker writes and settle or fence in-flight work;
 2. create and verify the required Recovery Copy;
@@ -581,7 +793,98 @@ Every storage release uses an exclusive controlled activation:
 Runtime startup and write admission require the exact active schema release.
 Recovery uses the verified Recovery Copy, PITR, or a forward repair. Migration
 history, historical payload schema identities, Receipts, Events, and archive
-profiles remain interpretable without running an older application binary.
+profiles remain interpretable without running an older application binary. The
+initial Release 1 baseline is the explicit exception to the forward-migration
+sequence: it has no predecessor and uses the atomic bootstrap in section 9.3;
+it does not claim a production data backfill or a migration Recovery Copy.
+
+### 9.3 Release 1 initial baseline and future migration boundary
+
+The active Release 1 persistence contract is an initial baseline, catalogued as
+`storyos.persistence.bootstrap.release-1.v1`. It has no supported stored
+predecessor, no migration edge, and no production data migration claim. A fresh
+database enters the positive path by creating the schema, catalog, roles,
+forced-RLS policies, composite constraints, and administrative records in one
+atomic bootstrap. The empty migration-chain identity and digest are still
+checked against the public same-release identity; a matching semantic version
+alone never activates storage.
+
+Future Release 2 or later may introduce a migration edge only after its owning
+contract supplies a real predecessor schema identity, persisted-format catalog,
+representative persisted rows or checksums, and an exact edge checksum. That
+future edge must use the Recovery Copy, transactional/nontransactional phase,
+backfill, invalid-index, restore-proof, and failure-state discipline below. The
+Release 1 catalog does not name or imply a predecessor and cannot be used to
+prove one.
+
+The migration runner acquires the one database-level advisory lock only for
+migrator exclusion, records the lock owner and runner revision, and verifies
+the complete immutable checksum chain before reading or writing schema state.
+`storyos_runtime` is never granted migration authority. The bootstrap records
+phase class, transaction boundary, catalog identity, postcondition, attempt,
+and terminal disposition in the administrative ledger; a future migration
+also records input/output checksums, batch or cursor checkpoints, and the exact
+predecessor edge in `migration_phases`.
+
+| Phase | Boundary | Positive postcondition | Restart and failure rule |
+|---|---|---|---|
+| `preflight` | Read-only control transaction | New installation, exact Release 1 catalog/route identity, empty predecessor set, roles, forced-RLS posture, and no conflicting runner are proven | Idempotent; mismatch enters `failed_unavailable` without touching domain rows |
+| `initial_schema_bootstrap` | One transactional DDL boundary | Release 1 schema, catalog, roles, forced-RLS policies, composite constraints, indexes, and bootstrap ledger are created atomically | Rollback leaves no partially active service; retry is idempotent and checksum-bound |
+| `validate_transaction` | Transactional validation | Composite references, payload digests/limits, Heads, counters, indexes, invalid-index scan, role/RLS posture, and catalog bindings pass | Failure never activates; invalid indexes are dropped/rebuilt or the service remains `unavailable` |
+| `activate` | Fenced controlled cutover | One exact storage/protocol identity is active and all write, projection, lifecycle, and restore-visibility gates are true | Any identity, lifecycle, projection, or restore-proof mismatch enters `recovery_hold` or `failed_unavailable` |
+
+The initial bootstrap is wholly transactional and has no nontransactional
+backfill, predecessor checkpoint, or migration Recovery Copy to resume. A
+future nontransactional backup, concurrent-index, or bounded-backfill phase
+must never pretend to be atomic: each checkpoint is independently checksummed
+and the runner must choose a verified predecessor, verified intermediate
+checkpoint, or isolated Recovery Copy before continuing. A phase with an
+invalid index, missing batch, checksum drift, unsupported payload, or uncertain
+source is not marked complete. Migration never disables forced RLS, composite
+foreign keys, payload constraints, or scope predicates to make a backfill
+succeed.
+
+### 9.4 Positive initial activation state machine
+
+The only positive path is:
+
+```text
+NewInstallRequired
+  -> Preflight
+  -> InitialSchemaBootstrap
+  -> Verifying
+  -> Activating
+  -> Active
+```
+
+The runner may enter `Active` only after the exact gates in section 7.5 and the
+catalog's `active_write_gates` pass. `Preflight` checks the server-declared
+database identity, persisted-format catalog, empty migration-chain digest,
+route catalog digest, same-release protocol identity, role posture, forced-RLS
+policy inventory, and bootstrap ledger. `InitialSchemaBootstrap` creates the
+full Release 1 physical surface in one transaction. No current state called
+`PredecessorPresent`, `RecoveryCopyRequired`, or `Migrating` is admitted for
+this initial baseline. The general Recovery Copy and PITR profile in section
+10 remains mandatory operational evidence, but it is not a predecessor input
+to an empty initial schema.
+
+Failure is positive and inspectable, not an implicit rollback guess:
+
+| Boundary | State | Allowed behavior |
+|---|---|---|
+| Preflight identity or checksum mismatch | `failed_unavailable` | Do not touch domain rows; fix the bootstrap input or retry the same empty-baseline preflight |
+| Initial schema bootstrap rollback | `failed_unavailable` | No partial Release 1 schema is active; retry only after the bootstrap transaction and catalog checksum are corrected |
+| Validation or invalid-index failure | `recovery_hold` or `failed_unavailable` | Drop/rebuild the invalid index or repair the named bootstrap input; do not activate partial storage |
+| Restore chain/lifecycle range gap | `recovery_hold` | Keep Project unavailable or read-only until Recovery Visibility Proof is complete |
+| Same-release identity mismatch | `failed_unavailable` | Return `upgrade_required` before domain attempt, cursor movement, external effect, or live traffic |
+| Future migration interruption | `failed_read_only` or `recovery_hold` | Apply the future edge's verified checkpoint/Recovery Copy rules; Release 1 has no such current phase |
+
+`storyos_runtime` starts or admits writes only from `Active` with a current
+bootstrap restore proof, and Recovery Visibility Proof. A runtime process
+cannot infer readiness from a matching schema version, a responsive database,
+a complete HTTP health check, or a projection row. The activation record binds
+the exact Server, Worker, protected Web Client, generated public contract,
+route/Event catalog, storage catalog, and migration ledger identities.
 
 ## 10. Backup, restore, export, and deployment migration
 
@@ -667,6 +970,47 @@ retired only under the retention contract. There is no dual write, implicit
 ownership transfer, Provider migration dependency, or cross-deployment secret
 copy.
 
+### 10.5 Recovery evidence, lifecycle proof, and measurement boundaries
+
+The Foundation Recovery Service Profile is retained exactly: synchronous
+PostgreSQL durability gives zero acknowledged-data loss for an ordinary process
+or power crash; host/disk loss has declared RPO at most fifteen minutes and RTO
+at most two hours; the profile uses a physical base backup plus WAL archive,
+independent failure-domain storage, and an isolated restore proof. Those values
+are storage contract requirements, not claims made by a logical dump test.
+
+The [Representative Writing-Path Performance and Storage-Growth Envelope](../research/representative-writing-path-performance-and-storage-growth-envelope.md)
+is calibration evidence only. Its sampled logical dump/restore, WAL deltas,
+relation sizes, compaction timings, and modelled annual bytes do not prove
+physical base-backup/WAL continuity, host-loss recovery, lifecycle proof,
+RPO/RTO, or a deployment capacity limit. They cannot set a payload hard limit,
+retention duration, checkpoint cadence, compaction policy, or public timeout.
+Any future capacity recommendation must replace the synthetic corpus with the
+exact Release 1 schema/DTO cardinality and explicitly include payload tables,
+indexes, WAL, backups, bloat, archives, projections, and recovery-chain
+headroom; it remains non-normative until a named owner accepts it.
+
+`RecoveryVisibilityProof` is a durable maintenance record, not a health-check
+boolean. It binds the Recovery Copy/restore point, migration and catalog
+identity, verified lifecycle/redaction range, canonical fact and History
+digests, Project Activity/replay generation, projection generation/watermark,
+credential-reference availability, and the exact checks performed. A missing
+WAL segment, lifecycle range, invalidated projection, or unresolved integrity
+check keeps the affected Project in `recovery_hold` and the service
+`read_only`/`unavailable`; it never exposes an older recovered view as current.
+
+Physical backup/WAL restores preserve all non-secret database facts and
+metadata required by the profile. Logical whole-service migration preserves
+identities, schema histories, Receipts, Events, Application Wire Records,
+Heads, sequences, idempotency, lifecycle, manifests, and `OutcomeUnknown`
+uncertainty, then rebuilds disposable projections. Project Export remains the
+exact-scope portable archive described in 10.3, not a selected-table dump.
+Credential References and non-secret binding metadata may be restored, but
+secret values, value digests, decrypting keys, authorization headers, and
+credential-bearing transport bytes are excluded from rows, backups, exports,
+logs, tracing, support bundles, and diagnostic material. An unresolved
+reference is explicitly `Unbound` until an authorized rebind.
+
 ## 11. Required proof gates
 
 Downstream implementation is not Foundation-ready until automated evidence
@@ -703,9 +1047,10 @@ covers at least:
 12. deleting every disposable projection and rebuilding produces complete
     scoped dependency closure, stable source enumeration and fixed-generation
     ranking, without treating refreshed embedding bytes as canonical;
-13. a migration survives a crash in every transactional and nontransactional
-    phase, detects checksum drift and invalid indexes, validates backfills, and
-    enforces exact active StoryOS release identity;
+13. the initial transactional bootstrap survives a crash without exposing
+    partial Release 1 state, and every future transactional or nontransactional
+    migration phase detects checksum drift and invalid indexes, validates
+    backfills, and enforces exact active StoryOS release identity;
 14. physical base backup plus WAL restores selected crash points with zero
     acknowledged loss for ordinary crashes and proves the declared disaster
     RPO and RTO in an isolated environment;
@@ -720,6 +1065,32 @@ covers at least:
 18. database corruption, failed invariant validation, missing recovery chain,
     or unsupported contract keeps the service read-only or unavailable rather
     than guessing or repairing history.
+19. the Release 1 persistence catalog parses as UTF-8/LF JSON, has one identity
+    per family/table/schema/migration edge, proves the empty initial edge set
+    and bootstrap path, binds its sole physical ledger to this section, and
+    resolves every declared Markdown owner and anchor;
+20. every project-bearing catalog family has the complete Project Scope,
+    forced-RLS, runtime-grant, and `MATCH FULL` composite-reference profile,
+    while global and maintenance families are explicitly unscoped or isolated;
+21. Canonical, Artifact, Operational, projection, and maintenance families
+    have disjoint physical table ownership; typed Receipt kinds, Author Action,
+    Admission, Application Wire Record, Project Activity, Snapshot/cursor,
+    replay, and disposable projection rows are not silently merged;
+22. every Release 1 route with a persistence-bearing owner is mechanically
+    covered by a catalog family, every settlement query is the exact named GET
+    operation, every success/no-effect Activity Event is catalogued, every
+    public Event has an Activity owner, and wire-history coverage is explicit;
+23. every disposable projection names canonical dependencies, a generation,
+    source watermark, invalidation set, rebuild rule, and recovery visibility
+    gate; deletion and rebuild cannot expose a partial generation;
+24. backup, whole-service restore, Project Export, Project Restore, projection
+    rebuild, secret-exclusion, settlement, and predecessor classifications are
+    mutually consistent; a negative self-test proves that duplicate identity,
+    broken owner anchor, invalid settlement, invalid portability, predecessor
+    bypass, and invented table-family inputs are rejected;
+25. the catalog's protocol route-catalog digest and migration-chain digest
+    agree with the checked-in Release 1 inputs, so a same-release activation
+    cannot skip storage migration by reusing a public protocol identity.
 
 ## 12. Normative invariants and handoff
 
@@ -752,6 +1123,28 @@ covers at least:
     restoration without merge, remap, overwrite, or ownership transfer.
 14. Local and cloud deployments preserve the same Project Isolation and
     persistence semantics.
+15. Release 1 activation binds the exact database schema, persisted-format
+    catalog, migration chain/digest, public route catalog, and same-release
+    identity; matching semantic versions cannot bypass migration or restore
+    proof.
+16. Release 1 is an initial persisted baseline with no supported predecessor;
+    its empty migration chain and atomic bootstrap are checksummed and verified.
+    Any future predecessor requires a source-backed migration edge, and its
+    transactional or nontransactional failure leaves a verified checkpoint,
+    Recovery Copy, read-only state, or unavailable state rather than guessed
+    history.
+17. Typed Receipts, Author Actions, Admissions, Application Wire Records,
+    Project Activity positions, Snapshot/replay evidence, and lifecycle facts
+    are immutable or explicitly versioned Operational Records with their own
+    identities; no browser projection, Event arrival, or query response is a
+    substitute for one of them.
+18. A disposable projection is visible only with complete Scope-bound
+    dependency closure, current generation, source watermark, and valid
+    invalidation state; a restored Project requires a fresh Snapshot/resync and
+    Recovery Visibility Proof before live traffic.
+19. The machine-readable persistence catalog and its verifier are review-time
+    contract proof, not production DDL or executable recovery. Their derived
+    statistics never become hard limits, retention defaults, or RPO/RTO claims.
 
 The versioned command/query/event protocol owns exact wire DTOs and byte-limit
 values while preserving every key, scope, digest, and compatibility field in
@@ -761,3 +1154,33 @@ retention ticket owns durations and final compaction policy without weakening
 historical evidence or immediate invalidation. The first editor-first
 implementation stage begins only after these proof gates are represented in
 its issue.
+
+### 12.1 Explicit owner boundary
+
+This contract owns physical persistence and activation prerequisites only. The
+public protocol owns route, DTO, Event, wire-schema, and public compatibility
+meaning; Core and Artifact contracts own creative authority, Proposal, Draft,
+Receipt allocation, and Author Action meaning; the Editor Session contract owns
+browser journal/projection continuity; [Run Event, Mailbox, Snapshot,
+Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
+owns retention duration, checkpoint policy, compaction, archival, tombstone
+and deletion settlement; and [Define Deterministic Verification and
+Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) owns
+executable fault schedules and acceptance gates. The performance report remains
+research input only. None of those owners may weaken the storage identity,
+Scope/RLS, immutable history, Recovery Visibility Proof, or secret exclusion
+defined here, and this contract does not decide their unowned semantics.
+
+### 12.2 Requirement traceability
+
+| Requirement | Contract closure | Catalog/verifier proof |
+|---|---|---|
+| PGS-REL-001 | Sections 0, 9.3–9.4, invariant 15, and the activation gates | `schema_identity`, protocol binding, route/migration digest checks |
+| PGS-MIG-002 | Sections 9.1–9.4 and failure-state table | `migration_chain`, empty-edge/bootstrap path, `state_machine`, and future-edge boundary checks |
+| PGS-MIG-003 | Sections 9.1 and 9.3 | bootstrap/future phase class, transaction, restart/idempotency/postcondition checks |
+| PGS-ISO-004 | Sections 2 and 4 plus the catalog role/scope profiles | role profiles, scope profiles, forced-RLS, grant, and composite-reference checks |
+| PGS-OWN-005 | Sections 3.2–3.3 and 4.5 | unique table-family ownership and public logical-record mapping |
+| PGS-PROJ-006 | Sections 7.3–7.5 and 10.5 | generation/dependency/watermark/invalidation/rebuild/visibility checks |
+| PGS-REC-007 | Sections 8–10.5 | portability and secret-exclusion classification checks |
+| PGS-BOUND-008 | Sections 10.1, 10.5, and 12.1 | owner anchors plus explicit non-normative measurement/retention boundaries |
+| PGS-VERIFY-009 | Sections 0, 11.19–11.25, and 12.2 | positive verifier, route/Event cross-check, Markdown links, and negative self-test |
