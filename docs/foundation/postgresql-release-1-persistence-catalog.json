@@ -2,13 +2,24 @@
   "catalog_id": "storyos.persistence.catalog.release-1.v1",
   "contract_revision": "release1-storage-contract-2026-07-31",
   "database_schema": "storyos",
+  "physical_ledger": {
+    "authority": "sole_exhaustive_table_family_ledger",
+    "source": "docs/foundation/postgresql-release-1-persistence-catalog.json",
+    "contract_boundary": "docs/foundation/postgresql-project-storage-isolation-and-migration-contract.md#32-normative-aggregate-and-family-boundary"
+  },
+  "table_family_registry": {
+    "profile": "storyos.persistence.table-family-registry.v1",
+    "digest_algorithm": "sha256:canonical-json",
+    "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
+    "digest": "sha256:b82461ab2b0995a9d0f6b7218921ab28905db1995dc218499226df6c52da2d8d"
+  },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v1",
     "active_schema_version": "storyos.persistence.release-1.v1",
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v1",
-    "migration_chain_id": "storyos.persistence.migrations.release-0-to-release-1.v1",
+    "migration_chain_id": "storyos.persistence.bootstrap.release-1.v1",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:58c01b9c7e15a16b9f0408110855a00bd1a737f5271b75230288b95fddb12126",
+    "migration_chain_digest": "sha256:d5a24d5d9b2e06c7a63661a286d6eed43cf8b431c124ef8ae83c694e9c8d7b64",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -122,59 +133,31 @@
     }
   },
   "migration_chain": {
-    "chain_id": "storyos.persistence.migrations.release-0-to-release-1.v1",
+    "chain_id": "storyos.persistence.bootstrap.release-1.v1",
     "current_version": "storyos.persistence.release-1.v1",
-    "supported_predecessors": ["storyos.persistence.release-0.v1"],
+    "supported_predecessors": [],
     "new_install_terminal": "storyos.persistence.release-1.v1",
     "digest_excludes": ["migration_chain_digest"],
-    "edges": [
-      {
-        "migration_id": "storyos.persistence.migrate.release-0-to-release-1.v1",
-        "from": "storyos.persistence.release-0.v1",
-        "to": "storyos.persistence.release-1.v1",
-        "class": "mixed_transactional_and_nontransactional",
-        "phase_ids": ["preflight", "recovery_copy", "expand_transaction", "backfill_nontransactional", "validate_transaction", "activate", "contract_cleanup"],
-        "predecessor_checksum_required": true,
-        "unique_path": true
-      }
-    ]
+    "edges": []
   },
-  "migration_phases": [
+  "bootstrap_phases": [
     {
       "phase_id": "preflight",
       "class": "control_read",
       "transactional": true,
       "restartable": true,
       "idempotent": true,
-      "postcondition": "supported_schema_and_complete_checksum_chain",
+      "postcondition": "new_install_active_catalog_and_empty_migration_chain_verified",
       "failure_state": "read_only_or_unavailable"
     },
     {
-      "phase_id": "recovery_copy",
-      "class": "nontransactional_external",
-      "transactional": false,
-      "restartable": true,
-      "idempotent": true,
-      "postcondition": "verified_recovery_copy_and_restore_manifest",
-      "failure_state": "read_only"
-    },
-    {
-      "phase_id": "expand_transaction",
+      "phase_id": "initial_schema_bootstrap",
       "class": "transactional_ddl",
       "transactional": true,
       "restartable": true,
       "idempotent": true,
-      "postcondition": "additive_schema_and_constraints_present",
-      "failure_state": "read_only"
-    },
-    {
-      "phase_id": "backfill_nontransactional",
-      "class": "nontransactional_bounded_backfill",
-      "transactional": false,
-      "restartable": true,
-      "idempotent": true,
-      "postcondition": "scoped_rows_backfilled_and_batch_checksums_recorded",
-      "failure_state": "read_only_or_restore_required"
+      "postcondition": "release1_schema_catalog_roles_rls_and_constraints_created_atomically",
+      "failure_state": "unavailable"
     },
     {
       "phase_id": "validate_transaction",
@@ -182,8 +165,8 @@
       "transactional": true,
       "restartable": true,
       "idempotent": true,
-      "postcondition": "constraints_indexes_digests_and_restore_preconditions_valid",
-      "failure_state": "read_only"
+      "postcondition": "constraints_indexes_digests_roles_and_catalog_bindings_valid",
+      "failure_state": "unavailable"
     },
     {
       "phase_id": "activate",
@@ -193,29 +176,16 @@
       "idempotent": true,
       "postcondition": "one_exact_release_identity_active_and_traffic_fenced_until_proof",
       "failure_state": "unavailable_or_recovery_hold"
-    },
-    {
-      "phase_id": "contract_cleanup",
-      "class": "transactional_ddl",
-      "transactional": true,
-      "restartable": true,
-      "idempotent": true,
-      "postcondition": "obsolete_structures_removed_only_after_recovery_point_and_proof",
-      "failure_state": "read_only"
     }
   ],
   "state_machine": {
     "states": [
       "new_install_required",
-      "predecessor_present",
       "preflight",
-      "recovery_copy_required",
-      "recovery_copy_verified",
-      "migrating",
+      "initial_schema_bootstrap",
       "verifying",
       "activating",
       "active",
-      "contract_cleanup_pending",
       "recovery_hold",
       "failed_read_only",
       "failed_unavailable"
@@ -224,33 +194,25 @@
     "closed_failure_states": ["recovery_hold", "failed_read_only", "failed_unavailable"],
     "transitions": [
       {"from": "new_install_required", "event": "initialize_schema", "to": "preflight"},
-      {"from": "predecessor_present", "event": "detect_supported_predecessor", "to": "preflight"},
-      {"from": "preflight", "event": "preflight_passed", "to": "recovery_copy_required"},
+      {"from": "preflight", "event": "preflight_passed", "to": "initial_schema_bootstrap"},
       {"from": "preflight", "event": "unsupported_or_checksum_drift", "to": "failed_unavailable"},
-      {"from": "recovery_copy_required", "event": "recovery_copy_verified", "to": "recovery_copy_verified"},
-      {"from": "recovery_copy_required", "event": "recovery_copy_failed", "to": "failed_read_only"},
-      {"from": "recovery_copy_verified", "event": "begin_migration", "to": "migrating"},
-      {"from": "migrating", "event": "phase_failed_with_usable_predecessor", "to": "failed_read_only"},
-      {"from": "migrating", "event": "phase_failed_without_usable_state", "to": "failed_unavailable"},
-      {"from": "migrating", "event": "all_migration_phases_complete", "to": "verifying"},
+      {"from": "initial_schema_bootstrap", "event": "bootstrap_committed", "to": "verifying"},
+      {"from": "initial_schema_bootstrap", "event": "bootstrap_failed", "to": "failed_unavailable"},
       {"from": "verifying", "event": "verification_passed", "to": "activating"},
       {"from": "verifying", "event": "verification_failed", "to": "recovery_hold"},
       {"from": "activating", "event": "same_release_and_recovery_visibility_proof", "to": "active"},
       {"from": "activating", "event": "identity_or_visibility_gate_failed", "to": "recovery_hold"},
-      {"from": "active", "event": "defer_obsolete_structure_cleanup", "to": "contract_cleanup_pending"},
-      {"from": "contract_cleanup_pending", "event": "cleanup_proof_durable", "to": "active"},
-      {"from": "contract_cleanup_pending", "event": "cleanup_failed", "to": "failed_read_only"},
       {"from": "recovery_hold", "event": "complete_lifecycle_and_restore_proof", "to": "active"},
-      {"from": "failed_read_only", "event": "restore_or_forward_repair_verified", "to": "verifying"},
-      {"from": "failed_unavailable", "event": "restore_verified_in_isolation", "to": "verifying"}
+      {"from": "failed_read_only", "event": "bootstrap_or_forward_repair_verified", "to": "verifying"},
+      {"from": "failed_unavailable", "event": "bootstrap_retry", "to": "preflight"}
     ],
     "active_write_gates": [
       "preflight_passed",
-      "verified_recovery_copy",
+      "initial_schema_bootstrap_complete",
       "migration_chain_complete",
       "active_schema_version_exact",
       "same_release_identity_exact",
-      "restore_proof_current",
+      "bootstrap_restore_proof_current",
       "projection_generations_ready",
       "recovery_visibility_proof_current",
       "no_unresolved_contract_or_scope_failure"
@@ -275,14 +237,14 @@
       "authority_class": "identity",
       "durability_class": "canonical",
       "scope": {"kind": "user", "requires_project_scope": false, "profile": "user_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "transactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "transactional"},
       "dependencies": [],
       "transaction_group": "identity_bootstrap",
       "immutability": "append_only_identity",
       "head": "none",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "not_applicable"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "reference_only", "project_restore": "authorize_same_user", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "read"], "activity_profile": null, "wire_history": "not_applicable", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "not_applicable", "internal_only": false}
     },
     {
       "family_id": "project-canonical",
@@ -291,7 +253,7 @@
       "authority_class": "canonical",
       "durability_class": "immutable_with_current_heads",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["identity-user"],
       "transaction_group": "core_transition",
       "immutability": "immutable_revisions_and_commits",
@@ -307,30 +269,30 @@
       "authority_class": "artifact",
       "durability_class": "immutable_revisions_with_heads",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical"],
       "transaction_group": "artifact_transition",
       "immutability": "immutable_revisions_and_lifecycle_events",
       "head": "scoped_head",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "artifact_lifecycle_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "getArtifact"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "getArtifact"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-receipts-actions",
-      "table_families": ["domain_receipts", "validation_receipts", "acceptance_receipts", "undo_receipts", "undo_acceptance_receipts", "author_undo_receipts", "receipt_settlements", "domain_events", "command_idempotency", "author_action_entries"],
+      "table_families": ["domain_receipts", "validation_receipts", "acceptance_receipts", "undo_acceptance_receipts", "author_undo_receipts", "receipt_settlements", "domain_events", "command_idempotency", "author_action_entries"],
       "owner": "core",
       "authority_class": "operational",
       "durability_class": "append_only_with_idempotency_head",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical"],
       "transaction_group": "core_transition",
       "immutability": "immutable_receipts_and_outcomes",
       "head": "idempotency_arbiter",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "receipt_and_idempotency_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "settlement_persistence", "operation_ids": ["getCommand", "getReceipt"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "settlement_persistence", "operation_ids": ["getCommand", "getReceipt"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-admission-editor",
@@ -339,14 +301,14 @@
       "authority_class": "operational",
       "durability_class": "append_only_with_current_generation",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["identity-user", "project-canonical"],
       "transaction_group": "admission_and_writer_fence",
       "immutability": "immutable_admission_and_fence_evidence",
       "head": "current_writer_generation",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "admission_and_writer_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "deleteProject", "createEditorSession", "getEditorSession", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "deleteProject", "createEditorSession", "getEditorSession", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-run-mailbox",
@@ -355,14 +317,14 @@
       "authority_class": "operational",
       "durability_class": "immutable_events_with_fenced_live_state",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical", "operational-admission-editor"],
       "transaction_group": "run_transition_and_outbox",
       "immutability": "immutable_events_and_receipts_with_fenced_heads",
       "head": "run_lane_and_worker_fence",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "run_and_outbox_fences_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_reconcile_outcome_unknown", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createAgentRun", "pauseAgentRun", "resumeAgentRun", "cancelAgentRun", "resolveWait", "decideApproval", "getAgentRun"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createAgentRun", "pauseAgentRun", "resumeAgentRun", "cancelAgentRun", "resolveWait", "decideApproval", "getAgentRun"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-context-disclosure",
@@ -371,7 +333,7 @@
       "authority_class": "operational",
       "durability_class": "immutable_manifests_attempts_and_disclosure_events",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical", "credential-references", "global-definitions"],
       "transaction_group": "manifest_and_destination_attempt",
       "immutability": "append_only_manifest_wire_and_disclosure_evidence",
@@ -387,14 +349,14 @@
       "authority_class": "operational",
       "durability_class": "immutable_wire_history",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "transactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "transactional"},
       "dependencies": ["project-canonical", "operational-admission-editor"],
       "transaction_group": "wire_evidence_commit",
       "immutability": "insert_only_exact_message_content_bytes",
       "head": "none",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "historical_wire_record_integrity_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "wire_history", "operation_ids": [], "operation_selector": {"mode": "all_persisted_commands"}, "event_selector": {"mode": "all"}, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "canonical", "internal_only": false}
+      "public_contract": {"mapping_role": "wire_history", "operation_ids": [], "operation_selector": {"mode": "all_persisted_commands"}, "event_selector": {"mode": "all"}, "settlement_modes": ["sync", "async", "challenge", "conditional_by_cause"], "activity_profile": "storyos.project-activity.v1", "wire_history": "canonical", "internal_only": false}
     },
     {
       "family_id": "operational-project-activity",
@@ -403,14 +365,14 @@
       "authority_class": "operational",
       "durability_class": "append_only_replay_history",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical", "operational-receipts-actions"],
       "transaction_group": "core_transition_and_activity",
       "immutability": "append_only_event_and_position_history",
       "head": "replay_generation_and_position",
       "projection": {"kind": "historical_projection", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "operational-receipts-actions", "operational-run-mailbox"], "dependency_closure": ["event_id", "project_activity_position", "replay_generation", "event_schema", "redaction_profile"], "generation_field": "replay_generation", "watermark_field": "project_activity_position", "invalidation_families": ["operational-lifecycle"], "rebuild": "rebuild_from_retained_events_and_receipts_without_guessing_cursor_translation", "visibility_gate": "snapshot_or_replay_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "activity_owner", "operation_ids": ["getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": {"mode": "all"}, "settlement_modes": ["read", "sse"], "activity_profile": "storyos.project-activity.v1", "wire_history": "event_representation_referenced", "internal_only": false}
+      "public_contract": {"mapping_role": "activity_owner", "operation_ids": ["getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": {"mode": "all"}, "settlement_modes": ["read", "stream"], "activity_profile": "storyos.project-activity.v1", "wire_history": "event_representation_referenced", "internal_only": false}
     },
     {
       "family_id": "operational-snapshot-replay",
@@ -419,14 +381,14 @@
       "authority_class": "operational",
       "durability_class": "bounded_snapshot_boundary",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical", "operational-project-activity"],
       "transaction_group": "snapshot_creation_and_resync",
       "immutability": "immutable_snapshot_revision",
       "head": "current_snapshot_generation",
       "projection": {"kind": "historical_projection", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "operational-project-activity"], "dependency_closure": ["snapshot_id", "project_activity_position", "replay_generation", "heads_digest", "contract_identity"], "generation_field": "replay_generation", "watermark_field": "project_activity_position", "invalidation_families": ["operational-project-activity", "operational-lifecycle"], "rebuild": "reestablish_authorized_snapshot_from_canonical_state", "visibility_gate": "snapshot_complete_and_authorized"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "rebuild_or_restore_and_verify", "project_export": "include_if_required_for_historical_evidence", "project_restore": "rebuild_from_canonical", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "replay_persistence", "operation_ids": ["getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read", "sse"], "activity_profile": "storyos.project-activity.v1", "wire_history": "not_applicable", "internal_only": false}
+      "public_contract": {"mapping_role": "replay_persistence", "operation_ids": ["getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read", "stream"], "activity_profile": "storyos.project-activity.v1", "wire_history": "not_applicable", "internal_only": false}
     },
     {
       "family_id": "operational-lifecycle",
@@ -435,7 +397,7 @@
       "authority_class": "operational",
       "durability_class": "immutable_lifecycle_decisions",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "transactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "transactional"},
       "dependencies": ["project-canonical", "artifact-proposal-draft"],
       "transaction_group": "lifecycle_and_invalidation",
       "immutability": "append_only_lifecycle_evidence",
@@ -451,7 +413,7 @@
       "authority_class": "projection",
       "durability_class": "append_only_invalidation_with_generation_pointer",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "transactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "transactional"},
       "dependencies": ["project-canonical", "operational-lifecycle"],
       "transaction_group": "canonical_transition_and_projection_invalidation",
       "immutability": "invalidation_append_only_generation_staged",
@@ -467,7 +429,7 @@
       "authority_class": "projection",
       "durability_class": "disposable_generation",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "nontransactional_rebuildable"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "nontransactional_rebuildable"},
       "dependencies": ["project-canonical", "artifact-proposal-draft", "projection-generation-control"],
       "transaction_group": "projection_rebuild_job",
       "immutability": "replaceable_generation_rows",
@@ -483,7 +445,7 @@
       "authority_class": "projection",
       "durability_class": "disposable_external_observation",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "nontransactional_rebuildable"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "nontransactional_rebuildable"},
       "dependencies": ["project-canonical", "projection-retrieval", "operational-context-disclosure", "projection-generation-control"],
       "transaction_group": "projection_rebuild_job",
       "immutability": "replaceable_generation_rows",
@@ -499,7 +461,7 @@
       "authority_class": "projection",
       "durability_class": "disposable_dependency_bound",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "nontransactional_rebuildable"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "nontransactional_rebuildable"},
       "dependencies": ["project-canonical", "operational-context-disclosure", "projection-generation-control"],
       "transaction_group": "projection_rebuild_job",
       "immutability": "replaceable_generation_rows",
@@ -515,7 +477,7 @@
       "authority_class": "projection",
       "durability_class": "disposable_current_read_model",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "nontransactional_rebuildable"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "nontransactional_rebuildable"},
       "dependencies": ["project-canonical", "artifact-proposal-draft", "operational-receipts-actions", "operational-project-activity", "projection-generation-control"],
       "transaction_group": "projection_rebuild_job",
       "immutability": "replaceable_generation_rows",
@@ -547,14 +509,14 @@
       "authority_class": "operational",
       "durability_class": "reference_metadata_only",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "transactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "transactional"},
       "dependencies": ["project-canonical", "global-definitions"],
       "transaction_group": "credential_binding",
       "immutability": "immutable_reference_with_status_revisions",
       "head": "credential_reference_generation",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": ["operational-context-disclosure"], "rebuild": "not_applicable", "visibility_gate": "unresolved_reference_is_unbound"},
       "portability": {"physical_backup": "full_rows_without_secret_values", "whole_service_restore": "restore_and_mark_unbound", "project_export": "include_reference_only", "project_restore": "restore_and_unbound_credentials", "secret_exclusion": "reference_only"},
-      "public_contract": {"mapping_role": "credential_reference_persistence", "operation_ids": ["createReplacementProposal", "createAgentRun", "retrieveContext"], "operation_selector": null, "event_selector": null, "settlement_modes": ["async", "read"], "activity_profile": null, "wire_history": "not_applicable", "internal_only": false}
+      "public_contract": {"mapping_role": "credential_reference_persistence", "operation_ids": ["createReplacementProposal", "createAgentRun", "retrieveContext"], "operation_selector": null, "event_selector": null, "settlement_modes": ["async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "not_applicable", "internal_only": false}
     },
     {
       "family_id": "admin-migration",
@@ -563,7 +525,7 @@
       "authority_class": "administrative",
       "durability_class": "immutable_ledger_with_phase_state",
       "scope": {"kind": "maintenance", "requires_project_scope": false, "profile": "maintenance_isolated_role"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": [],
       "transaction_group": "migration_control_plane",
       "immutability": "append_only_migration_ledger",
@@ -579,7 +541,7 @@
       "authority_class": "administrative",
       "durability_class": "immutable_recovery_evidence",
       "scope": {"kind": "maintenance", "requires_project_scope": false, "profile": "maintenance_isolated_role"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "nontransactional_external"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "nontransactional_external"},
       "dependencies": ["admin-migration", "operational-lifecycle"],
       "transaction_group": "recovery_control_plane",
       "immutability": "append_only_copy_and_proof_evidence",
@@ -595,7 +557,7 @@
       "authority_class": "administrative",
       "durability_class": "staged_integrity_bound_archive",
       "scope": {"kind": "maintenance", "requires_project_scope": false, "profile": "maintenance_isolated_role"},
-      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": ["storyos.persistence.release-0.v1"], "migration_class": "mixed_transactional_and_nontransactional"},
+      "schema": {"current": "storyos.persistence.release-1.v1", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
       "dependencies": ["project-canonical", "artifact-proposal-draft", "operational-receipts-actions", "operational-project-activity", "credential-references"],
       "transaction_group": "project_export_or_restore",
       "immutability": "immutable_archive_manifest_and_discardable_staging",
@@ -610,12 +572,15 @@
     "require_unique_table_family_names": true,
     "require_acyclic_dependencies": true,
     "require_one_active_schema_version": true,
-    "require_one_path_per_supported_predecessor": true,
+    "require_unique_path_per_supported_predecessor": true,
+    "require_empty_edge_set_for_initial_baseline": true,
     "require_project_scope_profile": true,
     "require_disjoint_authority_classes": true,
     "require_projection_dependency_closure": true,
     "require_secret_exclusion": true,
     "require_markdown_owner_and_anchor": true,
+    "require_physical_ledger_boundary": true,
+    "require_table_family_registry_digest": true,
     "require_route_settlement_and_activity_coverage": true,
     "require_negative_self_test": true,
     "derived_statistics": ["family_count", "table_family_count", "project_scoped_family_count", "projection_family_count", "operation_coverage_count", "event_coverage_count"]
