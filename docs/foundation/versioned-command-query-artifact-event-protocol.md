@@ -435,14 +435,22 @@ than fixed to the former illustrative route count.
 
 The catalog covers Project lifecycle, volume/chapter structure, one editor
 session and writer takeover, direct author editing, search and replacement,
-statistics, human-readable and portable archive import/export, Snapshot and
-resync, Proposal and Draft lifecycle, Agent-run control, and Project Activity.
+statistics, human-readable manuscript export, portable Project Export Archive
+import/export, Snapshot and resync, Proposal and Draft lifecycle, Agent-run
+control, and Project Activity.
 Each entry names one stable `operation_id`, method/path, resource/action shape,
 semantic owner, wire owner, request/response schema IDs, action/admission
 class, Editor Session and writer-generation rule, idempotency and
 preconditions, settlement/status profile, stable error profile, Project
 Activity mapping, positive/negative golden fixture IDs, and OpenAPI, JSON
 Schema, and TypeScript generated-operation coverage.
+The catalog's machine-readable `release1_capability_coverage` crosswalk is
+the acceptance-journey proof: it names every required Release 1 capability,
+maps it to existing operation IDs, and records action coverage where a generic
+resource update carries distinct actions such as volume/chapter rename and
+reorder. The verifier rejects an absent capability, operation, action mapping,
+or asynchronous settlement query rather than allowing a self-consistent but
+incomplete catalog.
 
 The only browser author-edit ingress is
 `POST /api/v1/projects/{project_id}/manuscript/author-edits`
@@ -482,13 +490,26 @@ meaning:
 | `CloseEditorFlowDraft` | Manuscript Revision and Proposal State Machine | `/drafts/{draft_id}/closures` | exact `dismissed`, `superseded`, or `abandoned` closure |
 | `UndoLatestAuthorAction` | Manuscript Revision and Proposal State Machine | `/author-actions/undo` | one unified newest-first frontier; compensation or reversal remains typed |
 
+`WithdrawProposal` and `ReplanProposal` each have one public operation and a
+closed request discriminator for their two Core-legal causes. The `author`
+profile is an explicit protected editor command: it requires the current
+Editor Session and writer generation, an `AuthorCommandAdmission`, its
+idempotency record, and the author-only `RequiresReconfirmation` recovery
+branch. The `current_producer` profile binds the exact current
+`AgentRunStep` or `ToolCall` producer cause: it has no Editor Session, writer
+generation, or `AuthorCommandAdmission` field or requirement, uses its own
+producer-cause idempotency record, and can settle only with the producer's
+committed result. The catalog's discriminated request/response schemas encode
+these profiles; it does not duplicate the Core state machine.
+
 All exact retries return the original typed settlement and event identities.
 `RecoveryDraft` has no upload or browser-cache route: only the admitted
 `ApplyAuthorEdit` body may return `recovery_draft_ref` when it reaches terminal
 `RequiresReconfirmation`. Every Release 1 editor command in the catalog
 excludes `Accepted` from its acknowledgement union; `Accepted` remains an
 asynchronous-operation acknowledgement for the catalogued long-running
-Agent-run, deletion, Proposal production, import, and export operations.
+Agent-run, deletion, Proposal production, human-readable manuscript export,
+and portable Project Archive import/export operations.
 
 ### 7.2 Shared command metadata
 
@@ -722,9 +743,11 @@ is safe by contract, creates no domain effect, and never shares an idempotency
 namespace with Commands. The complete Query, Snapshot, operation-status, and
 Project Activity inventory is the same [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json);
 there is no second query list here or in the AI-independent release contract.
-The catalog includes `getSnapshot`, `queryHistory`, and the explicit import and
-export status reads needed to settle asynchronous routes without treating
-process state as truth.
+The catalog includes `getSnapshot`, `queryHistory`, `getImportOperation`,
+`getExportOperation`, and `getHumanReadableManuscriptExport`—the explicit
+status reads needed to settle asynchronous routes without treating process
+state as truth. The human-readable manuscript status read is not an alias for
+the portable Project Export Archive status read.
 
 The Server assigns one `QueryId` when the first qualified evaluation begins.
 Every page cursor binds and reuses that Query identity, normalized request, and
@@ -1714,6 +1737,17 @@ Application Wire Record, backup, import, or export.
 
 ### 13.7 Project import and export
 
+Release 1 has two distinct export journeys. The human-readable manuscript
+export is a separate asynchronous public operation from the portable Project
+Export Archive: it serializes the manuscript in deterministic volume/chapter
+order and explicitly represents content that is currently unavailable. Its
+status/settlement query and Project Activity Event are separate from the
+archive export route, schema, operation reference, and Event. It does not
+create an archive manifest, ZIP entry set, archive root, or archive integrity
+proof. The portable Project Export Archive below remains the versioned,
+self-describing representation owned jointly by the storage and retention
+contracts, with its own import/export status routes.
+
 The Project Export Archive has a self-describing top-level manifest:
 
 ```text
@@ -2260,8 +2294,10 @@ The eventual repository verification command must fail when:
   `docs/foundation/verify-versioned-protocol-route-catalog.py` cannot parse the
   Release 1 catalog, finds a duplicate operation or method/path, finds a
   missing schema/error/Event/fixture/generated-operation reference, finds a
-  broken semantic-owner source path, or finds an editor command that exposes
-  `Accepted`;
+  broken semantic-owner source path or heading anchor, finds an invalid
+  Release 1 capability/journey mapping or missing settlement-query operation,
+  finds an inconsistent conditional-cause profile, or finds an editor command
+  that exposes `Accepted`;
 - a catalog operation's route, operation ID, request/response schema, error
   profile, Project Activity mapping, golden fixture, or generated OpenAPI/
   JSON-Schema/TypeScript coverage is not one-to-one and explicit; and

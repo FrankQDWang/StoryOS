@@ -16,6 +16,23 @@ PROTOCOL_PATH = ROOT / "docs/foundation/versioned-command-query-artifact-event-p
 ALLOWED_KINDS = {"command", "query", "challenge", "stream"}
 ALLOWED_METHODS = {"GET", "POST", "PATCH", "PUT", "DELETE"}
 EDITOR_ACTIONS = {"direct_editor_action", "explicit_editor_command"}
+CONDITIONAL_CAUSE_ACTION = "conditional_by_cause"
+REQUIRED_RELEASE1_CAPABILITY_IDS = {
+    "project_lifecycle",
+    "volume_chapter_lifecycle",
+    "chapter_navigation",
+    "manuscript_search",
+    "direct_author_edit",
+    "single_match_replace",
+    "multi_match_cross_location_proposal",
+    "manuscript_statistics",
+    "human_readable_manuscript_export",
+    "portable_project_archive",
+    "editor_session_takeover",
+    "snapshot_resync",
+    "proposal_draft_lifecycle",
+    "project_activity",
+}
 
 
 def fail(message: str, errors: list[str]) -> None:
@@ -24,6 +41,265 @@ def fail(message: str, errors: list[str]) -> None:
 
 def source_path(source: str) -> Path:
     return ROOT / source.split("#", 1)[0]
+
+
+def github_heading_slug(heading: str) -> str:
+    """Return the stable GitHub-style slug used by tracked Markdown anchors."""
+    heading = re.sub(r"\s+#+\s*$", "", heading).strip()
+    heading = re.sub(r"`([^`]*)`", r"\1", heading)
+    heading = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", heading)
+    heading = re.sub(r"<[^>]+>", "", heading)
+    heading = re.sub(r"[^\w\s-]", "", heading.lower(), flags=re.UNICODE)
+    return re.sub(r"[-\s]+", "-", heading).strip("-")
+
+
+def source_anchors(path: Path) -> set[str]:
+    anchors: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        match = re.match(r"^#{1,6}\s+(.+?)\s*$", line)
+        if match:
+            anchors.add(github_heading_slug(match.group(1)))
+    return anchors
+
+
+def validate_source_reference(
+    label: str, source: Any, errors: list[str]
+) -> None:
+    if not isinstance(source, str):
+        fail(f"{label} must be a tracked source string: {source!r}", errors)
+        return
+    path = source_path(source)
+    if not path.is_file():
+        fail(f"{label} points to a missing tracked source: {source!r}", errors)
+        return
+    if ".reference" in source:
+        fail(f"{label} points into .reference: {source!r}", errors)
+    if "#" in source:
+        anchor = source.split("#", 1)[1]
+        if anchor not in source_anchors(path):
+            fail(f"{label} points to a missing Markdown anchor: {source!r}", errors)
+
+
+def validate_conditional_cause_profiles(
+    operation: dict[str, Any],
+    owners: dict[str, Any],
+    error_profiles: dict[str, Any],
+    stable_error_rows: dict[str, int],
+    errors: list[str],
+) -> set[str]:
+    operation_id = operation.get("operation_id", "<missing>")
+    profiles = operation.get("cause_profiles")
+    if operation.get("action_class") != CONDITIONAL_CAUSE_ACTION:
+        if profiles is not None:
+            fail(f"{operation_id}: cause_profiles require conditional_by_cause action", errors)
+        return set()
+
+    discriminator = operation.get("cause_discriminator")
+    if not isinstance(discriminator, dict):
+        fail(f"{operation_id}: conditional cause discriminator must be the cause field", errors)
+    else:
+        if discriminator.get("field") != "cause":
+            fail(f"{operation_id}: conditional cause discriminator must be the cause field", errors)
+        if discriminator.get("values") != ["author", "current_producer"]:
+            fail(f"{operation_id}: conditional cause values must be author/current_producer", errors)
+        if discriminator.get("semantic_owner") != operation.get("semantic_owner"):
+            fail(f"{operation_id}: cause discriminator must use the operation semantic owner", errors)
+
+    if not isinstance(profiles, dict) or set(profiles) != {"author", "current_producer"}:
+        fail(f"{operation_id}: conditional cause profiles must be exactly author/current_producer", errors)
+        return set()
+
+    profile_schema_ids: set[str] = set()
+    top_settlement = operation.get("settlement", {})
+    top_statuses = set(top_settlement.get("http_statuses", [])) if isinstance(top_settlement, dict) else set()
+    for cause_name, profile in profiles.items():
+        prefix = f"{operation_id}.{cause_name}"
+        required = {
+            "semantic_cause",
+            "cause_binding",
+            "request_schema",
+            "response_schema",
+            "request_schema_source",
+            "response_schema_source",
+            "action_class",
+            "admission",
+            "editor",
+            "idempotency",
+            "settlement",
+            "error_profile",
+            "recovery",
+        }
+        if not isinstance(profile, dict):
+            fail(f"{prefix}: cause profile must be an object", errors)
+            continue
+        missing = required - profile.keys()
+        if missing:
+            fail(f"{prefix}: missing {sorted(missing)}", errors)
+            continue
+        request_schema = profile.get("request_schema")
+        response_schema = profile.get("response_schema")
+        if not isinstance(request_schema, str) or not isinstance(response_schema, str):
+            fail(f"{prefix}: request/response schema IDs are required", errors)
+        else:
+            if request_schema == response_schema:
+                fail(f"{prefix}: request and response schema IDs must be distinct", errors)
+            profile_schema_ids.update((request_schema, response_schema))
+        if profile.get("request_schema_source") not in owners or profile.get("response_schema_source") not in owners:
+            fail(f"{prefix}: schema source mapping is incomplete", errors)
+
+        editor = profile.get("editor")
+        if not isinstance(editor, dict) or not {"session", "writer_generation", "takeover"} <= editor.keys():
+            fail(f"{prefix}: editor session/writer-generation/takeover rule is incomplete", errors)
+        settlement = profile.get("settlement")
+        profile_settlement = settlement if isinstance(settlement, dict) else {}
+        if not isinstance(settlement, dict):
+            fail(f"{prefix}: settlement profile must be an object", errors)
+        else:
+            statuses = settlement.get("http_statuses")
+            if not isinstance(statuses, list) or not statuses or any(not isinstance(status, int) for status in statuses):
+                fail(f"{prefix}: settlement HTTP statuses are incomplete", errors)
+            elif set(statuses) != top_statuses:
+                fail(f"{prefix}: cause settlement statuses must equal the conditional operation statuses", errors)
+            if settlement.get("mode") != "sync":
+                fail(f"{prefix}: WithdrawProposal/ReplanProposal cause settlement must be synchronous", errors)
+            if settlement.get("settlement_query") is not None or settlement.get("operation_ref") is not None:
+                fail(f"{prefix}: synchronous cause settlement cannot expose an async query reference", errors)
+            acknowledgements = settlement.get("acknowledgements", [])
+            if "accepted" in acknowledgements:
+                fail(f"{prefix}: cause profile cannot acknowledge Accepted", errors)
+
+        error_profile = profile.get("error_profile")
+        if error_profile not in error_profiles:
+            fail(f"{prefix}: unknown error profile {error_profile!r}", errors)
+        else:
+            missing_statuses = {
+                stable_error_rows[code]
+                for code in error_profiles[error_profile]
+                if code in stable_error_rows
+            } - set(profile_settlement.get("http_statuses", []))
+            if missing_statuses:
+                fail(f"{prefix}: error-profile HTTP statuses are missing {sorted(missing_statuses)}", errors)
+
+        recovery = profile.get("recovery")
+        profile_recovery = recovery if isinstance(recovery, dict) else {}
+        if not isinstance(recovery, dict) or recovery.get("requires_reconfirmation") not in {"allowed", "forbidden"}:
+            fail(f"{prefix}: recovery RequiresReconfirmation rule is incomplete", errors)
+
+        if cause_name == "author":
+            if profile.get("cause_binding") != "protected_author_command_admission":
+                fail(f"{prefix}: author cause binding must be protected_author_command_admission", errors)
+            if profile.get("action_class") != "explicit_editor_command":
+                fail(f"{prefix}: author cause must be an explicit_editor_command", errors)
+            if profile.get("admission") != "author_command":
+                fail(f"{prefix}: author cause must use AuthorCommandAdmission", errors)
+            if editor != {"session": "required", "writer_generation": "current", "takeover": "no"}:
+                fail(f"{prefix}: author cause editor binding is incomplete", errors)
+            if profile.get("idempotency") != "header_and_admission_record":
+                fail(f"{prefix}: author cause idempotency must bind the admission record", errors)
+            if profile_recovery.get("requires_reconfirmation") != "allowed":
+                fail(f"{prefix}: author cause must allow RequiresReconfirmation", errors)
+            if set(profile_settlement.get("acknowledgements", [])) != {"committed", "requires_reconfirmation"}:
+                fail(f"{prefix}: author cause acknowledgements are incomplete", errors)
+        elif cause_name == "current_producer":
+            if profile.get("cause_binding") != "exact_current_proposal_revision_producer":
+                fail(f"{prefix}: current-producer cause binding must be exact current producer", errors)
+            if profile.get("action_class") != "producer_cause":
+                fail(f"{prefix}: current-producer cause must be producer_cause", errors)
+            if profile.get("admission") != "none":
+                fail(f"{prefix}: current-producer cause must not use AuthorCommandAdmission", errors)
+            if editor != {"session": "not-applicable", "writer_generation": "not-applicable", "takeover": "no"}:
+                fail(f"{prefix}: current-producer cause cannot require editor session/generation", errors)
+            if profile.get("idempotency") != "header_and_producer_cause_record":
+                fail(f"{prefix}: current-producer cause idempotency must bind its producer cause", errors)
+            if profile_recovery.get("requires_reconfirmation") != "forbidden":
+                fail(f"{prefix}: current-producer cause must forbid RequiresReconfirmation", errors)
+            if set(profile_settlement.get("acknowledgements", [])) != {"committed"}:
+                fail(f"{prefix}: current-producer cause must acknowledge only committed", errors)
+            if set(profile.get("producer_types", [])) != {"AgentRunStep", "ToolCall"}:
+                fail(f"{prefix}: current-producer cause must bind AgentRunStep/ToolCall", errors)
+            if "admission" in str(profile.get("semantic_cause", "")):
+                fail(f"{prefix}: current-producer semantic cause must not mention an admission", errors)
+    return profile_schema_ids
+
+
+def validate_capability_coverage(
+    catalog: dict[str, Any], operation_ids: set[str], errors: list[str]
+) -> None:
+    coverage = catalog.get("release1_capability_coverage")
+    if not isinstance(coverage, dict):
+        fail("release1_capability_coverage must be an object", errors)
+        return
+    declared_ids = coverage.get("required_capability_ids")
+    if not isinstance(declared_ids, list) or set(declared_ids) != REQUIRED_RELEASE1_CAPABILITY_IDS or len(declared_ids) != len(set(declared_ids)):
+        fail("Release 1 capability coverage must declare the complete required capability ID set", errors)
+
+    capabilities = coverage.get("capabilities")
+    if not isinstance(capabilities, list):
+        fail("release1_capability_coverage.capabilities must be an array", errors)
+        return
+    by_id: dict[str, dict[str, Any]] = {}
+    for capability in capabilities:
+        if not isinstance(capability, dict):
+            fail("Release 1 capability entries must be objects", errors)
+            continue
+        capability_id = capability.get("capability_id")
+        if not isinstance(capability_id, str) or not capability_id:
+            fail(f"invalid Release 1 capability ID: {capability_id!r}", errors)
+            continue
+        if capability_id in by_id:
+            fail(f"duplicate Release 1 capability ID {capability_id}", errors)
+        by_id[capability_id] = capability
+        if not isinstance(capability.get("journey"), str) or not capability["journey"]:
+            fail(f"{capability_id}: journey description is required", errors)
+        required_operations = capability.get("required_operations")
+        if not isinstance(required_operations, list) or not required_operations:
+            fail(f"{capability_id}: required_operations must be a non-empty array", errors)
+            required_operations = []
+        if len(required_operations) != len(set(required_operations)):
+            fail(f"{capability_id}: required_operations must not repeat an operation", errors)
+        for operation_id in required_operations:
+            if operation_id not in operation_ids:
+                fail(f"{capability_id}: required capability operation is missing from catalog: {operation_id!r}", errors)
+
+        operation_actions = capability.get("operation_actions", {})
+        if not isinstance(operation_actions, dict):
+            fail(f"{capability_id}: operation_actions must be an object", errors)
+            operation_actions = {}
+        unknown_action_operations = set(operation_actions) - set(required_operations)
+        if unknown_action_operations:
+            fail(f"{capability_id}: operation_actions reference non-required operations {sorted(unknown_action_operations)}", errors)
+        for operation_id, actions in operation_actions.items():
+            if not isinstance(actions, list) or not actions or any(not isinstance(action, str) or not action for action in actions):
+                fail(f"{capability_id}.{operation_id}: action coverage must be a non-empty string array", errors)
+            elif len(actions) != len(set(actions)):
+                fail(f"{capability_id}.{operation_id}: action coverage must not repeat an action", errors)
+
+    if set(by_id) != REQUIRED_RELEASE1_CAPABILITY_IDS:
+        fail("Release 1 capability entries must exactly cover the required capability ID set", errors)
+
+    exact_required_operations = {
+        "human_readable_manuscript_export": {
+            "exportHumanReadableManuscript",
+            "getHumanReadableManuscriptExport",
+        },
+        "portable_project_archive": {
+            "importProjectArchive",
+            "exportProjectArchive",
+            "getImportOperation",
+            "getExportOperation",
+        },
+    }
+    for capability_id, expected_operations in exact_required_operations.items():
+        capability = by_id.get(capability_id)
+        if capability is not None and set(capability.get("required_operations", [])) != expected_operations:
+            fail(f"{capability_id}: export journey operation coverage is incomplete or conflated", errors)
+
+    volume_capability = by_id.get("volume_chapter_lifecycle")
+    if volume_capability is not None:
+        actions = volume_capability.get("operation_actions", {})
+        for operation_id in ("updateVolume", "updateChapter"):
+            if set(actions.get(operation_id, [])) != {"rename", "reorder"}:
+                fail(f"volume_chapter_lifecycle: {operation_id} must explicitly cover rename and reorder", errors)
 
 
 def main() -> int:
@@ -51,13 +327,24 @@ def main() -> int:
         fail("catalog must explicitly classify non-public Event semantics", errors)
 
     owners = catalog.get("owners", {})
+    if not isinstance(owners, dict):
+        fail("owners must be an object", errors)
+        owners = {}
     for owner_name, owner_source in owners.items():
-        if not isinstance(owner_source, str) or not source_path(owner_source).is_file():
-            fail(f"owner {owner_name!r} points to a missing tracked source: {owner_source!r}", errors)
-        if ".reference" in owner_source:
-            fail(f"owner {owner_name!r} points into .reference", errors)
+        validate_source_reference(f"owner {owner_name!r}", owner_source, errors)
 
     protocol_text = PROTOCOL_PATH.read_text(encoding="utf-8")
+    validate_source_reference("error_source", catalog.get("error_source"), errors)
+    if "--self-test" in sys.argv:
+        probe: list[str] = []
+        missing_anchor = "__route_catalog_missing_anchor_self_test__"
+        validate_source_reference(
+            f"self-test {missing_anchor!r}",
+            f"docs/foundation/versioned-command-query-artifact-event-protocol.md#{missing_anchor}",
+            probe,
+        )
+        if not probe:
+            fail("anchor negative self-test did not reject a missing anchor", errors)
     error_section = protocol_text.split("### 11.2 Required error semantics", 1)[-1].split("### 11.3", 1)[0]
     stable_error_rows = {
         code: int(status)
@@ -80,10 +367,17 @@ def main() -> int:
     route_keys: set[tuple[str, str]] = set()
     openapi_ids: set[str] = set()
     typescript_ids: set[str] = set()
-    operation_fixture_ids: set[str] = set()
+    schema_id_owners: dict[str, str] = {}
+    fixture_id_owners: dict[str, str] = {}
+    event_kinds: dict[str, str] = {}
+    release_identity = catalog.get("release_identity", {})
+    release_identity_schema_id = release_identity.get("schema_id") if isinstance(release_identity, dict) else None
+    if not isinstance(release_identity_schema_id, str) or not release_identity_schema_id:
+        fail("release_identity.schema_id is required", errors)
+    else:
+        schema_id_owners[release_identity_schema_id] = "release_identity"
     event_catalog = catalog.get("events", [])
     event_by_id: dict[str, dict[str, Any]] = {}
-    event_fixture_ids: set[str] = set()
 
     for event in event_catalog:
         if not isinstance(event, dict):
@@ -96,18 +390,30 @@ def main() -> int:
         if event_id in event_by_id:
             fail(f"duplicate Event schema ID: {event_id}", errors)
         event_by_id[event_id] = event
+        previous_schema_owner = schema_id_owners.get(event_id)
+        if previous_schema_owner is not None:
+            fail(f"duplicate schema ID {event_id} ({previous_schema_owner} and Event)", errors)
+        else:
+            schema_id_owners[event_id] = f"Event {event_id}"
         if event.get("semantic_owner") not in owners:
             fail(f"Event {event_id} has unknown semantic owner", errors)
-        if not isinstance(event.get("event_kind"), str) or not event["event_kind"]:
+        event_kind = event.get("event_kind")
+        if not isinstance(event_kind, str) or not event_kind:
             fail(f"Event {event_id} has no stable event_kind", errors)
+        elif event_kind in event_kinds:
+            fail(f"duplicate Event event_kind {event_kind} ({event_kinds[event_kind]} and {event_id})", errors)
+        else:
+            event_kinds[event_kind] = event_id
         if event.get("wire_profile") != "storyos.project-activity.v1":
             fail(f"Event {event_id} must use the Release 1 Project Activity profile", errors)
         for fixture_key in ("positive_fixture", "negative_fixture"):
             fixture_id = event.get(fixture_key)
-            if not isinstance(fixture_id, str) or fixture_id in event_fixture_ids:
+            if not isinstance(fixture_id, str):
                 fail(f"invalid or duplicate Event fixture {fixture_id!r}", errors)
+            elif fixture_id in fixture_id_owners:
+                fail(f"duplicate fixture ID {fixture_id} ({fixture_id_owners[fixture_id]} and Event {event_id})", errors)
             else:
-                event_fixture_ids.add(fixture_id)
+                fixture_id_owners[fixture_id] = f"Event {event_id}"
 
     for operation in operations:
         if not isinstance(operation, dict):
@@ -162,18 +468,42 @@ def main() -> int:
             fail(f"{operation_id}: query parameters must be schema/profile fields, not route identity", errors)
         if operation.get("semantic_owner") not in owners or operation.get("wire_owner") not in owners:
             fail(f"{operation_id}: semantic/wire owner is not in owners", errors)
+        if "action_coverage" in operation:
+            action_coverage = operation.get("action_coverage")
+            if not isinstance(action_coverage, list) or not action_coverage or any(not isinstance(action, str) or not action for action in action_coverage):
+                fail(f"{operation_id}: action_coverage must be a non-empty string array", errors)
+            elif len(action_coverage) != len(set(action_coverage)):
+                fail(f"{operation_id}: action_coverage must not repeat an action", errors)
+        if operation_id in {"updateVolume", "updateChapter"} and operation.get("action_coverage") != ["rename", "reorder"]:
+            fail(f"{operation_id}: rename and reorder action coverage must be explicit and ordered", errors)
 
         schemas = operation["schemas"]
         schema_map = schemas if isinstance(schemas, dict) else {}
         generated = operation["generated"] if isinstance(operation["generated"], dict) else {}
+        cause_schema_ids = validate_conditional_cause_profiles(
+            operation, owners, error_profiles, stable_error_rows, errors
+        )
         if not isinstance(schemas, dict) or not isinstance(schemas.get("request"), str) or not isinstance(schemas.get("response"), str):
             fail(f"{operation_id}: request/response schema IDs are required", errors)
         else:
             schema_ids = generated.get("json_schema_ids", [])
-            if set(schema_ids) != {schemas["request"], schemas["response"]}:
-                fail(f"{operation_id}: generated JSON Schema coverage must equal request and response IDs", errors)
+            expected_schema_ids = {schemas["request"], schemas["response"], *cause_schema_ids}
+            if not isinstance(schema_ids, list) or set(schema_ids) != expected_schema_ids:
+                fail(f"{operation_id}: generated JSON Schema coverage must equal all operation schema IDs", errors)
+            if isinstance(schema_ids, list) and len(schema_ids) != len(set(schema_ids)):
+                fail(f"{operation_id}: generated JSON Schema IDs must be unique", errors)
             if schemas["request"] == schemas["response"]:
                 fail(f"{operation_id}: request and response schema IDs must be distinct", errors)
+            if isinstance(schema_ids, list):
+                for schema_id in schema_ids:
+                    if not isinstance(schema_id, str):
+                        fail(f"{operation_id}: generated JSON Schema IDs must be strings", errors)
+                        continue
+                    previous_schema_owner = schema_id_owners.get(schema_id)
+                    if previous_schema_owner is not None:
+                        fail(f"duplicate schema ID {schema_id} ({previous_schema_owner} and {operation_id})", errors)
+                    else:
+                        schema_id_owners[schema_id] = operation_id
         if schema_map.get("request_source") not in owners or schema_map.get("response_source") not in owners:
             fail(f"{operation_id}: schema source mapping is incomplete", errors)
         if schema_map.get("semantic_source") != operation.get("semantic_owner"):
@@ -192,8 +522,12 @@ def main() -> int:
             if any(not isinstance(status, int) for status in settlement["http_statuses"]):
                 fail(f"{operation_id}: HTTP statuses must be integers", errors)
             if "accepted" in settlement.get("acknowledgements", []):
-                if not settlement.get("settlement_query") or not settlement.get("operation_ref"):
-                    fail(f"{operation_id}: Accepted requires an inspectable settlement query and operation reference", errors)
+                if (
+                    not settlement.get("settlement_query")
+                    or not settlement.get("settlement_query_operation_id")
+                    or not settlement.get("operation_ref")
+                ):
+                    fail(f"{operation_id}: Accepted requires an inspectable settlement query operation and reference", errors)
         if operation.get("error_profile") not in error_profiles:
             fail(f"{operation_id}: unknown error profile {operation.get('error_profile')!r}", errors)
         else:
@@ -225,9 +559,10 @@ def main() -> int:
             fail(f"{operation_id}: positive and negative golden fixture IDs are required", errors)
         else:
             for fixture_id in [fixtures["positive"], *fixtures["negative"]]:
-                if fixture_id in operation_fixture_ids:
-                    fail(f"duplicate operation fixture ID {fixture_id}", errors)
-                operation_fixture_ids.add(fixture_id)
+                if fixture_id in fixture_id_owners:
+                    fail(f"duplicate fixture ID {fixture_id} ({fixture_id_owners[fixture_id]} and {operation_id})", errors)
+                else:
+                    fixture_id_owners[fixture_id] = operation_id
 
         if generated.get("openapi_operation_id") != operation_id:
             fail(f"{operation_id}: OpenAPI operation ID mismatch", errors)
@@ -249,6 +584,30 @@ def main() -> int:
                 fail(f"{operation_id}: Release 1 editor commands must not return Accepted", errors)
             if not isinstance(settlement, dict) or settlement.get("mode") != "sync":
                 fail(f"{operation_id}: Release 1 editor commands must settle synchronously", errors)
+
+    operation_by_id = {
+        operation.get("operation_id"): operation
+        for operation in operations
+        if isinstance(operation, dict) and isinstance(operation.get("operation_id"), str)
+    }
+    for operation in operations:
+        if not isinstance(operation, dict):
+            continue
+        settlement = operation.get("settlement", {})
+        if not isinstance(settlement, dict) or "accepted" not in settlement.get("acknowledgements", []):
+            continue
+        operation_id = operation.get("operation_id", "<missing>")
+        query_operation_id = settlement.get("settlement_query_operation_id")
+        query_operation = operation_by_id.get(query_operation_id)
+        if not isinstance(query_operation, dict):
+            fail(f"{operation_id}: settlement query operation does not exist: {query_operation_id!r}", errors)
+            continue
+        if query_operation.get("kind") != "query" or query_operation.get("method") != "GET":
+            fail(f"{operation_id}: settlement query operation must be a GET query: {query_operation_id}", errors)
+        if query_operation.get("path") != settlement.get("settlement_query"):
+            fail(f"{operation_id}: settlement query operation path does not match settlement_query", errors)
+
+    validate_capability_coverage(catalog, operation_ids, errors)
 
     author_edit = [op for op in operations if op.get("operation_id") == "applyAuthorEdit"]
     if len(author_edit) != 1:
@@ -291,6 +650,8 @@ def main() -> int:
 
     by_kind = {kind: sum(1 for op in operations if op["kind"] == kind) for kind in sorted(ALLOWED_KINDS)}
     print(f"OK: {len(operations)} operations ({by_kind}); {len(event_by_id)} Event schemas; no fixed count asserted")
+    if "--self-test" in sys.argv:
+        print("OK: missing-anchor negative self-test rejected a nonexistent anchor")
     return 0
 
 
