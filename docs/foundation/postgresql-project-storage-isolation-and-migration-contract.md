@@ -9,7 +9,8 @@
 - Parent semantic contracts: [Artifact domain model](artifact-domain-model.md), [Manuscript state machine](manuscript-revision-proposal-state-machine.md), [Fiction memory and research provenance](fiction-memory-and-research-provenance-semantics.md), and [Context assembly and disclosure](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Operational lifecycle contract: [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md)
 - Release 1 persistence catalog: [`postgresql-release-1-persistence-catalog.json`](postgresql-release-1-persistence-catalog.json)
-- Review-time catalog verifier: [`verify-postgresql-release-1-persistence-catalog.py`](verify-postgresql-release-1-persistence-catalog.py)
+- Review-time catalog verifier entry: [`verify-postgresql-release-1-persistence-catalog.py`](verify-postgresql-release-1-persistence-catalog.py)
+- Verifier modules: [`postgresql_persistence_verifier_common.py`](postgresql_persistence_verifier_common.py), [`postgresql_persistence_verifier_storage.py`](postgresql_persistence_verifier_storage.py), and [`postgresql_persistence_verifier_route.py`](postgresql_persistence_verifier_route.py)
 
 ## 0. Release 1 closure and compatibility identity
 
@@ -57,6 +58,14 @@ chain identity and digest remain part of the same-release identity so a future
 Release 2 can add a real edge only with a source-backed predecessor catalog,
 schema, persisted rows, and checksums. A semantic version or invented
 predecessor name never creates compatibility.
+
+The entry verifier above remains the only public review command:
+`python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py
+--self-test`. It delegates shared source/link/digest helpers, storage and
+physical-ledger validation, and route/settlement/Activity coverage to the
+three sibling modules named in the header. Those modules are review-time
+implementation detail, not additional catalog or contract authorities and have
+no independent CLI or alternate validation path.
 
 ## 1. Scope and authority
 
