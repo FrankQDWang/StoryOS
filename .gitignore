@@ -1,4 +1,6 @@
 .superpowers/
+
+# Local-only upstream reference material
 .reference/
 
 # Local machine and environment files
