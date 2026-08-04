@@ -1,0 +1,463 @@
+{
+  "schema_id": "storyos.evidence.stage1-contract-crosswalk.v1",
+  "claim_ceiling": "contract-foundation-only; no S1 requirement or stage acceptance",
+  "declarations": {
+    "authority": "Issue #100 locked body and Claim lock",
+    "execution_contract": {
+      "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
+      "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5",
+      "baseline_commit": "af50f2340a8ef0775fc344bc374390fe1d355e49",
+      "baseline_tree": "0d0ed71354194f7b4289a5cb859644784c39ae70",
+      "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
+    },
+    "requirements": [
+      {
+        "id": "S1-REQ-001",
+        "owners": [
+          "OWN-WEB",
+          "OWN-PROTO",
+          "OWN-CORE",
+          "OWN-PG",
+          "OWN-TRUST"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-REQ-002",
+        "owners": [
+          "OWN-WEB"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-REQ-003",
+        "owners": [
+          "OWN-ADM",
+          "OWN-CORE",
+          "OWN-PROTO",
+          "OWN-PG"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-REQ-004",
+        "owners": [
+          "OWN-WEB",
+          "OWN-ADM",
+          "OWN-CORE",
+          "OWN-RET"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-REQ-005",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-PG",
+          "OWN-ADM",
+          "OWN-TRUST"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-REQ-006",
+        "owners": [
+          "OWN-GOV",
+          "OWN-WEB",
+          "OWN-PROTO",
+          "OWN-CORE",
+          "OWN-PG",
+          "OWN-ADM",
+          "OWN-RET"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-JRN-001",
+        "owners": [
+          "OWN-REL",
+          "OWN-WEB",
+          "OWN-CORE",
+          "OWN-ADM",
+          "OWN-PG"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-EVD-001",
+        "owners": [
+          "OWN-REL",
+          "OWN-DVG"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-EVD-002",
+        "owners": [
+          "OWN-WEB"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-EVD-003",
+        "owners": [
+          "OWN-ADM",
+          "OWN-CORE",
+          "OWN-PG"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-EVD-004",
+        "owners": [
+          "OWN-WEB",
+          "OWN-ADM",
+          "OWN-CORE",
+          "OWN-RET"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-EVD-005",
+        "owners": [
+          "OWN-TRUST",
+          "OWN-PROTO",
+          "OWN-PG"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "S1-EVD-006",
+        "owners": [
+          "OWN-GOV"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      },
+      {
+        "id": "SMAP-STAGE-1",
+        "owners": [
+          "OWN-DVG",
+          "OWN-REL"
+        ],
+        "project_scope": "exact-owner-user-id-and-project-id where applicable"
+      }
+    ],
+    "proof_selection": {
+      "gates": [
+        "DVG-01",
+        "DVG-02",
+        "DVG-03",
+        "DVG-07",
+        "DVG-08",
+        "DVG-09",
+        "DVG-11",
+        "DVG-13"
+      ],
+      "evidence_classes": [
+        "EC-01",
+        "EC-02",
+        "EC-03",
+        "EC-04",
+        "EC-05",
+        "EC-07",
+        "EV-CP",
+        "EV-IT",
+        "EV-INT",
+        "EV-SE"
+      ],
+      "fixtures": [
+        "FX-CONTRACT-R1",
+        "FX-CORE-PROPOSAL",
+        "FX-EDITOR-IME",
+        "FX-HANDOFF",
+        "FX-JOURNAL-GROUP",
+        "FX-RECOVERY-EDITOR",
+        "FX-SCOPE-2U2P"
+      ],
+      "fault_points": [
+        "CFP-ADMISSION-BEFORE-CORE",
+        "CFP-ADMISSION-EXPIRY",
+        "CFP-CONTRACT-DRIFT",
+        "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+        "CFP-CORE-BEFORE-COMMIT",
+        "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+        "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+        "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+        "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+        "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
+        "CFP-FENCE-AFTER-TAKEOVER",
+        "CFP-LATE-RESULT",
+        "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+        "CFP-REPLAY-BELOW-FLOOR",
+        "CFP-SCOPE-BEFORE-QUERY"
+      ],
+      "schedules": [
+        "SCH-CRASH",
+        "SCH-DRIFT",
+        "SCH-FENCE",
+        "SCH-NORMAL",
+        "SCH-REORDER",
+        "SCH-REPLAY",
+        "SCH-SCOPE"
+      ],
+      "oracles": [
+        "ORC-ATOMIC-AUTHORITY",
+        "ORC-CONTRACT",
+        "ORC-CROSSWALK-COMPLETENESS",
+        "ORC-EDITOR-JOURNAL",
+        "ORC-NEGATIVE-CLOSURE",
+        "ORC-OUTCOME-UNKNOWN",
+        "ORC-RECOVERY-ATOMICITY",
+        "ORC-REPLAY-TRUTH",
+        "ORC-SCOPE"
+      ],
+      "bundles": [
+        "B-CONTRACT",
+        "B-SCOPE",
+        "B-EDITOR",
+        "B-CORE",
+        "B-RECOVERY",
+        "B-REPLAY",
+        "B-HANDOFF"
+      ],
+      "aggregate": "B-S1-MANDATORY-SET",
+      "disposition": "foundation-only; no PASS-STAGE claim"
+    }
+  },
+  "verifications": {
+    "baseline": {
+      "commit": "af50f2340a8ef0775fc344bc374390fe1d355e49",
+      "tree": "0d0ed71354194f7b4289a5cb859644784c39ae70"
+    },
+    "sources": [
+      {
+        "path": "AGENTS.md",
+        "sha256": "sha256:61f9aced95dec6ab112879517eb6a2ed65b0801f4c9197fad23d56c182e643fd"
+      },
+      {
+        "path": "CONTEXT.md",
+        "sha256": "sha256:bf35697b484ffd6035f61581c64067c8f7511f2ab4d2187972f6f365b2bf0838"
+      },
+      {
+        "path": "GOAL.md",
+        "sha256": "sha256:427e481bc9025a438abee778a90b07208ea5a7cc7c77ca929da61e3bf022f1d9"
+      },
+      {
+        "path": "docs/agents/issue-tracker.md",
+        "sha256": "sha256:a5066fa542f6c97b20fafdaf57e16236bc4fdf6ff52a31760ece162002b56c9f"
+      },
+      {
+        "path": "docs/adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md",
+        "sha256": "sha256:e314a5b211fd3e2323eb8e058362435b0977fb598369c5f8b4ea4a7f8d28022f"
+      },
+      {
+        "path": "docs/adr/0006-adopt-foundation-monorepo-governance.md",
+        "sha256": "sha256:4d3fc7b5533e087f47073591b95d21f07ddfe53d92ecefdf33679d62e280a3b7"
+      },
+      {
+        "path": "docs/adr/0007-preserve-process-separable-server-worker-boundary.md",
+        "sha256": "sha256:b53fada8583459aaea74eaea2cdcd020f093caf2f60c39339694eb38a11a032f"
+      },
+      {
+        "path": "docs/adr/0009-require-snapshot-resync-at-replay-generation-boundaries.md",
+        "sha256": "sha256:e3151334c00b07738b35e61d8fe01be1b76c6d6cc097ec29b435dfc0bbd533cc"
+      },
+      {
+        "path": "docs/adr/0010-require-lifecycle-proof-before-recovery-visibility.md",
+        "sha256": "sha256:52fad30d146701a19ec3defbcd1954fc3bddeb829fa1d068317c869a17c2a18c"
+      },
+      {
+        "path": "docs/adr/0012-adopt-deterministic-contract-verification.md",
+        "sha256": "sha256:b31ac0b38321c43f319879b912b247129946815cf6bd6bfa1fe5f15b5421864c"
+      },
+      {
+        "path": "docs/adr/0013-trust-the-storyos-web-client-for-author-command-admission.md",
+        "sha256": "sha256:84ceb253a16604230097ae3acde1bdc84e6f4023eaad7fa429cc349aabfd4dc2"
+      },
+      {
+        "path": "docs/foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md",
+        "sha256": "sha256:4ebfcb49ab426de82dfe0035a8b547459b976df9771884374bcddf6902248be6"
+      },
+      {
+        "path": "docs/foundation/author-command-admission.md",
+        "sha256": "sha256:0255cf57a1aea06742dbdc12785bbde1193abb0ca62ae44be47a8e42a67c22a3"
+      },
+      {
+        "path": "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
+        "sha256": "sha256:c38220a15fb8ef08c93665aa3c4f63dc7778c319b4766ae17b5f86bddbfe9d90"
+      },
+      {
+        "path": "docs/foundation/manuscript-revision-proposal-state-machine.md",
+        "sha256": "sha256:c0491c8a23a553acff1711ec90f8ee76ad235bd6b30b162e632dedebb0b29bd4"
+      },
+      {
+        "path": "docs/foundation/modular-monolith-and-repository-governance-boundaries.md",
+        "sha256": "sha256:5333754a7fe6cd42e546b5b7a571b64d1c28bc0ad9de46ca86d44ed4b4453062"
+      },
+      {
+        "path": "docs/foundation/postgresql-project-storage-isolation-and-migration-contract.md",
+        "sha256": "sha256:fb5199d5d9aa004e96306dd26351658502b3d37b1678b03f3ad1654db39476d6"
+      },
+      {
+        "path": "docs/foundation/postgresql-release-1-persistence-catalog.json",
+        "sha256": "sha256:17d365ae303245fbd0c3f7c0a9ed83b71487e6ee572106c14672d41a760c2862"
+      },
+      {
+        "path": "docs/foundation/run-event-mailbox-snapshot-retention-and-archival-semantics.md",
+        "sha256": "sha256:1195de4a111723801ebd959e2b0eb408808e67a8d0d87ae3ee90a1f9602afa30"
+      },
+      {
+        "path": "docs/foundation/storyos-service-client-external-trust-boundaries-threat-model.md",
+        "sha256": "sha256:464346d569d462b62e465fa5656b48a68254cdd395866b6641b1691b5074eb4b"
+      },
+      {
+        "path": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
+        "sha256": "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde"
+      },
+      {
+        "path": "docs/foundation/versioned-command-query-artifact-event-protocol.md",
+        "sha256": "sha256:2a3441728582565a82f9c9bd09f0511d64ccd8a45126ac408a1f1d3340a588fa"
+      },
+      {
+        "path": "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",
+        "sha256": "sha256:2e062ce8f1cd1a05a20448f701d998cb9a1e9a484dc4636439af53855e09b1b6"
+      }
+    ],
+    "catalogs": [
+      {
+        "path": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
+        "catalog_id": "storyos.public.route-catalog.release-1.v1",
+        "contract_revision": "release1-wire-catalog-2026-07-31",
+        "sha256": "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde"
+      },
+      {
+        "path": "docs/foundation/postgresql-release-1-persistence-catalog.json",
+        "catalog_id": "storyos.persistence.catalog.release-1.v1",
+        "contract_revision": "release1-storage-contract-2026-07-31",
+        "sha256": "sha256:17d365ae303245fbd0c3f7c0a9ed83b71487e6ee572106c14672d41a760c2862"
+      }
+    ],
+    "operations": [
+      {
+        "operation_id": "getProtocolProfile",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/protocol",
+        "request_schema": "storyos.query.protocol-profile.request.v1",
+        "response_schema": "storyos.query.protocol-profile.response.v1",
+        "semantic_owner": "protocol",
+        "error_profile": "query_protocol",
+        "project_scope": "project-free",
+        "scope_precondition": "active_public_release_profile"
+      },
+      {
+        "operation_id": "getProject",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}",
+        "request_schema": "storyos.query.project.request.v1",
+        "response_schema": "storyos.query.project.response.v1",
+        "semantic_owner": "release",
+        "error_profile": "query_canonical",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "getChapter",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+        "request_schema": "storyos.query.chapter.request.v1",
+        "response_schema": "storyos.query.chapter.response.v1",
+        "semantic_owner": "release",
+        "error_profile": "query_canonical",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "createEditorSession",
+        "kind": "command",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/editor-sessions",
+        "request_schema": "storyos.command.create-editor-session.request.v1",
+        "response_schema": "storyos.command.create-editor-session.response.v1",
+        "semantic_owner": "editor",
+        "error_profile": "session_control",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "getEditorSession",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}",
+        "request_schema": "storyos.query.editor-session.request.v1",
+        "response_schema": "storyos.query.editor-session.response.v1",
+        "semantic_owner": "editor",
+        "error_profile": "query_canonical",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "createProjectCommandChallenge",
+        "kind": "challenge",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/anti-forgery-challenges",
+        "request_schema": "storyos.challenge.project-command-anti-forgery-challenge.request.v1",
+        "response_schema": "storyos.challenge.project-command-anti-forgery-challenge.response.v1",
+        "semantic_owner": "admission",
+        "error_profile": "challenge",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "applyAuthorEdit",
+        "kind": "command",
+        "method": "POST",
+        "path": "/api/v1/projects/{project_id}/manuscript/author-edits",
+        "request_schema": "storyos.command.apply-author-edit.request.v1",
+        "response_schema": "storyos.command.apply-author-edit.response.v1",
+        "semantic_owner": "core",
+        "error_profile": "editor_command",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "getCommand",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/commands/{command_id}",
+        "request_schema": "storyos.query.command.request.v1",
+        "response_schema": "storyos.query.command.response.v1",
+        "semantic_owner": "admission",
+        "error_profile": "query_canonical",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "command_scope_join"
+      },
+      {
+        "operation_id": "activityStream",
+        "kind": "stream",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/activity",
+        "request_schema": "storyos.stream.activity-stream.request.v1",
+        "response_schema": "storyos.stream.activity-stream.response.v1",
+        "semantic_owner": "replay",
+        "error_profile": "stream",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "getSnapshot",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/snapshots/{snapshot_id}",
+        "request_schema": "storyos.query.snapshot.request.v1",
+        "response_schema": "storyos.query.snapshot.response.v1",
+        "semantic_owner": "replay",
+        "error_profile": "query_canonical",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "snapshot_scope_join"
+      }
+    ]
+  }
+}

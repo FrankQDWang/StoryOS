@@ -6,3 +6,6 @@
 # Local machine and environment files
 .DS_Store
 .env
+
+# Repository-owned build and verification outputs
+/target/
