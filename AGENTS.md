@@ -4,8 +4,22 @@
 
 - This file applies to the whole repository. A nearer nested `AGENTS.md` may add or narrow instructions for its subtree.
 - Repository files and tracked design artifacts are the source of truth. Conversation history and Codex memory are supporting context only.
+- Layering of authority: code and checked-in generated contracts state the current implementation reality; this `AGENTS.md` states binding architectural constraints; ADRs under `docs/adr/` record design rationale and trade-offs. When they diverge, code is the fact of what exists today, but a divergence from an architectural constraint is either a defect to fix or an ADR-recorded exception — never a silent override.
 - One task has one execution owner. Subagents may investigate or review, but they do not independently mutate the same deliverable or authoritative state.
 - Preserve unrelated user changes. Do not rewrite, discard, or clean them up as part of another task.
+
+## GitHub Issue and stacked-PR execution
+
+- StoryOS works directly from GitHub Issues; do not require a generated `tospec` or another parallel task specification. The locked current Issue body, its Claim lock, exact baseline, applicable `AGENTS.md` files, and the tracked contracts explicitly linked by the Issue form the execution contract.
+- Keep one implementation Issue, one execution owner, and one concentrated task context. When the implementation is larger than the review-size limits below, decompose it into one coherent GitHub-native stacked-PR chain within that same Issue rather than creating finer Issues solely to reduce PR size.
+- A PR stack is an implementation and review decomposition only. It does not create new scope, a second specification, parallel execution ownership, or permission to claim later-layer behavior early.
+- Git branches, commits, PR bases, reviews, checks, and merge state in GitHub are the authoritative representation of the stack. Do not require Graphite or treat any external stack manager as a source of truth.
+- Create the first stack branch from the Issue's locked `main` baseline. Create every later branch from the immediately preceding stack branch, and target each PR at that predecessor until it merges.
+- Every layer must name its stack position and predecessor, link the full Issue title, and use `Part of #<issue>` rather than an auto-closing keyword. Do not let an intermediate PR close the owning Issue.
+- Apply the hand-written, non-mechanical line limits below to each PR layer. Classify deterministic generated artifacts separately, keep their editable source in the owning earlier layer, and review generated drift explicitly.
+- Require independent read-only review and the layer-appropriate targeted checks for every PR. A lower layer must not claim upper-layer acceptance, and an upper layer must not hide a lower-layer contract, security, migration, or recovery defect.
+- Merge the stack bottom-up with ordinary merge commits. Do not squash-merge or rebase-merge a stack layer unless the locked Issue explicitly overrides this rule. After each merge, refresh `main`, then recheck the next PR's base, exact remaining diff, commit ancestry, review validity, and fresh required checks; a pre-retarget green check is not fresh evidence.
+- Close the Issue only after every stack layer is merged, the final composed state on current `main` passes the complete non-mutating verification, and the single tracker-compliant Resolution records all merged PRs, the final commit/tree, and retained evidence. Only then create or claim the next serial implementation Issue.
 
 ## Product invariants
 
@@ -18,6 +32,17 @@
 - Transcript-native MCP Apps are sandboxed views/controllers over StoryOS-owned typed artifacts. They never become the authoritative data store.
 - Prose proposals, editable diffs, accept/reject operations, and proposal conflict handling belong in the editor, not in an MCP App.
 
+## Architecture guardrails
+
+These guardrails are constitution-level architectural constraints, not implementation preferences. A deliberate exception is possible only through an accepted ADR, and the implementing change must cite that ADR number; do not relitigate them per task.
+
+- Never bypass the sanctioned authoritative write paths. Authoritative State changes only through an inspectable StoryOS Core Proposal explicitly accepted by the author, or through narrow deterministic Direct Author Actions via explicit domain commands (ADR 0001). Agent-, Tool-, MCP-, extension-produced, bulk, cross-location, or not-fully-previsible changes must take the Proposal path; no status flip, third-party handler, or convenience path becomes an alternate write path. Any exception must cite an ADR number in the implementation.
+- Never introduce a second source of truth. StoryOS project data in PostgreSQL behind the StoryOS Server is the single authority (ADR 0004); caches, indexes, embeddings, client-side journals and snapshots, provider sessions, and every derived projection must remain rebuildable and non-authoritative. Any exception must cite an ADR number in the implementation.
+- Never add a second Agent Loop for convenience. Task-specific behavior comes from Tools, MCP servers, Services, Skills, and policy inside the one novel-project-scoped Agent Loop, not from a parallel fixed workflow runtime. Any exception must cite an ADR number in the implementation.
+- Never let a Worker, MCP server or App, extension, Tool, Skill, or external Service or Provider hold authoritative business state. They operate over StoryOS-owned typed records and return results through StoryOS contracts (ADR 0007); a network connection or model process is never the source of truth. Any exception must cite an ADR number in the implementation.
+- Never introduce invisible state or uninspectable memory. Everything that influences Agent or system behavior must be durable, attributable, Project Scope-bound, and inspectable; Agent Memory stays a rebuildable, source-bearing projection with no independent authority. Any exception must cite an ADR number in the implementation.
+- Performance or storage optimization is never a justification for breaking these guardrails. Optimizations that touch durability, retention, replay, or inspectability must be policy-governed and ADR-recorded, following the post-seal compaction precedent (ADR 0008). Any exception must cite an ADR number in the implementation.
+
 ## Reference source policy
 
 - `.reference/` is local-only, Git-ignored reference material. Do not add any entry under it to Git, and do not edit an individual reference except when a task explicitly refreshes that reference.
@@ -27,6 +52,8 @@
 - The Rust guidance below is self-contained in StoryOS. Verbatim selections come from `.reference/codex/AGENTS.md` at commit `c9ef7eff005c3299a5a5f0004c34c6a3eedf2564` and `.reference/grok-build/rustfmt.toml` at commit `a881e6703f46b01d8c7d4a5437683546df30449d`; both references are Apache-2.0. Agents must not rely on opening the reference copies to discover these rules.
 
 ## Rust engineering rules
+
+Coding style is part of architectural consistency: a uniform Rust style keeps boundaries, call sites, and reviews legible across the workspace, which is why these rules live here alongside the guardrails rather than in a separate style document.
 
 ### Formatting and call sites
 
@@ -108,7 +135,7 @@ use_field_init_shorthand = true
 - Treat changes to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as contract changes and review their breaking and migration impact explicitly.
 - Unless the change is mechanical the total number of changed lines should not exceed 800 lines.
 - For complex logic changes the size should be under 500 lines.
-- If the change is larger, explore whether it can be split into reviewable stages and identify the smallest coherent stage to land first.
+- If the change is larger, split it into reviewable stacked-PR layers under the same locked Issue and identify the smallest coherent layer to land first. Create another Issue only when scope or ownership genuinely changes, not merely to satisfy review size.
 - Base the staging suggestion on the actual diff, dependencies, and affected call sites.
 
 ### Verification
