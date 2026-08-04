@@ -10,4 +10,4 @@ contracts:
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 verify: contracts
-	@cargo metadata --no-deps --format-version 1 | python3 -c 'import json, pathlib, sys; root = pathlib.Path.cwd().resolve(); data = json.load(sys.stdin); manifests = sorted(pathlib.Path(package["manifest_path"]).resolve() for package in data["packages"]); expected = [root / "crates/storyos-contracts/Cargo.toml"]; forbidden = [path for path in manifests if "/prototypes/" in str(path) or "/.reference/" in str(path)]; sys.exit(0 if manifests == expected and not forbidden else f"unexpected workspace manifests: {manifests}; forbidden: {forbidden}")'
+	@cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py

@@ -5,5 +5,6 @@ mod stage1_crosswalk;
 mod stage1_selection;
 
 pub use stage1_crosswalk::{
-    GENERATED_CROSSWALK_PATH, ManifestError, check_crosswalk, generate_crosswalk, write_crosswalk,
+    CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
+    write_crosswalk,
 };

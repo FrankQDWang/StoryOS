@@ -35,128 +35,155 @@ pub(super) const SOURCE_PATHS: &[&str] = &[
     "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",
 ];
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct OperationExpectation {
-    pub(super) operation_id: &'static str,
-    pub(super) kind: &'static str,
-    pub(super) method: &'static str,
-    pub(super) path: &'static str,
-    pub(super) request_schema: &'static str,
-    pub(super) response_schema: &'static str,
-    pub(super) semantic_owner: &'static str,
-    pub(super) error_profile: &'static str,
-    pub(super) project_scope: &'static str,
+pub(super) const OPERATION_IDS: &[&str] = &[
+    "getProtocolProfile",
+    "getProject",
+    "getChapter",
+    "createEditorSession",
+    "getEditorSession",
+    "createProjectCommandChallenge",
+    "applyAuthorEdit",
+    "getCommand",
+    "activityStream",
+    "getSnapshot",
+];
+
+#[derive(Debug, Serialize)]
+pub(super) struct RequirementBinding {
+    id: &'static str,
+    owners: &'static [&'static str],
+    project_scope: &'static str,
 }
 
-pub(super) const OPERATIONS: &[OperationExpectation] = &[
-    OperationExpectation {
-        operation_id: "getProtocolProfile",
-        kind: "query",
-        method: "GET",
-        path: "/api/v1/protocol",
-        request_schema: "storyos.query.protocol-profile.request.v1",
-        response_schema: "storyos.query.protocol-profile.response.v1",
-        semantic_owner: "protocol",
-        error_profile: "query_protocol",
-        project_scope: "project-free",
-    },
-    OperationExpectation {
-        operation_id: "getProject",
-        kind: "query",
-        method: "GET",
-        path: "/api/v1/projects/{project_id}",
-        request_schema: "storyos.query.project.request.v1",
-        response_schema: "storyos.query.project.response.v1",
-        semantic_owner: "release",
-        error_profile: "query_canonical",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "getChapter",
-        kind: "query",
-        method: "GET",
-        path: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
-        request_schema: "storyos.query.chapter.request.v1",
-        response_schema: "storyos.query.chapter.response.v1",
-        semantic_owner: "release",
-        error_profile: "query_canonical",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "createEditorSession",
-        kind: "command",
-        method: "POST",
-        path: "/api/v1/projects/{project_id}/editor-sessions",
-        request_schema: "storyos.command.create-editor-session.request.v1",
-        response_schema: "storyos.command.create-editor-session.response.v1",
-        semantic_owner: "editor",
-        error_profile: "session_control",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "getEditorSession",
-        kind: "query",
-        method: "GET",
-        path: "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}",
-        request_schema: "storyos.query.editor-session.request.v1",
-        response_schema: "storyos.query.editor-session.response.v1",
-        semantic_owner: "editor",
-        error_profile: "query_canonical",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "createProjectCommandChallenge",
-        kind: "challenge",
-        method: "POST",
-        path: "/api/v1/projects/{project_id}/anti-forgery-challenges",
-        request_schema: "storyos.challenge.project-command-anti-forgery-challenge.request.v1",
-        response_schema: "storyos.challenge.project-command-anti-forgery-challenge.response.v1",
-        semantic_owner: "admission",
-        error_profile: "challenge",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "applyAuthorEdit",
-        kind: "command",
-        method: "POST",
-        path: "/api/v1/projects/{project_id}/manuscript/author-edits",
-        request_schema: "storyos.command.apply-author-edit.request.v1",
-        response_schema: "storyos.command.apply-author-edit.response.v1",
-        semantic_owner: "core",
-        error_profile: "editor_command",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "getCommand",
-        kind: "query",
-        method: "GET",
-        path: "/api/v1/projects/{project_id}/commands/{command_id}",
-        request_schema: "storyos.query.command.request.v1",
-        response_schema: "storyos.query.command.response.v1",
-        semantic_owner: "admission",
-        error_profile: "query_canonical",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "activityStream",
-        kind: "stream",
-        method: "GET",
-        path: "/api/v1/projects/{project_id}/activity",
-        request_schema: "storyos.stream.activity-stream.request.v1",
-        response_schema: "storyos.stream.activity-stream.response.v1",
-        semantic_owner: "replay",
-        error_profile: "stream",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-    OperationExpectation {
-        operation_id: "getSnapshot",
-        kind: "query",
-        method: "GET",
-        path: "/api/v1/projects/{project_id}/snapshots/{snapshot_id}",
-        request_schema: "storyos.query.snapshot.request.v1",
-        response_schema: "storyos.query.snapshot.response.v1",
-        semantic_owner: "replay",
-        error_profile: "query_canonical",
-        project_scope: "exact-owner-user-id-and-project-id",
-    },
-];
+#[derive(Debug, Serialize)]
+pub(super) struct ProofSelection {
+    gates: &'static [&'static str],
+    evidence_classes: &'static [&'static str],
+    fixtures: &'static [&'static str],
+    fault_points: &'static [&'static str],
+    schedules: &'static [&'static str],
+    oracles: &'static [&'static str],
+    bundles: &'static [&'static str],
+    aggregate: &'static str,
+    disposition: &'static str,
+}
+
+pub(super) fn requirement_bindings() -> Vec<RequirementBinding> {
+    vec![
+        requirement(
+            "S1-REQ-001",
+            &["OWN-WEB", "OWN-PROTO", "OWN-CORE", "OWN-PG", "OWN-TRUST"],
+        ),
+        requirement("S1-REQ-002", &["OWN-WEB"]),
+        requirement(
+            "S1-REQ-003",
+            &["OWN-ADM", "OWN-CORE", "OWN-PROTO", "OWN-PG"],
+        ),
+        requirement("S1-REQ-004", &["OWN-WEB", "OWN-ADM", "OWN-CORE", "OWN-RET"]),
+        requirement(
+            "S1-REQ-005",
+            &["OWN-PROTO", "OWN-PG", "OWN-ADM", "OWN-TRUST"],
+        ),
+        requirement(
+            "S1-REQ-006",
+            &[
+                "OWN-GOV",
+                "OWN-WEB",
+                "OWN-PROTO",
+                "OWN-CORE",
+                "OWN-PG",
+                "OWN-ADM",
+                "OWN-RET",
+            ],
+        ),
+        requirement(
+            "S1-JRN-001",
+            &["OWN-REL", "OWN-WEB", "OWN-CORE", "OWN-ADM", "OWN-PG"],
+        ),
+        requirement("S1-EVD-001", &["OWN-REL", "OWN-DVG"]),
+        requirement("S1-EVD-002", &["OWN-WEB"]),
+        requirement("S1-EVD-003", &["OWN-ADM", "OWN-CORE", "OWN-PG"]),
+        requirement("S1-EVD-004", &["OWN-WEB", "OWN-ADM", "OWN-CORE", "OWN-RET"]),
+        requirement("S1-EVD-005", &["OWN-TRUST", "OWN-PROTO", "OWN-PG"]),
+        requirement("S1-EVD-006", &["OWN-GOV"]),
+        requirement("SMAP-STAGE-1", &["OWN-DVG", "OWN-REL"]),
+    ]
+}
+
+fn requirement(id: &'static str, owners: &'static [&'static str]) -> RequirementBinding {
+    RequirementBinding {
+        id,
+        owners,
+        project_scope: "exact-owner-user-id-and-project-id where applicable",
+    }
+}
+
+pub(super) fn proof_selection() -> ProofSelection {
+    ProofSelection {
+        gates: &[
+            "DVG-01", "DVG-02", "DVG-03", "DVG-07", "DVG-08", "DVG-09", "DVG-11", "DVG-13",
+        ],
+        evidence_classes: &[
+            "EC-01", "EC-02", "EC-03", "EC-04", "EC-05", "EC-07", "EV-CP", "EV-IT", "EV-INT",
+            "EV-SE",
+        ],
+        fixtures: &[
+            "FX-CONTRACT-R1",
+            "FX-CORE-PROPOSAL",
+            "FX-EDITOR-IME",
+            "FX-HANDOFF",
+            "FX-JOURNAL-GROUP",
+            "FX-RECOVERY-EDITOR",
+            "FX-SCOPE-2U2P",
+        ],
+        fault_points: &[
+            "CFP-ADMISSION-BEFORE-CORE",
+            "CFP-ADMISSION-EXPIRY",
+            "CFP-CONTRACT-DRIFT",
+            "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+            "CFP-CORE-BEFORE-COMMIT",
+            "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+            "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+            "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+            "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+            "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
+            "CFP-FENCE-AFTER-TAKEOVER",
+            "CFP-LATE-RESULT",
+            "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+            "CFP-REPLAY-BELOW-FLOOR",
+            "CFP-SCOPE-BEFORE-QUERY",
+        ],
+        schedules: &[
+            "SCH-CRASH",
+            "SCH-DRIFT",
+            "SCH-FENCE",
+            "SCH-NORMAL",
+            "SCH-REORDER",
+            "SCH-REPLAY",
+            "SCH-SCOPE",
+        ],
+        oracles: &[
+            "ORC-ATOMIC-AUTHORITY",
+            "ORC-CONTRACT",
+            "ORC-CROSSWALK-COMPLETENESS",
+            "ORC-EDITOR-JOURNAL",
+            "ORC-NEGATIVE-CLOSURE",
+            "ORC-OUTCOME-UNKNOWN",
+            "ORC-RECOVERY-ATOMICITY",
+            "ORC-REPLAY-TRUTH",
+            "ORC-SCOPE",
+        ],
+        bundles: &[
+            "B-CONTRACT",
+            "B-SCOPE",
+            "B-EDITOR",
+            "B-CORE",
+            "B-RECOVERY",
+            "B-REPLAY",
+            "B-HANDOFF",
+        ],
+        aggregate: "B-S1-MANDATORY-SET",
+        disposition: "foundation-only; no PASS-STAGE claim",
+    }
+}
+use serde::Serialize;
