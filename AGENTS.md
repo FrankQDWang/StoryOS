@@ -153,3 +153,5 @@ StoryOS issues and Wayfinder maps live in GitHub Issues for `FrankQDWang/StoryOS
 ### Domain docs
 
 StoryOS uses a single-context domain glossary at `CONTEXT.md` and architecture decisions under `docs/adr/`. See `docs/agents/domain.md`.
+
+- Always talk in ASD-STE100 Simplified Technical English. Always read `CONTEXT.md` files, and use their ubiquitous language.
