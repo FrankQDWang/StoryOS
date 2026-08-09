@@ -1,14 +1,477 @@
 {
-  "schema_id": "storyos.evidence.stage1-contract-crosswalk.v1",
-  "claim_ceiling": "contract-foundation-only; no S1 requirement or stage acceptance",
+  "schema_id": "storyos.evidence.stage1-contract-crosswalk.v2",
+  "claim_ceiling": "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
   "declarations": {
-    "authority": "Issue #100 locked body and Claim lock",
+    "authority": "Issue #100 accepted Stage 1 specification with delivery owned by child tickets #103-#112",
     "execution_contract": {
       "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
       "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5",
       "baseline_commit": "af50f2340a8ef0775fc344bc374390fe1d355e49",
       "baseline_tree": "0d0ed71354194f7b4289a5cb859644784c39ae70",
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
+    },
+    "delivery_contract": {
+      "revision": "stage1-ticketed-delivery-2026-08-09-v1",
+      "baseline_commit": "ab97eb33357c8ac6070ce29f44a6e2961bce59b0",
+      "baseline_tree": "cff9f500262dff61a906dfe99d82f1b0e05f7075",
+      "ticket_set_sha256": "sha256:ab794cc514ad3c7208b96c33b94ead93936374c5058f13d692a3c0d18e7cca7c",
+      "parent_specification": {
+        "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
+        "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
+        "title": "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice",
+        "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5",
+        "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1",
+        "blocked_by": [
+          "https://github.com/FrankQDWang/StoryOS/issues/77"
+        ]
+      },
+      "historical_foundation": {
+        "pull_request": "https://github.com/FrankQDWang/StoryOS/pull/102",
+        "merge_commit": "3468bdaaaa97ef05fd7c6e3f61836d20f1f76496",
+        "merge_tree": "485f740ba19616dc4809be3ee50575ef7723432c",
+        "crosswalk_sha256": "sha256:89bd814824e24e02e6ce0336435880fcf46ec2031bcd11ea3e6aa99a519dae41",
+        "evidence_role": "historical-contract-foundation",
+        "claim_ceiling": "contract-foundation-only; no S1 requirement or stage acceptance"
+      },
+      "tickets": [
+        {
+          "sequence": 1,
+          "responsibility_id": "S1-TICKET-01",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/103",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
+          "issue_body_sha256": "cf70e95a41dbe1b031a4f034ab7d615b4131cd5e67da9debce71be505489490b",
+          "blocked_by": null,
+          "evidence_role": "contract-binding",
+          "responsibility": "bind the accepted Stage 1 specification and ticket sequence",
+          "contract_coverage": {
+            "requirements": [
+              "S1-EVD-001",
+              "SMAP-STAGE-1"
+            ],
+            "operations": [],
+            "gates": [
+              "DVG-01"
+            ],
+            "evidence_classes": [
+              "EC-01",
+              "EV-CP"
+            ],
+            "fixtures": [
+              "FX-CONTRACT-R1"
+            ],
+            "fault_points": [
+              "CFP-CONTRACT-DRIFT"
+            ],
+            "schedules": [
+              "SCH-DRIFT"
+            ],
+            "oracles": [
+              "ORC-CONTRACT",
+              "ORC-CROSSWALK-COMPLETENESS"
+            ],
+            "bundles": [
+              "B-CONTRACT"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 2,
+          "responsibility_id": "S1-TICKET-02",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/104",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Boot the Protected Web Client Against the Release 1 Protocol Profile",
+          "issue_body_sha256": "cd1a9130c041f01be000ce87cef1b43df46afdbcc94fc4bf697b3061b78d1650",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/103",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "validate the protected client protocol identity",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-001",
+              "S1-REQ-005",
+              "S1-EVD-005"
+            ],
+            "operations": [
+              "getProtocolProfile"
+            ],
+            "gates": [
+              "DVG-01"
+            ],
+            "evidence_classes": [
+              "EC-01",
+              "EV-INT"
+            ],
+            "fixtures": [
+              "FX-CONTRACT-R1"
+            ],
+            "fault_points": [
+              "CFP-CONTRACT-DRIFT"
+            ],
+            "schedules": [
+              "SCH-DRIFT"
+            ],
+            "oracles": [
+              "ORC-CONTRACT"
+            ],
+            "bundles": [
+              "B-CONTRACT"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 3,
+          "responsibility_id": "S1-TICKET-03",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/105",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Open the Controlled Project and Current Chapter End to End",
+          "issue_body_sha256": "2ea7e9fdcaec104c9cc3911ca3104e8d0c8392987fa29306d273147e53803d4f",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/104",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "open one isolated Project and current Chapter",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-001",
+              "S1-REQ-005",
+              "S1-EVD-005"
+            ],
+            "operations": [
+              "getProject",
+              "getChapter"
+            ],
+            "gates": [
+              "DVG-07"
+            ],
+            "evidence_classes": [
+              "EC-07",
+              "EV-SE"
+            ],
+            "fixtures": [
+              "FX-SCOPE-2U2P"
+            ],
+            "fault_points": [
+              "CFP-SCOPE-BEFORE-QUERY"
+            ],
+            "schedules": [
+              "SCH-SCOPE"
+            ],
+            "oracles": [
+              "ORC-NEGATIVE-CLOSURE",
+              "ORC-SCOPE"
+            ],
+            "bundles": [
+              "B-SCOPE"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 4,
+          "responsibility_id": "S1-TICKET-04",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/106",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Create an Editor Session and Persist One Pending Intent",
+          "issue_body_sha256": "08119876e19fdc912496ba18659e4636551c2eb453573e25fad8a6b0654bb4fa",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/105",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "persist one pending editor intent",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-002",
+              "S1-JRN-001",
+              "S1-EVD-002"
+            ],
+            "operations": [
+              "createEditorSession",
+              "getEditorSession"
+            ],
+            "gates": [
+              "DVG-02"
+            ],
+            "evidence_classes": [
+              "EC-02"
+            ],
+            "fixtures": [
+              "FX-JOURNAL-GROUP"
+            ],
+            "fault_points": [
+              "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+              "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY"
+            ],
+            "schedules": [
+              "SCH-NORMAL"
+            ],
+            "oracles": [
+              "ORC-EDITOR-JOURNAL"
+            ],
+            "bundles": [
+              "B-EDITOR"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 5,
+          "responsibility_id": "S1-TICKET-05",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/107",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Settle One Direct Author Edit into an Authoritative Revision",
+          "issue_body_sha256": "7b1c4727d62840a96baff6b46e384662ac3f5fcf9a2a2bd9795645a0cff47386",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/106",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "settle one Direct Author Action as an authoritative Revision",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-003",
+              "S1-EVD-003"
+            ],
+            "operations": [
+              "createProjectCommandChallenge",
+              "applyAuthorEdit"
+            ],
+            "gates": [
+              "DVG-03"
+            ],
+            "evidence_classes": [
+              "EC-03",
+              "EV-IT"
+            ],
+            "fixtures": [
+              "FX-CORE-PROPOSAL"
+            ],
+            "fault_points": [
+              "CFP-ADMISSION-BEFORE-CORE",
+              "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+              "CFP-CORE-BEFORE-COMMIT"
+            ],
+            "schedules": [
+              "SCH-CRASH"
+            ],
+            "oracles": [
+              "ORC-ATOMIC-AUTHORITY"
+            ],
+            "bundles": [
+              "B-CORE"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 6,
+          "responsibility_id": "S1-TICKET-06",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/108",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Complete Bounded Manual Input and IME Semantics",
+          "issue_body_sha256": "c857884015d1618b850234594d04f7b1ec6f31c9a7677863b1a55e12cf81d70b",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/107",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "complete bounded manual input and IME semantics",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-002",
+              "S1-JRN-001",
+              "S1-EVD-002"
+            ],
+            "operations": [],
+            "gates": [
+              "DVG-02"
+            ],
+            "evidence_classes": [
+              "EC-02",
+              "EV-INT"
+            ],
+            "fixtures": [
+              "FX-EDITOR-IME"
+            ],
+            "fault_points": [
+              "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+              "CFP-EDITOR-BEFORE-GROUP-ADMISSION"
+            ],
+            "schedules": [
+              "SCH-NORMAL"
+            ],
+            "oracles": [
+              "ORC-EDITOR-JOURNAL"
+            ],
+            "bundles": [
+              "B-EDITOR"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 7,
+          "responsibility_id": "S1-TICKET-07",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/109",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Reconcile Acknowledgement Loss without Duplicate Authority",
+          "issue_body_sha256": "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/108",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "reconcile acknowledgement loss without duplicate authority",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-004",
+              "S1-EVD-004"
+            ],
+            "operations": [
+              "getCommand"
+            ],
+            "gates": [
+              "DVG-08"
+            ],
+            "evidence_classes": [
+              "EC-04"
+            ],
+            "fixtures": [
+              "FX-RECOVERY-EDITOR"
+            ],
+            "fault_points": [
+              "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+              "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK"
+            ],
+            "schedules": [
+              "SCH-CRASH"
+            ],
+            "oracles": [
+              "ORC-OUTCOME-UNKNOWN",
+              "ORC-RECOVERY-ATOMICITY"
+            ],
+            "bundles": [
+              "B-RECOVERY"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 8,
+          "responsibility_id": "S1-TICKET-08",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/110",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Recover Settled and Unsettled Edits across Reload and Restart",
+          "issue_body_sha256": "526e75701f2b9acb1461fc99a6e68c6bf533f96aaa86c4e7e5a18244109ce196",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/109",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "recover settled and unsettled edits after reload and restart",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-004",
+              "S1-EVD-004"
+            ],
+            "operations": [
+              "getEditorSession",
+              "getCommand"
+            ],
+            "gates": [
+              "DVG-08"
+            ],
+            "evidence_classes": [
+              "EC-04"
+            ],
+            "fixtures": [
+              "FX-RECOVERY-EDITOR"
+            ],
+            "fault_points": [
+              "CFP-ADMISSION-EXPIRY",
+              "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE"
+            ],
+            "schedules": [
+              "SCH-CRASH"
+            ],
+            "oracles": [
+              "ORC-RECOVERY-ATOMICITY"
+            ],
+            "bundles": [
+              "B-RECOVERY"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 9,
+          "responsibility_id": "S1-TICKET-09",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/111",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Fence Stale Writers and Resync across Replay Generations",
+          "issue_body_sha256": "78ac6a7fbec0886fc4c993140b1b3dd4c9da13db3b15fb36706a4f4021c7839f",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/110",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "fence stale writers and resync replay generations",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-004",
+              "S1-EVD-004"
+            ],
+            "operations": [
+              "activityStream",
+              "getSnapshot"
+            ],
+            "gates": [
+              "DVG-09",
+              "DVG-11"
+            ],
+            "evidence_classes": [
+              "EC-05"
+            ],
+            "fixtures": [
+              "FX-RECOVERY-EDITOR"
+            ],
+            "fault_points": [
+              "CFP-FENCE-AFTER-TAKEOVER",
+              "CFP-LATE-RESULT",
+              "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+              "CFP-REPLAY-BELOW-FLOOR"
+            ],
+            "schedules": [
+              "SCH-FENCE",
+              "SCH-REORDER",
+              "SCH-REPLAY"
+            ],
+            "oracles": [
+              "ORC-REPLAY-TRUTH"
+            ],
+            "bundles": [
+              "B-REPLAY"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 10,
+          "responsibility_id": "S1-TICKET-10",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Complete the Stage 1 Mandatory Evidence and Handoff",
+          "issue_body_sha256": "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/111",
+          "evidence_role": "acceptance-handoff",
+          "responsibility": "assemble the mandatory Stage 1 evidence and handoff",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-006",
+              "S1-EVD-001",
+              "S1-EVD-006",
+              "SMAP-STAGE-1"
+            ],
+            "operations": [],
+            "gates": [
+              "DVG-13"
+            ],
+            "evidence_classes": [],
+            "fixtures": [
+              "FX-HANDOFF"
+            ],
+            "fault_points": [],
+            "schedules": [],
+            "oracles": [],
+            "bundles": [
+              "B-HANDOFF"
+            ],
+            "aggregate": "B-S1-MANDATORY-SET"
+          }
+        }
+      ]
     },
     "requirements": [
       {
@@ -228,6 +691,117 @@
     "baseline": {
       "commit": "af50f2340a8ef0775fc344bc374390fe1d355e49",
       "tree": "0d0ed71354194f7b4289a5cb859644784c39ae70"
+    },
+    "delivery_coverage": {
+      "requirements": [
+        "S1-REQ-001",
+        "S1-REQ-002",
+        "S1-REQ-003",
+        "S1-REQ-004",
+        "S1-REQ-005",
+        "S1-REQ-006",
+        "S1-JRN-001",
+        "S1-EVD-001",
+        "S1-EVD-002",
+        "S1-EVD-003",
+        "S1-EVD-004",
+        "S1-EVD-005",
+        "S1-EVD-006",
+        "SMAP-STAGE-1"
+      ],
+      "operations": [
+        "getProtocolProfile",
+        "getProject",
+        "getChapter",
+        "createEditorSession",
+        "getEditorSession",
+        "createProjectCommandChallenge",
+        "applyAuthorEdit",
+        "getCommand",
+        "activityStream",
+        "getSnapshot"
+      ],
+      "proof_selection": {
+        "gates": [
+          "DVG-01",
+          "DVG-02",
+          "DVG-03",
+          "DVG-07",
+          "DVG-08",
+          "DVG-09",
+          "DVG-11",
+          "DVG-13"
+        ],
+        "evidence_classes": [
+          "EC-01",
+          "EC-02",
+          "EC-03",
+          "EC-04",
+          "EC-05",
+          "EC-07",
+          "EV-CP",
+          "EV-IT",
+          "EV-INT",
+          "EV-SE"
+        ],
+        "fixtures": [
+          "FX-CONTRACT-R1",
+          "FX-CORE-PROPOSAL",
+          "FX-EDITOR-IME",
+          "FX-HANDOFF",
+          "FX-JOURNAL-GROUP",
+          "FX-RECOVERY-EDITOR",
+          "FX-SCOPE-2U2P"
+        ],
+        "fault_points": [
+          "CFP-ADMISSION-BEFORE-CORE",
+          "CFP-ADMISSION-EXPIRY",
+          "CFP-CONTRACT-DRIFT",
+          "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+          "CFP-CORE-BEFORE-COMMIT",
+          "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+          "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+          "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+          "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+          "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
+          "CFP-FENCE-AFTER-TAKEOVER",
+          "CFP-LATE-RESULT",
+          "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+          "CFP-REPLAY-BELOW-FLOOR",
+          "CFP-SCOPE-BEFORE-QUERY"
+        ],
+        "schedules": [
+          "SCH-CRASH",
+          "SCH-DRIFT",
+          "SCH-FENCE",
+          "SCH-NORMAL",
+          "SCH-REORDER",
+          "SCH-REPLAY",
+          "SCH-SCOPE"
+        ],
+        "oracles": [
+          "ORC-ATOMIC-AUTHORITY",
+          "ORC-CONTRACT",
+          "ORC-CROSSWALK-COMPLETENESS",
+          "ORC-EDITOR-JOURNAL",
+          "ORC-NEGATIVE-CLOSURE",
+          "ORC-OUTCOME-UNKNOWN",
+          "ORC-RECOVERY-ATOMICITY",
+          "ORC-REPLAY-TRUTH",
+          "ORC-SCOPE"
+        ],
+        "bundles": [
+          "B-CONTRACT",
+          "B-SCOPE",
+          "B-EDITOR",
+          "B-CORE",
+          "B-RECOVERY",
+          "B-REPLAY",
+          "B-HANDOFF"
+        ],
+        "aggregate": "B-S1-MANDATORY-SET",
+        "disposition": "foundation-only; no PASS-STAGE claim"
+      }
     },
     "sources": [
       {

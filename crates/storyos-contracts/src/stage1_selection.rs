@@ -50,21 +50,21 @@ pub(super) const OPERATION_IDS: &[&str] = &[
 
 #[derive(Debug, Serialize)]
 pub(super) struct RequirementBinding {
-    id: &'static str,
+    pub(super) id: &'static str,
     owners: &'static [&'static str],
     project_scope: &'static str,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Clone, Copy, Debug, Serialize)]
 pub(super) struct ProofSelection {
-    gates: &'static [&'static str],
-    evidence_classes: &'static [&'static str],
-    fixtures: &'static [&'static str],
-    fault_points: &'static [&'static str],
-    schedules: &'static [&'static str],
-    oracles: &'static [&'static str],
-    bundles: &'static [&'static str],
-    aggregate: &'static str,
+    pub(super) gates: &'static [&'static str],
+    pub(super) evidence_classes: &'static [&'static str],
+    pub(super) fixtures: &'static [&'static str],
+    pub(super) fault_points: &'static [&'static str],
+    pub(super) schedules: &'static [&'static str],
+    pub(super) oracles: &'static [&'static str],
+    pub(super) bundles: &'static [&'static str],
+    pub(super) aggregate: &'static str,
     disposition: &'static str,
 }
 

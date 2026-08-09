@@ -1,7 +1,9 @@
 //! StoryOS-owned source for the deterministic Stage 1 contract crosswalk.
 //! Runtime DTOs and handlers remain outside this first stack layer.
 
+mod digest;
 mod stage1_crosswalk;
+mod stage1_delivery;
 mod stage1_selection;
 
 pub use stage1_crosswalk::{
