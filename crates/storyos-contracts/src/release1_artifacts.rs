@@ -354,6 +354,9 @@ fn operation_openapi(
     response_schema: &str,
     parameters: &[&str],
 ) -> String {
+    let response_schema = response_schema
+        .strip_prefix("generated/")
+        .expect("OpenAPI response schemas must be generated artifacts");
     let parameters = if parameters.is_empty() {
         String::new()
     } else {

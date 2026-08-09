@@ -15,7 +15,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../generated/json-schema/storyos-public-release-1/protocol-profile-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/protocol-profile-response.schema.json'
         '400':
           description: Invalid request
         '405':
@@ -41,7 +41,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../generated/json-schema/storyos-public-release-1/project-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/project-response.schema.json'
         '400':
           description: Invalid request
         '401':
@@ -79,7 +79,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '../generated/json-schema/storyos-public-release-1/chapter-response.schema.json'
+                $ref: '../json-schema/storyos-public-release-1/chapter-response.schema.json'
         '400':
           description: Invalid request
         '401':
