@@ -1,0 +1,27 @@
+{
+  "activity_profile": "storyos.project-activity.v1",
+  "api_major": 1,
+  "compatibility_profile": "storyos.public.same-release.v1",
+  "contract_revision": "release1-wire-catalog-2026-07-31",
+  "envelope_version": 1,
+  "limit_profile_revision": "storyos.foundation.absolute.v1",
+  "problem_profile": "storyos.problem.v1",
+  "public_protocol_release": "storyos.public.release.1",
+  "required_capabilities": [
+    "project_lifecycle",
+    "volume_chapter_lifecycle",
+    "chapter_navigation",
+    "manuscript_search",
+    "direct_author_edit",
+    "single_match_replace",
+    "multi_match_cross_location_proposal",
+    "manuscript_statistics",
+    "human_readable_manuscript_export",
+    "portable_project_archive",
+    "editor_session_takeover",
+    "snapshot_resync",
+    "proposal_draft_lifecycle",
+    "project_activity"
+  ],
+  "schema_id": "storyos.query.protocol-profile.response.v1"
+}

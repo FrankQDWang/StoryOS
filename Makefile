@@ -1,4 +1,4 @@
-.PHONY: contracts generate-contracts verify
+.PHONY: contracts generate-contracts verify web
 
 contracts:
 	cargo fmt --all -- --check
@@ -8,6 +8,11 @@ contracts:
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	cargo run --quiet -p storyos-contracts -- check
+	$(MAKE) web
+web:
+	node --test apps/web/test/protocol-boot.test.mjs
+	cargo build --quiet -p storyos-server
+	node --test apps/web/test/protocol-http.integration.test.mjs
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 verify: contracts
