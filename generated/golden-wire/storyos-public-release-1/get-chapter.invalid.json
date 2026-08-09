@@ -1,0 +1,12 @@
+{
+  "chapter": {
+    "chapter_id": "018f0000-0000-7001-8000-000000000003",
+    "current_revision": {
+      "body": "雨落在窗沿。",
+      "revision_id": "018f0000-0000-7001-8000-000000000004"
+    },
+    "title": "第一章"
+  },
+  "correlation_id": "018f0000-0000-7001-8000-000000000006",
+  "schema_id": "storyos.query.chapter.response.v1"
+}

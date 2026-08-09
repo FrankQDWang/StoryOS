@@ -3,14 +3,22 @@ export type Release1CompatibilityIdentity = { schema_id: string, api_major: numb
 
 export type Release1ProtocolProfile = { schema_id: string, api_major: number, public_protocol_release: string, envelope_version: number, problem_profile: string, activity_profile: string, limit_profile_revision: string, compatibility_profile: string, contract_revision: string, required_capabilities: Array<string>, release_identity: Release1CompatibilityIdentity, };
 
+export type GetProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project: ControlledProject, };
+
+export type GetChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, chapter: CurrentChapter, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
   readonly status?: number;
   readonly responseBody?: string;
 }
-export declare function getProtocolProfile(options: {
+export interface StoryOSQueryOptions {
   baseUrl: string;
+  sessionHandle?: string;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
-}): Promise<Release1ProtocolProfile>;
+}
+export declare function getProtocolProfile(options: StoryOSQueryOptions): Promise<Release1ProtocolProfile>;
+export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;
+export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;

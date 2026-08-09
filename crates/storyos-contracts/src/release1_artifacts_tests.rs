@@ -3,6 +3,28 @@ use super::{
     release1_protocol_profile, validate_review_bindings,
 };
 use crate::digest::sha256_prefixed;
+
+#[test]
+fn controlled_project_queries_are_generated_from_the_release_1_contract() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let openapi =
+        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
+            .expect("OpenAPI must be UTF-8");
+    let client = String::from_utf8(
+        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
+    )
+    .expect("generated client must be UTF-8");
+
+    assert!(openapi.contains("/api/v1/projects/{project_id}:"));
+    assert!(openapi.contains("operationId: getProject"));
+    assert!(openapi.contains("/api/v1/projects/{project_id}/chapters/{chapter_id}:"));
+    assert!(openapi.contains("operationId: getChapter"));
+    assert!(client.contains("export async function getProject"));
+    assert!(client.contains("export async function getChapter"));
+}
+
 #[test]
 fn fixture_digest_uses_the_declared_self_normalization() {
     let profile = release1_protocol_profile();

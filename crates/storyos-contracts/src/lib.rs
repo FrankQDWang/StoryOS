@@ -8,8 +8,10 @@ mod stage1_delivery;
 mod stage1_selection;
 
 pub use release1::{
-    GET_PROTOCOL_PROFILE_METHOD, GET_PROTOCOL_PROFILE_PATH, Release1CompatibilityIdentity,
-    Release1ProtocolProfile,
+    AuthoritativeChapterRevision, ControlledProject, CurrentChapter, GET_CHAPTER_METHOD,
+    GET_CHAPTER_PATH, GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD,
+    GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetProjectResponse, ProjectScope,
+    Release1CompatibilityIdentity, Release1ProtocolProfile, StoryOSProblem,
 };
 pub use release1_artifacts::{
     check_release1_artifacts, release1_protocol_profile, write_release1_artifacts,

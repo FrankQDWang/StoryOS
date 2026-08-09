@@ -1,6 +1,8 @@
 {
   "implemented_operations": [
-    "getProtocolProfile"
+    "getProtocolProfile",
+    "getProject",
+    "getChapter"
   ],
   "public_protocol_release": "storyos.public.release.1",
   "schema_id": "storyos.schema-catalog.v1",
@@ -14,6 +16,26 @@
       "path": "generated/json-schema/storyos-public-release-1/protocol-profile-response.schema.json",
       "schema_id": "storyos.query.protocol-profile.response.v1",
       "sha256": "sha256:e1656211bf840f3fcc97da032a7eb799a9c2d883b958b97dd0e0b703569a7f87"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/project-request.schema.json",
+      "schema_id": "storyos.query.project.request.v1",
+      "sha256": "sha256:083635c9bf7e15623079f80ea940ef1565ebec086a1bfaad91b54a372f81dd15"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/project-response.schema.json",
+      "schema_id": "storyos.query.project.response.v1",
+      "sha256": "sha256:4d49acb19f525a9e2ff8486646baa959a74d2a0bbb914750be032c15fa868392"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/chapter-request.schema.json",
+      "schema_id": "storyos.query.chapter.request.v1",
+      "sha256": "sha256:d451a429340cbd4af6d209b8bf83a81bc9e1dcc459ec4b580242030f3b0c5498"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/chapter-response.schema.json",
+      "schema_id": "storyos.query.chapter.response.v1",
+      "sha256": "sha256:21254ff709b655cebc8e0e9d2af4fb4d723f4a76a7dde7a47cb246e182190afd"
     }
   ]
 }

@@ -18,6 +18,10 @@ pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.re
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
+pub(super) const PROJECT_REQUEST_SCHEMA_ID: &str = "storyos.query.project.request.v1";
+pub(super) const PROJECT_RESPONSE_SCHEMA_ID: &str = "storyos.query.project.response.v1";
+pub(super) const CHAPTER_REQUEST_SCHEMA_ID: &str = "storyos.query.chapter.request.v1";
+pub(super) const CHAPTER_RESPONSE_SCHEMA_ID: &str = "storyos.query.chapter.response.v1";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";
 pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.positive.v1";
 pub(super) const INVALID_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.invalid.v1";
@@ -49,9 +53,50 @@ pub(super) const GET_PROTOCOL_PROFILE: QueryOperation = QueryOperation {
     fixtures: &[POSITIVE_FIXTURE_ID, INVALID_FIXTURE_ID, BOUNDARY_FIXTURE_ID],
 };
 
+pub(super) const GET_PROJECT: QueryOperation = QueryOperation {
+    operation_id: "getProject",
+    method: "GET",
+    path: "/api/v1/projects/{project_id}",
+    request_schema: PROJECT_REQUEST_SCHEMA_ID,
+    response_schema: PROJECT_RESPONSE_SCHEMA_ID,
+    responses: &[
+        (200, "Current Project"),
+        (400, "Invalid request"),
+        (401, "Authentication required"),
+        (403, "Request origin refused"),
+        (404, "Resource unavailable"),
+        (405, "Method not allowed"),
+        (429, "Rate limited"),
+        (503, "Service unavailable"),
+    ],
+    fixtures: &[
+        "storyos.golden.getProject.positive.v1",
+        "storyos.golden.getProject.invalid.v1",
+        "storyos.golden.getProject.boundary.v1",
+    ],
+};
+
+pub(super) const GET_CHAPTER: QueryOperation = QueryOperation {
+    operation_id: "getChapter",
+    method: "GET",
+    path: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+    request_schema: CHAPTER_REQUEST_SCHEMA_ID,
+    response_schema: CHAPTER_RESPONSE_SCHEMA_ID,
+    responses: GET_PROJECT.responses,
+    fixtures: &[
+        "storyos.golden.getChapter.positive.v1",
+        "storyos.golden.getChapter.invalid.v1",
+        "storyos.golden.getChapter.boundary.v1",
+    ],
+};
+
 /// Public route used by the generated client and StoryOS Server.
 pub const GET_PROTOCOL_PROFILE_PATH: &str = GET_PROTOCOL_PROFILE.path;
 pub const GET_PROTOCOL_PROFILE_METHOD: &str = GET_PROTOCOL_PROFILE.method;
+pub const GET_PROJECT_PATH: &str = GET_PROJECT.path;
+pub const GET_PROJECT_METHOD: &str = GET_PROJECT.method;
+pub const GET_CHAPTER_PATH: &str = GET_CHAPTER.path;
+pub const GET_CHAPTER_METHOD: &str = GET_CHAPTER.method;
 
 pub(super) const REQUIRED_CAPABILITIES: [&str; 14] = [
     "project_lifecycle",
@@ -105,6 +150,62 @@ pub struct Release1CompatibilityIdentity {
     pub fixture_corpus_digest: String,
     pub activity_profile: String,
     pub limit_profile_revision: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProjectScope {
+    pub owner_user_id: String,
+    pub project_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ControlledProject {
+    pub project_id: String,
+    pub title: String,
+    pub current_chapter_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct GetProjectResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: ProjectScope,
+    pub project: ControlledProject,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AuthoritativeChapterRevision {
+    pub revision_id: String,
+    pub body: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CurrentChapter {
+    pub chapter_id: String,
+    pub title: String,
+    pub current_revision: AuthoritativeChapterRevision,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct GetChapterResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: ProjectScope,
+    pub chapter: CurrentChapter,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct StoryOSProblem {
+    pub schema_id: String,
+    pub code: String,
+    pub message: String,
 }
 
 pub(super) struct ArtifactDigests {
