@@ -1,0 +1,13 @@
+[package]
+name = "storyos-adapter-postgres"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+storyos-application = { path = "../storyos-application" }
+tokio.workspace = true
+tokio-postgres.workspace = true
+
+[lints]
+workspace = true
