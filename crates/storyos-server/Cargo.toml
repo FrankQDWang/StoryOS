@@ -1,0 +1,11 @@
+[package]
+name = "storyos-server"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+[dependencies]
+axum.workspace = true
+storyos-contracts = { path = "../storyos-contracts" }
+tokio.workspace = true
+[lints]
+workspace = true

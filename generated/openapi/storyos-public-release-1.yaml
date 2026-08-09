@@ -1,0 +1,27 @@
+openapi: 3.1.0
+info:
+  title: StoryOS Public Release 1
+  version: storyos.public.release.1
+  x-storyos-contract-revision: release1-wire-catalog-2026-07-31
+  x-storyos-implemented-slice: getProtocolProfile
+paths:
+  /api/v1/protocol:
+    get:
+      operationId: getProtocolProfile
+      summary: Discover the active StoryOS Release 1 protocol profile
+      responses:
+        '200':
+          description: Active protocol profile
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/protocol-profile-response.schema.json'
+        '400':
+          description: Invalid request
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
+        '429':
+          description: Rate limited
+components: {}

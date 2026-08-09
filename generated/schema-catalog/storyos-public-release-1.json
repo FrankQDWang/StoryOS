@@ -1,0 +1,19 @@
+{
+  "implemented_operations": [
+    "getProtocolProfile"
+  ],
+  "public_protocol_release": "storyos.public.release.1",
+  "schema_id": "storyos.schema-catalog.v1",
+  "schemas": [
+    {
+      "path": "generated/json-schema/storyos-public-release-1/protocol-profile-request.schema.json",
+      "schema_id": "storyos.query.protocol-profile.request.v1",
+      "sha256": "sha256:7f20565bb1211f7e68277cfb1cf7449b52f31d53da9ce2e32ea571172f8776ef"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/protocol-profile-response.schema.json",
+      "schema_id": "storyos.query.protocol-profile.response.v1",
+      "sha256": "sha256:e1656211bf840f3fcc97da032a7eb799a9c2d883b958b97dd0e0b703569a7f87"
+    }
+  ]
+}

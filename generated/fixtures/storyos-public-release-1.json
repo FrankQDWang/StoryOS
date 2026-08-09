@@ -1,0 +1,33 @@
+{
+  "corpus_digest": "sha256:730962a6c0c52b039fdd45594d20d741f63a2d78edd751ca5a2c975658381d09",
+  "digest_scope": {
+    "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
+    "paths": [
+      "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json",
+      "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json"
+    ]
+  },
+  "fixtures": [
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getProtocolProfile.positive.v1",
+      "operation_id": "getProtocolProfile",
+      "path": "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getProtocolProfile.invalid.v1",
+      "operation_id": "getProtocolProfile",
+      "path": "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getProtocolProfile.boundary.v1",
+      "operation_id": "getProtocolProfile",
+      "path": "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json"
+    }
+  ],
+  "public_protocol_release": "storyos.public.release.1",
+  "schema_id": "storyos.fixture-catalog.release-1.v1"
+}

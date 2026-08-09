@@ -1,0 +1,138 @@
+{
+  "$defs": {
+    "Release1CompatibilityIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "activity_profile": {
+          "type": "string"
+        },
+        "api_major": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "contract_graph_digest": {
+          "type": "string"
+        },
+        "contract_graph_revision": {
+          "type": "string"
+        },
+        "envelope_profile": {
+          "type": "string"
+        },
+        "fixture_corpus_digest": {
+          "type": "string"
+        },
+        "generated_client_revision": {
+          "type": "string"
+        },
+        "json_schema_catalog_digest": {
+          "type": "string"
+        },
+        "limit_profile_revision": {
+          "type": "string"
+        },
+        "openapi_digest": {
+          "type": "string"
+        },
+        "public_protocol_release": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "server_contract_revision": {
+          "type": "string"
+        },
+        "typescript_artifact_digest": {
+          "type": "string"
+        },
+        "web_client_contract_revision": {
+          "type": "string"
+        },
+        "worker_contract_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_id",
+        "api_major",
+        "public_protocol_release",
+        "envelope_profile",
+        "contract_graph_revision",
+        "contract_graph_digest",
+        "web_client_contract_revision",
+        "server_contract_revision",
+        "worker_contract_revision",
+        "generated_client_revision",
+        "openapi_digest",
+        "json_schema_catalog_digest",
+        "typescript_artifact_digest",
+        "fixture_corpus_digest",
+        "activity_profile",
+        "limit_profile_revision"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.protocol-profile.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "activity_profile": {
+      "type": "string"
+    },
+    "api_major": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "compatibility_profile": {
+      "type": "string"
+    },
+    "contract_revision": {
+      "type": "string"
+    },
+    "envelope_version": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "limit_profile_revision": {
+      "type": "string"
+    },
+    "problem_profile": {
+      "type": "string"
+    },
+    "public_protocol_release": {
+      "type": "string"
+    },
+    "release_identity": {
+      "$ref": "#/$defs/Release1CompatibilityIdentity"
+    },
+    "required_capabilities": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "schema_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "api_major",
+    "public_protocol_release",
+    "envelope_version",
+    "problem_profile",
+    "activity_profile",
+    "limit_profile_revision",
+    "compatibility_profile",
+    "contract_revision",
+    "required_capabilities",
+    "release_identity"
+  ],
+  "title": "StoryOS Release 1 Protocol Profile",
+  "type": "object"
+}
