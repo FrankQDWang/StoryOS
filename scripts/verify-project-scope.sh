@@ -37,3 +37,7 @@ export STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$
 export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$port/postgres"
 echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
+echo "Building the StoryOS Server"
+cargo build --quiet -p storyos-server
+echo "Running HTTP Project Scope tests"
+node --test apps/web/test/project-http.integration.test.mjs

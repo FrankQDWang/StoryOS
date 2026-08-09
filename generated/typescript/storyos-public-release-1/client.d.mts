@@ -23,7 +23,6 @@ export declare class StoryOSProtocolError extends Error {
 }
 export interface StoryOSQueryOptions {
   baseUrl: string;
-  sessionHandle?: string;
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
 }

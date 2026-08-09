@@ -860,8 +860,12 @@ name = "storyos-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "serde_json",
+ "storyos-adapter-postgres",
+ "storyos-application",
  "storyos-contracts",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1115,6 +1119,17 @@ name = "unicode-properties"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
+
+[[package]]
+name = "uuid"
+version = "1.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f87b8aa10b915a06587d0dec516c282ff295b475d94abf425d62b57710070a2"
+dependencies = [
+ "getrandom 0.3.4",
+ "js-sys",
+ "wasm-bindgen",
+]
 
 [[package]]
 name = "wasi"
