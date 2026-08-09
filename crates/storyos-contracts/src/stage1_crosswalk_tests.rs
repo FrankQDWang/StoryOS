@@ -1,45 +1,13 @@
 use serde_json::Value;
 
 use super::{
-    BASELINE_COMMIT, BASELINE_TREE, CONTRACT_REVISION, CrosswalkError, GENERATED_CROSSWALK_PATH,
-    ISSUE_BODY_SHA256, OPERATION_IDS, ROUTE_CATALOG_PATH, generate_crosswalk, read_baseline_file,
-    read_baseline_json, repository_root, validate_operations, verify_baseline_tree,
+    CrosswalkError, GENERATED_CROSSWALK_PATH, ROUTE_CATALOG_PATH, generate_crosswalk,
+    read_baseline_file, read_baseline_json, repository_root, validate_operations,
+    verify_baseline_tree, verify_delivery_baseline_tree, verify_historical_foundation_crosswalk,
 };
 
 fn route_catalog() -> Value {
     read_baseline_json(repository_root(), ROUTE_CATALOG_PATH).expect("route catalog should load")
-}
-
-#[test]
-fn generated_crosswalk_matches_the_locked_contract_as_a_whole() {
-    let generated: Value = serde_json::from_slice(
-        &generate_crosswalk(repository_root()).expect("crosswalk generation should succeed"),
-    )
-    .expect("generated crosswalk should be JSON");
-    assert_eq!(
-        generated["declarations"]["execution_contract"],
-        serde_json::json!({
-            "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
-            "revision": CONTRACT_REVISION,
-            "baseline_commit": BASELINE_COMMIT,
-            "baseline_tree": BASELINE_TREE,
-            "issue_body_sha256": ISSUE_BODY_SHA256,
-        })
-    );
-    assert_eq!(
-        generated["verifications"]["operations"]
-            .as_array()
-            .map(Vec::len),
-        Some(OPERATION_IDS.len())
-    );
-    assert_eq!(
-        generated["verifications"]["baseline"],
-        serde_json::json!({"commit": BASELINE_COMMIT, "tree": BASELINE_TREE})
-    );
-    assert_eq!(
-        generated["claim_ceiling"],
-        "contract-foundation-only; no S1 requirement or stage acceptance"
-    );
 }
 
 #[test]
@@ -99,5 +67,23 @@ fn wrong_baseline_tree_is_rejected() {
     assert!(matches!(
         verify_baseline_tree(repository_root(), "wrong-tree"),
         Err(CrosswalkError::Invalid(message)) if message.contains("baseline tree drifted")
+    ));
+}
+
+#[test]
+fn wrong_delivery_baseline_tree_is_rejected() {
+    assert!(matches!(
+        verify_delivery_baseline_tree(repository_root(), "wrong-tree"),
+        Err(CrosswalkError::Invalid(message))
+            if message.contains("delivery baseline tree drifted")
+    ));
+}
+
+#[test]
+fn wrong_historical_foundation_crosswalk_digest_is_rejected() {
+    assert!(matches!(
+        verify_historical_foundation_crosswalk(repository_root(), "sha256:wrong"),
+        Err(CrosswalkError::Invalid(message))
+            if message.contains("PR #102 foundation crosswalk drifted")
     ));
 }

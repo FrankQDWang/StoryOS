@@ -1,4 +1,4 @@
-use std::fmt::{self, Write as _};
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -6,8 +6,12 @@ use std::process::Command;
 
 use serde::Serialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
+use crate::digest::sha256_prefixed;
+use crate::stage1_delivery::{
+    DELIVERY_BASELINE_COMMIT, DeliveryContract, DeliveryCoverage, FOUNDATION_CROSSWALK_SHA256,
+    FOUNDATION_MERGE_COMMIT, FOUNDATION_MERGE_TREE, delivery_contract, delivery_coverage,
+};
 use crate::stage1_selection::{
     BASELINE_COMMIT, BASELINE_TREE, CONTRACT_REVISION, ISSUE_BODY_SHA256, OPERATION_IDS,
     PERSISTENCE_CATALOG_PATH, ProofSelection, ROUTE_CATALOG_PATH, RequirementBinding, SOURCE_PATHS,
@@ -70,6 +74,7 @@ struct Crosswalk {
 struct Declarations {
     authority: &'static str,
     execution_contract: ExecutionContract,
+    delivery_contract: DeliveryContract,
     requirements: Vec<RequirementBinding>,
     proof_selection: ProofSelection,
 }
@@ -77,6 +82,7 @@ struct Declarations {
 #[derive(Debug, Serialize)]
 struct Verifications {
     baseline: BaselineBinding,
+    delivery_coverage: DeliveryCoverage,
     sources: Vec<SourceBinding>,
     catalogs: Vec<CatalogBinding>,
     operations: Vec<OperationBinding>,
@@ -152,14 +158,22 @@ enum ProjectScope {
 /// Build the deterministic Stage 1 contract crosswalk bytes.
 pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
     verify_baseline_tree(repo_root, BASELINE_TREE)?;
+    verify_delivery_baseline_tree(repo_root, crate::stage1_delivery::DELIVERY_BASELINE_TREE)?;
+    verify_historical_foundation_crosswalk(repo_root, FOUNDATION_CROSSWALK_SHA256)?;
     let route_catalog = read_baseline_json(repo_root, ROUTE_CATALOG_PATH)?;
     let persistence_catalog = read_baseline_json(repo_root, PERSISTENCE_CATALOG_PATH)?;
     let operations = validate_operations(&route_catalog)?;
+    let requirements = requirement_bindings();
+    let proof = proof_selection();
+    let delivery_contract = delivery_contract();
+    let delivery_coverage =
+        delivery_coverage(&delivery_contract, &requirements, OPERATION_IDS, &proof)
+            .map_err(CrosswalkError::Invalid)?;
     let mut bytes = serde_json::to_vec_pretty(&Crosswalk {
-        schema_id: "storyos.evidence.stage1-contract-crosswalk.v1",
-        claim_ceiling: "contract-foundation-only; no S1 requirement or stage acceptance",
+        schema_id: "storyos.evidence.stage1-contract-crosswalk.v2",
+        claim_ceiling: "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
         declarations: Declarations {
-            authority: "Issue #100 locked body and Claim lock",
+            authority: "Issue #100 accepted Stage 1 specification with delivery owned by child tickets #103-#112",
             execution_contract: ExecutionContract {
                 issue: "https://github.com/FrankQDWang/StoryOS/issues/100",
                 revision: CONTRACT_REVISION,
@@ -167,14 +181,16 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
                 baseline_tree: BASELINE_TREE,
                 issue_body_sha256: ISSUE_BODY_SHA256,
             },
-            requirements: requirement_bindings(),
-            proof_selection: proof_selection(),
+            delivery_contract,
+            requirements,
+            proof_selection: proof,
         },
         verifications: Verifications {
             baseline: BaselineBinding {
                 commit: BASELINE_COMMIT,
                 tree: BASELINE_TREE,
             },
+            delivery_coverage,
             sources: source_bindings(repo_root)?,
             catalogs: vec![
                 catalog_binding(repo_root, ROUTE_CATALOG_PATH, &route_catalog)?,
@@ -269,24 +285,60 @@ fn read_baseline_file(repo_root: &Path, relative_path: &str) -> Result<Vec<u8>, 
 }
 
 fn baseline_file_sha256(repo_root: &Path, relative_path: &str) -> Result<String, CrosswalkError> {
-    let digest = Sha256::digest(read_baseline_file(repo_root, relative_path)?);
-    let mut encoded = String::with_capacity("sha256:".len() + digest.len() * 2);
-    encoded.push_str("sha256:");
-    for byte in digest {
-        write!(&mut encoded, "{byte:02x}").expect("writing to a String cannot fail");
-    }
-    Ok(encoded)
+    Ok(sha256_prefixed(read_baseline_file(
+        repo_root,
+        relative_path,
+    )?))
 }
 
 fn verify_baseline_tree(repo_root: &Path, expected: &str) -> Result<(), CrosswalkError> {
-    let revision = format!("{BASELINE_COMMIT}^{{tree}}");
+    verify_git_tree(repo_root, BASELINE_COMMIT, expected, "baseline")
+}
+
+fn verify_delivery_baseline_tree(repo_root: &Path, expected: &str) -> Result<(), CrosswalkError> {
+    verify_git_tree(
+        repo_root,
+        DELIVERY_BASELINE_COMMIT,
+        expected,
+        "delivery baseline",
+    )
+}
+
+fn verify_git_tree(
+    repo_root: &Path,
+    commit: &str,
+    expected: &str,
+    label: &str,
+) -> Result<(), CrosswalkError> {
+    let revision = format!("{commit}^{{tree}}");
     let output = git_output(repo_root, &["rev-parse", &revision])?;
     let actual = std::str::from_utf8(&output)
         .map_err(|error| CrosswalkError::Invalid(format!("git tree output is not UTF-8: {error}")))?
         .trim();
     if actual != expected {
         return Err(CrosswalkError::Invalid(format!(
-            "baseline tree drifted: expected {expected}, found {actual}"
+            "{label} tree drifted: expected {expected}, found {actual}"
+        )));
+    }
+    Ok(())
+}
+
+fn verify_historical_foundation_crosswalk(
+    repo_root: &Path,
+    expected: &str,
+) -> Result<(), CrosswalkError> {
+    verify_git_tree(
+        repo_root,
+        FOUNDATION_MERGE_COMMIT,
+        FOUNDATION_MERGE_TREE,
+        "PR #102 foundation",
+    )?;
+    let object = format!("{FOUNDATION_MERGE_COMMIT}:{GENERATED_CROSSWALK_PATH}");
+    let bytes = git_output(repo_root, &["show", &object])?;
+    let actual = sha256_prefixed(bytes);
+    if actual != expected {
+        return Err(CrosswalkError::Invalid(format!(
+            "PR #102 foundation crosswalk drifted: expected {expected}, found {actual}"
         )));
     }
     Ok(())
