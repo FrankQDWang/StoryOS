@@ -10,6 +10,9 @@ storyos-adapter-postgres = { path = "../storyos-adapter-postgres" }
 storyos-application = { path = "../storyos-application" }
 storyos-contracts = { path = "../storyos-contracts" }
 tokio.workspace = true
+url.workspace = true
 uuid.workspace = true
+[dev-dependencies]
+tower.workspace = true
 [lints]
 workspace = true

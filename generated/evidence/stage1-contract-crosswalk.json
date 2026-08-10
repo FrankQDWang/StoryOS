@@ -2,7 +2,7 @@
   "schema_id": "storyos.evidence.stage1-contract-crosswalk.v2",
   "claim_ceiling": "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
   "declarations": {
-    "authority": "Issue #100 accepted Stage 1 specification with delivery owned by child tickets #103-#112",
+    "authority": "Issue #100 accepted Stage 1 specification with delivery owned by 11 child tickets, including #119",
     "execution_contract": {
       "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
       "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5",
@@ -11,10 +11,10 @@
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-09-v1",
-      "baseline_commit": "ab97eb33357c8ac6070ce29f44a6e2961bce59b0",
-      "baseline_tree": "cff9f500262dff61a906dfe99d82f1b0e05f7075",
-      "ticket_set_sha256": "sha256:ab794cc514ad3c7208b96c33b94ead93936374c5058f13d692a3c0d18e7cca7c",
+      "revision": "stage1-ticketed-delivery-2026-08-10-v2",
+      "baseline_commit": "f0463582374d6a6336d1579434807a5306f53d81",
+      "baseline_tree": "6b98389d646b89e165e5e021a998633b75095202",
+      "ticket_set_sha256": "sha256:f4ea59123f78c554a65c9b824379d1064730f6d9190cc5759dee2a71b69cc6a2",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -168,12 +168,58 @@
         },
         {
           "sequence": 4,
+          "responsibility_id": "S1-TICKET-03A",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/119",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Harden Sensitive Read Origin Admission with Standard URL Parsing",
+          "issue_body_sha256": "e28c601251b1fd0905f0b1bf1d38a249102f41613a6cfc7096eec869097d9f6e",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/105",
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "harden sensitive read origin admission",
+          "contract_coverage": {
+            "requirements": [
+              "S1-REQ-001",
+              "S1-REQ-005",
+              "S1-EVD-005"
+            ],
+            "operations": [
+              "getProject",
+              "getChapter"
+            ],
+            "gates": [
+              "DVG-07"
+            ],
+            "evidence_classes": [
+              "EC-07",
+              "EV-SE"
+            ],
+            "fixtures": [
+              "FX-SCOPE-2U2P"
+            ],
+            "fault_points": [
+              "CFP-SCOPE-BEFORE-QUERY"
+            ],
+            "schedules": [
+              "SCH-SCOPE"
+            ],
+            "oracles": [
+              "ORC-NEGATIVE-CLOSURE",
+              "ORC-SCOPE"
+            ],
+            "bundles": [
+              "B-SCOPE"
+            ],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 5,
           "responsibility_id": "S1-TICKET-04",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/106",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Create an Editor Session and Persist One Pending Intent",
-          "issue_body_sha256": "08119876e19fdc912496ba18659e4636551c2eb453573e25fad8a6b0654bb4fa",
-          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/105",
+          "issue_body_sha256": "f3ab17f2a5cf0a6e8fbd0e7ed4854f32f2fe776e1160b5cfea7e90c00fc7d783",
+          "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/119",
           "evidence_role": "planned-runtime-evidence",
           "responsibility": "persist one pending editor intent",
           "contract_coverage": {
@@ -212,7 +258,7 @@
           }
         },
         {
-          "sequence": 5,
+          "sequence": 6,
           "responsibility_id": "S1-TICKET-05",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/107",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
@@ -258,7 +304,7 @@
           }
         },
         {
-          "sequence": 6,
+          "sequence": 7,
           "responsibility_id": "S1-TICKET-06",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/108",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
@@ -301,7 +347,7 @@
           }
         },
         {
-          "sequence": 7,
+          "sequence": 8,
           "responsibility_id": "S1-TICKET-07",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/109",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
@@ -345,7 +391,7 @@
           }
         },
         {
-          "sequence": 8,
+          "sequence": 9,
           "responsibility_id": "S1-TICKET-08",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/110",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
@@ -389,7 +435,7 @@
           }
         },
         {
-          "sequence": 9,
+          "sequence": 10,
           "responsibility_id": "S1-TICKET-09",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/111",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
@@ -438,7 +484,7 @@
           }
         },
         {
-          "sequence": 10,
+          "sequence": 11,
           "responsibility_id": "S1-TICKET-10",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
