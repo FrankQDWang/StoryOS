@@ -15,6 +15,10 @@ use storyos_application::{
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod request_origin;
+
+use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
+
 /// The reviewed browser security policy accepted by this Server release.
 pub const RELEASE_1_SECURITY_POLICY_REVISION: &str = "storyos.web-security-policy.release-1.v1";
 
@@ -44,6 +48,30 @@ pub struct ServerConfig {
 #[derive(Clone)]
 struct ServerState {
     config: ServerConfig,
+    allowed_origin: Option<TupleOrigin>,
+    session_allowed_origins: HashMap<String, TupleOrigin>,
+}
+
+impl ServerState {
+    fn new(config: ServerConfig) -> Self {
+        let allowed_origin = config
+            .allowed_origin
+            .as_deref()
+            .and_then(TupleOrigin::from_allowed_origin);
+        let session_allowed_origins = config
+            .session_bindings
+            .iter()
+            .filter_map(|(handle, binding)| {
+                TupleOrigin::from_allowed_origin(&binding.allowed_origin)
+                    .map(|origin| (handle.clone(), origin))
+            })
+            .collect();
+        Self {
+            config,
+            allowed_origin,
+            session_allowed_origins,
+        }
+    }
 }
 
 type ApiError = (StatusCode, Json<contracts::StoryOSProblem>);
@@ -71,7 +99,7 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             contracts::GET_CHAPTER_PATH,
             routing::on(chapter_method, get_chapter),
         )
-        .with_state(Arc::new(ServerState { config }))
+        .with_state(Arc::new(ServerState::new(config)))
 }
 
 fn method_filter(method: &str) -> routing::MethodFilter {
@@ -88,7 +116,12 @@ async fn get_project(
     Path(project_id): Path<String>,
     headers: HeaderMap,
 ) -> Result<Json<contracts::GetProjectResponse>, ApiError> {
-    let scope = authenticate_scope(&state, &headers, &project_id)?;
+    let scope = authenticate_scope(
+        &state,
+        &headers,
+        &project_id,
+        RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
+    )?;
     let reader = project_reader(&state)?;
     let Some(project) = open_project(&reader, &scope)
         .await
@@ -113,7 +146,12 @@ async fn get_chapter(
     Path((project_id, chapter_id)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Result<Json<contracts::GetChapterResponse>, ApiError> {
-    let scope = authenticate_scope(&state, &headers, &project_id)?;
+    let scope = authenticate_scope(
+        &state,
+        &headers,
+        &project_id,
+        RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
+    )?;
     valid_uuid(&chapter_id)?;
     let chapter_id = ChapterId::new(chapter_id);
     let reader = project_reader(&state)?;
@@ -142,50 +180,40 @@ fn authenticate_scope(
     state: &ServerState,
     headers: &HeaderMap,
     project_id: &str,
+    origin_policy: RequestOriginPolicy,
 ) -> Result<ApplicationScope, ApiError> {
     valid_uuid(project_id)?;
-    validate_request_site(&state.config, headers)?;
+    let request_origin = validate_request_site(state, headers, origin_policy)?;
     let session_handle = session_cookie(headers).ok_or_else(authentication_required)?;
     let binding = state
         .config
         .session_bindings
         .get(session_handle)
         .ok_or_else(authentication_required)?;
-    validate_session_binding(&state.config, binding, headers)?;
+    validate_session_binding(state, session_handle, binding, headers, &request_origin)?;
     Ok(ApplicationScope::new(
         binding.owner_user_id.clone(),
         ProjectId::new(project_id),
     ))
 }
 
-fn validate_request_site(config: &ServerConfig, headers: &HeaderMap) -> Result<(), ApiError> {
+fn validate_request_site(
+    state: &ServerState,
+    headers: &HeaderMap,
+    origin_policy: RequestOriginPolicy,
+) -> Result<TupleOrigin, ApiError> {
+    let config = &state.config;
     let host = headers.get("host").and_then(|value| value.to_str().ok());
     if let Some(expected) = &config.allowed_host
         && host != Some(expected.as_str())
     {
         return Err(request_site_refused());
     }
-    let origin = request_origin(headers);
-    if let Some(expected) = &config.allowed_origin
-        && origin != Some(expected.as_str())
-    {
+    let origin = request_origin(headers, origin_policy).ok_or_else(request_site_refused)?;
+    if config.allowed_origin.is_some() && state.allowed_origin.as_ref() != Some(&origin) {
         return Err(request_site_refused());
     }
-    Ok(())
-}
-
-fn request_origin(headers: &HeaderMap) -> Option<&str> {
-    headers
-        .get("origin")
-        .and_then(|value| value.to_str().ok())
-        .or_else(|| {
-            let referer = headers.get("referer")?.to_str().ok()?;
-            let scheme_end = referer.find("://")? + 3;
-            let path_start = referer[scheme_end..]
-                .find('/')
-                .map_or(referer.len(), |index| scheme_end + index);
-            Some(&referer[..path_start])
-        })
+    Ok(origin)
 }
 
 fn session_cookie(headers: &HeaderMap) -> Option<&str> {
@@ -207,24 +235,25 @@ fn session_cookie(headers: &HeaderMap) -> Option<&str> {
 }
 
 fn validate_session_binding(
-    config: &ServerConfig,
+    state: &ServerState,
+    session_handle: &str,
     binding: &ClientSessionBinding,
     headers: &HeaderMap,
+    request_origin: &TupleOrigin,
 ) -> Result<(), ApiError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| authentication_required())?
         .as_secs();
     let host = headers.get("host").and_then(|value| value.to_str().ok());
-    let origin = request_origin(headers);
     let valid = host == Some(binding.allowed_host.as_str())
-        && origin == Some(binding.allowed_origin.as_str())
-        && binding.session_generation == config.current_session_generation
+        && state.session_allowed_origins.get(session_handle) == Some(request_origin)
+        && binding.session_generation == state.config.current_session_generation
         && binding.issued_at_unix_seconds <= now
         && now < binding.expires_at_unix_seconds
-        && config.accepted_client_contract_revision.as_deref()
+        && state.config.accepted_client_contract_revision.as_deref()
             == Some(binding.client_contract_revision.as_str())
-        && config.accepted_security_policy_revision.as_deref()
+        && state.config.accepted_security_policy_revision.as_deref()
             == Some(binding.security_policy_revision.as_str());
     if valid {
         Ok(())

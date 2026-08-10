@@ -265,10 +265,19 @@ controlled-cloud transport additionally requires TLS and `Secure`. The local
 profile binds only the configured loopback listener and exact first-party
 Origin. No bearer token appears in a URL, SSE query, log, Artifact, or export.
 
-Every request:
+Before it admits protected traffic, the Server parses and holds the configured
+allowed Origin as a WHATWG tuple origin. The value must be one strict absolute
+HTTP or HTTPS origin. A parser error, parser SyntaxViolation, user information,
+fragment, opaque origin, other scheme, path, or query makes the configuration
+invalid. An invalid configured Origin admits no protected request. Origin
+equality compares the scheme, normalized host, and effective port. Default-port,
+host-case, and IDNA-equivalent serializations are the same Origin.
+
+Every protected request:
 
 1. validates Host before routing;
-2. validates the exact allowed Origin when a browser Origin is expected;
+2. derives one request tuple origin under the route's explicit origin policy
+   and validates it against the allowed Origin;
 3. resolves the Client Session Binding and its current generation;
 4. derives the requester User;
 5. resolves and validates the existing Project Scope, or follows the sole
@@ -291,6 +300,13 @@ CSRF resistance is the compound admission of exact Host, exact first-party
 Origin, current Client Session Binding generation, non-simple content type,
 and the command-bound anti-forgery challenge below. No one input substitutes
 for the others, and CORS remains only a browser response-sharing policy.
+
+Every state-changing request must carry exactly one Origin header field. The
+field must contain one strict absolute HTTP or HTTPS origin with no parser
+error, parser SyntaxViolation, user information, fragment, opaque origin,
+other scheme, path, or query. A missing, empty, malformed, non-UTF-8, or
+repeated Origin refuses the request. A state-changing request never derives an
+origin from Referer.
 
 The first-party client obtains an anti-forgery challenge through one of:
 
@@ -377,6 +393,17 @@ Author Command Admission.
 Sensitive reads and SSE require the same current Client Session Binding,
 Host/Origin checks, Project Scope resolution, and authorization. Each SSE
 connect and reconnect is reauthorized. A cursor is never a bearer capability.
+
+A sensitive safe read or SSE route may explicitly select the Referer fallback
+policy. Under that policy, Origin remains authoritative when it is present. The
+Server requires exactly one valid Origin and refuses an empty, malformed,
+non-UTF-8, unsupported, or repeated value without reading Referer. Only when
+Origin is absent may the Server derive the request tuple origin from exactly
+one Referer. The Referer must be one strict absolute HTTP or HTTPS URL with no
+parser error, parser SyntaxViolation, user information, fragment, opaque
+origin, or other scheme. Its path and query do not take part in tuple-origin
+equality. A route that does not explicitly select this policy cannot use
+Referer as its request origin.
 
 ## 6. Public version model
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -77,6 +78,23 @@ async function stopRealServer(server) {
   const exited = once(server, "exit");
   server.kill("SIGTERM");
   await exited;
+}
+
+async function responseSnapshot(response) {
+  return { status: response.status, body: await response.text() };
+}
+
+function httpGet(url, headers) {
+  return new Promise((resolve, reject) => {
+    const request = httpRequest(url, { headers }, (response) => {
+      response.setEncoding("utf8");
+      let body = "";
+      response.on("data", (chunk) => { body += chunk; });
+      response.on("end", () => resolve({ status: response.statusCode, body }));
+    });
+    request.on("error", reject);
+    request.end();
+  });
 }
 
 test("the real Web entry opens the URL-selected Project with its same-origin session cookie", async () => {
@@ -173,6 +191,83 @@ test("two authenticated Users open only their own Project and current Chapter ov
       }),
       (error) => error.status === 404 && !/Project B|secret/.test(error.responseBody),
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("a sensitive Project read accepts same-origin Referer paths and queries", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    for (const referer of [
+      `${baseUrl}?view=project`,
+      `${baseUrl}/projects/${PROJECT_A}?view=editor`,
+    ]) {
+      const response = await fetch(new URL(`/api/v1/projects/${PROJECT_A}`, baseUrl), {
+        headers: { referer, cookie: "storyos_session=session-a" },
+      });
+
+      assert.equal(response.status, 200, referer);
+      assert.match(await response.text(), /Project A/, referer);
+    }
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("hostile Origin and Referer inputs refuse without Project disclosure", async () => {
+  const { baseUrl, server } = await startRealServer();
+  const url = new URL(`/api/v1/projects/${PROJECT_A}`, baseUrl);
+  const cookie = "storyos_session=session-a";
+  try {
+    const foreignPort = new URL(baseUrl);
+    foreignPort.port = foreignPort.port === "65535" ? "65534" : String(Number(foreignPort.port) + 1);
+    const sameOriginReferer = `${baseUrl}/projects/${PROJECT_A}`;
+    const hostileHeaders = [
+      ["missing Origin and Referer", { cookie }],
+      ["normalized Origin path", { origin: `${baseUrl}/foo/..`, cookie }],
+      ["invalid Origin with valid Referer", {
+        origin: `${baseUrl}/%story`, referer: sameOriginReferer, cookie,
+      }],
+      ["empty Origin with valid Referer", { origin: "", referer: sameOriginReferer, cookie }],
+      ["different non-default port", { origin: foreignPort.origin, cookie }],
+      ["cross-origin Referer", { referer: "https://foreign.example/project", cookie }],
+      ["relative Referer", { referer: "/relative/project", cookie }],
+      ["invalid Referer port", { referer: "http://127.0.0.1:99999/project", cookie }],
+      ["malformed IPv6 Referer", { referer: "http://[::1/project", cookie }],
+      ["userinfo Referer", { referer: baseUrl.replace("://", "://user@"), cookie }],
+      ["fragment Referer", { referer: `${baseUrl}/project#fragment`, cookie }],
+      ["opaque Referer", { referer: "data:text/plain,story", cookie }],
+      ["non-HTTP Referer", { referer: "ftp://example.com/project", cookie }],
+      ["backslash recovery", { referer: baseUrl.replace("://", ":\\\\"), cookie }],
+      ["missing slashes recovery", { referer: baseUrl.replace("://", ":"), cookie }],
+      ["invalid percent escape", { referer: `${baseUrl}/%story`, cookie }],
+      ["unencoded at-sign", { referer: baseUrl.replace("://", "://user@name@"), cookie }],
+    ];
+    const cases = [];
+    for (const [name, headers] of hostileHeaders) {
+      cases.push([name, await responseSnapshot(await fetch(url, { headers }))]);
+    }
+    cases.push(
+      ["non-UTF-8 Origin with valid Referer", await responseSnapshot(await fetch(url, {
+        headers: {
+          origin: `${baseUrl}${String.fromCharCode(0x80)}`,
+          referer: sameOriginReferer,
+          cookie,
+        },
+      }))],
+      ["repeated Origin fields", await httpGet(url, {
+        origin: [baseUrl, "https://foreign.example"], cookie,
+      })],
+      ["repeated Referer fields", await httpGet(url, {
+        referer: [`${baseUrl}/one`, `${baseUrl}/two`], cookie,
+      })],
+    );
+
+    for (const [name, response] of cases) {
+      assert.equal(response.status, 403, name);
+      assert.doesNotMatch(response.body, /Project A|Authoritative A|018f0000-0000-7001/, name);
+    }
   } finally {
     await stopRealServer(server);
   }

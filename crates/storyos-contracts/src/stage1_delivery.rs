@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-09-v1";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "ab97eb33357c8ac6070ce29f44a6e2961bce59b0";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "cff9f500262dff61a906dfe99d82f1b0e05f7075";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-10-v2";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "f0463582374d6a6336d1579434807a5306f53d81";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "6b98389d646b89e165e5e021a998633b75095202";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:ab794cc514ad3c7208b96c33b94ead93936374c5058f13d692a3c0d18e7cca7c";
+    "sha256:f4ea59123f78c554a65c9b824379d1064730f6d9190cc5759dee2a71b69cc6a2";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -250,7 +250,7 @@ const COVERAGE_10: TicketCoverage = TicketCoverage {
     aggregate: Some("B-S1-MANDATORY-SET"),
 };
 
-const TICKET_DEFINITIONS: [TicketDefinition; 10] = [
+const TICKET_DEFINITIONS: [TicketDefinition; 11] = [
     TicketDefinition {
         responsibility_id: "S1-TICKET-01",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
@@ -279,10 +279,19 @@ const TICKET_DEFINITIONS: [TicketDefinition; 10] = [
         contract_coverage: COVERAGE_03,
     },
     TicketDefinition {
+        responsibility_id: "S1-TICKET-03A",
+        issue: "https://github.com/FrankQDWang/StoryOS/issues/119",
+        title: "Harden Sensitive Read Origin Admission with Standard URL Parsing",
+        issue_body_sha256: "e28c601251b1fd0905f0b1bf1d38a249102f41613a6cfc7096eec869097d9f6e",
+        evidence_role: EvidenceRole::PlannedRuntimeEvidence,
+        responsibility: "harden sensitive read origin admission",
+        contract_coverage: COVERAGE_03,
+    },
+    TicketDefinition {
         responsibility_id: "S1-TICKET-04",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
-        issue_body_sha256: "08119876e19fdc912496ba18659e4636551c2eb453573e25fad8a6b0654bb4fa",
+        issue_body_sha256: "f3ab17f2a5cf0a6e8fbd0e7ed4854f32f2fe776e1160b5cfea7e90c00fc7d783",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",
         contract_coverage: COVERAGE_04,
@@ -392,9 +401,9 @@ pub(super) fn delivery_coverage(
     operations: &'static [&'static str],
     proof: &ProofSelection,
 ) -> Result<DeliveryCoverage, String> {
-    if contract.tickets.len() != 10 {
+    if contract.tickets.len() != 11 {
         return Err(format!(
-            "Stage 1 delivery must contain 10 tickets, found {}",
+            "Stage 1 delivery must contain 11 tickets, found {}",
             contract.tickets.len()
         ));
     }
