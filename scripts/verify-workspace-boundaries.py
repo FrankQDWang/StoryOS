@@ -7,7 +7,12 @@ import sys
 root = Path(__file__).resolve().parents[1]
 metadata = json.load(sys.stdin)
 manifests = sorted(Path(package["manifest_path"]).resolve() for package in metadata["packages"])
-expected = [root / "crates/storyos-contracts/Cargo.toml", root / "crates/storyos-server/Cargo.toml"]
+expected = [
+    root / "crates/storyos-adapter-postgres/Cargo.toml",
+    root / "crates/storyos-application/Cargo.toml",
+    root / "crates/storyos-contracts/Cargo.toml",
+    root / "crates/storyos-server/Cargo.toml",
+]
 forbidden = [
     path for path in manifests if "/prototypes/" in str(path) or "/.reference/" in str(path)
 ]
