@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "AuthoritativeChapterRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision_id",
+        "body"
+      ],
+      "type": "object"
+    },
+    "CurrentChapter": {
+      "additionalProperties": false,
+      "properties": {
+        "chapter_id": {
+          "type": "string"
+        },
+        "current_revision": {
+          "$ref": "#/$defs/AuthoritativeChapterRevision"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chapter_id",
+        "title",
+        "current_revision"
+      ],
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.chapter.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "chapter": {
+      "$ref": "#/$defs/CurrentChapter"
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "chapter"
+  ],
+  "title": "StoryOS Chapter Query Response",
+  "type": "object"
+}

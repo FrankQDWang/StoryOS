@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-07-31
-  x-storyos-implemented-slice: getProtocolProfile
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter
 paths:
   /api/v1/protocol:
     get:
@@ -24,4 +24,74 @@ paths:
           description: Active release conflict
         '429':
           description: Rate limited
+  /api/v1/projects/{project_id}:
+    get:
+      operationId: getProject
+      summary: Read one controlled StoryOS Project
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current Project
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/chapters/{chapter_id}:
+    get:
+      operationId: getChapter
+      summary: Read the controlled Project current Chapter
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: chapter_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current Project
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/chapter-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
 components: {}

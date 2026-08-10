@@ -11,35 +11,30 @@ export class StoryOSProtocolError extends Error {
   }
 }
 
-export async function getProtocolProfile({ baseUrl, fetchImpl = globalThis.fetch, signal } = {}) {
-  if (typeof baseUrl !== "string" || baseUrl.length === 0) {
-    throw new TypeError("getProtocolProfile requires a non-empty baseUrl");
-  }
-  if (typeof fetchImpl !== "function") {
-    throw new TypeError("getProtocolProfile requires a fetch implementation");
-  }
-
-  const endpoint = new URL("/api/v1/protocol", baseUrl);
-  const response = await fetchImpl(endpoint, {
-    method: "GET",
-    headers: { accept: "application/json" },
-    signal,
-  });
+async function queryJson({ baseUrl, path, sessionHandle, fetchImpl = globalThis.fetch, signal }) {
+  if (typeof baseUrl !== "string" || baseUrl.length === 0) throw new TypeError("StoryOS query requires a non-empty baseUrl");
+  if (typeof fetchImpl !== "function") throw new TypeError("StoryOS query requires a fetch implementation");
+  const headers = { accept: "application/json" };
+  if (sessionHandle !== undefined) headers["x-storyos-client-session"] = sessionHandle;
+  const response = await fetchImpl(new URL(path, baseUrl), { method: "GET", headers, credentials: "same-origin", signal });
   const responseBody = await response.text();
-  if (!response.ok) {
-    throw new StoryOSProtocolError(
-      "protocol_http_error",
-      `Protocol discovery failed with HTTP ${response.status}`,
-      { status: response.status, responseBody },
-    );
+  if (!response.ok) throw new StoryOSProtocolError("query_http_error", `StoryOS query failed with HTTP ${response.status}`, { status: response.status, responseBody });
+  try { return JSON.parse(responseBody); } catch {
+    throw new StoryOSProtocolError("query_invalid_json", "StoryOS query returned invalid JSON", { status: response.status, responseBody });
   }
-  try {
-    return JSON.parse(responseBody);
-  } catch {
-    throw new StoryOSProtocolError(
-      "protocol_invalid_json",
-      "Protocol discovery returned invalid JSON",
-      { status: response.status, responseBody },
-    );
-  }
+}
+
+export async function getProtocolProfile(options = {}) {
+  return queryJson({ ...options, path: "/api/v1/protocol" });
+}
+
+export async function getProject({ projectId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getProject requires projectId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}` });
+}
+
+export async function getChapter({ projectId, chapterId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getChapter requires projectId");
+  if (typeof chapterId !== "string" || chapterId.length === 0) throw new TypeError("getChapter requires chapterId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}` });
 }
