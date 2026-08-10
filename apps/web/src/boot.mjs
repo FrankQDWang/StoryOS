@@ -1,7 +1,12 @@
-import { getProtocolProfile } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  getChapter,
+  getProject,
+  getProtocolProfile,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const blockedMessages = {
   protocol_identity_missing: "服务器缺少 Release 1 兼容身份，受保护状态不会开放。",
@@ -21,6 +26,9 @@ function closedMismatches(actual, expected, prefix) {
     }];
   });
 }
+const validUuid = (value) => typeof value === "string" && UUID.test(value);
+
+export const PROJECT_OPEN_DIAGNOSTIC_CAUSE = Symbol("storyos.project-open-diagnostic-cause");
 
 export function validateProtocolProfile(profile) {
   const received = profile && typeof profile === "object" && !Array.isArray(profile) ? profile : {};
@@ -58,5 +66,39 @@ export async function bootProtectedWebClient({ baseUrl, fetchImpl = globalThis.f
     return blocked("protocol_unavailable", [{
       path: "request.getProtocolProfile", error: error instanceof Error ? error.message : String(error),
     }]);
+  }
+}
+
+export async function openControlledProject(options) {
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
+  const boot = await bootProtectedWebClient({ baseUrl, fetchImpl, signal });
+  if (boot.kind !== "protected-ready") return boot;
+
+  try {
+    const project = await getProject({ baseUrl, projectId, fetchImpl, signal });
+    const scope = project?.project_scope;
+    const ownerUserId = scope?.owner_user_id;
+    if (!validUuid(ownerUserId)
+      || scope?.project_id !== projectId
+      || project?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
+    const chapterId = project.project.current_chapter_id;
+    const chapter = await getChapter({ baseUrl, projectId, chapterId, fetchImpl, signal });
+    const chapterOwnerUserId = chapter?.project_scope?.owner_user_id;
+    if (!validUuid(chapterOwnerUserId)
+      || chapterOwnerUserId !== ownerUserId
+      || chapter?.project_scope?.project_id !== scope.project_id
+      || chapter?.chapter?.chapter_id !== chapterId) throw new Error("Chapter Scope mismatch");
+    return { kind: "project-ready", profile: boot.profile, project, chapter };
+  } catch (error) {
+    const blockedState = {
+      kind: "project-blocked",
+      code: "project_unavailable",
+      heading: "StoryOS 无法打开项目",
+      message: "无法读取这个受控项目或其当前章节。",
+    };
+    Object.defineProperty(blockedState, PROJECT_OPEN_DIAGNOSTIC_CAUSE, {
+      value: new Error("Controlled Project open failed.", { cause: error }),
+    });
+    return blockedState;
   }
 }
