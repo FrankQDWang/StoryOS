@@ -1,4 +1,4 @@
-.PHONY: contracts generate-contracts verify web
+.PHONY: contracts generate-contracts project-scope verify web
 
 contracts:
 	cargo fmt --all -- --check
@@ -15,6 +15,9 @@ web:
 	node --test apps/web/test/protocol-boot.test.mjs
 	cargo build --quiet -p storyos-server
 	node --test apps/web/test/protocol-http.integration.test.mjs
+	$(MAKE) project-scope
+project-scope:
+	scripts/verify-project-scope.sh
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 verify: contracts

@@ -11,11 +11,10 @@ export class StoryOSProtocolError extends Error {
   }
 }
 
-async function queryJson({ baseUrl, path, sessionHandle, fetchImpl = globalThis.fetch, signal }) {
+async function queryJson({ baseUrl, path, fetchImpl = globalThis.fetch, signal }) {
   if (typeof baseUrl !== "string" || baseUrl.length === 0) throw new TypeError("StoryOS query requires a non-empty baseUrl");
   if (typeof fetchImpl !== "function") throw new TypeError("StoryOS query requires a fetch implementation");
   const headers = { accept: "application/json" };
-  if (sessionHandle !== undefined) headers["x-storyos-client-session"] = sessionHandle;
   const response = await fetchImpl(new URL(path, baseUrl), { method: "GET", headers, credentials: "same-origin", signal });
   const responseBody = await response.text();
   if (!response.ok) throw new StoryOSProtocolError("query_http_error", `StoryOS query failed with HTTP ${response.status}`, { status: response.status, responseBody });
