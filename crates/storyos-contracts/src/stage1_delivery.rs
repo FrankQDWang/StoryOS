@@ -262,7 +262,9 @@ const COVERAGE_10: TicketCoverage = TicketCoverage {
     aggregate: Some("B-S1-MANDATORY-SET"),
 };
 
-const TICKET_DEFINITIONS: [TicketDefinition; 12] = [
+const STAGE_1_DELIVERY_TICKET_COUNT: usize = 12;
+
+const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
     TicketDefinition {
         responsibility_id: "S1-TICKET-01",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
@@ -422,9 +424,9 @@ pub(super) fn delivery_coverage(
     operations: &'static [&'static str],
     proof: &ProofSelection,
 ) -> Result<DeliveryCoverage, String> {
-    if contract.tickets.len() != 12 {
+    if contract.tickets.len() != STAGE_1_DELIVERY_TICKET_COUNT {
         return Err(format!(
-            "Stage 1 delivery must contain 12 tickets, found {}",
+            "Stage 1 delivery must contain {STAGE_1_DELIVERY_TICKET_COUNT} tickets, found {}",
             contract.tickets.len()
         ));
     }
