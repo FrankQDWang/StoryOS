@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-10-v2";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "f0463582374d6a6336d1579434807a5306f53d81";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "6b98389d646b89e165e5e021a998633b75095202";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-11-v3";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "199a698b3916c7ebf479dc5b275a1cad0fd4167a";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "5e54d7c252de71ffdb7ed3412e0ca2ea5ea3294c";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:f4ea59123f78c554a65c9b824379d1064730f6d9190cc5759dee2a71b69cc6a2";
+    "sha256:95959fedcfd801cbbac015e421f872349e6a4afa6240122083999568b6b9298e";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -144,6 +144,18 @@ const COVERAGE_03: TicketCoverage = TicketCoverage {
     bundles: &["B-SCOPE"],
     aggregate: None,
 };
+const COVERAGE_03B: TicketCoverage = TicketCoverage {
+    requirements: &["S1-REQ-005", "S1-EVD-005"],
+    operations: &["createProjectCommandChallenge"],
+    gates: &["DVG-07"],
+    evidence_classes: &["EC-05", "EV-IT", "EV-INT", "EV-SE"],
+    fixtures: &["FX-SCOPE-2U2P"],
+    fault_points: &["CFP-SCOPE-BEFORE-QUERY"],
+    schedules: &["SCH-SCOPE"],
+    oracles: &["ORC-NEGATIVE-CLOSURE", "ORC-SCOPE"],
+    bundles: &["B-SCOPE"],
+    aggregate: None,
+};
 const COVERAGE_04: TicketCoverage = TicketCoverage {
     requirements: &["S1-REQ-002", "S1-JRN-001", "S1-EVD-002"],
     operations: &["createEditorSession", "getEditorSession"],
@@ -161,7 +173,7 @@ const COVERAGE_04: TicketCoverage = TicketCoverage {
 };
 const COVERAGE_05: TicketCoverage = TicketCoverage {
     requirements: &["S1-REQ-003", "S1-EVD-003"],
-    operations: &["createProjectCommandChallenge", "applyAuthorEdit"],
+    operations: &["applyAuthorEdit"],
     gates: &["DVG-03"],
     evidence_classes: &["EC-03", "EV-IT"],
     fixtures: &["FX-CORE-PROPOSAL"],
@@ -250,7 +262,7 @@ const COVERAGE_10: TicketCoverage = TicketCoverage {
     aggregate: Some("B-S1-MANDATORY-SET"),
 };
 
-const TICKET_DEFINITIONS: [TicketDefinition; 11] = [
+const TICKET_DEFINITIONS: [TicketDefinition; 12] = [
     TicketDefinition {
         responsibility_id: "S1-TICKET-01",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
@@ -288,10 +300,19 @@ const TICKET_DEFINITIONS: [TicketDefinition; 11] = [
         contract_coverage: COVERAGE_03,
     },
     TicketDefinition {
+        responsibility_id: "S1-TICKET-03B",
+        issue: "https://github.com/FrankQDWang/StoryOS/issues/121",
+        title: "Implement Project-Scoped Anti-Forgery Challenge Admission",
+        issue_body_sha256: "33ee21f492d4bc567452e25c34e1256f8312f904e390ade62f329a9b5ae21491",
+        evidence_role: EvidenceRole::PlannedRuntimeEvidence,
+        responsibility: "establish the Project-scoped command challenge and pre-domain idempotency fence",
+        contract_coverage: COVERAGE_03B,
+    },
+    TicketDefinition {
         responsibility_id: "S1-TICKET-04",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
-        issue_body_sha256: "f3ab17f2a5cf0a6e8fbd0e7ed4854f32f2fe776e1160b5cfea7e90c00fc7d783",
+        issue_body_sha256: "b2a922ac28b62e642c42e37c34e16d33afc4779d75697c115b00e0a89af0f829",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",
         contract_coverage: COVERAGE_04,
@@ -300,7 +321,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; 11] = [
         responsibility_id: "S1-TICKET-05",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/107",
         title: "Settle One Direct Author Edit into an Authoritative Revision",
-        issue_body_sha256: "7b1c4727d62840a96baff6b46e384662ac3f5fcf9a2a2bd9795645a0cff47386",
+        issue_body_sha256: "ad51e51c15c8ae5f6c3d0c8b5a7ce88b3400aa2057a8a6021ca7b5b372ac7ea3",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "settle one Direct Author Action as an authoritative Revision",
         contract_coverage: COVERAGE_05,
@@ -401,9 +422,9 @@ pub(super) fn delivery_coverage(
     operations: &'static [&'static str],
     proof: &ProofSelection,
 ) -> Result<DeliveryCoverage, String> {
-    if contract.tickets.len() != 11 {
+    if contract.tickets.len() != 12 {
         return Err(format!(
-            "Stage 1 delivery must contain 11 tickets, found {}",
+            "Stage 1 delivery must contain 12 tickets, found {}",
             contract.tickets.len()
         ));
     }
