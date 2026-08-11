@@ -24,14 +24,15 @@ fn stale_ticket_body_binding_is_rejected() {
 #[test]
 fn stale_requirement_gate_and_evidence_bindings_are_rejected() {
     let mut requirement = delivery_contract();
-    requirement.tickets[5].contract_coverage.requirements = &["S1-EVD-003"];
+    requirement.tickets[11].contract_coverage.requirements =
+        &["S1-EVD-001", "S1-EVD-006", "SMAP-STAGE-1"];
     assert!(delivery_error(&requirement).contains("requirement coverage drifted"));
 
     let mut gate = delivery_contract();
-    gate.tickets[10].contract_coverage.gates = &[];
+    gate.tickets[11].contract_coverage.gates = &[];
     assert!(delivery_error(&gate).contains("gate coverage drifted"));
 
     let mut evidence = delivery_contract();
-    evidence.tickets[5].contract_coverage.evidence_classes = &["EV-IT"];
+    evidence.tickets[6].contract_coverage.evidence_classes = &["EV-IT"];
     assert!(delivery_error(&evidence).contains("evidence class coverage drifted"));
 }
