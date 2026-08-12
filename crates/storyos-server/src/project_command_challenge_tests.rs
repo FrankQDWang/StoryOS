@@ -1,3 +1,4 @@
+use super::project_command_challenge::secret_digest;
 use super::*;
 use axum::body::{Body, to_bytes};
 use axum::http::{HeaderValue, Request};
@@ -136,6 +137,60 @@ async fn public_challenge_route_reaches_the_project_store_after_security_validat
         .expect("public request should complete");
 
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn public_challenge_route_accepts_case_insensitive_json_content_type() {
+    let mut request = challenge_request(Some(ORIGIN), None);
+    request.headers_mut().insert(
+        "content-type",
+        HeaderValue::from_static("Application/Problem+JSON; Charset=UTF-8"),
+    );
+
+    let response = router_with_config(challenge_config())
+        .oneshot(request)
+        .await
+        .expect("public request should complete");
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[tokio::test]
+async fn public_challenge_route_rejects_repeated_content_type_without_disclosure() {
+    let mut request = challenge_request(Some(ORIGIN), None);
+    request
+        .headers_mut()
+        .append("content-type", HeaderValue::from_static("application/json"));
+
+    let response = router_with_config(challenge_config())
+        .oneshot(request)
+        .await
+        .expect("public request should complete");
+
+    assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!({
+            "schema_id": "storyos.problem.v1",
+            "code": "unsupported_content_type",
+            "message": "The request must use one JSON content type."
+        })
+    );
+}
+
+#[test]
+fn challenge_secret_derivation_uses_hmac_sha256() {
+    let digest = secret_digest(
+        b"0123456789abcdef0123456789abcdef",
+        "storyos.project-command-challenge.nonce.hmac-sha256.v1",
+        &[b"session-a".to_vec(), b"project-a".to_vec()],
+    );
+
+    assert_eq!(
+        digest,
+        "e3aca80ee6955ba44502fdb1ddd02acdfad13e00ec06bf674efca8b6411517c8"
+    );
 }
 
 #[tokio::test]

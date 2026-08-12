@@ -361,7 +361,15 @@ fn validate_json_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
         .and_then(|value| value.split(';').next())
         .map(str::trim);
     if values.next().is_some()
-        || !value.is_some_and(|value| value == "application/json" || value.ends_with("+json"))
+        || !value.is_some_and(|value| {
+            value.split_once('/').is_some_and(|(type_name, subtype)| {
+                type_name.eq_ignore_ascii_case("application")
+                    && (subtype.eq_ignore_ascii_case("json")
+                        || subtype.rsplit_once('+').is_some_and(|(name, suffix)| {
+                            !name.is_empty() && suffix.eq_ignore_ascii_case("json")
+                        }))
+            })
+        })
     {
         return Err(problem(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,

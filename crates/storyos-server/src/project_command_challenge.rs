@@ -1,10 +1,15 @@
 use axum::body::to_bytes;
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::{Digest, Sha256};
 use storyos_application::{
     IssueProjectCommandChallenge, ProjectCommandChallengeBinding, issue_project_command_challenge,
 };
 
 use super::*;
+
+const SESSION_BINDING_HMAC_PROFILE: &str =
+    "storyos.project-command-challenge.session-binding.hmac-sha256.v1";
+const NONCE_HMAC_PROFILE: &str = "storyos.project-command-challenge.nonce.hmac-sha256.v1";
 
 pub(super) async fn create_project_command_challenge(
     State(state): State<Arc<ServerState>>,
@@ -58,7 +63,11 @@ pub(super) async fn create_project_command_challenge(
     if secret.len() < 32 {
         return Err(challenge_store_unavailable());
     }
-    let session_digest = secret_digest(secret, &[session_handle.as_bytes().to_vec()]);
+    let session_digest = secret_digest(
+        secret,
+        SESSION_BINDING_HMAC_PROFILE,
+        &[session_handle.as_bytes().to_vec()],
+    );
     let challenge_binding = ProjectCommandChallengeBinding {
         project_scope: scope,
         client_session_binding_digest: session_digest,
@@ -75,7 +84,11 @@ pub(super) async fn create_project_command_challenge(
         canonical_command_digest: canonical_digest(&request.canonical_command_digest),
         idempotency_key: request.idempotency_key,
     };
-    let nonce = secret_digest(secret, &binding_parts(&challenge_binding));
+    let nonce = secret_digest(
+        secret,
+        NONCE_HMAC_PROFILE,
+        &binding_parts(&challenge_binding),
+    );
     let nonce_digest = plain_digest(nonce.as_bytes());
     let challenge = issue_project_command_challenge(
         &store,
@@ -123,15 +136,14 @@ fn binding_parts(binding: &ProjectCommandChallengeBinding) -> Vec<Vec<u8>> {
     ]
 }
 
-fn secret_digest(secret: &[u8], parts: &[Vec<u8>]) -> String {
-    let mut digest = Sha256::new();
-    digest.update(secret.len().to_be_bytes());
-    digest.update(secret);
-    for part in parts {
-        digest.update(part.len().to_be_bytes());
+pub(super) fn secret_digest(secret: &[u8], profile: &str, parts: &[Vec<u8>]) -> String {
+    let mut digest =
+        Hmac::<Sha256>::new_from_slice(secret).expect("HMAC-SHA256 accepts a secret of any length");
+    for part in std::iter::once(profile.as_bytes()).chain(parts.iter().map(Vec::as_slice)) {
+        digest.update(&part.len().to_be_bytes());
         digest.update(part);
     }
-    hex_bytes(&digest.finalize())
+    hex_bytes(&digest.finalize().into_bytes())
 }
 
 fn plain_digest(value: &[u8]) -> String {

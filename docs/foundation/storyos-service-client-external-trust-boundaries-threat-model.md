@@ -364,7 +364,10 @@ Client launch and future cloud sessions without requiring account UX now.
 Every state-changing request must use an exact versioned non-simple command,
 reject absent or disallowed Origin and Host at the Server boundary, and bind
 its anti-forgery/session evidence to the trusted User, Project Scope, method,
-and command digest. CORS is deny-by-default with an exact first-party origin;
+and command digest. The Server uses separate versioned HMAC-SHA256 domains for
+the opaque session-binding digest and one-use nonce. The Server secret is the
+HMAC key and never enters the message, durable record, response, diagnostic,
+or log. CORS is deny-by-default with an exact first-party origin;
 no wildcard credential policy, URL bearer credential, GET mutation, or
 loopback exception is allowed. Cloud transport requires TLS. Local network
 binding and browser private-network behavior are defense in depth, not
