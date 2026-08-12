@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { getChapter, getProject } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { createProjectCommandChallenge, getChapter, getProject } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { runStoryOSWeb } from "../src/app.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -56,6 +56,7 @@ async function startRealServer(sessionUsers = { "session-a": USER_A, "session-b"
         ...process.env,
         STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
         STORYOS_BOOTSTRAP_SESSIONS: JSON.stringify(sessionUsers),
+        STORYOS_CHALLENGE_SECRET: "test-only-challenge-secret-that-is-at-least-thirty-two-bytes",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -191,6 +192,127 @@ test("two authenticated Users open only their own Project and current Chapter ov
       }),
       (error) => error.status === 404 && !/Project B|secret/.test(error.responseBody),
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("Project command challenges bind Origin, Scope, nonce, and idempotency on real PostgreSQL", async () => {
+  const { baseUrl, server } = await startRealServer();
+  const request = {
+    method: "PATCH",
+    route_template: "/api/v1/projects/{project_id}",
+    command_schema: "storyos.command.update-project.request.v1",
+    canonical_command_digest: {
+      algorithm: "sha256",
+      profile: "storyos.command.updateProject.jcs.v1",
+      value_hex_lowercase: "d".repeat(64),
+    },
+    idempotency_key: "018f0000-0000-7001-8000-000000000014",
+  };
+  try {
+    const options = {
+      baseUrl, projectId: PROJECT_A, request, fetchImpl: browserFetch(baseUrl, "session-a"),
+    };
+    const first = await createProjectCommandChallenge(options);
+    const retry = await createProjectCommandChallenge(options);
+    assert.deepEqual(retry, first);
+    assert.match(first.nonce, /^[0-9a-f]{64}$/);
+    assert.equal(first.limit_profile_revision, "storyos.foundation.absolute.v1");
+
+    await assert.rejects(
+      createProjectCommandChallenge({
+        ...options,
+        request: {
+          ...request,
+          canonical_command_digest: { ...request.canonical_command_digest, value_hex_lowercase: "e".repeat(64) },
+        },
+      }),
+      (error) => error.status === 409,
+    );
+    await assert.rejects(
+      createProjectCommandChallenge({
+        ...options,
+        request: {
+          ...request,
+          idempotency_key: "018f0000-0000-7001-8000-000000000017",
+          canonical_command_digest: { ...request.canonical_command_digest, profile: "storyos.command.other.jcs.v1" },
+        },
+      }),
+      (error) => error.status === 400,
+    );
+    const editorSession = await createProjectCommandChallenge({
+      ...options,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/editor-sessions",
+        command_schema: "storyos.command.create-editor-session.request.v1",
+        canonical_command_digest: {
+          algorithm: "sha256",
+          profile: "storyos.command.createEditorSession.jcs.v1",
+          value_hex_lowercase: "f".repeat(64),
+        },
+        idempotency_key: "018f0000-0000-7001-8000-000000000018",
+      },
+    });
+    assert.match(editorSession.nonce, /^[0-9a-f]{64}$/);
+    await assert.rejects(
+      createProjectCommandChallenge({
+        ...options, projectId: PROJECT_B,
+        request: { ...request, idempotency_key: "018f0000-0000-7001-8000-000000000015" },
+      }),
+      (error) => error.status === 404 && !/Project B|secret/.test(error.responseBody),
+    );
+
+    const refererOnly = await fetch(new URL(`/api/v1/projects/${PROJECT_A}/anti-forgery-challenges`, baseUrl), {
+      method: "POST",
+      headers: {
+        referer: `${baseUrl}/projects/${PROJECT_A}`,
+        cookie: "storyos_session=session-a",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ ...request, idempotency_key: "018f0000-0000-7001-8000-000000000016" }),
+    });
+    assert.equal(refererOnly.status, 403);
+
+    for (let index = 20; index < 28; index += 1) {
+      await createProjectCommandChallenge({
+        ...options,
+        request: {
+          ...request,
+          idempotency_key: `018f0000-0000-7001-8000-${String(index).padStart(12, "0")}`,
+          canonical_command_digest: {
+            ...request.canonical_command_digest,
+            value_hex_lowercase: (index % 16).toString(16).repeat(64),
+          },
+        },
+      });
+    }
+    const limited = await fetch(new URL(`/api/v1/projects/${PROJECT_A}/anti-forgery-challenges`, baseUrl), {
+      method: "POST",
+      headers: {
+        origin: baseUrl,
+        cookie: "storyos_session=session-a",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        ...request,
+        idempotency_key: "018f0000-0000-7001-8000-000000000028",
+        canonical_command_digest: {
+          ...request.canonical_command_digest,
+          value_hex_lowercase: "c".repeat(64),
+        },
+      }),
+    });
+    assert.equal(limited.status, 429);
+    assert.match(limited.headers.get("retry-after"), /^(?:[1-9]|[1-5][0-9]|60)$/);
+    const limitedBody = await limited.text();
+    assert.deepEqual(JSON.parse(limitedBody), {
+      schema_id: "storyos.problem.v1",
+      code: "challenge_rate_limited",
+      message: "The command challenge rate limit is exceeded.",
+    });
+    assert.doesNotMatch(limitedBody, new RegExp(`${USER_A}|${PROJECT_A}|nonce|sha256`));
   } finally {
     await stopRealServer(server);
   }

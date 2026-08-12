@@ -53,6 +53,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         accepted_security_policy_revision: Some(security_policy_revision),
         allowed_host: Some(host.clone()),
         allowed_origin: Some(allowed_origin),
+        project_command_challenge_secret: env::var("STORYOS_CHALLENGE_SECRET")
+            .ok()
+            .map(String::into_bytes),
     };
     println!("STORYOS_SERVER_URL=http://{address}");
     io::stdout().flush()?;
