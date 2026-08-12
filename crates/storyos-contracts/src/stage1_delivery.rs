@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-11-v3";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "199a698b3916c7ebf479dc5b275a1cad0fd4167a";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "5e54d7c252de71ffdb7ed3412e0ca2ea5ea3294c";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-12-v4";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "a62fb29875b8b507b525c98544cfef5eba8bf8db";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "41d3b3e24cf76db136df09d82d383d73e2de9ca1";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:95959fedcfd801cbbac015e421f872349e6a4afa6240122083999568b6b9298e";
+    "sha256:53e28343f554629f051ca20e3095f1ffaf7ffce141faf5eba61e38137f644e11";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -305,7 +305,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-03B",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/121",
         title: "Implement Project-Scoped Anti-Forgery Challenge Admission",
-        issue_body_sha256: "33ee21f492d4bc567452e25c34e1256f8312f904e390ade62f329a9b5ae21491",
+        issue_body_sha256: "5937d9a0ccd57244d7cb1ee6122403aa1ad9c8e7d0d66072c555351fc2414af4",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "establish the Project-scoped command challenge and pre-domain idempotency fence",
         contract_coverage: COVERAGE_03B,
