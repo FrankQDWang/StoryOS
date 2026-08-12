@@ -29,6 +29,8 @@ docker exec "$container" psql -v ON_ERROR_STOP=1 -U postgres -c \
 docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/migrations/0001_controlled_project.sql" >/dev/null
 docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0002_project_command_challenges.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 
 published=$(docker port "$container" 5432/tcp)
@@ -37,6 +39,7 @@ export STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$
 export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$port/postgres"
 echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
+cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture
 echo "Building the StoryOS Server"
 cargo build --quiet -p storyos-server
 echo "Running HTTP Project Scope tests"

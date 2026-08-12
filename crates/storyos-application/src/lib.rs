@@ -24,6 +24,11 @@
 
 use std::future::Future;
 
+pub const PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION: &str =
+    "storyos.project-command-challenge-rate.fixed-window.v1";
+pub const PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS: u64 = 60;
+pub const PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY: i16 = 10;
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UserId(String);
 
@@ -88,6 +93,112 @@ impl AsRef<str> for RevisionId {
 pub struct ProjectScope {
     pub owner_user_id: UserId,
     pub project_id: ProjectId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectCommandChallengeBinding {
+    pub project_scope: ProjectScope,
+    pub client_session_binding_digest: String,
+    pub client_session_generation: u64,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub limit_profile_revision: String,
+    pub challenge_rate_policy_revision: String,
+    pub method: String,
+    pub route_template: String,
+    pub command_schema: String,
+    pub command_kind: String,
+    pub canonical_command_digest: String,
+    pub idempotency_key: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProjectCommandChallenge {
+    pub nonce: String,
+    pub expires_at: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IssueProjectCommandChallenge {
+    pub binding: ProjectCommandChallengeBinding,
+    pub nonce: String,
+    pub nonce_digest: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProjectCommandChallengeUse {
+    FirstUse,
+    ExactRetryInProgress,
+    ExactRetrySettled { result_reference: String },
+}
+
+#[derive(Debug)]
+pub enum ProjectCommandChallengeError {
+    BindingConflict,
+    InvalidOrExpired,
+    RateLimited { retry_after_seconds: u64 },
+    Unavailable(Box<dyn std::error::Error + Send + Sync>),
+}
+
+impl std::fmt::Display for ProjectCommandChallengeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::BindingConflict => formatter.write_str("The idempotency key has another binding"),
+            Self::InvalidOrExpired => {
+                formatter.write_str("The command challenge is invalid or expired")
+            }
+            Self::RateLimited { .. } => {
+                formatter.write_str("The command challenge rate limit is exceeded")
+            }
+            Self::Unavailable(_) => {
+                formatter.write_str("The command challenge store is unavailable")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ProjectCommandChallengeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Unavailable(source) => Some(source.as_ref()),
+            Self::BindingConflict | Self::InvalidOrExpired | Self::RateLimited { .. } => None,
+        }
+    }
+}
+
+/// Owns durable challenge issuance and pre-domain idempotency creation.
+pub trait ProjectCommandChallengeStore: Sync {
+    fn issue(
+        &self,
+        request: &IssueProjectCommandChallenge,
+    ) -> impl Future<Output = Result<ProjectCommandChallenge, ProjectCommandChallengeError>> + Send;
+}
+
+/// Consumes a challenge inside a caller-owned Project command transaction.
+///
+/// Implementations must not begin or commit a transaction. The caller must use
+/// the same transaction for future Admission and authoritative command writes.
+pub trait ProjectCommandChallengeTransaction {
+    fn consume(
+        &mut self,
+        binding: &ProjectCommandChallengeBinding,
+        nonce_digest: &str,
+    ) -> impl Future<Output = Result<ProjectCommandChallengeUse, ProjectCommandChallengeError>> + Send;
+}
+
+pub async fn issue_project_command_challenge(
+    store: &impl ProjectCommandChallengeStore,
+    request: &IssueProjectCommandChallenge,
+) -> Result<ProjectCommandChallenge, ProjectCommandChallengeError> {
+    store.issue(request).await
+}
+
+pub async fn consume_project_command_challenge(
+    transaction: &mut impl ProjectCommandChallengeTransaction,
+    binding: &ProjectCommandChallengeBinding,
+    nonce_digest: &str,
+) -> Result<ProjectCommandChallengeUse, ProjectCommandChallengeError> {
+    transaction.consume(binding, nonce_digest).await
 }
 
 impl ProjectScope {
