@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
-  x-storyos-contract-revision: release1-wire-catalog-2026-07-31
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter
+  x-storyos-contract-revision: release1-wire-catalog-2026-08-12
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge
 paths:
   /api/v1/protocol:
     get:
@@ -92,6 +92,61 @@ paths:
           description: Method not allowed
         '429':
           description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/anti-forgery-challenges:
+    post:
+      operationId: createProjectCommandChallenge
+      summary: Issue one exact Project command challenge
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/project-command-challenge-request.schema.json'
+      responses:
+        '200':
+          description: Project command challenge
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/project-command-challenge-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency binding conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Command target refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
         '503':
           description: Service unavailable
 components: {}

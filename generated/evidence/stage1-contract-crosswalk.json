@@ -11,10 +11,10 @@
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-12-v4",
+      "revision": "stage1-ticketed-delivery-2026-08-12-v5",
       "baseline_commit": "a62fb29875b8b507b525c98544cfef5eba8bf8db",
       "baseline_tree": "41d3b3e24cf76db136df09d82d383d73e2de9ca1",
-      "ticket_set_sha256": "sha256:53e28343f554629f051ca20e3095f1ffaf7ffce141faf5eba61e38137f644e11",
+      "ticket_set_sha256": "sha256:ddf3fc673d49f3b1706dbd5dcadaba6d4bc1632e229ae93d09c2393b746c2d32",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -218,7 +218,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/121",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Implement Project-Scoped Anti-Forgery Challenge Admission",
-          "issue_body_sha256": "5937d9a0ccd57244d7cb1ee6122403aa1ad9c8e7d0d66072c555351fc2414af4",
+          "issue_body_sha256": "f9fa15fd8b28fcc6857f16c48cbca164db571bd945369a9204210e7789b67f0f",
           "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/119",
           "evidence_role": "planned-runtime-evidence",
           "responsibility": "establish the Project-scoped command challenge and pre-domain idempotency fence",

@@ -1,7 +1,7 @@
 use super::{
-    CHAPTER_RESPONSE_SCHEMA_PATH, FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH,
-    PROJECT_RESPONSE_SCHEMA_PATH, RESPONSE_SCHEMA_PATH, REVIEW_CATALOG_PATH, fixture_corpus_bytes,
-    release1_protocol_profile, validate_review_bindings,
+    CHALLENGE_REQUEST_SCHEMA_PATH, CHALLENGE_RESPONSE_SCHEMA_PATH, CHAPTER_RESPONSE_SCHEMA_PATH,
+    FIXTURE_DIGEST_PLACEHOLDER, OPENAPI_PATH, PROJECT_RESPONSE_SCHEMA_PATH, RESPONSE_SCHEMA_PATH,
+    REVIEW_CATALOG_PATH, fixture_corpus_bytes, release1_protocol_profile, validate_review_bindings,
 };
 use crate::digest::sha256_prefixed;
 
@@ -24,6 +24,12 @@ fn controlled_project_queries_are_generated_from_the_release_1_contract() {
     assert!(openapi.contains("operationId: getChapter"));
     assert!(client.contains("export async function getProject"));
     assert!(client.contains("export async function getChapter"));
+    assert!(openapi.contains("operationId: createProjectCommandChallenge"));
+    assert!(openapi.contains("Retry-After:"));
+    assert!(openapi.contains("maximum: 60"));
+    assert!(client.contains("export async function createProjectCommandChallenge"));
+    assert!(client.contains("this.retryAfterSeconds = details.retryAfterSeconds"));
+    assert!(client.contains("response.headers.get(\"retry-after\")"));
 }
 
 #[test]
@@ -71,6 +77,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
             RESPONSE_SCHEMA_PATH,
             PROJECT_RESPONSE_SCHEMA_PATH,
             CHAPTER_RESPONSE_SCHEMA_PATH,
+            CHALLENGE_REQUEST_SCHEMA_PATH,
+            CHALLENGE_RESPONSE_SCHEMA_PATH,
         ]
         .map(str::to_owned)
         .into_iter()

@@ -8,6 +8,7 @@ export class StoryOSProtocolError extends Error {
     this.code = code;
     this.status = details.status;
     this.responseBody = details.responseBody;
+    this.retryAfterSeconds = details.retryAfterSeconds;
   }
 }
 
@@ -23,6 +24,19 @@ async function queryJson({ baseUrl, path, fetchImpl = globalThis.fetch, signal }
   }
 }
 
+async function commandJson({ baseUrl, path, body, fetchImpl = globalThis.fetch, signal }) {
+  if (typeof baseUrl !== "string" || baseUrl.length === 0) throw new TypeError("StoryOS command requires a non-empty baseUrl");
+  if (typeof fetchImpl !== "function") throw new TypeError("StoryOS command requires a fetch implementation");
+  const response = await fetchImpl(new URL(path, baseUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body), signal });
+  const responseBody = await response.text();
+  if (!response.ok) {
+    const retryAfter = response.headers.get("retry-after");
+    const retryAfterSeconds = /^(?:[1-9]|[1-5][0-9]|60)$/.test(retryAfter ?? "") ? Number(retryAfter) : undefined;
+    throw new StoryOSProtocolError("command_http_error", `StoryOS command failed with HTTP ${response.status}`, { status: response.status, responseBody, retryAfterSeconds });
+  }
+  try { return JSON.parse(responseBody); } catch { throw new StoryOSProtocolError("command_invalid_json", "StoryOS command returned invalid JSON", { status: response.status, responseBody }); }
+}
+
 export async function getProtocolProfile(options = {}) {
   return queryJson({ ...options, path: "/api/v1/protocol" });
 }
@@ -36,4 +50,10 @@ export async function getChapter({ projectId, chapterId, ...options } = {}) {
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getChapter requires projectId");
   if (typeof chapterId !== "string" || chapterId.length === 0) throw new TypeError("getChapter requires chapterId");
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}` });
+}
+
+export async function createProjectCommandChallenge({ projectId, request, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createProjectCommandChallenge requires projectId");
+  if (!request || typeof request !== "object") throw new TypeError("createProjectCommandChallenge requires request");
+  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/anti-forgery-challenges`, body: request });
 }

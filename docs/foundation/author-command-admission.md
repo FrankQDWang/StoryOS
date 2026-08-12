@@ -87,6 +87,14 @@ appends the issuance record. A crash before this transaction commits leaves no
 admission, nonce consumption, Command, Core effect, or acknowledgement. All
 issuance fields are immutable after commit.
 
+The shared challenge-consumption seam runs only inside this caller-owned
+PostgreSQL transaction. It never commits before the Admission and protected
+command writes. A failed validation, handler error, or rollback therefore
+leaves the challenge unconsumed and the pre-domain idempotency record pending.
+Later command tickets add their own writes to this transaction; the challenge
+ticket supplies only the compare-and-consume seam and does not create an
+Admission, Command, Receipt, or authoritative effect.
+
 Expiry limits when a pending admission may begin its first Core invocation; it
 may begin only while Server time satisfies
 `issued_at <= now < expires_at`. Expiry never erases the admission, frees its

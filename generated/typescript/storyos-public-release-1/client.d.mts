@@ -15,11 +15,20 @@ export type GetProjectResponse = { schema_id: string, correlation_id: string, pr
 
 export type GetChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, chapter: CurrentChapter, };
 
+export type DigestAlgorithm = "sha256";
+
+export type DigestValue = { algorithm: DigestAlgorithm, profile: string, value_hex_lowercase: string, };
+
+export type CreateProjectCommandChallengeRequest = { method: string, route_template: string, command_schema: string, canonical_command_digest: DigestValue, idempotency_key: string, };
+
+export type CreateProjectCommandChallengeResponse = { nonce: string, expires_at: string, limit_profile_revision: string, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
   readonly status?: number;
   readonly responseBody?: string;
+  readonly retryAfterSeconds?: number;
 }
 export interface StoryOSQueryOptions {
   baseUrl: string;
@@ -29,3 +38,4 @@ export interface StoryOSQueryOptions {
 export declare function getProtocolProfile(options: StoryOSQueryOptions): Promise<Release1ProtocolProfile>;
 export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;
 export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;
+export declare function createProjectCommandChallenge(options: StoryOSQueryOptions & { projectId: string; request: CreateProjectCommandChallengeRequest }): Promise<CreateProjectCommandChallengeResponse>;
