@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:0b82042eb8e068f832d7921ea13a8cf46cf915f9f599b6f4efdf8dffc107e21a",
+  "corpus_digest": "sha256:aa94cd2b5cd615e7b3d8d78e3440b7d1124ef953964e5ef3a26cad8c15431ba3",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -11,7 +11,10 @@
       "generated/golden-wire/storyos-public-release-1/get-project.boundary.json",
       "generated/golden-wire/storyos-public-release-1/get-chapter.json",
       "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json"
     ]
   },
   "fixtures": [
@@ -68,6 +71,24 @@
       "fixture_id": "storyos.golden.getChapter.boundary.v1",
       "operation_id": "getChapter",
       "path": "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.createProjectCommandChallenge.positive.v1",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.createProjectCommandChallenge.invalid.v1",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.createProjectCommandChallenge.boundary.v1",
+      "operation_id": "createProjectCommandChallenge",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

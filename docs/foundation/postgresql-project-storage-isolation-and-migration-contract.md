@@ -496,6 +496,27 @@ exact admitted command automatically. An expired admission,
 settlement; a later author confirmation uses a new idempotency record, nonce,
 and admission.
 
+The Project command-challenge adapter exposes consumption only against one
+caller-owned, already-open PostgreSQL transaction with its exact Project Scope
+set. That transaction also owns the later protected command's Admission and
+business writes. The consumption seam can lock and compare the challenge and
+idempotency rows and stage `consumed_at` plus the in-progress outcome, but it
+cannot begin, commit, or detach those changes. The outer operation commits all
+Admission and business writes together. Any error or rollback preserves the
+unconsumed challenge and pending idempotency record.
+
+`project_command_challenge_rate_windows` is a Project-scoped Operational
+Record for policy
+`storyos.project-command-challenge-rate.fixed-window.v1`. Its composite
+identity contains `(owner_user_id, project_id, client_session_generation,
+window_started_at)`. PostgreSQL database time selects a UTC-aligned one-minute
+window. A row lock serializes increments up to the inclusive capacity of 10.
+The transaction that inserts a new logical challenge increments the same
+window; exact retries and refused attempts do not. A full window changes no
+challenge, idempotency, or counter fact and returns the rounded-up seconds to
+its database-time window end. The table uses the same composite Scope foreign
+key, forced RLS, and non-owner runtime posture as every Project-scoped record.
+
 ### 5.5 Leases and fencing
 
 Leases are durable scheduling permission, not execution truth. Each protected

@@ -362,6 +362,21 @@ returned nonce is sent only in the command header, never a URL or log. The
 client performs this automatically; it is not an author setting or
 confirmation step.
 
+Project-scoped challenge issuance uses the immutable admission-rate policy
+`storyos.project-command-challenge-rate.fixed-window.v1`. Its key is the
+Server-derived `(owner_user_id, project_id, client_session_generation)` tuple.
+PostgreSQL database time assigns each new logical challenge to one UTC-aligned
+one-minute half-open window. The inclusive capacity is 10 new logical
+challenges per key and window. An eligible exact retry returns the original
+challenge and does not consume another unit. A changed-input conflict and any
+refusal before challenge insertion consume no unit. The transaction that
+inserts a new challenge locks and increments the exact rate-window row; an
+eleventh concurrent or serial insertion changes nothing and returns
+`429 rate_limited` with a `Retry-After` delta-seconds value rounded up to the
+end of that database-time window. The response discloses no other Scope,
+session, counter, or request identity. A policy, key, window, capacity, or
+retry-semantics change requires a new rate-policy revision.
+
 Every state-changing request:
 
 - uses a non-safe HTTP method and a non-simple JSON content type;
@@ -379,7 +394,13 @@ Every state-changing request:
 - creates one durable Author Command Admission before invoking an author-owned
   Core command.
 
-Nonce consumption is recorded atomically against that same idempotency record.
+Nonce consumption is recorded atomically against that same idempotency record
+inside the one PostgreSQL transaction that also creates the later protected
+command's Admission and business writes. The shared consumption seam accepts
+an already-open scoped transaction; it cannot begin or commit independently.
+All protected-command writes succeed and commit together, or rollback leaves
+the nonce and idempotency record unconsumed. Challenge issuance creates the
+pending records in its own earlier transaction and never consumes the nonce.
 The anti-forgery nonce grants no reusable authority: the same digest under a
 new `idempotency_key` is a different record and cannot reuse the nonce. An exact
 transport retry may present an already consumed nonce only to resolve the same

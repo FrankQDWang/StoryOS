@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.challenge.project-command-anti-forgery-challenge.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "canonical_command_digest": {
+      "$ref": "#/$defs/DigestValue"
+    },
+    "command_schema": {
+      "type": "string"
+    },
+    "idempotency_key": {
+      "type": "string"
+    },
+    "method": {
+      "type": "string"
+    },
+    "route_template": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "method",
+    "route_template",
+    "command_schema",
+    "canonical_command_digest",
+    "idempotency_key"
+  ],
+  "title": "StoryOS Project Command Challenge Request",
+  "type": "object"
+}

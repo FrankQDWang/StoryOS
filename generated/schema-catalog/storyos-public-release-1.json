@@ -2,7 +2,8 @@
   "implemented_operations": [
     "getProtocolProfile",
     "getProject",
-    "getChapter"
+    "getChapter",
+    "createProjectCommandChallenge"
   ],
   "public_protocol_release": "storyos.public.release.1",
   "schema_id": "storyos.schema-catalog.v1",
@@ -36,6 +37,16 @@
       "path": "generated/json-schema/storyos-public-release-1/chapter-response.schema.json",
       "schema_id": "storyos.query.chapter.response.v1",
       "sha256": "sha256:21254ff709b655cebc8e0e9d2af4fb4d723f4a76a7dde7a47cb246e182190afd"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/project-command-challenge-request.schema.json",
+      "schema_id": "storyos.challenge.project-command-anti-forgery-challenge.request.v1",
+      "sha256": "sha256:65450586144ffb9c300c0cc5edd282c1a25b3729e864021a8ad04a0902a7a541"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/project-command-challenge-response.schema.json",
+      "schema_id": "storyos.challenge.project-command-anti-forgery-challenge.response.v1",
+      "sha256": "sha256:3df3fbb12935d27a44e1274e9390beb84908709ce65f1f3744603d0c54b286ff"
     }
   ]
 }

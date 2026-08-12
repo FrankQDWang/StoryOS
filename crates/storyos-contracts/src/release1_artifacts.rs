@@ -10,9 +10,12 @@ use crate::digest::sha256_prefixed;
 use crate::release1::{
     ACTIVITY_PROFILE, API_MAJOR, ArtifactDigests, AuthoritativeChapterRevision,
     CHAPTER_REQUEST_SCHEMA_ID, CHAPTER_RESPONSE_SCHEMA_ID, COMPATIBILITY_PROFILE,
-    CONTRACT_REVISION, ControlledProject, CurrentChapter, ENVELOPE_PROFILE, ENVELOPE_VERSION,
-    GENERATED_CLIENT_REVISION, GET_CHAPTER, GET_PROJECT, GET_PROTOCOL_PROFILE, GetChapterResponse,
-    GetProjectResponse, LIMIT_PROFILE_REVISION, PROBLEM_PROFILE, PROJECT_REQUEST_SCHEMA_ID,
+    CONTRACT_REVISION, CREATE_PROJECT_COMMAND_CHALLENGE, ControlledProject,
+    CreateProjectCommandChallengeRequest, CreateProjectCommandChallengeResponse, CurrentChapter,
+    DigestAlgorithm, DigestValue, ENVELOPE_PROFILE, ENVELOPE_VERSION, GENERATED_CLIENT_REVISION,
+    GET_CHAPTER, GET_PROJECT, GET_PROTOCOL_PROFILE, GetChapterResponse, GetProjectResponse,
+    LIMIT_PROFILE_REVISION, PROBLEM_PROFILE, PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
+    PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID, PROJECT_REQUEST_SCHEMA_ID,
     PROJECT_RESPONSE_SCHEMA_ID, PROTOCOL_PROFILE_REQUEST_SCHEMA_ID, PROTOCOL_PROFILE_SCHEMA_ID,
     PUBLIC_PROTOCOL_RELEASE, ProjectScope, RELEASE_IDENTITY_SCHEMA_ID, REQUIRED_CAPABILITIES,
     Release1CompatibilityIdentity, Release1ProtocolProfile, SERVER_CONTRACT_REVISION,
@@ -33,6 +36,10 @@ const CHAPTER_REQUEST_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-request.schema.json";
 const CHAPTER_RESPONSE_SCHEMA_PATH: &str =
     "generated/json-schema/storyos-public-release-1/chapter-response.schema.json";
+const CHALLENGE_REQUEST_SCHEMA_PATH: &str =
+    "generated/json-schema/storyos-public-release-1/project-command-challenge-request.schema.json";
+const CHALLENGE_RESPONSE_SCHEMA_PATH: &str =
+    "generated/json-schema/storyos-public-release-1/project-command-challenge-response.schema.json";
 const TYPESCRIPT_CLIENT_PATH: &str = "generated/typescript/storyos-public-release-1/client.mjs";
 const TYPESCRIPT_DECLARATION_PATH: &str =
     "generated/typescript/storyos-public-release-1/client.d.mts";
@@ -56,11 +63,16 @@ const CHAPTER_FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/get-chapter.invalid.json",
     "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
 ];
+const CHALLENGE_FIXTURE_PATHS: [&str; 3] = [
+    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
+    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
+    "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
+];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:333cc3f19f39e56622c2fbdecc6f6e4015ac33490829ad4b371439656377c656";
+    "sha256:b8b8a303a8332af37898fdf8868e98f72f298bb946ce01e9895ebc05f29fc0af";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -85,6 +97,12 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
         CHAPTER_RESPONSE_SCHEMA_ID,
         "StoryOS Chapter Query Response",
     ));
+    let challenge_request_schema =
+        json_bytes(&typed_schema::<CreateProjectCommandChallengeRequest>(
+            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
+            "StoryOS Project Command Challenge Request",
+        ));
+    let challenge_response_schema = json_bytes(&challenge_response_schema());
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -115,6 +133,16 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
             CHAPTER_RESPONSE_SCHEMA_ID,
             CHAPTER_RESPONSE_SCHEMA_PATH,
             &chapter_response_schema,
+        ),
+        (
+            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
+            CHALLENGE_REQUEST_SCHEMA_PATH,
+            &challenge_request_schema,
+        ),
+        (
+            PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
+            CHALLENGE_RESPONSE_SCHEMA_PATH,
+            &challenge_response_schema,
         ),
     ]);
     let client = typescript_client_bytes();
@@ -189,6 +217,12 @@ fn generated_files() -> Vec<GeneratedFile> {
         CHAPTER_RESPONSE_SCHEMA_ID,
         "StoryOS Chapter Query Response",
     ));
+    let challenge_request_schema =
+        json_bytes(&typed_schema::<CreateProjectCommandChallengeRequest>(
+            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
+            "StoryOS Project Command Challenge Request",
+        ));
+    let challenge_response_schema = json_bytes(&challenge_response_schema());
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -220,6 +254,16 @@ fn generated_files() -> Vec<GeneratedFile> {
             CHAPTER_RESPONSE_SCHEMA_PATH,
             &chapter_response_schema,
         ),
+        (
+            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
+            CHALLENGE_REQUEST_SCHEMA_PATH,
+            &challenge_request_schema,
+        ),
+        (
+            PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
+            CHALLENGE_RESPONSE_SCHEMA_PATH,
+            &challenge_response_schema,
+        ),
     ]);
     let profile = release1_protocol_profile();
     let profile_json =
@@ -233,6 +277,8 @@ fn generated_files() -> Vec<GeneratedFile> {
         (PROJECT_RESPONSE_SCHEMA_PATH, project_response_schema),
         (CHAPTER_REQUEST_SCHEMA_PATH, chapter_request_schema),
         (CHAPTER_RESPONSE_SCHEMA_PATH, chapter_response_schema),
+        (CHALLENGE_REQUEST_SCHEMA_PATH, challenge_request_schema),
+        (CHALLENGE_RESPONSE_SCHEMA_PATH, challenge_response_schema),
         (TYPESCRIPT_CLIENT_PATH, typescript_client_bytes()),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration_bytes()),
         (RELEASE_PROFILE_MODULE_PATH, profile_module),
@@ -247,6 +293,15 @@ fn generated_files() -> Vec<GeneratedFile> {
         (CHAPTER_FIXTURE_PATHS[0], chapter_fixture_bytes()),
         (CHAPTER_FIXTURE_PATHS[1], invalid_chapter_fixture_bytes()),
         (CHAPTER_FIXTURE_PATHS[2], boundary_chapter_fixture_bytes()),
+        (CHALLENGE_FIXTURE_PATHS[0], challenge_fixture_bytes()),
+        (
+            CHALLENGE_FIXTURE_PATHS[1],
+            invalid_challenge_fixture_bytes(),
+        ),
+        (
+            CHALLENGE_FIXTURE_PATHS[2],
+            boundary_challenge_fixture_bytes(),
+        ),
     ]
 }
 
@@ -291,6 +346,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             operation_graph(&GET_PROTOCOL_PROFILE, &["active_public_release_profile"]),
             operation_graph(&GET_PROJECT, &["server_derived_project_scope", "project_visibility"]),
             operation_graph(&GET_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "canonical_snapshot"]),
+            challenge_operation_graph(),
         ],
         "release": {
             "api_major": API_MAJOR, "public_protocol_release": PUBLIC_PROTOCOL_RELEASE, "envelope_version": ENVELOPE_VERSION,
@@ -303,6 +359,19 @@ fn contract_graph_bytes() -> Vec<u8> {
         },
     }))
     .expect("the contract graph contains only serializable values")
+}
+
+fn challenge_operation_graph() -> Value {
+    let operation = &CREATE_PROJECT_COMMAND_CHALLENGE;
+    json!({
+        "operation_id": operation.operation_id, "kind": "challenge", "method": operation.method,
+        "path": operation.path, "request_schema": operation.request_schema,
+        "response_schema": operation.response_schema,
+        "preconditions": ["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "route_method_schema_digest_match", "closed_command_schema"],
+        "http_statuses": operation.responses.iter().map(|(status, _)| status).collect::<Vec<_>>(),
+        "fixtures": operation.fixtures,
+        "generated": ["openapi", "json_schema", "typescript_client", "golden_wire"]
+    })
 }
 
 fn operation_graph(operation: &crate::release1::QueryOperation, preconditions: &[&str]) -> Value {
@@ -337,15 +406,35 @@ fn openapi_bytes() -> Vec<u8> {
             &["project_id", "chapter_id"][..],
         ),
     ];
-    let paths = operations
+    let mut paths = operations
         .iter()
         .map(|(operation, summary, response_schema, parameters)| {
             operation_openapi(operation, summary, response_schema, parameters)
         })
         .collect::<String>();
+    paths.push_str(&challenge_openapi());
     format!(
-        "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter\npaths:\n{paths}components: {{}}\n",
+        "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge\npaths:\n{paths}components: {{}}\n",
     ).into_bytes()
+}
+
+fn challenge_openapi() -> String {
+    let operation = &CREATE_PROJECT_COMMAND_CHALLENGE;
+    let request_schema = CHALLENGE_REQUEST_SCHEMA_PATH
+        .strip_prefix("generated/")
+        .unwrap();
+    let response_schema = CHALLENGE_RESPONSE_SCHEMA_PATH
+        .strip_prefix("generated/")
+        .unwrap();
+    let responses = operation.responses.iter().map(|(status, description)| format!(
+        "        '{status}':\n          description: {description}\n{}{}",
+        if *status == 429 { "          headers:\n            Retry-After:\n              required: true\n              schema:\n                type: integer\n                minimum: 1\n                maximum: 60\n" } else { "" },
+        if *status == 200 { format!("          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n") } else { String::new() }
+    )).collect::<String>();
+    format!(
+        "  {}:\n    post:\n      operationId: {}\n      summary: Issue one exact Project command challenge\n      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{request_schema}'\n      responses:\n{responses}",
+        operation.path, operation.operation_id,
+    )
 }
 
 fn operation_openapi(
@@ -401,6 +490,15 @@ fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value 
     schema
 }
 
+fn challenge_response_schema() -> Value {
+    let mut schema = typed_schema::<CreateProjectCommandChallengeResponse>(
+        PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
+        "StoryOS Project Command Challenge Response",
+    );
+    schema["properties"]["expires_at"]["format"] = Value::String("date-time".to_owned());
+    schema
+}
+
 fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
     let properties = fields
         .iter()
@@ -419,7 +517,7 @@ fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
 fn schema_catalog_bytes(schemas: &[(&str, &str, &[u8])]) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
-        "implemented_operations": [GET_PROTOCOL_PROFILE.operation_id, GET_PROJECT.operation_id, GET_CHAPTER.operation_id],
+        "implemented_operations": [GET_PROTOCOL_PROFILE.operation_id, GET_PROJECT.operation_id, GET_CHAPTER.operation_id, CREATE_PROJECT_COMMAND_CHALLENGE.operation_id],
         "schemas": schemas.iter().map(|(schema_id, path, bytes)| json!({
             "schema_id": schema_id, "path": path, "sha256": sha256_prefixed(bytes)
         })).collect::<Vec<_>>()
@@ -432,7 +530,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v1\";\n\n",
         "export class StoryOSProtocolError extends Error {{\n",
         "  constructor(code, message, details = {{}}) {{\n    super(message);\n    this.name = \"StoryOSProtocolError\";\n",
-        "    this.code = code;\n    this.status = details.status;\n    this.responseBody = details.responseBody;\n  }}\n}}\n\n",
+        "    this.code = code;\n    this.status = details.status;\n    this.responseBody = details.responseBody;\n    this.retryAfterSeconds = details.retryAfterSeconds;\n  }}\n}}\n\n",
         "async function queryJson({{ baseUrl, path, fetchImpl = globalThis.fetch, signal }}) {{\n",
         "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS query requires a non-empty baseUrl\");\n",
         "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS query requires a fetch implementation\");\n",
@@ -442,6 +540,13 @@ fn typescript_client_bytes() -> Vec<u8> {
         "  if (!response.ok) throw new StoryOSProtocolError(\"query_http_error\", `StoryOS query failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody }});\n",
         "  try {{ return JSON.parse(responseBody); }} catch {{\n",
         "    throw new StoryOSProtocolError(\"query_invalid_json\", \"StoryOS query returned invalid JSON\", {{ status: response.status, responseBody }});\n  }}\n}}\n\n",
+        "async function commandJson({{ baseUrl, path, body, fetchImpl = globalThis.fetch, signal }}) {{\n",
+        "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS command requires a non-empty baseUrl\");\n",
+        "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS command requires a fetch implementation\");\n",
+        "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"POST\", headers: {{ accept: \"application/json\", \"content-type\": \"application/json\" }}, credentials: \"same-origin\", body: JSON.stringify(body), signal }});\n",
+        "  const responseBody = await response.text();\n",
+        "  if (!response.ok) {{\n    const retryAfter = response.headers.get(\"retry-after\");\n    const retryAfterSeconds = /^(?:[1-9]|[1-5][0-9]|60)$/.test(retryAfter ?? \"\") ? Number(retryAfter) : undefined;\n    throw new StoryOSProtocolError(\"command_http_error\", `StoryOS command failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody, retryAfterSeconds }});\n  }}\n",
+        "  try {{ return JSON.parse(responseBody); }} catch {{ throw new StoryOSProtocolError(\"command_invalid_json\", \"StoryOS command returned invalid JSON\", {{ status: response.status, responseBody }}); }}\n}}\n\n",
         "export async function getProtocolProfile(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n\n",
         "export async function getProject({{ projectId, ...options }} = {{}}) {{\n",
         "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
@@ -450,12 +555,18 @@ fn typescript_client_bytes() -> Vec<u8> {
         "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getChapter requires projectId\");\n",
         "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"getChapter requires chapterId\");\n",
         "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
+        "\nexport async function createProjectCommandChallenge({{ projectId, request, ...options }} = {{}}) {{\n",
+        "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createProjectCommandChallenge requires projectId\");\n",
+        "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectCommandChallenge requires request\");\n",
+        "  return commandJson({{ ...options, path: `{}`, body: request }});\n}}\n",
     ),
         GET_PROTOCOL_PROFILE.path,
         GET_PROJECT.path.replace("{project_id}", "${encodeURIComponent(projectId)}"),
         GET_CHAPTER.path
             .replace("{project_id}", "${encodeURIComponent(projectId)}")
             .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
+        CREATE_PROJECT_COMMAND_CHALLENGE.path
+            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
     ).into_bytes()
 }
 
@@ -469,15 +580,20 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let current_chapter = CurrentChapter::decl(&config);
     let project = GetProjectResponse::decl(&config);
     let chapter = GetChapterResponse::decl(&config);
+    let challenge_request = CreateProjectCommandChallengeRequest::decl(&config);
+    let challenge_response = CreateProjectCommandChallengeResponse::decl(&config);
+    let digest_value = DigestValue::decl(&config);
+    let digest_algorithm = DigestAlgorithm::decl(&config);
     format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\n{}",
         concat!(
             "export declare const GENERATED_CLIENT_REVISION: string;\n",
-            "export declare class StoryOSProtocolError extends Error {\n  readonly code: string;\n  readonly status?: number;\n  readonly responseBody?: string;\n}\n",
+            "export declare class StoryOSProtocolError extends Error {\n  readonly code: string;\n  readonly status?: number;\n  readonly responseBody?: string;\n  readonly retryAfterSeconds?: number;\n}\n",
             "export interface StoryOSQueryOptions {\n  baseUrl: string;\n  fetchImpl?: typeof fetch;\n  signal?: AbortSignal;\n}\n",
             "export declare function getProtocolProfile(options: StoryOSQueryOptions): Promise<Release1ProtocolProfile>;\n",
             "export declare function getProject(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectResponse>;\n",
             "export declare function getChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string }): Promise<GetChapterResponse>;\n",
+            "export declare function createProjectCommandChallenge(options: StoryOSQueryOptions & { projectId: string; request: CreateProjectCommandChallengeRequest }): Promise<CreateProjectCommandChallengeResponse>;\n",
         )
     )
     .into_bytes()
@@ -490,7 +606,8 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         "digest_scope": {
             "paths": [GOLDEN_PROFILE_PATH, INVALID_PROFILE_PATH, BOUNDARY_PROFILE_PATH,
                 PROJECT_FIXTURE_PATHS[0], PROJECT_FIXTURE_PATHS[1], PROJECT_FIXTURE_PATHS[2],
-                CHAPTER_FIXTURE_PATHS[0], CHAPTER_FIXTURE_PATHS[1], CHAPTER_FIXTURE_PATHS[2]],
+                CHAPTER_FIXTURE_PATHS[0], CHAPTER_FIXTURE_PATHS[1], CHAPTER_FIXTURE_PATHS[2],
+                CHALLENGE_FIXTURE_PATHS[0], CHALLENGE_FIXTURE_PATHS[1], CHALLENGE_FIXTURE_PATHS[2]],
             "normalization": format!("replace every release_identity.fixture_corpus_digest with {FIXTURE_DIGEST_PLACEHOLDER}")
         },
         "fixtures": [
@@ -505,7 +622,10 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": GET_PROJECT.fixtures[2], "classification": "boundary", "operation_id": GET_PROJECT.operation_id, "path": PROJECT_FIXTURE_PATHS[2]},
             {"fixture_id": GET_CHAPTER.fixtures[0], "classification": "positive", "operation_id": GET_CHAPTER.operation_id, "path": CHAPTER_FIXTURE_PATHS[0]},
             {"fixture_id": GET_CHAPTER.fixtures[1], "classification": "invalid", "operation_id": GET_CHAPTER.operation_id, "path": CHAPTER_FIXTURE_PATHS[1]},
-            {"fixture_id": GET_CHAPTER.fixtures[2], "classification": "boundary", "operation_id": GET_CHAPTER.operation_id, "path": CHAPTER_FIXTURE_PATHS[2]}
+            {"fixture_id": GET_CHAPTER.fixtures[2], "classification": "boundary", "operation_id": GET_CHAPTER.operation_id, "path": CHAPTER_FIXTURE_PATHS[2]},
+            {"fixture_id": CREATE_PROJECT_COMMAND_CHALLENGE.fixtures[0], "classification": "positive", "operation_id": CREATE_PROJECT_COMMAND_CHALLENGE.operation_id, "path": CHALLENGE_FIXTURE_PATHS[0]},
+            {"fixture_id": CREATE_PROJECT_COMMAND_CHALLENGE.fixtures[1], "classification": "invalid", "operation_id": CREATE_PROJECT_COMMAND_CHALLENGE.operation_id, "path": CHALLENGE_FIXTURE_PATHS[1]},
+            {"fixture_id": CREATE_PROJECT_COMMAND_CHALLENGE.fixtures[2], "classification": "boundary", "operation_id": CREATE_PROJECT_COMMAND_CHALLENGE.operation_id, "path": CHALLENGE_FIXTURE_PATHS[2]}
         ]
     }))
 }
@@ -541,6 +661,9 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         chapter_fixture_bytes(),
         invalid_chapter_fixture_bytes(),
         boundary_chapter_fixture_bytes(),
+        challenge_fixture_bytes(),
+        invalid_challenge_fixture_bytes(),
+        boundary_challenge_fixture_bytes(),
     ]
     .concat()
 }
@@ -560,6 +683,14 @@ fn chapter_fixture() -> Value {
         "correlation_id": "018f0000-0000-7001-8000-000000000006",
         "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
         "chapter": {"chapter_id": "018f0000-0000-7001-8000-000000000003", "title": "第一章", "current_revision": {"revision_id": "018f0000-0000-7001-8000-000000000004", "body": "雨落在窗沿。"}}
+    })
+}
+
+fn challenge_fixture() -> Value {
+    json!({
+        "nonce": "4f9f5ad05c4d1294d4114fb15595d831b64e3f4312a17e639213ad36e941ca71",
+        "expires_at": "2026-08-12T08:05:00.000Z",
+        "limit_profile_revision": LIMIT_PROFILE_REVISION
     })
 }
 
@@ -594,6 +725,19 @@ fn invalid_chapter_fixture_bytes() -> Vec<u8> {
 }
 fn boundary_chapter_fixture_bytes() -> Vec<u8> {
     boundary_fixture(chapter_fixture())
+}
+fn challenge_fixture_bytes() -> Vec<u8> {
+    json_bytes(&challenge_fixture())
+}
+fn invalid_challenge_fixture_bytes() -> Vec<u8> {
+    let mut invalid = challenge_fixture();
+    invalid.as_object_mut().unwrap().remove("nonce");
+    json_bytes(&invalid)
+}
+fn boundary_challenge_fixture_bytes() -> Vec<u8> {
+    let mut boundary = challenge_fixture();
+    boundary["expires_at"] = json!("1970-01-01T00:00:00.000Z");
+    json_bytes(&boundary)
 }
 
 fn json_bytes(value: &Value) -> Vec<u8> {
