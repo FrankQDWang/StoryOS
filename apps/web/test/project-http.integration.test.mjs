@@ -6,7 +6,10 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { createProjectCommandChallenge, getChapter, getProject } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  createEditorSession, createProjectCommandChallenge, digestCreateEditorSession,
+  getChapter, getEditorSession, getProject,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { runStoryOSWeb } from "../src/app.mjs";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
@@ -17,6 +20,7 @@ const CHAPTER_A = "018f0000-0000-7001-8000-000000000003";
 const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 class TestNode {
   constructor(tag = "div") { this.tag = tag; this.children = []; this.dataset = {}; this.attributes = {}; this.ownText = ""; }
@@ -275,6 +279,96 @@ test("Project command challenges bind Origin, Scope, nonce, and idempotency on r
     });
     assert.equal(refererOnly.status, 403);
 
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("concurrent Editor Sessions have one current writer and exact retries return one result", async () => {
+  const { baseUrl, server } = await startRealServer();
+  const requests = [20, 21].map((suffix) => ({
+    command_schema: "storyos.command.create-editor-session.request.v1",
+    client_contract_revision: "storyos.web-client.release-1.v1",
+    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+    correlation_id: `018f0000-0000-7001-8000-${String(suffix).padStart(12, "0")}`,
+  }));
+  const keys = [22, 23].map((suffix) =>
+    `018f0000-0000-7001-8000-${String(suffix).padStart(12, "0")}`);
+  try {
+    assert.deepEqual(await digestCreateEditorSession(requests[0]), await digestCreateEditorSession({
+      correlation_id: requests[0].correlation_id,
+      security_policy_revision: requests[0].security_policy_revision,
+      command_schema: requests[0].command_schema,
+      client_contract_revision: requests[0].client_contract_revision,
+    }));
+    const challenges = await Promise.all(requests.map(async (request, index) =>
+      createProjectCommandChallenge({
+        baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+        request: {
+          method: "POST",
+          route_template: "/api/v1/projects/{project_id}/editor-sessions",
+          command_schema: request.command_schema,
+          canonical_command_digest: await digestCreateEditorSession(request),
+          idempotency_key: keys[index],
+        },
+      })));
+    const sessionUrl = new URL(`/api/v1/projects/${PROJECT_A}/editor-sessions`, baseUrl);
+    const refererOnly = await fetch(sessionUrl, {
+      method: "POST",
+      headers: { referer: `${baseUrl}/projects/${PROJECT_A}`, cookie: "storyos_session=session-a",
+        "content-type": "application/json", "idempotency-key": keys[0],
+        "x-storyos-anti-forgery": challenges[0].nonce },
+      body: JSON.stringify(requests[0]),
+    });
+    assert.equal(refererOnly.status, 403);
+    const missingChallenge = await fetch(sessionUrl, {
+      method: "POST",
+      headers: { origin: baseUrl, cookie: "storyos_session=session-a",
+        "content-type": "application/json", "idempotency-key": keys[0] },
+      body: JSON.stringify(requests[0]),
+    });
+    assert.equal(missingChallenge.status, 400);
+    await assert.rejects(createEditorSession({
+      baseUrl, projectId: PROJECT_A, request: requests[0], idempotencyKey: keys[0],
+      antiForgery: challenges[0].nonce, fetchImpl: browserFetch(baseUrl, "session-b"),
+    }), (error) => error.status === 422 && !/Project A|Authoritative A/.test(error.responseBody));
+    const sessions = await Promise.all(requests.map((request, index) => createEditorSession({
+      baseUrl, projectId: PROJECT_A, request, idempotencyKey: keys[index],
+      antiForgery: challenges[index].nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    })));
+    assert.equal(sessions.filter((session) => session.writer.kind === "current_writer").length, 1);
+    assert.equal(sessions.filter((session) => session.writer.kind === "read_only").length, 1);
+    assert.deepEqual(new Set(sessions.map((session) => session.writer.writer_generation
+      ?? session.writer.observed_writer_generation)), new Set(["1"]));
+    const currentIndex = sessions.findIndex((session) => session.writer.kind === "current_writer");
+    assert.deepEqual(await createEditorSession({
+      baseUrl, projectId: PROJECT_A, request: requests[currentIndex],
+      idempotencyKey: keys[currentIndex], antiForgery: challenges[currentIndex].nonce,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    }), sessions[currentIndex]);
+    const read = await getEditorSession({
+      baseUrl, projectId: PROJECT_A,
+      editorSessionId: sessions[currentIndex].editor_session.editor_session_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    const { schema_id: createSchema, correlation_id: createCorrelation, ...created } = sessions[currentIndex];
+    const { schema_id: readSchema, correlation_id: readCorrelation, ...readPayload } = read;
+    assert.deepEqual(readPayload, created);
+    assert.equal(createSchema, "storyos.command.create-editor-session.response.v1");
+    assert.equal(readSchema, "storyos.query.editor-session.response.v1");
+    assert.match(createCorrelation, UUID);
+    assert.match(readCorrelation, UUID);
+    await assert.rejects(getEditorSession({
+      baseUrl, projectId: PROJECT_A,
+      editorSessionId: sessions[currentIndex].editor_session.editor_session_id,
+      fetchImpl: browserFetch(baseUrl, "session-b"),
+    }), (error) => error.status === 404 && !/Project A|Authoritative A/.test(error.responseBody));
+    await assert.rejects(createEditorSession({
+      baseUrl, projectId: PROJECT_A,
+      request: { ...requests[currentIndex], correlation_id: "018f0000-0000-7001-8000-000000000099" },
+      idempotencyKey: keys[currentIndex], antiForgery: challenges[currentIndex].nonce,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    }), (error) => error.status === 422);
   } finally {
     await stopRealServer(server);
   }

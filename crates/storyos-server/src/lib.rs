@@ -17,9 +17,11 @@ use storyos_application::{
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod editor_session;
 mod project_command_challenge;
 mod request_origin;
 
+use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 
@@ -117,6 +119,8 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let project_method = method_filter(contracts::GET_PROJECT_METHOD);
     let chapter_method = method_filter(contracts::GET_CHAPTER_METHOD);
     let challenge_method = method_filter(contracts::CREATE_PROJECT_COMMAND_CHALLENGE_METHOD);
+    let create_editor_method = method_filter(contracts::CREATE_EDITOR_SESSION_METHOD);
+    let get_editor_method = method_filter(contracts::GET_EDITOR_SESSION_METHOD);
     Router::new()
         .route(
             contracts::GET_PROTOCOL_PROFILE_PATH,
@@ -133,6 +137,14 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::CREATE_PROJECT_COMMAND_CHALLENGE_PATH,
             routing::on(challenge_method, create_project_command_challenge),
+        )
+        .route(
+            contracts::CREATE_EDITOR_SESSION_PATH,
+            routing::on(create_editor_method, create_editor_session),
+        )
+        .route(
+            contracts::GET_EDITOR_SESSION_PATH,
+            routing::on(get_editor_method, get_editor_session),
         )
         .with_state(Arc::new(ServerState::new(config)))
 }
@@ -461,3 +473,7 @@ mod tests;
 #[cfg(test)]
 #[path = "project_command_challenge_tests.rs"]
 mod project_command_challenge_tests;
+
+#[cfg(test)]
+#[path = "editor_session_tests.rs"]
+mod editor_session_tests;
