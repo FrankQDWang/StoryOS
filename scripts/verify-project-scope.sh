@@ -40,6 +40,7 @@ export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$por
 echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture
+cargo test -p storyos-adapter-postgres --lib -- --ignored --nocapture
 echo "Building the StoryOS Server"
 cargo build --quiet -p storyos-server
 echo "Running HTTP Project Scope tests"
