@@ -4,6 +4,7 @@ import {
   getProtocolProfile,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { openEditorWorkspace } from "./editor-session.mjs";
 
 const { release_identity: expectedIdentity, required_capabilities: expectedCapabilities, ...expectedProtocol } = RELEASE_1_PROTOCOL_PROFILE;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,7 +71,8 @@ export async function bootProtectedWebClient({ baseUrl, fetchImpl = globalThis.f
 }
 
 export async function openControlledProject(options) {
-  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal } = options;
+  const { baseUrl, projectId, fetchImpl = globalThis.fetch, signal,
+    indexedDBImpl = globalThis.indexedDB, cryptoImpl = globalThis.crypto } = options;
   const boot = await bootProtectedWebClient({ baseUrl, fetchImpl, signal });
   if (boot.kind !== "protected-ready") return boot;
 
@@ -88,7 +90,10 @@ export async function openControlledProject(options) {
       || chapterOwnerUserId !== ownerUserId
       || chapter?.project_scope?.project_id !== scope.project_id
       || chapter?.chapter?.chapter_id !== chapterId) throw new Error("Chapter Scope mismatch");
-    return { kind: "project-ready", profile: boot.profile, project, chapter };
+    const editor = await openEditorWorkspace({
+      baseUrl, project, chapter, profile: boot.profile, fetchImpl, indexedDBImpl, cryptoImpl,
+    });
+    return { kind: "project-ready", profile: boot.profile, project, chapter, editor };
   } catch (error) {
     const blockedState = {
       kind: "project-blocked",
