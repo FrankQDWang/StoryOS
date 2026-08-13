@@ -1,0 +1,15 @@
+#!/bin/sh
+
+if [ "$1" != prepared ]; then
+  exit 0
+fi
+
+while read -r old new ref; do
+  case "$ref" in
+    refs/heads/main) ;;
+    refs/heads/*)
+      echo "StoryOS accepts local development only on refs/heads/main." >&2
+      exit 1
+      ;;
+  esac
+done

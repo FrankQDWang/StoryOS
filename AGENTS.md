@@ -10,6 +10,12 @@
 
 ## GitHub Issue and stacked-PR execution
 
+### Single-main development policy
+
+- Develop only on the checked-out local `main` branch. Do not create Git worktrees, local feature branches, remote feature branches, or pull requests.
+- Commit and push directly to `main`. GitHub Actions verifies every push; CI reports results and never deploys, rewrites history, or automatically reverts changes.
+- Do not bypass the local ref policy or the GitHub `main-only-direct-push` ruleset. A new worktree is prohibited even when local Git could technically create one.
+
 - StoryOS works directly from GitHub Issues; do not require a generated `tospec` or another parallel task specification. The locked current Issue body, its Claim lock, exact baseline, applicable `AGENTS.md` files, and the tracked contracts explicitly linked by the Issue form the execution contract.
 - Keep one implementation Issue, one execution owner, and one concentrated task context. When the implementation is larger than the review-size limits below, decompose it into one coherent GitHub-native stacked-PR chain within that same Issue rather than creating finer Issues solely to reduce PR size.
 - A PR stack is an implementation and review decomposition only. It does not create new scope, a second specification, parallel execution ownership, or permission to claim later-layer behavior early.
