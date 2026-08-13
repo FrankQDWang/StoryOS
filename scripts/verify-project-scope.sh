@@ -32,6 +32,19 @@ docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/migrations/0002_project_command_challenges.sql" >/dev/null
 docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/tests/migration_0003_fixture.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0003_expand_client_session_generation.sql" >/dev/null
+
+preserved_generation=$(docker exec "$container" psql -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT client_session_generation::text
+     FROM storyos.project_command_challenges
+    WHERE command_kind = 'migration-proof'")
+if [ "$preserved_generation" != "9223372036854775807" ]; then
+  echo "Migration 0003 did not preserve the existing Client Session generation" >&2
+  exit 1
+fi
 
 published=$(docker port "$container" 5432/tcp)
 port=${published##*:}
