@@ -24,11 +24,16 @@ test("the protected Web client opens the authoritative current Chapter", async (
     });
   };
 
-  assert.deepEqual(await openControlledProject({
+  const state = await openControlledProject({
     baseUrl: "http://storyos.test",
     projectId: project.project.project_id,
     fetchImpl,
-  }), { kind: "project-ready", profile, project, chapter });
+  });
+  assert.equal(state.kind, "project-ready");
+  assert.deepEqual({ profile: state.profile, project: state.project, chapter: state.chapter }, {
+    profile, project, chapter,
+  });
+  assert.equal(state.editor.kind, "editor-read-only-recovery");
   assert.deepEqual(requests.map(({ path }) => path), [
     "/api/v1/protocol",
     `/api/v1/projects/${project.project.project_id}`,
