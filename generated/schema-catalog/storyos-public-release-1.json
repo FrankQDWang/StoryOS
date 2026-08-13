@@ -3,7 +3,9 @@
     "getProtocolProfile",
     "getProject",
     "getChapter",
-    "createProjectCommandChallenge"
+    "createProjectCommandChallenge",
+    "createEditorSession",
+    "getEditorSession"
   ],
   "public_protocol_release": "storyos.public.release.1",
   "schema_id": "storyos.schema-catalog.v1",
@@ -16,7 +18,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/protocol-profile-response.schema.json",
       "schema_id": "storyos.query.protocol-profile.response.v1",
-      "sha256": "sha256:e1656211bf840f3fcc97da032a7eb799a9c2d883b958b97dd0e0b703569a7f87"
+      "sha256": "sha256:5030b14c7e088c2ab43221059c16eb6c9eb4ffd2d77ef13e87dc45ba73419ab6"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/project-request.schema.json",
@@ -47,6 +49,26 @@
       "path": "generated/json-schema/storyos-public-release-1/project-command-challenge-response.schema.json",
       "schema_id": "storyos.challenge.project-command-anti-forgery-challenge.response.v1",
       "sha256": "sha256:3df3fbb12935d27a44e1274e9390beb84908709ce65f1f3744603d0c54b286ff"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",
+      "schema_id": "storyos.command.create-editor-session.request.v1",
+      "sha256": "sha256:c61430b535cb1586eaf2996adee09e4b0bf1b33869948423828d6db6cbec7e73"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/editor-session-create-response.schema.json",
+      "schema_id": "storyos.command.create-editor-session.response.v1",
+      "sha256": "sha256:cbae08478163772ce98d5e8065b68562e71aaa5a05fd93d38ca0bc5c2cd0cc2d"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/editor-session-get-request.schema.json",
+      "schema_id": "storyos.query.editor-session.request.v1",
+      "sha256": "sha256:d2dbada7a8460fa2ef9cd2d5eab8ac44b4fce048766e2d7fea2197cf21018187"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/editor-session-get-response.schema.json",
+      "schema_id": "storyos.query.editor-session.response.v1",
+      "sha256": "sha256:7f55f1fd34ea6a0e8d714704a1794ab72bdceddbd1ad6fcc9379cb21bc03005b"
     }
   ]
 }

@@ -9,8 +9,9 @@ pub(super) const ENVELOPE_PROFILE: &str = "storyos.public.envelope.v1";
 pub(super) const PROBLEM_PROFILE: &str = "storyos.problem.v1";
 pub(super) const ACTIVITY_PROFILE: &str = "storyos.project-activity.v1";
 pub const LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
+const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
-pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-08-12";
+pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-08-13-editor-session";
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v1";
 pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v1";
 pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v1";
@@ -26,6 +27,14 @@ pub(super) const PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID: &str =
     "storyos.challenge.project-command-anti-forgery-challenge.request.v1";
 pub(super) const PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID: &str =
     "storyos.challenge.project-command-anti-forgery-challenge.response.v1";
+pub const CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID: &str =
+    "storyos.command.create-editor-session.request.v1";
+pub(super) const CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
+    "storyos.command.create-editor-session.response.v1";
+pub(super) const GET_EDITOR_SESSION_REQUEST_SCHEMA_ID: &str =
+    "storyos.query.editor-session.request.v1";
+pub(super) const GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
+    "storyos.query.editor-session.response.v1";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";
 pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.positive.v1";
 pub(super) const INVALID_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.invalid.v1";
@@ -122,6 +131,63 @@ pub(super) const CREATE_PROJECT_COMMAND_CHALLENGE: QueryOperation = QueryOperati
     ],
 };
 
+pub(super) const CREATE_EDITOR_SESSION: QueryOperation = QueryOperation {
+    operation_id: "createEditorSession",
+    method: "POST",
+    path: "/api/v1/projects/{project_id}/editor-sessions",
+    request_schema: CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
+    response_schema: CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
+    responses: &[
+        (200, "Current Editor Session"),
+        (201, "Created Editor Session"),
+        (400, "Invalid request"),
+        (401, "Authentication required"),
+        (403, "Request origin refused"),
+        (404, "Resource unavailable"),
+        (405, "Method not allowed"),
+        (409, "Idempotency binding conflict"),
+        (412, "Session binding refused"),
+        (413, "Request too large"),
+        (415, "Unsupported content type"),
+        (422, "Request refused"),
+        (428, "Precondition required"),
+        (429, "Rate limited"),
+        (503, "Service unavailable"),
+    ],
+    fixtures: &[
+        "storyos.golden.createEditorSession.positive.v1",
+        "storyos.golden.createEditorSession.invalid.v1",
+        "storyos.golden.createEditorSession.boundary.v1",
+    ],
+};
+
+pub(super) const GET_EDITOR_SESSION: QueryOperation = QueryOperation {
+    operation_id: "getEditorSession",
+    method: "GET",
+    path: "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}",
+    request_schema: GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
+    response_schema: GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
+    responses: &[
+        (200, "Editor Session"),
+        (400, "Invalid request"),
+        (401, "Authentication required"),
+        (403, "Request origin refused"),
+        (404, "Resource unavailable"),
+        (405, "Method not allowed"),
+        (409, "Session binding conflict"),
+        (413, "Request too large"),
+        (415, "Unsupported content type"),
+        (422, "Request refused"),
+        (429, "Rate limited"),
+        (503, "Service unavailable"),
+    ],
+    fixtures: &[
+        "storyos.golden.getEditorSession.positive.v1",
+        "storyos.golden.getEditorSession.invalid.v1",
+        "storyos.golden.getEditorSession.boundary.v1",
+    ],
+};
+
 /// Public route used by the generated client and StoryOS Server.
 pub const GET_PROTOCOL_PROFILE_PATH: &str = GET_PROTOCOL_PROFILE.path;
 pub const GET_PROTOCOL_PROFILE_METHOD: &str = GET_PROTOCOL_PROFILE.method;
@@ -131,6 +197,10 @@ pub const GET_CHAPTER_PATH: &str = GET_CHAPTER.path;
 pub const GET_CHAPTER_METHOD: &str = GET_CHAPTER.method;
 pub const CREATE_PROJECT_COMMAND_CHALLENGE_PATH: &str = CREATE_PROJECT_COMMAND_CHALLENGE.path;
 pub const CREATE_PROJECT_COMMAND_CHALLENGE_METHOD: &str = CREATE_PROJECT_COMMAND_CHALLENGE.method;
+pub const CREATE_EDITOR_SESSION_PATH: &str = CREATE_EDITOR_SESSION.path;
+pub const CREATE_EDITOR_SESSION_METHOD: &str = CREATE_EDITOR_SESSION.method;
+pub const GET_EDITOR_SESSION_PATH: &str = GET_EDITOR_SESSION.path;
+pub const GET_EDITOR_SESSION_METHOD: &str = GET_EDITOR_SESSION.method;
 
 pub(super) const REQUIRED_CAPABILITIES: [&str; 14] = [
     "project_lifecycle",
@@ -159,6 +229,7 @@ pub struct Release1ProtocolProfile {
     pub problem_profile: String,
     pub activity_profile: String,
     pub limit_profile_revision: String,
+    pub max_json_string_utf8_bytes: u32,
     pub compatibility_profile: String,
     pub contract_revision: String,
     pub required_capabilities: Vec<String>,
@@ -224,6 +295,82 @@ pub struct CreateProjectCommandChallengeResponse {
     pub nonce: String,
     pub expires_at: String,
     pub limit_profile_revision: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CreateEditorSessionRequest {
+    pub command_schema: String,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub correlation_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum EditorWriterProjection {
+    CurrentWriter {
+        writer_generation: String,
+    },
+    ReadOnly {
+        observed_writer_generation: String,
+        reason: EditorReadOnlyReason,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum EditorReadOnlyReason {
+    SecondarySession,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EditorSessionBinding {
+    pub editor_session_id: String,
+    pub client_session_binding_ref: String,
+    pub client_session_generation: String,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub opened_at: String,
+    pub disposition: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EditorBaseSnapshot {
+    pub snapshot_id: String,
+    pub chapter_id: String,
+    pub project_activity_position: String,
+    pub authoritative_head_revision_id: String,
+    pub proposal_head_revision_ids: Vec<String>,
+    pub target_refs: Vec<String>,
+    pub observed_ownership_partition: String,
+    pub materialized_revision: AuthoritativeChapterRevision,
+    pub materialized_payload_digest: DigestValue,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CreateEditorSessionResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: ProjectScope,
+    pub editor_session: EditorSessionBinding,
+    pub writer: EditorWriterProjection,
+    pub base_snapshot: EditorBaseSnapshot,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct GetEditorSessionResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: ProjectScope,
+    pub editor_session: EditorSessionBinding,
+    pub writer: EditorWriterProjection,
+    pub base_snapshot: EditorBaseSnapshot,
 }
 
 pub use crate::project_command_targets::project_command_kind;
@@ -293,6 +440,7 @@ pub(super) fn protocol_profile(digests: ArtifactDigests) -> Release1ProtocolProf
         problem_profile: PROBLEM_PROFILE.to_owned(),
         activity_profile: ACTIVITY_PROFILE.to_owned(),
         limit_profile_revision: LIMIT_PROFILE_REVISION.to_owned(),
+        max_json_string_utf8_bytes: MAX_JSON_STRING_UTF8_BYTES,
         compatibility_profile: COMPATIBILITY_PROFILE.to_owned(),
         contract_revision: CONTRACT_REVISION.to_owned(),
         required_capabilities: REQUIRED_CAPABILITIES.map(str::to_owned).to_vec(),

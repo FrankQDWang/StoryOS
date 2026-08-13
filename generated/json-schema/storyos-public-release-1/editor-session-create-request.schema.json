@@ -1,0 +1,27 @@
+{
+  "$id": "storyos.command.create-editor-session.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "client_contract_revision": {
+      "type": "string"
+    },
+    "command_schema": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "security_policy_revision": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "command_schema",
+    "client_contract_revision",
+    "security_policy_revision",
+    "correlation_id"
+  ],
+  "title": "StoryOS Create Editor Session Request",
+  "type": "object"
+}

@@ -1,7 +1,7 @@
 # PostgreSQL Project Storage, Isolation, and Migration Contract
 
 - Status: accepted
-- Contract revision: `release1-storage-contract-2026-07-31`
+- Contract revision: `release1-storage-contract-2026-08-13-editor-session`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)

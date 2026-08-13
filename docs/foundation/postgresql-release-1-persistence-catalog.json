@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.persistence.catalog.release-1.v1",
-  "contract_revision": "release1-storage-contract-2026-07-31",
+  "contract_revision": "release1-storage-contract-2026-08-13-editor-session",
   "database_schema": "storyos",
   "physical_ledger": {
     "authority": "sole_exhaustive_table_family_ledger",
@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:b82461ab2b0995a9d0f6b7218921ab28905db1995dc218499226df6c52da2d8d"
+    "digest": "sha256:e875a6147e4d3bcc54b2ee869dad4593663e4a2c3f266cef7710786e638cc8d4"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v1",
@@ -296,7 +296,7 @@
     },
     {
       "family_id": "operational-admission-editor",
-      "table_families": ["anti_forgery_challenges", "author_command_admissions", "author_command_admission_settlements", "editor_sessions", "project_writer_generations", "editor_input_fences", "proposal_pause_fences"],
+      "table_families": ["anti_forgery_challenges", "author_command_admissions", "author_command_admission_settlements", "editor_sessions", "project_writer_generations", "editor_session_base_snapshots", "editor_input_fences", "proposal_pause_fences"],
       "owner": "admission",
       "authority_class": "operational",
       "durability_class": "append_only_with_current_generation",
