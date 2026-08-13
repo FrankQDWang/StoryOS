@@ -289,6 +289,6 @@ test("a real browser reload rebuilds one durable pending intent from IndexedDB",
     }
   } finally {
     server.close();
-    rmSync(profileDirectory, { recursive: true, force: true });
+    rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   }
 });
