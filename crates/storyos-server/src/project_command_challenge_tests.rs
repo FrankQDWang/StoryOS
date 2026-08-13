@@ -179,6 +179,46 @@ async fn public_challenge_route_rejects_repeated_content_type_without_disclosure
     );
 }
 
+#[tokio::test]
+async fn public_challenge_route_rejects_malformed_json_content_types() {
+    for content_type in [
+        "application/json;",
+        "application/json; charset",
+        "application/foo bar+json",
+        "application/foo/bar+json",
+    ] {
+        let mut request = challenge_request(Some(ORIGIN), None);
+        request.headers_mut().insert(
+            "content-type",
+            HeaderValue::from_str(content_type).expect("fixture header should be representable"),
+        );
+
+        let response = router_with_config(challenge_config())
+            .oneshot(request)
+            .await
+            .expect("public request should complete");
+
+        assert_eq!(
+            response.status(),
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "{content_type}"
+        );
+    }
+}
+
+#[test]
+fn server_config_debug_redacts_the_challenge_secret() {
+    let secret = b"debug-must-not-disclose-this-challenge-secret";
+    let config = ServerConfig {
+        project_command_challenge_secret: Some(secret.to_vec()),
+        ..ServerConfig::default()
+    };
+
+    let debug = format!("{config:?}");
+    assert!(!debug.contains(str::from_utf8(secret).unwrap()));
+    assert!(debug.contains("project_command_challenge_secret: Some([REDACTED])"));
+}
+
 #[test]
 fn challenge_secret_derivation_uses_hmac_sha256() {
     let digest = secret_digest(

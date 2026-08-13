@@ -140,7 +140,8 @@ pub(super) fn secret_digest(secret: &[u8], profile: &str, parts: &[Vec<u8>]) -> 
     let mut digest =
         Hmac::<Sha256>::new_from_slice(secret).expect("HMAC-SHA256 accepts a secret of any length");
     for part in std::iter::once(profile.as_bytes()).chain(parts.iter().map(Vec::as_slice)) {
-        digest.update(&part.len().to_be_bytes());
+        let length = u64::try_from(part.len()).expect("challenge binding part length must fit u64");
+        digest.update(&length.to_be_bytes());
         digest.update(part);
     }
     hex_bytes(&digest.finalize().into_bytes())

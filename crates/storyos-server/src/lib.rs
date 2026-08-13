@@ -1,6 +1,7 @@
 //! StoryOS public HTTP boundary.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -37,7 +38,7 @@ pub struct ClientSessionBinding {
     pub security_policy_revision: String,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct ServerConfig {
     pub database_url: Option<String>,
     pub session_bindings: HashMap<String, ClientSessionBinding>,
@@ -47,6 +48,44 @@ pub struct ServerConfig {
     pub allowed_host: Option<String>,
     pub allowed_origin: Option<String>,
     pub project_command_challenge_secret: Option<Vec<u8>>,
+}
+
+impl fmt::Debug for ServerConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        struct Redacted;
+        impl fmt::Debug for Redacted {
+            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+                formatter.write_str("[REDACTED]")
+            }
+        }
+
+        formatter
+            .debug_struct("ServerConfig")
+            .field("database_url", &self.database_url)
+            .field("session_bindings", &self.session_bindings)
+            .field(
+                "current_session_generation",
+                &self.current_session_generation,
+            )
+            .field(
+                "accepted_client_contract_revision",
+                &self.accepted_client_contract_revision,
+            )
+            .field(
+                "accepted_security_policy_revision",
+                &self.accepted_security_policy_revision,
+            )
+            .field("allowed_host", &self.allowed_host)
+            .field("allowed_origin", &self.allowed_origin)
+            .field(
+                "project_command_challenge_secret",
+                &self
+                    .project_command_challenge_secret
+                    .as_ref()
+                    .map(|_| Redacted),
+            )
+            .finish()
+    }
 }
 
 #[derive(Clone)]
@@ -355,20 +394,19 @@ fn invalid_request() -> ApiError {
 
 fn validate_json_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
     let mut values = headers.get_all(header::CONTENT_TYPE).iter();
-    let value = values
+    let content_type = values
         .next()
         .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.split(';').next())
-        .map(str::trim);
+        .and_then(|value| {
+            (!value.trim_end().ends_with(';'))
+                .then(|| value.parse::<mime::Mime>().ok())
+                .flatten()
+        });
     if values.next().is_some()
-        || !value.is_some_and(|value| {
-            value.split_once('/').is_some_and(|(type_name, subtype)| {
-                type_name.eq_ignore_ascii_case("application")
-                    && (subtype.eq_ignore_ascii_case("json")
-                        || subtype.rsplit_once('+').is_some_and(|(name, suffix)| {
-                            !name.is_empty() && suffix.eq_ignore_ascii_case("json")
-                        }))
-            })
+        || !content_type.is_some_and(|content_type| {
+            content_type.type_() == mime::APPLICATION
+                && (content_type.subtype() == mime::JSON
+                    || content_type.suffix() == Some(mime::JSON))
         })
     {
         return Err(problem(
