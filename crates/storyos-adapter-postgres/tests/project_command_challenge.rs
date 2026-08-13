@@ -184,6 +184,84 @@ async fn issue_and_consume_are_exact_retry_safe_under_forced_rls() {
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
+async fn issue_and_consume_preserve_the_full_u64_client_session_generation() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let request = numbered_challenge_request(401, u64::MAX);
+
+    let first = issue_project_command_challenge(&store, &request)
+        .await
+        .unwrap();
+    assert_eq!(
+        issue_project_command_challenge(&store, &request)
+            .await
+            .unwrap(),
+        first
+    );
+
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move { connection.await.unwrap() });
+    let expected_generation = u64::MAX.to_string();
+    let stored_generations = admin
+        .query_one(
+            "SELECT
+               (SELECT client_session_generation::text
+                  FROM storyos.project_command_challenges
+                 WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                   AND command_kind = $3 AND idempotency_key = $4::text::uuid),
+               (SELECT client_session_generation::text
+                  FROM storyos.project_command_challenge_rate_guards
+                 WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                   AND client_session_generation = $5::text::numeric),
+               (SELECT client_session_generation::text
+                  FROM storyos.project_command_challenge_rate_windows
+                 WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                   AND client_session_generation = $5::text::numeric)",
+            &[
+                &USER_A,
+                &PROJECT_A,
+                &request.binding.command_kind,
+                &request.binding.idempotency_key,
+                &expected_generation,
+            ],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            stored_generations.get::<_, String>(0),
+            stored_generations.get::<_, String>(1),
+            stored_generations.get::<_, String>(2),
+        ),
+        (
+            expected_generation.clone(),
+            expected_generation.clone(),
+            expected_generation,
+        )
+    );
+
+    let mut transaction = store
+        .begin_project_command_transaction(&request.binding.project_scope)
+        .await
+        .unwrap();
+    assert_eq!(
+        consume_project_command_challenge(
+            &mut transaction,
+            &request.binding,
+            &request.nonce_digest
+        )
+        .await
+        .unwrap(),
+        ProjectCommandChallengeUse::FirstUse,
+    );
+    transaction.rollback().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
 async fn changed_binding_and_wrong_scope_fail_closed_without_consumption() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
