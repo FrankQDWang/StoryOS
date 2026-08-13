@@ -505,15 +505,7 @@ cannot begin, commit, or detach those changes. The outer operation commits all
 Admission and business writes together. Any error or rollback preserves the
 unconsumed challenge and pending idempotency record.
 
-The Release 1 Server derives new challenge session-binding digests and nonces
-with the versioned HMAC-SHA256 profiles in the public protocol contract. This
-change lands before the challenge Server route has a merged release, so it
-requires no production schema edge or data backfill. A database created by an
-earlier unmerged development head is not a supported predecessor. Its pending
-challenge and pre-domain idempotency rows must be discarded with that test
-database and issued again. The Server must not accept the earlier custom
-SHA-256 derivation as a compatibility fallback. Existing Release 1 table
-shapes and the generated public wire artifacts do not change.
+The Release 1 Server derives new challenge session-binding digests and nonces with the versioned HMAC-SHA256 profiles in the public protocol contract. This change lands before the challenge Server route has a merged release, so it requires no production schema edge or data backfill. A database created by an earlier unmerged development head is not a supported predecessor. Its pending challenge and pre-domain idempotency rows must be discarded with that test database and issued again. The Server must not accept the earlier custom SHA-256 derivation as a compatibility fallback. Existing Release 1 table shapes and generated public wire artifacts do not change.
 
 `project_command_challenge_rate_windows` is a Project-scoped Operational
 Record for policy

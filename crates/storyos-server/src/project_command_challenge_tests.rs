@@ -216,7 +216,7 @@ fn server_config_debug_redacts_the_challenge_secret() {
 
     let debug = format!("{config:?}");
     assert!(!debug.contains(str::from_utf8(secret).unwrap()));
-    assert!(debug.contains("project_command_challenge_secret: Some([REDACTED])"));
+    assert!(debug.contains("project_command_challenge_secret: Some(\"[REDACTED]\")"));
 }
 
 #[test]

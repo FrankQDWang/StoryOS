@@ -52,39 +52,16 @@ pub struct ServerConfig {
 
 impl fmt::Debug for ServerConfig {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        struct Redacted;
-        impl fmt::Debug for Redacted {
-            fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-                formatter.write_str("[REDACTED]")
-            }
-        }
-
         formatter
             .debug_struct("ServerConfig")
-            .field("database_url", &self.database_url)
-            .field("session_bindings", &self.session_bindings)
-            .field(
-                "current_session_generation",
-                &self.current_session_generation,
-            )
-            .field(
-                "accepted_client_contract_revision",
-                &self.accepted_client_contract_revision,
-            )
-            .field(
-                "accepted_security_policy_revision",
-                &self.accepted_security_policy_revision,
-            )
-            .field("allowed_host", &self.allowed_host)
-            .field("allowed_origin", &self.allowed_origin)
             .field(
                 "project_command_challenge_secret",
                 &self
                     .project_command_challenge_secret
                     .as_ref()
-                    .map(|_| Redacted),
+                    .map(|_| "[REDACTED]"),
             )
-            .finish()
+            .finish_non_exhaustive()
     }
 }
 
@@ -390,32 +367,6 @@ fn invalid_request() -> ApiError {
         "invalid_request",
         "The request is invalid.",
     )
-}
-
-fn validate_json_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
-    let mut values = headers.get_all(header::CONTENT_TYPE).iter();
-    let content_type = values
-        .next()
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| {
-            (!value.trim_end().ends_with(';'))
-                .then(|| value.parse::<mime::Mime>().ok())
-                .flatten()
-        });
-    if values.next().is_some()
-        || !content_type.is_some_and(|content_type| {
-            content_type.type_() == mime::APPLICATION
-                && (content_type.subtype() == mime::JSON
-                    || content_type.suffix() == Some(mime::JSON))
-        })
-    {
-        return Err(problem(
-            StatusCode::UNSUPPORTED_MEDIA_TYPE,
-            "unsupported_content_type",
-            "The request must use one JSON content type.",
-        ));
-    }
-    Ok(())
 }
 
 fn payload_too_large() -> ApiError {

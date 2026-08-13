@@ -352,12 +352,7 @@ uses the project-scoped endpoint and an existing Project row.
 
 The preflight validates exact Host, first-party Origin, current Client Session
 generation, Web Client contract revision, security-policy revision, exact
-existing or prospective Project Scope, exactly one non-simple JSON content
-type, closed schema, digest syntax, and admission rate. JSON media-type matching
-is ASCII case-insensitive. The Server accepts `application/json` and an
-`application/*+json` subtype, with optional parameters. It rejects every
-repeated `Content-Type` field, including repeated equal values. It resolves one
-pre-domain idempotency
+existing or prospective Project Scope, exactly one non-simple JSON content type, closed schema, digest syntax, and admission rate. JSON media-type matching is ASCII case-insensitive. The Server accepts `application/json` and an `application/*+json` subtype, with optional parameters. It rejects every repeated `Content-Type` field, including repeated equal values. It resolves one pre-domain idempotency
 record under the exact arbitration tuple from section 7.3 and binds the
 challenge to that record identity, its `idempotency_key`, canonical command
 digest, client contract, and security policy. It creates no Command, Receipt,
@@ -366,16 +361,7 @@ returned nonce is sent only in the command header, never a URL or log. The
 client performs this automatically; it is not an author setting or
 confirmation step.
 
-The Server derives the opaque session-binding digest with profile
-`storyos.project-command-challenge.session-binding.hmac-sha256.v1` and the
-nonce with profile
-`storyos.project-command-challenge.nonce.hmac-sha256.v1`. Each profile uses
-HMAC-SHA256 with the Server challenge secret as its key. Its message starts
-with the profile string and then the ordered binding values. Every message
-value uses an unsigned 64-bit big-endian byte-length prefix followed by its
-exact bytes. The separate profile strings give the two derivations distinct
-domains. The lowercase hexadecimal result preserves the Release 1 public
-nonce shape. The Server never stores or discloses the HMAC key.
+The Server derives the opaque session-binding digest with profile `storyos.project-command-challenge.session-binding.hmac-sha256.v1` and the nonce with profile `storyos.project-command-challenge.nonce.hmac-sha256.v1`. Each profile uses HMAC-SHA256 with the Server challenge secret as its key. Its message starts with the profile string and then the ordered binding values. Every message value uses an unsigned 64-bit big-endian byte-length prefix followed by its exact bytes. The separate profile strings give the two derivations distinct domains. The lowercase hexadecimal result preserves the Release 1 public nonce shape. The Server never stores or discloses the HMAC key.
 
 Project-scoped challenge issuance uses the immutable admission-rate policy
 `storyos.project-command-challenge-rate.fixed-window.v1`. Its key is the

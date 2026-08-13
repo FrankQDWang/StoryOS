@@ -11,6 +11,31 @@ const SESSION_BINDING_HMAC_PROFILE: &str =
     "storyos.project-command-challenge.session-binding.hmac-sha256.v1";
 const NONCE_HMAC_PROFILE: &str = "storyos.project-command-challenge.nonce.hmac-sha256.v1";
 
+fn validate_json_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
+    let mut values = headers.get_all(header::CONTENT_TYPE).iter();
+    let content_type = values
+        .next()
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| {
+            (!value.trim_end().ends_with(';'))
+                .then(|| value.parse::<mime::Mime>().ok())
+                .flatten()
+        });
+    if values.next().is_some()
+        || !content_type.is_some_and(|value| {
+            value.type_() == mime::APPLICATION
+                && (value.subtype() == mime::JSON || value.suffix() == Some(mime::JSON))
+        })
+    {
+        return Err(problem(
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "unsupported_content_type",
+            "The request must use one JSON content type.",
+        ));
+    }
+    Ok(())
+}
+
 pub(super) async fn create_project_command_challenge(
     State(state): State<Arc<ServerState>>,
     Path(project_id): Path<String>,
