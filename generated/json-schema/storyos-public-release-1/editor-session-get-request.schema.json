@@ -1,0 +1,20 @@
+{
+  "$id": "storyos.query.editor-session.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "editor_session_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "editor_session_id"
+  ],
+  "type": "object"
+}

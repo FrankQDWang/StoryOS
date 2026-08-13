@@ -101,6 +101,11 @@
     "limit_profile_revision": {
       "type": "string"
     },
+    "max_json_string_utf8_bytes": {
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
     "problem_profile": {
       "type": "string"
     },
@@ -128,6 +133,7 @@
     "problem_profile",
     "activity_profile",
     "limit_profile_revision",
+    "max_json_string_utf8_bytes",
     "compatibility_profile",
     "contract_revision",
     "required_capabilities",

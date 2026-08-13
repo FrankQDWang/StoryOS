@@ -30,6 +30,13 @@ fn controlled_project_queries_are_generated_from_the_release_1_contract() {
     assert!(client.contains("export async function createProjectCommandChallenge"));
     assert!(client.contains("this.retryAfterSeconds = details.retryAfterSeconds"));
     assert!(client.contains("response.headers.get(\"retry-after\")"));
+    assert!(openapi.contains("operationId: createEditorSession"));
+    assert!(openapi.contains("operationId: getEditorSession"));
+    assert!(openapi.contains("- name: Idempotency-Key"));
+    assert!(openapi.contains("- name: X-StoryOS-Anti-Forgery"));
+    assert!(client.contains("export async function createEditorSession"));
+    assert!(client.contains("export async function getEditorSession"));
+    assert!(client.contains("x-storyos-anti-forgery"));
 }
 
 #[test]
@@ -79,6 +86,9 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
             CHAPTER_RESPONSE_SCHEMA_PATH,
             CHALLENGE_REQUEST_SCHEMA_PATH,
             CHALLENGE_RESPONSE_SCHEMA_PATH,
+            super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
+            super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
+            super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
         ]
         .map(str::to_owned)
         .into_iter()

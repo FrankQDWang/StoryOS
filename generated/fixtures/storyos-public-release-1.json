@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:aa94cd2b5cd615e7b3d8d78e3440b7d1124ef953964e5ef3a26cad8c15431ba3",
+  "corpus_digest": "sha256:b917b952f5e5544898bb18c1c5f44720e9d2a1481c8284cd2d405930fd5e0521",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -14,7 +14,13 @@
       "generated/golden-wire/storyos-public-release-1/get-chapter.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.json",
       "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
+      "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.json",
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json"
     ]
   },
   "fixtures": [
@@ -89,6 +95,42 @@
       "fixture_id": "storyos.golden.createProjectCommandChallenge.boundary.v1",
       "operation_id": "createProjectCommandChallenge",
       "path": "generated/golden-wire/storyos-public-release-1/create-project-command-challenge.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.createEditorSession.positive.v1",
+      "operation_id": "createEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.createEditorSession.invalid.v1",
+      "operation_id": "createEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.createEditorSession.boundary.v1",
+      "operation_id": "createEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getEditorSession.positive.v1",
+      "operation_id": "getEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getEditorSession.invalid.v1",
+      "operation_id": "getEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getEditorSession.boundary.v1",
+      "operation_id": "getEditorSession",
+      "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

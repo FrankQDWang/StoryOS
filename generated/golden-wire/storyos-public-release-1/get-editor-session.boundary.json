@@ -1,0 +1,42 @@
+{
+  "base_snapshot": {
+    "authoritative_head_revision_id": "018f0000-0000-7001-8000-000000000004",
+    "chapter_id": "018f0000-0000-7001-8000-000000000003",
+    "created_at": "2026-08-13T08:00:00.000Z",
+    "materialized_payload_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.canonical-payload.sha256.v1",
+      "value_hex_lowercase": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "materialized_revision": {
+      "body": "雨落在窗沿。",
+      "revision_id": "018f0000-0000-7001-8000-000000000004"
+    },
+    "observed_ownership_partition": "authoritative",
+    "project_activity_position": "0",
+    "proposal_head_revision_ids": [],
+    "snapshot_id": "018f0000-0000-7001-8000-000000000022",
+    "target_refs": [
+      "manuscript:018f0000-0000-7001-8000-000000000003"
+    ]
+  },
+  "correlation_id": "018f0000-0000-7001-8000-000000000020",
+  "editor_session": {
+    "client_contract_revision": "storyos.web-client.release-1.v1",
+    "client_session_binding_ref": "binding:7af2",
+    "client_session_generation": "1",
+    "disposition": "open",
+    "editor_session_id": "018f0000-0000-7001-8000-000000000021",
+    "opened_at": "2026-08-13T08:00:00.000Z",
+    "security_policy_revision": "storyos.web-security-policy.release-1.v1"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000102"
+  },
+  "schema_id": "storyos.query.editor-session.response.v1",
+  "writer": {
+    "kind": "current_writer",
+    "writer_generation": "1"
+  }
+}

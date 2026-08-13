@@ -24,10 +24,10 @@ async function queryJson({ baseUrl, path, fetchImpl = globalThis.fetch, signal }
   }
 }
 
-async function commandJson({ baseUrl, path, body, fetchImpl = globalThis.fetch, signal }) {
+async function commandJson({ baseUrl, path, body, commandHeaders = {}, fetchImpl = globalThis.fetch, signal }) {
   if (typeof baseUrl !== "string" || baseUrl.length === 0) throw new TypeError("StoryOS command requires a non-empty baseUrl");
   if (typeof fetchImpl !== "function") throw new TypeError("StoryOS command requires a fetch implementation");
-  const response = await fetchImpl(new URL(path, baseUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, credentials: "same-origin", body: JSON.stringify(body), signal });
+  const response = await fetchImpl(new URL(path, baseUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json", ...commandHeaders }, credentials: "same-origin", body: JSON.stringify(body), signal });
   const responseBody = await response.text();
   if (!response.ok) {
     const retryAfter = response.headers.get("retry-after");
@@ -56,4 +56,25 @@ export async function createProjectCommandChallenge({ projectId, request, ...opt
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createProjectCommandChallenge requires projectId");
   if (!request || typeof request !== "object") throw new TypeError("createProjectCommandChallenge requires request");
   return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/anti-forgery-challenges`, body: request });
+}
+
+export async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestCreateEditorSession requires request");
+  const canonical = { client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision };
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.createEditorSession.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function createEditorSession({ projectId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createEditorSession requires projectId");
+  if (!request || typeof request !== "object") throw new TypeError("createEditorSession requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("createEditorSession requires security bindings");
+  return commandJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/editor-sessions`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
+export async function getEditorSession({ projectId, editorSessionId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getEditorSession requires projectId");
+  if (typeof editorSessionId !== "string" || editorSessionId.length === 0) throw new TypeError("getEditorSession requires editorSessionId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/editor-sessions/${encodeURIComponent(editorSessionId)}` });
 }

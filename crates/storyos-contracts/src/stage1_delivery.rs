@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-12-v5";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-13-v8";
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "a62fb29875b8b507b525c98544cfef5eba8bf8db";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "41d3b3e24cf76db136df09d82d383d73e2de9ca1";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:c9672b0469b1247e16e3be27393486f5d6b8cd7fb8bed2274446e3e6174b9787";
+    "sha256:9d39bc70b36e450c107344c0237a391aaec80ff2b2c635e3dc94efd9e7326ffb";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -314,7 +314,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-04",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
-        issue_body_sha256: "3a667af193cbe869fced580f602d8e7060c1708a672b29bcbbc227c2783dd641",
+        issue_body_sha256: "db44ffa60cf52d0e59c54e11c6496ac4c48ea3d1ef4c038dc40e00a3e2b1a9f9",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",
         contract_coverage: COVERAGE_04,

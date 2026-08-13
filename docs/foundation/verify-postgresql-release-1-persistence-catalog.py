@@ -41,7 +41,7 @@ from postgresql_persistence_verifier_storage import (
 def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str], check_digests: bool = True) -> dict[str, int]:
     if catalog.get("catalog_id") != catalog.get("schema_identity", {}).get("persisted_format_catalog_id"):
         fail(errors, "catalog identity does not bind persisted-format identity")
-    if catalog.get("contract_revision") != "release1-storage-contract-2026-07-31":
+    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-13-editor-session":
         fail(errors, "unexpected storage contract revision")
     binding = catalog.get("schema_identity", {}).get("protocol_binding", {})
     for key, expected in {
