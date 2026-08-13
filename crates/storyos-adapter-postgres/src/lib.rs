@@ -25,6 +25,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
         request: &IssueProjectCommandChallenge,
     ) -> Result<ProjectCommandChallenge, ProjectCommandChallengeError> {
         let binding = &request.binding;
+        let client_session_generation = binding.client_session_generation.to_string();
         let mut client = self.connect_challenge().await?;
         let transaction = client.transaction().await.map_err(challenge_error)?;
         set_challenge_scope(&transaction, &binding.project_scope).await?;
@@ -80,7 +81,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
                     method, route_template, command_schema,
                     canonical_command_digest, nonce_digest)
                  VALUES ($1::text::uuid, $2::text::uuid, $3, $4::text::uuid,
-                         $5, $6::bigint, $7, $8, $9, $10,
+                         $5, $6::text::numeric, $7, $8, $9, $10,
                          to_timestamp($11::bigint * $12::bigint),
                          $13, $14, $15, $16, $17)
                  ON CONFLICT DO NOTHING",
@@ -90,7 +91,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
                     &binding.command_kind,
                     &binding.idempotency_key,
                     &binding.client_session_binding_digest,
-                    &(binding.client_session_generation as i64),
+                    &client_session_generation,
                     &binding.client_contract_revision,
                     &binding.security_policy_revision,
                     &binding.limit_profile_revision,
@@ -108,7 +109,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
             .map_err(challenge_error)?;
         let row = transaction
             .query_one(
-                "SELECT client_session_binding_digest, client_session_generation,
+                "SELECT client_session_binding_digest, client_session_generation::text,
                         client_contract_revision, security_policy_revision, limit_profile_revision,
                         challenge_rate_policy_revision,
                         method, route_template, command_schema,
@@ -127,7 +128,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
             .await
             .map_err(challenge_error)?;
         let exact = row.get::<_, String>(0) == binding.client_session_binding_digest
-            && row.get::<_, i64>(1) == binding.client_session_generation as i64
+            && row.get::<_, String>(1) == client_session_generation
             && row.get::<_, String>(2) == binding.client_contract_revision
             && row.get::<_, String>(3) == binding.security_policy_revision
             && row.get::<_, String>(4) == binding.limit_profile_revision
@@ -176,10 +177,12 @@ impl ProjectCommandChallengeTransaction for PostgresProjectCommandTransaction {
         binding: &ProjectCommandChallengeBinding,
         nonce_digest: &str,
     ) -> Result<ProjectCommandChallengeUse, ProjectCommandChallengeError> {
+        let client_session_generation = binding.client_session_generation.to_string();
         let row = self
             .client
             .query_opt(
-                "SELECT challenge.client_session_binding_digest, challenge.client_session_generation,
+                "SELECT challenge.client_session_binding_digest,
+                        challenge.client_session_generation::text,
                         challenge.client_contract_revision, challenge.security_policy_revision,
                         challenge.limit_profile_revision, challenge.challenge_rate_policy_revision,
                         challenge.method,
@@ -200,7 +203,7 @@ impl ProjectCommandChallengeTransaction for PostgresProjectCommandTransaction {
             .map_err(challenge_error)?
             .ok_or(ProjectCommandChallengeError::InvalidOrExpired)?;
         let exact = row.get::<_, String>(0) == binding.client_session_binding_digest
-            && row.get::<_, i64>(1) == binding.client_session_generation as i64
+            && row.get::<_, String>(1) == client_session_generation
             && row.get::<_, String>(2) == binding.client_contract_revision
             && row.get::<_, String>(3) == binding.security_policy_revision
             && row.get::<_, String>(4) == binding.limit_profile_revision
@@ -291,16 +294,17 @@ async fn apply_challenge_rate_limit(
     binding: &ProjectCommandChallengeBinding,
     clock_unix_seconds: Option<i64>,
 ) -> Result<i64, ProjectCommandChallengeError> {
+    let client_session_generation = binding.client_session_generation.to_string();
     transaction
         .execute(
             "INSERT INTO storyos.project_command_challenge_rate_guards
                (owner_user_id, project_id, client_session_generation, policy_revision)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::bigint, $4)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4)
              ON CONFLICT DO NOTHING",
             &[
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
-                &(binding.client_session_generation as i64),
+                &client_session_generation,
                 &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
             ],
         )
@@ -311,12 +315,12 @@ async fn apply_challenge_rate_limit(
             "SELECT policy_revision
              FROM storyos.project_command_challenge_rate_guards
              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-               AND client_session_generation = $3::bigint AND policy_revision = $4
+               AND client_session_generation = $3::text::numeric AND policy_revision = $4
              FOR UPDATE",
             &[
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
-                &(binding.client_session_generation as i64),
+                &client_session_generation,
                 &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
             ],
         )
@@ -346,13 +350,13 @@ async fn apply_challenge_rate_limit(
             "INSERT INTO storyos.project_command_challenge_rate_windows
                (owner_user_id, project_id, client_session_generation, policy_revision,
                 window_started_at, issued_count)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::bigint, $4,
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4,
                      to_timestamp($5::bigint * $6::bigint), 0)
              ON CONFLICT DO NOTHING",
             &[
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
-                &(binding.client_session_generation as i64),
+                &client_session_generation,
                 &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
                 &minute_bucket,
                 &(PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64),
@@ -365,13 +369,13 @@ async fn apply_challenge_rate_limit(
             "SELECT issued_count
              FROM storyos.project_command_challenge_rate_windows
              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-               AND client_session_generation = $3::bigint AND policy_revision = $4
+               AND client_session_generation = $3::text::numeric AND policy_revision = $4
                AND window_started_at = to_timestamp($5::bigint * $6::bigint)
              FOR UPDATE",
             &[
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
-                &(binding.client_session_generation as i64),
+                &client_session_generation,
                 &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
                 &minute_bucket,
                 &(PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64),
@@ -392,12 +396,12 @@ async fn apply_challenge_rate_limit(
         .execute(
             "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = issued_count + 1
              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-               AND client_session_generation = $3::bigint AND policy_revision = $4
+               AND client_session_generation = $3::text::numeric AND policy_revision = $4
                AND window_started_at = to_timestamp($5::bigint * $6::bigint)",
             &[
                 &binding.project_scope.owner_user_id.as_ref(),
                 &binding.project_scope.project_id.as_ref(),
-                &(binding.client_session_generation as i64),
+                &client_session_generation,
                 &PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION,
                 &minute_bucket,
                 &(PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS as i64),
