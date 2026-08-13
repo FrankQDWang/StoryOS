@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+sha2.workspace = true
 storyos-application = { path = "../storyos-application" }
 tokio.workspace = true
 tokio-postgres.workspace = true
