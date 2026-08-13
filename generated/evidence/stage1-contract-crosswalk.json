@@ -14,7 +14,7 @@
       "revision": "stage1-ticketed-delivery-2026-08-12-v5",
       "baseline_commit": "a62fb29875b8b507b525c98544cfef5eba8bf8db",
       "baseline_tree": "41d3b3e24cf76db136df09d82d383d73e2de9ca1",
-      "ticket_set_sha256": "sha256:ddf3fc673d49f3b1706dbd5dcadaba6d4bc1632e229ae93d09c2393b746c2d32",
+      "ticket_set_sha256": "sha256:c9672b0469b1247e16e3be27393486f5d6b8cd7fb8bed2274446e3e6174b9787",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -264,7 +264,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/106",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Create an Editor Session and Persist One Pending Intent",
-          "issue_body_sha256": "b2a922ac28b62e642c42e37c34e16d33afc4779d75697c115b00e0a89af0f829",
+          "issue_body_sha256": "3a667af193cbe869fced580f602d8e7060c1708a672b29bcbbc227c2783dd641",
           "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/121",
           "evidence_role": "planned-runtime-evidence",
           "responsibility": "persist one pending editor intent",

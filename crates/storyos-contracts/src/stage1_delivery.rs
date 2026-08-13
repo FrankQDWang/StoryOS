@@ -11,7 +11,7 @@ pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-20
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "a62fb29875b8b507b525c98544cfef5eba8bf8db";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "41d3b3e24cf76db136df09d82d383d73e2de9ca1";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:ddf3fc673d49f3b1706dbd5dcadaba6d4bc1632e229ae93d09c2393b746c2d32";
+    "sha256:c9672b0469b1247e16e3be27393486f5d6b8cd7fb8bed2274446e3e6174b9787";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -314,7 +314,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-04",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
-        issue_body_sha256: "b2a922ac28b62e642c42e37c34e16d33afc4779d75697c115b00e0a89af0f829",
+        issue_body_sha256: "3a667af193cbe869fced580f602d8e7060c1708a672b29bcbbc227c2783dd641",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",
         contract_coverage: COVERAGE_04,
