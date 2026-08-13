@@ -4,6 +4,8 @@
 #[path = "project_command_challenge_tests.rs"]
 mod tests;
 
+mod editor_session;
+
 use storyos_application::{
     Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,
     PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION, PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS,

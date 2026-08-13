@@ -152,3 +152,114 @@ async fn composite_identity_rejects_a_foreign_revision_reference() {
         .await;
     assert!(result.is_err());
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn editor_session_tables_force_scope_and_composite_references() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (mut client, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    tokio::spawn(async move { connection.await.unwrap() });
+    let transaction = client.transaction().await.unwrap();
+    transaction
+        .execute(
+            "SELECT set_config('storyos.user_id', $1, true), \
+             set_config('storyos.owner_user_id', $1, true), \
+             set_config('storyos.project_id', $2, true)",
+            &[&USER_A, &PROJECT_A],
+        )
+        .await
+        .unwrap();
+    let session_id = "018f0000-0000-7001-8000-000000000081";
+    transaction
+        .execute(
+            "INSERT INTO storyos.editor_sessions
+             (owner_user_id, project_id, editor_session_id, client_session_binding_ref,
+              client_session_generation, client_contract_revision, security_policy_revision)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'binding', 1, 'client', 'security')",
+            &[&USER_A, &PROJECT_A, &session_id],
+        )
+        .await
+        .unwrap();
+    transaction
+        .batch_execute("SAVEPOINT wrong_scope")
+        .await
+        .unwrap();
+    assert!(
+        transaction
+            .execute(
+                "INSERT INTO storyos.editor_sessions
+                 (owner_user_id, project_id, editor_session_id, client_session_binding_ref,
+                  client_session_generation, client_contract_revision, security_policy_revision)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'binding', 1, 'client', 'security')",
+                &[&USER_B, &PROJECT_B, &"018f0000-0000-7001-8000-000000000181"],
+            )
+            .await
+            .is_err()
+    );
+    transaction
+        .batch_execute("ROLLBACK TO SAVEPOINT wrong_scope")
+        .await
+        .unwrap();
+    transaction
+        .batch_execute("SAVEPOINT foreign_revision")
+        .await
+        .unwrap();
+    assert!(
+        transaction
+            .execute(
+                "INSERT INTO storyos.editor_session_base_snapshots
+                 (owner_user_id, project_id, snapshot_id, editor_session_id,
+                  chapter_object_id, authoritative_revision_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         $5::text::uuid, $6::text::uuid)",
+                &[
+                    &USER_A,
+                    &PROJECT_A,
+                    &"018f0000-0000-7001-8000-000000000082",
+                    &session_id,
+                    &CHAPTER_A,
+                    &"018f0000-0000-7001-8000-000000000105",
+                ],
+            )
+            .await
+            .is_err()
+    );
+    transaction
+        .batch_execute("ROLLBACK TO SAVEPOINT foreign_revision")
+        .await
+        .unwrap();
+
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (client, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move { connection.await.unwrap() });
+    let posture = client
+        .query(
+            "SELECT relname, relrowsecurity, relforcerowsecurity
+             FROM pg_class WHERE relname IN
+               ('editor_session_base_snapshots', 'editor_sessions', 'project_writer_generations')
+             ORDER BY relname",
+            &[],
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            (
+                row.get::<_, String>(0),
+                row.get::<_, bool>(1),
+                row.get::<_, bool>(2),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        posture,
+        [
+            "editor_session_base_snapshots",
+            "editor_sessions",
+            "project_writer_generations",
+        ]
+        .map(|name| (name.to_owned(), true, true))
+    );
+}

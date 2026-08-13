@@ -24,6 +24,14 @@
 
 use std::future::Future;
 
+mod editor_session;
+
+pub use editor_session::{
+    EditorClientBinding, EditorSession, EditorSessionError, EditorSessionId, EditorSessionLookup,
+    EditorSessionSnapshot, EditorSessionStore, EditorWriterState, OpenEditorSession,
+    create_editor_session, get_editor_session,
+};
+
 pub const PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION: &str =
     "storyos.project-command-challenge-rate.fixed-window.v1";
 pub const PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS: u64 = 60;
