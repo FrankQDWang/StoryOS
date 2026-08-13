@@ -1,22 +1,26 @@
 //! StoryOS public HTTP boundary.
 
 use std::collections::HashMap;
+use std::fmt;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use axum::extract::{Path, State};
-use axum::http::{HeaderMap, Method, StatusCode};
+use axum::extract::{Path, Request, State};
+use axum::http::{HeaderMap, Method, StatusCode, header};
+use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing};
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
-    ChapterId, ProjectId, ProjectScope as ApplicationScope, UserId, open_current_chapter,
-    open_project,
+    ChapterId, ProjectCommandChallengeError, ProjectId, ProjectScope as ApplicationScope, UserId,
+    open_current_chapter, open_project,
 };
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod project_command_challenge;
 mod request_origin;
 
+use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 
 /// The reviewed browser security policy accepted by this Server release.
@@ -34,7 +38,7 @@ pub struct ClientSessionBinding {
     pub security_policy_revision: String,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct ServerConfig {
     pub database_url: Option<String>,
     pub session_bindings: HashMap<String, ClientSessionBinding>,
@@ -43,6 +47,22 @@ pub struct ServerConfig {
     pub accepted_security_policy_revision: Option<String>,
     pub allowed_host: Option<String>,
     pub allowed_origin: Option<String>,
+    pub project_command_challenge_secret: Option<Vec<u8>>,
+}
+
+impl fmt::Debug for ServerConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ServerConfig")
+            .field(
+                "project_command_challenge_secret",
+                &self
+                    .project_command_challenge_secret
+                    .as_ref()
+                    .map(|_| "[REDACTED]"),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Clone)]
@@ -74,7 +94,17 @@ impl ServerState {
     }
 }
 
-type ApiError = (StatusCode, Json<contracts::StoryOSProblem>);
+struct ApiError(
+    StatusCode,
+    Box<(HeaderMap, Json<contracts::StoryOSProblem>)>,
+);
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let (headers, problem) = *self.1;
+        (self.0, headers, problem).into_response()
+    }
+}
 
 /// Build the protocol-only router used when no controlled Project store is configured.
 pub fn router() -> Router {
@@ -86,6 +116,7 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let protocol_method = method_filter(contracts::GET_PROTOCOL_PROFILE_METHOD);
     let project_method = method_filter(contracts::GET_PROJECT_METHOD);
     let chapter_method = method_filter(contracts::GET_CHAPTER_METHOD);
+    let challenge_method = method_filter(contracts::CREATE_PROJECT_COMMAND_CHALLENGE_METHOD);
     Router::new()
         .route(
             contracts::GET_PROTOCOL_PROFILE_PATH,
@@ -98,6 +129,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::GET_CHAPTER_PATH,
             routing::on(chapter_method, get_chapter),
+        )
+        .route(
+            contracts::CREATE_PROJECT_COMMAND_CHALLENGE_PATH,
+            routing::on(challenge_method, create_project_command_challenge),
         )
         .with_state(Arc::new(ServerState::new(config)))
 }
@@ -326,17 +361,103 @@ fn resource_unavailable() -> ApiError {
     )
 }
 
+fn invalid_request() -> ApiError {
+    problem(
+        StatusCode::BAD_REQUEST,
+        "invalid_request",
+        "The request is invalid.",
+    )
+}
+
+fn payload_too_large() -> ApiError {
+    problem(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "payload_too_large",
+        "The request exceeds the active Protocol Limit Profile.",
+    )
+}
+
+fn invalid_request_shape() -> ApiError {
+    problem(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_request_shape",
+        "The request does not match its closed schema.",
+    )
+}
+
+fn command_target_refused() -> ApiError {
+    problem(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "command_target_refused",
+        "The command target is not in the closed Release 1 contract.",
+    )
+}
+
+fn challenge_store_unavailable() -> ApiError {
+    problem(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "challenge_store_unavailable",
+        "The command challenge store is unavailable.",
+    )
+}
+
+fn challenge_error(error: ProjectCommandChallengeError) -> ApiError {
+    match error {
+        ProjectCommandChallengeError::BindingConflict => problem(
+            StatusCode::CONFLICT,
+            "idempotency_binding_conflict",
+            "The idempotency key is already bound to another command.",
+        ),
+        ProjectCommandChallengeError::InvalidOrExpired => problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "challenge_invalid",
+            "The command challenge is invalid or expired.",
+        ),
+        ProjectCommandChallengeError::RateLimited {
+            retry_after_seconds,
+        } => {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                header::RETRY_AFTER,
+                retry_after_seconds
+                    .to_string()
+                    .parse()
+                    .expect("retry seconds must be a valid header value"),
+            );
+            ApiError(
+                StatusCode::TOO_MANY_REQUESTS,
+                Box::new((
+                    headers,
+                    Json(contracts::StoryOSProblem {
+                        schema_id: "storyos.problem.v1".to_owned(),
+                        code: "challenge_rate_limited".to_owned(),
+                        message: "The command challenge rate limit is exceeded.".to_owned(),
+                    }),
+                )),
+            )
+        }
+        ProjectCommandChallengeError::Unavailable(_) => challenge_store_unavailable(),
+    }
+}
+
 fn problem(status: StatusCode, code: &str, message: &str) -> ApiError {
-    (
+    ApiError(
         status,
-        Json(contracts::StoryOSProblem {
-            schema_id: "storyos.problem.v1".to_owned(),
-            code: code.to_owned(),
-            message: message.to_owned(),
-        }),
+        Box::new((
+            HeaderMap::new(),
+            Json(contracts::StoryOSProblem {
+                schema_id: "storyos.problem.v1".to_owned(),
+                code: code.to_owned(),
+                message: message.to_owned(),
+            }),
+        )),
     )
 }
 
 #[cfg(test)]
 #[path = "client_session_binding_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "project_command_challenge_tests.rs"]
+mod project_command_challenge_tests;

@@ -995,7 +995,10 @@ name = "storyos-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "hmac",
+ "mime",
  "serde_json",
+ "sha2",
  "storyos-adapter-postgres",
  "storyos-application",
  "storyos-contracts",
