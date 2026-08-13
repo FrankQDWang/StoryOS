@@ -7,11 +7,11 @@ use storyos_application::{
 
 use super::*;
 
-const SESSION_BINDING_HMAC_PROFILE: &str =
+pub(super) const SESSION_BINDING_HMAC_PROFILE: &str =
     "storyos.project-command-challenge.session-binding.hmac-sha256.v1";
 const NONCE_HMAC_PROFILE: &str = "storyos.project-command-challenge.nonce.hmac-sha256.v1";
 
-fn validate_json_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
+pub(super) fn validate_json_content_type(headers: &HeaderMap) -> Result<(), ApiError> {
     let mut values = headers.get_all(header::CONTENT_TYPE).iter();
     let content_type = values
         .next()
@@ -172,7 +172,7 @@ pub(super) fn secret_digest(secret: &[u8], profile: &str, parts: &[Vec<u8>]) -> 
     hex_bytes(&digest.finalize().into_bytes())
 }
 
-fn plain_digest(value: &[u8]) -> String {
+pub(super) fn plain_digest(value: &[u8]) -> String {
     format!("sha256:{}", hex_bytes(&Sha256::digest(value)))
 }
 
@@ -203,7 +203,7 @@ fn canonical_digest(value: &contracts::DigestValue) -> String {
     )
 }
 
-fn valid_uuid_v7(value: &str) -> bool {
+pub(super) fn valid_uuid_v7(value: &str) -> bool {
     Uuid::parse_str(value)
         .is_ok_and(|uuid| uuid.get_version_num() == 7 && uuid.to_string() == value)
 }
