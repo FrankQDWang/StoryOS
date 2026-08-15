@@ -33,7 +33,9 @@ impl PostgresProjectReader {
         fault: AuthorEditFault,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
         match self.create_author_command_admission(command).await? {
-            AdmissionUse::ExistingSettlement => return Err(AuthorEditError::BindingConflict),
+            AdmissionUse::ExistingSettlement(receipt_id) => {
+                return self.read_author_edit_settlement(command, &receipt_id).await;
+            }
             AdmissionUse::Created => {}
         }
         if fault == AuthorEditFault::AfterAdmissionBeforeCore {
@@ -181,12 +183,12 @@ impl PostgresProjectReader {
             .await
             .map_err(author_edit_challenge_error)?;
         match challenge_use {
-            ProjectCommandChallengeUse::ExactRetrySettled { .. } => {
+            ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
                 transaction
                     .rollback()
                     .await
                     .map_err(author_edit_challenge_error)?;
-                Ok(AdmissionUse::ExistingSettlement)
+                Ok(AdmissionUse::ExistingSettlement(result_reference))
             }
             ProjectCommandChallengeUse::ExactRetryInProgress => {
                 transaction
@@ -331,7 +333,7 @@ impl PostgresProjectReader {
 
 enum AdmissionUse {
     Created,
-    ExistingSettlement,
+    ExistingSettlement(String),
 }
 
 pub(super) fn sha256_hex(bytes: &[u8]) -> String {

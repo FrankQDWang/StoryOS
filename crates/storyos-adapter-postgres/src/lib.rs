@@ -5,6 +5,7 @@
 mod tests;
 
 mod author_edit;
+mod author_edit_replay;
 mod author_edit_settlement;
 mod editor_session;
 
