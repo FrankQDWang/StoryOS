@@ -507,7 +507,7 @@ Steps, and browser events may be retained as bounded diagnostics but are not
 command semantics.
 
 One command per completed semantic intent is the conservative correctness
-boundary. Bounded idle coalescing occurs before admission issuance, when no
+boundary. Bounded idle coalescing occurs before Admission issuance, when no
 Command ID, Author Command Admission ID, issuance time, or expiry exists and
 the canonical command digest is not final. It therefore cannot compare a
 prospective Admission identity or lifetime.
@@ -529,13 +529,86 @@ undo group. Any difference or unverifiable input flushes the unit. Composition,
 paste, cut, drop, every structural primitive, and an explicit command are
 unconditional flush boundaries.
 
-A current Protocol Limit Profile supplies maximum idle time, intent count,
-operation count, and payload; absence of a proven bound falls back to one intent
-per command. Only after the combined body is final does the Server compute its
-canonical digest, resolve every section 3 binding, claim the idempotency record,
-consume the nonce record, and issue one Admission with `issued_at` and
-`expires_at`. No post-admission merge may change the body or digest. Browser
-history grouping is independent and never changes this commit boundary.
+Release 1 uses the operation-specific policy
+`storyos.author-edit-batch.release-1.v1`. Its inclusive ceilings are:
+
+| Bound | Ceiling |
+| --- | ---: |
+| idle gap between adjacent completed intents | 250 ms |
+| ordered `AuthorEditUnit` values in one command | 240 |
+| normalized primitives across the complete command | 240 |
+| encoded public JSON command body | 1 MiB under `storyos.foundation.absolute.v1` |
+
+These values are safety ceilings, not a batching target. The client may freeze
+earlier. It freezes immediately when a hard input boundary occurs, any shared
+binding differs, any comparison is unavailable, or adding the next intent
+would exceed a ceiling. The 240-unit value keeps the accepted sustained-input
+case reachable without requiring every command to contain 240 units. The 250 ms
+value affects only optional pre-Admission grouping and never delays a semantic
+hard boundary. Absence or mismatch of the policy falls back to one intent per
+command.
+
+For the Release 1 manual-input surface, each `AuthorEditUnit` contains exactly
+one `ReplaceSelection`. Unit order is the frozen group's contiguous
+`local_intent_sequence` order. Core evaluates the list from first to last
+against one transient working body. Each unit's UTF-16 coordinates are relative
+to the body produced by all preceding units in the same command. An invalid
+coordinate, unsupported unit, duplicate, omission, reorder, gap, or exceeded
+bound invalidates the complete command. Core never commits a valid prefix.
+
+Only after the final ordered request is frozen does the Server compute its
+canonical digest, resolve every Admission section 3 binding, claim the
+idempotency record, consume the nonce record, and issue one Admission with
+`issued_at` and `expires_at`. The digest covers the exact ordered unit list and
+all existing request fields. One challenge, nonce, idempotency record, and
+Admission bind the complete list. Any unit, order, selection, text, binding, or
+policy change creates a different command and cannot reuse the consumed
+challenge or immutable settlement. No post-Admission merge may change the body
+or digest. Browser history grouping is independent and never changes this
+commit boundary.
+
+Core validates the complete command boundary, current ownership facts,
+expected Heads, target, unit shapes, bounds, and ordered selections before it
+settles the result. It derives the final body in memory. One command receives
+one exhaustive result. An authoritative result writes exactly one resulting
+Authoritative Revision, Authoritative Commit, Forward Author Action, Domain
+Receipt, Project Activity event, and resulting Head transition for the final
+body in one transaction. No intermediate unit body becomes authority or a
+durable settlement. A final body equal to the initial body is one whole-command
+`NoEffect`. Refusal, conflict, validation failure, or transaction failure
+creates no partial unit settlement. Exact retry returns the same whole-command
+result and never reapplies a unit.
+
+The Web Local Edit Journal retains the complete one-to-one mapping between the
+group's contiguous ordered coverage and these units. The existing wire
+`completed_intent_record_id` and `local_intent_sequence` name the first covered
+record as the group anchor; they do not replace the complete local coverage.
+One Receipt settles the complete group. Each covered record refers to this same
+immutable settlement, and no record receives a partial Receipt. Pending Edit
+Projection applies every unsettled unit in frozen order from its durable
+checkpoint. It converges a committed group only after both the final canonical
+result and its Receipt-backed Project Activity position are observed.
+Per-record checkpoints and projection dependencies remain immutable evidence;
+settlement does not rewrite their source Snapshot, source Heads, payload
+digest, or local order. Normal-path active-base roll-forward uses only the
+final canonical result and never an intermediate unit body. A later group
+cannot be created until the current serialized group settles and the complete
+authorized `EditorBaseSnapshot` tuple is installed.
+
+The [Complete Bounded Manual Input and IME Semantics](https://github.com/FrankQDWang/StoryOS/issues/108)
+implementation may consume this batch policy only for Direct Author Action
+`ReplaceSelection` units from its accepted typing, deletion, selection,
+clipboard, and supported IME surface. It may implement the hard-flush rules,
+immutable group coverage, same-session second edit, and complete durable base
+roll-forward through the existing `getEditorSession`,
+`createProjectCommandChallenge`, and `applyAuthorEdit` operations. This policy
+does not authorize Proposal or mixed-ownership settlement,
+`RequiresReconfirmation`, acknowledgement-loss handling, reload, restart,
+recovery, writer or replay-generation change, Snapshot resync, late-result
+handling, or Local Edit Journal garbage collection. Those successor behaviors
+remain with [Reconcile Acknowledgement Loss without Duplicate Authority](https://github.com/FrankQDWang/StoryOS/issues/109),
+[Recover Settled and Unsettled Edits across Reload and Restart](https://github.com/FrankQDWang/StoryOS/issues/110),
+and [Fence Stale Writers and Resync across Replay Generations](https://github.com/FrankQDWang/StoryOS/issues/111).
 
 Core treats `observed_ownership_partition` as a stale-detection precondition,
 not a grant. At the first domain attempt it recomputes ownership from current
@@ -1549,10 +1622,13 @@ available.
     idempotency record, and recovery projection validates one exact Project
     Scope; no opaque ID, digest, or client assertion permits cross-scope access.
 16. The conservative Author Edit commit boundary is one completed semantic
-    intent; bounded idle coalescing is valid only before Admission issuance,
-    while every pre-issuance input that Admission section 3 will bind and every
-    #46 semantic field remain equal. The final body and digest receive one
-    Admission and are never merged afterward.
+    intent. `storyos.author-edit-batch.release-1.v1` permits at most 240 ordered
+    units, 240 normalized primitives, a 250 ms adjacent-intent idle gap, and the
+    active 1 MiB public command-body ceiling before Admission. Every shared
+    Admission and Author Edit semantic field must remain equal. Core evaluates
+    the immutable units in order against one transient body and settles the
+    complete list atomically as one result. The final body and digest receive
+    one Admission; no intermediate unit or later merge can create a partial effect.
 17. Every first domain attempt settles through its owning typed Receipt; only
     the exhaustive result variant allocates the Commit, Author Action, Draft, or
     Proposal condition named by its matrix.
