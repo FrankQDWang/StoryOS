@@ -4,6 +4,8 @@
 #[path = "project_command_challenge_tests.rs"]
 mod tests;
 
+mod author_edit;
+mod author_edit_settlement;
 mod editor_session;
 
 use storyos_application::{
@@ -265,6 +267,19 @@ impl ProjectCommandChallengeTransaction for PostgresProjectCommandTransaction {
 }
 
 impl PostgresProjectReader {
+    async fn begin_serializable_project_command_transaction(
+        &self,
+        scope: &ProjectScope,
+    ) -> Result<PostgresProjectCommandTransaction, ProjectCommandChallengeError> {
+        let client = self.connect_challenge().await?;
+        client
+            .batch_execute("BEGIN ISOLATION LEVEL SERIALIZABLE")
+            .await
+            .map_err(challenge_error)?;
+        set_challenge_scope_on_client(&client, scope).await?;
+        Ok(PostgresProjectCommandTransaction { client })
+    }
+
     pub async fn begin_project_command_transaction(
         &self,
         scope: &ProjectScope,
