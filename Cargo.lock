@@ -967,8 +967,10 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 name = "storyos-adapter-postgres"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "sha2",
  "storyos-application",
+ "storyos-core",
  "tokio",
  "tokio-postgres",
 ]
@@ -977,6 +979,8 @@ dependencies = [
 name = "storyos-application"
 version = "0.1.0"
 dependencies = [
+ "sha2",
+ "storyos-core",
  "tokio",
 ]
 
@@ -992,6 +996,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "storyos-core"
+version = "0.1.0"
+
+[[package]]
 name = "storyos-server"
 version = "0.1.0"
 dependencies = [
@@ -1003,6 +1011,7 @@ dependencies = [
  "storyos-adapter-postgres",
  "storyos-application",
  "storyos-contracts",
+ "storyos-core",
  "tokio",
  "tower",
  "url",

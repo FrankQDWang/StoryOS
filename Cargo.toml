@@ -3,6 +3,7 @@ members = [
   "crates/storyos-adapter-postgres",
   "crates/storyos-application",
   "crates/storyos-contracts",
+  "crates/storyos-core",
   "crates/storyos-server",
 ]
 resolver = "3"
