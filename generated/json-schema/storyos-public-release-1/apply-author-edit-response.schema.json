@@ -1,0 +1,371 @@
+{
+  "$defs": {
+    "ApplyAuthorEditEffect": {
+      "oneOf": [
+        {
+          "properties": {
+            "author_action_sequence": {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            "authoritative_commit_id": {
+              "type": "string"
+            },
+            "authoritative_revision": {
+              "$ref": "#/$defs/AuthoritativeChapterRevision"
+            },
+            "kind": {
+              "const": "authoritative_applied",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "authoritative_revision",
+            "authoritative_commit_id",
+            "author_action_sequence",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/NoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "current_authoritative_revision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AuthorEditConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "current_authoritative_revision_id",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AuthorEditRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "project_activity_position"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AuthorEditConflictReason": {
+      "enum": [
+        "stale_authoritative_head",
+        "proposal_head_present",
+        "ownership_changed"
+      ],
+      "type": "string"
+    },
+    "AuthorEditRefusalReason": {
+      "enum": [
+        "unsupported_intent_shape",
+        "invalid_selection",
+        "target_mismatch"
+      ],
+      "type": "string"
+    },
+    "AuthoritativeChapterRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "type": "string"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision_id",
+        "body"
+      ],
+      "type": "object"
+    },
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "DomainReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_lifecycle_event_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "author_action_sequence": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "authoritative_commit_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "command_kind": {
+          "$ref": "#/$defs/DomainReceiptCommandKind"
+        },
+        "condition_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "draft_artifact_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "expected_heads": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "prior_heads": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "producer_cause": {
+          "$ref": "#/$defs/DomainReceiptProducerCause"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "proposal_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/DomainReceiptResult"
+        },
+        "resulting_heads": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "project_scope",
+        "command_kind",
+        "command_digest",
+        "idempotency_key",
+        "producer_cause",
+        "author_command_admission_id",
+        "expected_heads",
+        "prior_heads",
+        "resulting_heads",
+        "authoritative_revision_ids",
+        "proposal_revision_ids",
+        "authoritative_commit_ids",
+        "author_action_sequence",
+        "draft_artifact_refs",
+        "artifact_lifecycle_event_refs",
+        "condition_refs",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "DomainReceiptCommandKind": {
+      "enum": [
+        "applyAuthorEdit"
+      ],
+      "type": "string"
+    },
+    "DomainReceiptProducerCause": {
+      "enum": [
+        "author_command_admission"
+      ],
+      "type": "string"
+    },
+    "DomainReceiptResult": {
+      "enum": [
+        "authoritative_applied",
+        "no_effect",
+        "conflicted",
+        "refused"
+      ],
+      "type": "string"
+    },
+    "NoEffectReason": {
+      "enum": [
+        "content_unchanged"
+      ],
+      "type": "string"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.apply-author-edit.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_command_admission_id": {
+      "type": "string"
+    },
+    "command_id": {
+      "type": "string"
+    },
+    "completed_intent_record_id": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "#/$defs/ApplyAuthorEditEffect"
+    },
+    "local_intent_sequence": {
+      "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "receipt": {
+      "$ref": "#/$defs/DomainReceipt"
+    },
+    "schema_id": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "command_id",
+    "author_command_admission_id",
+    "receipt",
+    "effect",
+    "completed_intent_record_id",
+    "local_intent_sequence"
+  ],
+  "title": "StoryOS Apply Author Edit Response",
+  "type": "object"
+}

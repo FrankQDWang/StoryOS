@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:b917b952f5e5544898bb18c1c5f44720e9d2a1481c8284cd2d405930fd5e0521",
+  "corpus_digest": "sha256:e3b298dab867005f06b9275582e496445983a043316913e71aee35a659795db0",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -20,7 +20,10 @@
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
       "generated/golden-wire/storyos-public-release-1/get-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/get-editor-session.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/apply-author-edit.json",
+      "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json"
     ]
   },
   "fixtures": [
@@ -131,6 +134,24 @@
       "fixture_id": "storyos.golden.getEditorSession.boundary.v1",
       "operation_id": "getEditorSession",
       "path": "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.applyAuthorEdit.positive.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.applyAuthorEdit.invalid.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.applyAuthorEdit.boundary.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

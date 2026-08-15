@@ -37,6 +37,14 @@ fn controlled_project_queries_are_generated_from_the_release_1_contract() {
     assert!(client.contains("export async function createEditorSession"));
     assert!(client.contains("export async function getEditorSession"));
     assert!(client.contains("x-storyos-anti-forgery"));
+    assert_eq!(
+        openapi.contains("operationId: applyAuthorEdit"),
+        crate::release1_author_edit_artifacts::IS_IMPLEMENTED
+    );
+    assert_eq!(
+        client.contains("export async function applyAuthorEdit"),
+        crate::release1_author_edit_artifacts::IS_IMPLEMENTED
+    );
 }
 
 #[test]
@@ -78,21 +86,25 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         );
         resolved_references.insert(relative);
     }
+    let mut expected_references = vec![
+        RESPONSE_SCHEMA_PATH,
+        PROJECT_RESPONSE_SCHEMA_PATH,
+        CHAPTER_RESPONSE_SCHEMA_PATH,
+        CHALLENGE_REQUEST_SCHEMA_PATH,
+        CHALLENGE_RESPONSE_SCHEMA_PATH,
+        super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
+        super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
+        super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
+    ];
+    if crate::release1_author_edit_artifacts::IS_IMPLEMENTED {
+        expected_references.extend([
+            crate::release1_author_edit_artifacts::REQUEST_SCHEMA_PATH,
+            crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH,
+        ]);
+    }
     assert_eq!(
         resolved_references,
-        [
-            RESPONSE_SCHEMA_PATH,
-            PROJECT_RESPONSE_SCHEMA_PATH,
-            CHAPTER_RESPONSE_SCHEMA_PATH,
-            CHALLENGE_REQUEST_SCHEMA_PATH,
-            CHALLENGE_RESPONSE_SCHEMA_PATH,
-            super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-            super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-            super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-        ]
-        .map(str::to_owned)
-        .into_iter()
-        .collect()
+        expected_references.into_iter().map(str::to_owned).collect()
     );
 }
 
@@ -103,6 +115,63 @@ fn fixture_digest_uses_the_declared_self_normalization() {
     let mut normalized = profile;
     normalized.release_identity.fixture_corpus_digest = FIXTURE_DIGEST_PLACEHOLDER.to_owned();
     assert_eq!(sha256_prefixed(fixture_corpus_bytes(&normalized)), expected);
+}
+
+#[test]
+fn author_edit_receipt_is_complete_and_no_effect_has_no_allocations() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let schema: serde_json::Value = serde_json::from_slice(
+        &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
+    )
+    .expect("response schema must be JSON");
+    assert_eq!(
+        schema["$defs"]["DomainReceipt"]["required"],
+        serde_json::json!([
+            "receipt_id",
+            "project_scope",
+            "command_kind",
+            "command_digest",
+            "idempotency_key",
+            "producer_cause",
+            "author_command_admission_id",
+            "expected_heads",
+            "prior_heads",
+            "resulting_heads",
+            "authoritative_revision_ids",
+            "proposal_revision_ids",
+            "authoritative_commit_ids",
+            "author_action_sequence",
+            "draft_artifact_refs",
+            "artifact_lifecycle_event_refs",
+            "condition_refs",
+            "result",
+            "created_at"
+        ])
+    );
+    for outcome in schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+        .as_array()
+        .expect("Author Edit outcomes are a union")
+        .iter()
+        .skip(1)
+    {
+        assert!(
+            outcome["required"]
+                .as_array()
+                .expect("outcome required fields are an array")
+                .contains(&serde_json::json!("project_activity_position"))
+        );
+        assert_eq!(
+            outcome["properties"]["project_activity_position"]["type"],
+            "string"
+        );
+        assert!(
+            outcome["properties"]["project_activity_position"]["pattern"]
+                .as_str()
+                .is_some()
+        );
+    }
 }
 #[test]
 fn changed_review_catalog_contract_is_rejected() {

@@ -11,10 +11,10 @@
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-13-v8",
+      "revision": "stage1-ticketed-delivery-2026-08-13-v9",
       "baseline_commit": "a62fb29875b8b507b525c98544cfef5eba8bf8db",
       "baseline_tree": "41d3b3e24cf76db136df09d82d383d73e2de9ca1",
-      "ticket_set_sha256": "sha256:9d39bc70b36e450c107344c0237a391aaec80ff2b2c635e3dc94efd9e7326ffb",
+      "ticket_set_sha256": "sha256:77912f32ed0789c84d1d02ef5988ea168c59380a3ec71722c4653eab49597b9a",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -309,7 +309,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/107",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Settle One Direct Author Edit into an Authoritative Revision",
-          "issue_body_sha256": "ad51e51c15c8ae5f6c3d0c8b5a7ce88b3400aa2057a8a6021ca7b5b372ac7ea3",
+          "issue_body_sha256": "755e6d56422445da42ce4ab904f1c2894e5ab1552e67f52497ba74fd07bf3b77",
           "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/106",
           "evidence_role": "planned-runtime-evidence",
           "responsibility": "settle one Direct Author Action as an authoritative Revision",
