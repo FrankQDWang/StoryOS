@@ -20,7 +20,8 @@ const chromeExecutable = chromeCandidates.find(existsSync);
 
 const harness = `<!doctype html>
 <html><body data-result="running"><script type="module">
-import { openEditorWorkspace, persistReplaceSelection, rebuildPendingProjection }
+import { openEditorWorkspace, persistReplaceSelection, rebuildPendingProjection,
+  submitOnePendingAuthorEdit }
   from "/apps/web/src/editor-session.mjs";
 
 const assert = {
@@ -73,19 +74,83 @@ const session = {
     created_at: "2026-08-13T08:00:00.000Z" }
 };
 const requestPaths = [];
+const authorEditRequests = [];
+const challengeRequests = [];
+let failAuthorEditChallenge = sessionStorage.getItem("storyos-browser-reload") === "pending";
+let corruptAuthorEditAcknowledgement = failAuthorEditChallenge;
+let authorEditDigest;
 const jsonResponse = (body) => new Response(JSON.stringify(body), {
   status: 200, headers: { "content-type": "application/json" },
 });
-const fetchImpl = async (url) => {
+const fetchImpl = async (url, options = {}) => {
   const path = new URL(url).pathname;
   requestPaths.push(path);
-  if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({
-    nonce: "a".repeat(64), expires_at: "2026-08-13T08:05:00.000Z",
-    limit_profile_revision: "storyos.foundation.absolute.v1",
-  });
+  if (path.endsWith("/anti-forgery-challenges")) {
+    const request = JSON.parse(options.body);
+    challengeRequests.push(request);
+    if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
+      authorEditDigest = request.canonical_command_digest;
+      if (failAuthorEditChallenge) {
+        failAuthorEditChallenge = false;
+        throw new Error("simulated pre-send challenge failure");
+      }
+    }
+    return jsonResponse({ nonce: "a".repeat(64), expires_at: "2026-08-13T08:05:00.000Z",
+      limit_profile_revision: "storyos.foundation.absolute.v1" });
+  }
   if (path.endsWith("/editor-sessions")) return jsonResponse(session);
   if (path.endsWith("/editor-sessions/" + SESSION)) return jsonResponse({
     ...session, schema_id: "storyos.query.editor-session.response.v1",
+  });
+  if (path.endsWith("/manuscript/author-edits")) {
+    const request = JSON.parse(options.body);
+    authorEditRequests.push({
+      body: options.body,
+      idempotencyKey: options.headers["idempotency-key"],
+    });
+    const responseDigest = corruptAuthorEditAcknowledgement
+      ? { ...authorEditDigest, value_hex_lowercase: "0".repeat(64) }
+      : authorEditDigest;
+    corruptAuthorEditAcknowledgement = false;
+    return jsonResponse({
+      schema_id: "storyos.command.apply-author-edit.response.v1",
+      correlation_id: request.correlation_id,
+      project_scope: project.project_scope,
+      command_id: "018f0000-0000-7001-8000-000000000031",
+      author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+      receipt: {
+        receipt_id: "018f0000-0000-7001-8000-000000000033",
+        project_scope: project.project_scope, command_kind: "applyAuthorEdit",
+        command_digest: responseDigest,
+        idempotency_key: options.headers["idempotency-key"],
+        producer_cause: "author_command_admission",
+        author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+        expected_heads: [REVISION], prior_heads: [REVISION],
+        resulting_heads: ["018f0000-0000-7001-8000-000000000034"],
+        authoritative_revision_ids: ["018f0000-0000-7001-8000-000000000034"],
+        proposal_revision_ids: [],
+        authoritative_commit_ids: ["018f0000-0000-7001-8000-000000000035"],
+        author_action_sequence: "1", draft_artifact_refs: [],
+        artifact_lifecycle_event_refs: [], condition_refs: [],
+        result: "authoritative_applied", created_at: "2026-08-15T08:00:00.000Z",
+      },
+      effect: { kind: "authoritative_applied",
+        authoritative_revision: { revision_id: "018f0000-0000-7001-8000-000000000034",
+          body: "Base!" },
+        authoritative_commit_id: "018f0000-0000-7001-8000-000000000035",
+        author_action_sequence: "1", project_activity_position: "1" },
+      completed_intent_record_id: request.completed_intent_record_id,
+      local_intent_sequence: request.local_intent_sequence,
+    });
+  }
+  if (path.endsWith("/chapters/" + CHAPTER)) return jsonResponse({
+    schema_id: "storyos.query.chapter.response.v1",
+    correlation_id: "018f0000-0000-7001-8000-000000000036",
+    project_scope: project.project_scope,
+    project_activity_position: "1",
+    chapter: { chapter_id: CHAPTER, title: "Chapter",
+      current_revision: { revision_id: "018f0000-0000-7001-8000-000000000034",
+        body: "Base!" } },
   });
   throw new Error("Unexpected request: " + path);
 };
@@ -138,6 +203,24 @@ async function run() {
     unsettled_intent_count: 1, authoritative_revision_id: REVISION });
   assert.equal(await intentCount(workspace.database), 1);
   assert.deepEqual(requestPaths, ["/api/v1/projects/" + PROJECT + "/editor-sessions/" + SESSION]);
+
+  await assert.rejects(submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
+    fetchImpl, cryptoImpl: crypto }), /simulated pre-send challenge failure/);
+  await assert.rejects(submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
+    fetchImpl, cryptoImpl: crypto }), /acknowledgement does not converge/);
+  const settled = await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
+    fetchImpl, cryptoImpl: crypto });
+  assert.deepEqual(settled, { body: "Base!", save_state: "saved",
+    unsettled_intent_count: 0,
+    authoritative_revision_id: "018f0000-0000-7001-8000-000000000034" });
+  assert.equal(authorEditRequests.length, 2);
+  const editChallenges = challengeRequests.filter((request) =>
+    request.command_schema === "storyos.command.apply-author-edit.request.v1");
+  assert.equal(editChallenges.length, 3);
+  assert.equal(editChallenges[0].idempotency_key, editChallenges[1].idempotency_key);
+  assert.equal(editChallenges[1].idempotency_key, editChallenges[2].idempotency_key);
+  assert.deepEqual(editChallenges[0].canonical_command_digest,
+    editChallenges[1].canonical_command_digest);
 
   await assert.rejects(persistReplaceSelection(workspace, {
     from: 5, to: 5, text: "?", resultingBody: "x".repeat(1048577),
@@ -209,12 +292,15 @@ async function waitForHarness(browserWebSocketUrl, harnessUrl) {
   const { port } = new URL(browserWebSocketUrl);
   const target = await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(harnessUrl)}`, {
     method: "PUT",
+    signal: AbortSignal.timeout(5_000),
   }).then((response) => response.json());
   const socket = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => {
+  await Promise.race([new Promise((resolve, reject) => {
     socket.addEventListener("open", resolve, { once: true });
     socket.addEventListener("error", reject, { once: true });
-  });
+  }), new Promise((_, reject) => setTimeout(
+    () => reject(new Error("Chrome DevTools WebSocket timed out")), 5_000,
+  ))]);
   let commandId = 0;
   const pending = new Map();
   socket.addEventListener("message", (event) => {
@@ -227,7 +313,21 @@ async function waitForHarness(browserWebSocketUrl, harnessUrl) {
   });
   const command = (method, params = {}) => new Promise((resolve, reject) => {
     commandId += 1;
-    pending.set(commandId, { resolve, reject });
+    const id = commandId;
+    const timeout = setTimeout(() => {
+      pending.delete(id);
+      reject(new Error(`Chrome DevTools command timed out: ${method}`));
+    }, 5_000);
+    pending.set(id, {
+      resolve(value) {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      reject(error) {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    });
     socket.send(JSON.stringify({ id: commandId, method, params }));
   });
   await command("Runtime.enable");
@@ -281,7 +381,7 @@ async function startBrowser() {
   throw lastError;
 }
 
-test("a real browser reload rebuilds one durable pending intent from IndexedDB", {
+test("a real browser reload submits one frozen Author Edit and settles its Receipt", {
   skip: chromeExecutable ? false : "Chrome or Chromium is unavailable",
   timeout: 60_000,
 }, async () => {
