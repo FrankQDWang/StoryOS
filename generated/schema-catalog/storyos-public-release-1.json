@@ -5,7 +5,8 @@
     "getChapter",
     "createProjectCommandChallenge",
     "createEditorSession",
-    "getEditorSession"
+    "getEditorSession",
+    "applyAuthorEdit"
   ],
   "public_protocol_release": "storyos.public.release.1",
   "schema_id": "storyos.schema-catalog.v1",
@@ -38,7 +39,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/chapter-response.schema.json",
       "schema_id": "storyos.query.chapter.response.v1",
-      "sha256": "sha256:21254ff709b655cebc8e0e9d2af4fb4d723f4a76a7dde7a47cb246e182190afd"
+      "sha256": "sha256:2b112862e0a580d6a97b4602152fb84655f52cd13bebe98e51b3dfdf123f16f3"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/project-command-challenge-request.schema.json",

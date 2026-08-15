@@ -17,10 +17,12 @@ use storyos_application::{
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod author_edit;
 mod editor_session;
 mod project_command_challenge;
 mod request_origin;
 
+use author_edit::apply_author_edit;
 use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
@@ -121,6 +123,7 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let challenge_method = method_filter(contracts::CREATE_PROJECT_COMMAND_CHALLENGE_METHOD);
     let create_editor_method = method_filter(contracts::CREATE_EDITOR_SESSION_METHOD);
     let get_editor_method = method_filter(contracts::GET_EDITOR_SESSION_METHOD);
+    let apply_author_edit_method = method_filter(contracts::APPLY_AUTHOR_EDIT_METHOD);
     Router::new()
         .route(
             contracts::GET_PROTOCOL_PROFILE_PATH,
@@ -145,6 +148,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::GET_EDITOR_SESSION_PATH,
             routing::on(get_editor_method, get_editor_session),
+        )
+        .route(
+            contracts::APPLY_AUTHOR_EDIT_PATH,
+            routing::on(apply_author_edit_method, apply_author_edit),
         )
         .with_state(Arc::new(ServerState::new(config)))
 }
@@ -212,6 +219,7 @@ async fn get_chapter(
         schema_id: "storyos.query.chapter.response.v1".to_owned(),
         correlation_id: Uuid::now_v7().to_string(),
         project_scope: contract_scope(&scope),
+        project_activity_position: chapter.project_activity_position.to_string(),
         chapter: contracts::CurrentChapter {
             chapter_id: chapter.chapter_id.as_ref().to_owned(),
             title: chapter.title,

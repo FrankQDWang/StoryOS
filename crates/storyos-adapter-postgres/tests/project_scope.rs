@@ -52,6 +52,7 @@ async fn two_users_and_projects_are_isolated_at_application_and_rls_boundaries()
             title: "Chapter A".to_owned(),
             revision_id: RevisionId::new(REVISION_A),
             body: "Authoritative A".to_owned(),
+            project_activity_position: 0,
         })
     );
     assert_eq!(

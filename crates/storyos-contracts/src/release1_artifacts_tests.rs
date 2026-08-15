@@ -172,6 +172,11 @@ fn author_edit_receipt_is_complete_and_no_effect_has_no_allocations() {
                 .is_some()
         );
     }
+    assert!(
+        generated[CHAPTER_RESPONSE_SCHEMA_PATH]
+            .windows(b"project_activity_position".len())
+            .any(|window| window == b"project_activity_position")
+    );
 }
 #[test]
 fn changed_review_catalog_contract_is_rejected() {

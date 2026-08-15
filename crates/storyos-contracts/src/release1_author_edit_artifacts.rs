@@ -20,8 +20,8 @@ pub(super) const FIXTURE_PATHS: [&str; 3] = [
     "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json",
 ];
 
-// This becomes true only in the layer that adds the public Server route.
-pub(super) const IS_IMPLEMENTED: bool = false;
+// This is true only in the layer that adds the public Server route.
+pub(super) const IS_IMPLEMENTED: bool = true;
 
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema_bytes::<ApplyAuthorEditRequest>(

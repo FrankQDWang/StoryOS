@@ -63,6 +63,9 @@
     "correlation_id": {
       "type": "string"
     },
+    "project_activity_position": {
+      "type": "string"
+    },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
     },
@@ -74,6 +77,7 @@
     "schema_id",
     "correlation_id",
     "project_scope",
+    "project_activity_position",
     "chapter"
   ],
   "title": "StoryOS Chapter Query Response",

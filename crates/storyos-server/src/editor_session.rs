@@ -13,7 +13,7 @@ use super::project_command_challenge::{
 };
 use super::*;
 
-fn session_binding_ref(secret: &[u8], session_handle: &str) -> String {
+pub(super) fn session_binding_ref(secret: &[u8], session_handle: &str) -> String {
     secret_digest(
         secret,
         SESSION_BINDING_HMAC_PROFILE,
@@ -187,7 +187,7 @@ pub(super) async fn get_editor_session(
     }))
 }
 
-fn exact_header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, ApiError> {
+pub(super) fn exact_header<'a>(headers: &'a HeaderMap, name: &str) -> Result<&'a str, ApiError> {
     let mut values = headers.get_all(name).iter();
     let value = values
         .next()

@@ -416,6 +416,7 @@ pub struct GetChapterResponse {
     pub schema_id: String,
     pub correlation_id: String,
     pub project_scope: ProjectScope,
+    pub project_activity_position: String,
     pub chapter: CurrentChapter,
 }
 
