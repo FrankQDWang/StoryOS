@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import {
-  createEditorSession, createProjectCommandChallenge, digestCreateEditorSession,
-  getChapter, getEditorSession, getProject,
+  applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
+  digestCreateEditorSession, getChapter, getEditorSession, getProject,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { runStoryOSWeb } from "../src/app.mjs";
 
@@ -284,7 +284,7 @@ test("Project command challenges bind Origin, Scope, nonce, and idempotency on r
   }
 });
 
-test("concurrent Editor Sessions have one current writer and exact retries return one result", async () => {
+test("one current writer settles one Author Edit and exact retries return one result", async () => {
   const { baseUrl, server } = await startRealServer();
   const requests = [20, 21].map((suffix) => ({
     command_schema: "storyos.command.create-editor-session.request.v1",
@@ -369,6 +369,177 @@ test("concurrent Editor Sessions have one current writer and exact retries retur
       idempotencyKey: keys[currentIndex], antiForgery: challenges[currentIndex].nonce,
       fetchImpl: browserFetch(baseUrl, "session-a"),
     }), (error) => error.status === 422);
+
+    const currentSession = sessions[currentIndex];
+    const authorEditRequest = {
+      command_schema: "storyos.command.apply-author-edit.request.v1",
+      client_contract_revision: "storyos.web-client.release-1.v1",
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: "018f0000-0000-7001-8000-000000000024",
+      editor_session_id: currentSession.editor_session.editor_session_id,
+      writer_generation: currentSession.writer.writer_generation,
+      chapter_id: currentSession.base_snapshot.chapter_id,
+      expected_authoritative_revision_id:
+        currentSession.base_snapshot.authoritative_head_revision_id,
+      expected_proposal_head_revision_ids:
+        currentSession.base_snapshot.proposal_head_revision_ids,
+      target_refs: currentSession.base_snapshot.target_refs,
+      observed_ownership_partition:
+        currentSession.base_snapshot.observed_ownership_partition,
+      editor_contract_revision: "storyos.editor-contract.release-1.v1",
+      undo_group_id: "018f0000-0000-7001-8000-000000000025",
+      completed_intent_record_id: "018f0000-0000-7001-8000-000000000026",
+      local_intent_sequence: "1",
+      author_edit_units: [{
+        normalized_primitives: [{ kind: "replace_selection", from: 15, to: 15, text: "!" }],
+        selection_snapshot: {
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 15, to: 15,
+        },
+      }],
+    };
+    const authorEditKey = "018f0000-0000-7001-8000-000000000027";
+    const authorEditChallenge = await createProjectCommandChallenge({
+      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+        command_schema: authorEditRequest.command_schema,
+        canonical_command_digest: await digestApplyAuthorEdit(authorEditRequest),
+        idempotency_key: authorEditKey,
+      },
+    });
+    const authorEditUrl = new URL(
+      `/api/v1/projects/${PROJECT_A}/manuscript/author-edits`, baseUrl,
+    );
+    const refererOnlyAuthorEdit = await fetch(authorEditUrl, {
+      method: "POST",
+      headers: {
+        referer: `${baseUrl}/projects/${PROJECT_A}`,
+        cookie: "storyos_session=session-a",
+        "content-type": "application/json",
+        "idempotency-key": authorEditKey,
+        "x-storyos-anti-forgery": authorEditChallenge.nonce,
+      },
+      body: JSON.stringify(authorEditRequest),
+    });
+    assert.equal(refererOnlyAuthorEdit.status, 403);
+    const authorEditOptions = {
+      baseUrl,
+      projectId: PROJECT_A,
+      request: authorEditRequest,
+      idempotencyKey: authorEditKey,
+      antiForgery: authorEditChallenge.nonce,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    };
+    const settlement = await applyAuthorEdit(authorEditOptions);
+    assert.equal(settlement.receipt.result, "authoritative_applied");
+    assert.equal(settlement.effect.kind, "authoritative_applied");
+    assert.equal(settlement.effect.authoritative_revision.body, "Authoritative A!");
+    assert.equal(settlement.completed_intent_record_id,
+      authorEditRequest.completed_intent_record_id);
+    assert.deepEqual(await applyAuthorEdit(authorEditOptions), settlement);
+
+    const outcomeRequests = [
+      {
+        expected: "conflicted",
+        request: {
+          ...authorEditRequest,
+          correlation_id: "018f0000-0000-7001-8000-000000000040",
+          undo_group_id: "018f0000-0000-7001-8000-000000000041",
+          completed_intent_record_id: "018f0000-0000-7001-8000-000000000042",
+          local_intent_sequence: "2",
+        },
+      },
+      {
+        expected: "no_effect",
+        request: {
+          ...authorEditRequest,
+          correlation_id: "018f0000-0000-7001-8000-000000000043",
+          expected_authoritative_revision_id: settlement.effect.authoritative_revision.revision_id,
+          undo_group_id: "018f0000-0000-7001-8000-000000000044",
+          completed_intent_record_id: "018f0000-0000-7001-8000-000000000045",
+          local_intent_sequence: "3",
+          author_edit_units: [{
+            normalized_primitives: [{ kind: "replace_selection", from: 16, to: 16, text: "" }],
+            selection_snapshot: {
+              coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 16, to: 16,
+            },
+          }],
+        },
+      },
+      {
+        expected: "refused",
+        request: {
+          ...authorEditRequest,
+          correlation_id: "018f0000-0000-7001-8000-000000000046",
+          expected_authoritative_revision_id: settlement.effect.authoritative_revision.revision_id,
+          undo_group_id: "018f0000-0000-7001-8000-000000000047",
+          completed_intent_record_id: "018f0000-0000-7001-8000-000000000048",
+          local_intent_sequence: "4",
+          author_edit_units: [{
+            normalized_primitives: [{ kind: "replace_selection", from: 16, to: 16, text: "?" }],
+            selection_snapshot: {
+              coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 16, to: 15,
+            },
+          }],
+        },
+      },
+    ];
+    for (const [index, outcome] of outcomeRequests.entries()) {
+      const idempotencyKey = `018f0000-0000-7001-8000-00000000005${index}`;
+      const challenge = await createProjectCommandChallenge({
+        baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+        request: {
+          method: "POST",
+          route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+          command_schema: outcome.request.command_schema,
+          canonical_command_digest: await digestApplyAuthorEdit(outcome.request),
+          idempotency_key: idempotencyKey,
+        },
+      });
+      const result = await applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request: outcome.request, idempotencyKey,
+        antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+      });
+      assert.equal(result.receipt.result, outcome.expected);
+      assert.equal(result.effect.kind, outcome.expected);
+      assert.deepEqual(result.receipt.authoritative_revision_ids, []);
+      assert.deepEqual(result.receipt.authoritative_commit_ids, []);
+      assert.equal(result.receipt.author_action_sequence, null);
+      assert.match(result.effect.project_activity_position, /^[1-9][0-9]*$/);
+    }
+
+    const staleSession = sessions.find((session) => session.writer.kind === "read_only");
+    const staleRequest = {
+      ...authorEditRequest,
+      correlation_id: "018f0000-0000-7001-8000-000000000060",
+      editor_session_id: staleSession.editor_session.editor_session_id,
+      writer_generation: staleSession.writer.observed_writer_generation,
+      undo_group_id: "018f0000-0000-7001-8000-000000000061",
+      completed_intent_record_id: "018f0000-0000-7001-8000-000000000062",
+      local_intent_sequence: "5",
+    };
+    const staleKey = "018f0000-0000-7001-8000-000000000063";
+    const staleChallenge = await createProjectCommandChallenge({
+      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+        command_schema: staleRequest.command_schema,
+        canonical_command_digest: await digestApplyAuthorEdit(staleRequest),
+        idempotency_key: staleKey,
+      },
+    });
+    await assert.rejects(applyAuthorEdit({
+      baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
+      antiForgery: "0".repeat(64), fetchImpl: browserFetch(baseUrl, "session-a"),
+    }), (error) => error.status === 422
+      && JSON.parse(error.responseBody).code === "challenge_invalid");
+    await assert.rejects(applyAuthorEdit({
+      baseUrl, projectId: PROJECT_A, request: staleRequest, idempotencyKey: staleKey,
+      antiForgery: staleChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    }), (error) => error.status === 412
+      && JSON.parse(error.responseBody).code === "editor_writer_stale");
   } finally {
     await stopRealServer(server);
   }
