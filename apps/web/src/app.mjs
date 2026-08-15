@@ -1,9 +1,9 @@
 import { openControlledProject } from "./boot.mjs";
-import { persistReplaceSelection } from "./editor-session.mjs";
+import { persistReplaceSelection, submitOnePendingAuthorEdit } from "./editor-session.mjs";
 
 const PROJECT_PATH = /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
 
-function render(documentImpl, root, state) {
+function render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl }) {
   const element = (tag, text) => {
     const node = documentImpl.createElement(tag);
     node.textContent = text;
@@ -45,6 +45,14 @@ function render(documentImpl, root, state) {
           state.editor.pending = pending;
           saveState.textContent = pending.save_state;
           saveState.dataset.saveState = pending.save_state;
+          const settled = await submitOnePendingAuthorEdit({
+            workspace: state.editor, baseUrl, fetchImpl, cryptoImpl,
+          });
+          durableBody = settled.body;
+          state.editor.pending = settled;
+          editor.readOnly = true;
+          saveState.textContent = settled.save_state;
+          saveState.dataset.saveState = settled.save_state;
         }).catch(() => {
           editor.readOnly = true;
           saveState.textContent = "needs_attention";
@@ -91,6 +99,6 @@ export async function runStoryOSWeb({
         heading: "StoryOS 无法打开项目",
         message: "项目地址缺少有效的受控项目身份。",
       };
-  render(documentImpl, root, state);
+  render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl });
   return state;
 }

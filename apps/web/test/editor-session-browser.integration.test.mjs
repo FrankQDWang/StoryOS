@@ -49,6 +49,7 @@ const SESSION = "018f0000-0000-7001-8000-000000000021";
 const project = { project_scope: { owner_user_id: OWNER, project_id: PROJECT },
   project: { project_id: PROJECT, current_chapter_id: CHAPTER } };
 const chapter = { project_scope: project.project_scope,
+  project_activity_position: "0",
   chapter: { chapter_id: CHAPTER, current_revision: { revision_id: REVISION, body: "Base" } } };
 const profile = { limit_profile_revision: "storyos.foundation.absolute.v1",
   max_json_string_utf8_bytes: 1048576,
@@ -292,6 +293,7 @@ test("a real browser reload rebuilds one durable pending intent from IndexedDB",
     }
     const pathname = new URL(request.url, "http://storyos.test").pathname;
     const allowed = pathname === "/apps/web/src/editor-session.mjs"
+      || pathname === "/apps/web/src/author-edit-submission.mjs"
       || pathname === "/generated/typescript/storyos-public-release-1/client.mjs";
     if (!allowed) {
       response.writeHead(404).end();
