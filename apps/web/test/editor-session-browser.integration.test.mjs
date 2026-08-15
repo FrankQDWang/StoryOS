@@ -195,9 +195,11 @@ function devToolsAddress(browser) {
         resolve(match[1]);
       }
     });
-    browser.once("exit", (code) => {
+    browser.once("exit", (code, signal) => {
       clearTimeout(timeout);
-      reject(new Error(`Chrome exited before DevTools started (${code}): ${stderr}`));
+      reject(new Error(
+        `Chrome exited before DevTools started (${code ?? signal ?? "unknown"}): ${stderr}`,
+      ));
     });
   });
 }
@@ -246,8 +248,41 @@ async function waitForHarness(browserWebSocketUrl, harnessUrl) {
   }
 }
 
+async function terminateBrowser(browser) {
+  if (browser.exitCode !== null) return;
+  const exited = once(browser, "exit");
+  browser.kill("SIGTERM");
+  await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 2_000))]);
+  if (browser.exitCode === null) {
+    browser.kill("SIGKILL");
+    await Promise.race([exited, new Promise((resolve) => setTimeout(resolve, 2_000))]);
+  }
+}
+
+async function startBrowser() {
+  let lastError;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const profileDirectory = mkdtempSync(join(tmpdir(), "storyos-editor-browser-"));
+    const browser = spawn(chromeExecutable, [
+      "--headless=new", "--disable-gpu", "--disable-breakpad", "--disable-crash-reporter",
+      "--disable-dev-shm-usage", "--no-first-run", "--remote-debugging-port=0",
+      "--remote-allow-origins=*", `--user-data-dir=${profileDirectory}`, "about:blank",
+    ], { stdio: ["ignore", "ignore", "pipe"] });
+    try {
+      const browserWebSocketUrl = await devToolsAddress(browser);
+      return { browser, browserWebSocketUrl, profileDirectory };
+    } catch (error) {
+      lastError = error;
+      await terminateBrowser(browser);
+      rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    }
+  }
+  throw lastError;
+}
+
 test("a real browser reload rebuilds one durable pending intent from IndexedDB", {
   skip: chromeExecutable ? false : "Chrome or Chromium is unavailable",
+  timeout: 60_000,
 }, async () => {
   const server = createServer(async (request, response) => {
     if (request.url === "/harness") {
@@ -270,25 +305,21 @@ test("a real browser reload rebuilds one durable pending intent from IndexedDB",
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const port = server.address().port;
-  const profileDirectory = mkdtempSync(join(tmpdir(), "storyos-editor-browser-"));
+  let launchedBrowser;
   try {
-    const browser = spawn(chromeExecutable, [
-      "--headless=new", "--disable-gpu", "--no-first-run", "--remote-debugging-port=0",
-      "--remote-allow-origins=*", `--user-data-dir=${profileDirectory}`, "about:blank",
-    ], { stdio: ["ignore", "ignore", "pipe"] });
-    try {
-      const browserWebSocketUrl = await devToolsAddress(browser);
-      const state = await waitForHarness(browserWebSocketUrl, `http://127.0.0.1:${port}/harness`);
-      assert.equal(state.text, "real IndexedDB reload passed");
-    } finally {
-      if (browser.exitCode === null) {
-        const exited = once(browser, "exit");
-        browser.kill("SIGTERM");
-        await exited;
-      }
-    }
+    launchedBrowser = await startBrowser();
+    const state = await waitForHarness(
+      launchedBrowser.browserWebSocketUrl,
+      `http://127.0.0.1:${port}/harness`,
+    );
+    assert.equal(state.text, "real IndexedDB reload passed");
   } finally {
     server.close();
-    rmSync(profileDirectory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    if (launchedBrowser) {
+      await terminateBrowser(launchedBrowser.browser);
+      rmSync(launchedBrowser.profileDirectory, {
+        recursive: true, force: true, maxRetries: 10, retryDelay: 100,
+      });
+    }
   }
 });
