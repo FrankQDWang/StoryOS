@@ -11,10 +11,10 @@
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-13-v9",
-      "baseline_commit": "a62fb29875b8b507b525c98544cfef5eba8bf8db",
-      "baseline_tree": "41d3b3e24cf76db136df09d82d383d73e2de9ca1",
-      "ticket_set_sha256": "sha256:77912f32ed0789c84d1d02ef5988ea168c59380a3ec71722c4653eab49597b9a",
+      "revision": "stage1-ticketed-delivery-2026-08-15-v11",
+      "baseline_commit": "7d5857cd9b65a97015d65e2caacb649a9d4c5bd2",
+      "baseline_tree": "207788ff5d98ed32c47391397f9630dcf22ac433",
+      "ticket_set_sha256": "sha256:e0845dd92d6f93c382402a992e350aa253e2c34e29956ac03d2496bd1698cc42",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -354,10 +354,10 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/108",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Complete Bounded Manual Input and IME Semantics",
-          "issue_body_sha256": "c857884015d1618b850234594d04f7b1ec6f31c9a7677863b1a55e12cf81d70b",
+          "issue_body_sha256": "d7d6e6c55be9be5baab6a9f9ef6fd0cf800fed2541651db988752d99d42fd168",
           "blocked_by": "https://github.com/FrankQDWang/StoryOS/issues/107",
           "evidence_role": "planned-runtime-evidence",
-          "responsibility": "complete bounded manual input and IME semantics",
+          "responsibility": "complete bounded manual input, IME, and same-session base roll-forward semantics",
           "contract_coverage": {
             "requirements": [
               "S1-REQ-002",
