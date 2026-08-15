@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.persistence.catalog.release-1.v1",
-  "contract_revision": "release1-storage-contract-2026-08-13-editor-session",
+  "contract_revision": "release1-storage-contract-2026-08-13-author-edit",
   "database_schema": "storyos",
   "physical_ledger": {
     "authority": "sole_exhaustive_table_family_ledger",
@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:e875a6147e4d3bcc54b2ee869dad4593663e4a2c3f266cef7710786e638cc8d4"
+    "digest": "sha256:373749a7dd4304c77f82758bed6587b1decc367f87a7e9f5398c6dd148cfc14f"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v1",
@@ -248,7 +248,7 @@
     },
     {
       "family_id": "project-canonical",
-      "table_families": ["projects", "project_instruction_revisions", "project_instruction_heads", "author_preference_revisions", "project_policy_revisions", "project_destination_grants", "project_tool_enablements", "context_controls", "proactive_trigger_revisions", "trigger_occurrences", "trigger_admission_decisions", "authoritative_objects", "authoritative_revisions", "authoritative_payloads", "authoritative_heads", "authoritative_commits", "authoritative_commit_members", "manuscript_objects", "manuscript_blocks", "manuscript_revision_members", "revision_anchors", "scope_counters", "aggregate_counters"],
+      "table_families": ["projects", "project_instruction_revisions", "project_instruction_heads", "author_preference_revisions", "project_policy_revisions", "project_destination_grants", "project_tool_enablements", "context_controls", "proactive_trigger_revisions", "trigger_occurrences", "trigger_admission_decisions", "authoritative_objects", "authoritative_revisions", "authoritative_payloads", "authoritative_heads", "authoritative_revision_envelopes", "authoritative_commits", "authoritative_commit_members", "manuscript_objects", "manuscript_blocks", "manuscript_revision_members", "revision_anchors", "scope_counters", "aggregate_counters"],
       "owner": "core",
       "authority_class": "canonical",
       "durability_class": "immutable_with_current_heads",
