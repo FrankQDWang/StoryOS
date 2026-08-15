@@ -12,15 +12,15 @@
 
 ### Single-main development policy
 
-- Develop only on the checked-out local `main` branch. Do not create Git worktrees, local feature branches, remote feature branches, or pull requests.
-- Commit and push directly to `main`. GitHub Actions verifies every push; CI reports results and never deploys, rewrites history, or automatically reverts changes.
-- Do not bypass the local ref policy or the GitHub `main-only-direct-push` ruleset. A new worktree is prohibited even when local Git could technically create one.
+- Develop only on the checked-out local `main` branch. Do not create Git worktrees or local feature branches. A new worktree is prohibited even when local Git could technically create one.
+- Commit on local `main`, but never push implementation commits directly to `origin/main`. Push the required commit range from local `main` to a temporary remote feature branch, open a pull request, merge only after its required checks and reviews pass, then delete that remote branch.
+- `origin/main` must reject direct pushes, deletion, and force-pushes. GitHub Actions verifies both pull requests targeting `main` and the resulting merge on `main`; CI reports results and never deploys, rewrites history, or automatically reverts changes.
 
 - StoryOS works directly from GitHub Issues; do not require a generated `tospec` or another parallel task specification. The locked current Issue body, its Claim lock, exact baseline, applicable `AGENTS.md` files, and the tracked contracts explicitly linked by the Issue form the execution contract.
 - Keep one implementation Issue, one execution owner, and one concentrated task context. When the implementation is larger than the review-size limits below, decompose it into one coherent GitHub-native stacked-PR chain within that same Issue rather than creating finer Issues solely to reduce PR size.
 - A PR stack is an implementation and review decomposition only. It does not create new scope, a second specification, parallel execution ownership, or permission to claim later-layer behavior early.
 - Git branches, commits, PR bases, reviews, checks, and merge state in GitHub are the authoritative representation of the stack. Do not require Graphite or treat any external stack manager as a source of truth.
-- Create the first stack branch from the Issue's locked `main` baseline. Create every later branch from the immediately preceding stack branch, and target each PR at that predecessor until it merges.
+- Create the first temporary remote stack branch from the Issue's locked `main` baseline. Create every later temporary remote branch from the immediately preceding stack branch, and target each PR at that predecessor until it merges. Local implementation remains only on local `main`; no local branch is needed to push a commit range to a named remote branch.
 - Every layer must name its stack position and predecessor, link the full Issue title, and use `Part of #<issue>` rather than an auto-closing keyword. Do not let an intermediate PR close the owning Issue.
 - Apply the hand-written, non-mechanical line limits below to each PR layer. Classify deterministic generated artifacts separately, keep their editable source in the owning earlier layer, and review generated drift explicitly.
 - Require independent read-only review and the layer-appropriate targeted checks for every PR. A lower layer must not claim upper-layer acceptance, and an upper layer must not hide a lower-layer contract, security, migration, or recovery defect.
