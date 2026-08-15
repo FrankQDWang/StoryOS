@@ -38,6 +38,8 @@ docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/migrations/0003_expand_client_session_generation.sql" >/dev/null
 docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/migrations/0004_editor_sessions.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0005_author_edits.sql" >/dev/null
 
 preserved_generation=$(docker exec "$container" psql -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT client_session_generation::text

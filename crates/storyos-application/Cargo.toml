@@ -4,6 +4,10 @@ version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 
+[dependencies]
+storyos-core = { path = "../storyos-core" }
+sha2.workspace = true
+
 [dev-dependencies]
 tokio.workspace = true
 
