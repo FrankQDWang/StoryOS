@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-13-v9";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "a62fb29875b8b507b525c98544cfef5eba8bf8db";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "41d3b3e24cf76db136df09d82d383d73e2de9ca1";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-15-v11";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "7d5857cd9b65a97015d65e2caacb649a9d4c5bd2";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "207788ff5d98ed32c47391397f9630dcf22ac433";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:77912f32ed0789c84d1d02ef5988ea168c59380a3ec71722c4653eab49597b9a";
+    "sha256:e0845dd92d6f93c382402a992e350aa253e2c34e29956ac03d2496bd1698cc42";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -332,9 +332,9 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-06",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/108",
         title: "Complete Bounded Manual Input and IME Semantics",
-        issue_body_sha256: "c857884015d1618b850234594d04f7b1ec6f31c9a7677863b1a55e12cf81d70b",
+        issue_body_sha256: "d7d6e6c55be9be5baab6a9f9ef6fd0cf800fed2541651db988752d99d42fd168",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
-        responsibility: "complete bounded manual input and IME semantics",
+        responsibility: "complete bounded manual input, IME, and same-session base roll-forward semantics",
         contract_coverage: COVERAGE_06,
     },
     TicketDefinition {
