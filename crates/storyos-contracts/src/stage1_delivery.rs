@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-13-v8";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-13-v9";
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "a62fb29875b8b507b525c98544cfef5eba8bf8db";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "41d3b3e24cf76db136df09d82d383d73e2de9ca1";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:9d39bc70b36e450c107344c0237a391aaec80ff2b2c635e3dc94efd9e7326ffb";
+    "sha256:77912f32ed0789c84d1d02ef5988ea168c59380a3ec71722c4653eab49597b9a";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -323,7 +323,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-05",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/107",
         title: "Settle One Direct Author Edit into an Authoritative Revision",
-        issue_body_sha256: "ad51e51c15c8ae5f6c3d0c8b5a7ce88b3400aa2057a8a6021ca7b5b372ac7ea3",
+        issue_body_sha256: "755e6d56422445da42ce4ab904f1c2894e5ab1552e67f52497ba74fd07bf3b77",
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "settle one Direct Author Action as an authoritative Revision",
         contract_coverage: COVERAGE_05,

@@ -1,0 +1,163 @@
+{
+  "$defs": {
+    "AuthorEditPrimitive": {
+      "oneOf": [
+        {
+          "properties": {
+            "from": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "replace_selection",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "to": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "to",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AuthorEditUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "normalized_primitives": {
+          "items": {
+            "$ref": "#/$defs/AuthorEditPrimitive"
+          },
+          "type": "array"
+        },
+        "selection_snapshot": {
+          "$ref": "#/$defs/SelectionSnapshot"
+        }
+      },
+      "required": [
+        "normalized_primitives",
+        "selection_snapshot"
+      ],
+      "type": "object"
+    },
+    "SelectionSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "coordinate_profile",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.apply-author-edit.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_edit_units": {
+      "items": {
+        "$ref": "#/$defs/AuthorEditUnit"
+      },
+      "type": "array"
+    },
+    "chapter_id": {
+      "type": "string"
+    },
+    "client_contract_revision": {
+      "type": "string"
+    },
+    "command_schema": {
+      "type": "string"
+    },
+    "completed_intent_record_id": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "type": "string"
+    },
+    "editor_contract_revision": {
+      "type": "string"
+    },
+    "editor_session_id": {
+      "type": "string"
+    },
+    "expected_authoritative_revision_id": {
+      "type": "string"
+    },
+    "expected_proposal_head_revision_ids": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "local_intent_sequence": {
+      "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+      "type": "string"
+    },
+    "observed_ownership_partition": {
+      "type": "string"
+    },
+    "security_policy_revision": {
+      "type": "string"
+    },
+    "target_refs": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "undo_group_id": {
+      "type": "string"
+    },
+    "writer_generation": {
+      "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command_schema",
+    "client_contract_revision",
+    "security_policy_revision",
+    "correlation_id",
+    "editor_session_id",
+    "writer_generation",
+    "chapter_id",
+    "expected_authoritative_revision_id",
+    "expected_proposal_head_revision_ids",
+    "target_refs",
+    "observed_ownership_partition",
+    "editor_contract_revision",
+    "undo_group_id",
+    "completed_intent_record_id",
+    "local_intent_sequence",
+    "author_edit_units"
+  ],
+  "title": "StoryOS Apply Author Edit Request",
+  "type": "object"
+}

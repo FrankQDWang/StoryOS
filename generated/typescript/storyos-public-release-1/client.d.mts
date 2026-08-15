@@ -37,6 +37,32 @@ export type CreateEditorSessionResponse = { schema_id: string, correlation_id: s
 
 export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, };
 
+export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
+
+export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
+
+export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>, selection_snapshot: SelectionSnapshot, };
+
+export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
+
+export type DomainReceiptCommandKind = "applyAuthorEdit";
+
+export type DomainReceiptProducerCause = "author_command_admission";
+
+export type DomainReceiptResult = "authoritative_applied" | "no_effect" | "conflicted" | "refused";
+
+export type DomainReceipt = { receipt_id: string, project_scope: ProjectScope, command_kind: DomainReceiptCommandKind, command_digest: DigestValue, idempotency_key: string, producer_cause: DomainReceiptProducerCause, author_command_admission_id: string, expected_heads: Array<string>, prior_heads: Array<string>, resulting_heads: Array<string>, authoritative_revision_ids: Array<string>, proposal_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, author_action_sequence: string | null, draft_artifact_refs: Array<string>, artifact_lifecycle_event_refs: Array<string>, condition_refs: Array<string>, result: DomainReceiptResult, created_at: string, };
+
+export type NoEffectReason = "content_unchanged";
+
+export type AuthorEditConflictReason = "stale_authoritative_head" | "proposal_head_present" | "ownership_changed";
+
+export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_selection" | "target_mismatch";
+
+export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "no_effect", reason: NoEffectReason, project_activity_position: string, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, project_activity_position: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, project_activity_position: string, };
+
+export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;

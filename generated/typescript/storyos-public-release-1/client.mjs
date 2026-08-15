@@ -37,6 +37,12 @@ async function commandJson({ baseUrl, path, body, commandHeaders = {}, fetchImpl
   try { return JSON.parse(responseBody); } catch { throw new StoryOSProtocolError("command_invalid_json", "StoryOS command returned invalid JSON", { status: response.status, responseBody }); }
 }
 
+function canonicalJson(value) {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]));
+  return value;
+}
+
 export async function getProtocolProfile(options = {}) {
   return queryJson({ ...options, path: "/api/v1/protocol" });
 }

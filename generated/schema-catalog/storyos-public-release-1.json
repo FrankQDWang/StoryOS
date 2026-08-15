@@ -69,6 +69,16 @@
       "path": "generated/json-schema/storyos-public-release-1/editor-session-get-response.schema.json",
       "schema_id": "storyos.query.editor-session.response.v1",
       "sha256": "sha256:7f55f1fd34ea6a0e8d714704a1794ab72bdceddbd1ad6fcc9379cb21bc03005b"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-request.schema.json",
+      "schema_id": "storyos.command.apply-author-edit.request.v1",
+      "sha256": "sha256:6e7dfcca3e5e61b5edb7d297c1c89f4887ee1cc7b747c6b85d17f33402099a51"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json",
+      "schema_id": "storyos.command.apply-author-edit.response.v1",
+      "sha256": "sha256:6fed3a3fa44983fdce86c73056fcb3fb648ab5fe72ceb06d0e088512746a6f64"
     }
   ]
 }

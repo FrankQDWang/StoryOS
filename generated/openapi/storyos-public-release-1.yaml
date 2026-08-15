@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
-  x-storyos-contract-revision: release1-wire-catalog-2026-08-13-editor-session
+  x-storyos-contract-revision: release1-wire-catalog-2026-08-15-author-edit
   x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession
 paths:
   /api/v1/protocol:

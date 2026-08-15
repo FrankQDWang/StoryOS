@@ -8,7 +8,8 @@ use ts_rs::{Config, TS};
 
 use crate::digest::sha256_prefixed;
 use crate::release1::{
-    ACTIVITY_PROFILE, API_MAJOR, ArtifactDigests, AuthoritativeChapterRevision,
+    ACTIVITY_PROFILE, API_MAJOR, APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
+    APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID, ArtifactDigests, AuthoritativeChapterRevision,
     CHAPTER_REQUEST_SCHEMA_ID, CHAPTER_RESPONSE_SCHEMA_ID, COMPATIBILITY_PROFILE,
     CONTRACT_REVISION, CREATE_EDITOR_SESSION, CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
     CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID, CREATE_PROJECT_COMMAND_CHALLENGE, ControlledProject,
@@ -26,6 +27,8 @@ use crate::release1::{
     SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION, WORKER_CONTRACT_REVISION,
     protocol_profile,
 };
+use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
+use crate::release1_author_edit_artifacts as author_edit_artifacts;
 
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
@@ -95,7 +98,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:faabf9e85f832e5fb0914fca864de450f3713e24c6cbe940c8eb06b05aef9f33";
+    "sha256:6d5dfc386af0feb920d93d046565a3c3b60f83afebe19e5ad41e6af3daee201f";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -142,6 +145,8 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
         GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
         "StoryOS Get Editor Session Response",
     ));
+    let apply_edit_request_schema = author_edit_artifacts::request_schema_bytes();
+    let apply_edit_response_schema = author_edit_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -202,6 +207,16 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
             GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
             EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
             &editor_get_response_schema,
+        ),
+        (
+            APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
+            author_edit_artifacts::REQUEST_SCHEMA_PATH,
+            &apply_edit_request_schema,
+        ),
+        (
+            APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
+            author_edit_artifacts::RESPONSE_SCHEMA_PATH,
+            &apply_edit_response_schema,
         ),
     ]);
     let client = typescript_client_bytes();
@@ -298,6 +313,8 @@ fn generated_files() -> Vec<GeneratedFile> {
         GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
         "StoryOS Get Editor Session Response",
     ));
+    let apply_edit_request_schema = author_edit_artifacts::request_schema_bytes();
+    let apply_edit_response_schema = author_edit_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -359,6 +376,16 @@ fn generated_files() -> Vec<GeneratedFile> {
             EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
             &editor_get_response_schema,
         ),
+        (
+            APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
+            author_edit_artifacts::REQUEST_SCHEMA_PATH,
+            &apply_edit_request_schema,
+        ),
+        (
+            APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
+            author_edit_artifacts::RESPONSE_SCHEMA_PATH,
+            &apply_edit_response_schema,
+        ),
     ]);
     let profile = release1_protocol_profile();
     let profile_json =
@@ -389,6 +416,14 @@ fn generated_files() -> Vec<GeneratedFile> {
         (
             EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
             editor_get_response_schema,
+        ),
+        (
+            author_edit_artifacts::REQUEST_SCHEMA_PATH,
+            apply_edit_request_schema,
+        ),
+        (
+            author_edit_artifacts::RESPONSE_SCHEMA_PATH,
+            apply_edit_response_schema,
         ),
         (TYPESCRIPT_CLIENT_PATH, typescript_client_bytes()),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration_bytes()),
@@ -437,6 +472,18 @@ fn generated_files() -> Vec<GeneratedFile> {
             GET_EDITOR_SESSION_FIXTURE_PATHS[2],
             boundary_get_editor_session_fixture_bytes(),
         ),
+        (
+            author_edit_artifacts::FIXTURE_PATHS[0],
+            author_edit_artifacts::fixture_bytes(),
+        ),
+        (
+            author_edit_artifacts::FIXTURE_PATHS[1],
+            author_edit_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            author_edit_artifacts::FIXTURE_PATHS[2],
+            author_edit_artifacts::boundary_fixture_bytes(),
+        ),
     ]
 }
 
@@ -484,6 +531,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             challenge_operation_graph(),
             command_operation_graph(&CREATE_EDITOR_SESSION, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge"]),
             operation_graph(&GET_EDITOR_SESSION, &["server_derived_project_scope", "session_scope_join", "protected_client_session_binding"]),
+            command_operation_graph(&APPLY_AUTHOR_EDIT, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge", "editor_session_writer_generation", "expected_authoritative_head"]),
         ],
         "release": {
             "api_major": API_MAJOR, "public_protocol_release": PUBLIC_PROTOCOL_RELEASE, "envelope_version": ENVELOPE_VERSION,
@@ -566,8 +614,12 @@ fn openapi_bytes() -> Vec<u8> {
         .collect::<String>();
     paths.push_str(&challenge_openapi());
     paths.push_str(&editor_session_create_openapi());
+    if author_edit_artifacts::IS_IMPLEMENTED {
+        paths.push_str(&author_edit_artifacts::openapi());
+    }
+    let implemented_slice = implemented_operation_ids().join(",");
     format!(
-        "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession\npaths:\n{paths}components: {{}}\n",
+        "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: {implemented_slice}\npaths:\n{paths}components: {{}}\n",
     ).into_bytes()
 }
 
@@ -667,10 +719,7 @@ fn typed_schema<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value 
 }
 
 fn apply_u64_wire_constraints(schema: &mut Value) {
-    let canonical_u64 = json!({
-        "type": "string",
-        "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
-    });
+    let canonical_u64 = canonical_u64_wire_schema();
     schema["$defs"]["EditorSessionBinding"]["properties"]["client_session_generation"] =
         canonical_u64.clone();
     schema["$defs"]["EditorBaseSnapshot"]["properties"]["project_activity_position"] =
@@ -679,6 +728,13 @@ fn apply_u64_wire_constraints(schema: &mut Value) {
         canonical_u64.clone();
     schema["$defs"]["EditorWriterProjection"]["oneOf"][1]["properties"]["observed_writer_generation"] =
         canonical_u64;
+}
+
+fn canonical_u64_wire_schema() -> Value {
+    json!({
+        "type": "string",
+        "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
+    })
 }
 
 fn challenge_response_schema() -> Value {
@@ -708,75 +764,104 @@ fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
 fn schema_catalog_bytes(schemas: &[(&str, &str, &[u8])]) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
-        "implemented_operations": [GET_PROTOCOL_PROFILE.operation_id, GET_PROJECT.operation_id, GET_CHAPTER.operation_id, CREATE_PROJECT_COMMAND_CHALLENGE.operation_id, CREATE_EDITOR_SESSION.operation_id, GET_EDITOR_SESSION.operation_id],
+        "implemented_operations": implemented_operation_ids(),
         "schemas": schemas.iter().map(|(schema_id, path, bytes)| json!({
             "schema_id": schema_id, "path": path, "sha256": sha256_prefixed(bytes)
         })).collect::<Vec<_>>()
     }))
 }
 
+fn implemented_operation_ids() -> Vec<&'static str> {
+    let mut operation_ids = vec![
+        GET_PROTOCOL_PROFILE.operation_id,
+        GET_PROJECT.operation_id,
+        GET_CHAPTER.operation_id,
+        CREATE_PROJECT_COMMAND_CHALLENGE.operation_id,
+        CREATE_EDITOR_SESSION.operation_id,
+        GET_EDITOR_SESSION.operation_id,
+    ];
+    if author_edit_artifacts::IS_IMPLEMENTED {
+        operation_ids.push(APPLY_AUTHOR_EDIT.operation_id);
+    }
+    operation_ids
+}
+
 fn typescript_client_bytes() -> Vec<u8> {
+    let author_edit_client = author_edit_artifacts::typescript_client_source();
     format!(concat!(
-        "// @generated by storyos-contracts; do not edit.\n",
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v1\";\n\n",
-        "export class StoryOSProtocolError extends Error {{\n",
-        "  constructor(code, message, details = {{}}) {{\n    super(message);\n    this.name = \"StoryOSProtocolError\";\n",
-        "    this.code = code;\n    this.status = details.status;\n    this.responseBody = details.responseBody;\n    this.retryAfterSeconds = details.retryAfterSeconds;\n  }}\n}}\n\n",
-        "async function queryJson({{ baseUrl, path, fetchImpl = globalThis.fetch, signal }}) {{\n",
-        "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS query requires a non-empty baseUrl\");\n",
-        "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS query requires a fetch implementation\");\n",
-        "  const headers = {{ accept: \"application/json\" }};\n",
-        "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"GET\", headers, credentials: \"same-origin\", signal }});\n",
-        "  const responseBody = await response.text();\n",
-        "  if (!response.ok) throw new StoryOSProtocolError(\"query_http_error\", `StoryOS query failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody }});\n",
-        "  try {{ return JSON.parse(responseBody); }} catch {{\n",
-        "    throw new StoryOSProtocolError(\"query_invalid_json\", \"StoryOS query returned invalid JSON\", {{ status: response.status, responseBody }});\n  }}\n}}\n\n",
-        "async function commandJson({{ baseUrl, path, body, commandHeaders = {{}}, fetchImpl = globalThis.fetch, signal }}) {{\n",
-        "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS command requires a non-empty baseUrl\");\n",
-        "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS command requires a fetch implementation\");\n",
-        "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"POST\", headers: {{ accept: \"application/json\", \"content-type\": \"application/json\", ...commandHeaders }}, credentials: \"same-origin\", body: JSON.stringify(body), signal }});\n",
-        "  const responseBody = await response.text();\n",
-        "  if (!response.ok) {{\n    const retryAfter = response.headers.get(\"retry-after\");\n    const retryAfterSeconds = /^(?:[1-9]|[1-5][0-9]|60)$/.test(retryAfter ?? \"\") ? Number(retryAfter) : undefined;\n    throw new StoryOSProtocolError(\"command_http_error\", `StoryOS command failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody, retryAfterSeconds }});\n  }}\n",
-        "  try {{ return JSON.parse(responseBody); }} catch {{ throw new StoryOSProtocolError(\"command_invalid_json\", \"StoryOS command returned invalid JSON\", {{ status: response.status, responseBody }}); }}\n}}\n\n",
-        "export async function getProtocolProfile(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n\n",
-        "export async function getProject({{ projectId, ...options }} = {{}}) {{\n",
-        "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
-        "  return queryJson({{ ...options, path: `{}` }});\n}}\n\n",
-        "export async function getChapter({{ projectId, chapterId, ...options }} = {{}}) {{\n",
-        "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getChapter requires projectId\");\n",
-        "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"getChapter requires chapterId\");\n",
-        "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "\nexport async function createProjectCommandChallenge({{ projectId, request, ...options }} = {{}}) {{\n",
-        "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createProjectCommandChallenge requires projectId\");\n",
-        "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectCommandChallenge requires request\");\n",
-        "  return commandJson({{ ...options, path: `{}`, body: request }});\n}}\n",
-        "\nexport async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {{\n",
-        "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCreateEditorSession requires request\");\n",
-        "  const canonical = {{ client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision }};\n",
-        "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
-        "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
-        "  return {{ algorithm: \"sha256\", profile: \"storyos.command.createEditorSession.jcs.v1\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
-        "\nexport async function createEditorSession({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
-        "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createEditorSession requires projectId\");\n",
-        "  if (!request || typeof request !== \"object\") throw new TypeError(\"createEditorSession requires request\");\n",
-        "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createEditorSession requires security bindings\");\n",
-        "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-        "\nexport async function getEditorSession({{ projectId, editorSessionId, ...options }} = {{}}) {{\n",
-        "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
-        "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
-        "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
+            "// @generated by storyos-contracts; do not edit.\n",
+            "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v1\";\n\n",
+            "export class StoryOSProtocolError extends Error {{\n",
+            "  constructor(code, message, details = {{}}) {{\n    super(message);\n    this.name = \"StoryOSProtocolError\";\n",
+            "    this.code = code;\n    this.status = details.status;\n    this.responseBody = details.responseBody;\n    this.retryAfterSeconds = details.retryAfterSeconds;\n  }}\n}}\n\n",
+            "async function queryJson({{ baseUrl, path, fetchImpl = globalThis.fetch, signal }}) {{\n",
+            "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS query requires a non-empty baseUrl\");\n",
+            "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS query requires a fetch implementation\");\n",
+            "  const headers = {{ accept: \"application/json\" }};\n",
+            "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"GET\", headers, credentials: \"same-origin\", signal }});\n",
+            "  const responseBody = await response.text();\n",
+            "  if (!response.ok) throw new StoryOSProtocolError(\"query_http_error\", `StoryOS query failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody }});\n",
+            "  try {{ return JSON.parse(responseBody); }} catch {{\n",
+            "    throw new StoryOSProtocolError(\"query_invalid_json\", \"StoryOS query returned invalid JSON\", {{ status: response.status, responseBody }});\n  }}\n}}\n\n",
+            "async function commandJson({{ baseUrl, path, body, commandHeaders = {{}}, fetchImpl = globalThis.fetch, signal }}) {{\n",
+            "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS command requires a non-empty baseUrl\");\n",
+            "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS command requires a fetch implementation\");\n",
+            "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"POST\", headers: {{ accept: \"application/json\", \"content-type\": \"application/json\", ...commandHeaders }}, credentials: \"same-origin\", body: JSON.stringify(body), signal }});\n",
+            "  const responseBody = await response.text();\n",
+            "  if (!response.ok) {{\n    const retryAfter = response.headers.get(\"retry-after\");\n    const retryAfterSeconds = /^(?:[1-9]|[1-5][0-9]|60)$/.test(retryAfter ?? \"\") ? Number(retryAfter) : undefined;\n    throw new StoryOSProtocolError(\"command_http_error\", `StoryOS command failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody, retryAfterSeconds }});\n  }}\n",
+            "  try {{ return JSON.parse(responseBody); }} catch {{ throw new StoryOSProtocolError(\"command_invalid_json\", \"StoryOS command returned invalid JSON\", {{ status: response.status, responseBody }}); }}\n}}\n\n",
+            "function canonicalJson(value) {{\n  if (Array.isArray(value)) return value.map(canonicalJson);\n  if (value && typeof value === \"object\") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalJson(value[key])]));\n  return value;\n}}\n\n",
+            "export async function getProtocolProfile(options = {{}}) {{\n  return queryJson({{ ...options, path: \"{}\" }});\n}}\n\n",
+            "export async function getProject({{ projectId, ...options }} = {{}}) {{\n",
+            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getProject requires projectId\");\n",
+            "  return queryJson({{ ...options, path: `{}` }});\n}}\n\n",
+            "export async function getChapter({{ projectId, chapterId, ...options }} = {{}}) {{\n",
+            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getChapter requires projectId\");\n",
+            "  if (typeof chapterId !== \"string\" || chapterId.length === 0) throw new TypeError(\"getChapter requires chapterId\");\n",
+            "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
+            "\nexport async function createProjectCommandChallenge({{ projectId, request, ...options }} = {{}}) {{\n",
+            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createProjectCommandChallenge requires projectId\");\n",
+            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createProjectCommandChallenge requires request\");\n",
+            "  return commandJson({{ ...options, path: `{}`, body: request }});\n}}\n",
+            "\nexport async function digestCreateEditorSession(request, cryptoImpl = globalThis.crypto) {{\n",
+            "  if (!request || typeof request !== \"object\") throw new TypeError(\"digestCreateEditorSession requires request\");\n",
+            "  const canonical = {{ client_contract_revision: request.client_contract_revision, command_schema: request.command_schema, correlation_id: request.correlation_id, security_policy_revision: request.security_policy_revision }};\n",
+            "  const bytes = new TextEncoder().encode(JSON.stringify(canonical));\n",
+            "  const digest = new Uint8Array(await cryptoImpl.subtle.digest(\"SHA-256\", bytes));\n",
+            "  return {{ algorithm: \"sha256\", profile: \"storyos.command.createEditorSession.jcs.v1\", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, \"0\")).join(\"\") }};\n}}\n",
+            "\nexport async function createEditorSession({{ projectId, request, idempotencyKey, antiForgery, ...options }} = {{}}) {{\n",
+            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"createEditorSession requires projectId\");\n",
+            "  if (!request || typeof request !== \"object\") throw new TypeError(\"createEditorSession requires request\");\n",
+            "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createEditorSession requires security bindings\");\n",
+            "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
+            "\nexport async function getEditorSession({{ projectId, editorSessionId, ...options }} = {{}}) {{\n",
+            "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
+            "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
+            "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
+        "{}",
     ),
         GET_PROTOCOL_PROFILE.path,
-        GET_PROJECT.path.replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        GET_CHAPTER.path
+        GET_PROJECT
+            .path
+            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
+        GET_CHAPTER
+            .path
             .replace("{project_id}", "${encodeURIComponent(projectId)}")
             .replace("{chapter_id}", "${encodeURIComponent(chapterId)}"),
-        CREATE_PROJECT_COMMAND_CHALLENGE.path
+        CREATE_PROJECT_COMMAND_CHALLENGE
+            .path
             .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        CREATE_EDITOR_SESSION.path.replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        GET_EDITOR_SESSION.path
+        CREATE_EDITOR_SESSION
+            .path
+            .replace("{project_id}", "${encodeURIComponent(projectId)}"),
+        GET_EDITOR_SESSION
+            .path
             .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{editor_session_id}", "${encodeURIComponent(editorSessionId)}"),
+            .replace(
+                "{editor_session_id}",
+                "${encodeURIComponent(editorSessionId)}"
+            ),
+        author_edit_client,
     ).into_bytes()
 }
 
@@ -801,8 +886,12 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_writer = EditorWriterProjection::decl(&config);
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
-    format!(
+    let mut declaration = format!(
         "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}",
+        author_edit_artifacts::typescript_type_declarations(),
+    );
+    declaration.push_str("\n\n");
+    declaration.push_str(
         concat!(
             "export declare const GENERATED_CLIENT_REVISION: string;\n",
             "export declare class StoryOSProtocolError extends Error {\n  readonly code: string;\n  readonly status?: number;\n  readonly responseBody?: string;\n  readonly retryAfterSeconds?: number;\n}\n",
@@ -815,8 +904,9 @@ fn typescript_declaration_bytes() -> Vec<u8> {
             "export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;\n",
             "export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;\n",
         )
-    )
-    .into_bytes()
+    );
+    declaration.push_str(author_edit_artifacts::typescript_declarations());
+    declaration.into_bytes()
 }
 
 fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
@@ -829,7 +919,8 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 CHAPTER_FIXTURE_PATHS[0], CHAPTER_FIXTURE_PATHS[1], CHAPTER_FIXTURE_PATHS[2],
                 CHALLENGE_FIXTURE_PATHS[0], CHALLENGE_FIXTURE_PATHS[1], CHALLENGE_FIXTURE_PATHS[2],
                 CREATE_EDITOR_SESSION_FIXTURE_PATHS[0], CREATE_EDITOR_SESSION_FIXTURE_PATHS[1], CREATE_EDITOR_SESSION_FIXTURE_PATHS[2],
-                GET_EDITOR_SESSION_FIXTURE_PATHS[0], GET_EDITOR_SESSION_FIXTURE_PATHS[1], GET_EDITOR_SESSION_FIXTURE_PATHS[2]],
+                GET_EDITOR_SESSION_FIXTURE_PATHS[0], GET_EDITOR_SESSION_FIXTURE_PATHS[1], GET_EDITOR_SESSION_FIXTURE_PATHS[2],
+                author_edit_artifacts::FIXTURE_PATHS[0], author_edit_artifacts::FIXTURE_PATHS[1], author_edit_artifacts::FIXTURE_PATHS[2]],
             "normalization": format!("replace every release_identity.fixture_corpus_digest with {FIXTURE_DIGEST_PLACEHOLDER}")
         },
         "fixtures": [
@@ -853,7 +944,10 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": CREATE_EDITOR_SESSION.fixtures[2], "classification": "boundary", "operation_id": CREATE_EDITOR_SESSION.operation_id, "path": CREATE_EDITOR_SESSION_FIXTURE_PATHS[2]},
             {"fixture_id": GET_EDITOR_SESSION.fixtures[0], "classification": "positive", "operation_id": GET_EDITOR_SESSION.operation_id, "path": GET_EDITOR_SESSION_FIXTURE_PATHS[0]},
             {"fixture_id": GET_EDITOR_SESSION.fixtures[1], "classification": "invalid", "operation_id": GET_EDITOR_SESSION.operation_id, "path": GET_EDITOR_SESSION_FIXTURE_PATHS[1]},
-            {"fixture_id": GET_EDITOR_SESSION.fixtures[2], "classification": "boundary", "operation_id": GET_EDITOR_SESSION.operation_id, "path": GET_EDITOR_SESSION_FIXTURE_PATHS[2]}
+            {"fixture_id": GET_EDITOR_SESSION.fixtures[2], "classification": "boundary", "operation_id": GET_EDITOR_SESSION.operation_id, "path": GET_EDITOR_SESSION_FIXTURE_PATHS[2]},
+            {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[0], "classification": "positive", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[1], "classification": "invalid", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[2], "classification": "boundary", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[2]}
         ]
     }))
 }
@@ -898,6 +992,9 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         get_editor_session_fixture_bytes(),
         invalid_get_editor_session_fixture_bytes(),
         boundary_get_editor_session_fixture_bytes(),
+        author_edit_artifacts::fixture_bytes(),
+        author_edit_artifacts::invalid_fixture_bytes(),
+        author_edit_artifacts::boundary_fixture_bytes(),
     ]
     .concat()
 }
