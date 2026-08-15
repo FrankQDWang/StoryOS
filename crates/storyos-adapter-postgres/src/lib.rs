@@ -522,7 +522,8 @@ impl ProjectReader for PostgresProjectReader {
         let chapter = transaction
             .query_opt(
                 "SELECT object.manuscript_object_id::text, object.title, \
-                        revision.revision_id::text, convert_from(payload.canonical_bytes, 'UTF8') \
+                        revision.revision_id::text, convert_from(payload.canonical_bytes, 'UTF8'), \
+                        COALESCE(counters.project_activity_position, 0)::text \
                  FROM storyos.manuscript_objects AS object \
                  JOIN storyos.projects AS project \
                    ON (project.owner_user_id, project.project_id, project.current_chapter_id) = \
@@ -536,6 +537,9 @@ impl ProjectReader for PostgresProjectReader {
                  JOIN storyos.authoritative_payloads AS payload \
                    ON (payload.owner_user_id, payload.project_id, payload.payload_id) = \
                       (revision.owner_user_id, revision.project_id, revision.payload_id) \
+                 LEFT JOIN storyos.scope_counters AS counters \
+                   ON (counters.owner_user_id, counters.project_id) = \
+                      (object.owner_user_id, object.project_id) \
                  WHERE object.owner_user_id = $1::text::uuid AND object.project_id = $2::text::uuid \
                    AND object.manuscript_object_id = $3::text::uuid AND object.object_kind = 'chapter'",
                 &[
@@ -546,12 +550,17 @@ impl ProjectReader for PostgresProjectReader {
             )
             .await
             .map_err(read_error)?
-            .map(|row| Chapter {
+            .map(|row| -> Result<Chapter, ProjectReadError> { Ok(Chapter {
                 chapter_id: ChapterId::new(row.get::<_, String>(0)),
                 title: row.get(1),
                 revision_id: RevisionId::new(row.get::<_, String>(2)),
                 body: row.get(3),
-            });
+                project_activity_position: row
+                    .get::<_, String>(4)
+                    .parse()
+                    .map_err(ProjectReadError::unavailable)?,
+            })})
+            .transpose()?;
         transaction.commit().await.map_err(read_error)?;
         Ok(chapter)
     }

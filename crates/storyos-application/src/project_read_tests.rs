@@ -28,6 +28,7 @@ impl ProjectReader for FixtureReader {
             title: "Chapter".to_owned(),
             revision_id: RevisionId::new("revision-current"),
             body: "Current body".to_owned(),
+            project_activity_position: 0,
         }))
     }
 }

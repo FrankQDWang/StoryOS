@@ -13,7 +13,7 @@ export type CurrentChapter = { chapter_id: string, title: string, current_revisi
 
 export type GetProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project: ControlledProject, };
 
-export type GetChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, chapter: CurrentChapter, };
+export type GetChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_activity_position: string, chapter: CurrentChapter, };
 
 export type DigestAlgorithm = "sha256";
 
@@ -82,3 +82,5 @@ export declare function createProjectCommandChallenge(options: StoryOSQueryOptio
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
+export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;

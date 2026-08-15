@@ -237,6 +237,7 @@ pub struct Chapter {
     pub title: String,
     pub revision_id: RevisionId,
     pub body: String,
+    pub project_activity_position: u64,
 }
 
 #[derive(Debug)]
