@@ -2,7 +2,7 @@
   "schema": "storyos.author-edit-batch-prerelease-browser-evidence.v1",
   "policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
   "policy_sha256": "e6ef76ddf626d22166986abd429578a5cde617fc4f18f1d347051eecfe7e023d",
-  "captured_at": "2026-08-16T07:21:39.936Z",
+  "captured_at": "2026-08-16T07:29:20.242Z",
   "browser": "Google Chrome 151.0.7922.138",
   "synthetic_only": true,
   "real_user_content": false,

@@ -295,8 +295,8 @@ try {
   }
   if (process.argv.includes("--capture")) {
     writeFileSync(candidatesPath, result.candidates.map(JSON.stringify).join("\n") + "\n");
-    writeFileSync(evidencePath, JSON.stringify({ ...captured,
-      captured_at: new Date().toISOString(), semantic_oracle: result.semantic_oracle }, null, 2) + "\n");
+    writeFileSync(evidencePath, JSON.stringify({ ...captured, captured_at: new Date().toISOString(),
+      browser: spawnSync(chrome, ["--version"], { encoding: "utf8" }).stdout.trim(), semantic_oracle: result.semantic_oracle }, null, 2) + "\n");
   }
   if (process.argv.some(argument => ["--capture", "--json"].includes(argument)))
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
