@@ -1,0 +1,81 @@
+{
+  "schema": "storyos.author-edit-batch-prerelease-browser-evidence.v1",
+  "policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
+  "policy_sha256": "e6ef76ddf626d22166986abd429578a5cde617fc4f18f1d347051eecfe7e023d",
+  "captured_at": "2026-08-16T07:29:20.242Z",
+  "browser": "Google Chrome 151.0.7922.138",
+  "synthetic_only": true,
+  "real_user_content": false,
+  "candidate_order": {
+    "idle_ms": [
+      250,
+      500,
+      750
+    ],
+    "max_units": [
+      64,
+      128,
+      240,
+      256
+    ]
+  },
+  "candidate_metric_records": "docs/research/author-edit-batch-prerelease-browser-candidates.jsonl",
+  "advisory_latency_scope": "Each retained candidate and scenario records browser input-event dispatch latency and candidate grouping-evaluation latency from one synthetic single-machine run; these values are not an SLA or deterministic pass threshold.",
+  "semantic_oracle": {
+    "ime_update_and_cancel_not_durable": true,
+    "hard_boundary_composition_confirmation_isolated": true,
+    "hard_boundary_paste_isolated": true,
+    "hard_boundary_cut_isolated": true,
+    "hard_boundary_drop_isolated": true,
+    "hard_boundary_split_block_isolated": true,
+    "hard_boundary_join_blocks_isolated": true,
+    "hard_boundary_move_block_isolated": true,
+    "hard_boundary_retype_block_isolated": true,
+    "hard_boundary_explicit_editor_command_isolated": true,
+    "hard_boundary_policy_identity_change_isolated": true,
+    "hard_boundary_shared_binding_change_isolated": true,
+    "hard_boundary_composition_confirmation_missing_mutation_rejected": true,
+    "hard_boundary_paste_missing_mutation_rejected": true,
+    "hard_boundary_cut_missing_mutation_rejected": true,
+    "hard_boundary_drop_missing_mutation_rejected": true,
+    "hard_boundary_split_block_missing_mutation_rejected": true,
+    "hard_boundary_join_blocks_missing_mutation_rejected": true,
+    "hard_boundary_move_block_missing_mutation_rejected": true,
+    "hard_boundary_retype_block_missing_mutation_rejected": true,
+    "hard_boundary_explicit_editor_command_missing_mutation_rejected": true,
+    "hard_boundary_policy_identity_change_missing_mutation_rejected": true,
+    "hard_boundary_shared_binding_change_missing_mutation_rejected": true,
+    "complete_local_coverage_accepted": true,
+    "duplicate_local_coverage_rejected": true,
+    "skipped_local_coverage_rejected": true,
+    "reordered_local_coverage_rejected": true,
+    "overlapping_local_coverage_rejected": true,
+    "policy_mismatched_coverage_rejected": true,
+    "unit_limit_refused_before_admission": true,
+    "primitive_limit_refused_before_admission": true,
+    "body_limit_refused_before_admission": true,
+    "policy_mismatch_refused_before_admission": true,
+    "admitted_refused_typed_zero_authority": true,
+    "admitted_conflicted_typed_zero_authority": true,
+    "admitted_no_effect_typed_zero_authority": true,
+    "invalid_later_unit_typed_zero_authority": true,
+    "pre_commit_transaction_failure_receipt_free": true,
+    "whole_batch_has_one_final_settlement": true,
+    "no_prefix_authority": true,
+    "contradictory_prefix_state_rejected": true,
+    "exact_retry_has_no_second_effect": true,
+    "grouping_never_exceeds_selected_limit": true
+  },
+  "adoption": {
+    "decision": "adopt_conservative_prerelease",
+    "idle_ms": 250,
+    "max_units": 240,
+    "rationale": "The smallest candidate window avoids joining the synthetic 600 ms slow path. The 240-unit ceiling keeps the established sustained-input case while remaining below the tested 256-unit candidate. The selected synthetic maximum payload is 1.61% of the inherited 1 MiB command-body ceiling.",
+    "not_claimed": [
+      "permanent product default",
+      "real-user validation",
+      "foreground-browser latency SLA",
+      "production runtime conformance"
+    ]
+  }
+}

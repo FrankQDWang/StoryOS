@@ -878,9 +878,17 @@ per-intent idempotency identity can conflict. Coalescing never
 alters local undo grouping, crosses a partition, includes an explicit command,
 or applies to `explicit_editor_command`.
 
+The #70-owned [structured prerelease policy](author-edit-batch-release-1-policy.json)
+selects the replaceable Release 1 window and ceilings and records the candidate
+set, evidence, and future anonymous calibration gate. Its revision maps exactly
+to `storyos.editor-contract.release-1.v2`, which the existing request digest
+already binds. The selection is conservative prerelease policy, not a permanent
+or real-user-validated product default.
+
 The positive long-session case is therefore reachable: 240 consecutive typing
 intents with distinct ordered `AuthorEditUnit` payloads/selections but equal
-shared bindings may form one bounded group. Changing any shared binding or
+shared bindings may form one bounded group under the selected prerelease policy.
+Changing any shared binding or
 encountering composition completion, paste, cut, drop, `SplitBlock`,
 `JoinBlocks`, `MoveBlock`, `RetypeBlock`, or an explicit command freezes the
 group immediately.

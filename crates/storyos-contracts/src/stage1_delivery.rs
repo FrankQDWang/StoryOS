@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-15-v11";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-16-v13";
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "7d5857cd9b65a97015d65e2caacb649a9d4c5bd2";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "207788ff5d98ed32c47391397f9630dcf22ac433";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:e0845dd92d6f93c382402a992e350aa253e2c34e29956ac03d2496bd1698cc42";
+    "sha256:ad4bb2cc1cb6d84d3d8221ba476a1d4a19e24f9970e0674414fc883524612d69";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -80,6 +80,7 @@ struct TicketDefinition {
     issue: &'static str,
     title: &'static str,
     issue_body_sha256: &'static str,
+    blocked_by: Option<&'static str>,
     evidence_role: EvidenceRole,
     responsibility: &'static str,
     contract_coverage: TicketCoverage,
@@ -189,17 +190,26 @@ const COVERAGE_05: TicketCoverage = TicketCoverage {
 };
 const COVERAGE_06: TicketCoverage = TicketCoverage {
     requirements: &["S1-REQ-002", "S1-JRN-001", "S1-EVD-002"],
-    operations: &[],
-    gates: &["DVG-02"],
-    evidence_classes: &["EC-02", "EV-INT"],
-    fixtures: &["FX-EDITOR-IME"],
+    operations: &[
+        "createEditorSession",
+        "getEditorSession",
+        "createProjectCommandChallenge",
+        "applyAuthorEdit",
+        "getChapter",
+    ],
+    gates: &["DVG-01", "DVG-02", "DVG-03"],
+    evidence_classes: &["EC-01", "EC-02", "EC-03", "EV-IT", "EV-INT"],
+    fixtures: &["FX-CONTRACT-R1", "FX-EDITOR-IME", "FX-JOURNAL-GROUP"],
     fault_points: &[
-        "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+        "CFP-ADMISSION-BEFORE-CORE",
+        "CFP-CORE-BEFORE-COMMIT",
+        "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
         "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+        "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
     ],
     schedules: &["SCH-NORMAL"],
-    oracles: &["ORC-EDITOR-JOURNAL"],
-    bundles: &["B-EDITOR"],
+    oracles: &["ORC-ATOMIC-AUTHORITY", "ORC-CONTRACT", "ORC-EDITOR-JOURNAL"],
+    bundles: &["B-CONTRACT", "B-CORE", "B-EDITOR"],
     aggregate: None,
 };
 const COVERAGE_07: TicketCoverage = TicketCoverage {
@@ -270,6 +280,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
         title: "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
         issue_body_sha256: "cf70e95a41dbe1b031a4f034ab7d615b4131cd5e67da9debce71be505489490b",
+        blocked_by: None,
         evidence_role: EvidenceRole::ContractBinding,
         responsibility: "bind the accepted Stage 1 specification and ticket sequence",
         contract_coverage: COVERAGE_01,
@@ -279,6 +290,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/104",
         title: "Boot the Protected Web Client Against the Release 1 Protocol Profile",
         issue_body_sha256: "cd1a9130c041f01be000ce87cef1b43df46afdbcc94fc4bf697b3061b78d1650",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/103"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "validate the protected client protocol identity",
         contract_coverage: COVERAGE_02,
@@ -288,6 +300,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/105",
         title: "Open the Controlled Project and Current Chapter End to End",
         issue_body_sha256: "2ea7e9fdcaec104c9cc3911ca3104e8d0c8392987fa29306d273147e53803d4f",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/104"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "open one isolated Project and current Chapter",
         contract_coverage: COVERAGE_03,
@@ -297,6 +310,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/119",
         title: "Harden Sensitive Read Origin Admission with Standard URL Parsing",
         issue_body_sha256: "e28c601251b1fd0905f0b1bf1d38a249102f41613a6cfc7096eec869097d9f6e",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/105"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "harden sensitive read origin admission",
         contract_coverage: COVERAGE_03,
@@ -306,6 +320,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/121",
         title: "Implement Project-Scoped Anti-Forgery Challenge Admission",
         issue_body_sha256: "f9fa15fd8b28fcc6857f16c48cbca164db571bd945369a9204210e7789b67f0f",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/119"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "establish the Project-scoped command challenge and pre-domain idempotency fence",
         contract_coverage: COVERAGE_03B,
@@ -315,6 +330,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
         issue_body_sha256: "db44ffa60cf52d0e59c54e11c6496ac4c48ea3d1ef4c038dc40e00a3e2b1a9f9",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/121"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",
         contract_coverage: COVERAGE_04,
@@ -324,6 +340,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/107",
         title: "Settle One Direct Author Edit into an Authoritative Revision",
         issue_body_sha256: "755e6d56422445da42ce4ab904f1c2894e5ab1552e67f52497ba74fd07bf3b77",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/106"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "settle one Direct Author Action as an authoritative Revision",
         contract_coverage: COVERAGE_05,
@@ -332,7 +349,8 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-06",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/108",
         title: "Complete Bounded Manual Input and IME Semantics",
-        issue_body_sha256: "d7d6e6c55be9be5baab6a9f9ef6fd0cf800fed2541651db988752d99d42fd168",
+        issue_body_sha256: "1989df5942675d9ba7785144890dc3d7d24e134d420578fb16e28a99fa79552f",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/60"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "complete bounded manual input, IME, and same-session base roll-forward semantics",
         contract_coverage: COVERAGE_06,
@@ -342,6 +360,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/109",
         title: "Reconcile Acknowledgement Loss without Duplicate Authority",
         issue_body_sha256: "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/108"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "reconcile acknowledgement loss without duplicate authority",
         contract_coverage: COVERAGE_07,
@@ -351,6 +370,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/110",
         title: "Recover Settled and Unsettled Edits across Reload and Restart",
         issue_body_sha256: "526e75701f2b9acb1461fc99a6e68c6bf533f96aaa86c4e7e5a18244109ce196",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/109"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "recover settled and unsettled edits after reload and restart",
         contract_coverage: COVERAGE_08,
@@ -360,6 +380,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/111",
         title: "Fence Stale Writers and Resync across Replay Generations",
         issue_body_sha256: "78ac6a7fbec0886fc4c993140b1b3dd4c9da13db3b15fb36706a4f4021c7839f",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/110"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "fence stale writers and resync replay generations",
         contract_coverage: COVERAGE_09,
@@ -369,6 +390,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/112",
         title: "Complete the Stage 1 Mandatory Evidence and Handoff",
         issue_body_sha256: "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/111"),
         evidence_role: EvidenceRole::AcceptanceHandoff,
         responsibility: "assemble the mandatory Stage 1 evidence and handoff",
         contract_coverage: COVERAGE_10,
@@ -407,9 +429,7 @@ pub(super) fn delivery_contract() -> DeliveryContract {
                 parent: PARENT_ISSUE,
                 title: definition.title,
                 issue_body_sha256: definition.issue_body_sha256,
-                blocked_by: index
-                    .checked_sub(1)
-                    .map(|blocker_index| TICKET_DEFINITIONS[blocker_index].issue),
+                blocked_by: definition.blocked_by,
                 evidence_role: definition.evidence_role,
                 responsibility: definition.responsibility,
                 contract_coverage: definition.contract_coverage,
