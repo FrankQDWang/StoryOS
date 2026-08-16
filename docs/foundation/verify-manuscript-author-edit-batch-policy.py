@@ -60,6 +60,8 @@ def union_variant_body(text: str, variant: str, next_variant: str) -> str | None
         flags=re.DOTALL,
     )
     return match.group("body") if match else None
+def union_variant_names(text: str) -> tuple[str, ...]:
+    return tuple(re.findall(r"^  (?:\| )?([A-Z][A-Za-z0-9]*)\b", text, flags=re.MULTILINE))
 def require_union_variant_shape(
     errors: list[str],
     union: str,
@@ -78,12 +80,13 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
     for variant in schema.get("$defs", {}).get("ApplyAuthorEditEffect", {}).get("oneOf", []):
         kind = variant.get("properties", {}).get("kind", {}).get("const")
         if isinstance(kind, str):
+            if kind in variants:
+                errors.append(f"applyAuthorEdit response repeats {kind} effect")
             variants[kind] = variant
     expected_fields = {
         "authoritative_applied": {
             "kind", "authoritative_revision", "authoritative_commit_id",
-            "author_action_sequence", "project_activity_position",
-        },
+            "author_action_sequence", "project_activity_position"},
         "no_effect": {"kind", "reason"},
         "conflicted": {"kind", "reason", "current_authoritative_revision_id"},
         "refused": {"kind", "reason"},
@@ -108,6 +111,10 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         errors.append("Web GroupSettlement union is missing")
     else:
         settlement = group_settlement.group(0)
+        if union_variant_names(settlement) != (
+            "Unsettled", "PreAdmissionRefused", "AppliedReceiptSettled",
+            "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled", "RequiresReconfirmation"):
+            errors.append("Web GroupSettlement variants drifted")
         require_union_variant_shape(
             errors, settlement, "AppliedReceiptSettled", "ZeroAuthorityReceiptSettled",
             ("receipt_ref: DomainReceiptRef", "project_activity_position"),
@@ -130,6 +137,11 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         errors.append("Web AuthorSurfaceConvergence union is missing")
     else:
         convergence_union = convergence.group(0)
+        if union_variant_names(convergence_union) != (
+            "Pending", "AppliedReceiptConverged", "ZeroAuthorityReceiptVisible",
+            "OtherEditorReceiptConverged", "PreAdmissionRefusalConverged",
+            "ReconfirmationConverged"):
+            errors.append("Web AuthorSurfaceConvergence variants drifted")
         require_union_variant_shape(
             errors, convergence_union, "AppliedReceiptConverged", "ZeroAuthorityReceiptVisible",
             ("receipt_ref: DomainReceiptRef", "project_activity_position", "projection_proof:"),
@@ -154,6 +166,12 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         errors.append("Web BrowserProtocolObservation union is missing")
     else:
         observation_union = observations.group(0)
+        if union_variant_names(observation_union) != (
+            "PreAdmissionProblemObservation", "UnresolvedTransportProblemObservation",
+            "AcceptedObservation", "ApplyAuthorEditAppliedObservation",
+            "ApplyAuthorEditZeroAuthorityObservation", "OtherEditorCommittedObservation",
+            "RequiresReconfirmationObservation", "OutcomeUnknownProblemObservation"):
+            errors.append("Web BrowserProtocolObservation variants drifted")
         require_union_variant_shape(
             errors, observation_union, "ApplyAuthorEditAppliedObservation",
             "ApplyAuthorEditZeroAuthorityObservation",
@@ -323,8 +341,7 @@ def self_test() -> None:
     zero_variant["properties"]["project_activity_position"] = {"type": "string"}
     zero_variant["required"].append("project_activity_position")
     assert "no_effect effect shape drifted" in "\n".join(
-        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections)
-    )
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
     changed_schema = deepcopy(response_schema)
     applied_variant = next(
         variant for variant in changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
@@ -335,6 +352,11 @@ def self_test() -> None:
     assert "authoritative_applied effect shape drifted" in "\n".join(
         policy_errors(policy, evidence, candidate_metrics, changed_schema, projections)
     )
+    changed_schema = deepcopy(response_schema)
+    effects = changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+    effects.append(deepcopy(effects[0]))
+    assert "response repeats authoritative_applied effect" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
     web = PROJECTIONS[3].as_posix()
     for old, new, expected_error in (
         ("receipt_ref: DomainReceiptRef\n      result: NoEffect | Conflicted | Refused",
@@ -347,19 +369,15 @@ def self_test() -> None:
          "      project_activity_position", "AppliedReceiptSettled shape drifted"),
         ("      result: NoEffect | Conflicted | Refused\n      committed_at",
          "      committed_at", "ZeroAuthorityReceiptSettled shape drifted"),
-        ("      effect: NoEffect | Conflicted | Refused\n      completed_intent_record_id",
-         "      effect: NoEffect | Conflicted | Refused\n"
-         "      project_activity_position\n      completed_intent_record_id",
-         "ApplyAuthorEditZeroAuthorityObservation shape drifted"),
-        ("      receipt_ref: ReceiptRef\n      project_activity_position\n      committed_at",
-         "      receipt_ref: ReceiptRef\n      committed_at",
-         "OtherEditorReceiptSettled shape drifted"),
+        ("  | ZeroAuthorityReceiptSettled {",
+         "  | ReceiptSettled {\n      receipt_ref: ReceiptRef\n"
+         "      project_activity_position\n    }\n  | ZeroAuthorityReceiptSettled {",
+         "GroupSettlement variants drifted"),
     ):
         changed_projections = dict(projections)
         changed_projections[web] = changed_projections[web].replace(old, new, 1)
-        assert expected_error in "\n".join(
-            policy_errors(policy, evidence, candidate_metrics, response_schema, changed_projections)
-        )
+        assert expected_error in "\n".join(policy_errors(
+            policy, evidence, candidate_metrics, response_schema, changed_projections))
 def main() -> None:
     errors = policy_errors(*current_sources())
     if errors:
