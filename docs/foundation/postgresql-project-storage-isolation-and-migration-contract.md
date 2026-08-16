@@ -515,7 +515,9 @@ that every Receipt Head belongs to that target. It then branches on the Receipt
 must have exactly one complete Activity, Author Action, Commit, Revision, and
 payload relation. Its prior Receipt Head, Commit prior Revision, Envelope parent
 Revision, target object, and payload digest must agree. `NoEffect`, `Conflicted`,
-and `Refused` must have no authority relation. A
+and `Refused` must have no authority relation. A `stale_authoritative_head`
+conflict must preserve an expected Head that differs from its recorded current
+Head. A
 missing, duplicate, mixed, malformed, or surplus relation fails closed. The
 read path never uses an empty identity, zero position, nullable authority field,
 fallback join, or guessed current Head.

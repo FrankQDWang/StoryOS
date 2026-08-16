@@ -535,7 +535,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             &outcome_commands[0],
             outcomes[0].ids.receipt_id.as_str(),
             [
-                applied_revision_id,
+                "018f0000-0000-7001-8000-000000000790",
                 applied_revision_id,
                 applied_revision_id,
             ],
@@ -606,6 +606,78 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             .await
             .unwrap();
     }
+
+    let impossible_stale_receipt = "UPDATE storyos.domain_receipts
+            SET prior_heads = expected_heads,
+                resulting_heads = expected_heads,
+                result_payload = jsonb_build_object(
+                  'reason', 'stale_authoritative_head',
+                  'current_authoritative_revision_id', expected_heads[1]::text)
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND receipt_id = $3::text::uuid";
+    let rejected_stale_receipt = admin
+        .execute(
+            impossible_stale_receipt,
+            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
+        )
+        .await;
+    assert!(rejected_stale_receipt.is_err());
+
+    let result_shape_definition = admin
+        .query_one(
+            "SELECT pg_get_constraintdef(oid)
+               FROM pg_constraint
+              WHERE conrelid = 'storyos.domain_receipts'::regclass
+                AND conname = 'domain_receipts_result_shape'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(0);
+    admin
+        .batch_execute(
+            "ALTER TABLE storyos.domain_receipts
+               DROP CONSTRAINT domain_receipts_result_shape",
+        )
+        .await
+        .unwrap();
+    admin
+        .execute(
+            impossible_stale_receipt,
+            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &outcome_commands[0]).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET prior_heads = ARRAY[$4::text::uuid],
+                    resulting_heads = ARRAY[$4::text::uuid],
+                    result_payload = jsonb_build_object(
+                      'reason', 'stale_authoritative_head',
+                      'current_authoritative_revision_id', $4::text)
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &outcomes[0].ids.receipt_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+    admin
+        .batch_execute(&format!(
+            "ALTER TABLE storyos.domain_receipts
+               ADD CONSTRAINT domain_receipts_result_shape {result_shape_definition}"
+        ))
+        .await
+        .unwrap();
 
     admin
         .execute(
