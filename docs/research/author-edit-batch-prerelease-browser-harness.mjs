@@ -4,7 +4,6 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const policyPath = join(root, "docs/foundation/author-edit-batch-release-1-policy.json");
 const evidencePath = join(root, "docs/research/author-edit-batch-prerelease-browser-evidence.json");
@@ -18,9 +17,7 @@ const chrome = [
   "/usr/bin/google-chrome",
   "/usr/bin/chromium",
 ].filter(Boolean).find(existsSync);
-
 if (!chrome) throw new Error("Chrome or Chromium is required for the prerelease browser harness");
-
 const page = `<!doctype html><meta charset="utf-8"><textarea id="editor"></textarea>
 <pre id="result">running</pre><script>
 window.addEventListener("error", event => {
@@ -34,9 +31,8 @@ let composing = false;
 let nextSequence = 1;
 let intents = [];
 let latencies = [];
-const hardOrigins = new Set(["composition_confirmation", "paste", "cut", "drop",
-  "split_block", "join_blocks", "move_block", "retype_block", "explicit_editor_command",
-  "policy_identity_change", "shared_binding_change"]);
+const hardOrigins = new Set(["composition_confirmation", "paste", "cut", "drop", "split_block",
+  "join_blocks", "move_block", "retype_block", "explicit_editor_command", "policy_identity_change", "shared_binding_change"]);
 const record = (origin, text = "x", from = 0, to = 0) => intents.push({
   sequence: nextSequence++, at_ms: now, origin,
   coverage: { first: nextSequence - 1, last: nextSequence - 1 },
@@ -50,9 +46,8 @@ editor.addEventListener("compositionend", (event) => {
 });
 editor.addEventListener("input", (event) => {
   if (composing || event.isComposing || event.inputType === "insertCompositionText") return;
-  const origins = { insertText: "typing", insertFromPaste: "paste",
-    insertFromDrop: "drop", deleteByCut: "cut", deleteContentBackward: "deletion",
-    insertReplacementText: "selection_replacement" };
+  const origins = { insertText: "typing", insertFromPaste: "paste", insertFromDrop: "drop",
+    deleteByCut: "cut", deleteContentBackward: "deletion", insertReplacementText: "selection_replacement" };
   record(origins[event.inputType] ?? "explicit_editor_command", event.data ?? "");
 });
 editor.addEventListener("storyos-boundary", event => record(event.detail));
@@ -83,8 +78,8 @@ function emitBoundary(origin) {
 function snapshot(action) {
   reset(); action();
   const sorted = latencies.slice().sort((a, b) => a - b);
-  return { records: intents.slice(), browser_input_latency_ms: { max: Math.max(...latencies),
-    p95: sorted[Math.floor(sorted.length * 0.95)] ?? 0, classification: "advisory" } };
+  return { records: intents.slice(), browser_input_latency_ms: { max: Math.max(...latencies), p95:
+    sorted[Math.floor(sorted.length * 0.95)] ?? 0, classification: "advisory" } };
 }
 function english(count, gap) {
   for (let i = 0; i < count; i += 1) emit("input", { inputType: "insertText", data: "a" }, gap);
@@ -97,6 +92,11 @@ function ime() {
   emit("compositionstart", { data: "" }, 20);
   emit("compositionupdate", { data: "hao" }, 20);
   emit("compositionend", { data: "" }, 20);
+}
+function boundarySandwich(origin) {
+  emit("input", { inputType: "insertText", data: "a" }, 10);
+  emitBoundary(origin);
+  emit("input", { inputType: "insertText", data: "b" }, 10);
 }
 function batch(records, idleMs, maxUnits) {
   const groups = [];
@@ -171,6 +171,8 @@ function validCoverage(records, units, policyRevision) {
       || records[index - 1].coverage.last < record.coverage.first);
 }
 
+const hardBoundaryTraces = Object.fromEntries([...hardOrigins].map(origin =>
+  [origin, snapshot(() => boundarySandwich(origin))]));
 const scenarios = {
   continuous_english: snapshot(() => english(300, 25)),
   slow_english: snapshot(() => english(20, 600)),
@@ -181,7 +183,9 @@ const scenarios = {
     emit("input", { inputType: "deleteContentBackward", data: null }, 10);
     emit("input", { inputType: "insertReplacementText", data: "replace" }, 10);
   }),
-  hard_boundaries: snapshot(() => [...hardOrigins].forEach(emitBoundary)),
+  hard_boundaries: snapshot(() => [...hardOrigins].forEach(origin => {
+    boundarySandwich(origin); now += 1000;
+  })),
   pressure: snapshot(() => english(1024, 1)),
 };
 const candidates = [];
@@ -210,14 +214,24 @@ const coverage = scenarios.continuous_english.records.slice(0, 3)
     coverage: { first: index + 1, last: index + 1 } }));
 const coverageUnits = coverage.map(record => record.unit);
 const invalidLaterUnit = run({ kind: "unit", valid: true }, { kind: "unit", valid: false });
-const hardGroups = batch(scenarios.hard_boundaries.records, 750, 256);
+const hardBoundaryIsolated = (origin, records) => {
+  const groups = batch(records, 750, 256);
+  return groups.length === 3 && groups.every(group => group.length === 1)
+    && groups.map(group => group[0].origin).join(",") === "typing," + origin + ",typing";
+};
 const hardBoundaryOracle = Object.fromEntries([...hardOrigins].map(origin => [
   "hard_boundary_" + origin + "_isolated",
-  hardGroups.some(group => group.length === 1 && group[0].origin === origin),
+  hardBoundaryIsolated(origin, hardBoundaryTraces[origin].records),
+]));
+const hardBoundaryMutationOracle = Object.fromEntries([...hardOrigins].map(origin => [
+  "hard_boundary_" + origin + "_missing_mutation_rejected",
+  !hardBoundaryIsolated(origin, hardBoundaryTraces[origin].records
+    .filter(record => record.origin !== origin)),
 ]));
 const semanticOracle = {
   ime_update_and_cancel_not_durable: scenarios.chinese_ime_confirm_cancel.records.length === 1,
   ...hardBoundaryOracle,
+  ...hardBoundaryMutationOracle,
   complete_local_coverage_accepted: validCoverage(coverage, coverageUnits, policy.revision),
   duplicate_local_coverage_rejected: !validCoverage([coverage[0], coverage[0], coverage[2]], coverageUnits, policy.revision),
   skipped_local_coverage_rejected: !validCoverage([coverage[0], coverage[2]], coverageUnits, policy.revision),
@@ -278,6 +292,11 @@ try {
       && Number.isFinite(metrics.browser_input_latency_ms.max)
       && Number.isFinite(metrics.browser_input_latency_ms.p95))));
     assert.deepEqual(captured.semantic_oracle, result.semantic_oracle);
+  }
+  if (process.argv.includes("--capture")) {
+    writeFileSync(candidatesPath, result.candidates.map(JSON.stringify).join("\n") + "\n");
+    writeFileSync(evidencePath, JSON.stringify({ ...captured,
+      captured_at: new Date().toISOString(), semantic_oracle: result.semantic_oracle }, null, 2) + "\n");
   }
   if (process.argv.some(argument => ["--capture", "--json"].includes(argument)))
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);

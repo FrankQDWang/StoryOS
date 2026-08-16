@@ -2,13 +2,22 @@
   "schema": "storyos.author-edit-batch-prerelease-browser-evidence.v1",
   "policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
   "policy_sha256": "e6ef76ddf626d22166986abd429578a5cde617fc4f18f1d347051eecfe7e023d",
-  "captured_at": "2026-08-16T07:04:00Z",
+  "captured_at": "2026-08-16T07:21:39.936Z",
   "browser": "Google Chrome 151.0.7922.138",
   "synthetic_only": true,
   "real_user_content": false,
   "candidate_order": {
-    "idle_ms": [250, 500, 750],
-    "max_units": [64, 128, 240, 256]
+    "idle_ms": [
+      250,
+      500,
+      750
+    ],
+    "max_units": [
+      64,
+      128,
+      240,
+      256
+    ]
   },
   "candidate_metric_records": "docs/research/author-edit-batch-prerelease-browser-candidates.jsonl",
   "advisory_latency_scope": "Each retained candidate and scenario records browser input-event dispatch latency and candidate grouping-evaluation latency from one synthetic single-machine run; these values are not an SLA or deterministic pass threshold.",
@@ -25,6 +34,17 @@
     "hard_boundary_explicit_editor_command_isolated": true,
     "hard_boundary_policy_identity_change_isolated": true,
     "hard_boundary_shared_binding_change_isolated": true,
+    "hard_boundary_composition_confirmation_missing_mutation_rejected": true,
+    "hard_boundary_paste_missing_mutation_rejected": true,
+    "hard_boundary_cut_missing_mutation_rejected": true,
+    "hard_boundary_drop_missing_mutation_rejected": true,
+    "hard_boundary_split_block_missing_mutation_rejected": true,
+    "hard_boundary_join_blocks_missing_mutation_rejected": true,
+    "hard_boundary_move_block_missing_mutation_rejected": true,
+    "hard_boundary_retype_block_missing_mutation_rejected": true,
+    "hard_boundary_explicit_editor_command_missing_mutation_rejected": true,
+    "hard_boundary_policy_identity_change_missing_mutation_rejected": true,
+    "hard_boundary_shared_binding_change_missing_mutation_rejected": true,
     "complete_local_coverage_accepted": true,
     "duplicate_local_coverage_rejected": true,
     "skipped_local_coverage_rejected": true,

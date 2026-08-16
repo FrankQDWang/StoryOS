@@ -5,15 +5,12 @@ This is a contract-source and projection-drift check. The browser harness is
 the executable semantic oracle; this verifier does not infer semantics from
 prose or claim that production code already conforms.
 """
-
 from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
 import re
 import sys
-
-
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / "docs/foundation/author-edit-batch-release-1-policy.json"
 EVIDENCE_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-evidence.json"
@@ -41,12 +38,8 @@ PROJECTION_REQUIREMENTS = {
     PROJECTIONS[4]: ("`DVG-01`", "`DVG-02`", "`DVG-03`", "#70-owned structured source",
                      REVISION, EDITOR_REVISION, "captured synthetic evidence binding"),
 }
-
-
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
 def current_sources() -> tuple[dict, dict, list[dict], dict[str, str]]:
     return (
         json.loads(POLICY_PATH.read_text(encoding="utf-8")),
@@ -54,12 +47,8 @@ def current_sources() -> tuple[dict, dict, list[dict], dict[str, str]]:
         [json.loads(line) for line in CANDIDATES_PATH.read_text(encoding="utf-8").splitlines()],
         {path.as_posix(): path.read_text(encoding="utf-8") for path in PROJECTIONS},
     )
-
-
 def visible_markdown(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-
-
 def policy_errors(
     policy: dict, evidence: dict, candidate_metrics: list[dict], projections: dict[str, str]
 ) -> list[str]:
@@ -156,8 +145,6 @@ def policy_errors(
             if required not in projection:
                 errors.append(f"{path.name} projection lost {required}")
     return errors
-
-
 def self_test() -> None:
     policy, evidence, candidate_metrics, projections = current_sources()
     assert policy_errors(policy, evidence, candidate_metrics, projections) == []
@@ -194,8 +181,6 @@ def self_test() -> None:
     assert PROJECTIONS[1].name in "\n".join(
         policy_errors(policy, evidence, candidate_metrics, changed_projections)
     )
-
-
 def main() -> None:
     errors = policy_errors(*current_sources())
     if errors:
@@ -204,7 +189,5 @@ def main() -> None:
         f"verified structured {REVISION} source, evidence binding, and document projection drift; "
         "semantic redlines run in the browser harness"
     )
-
-
 if __name__ == "__main__":
     self_test() if sys.argv[1:] == ["--self-test"] else main()
