@@ -171,6 +171,20 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
     if not any("Receipt/Activity contract" in error for error in receipt_errors):
         errors.append("negative self-test did not reject Receipt/Activity contract drift")
 
+    nullable_receipt_probe = copy.deepcopy(catalog)
+    nullable_receipt_probe["author_edit_receipt_activity"]["typed_value_guard"] = (
+        "allow_check_unknown"
+    )
+    nullable_receipt_errors: list[str] = []
+    validate_catalog(
+        nullable_receipt_probe,
+        route_catalog,
+        nullable_receipt_errors,
+        check_digests=False,
+    )
+    if not any("Receipt/Activity contract" in error for error in nullable_receipt_errors):
+        errors.append("negative self-test did not reject nullable Receipt contract drift")
+
     credential_probe = copy.deepcopy(catalog)
     credential_probe["migration_chain"]["bootstrap"]["runtime_credential_source"] = (
         "tracked_bootstrap_password"
@@ -221,6 +235,7 @@ def main() -> int:
         print("OK: invented-table-family negative self-test rejected a bad catalog")
         print("OK: bootstrap-checksum negative self-test rejected a bad catalog")
         print("OK: Receipt/Activity negative self-test rejected a bad catalog")
+        print("OK: nullable-Receipt negative self-test rejected a bad catalog")
         print("OK: bootstrap-credential negative self-test rejected a bad catalog")
     return 0
 

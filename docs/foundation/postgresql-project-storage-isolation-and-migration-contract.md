@@ -392,6 +392,11 @@ Envelope's exact object, parent Revision, and resulting Revision. Author Action
 and Project Activity references continue the same Receipt and Commit tuple.
 These references cannot name a zero-authority Receipt.
 
+Every Receipt identity array rejects SQL `NULL` elements. Typed result
+discriminants and identity values are JSON strings, never JSON `null`. The
+complete result-shape constraint must evaluate `TRUE`; PostgreSQL `UNKNOWN`
+cannot admit a durable Receipt.
+
 The physical mapping is closed as follows:
 
 | Logical record | Catalog family | Required physical rule |
