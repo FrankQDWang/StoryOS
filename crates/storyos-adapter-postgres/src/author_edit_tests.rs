@@ -519,6 +519,45 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await;
     assert!(malformed_zero_receipt.is_err());
 
+    let null_no_effect_receipt = "UPDATE storyos.domain_receipts
+            SET expected_heads = ARRAY[NULL]::uuid[],
+                prior_heads = ARRAY[NULL]::uuid[],
+                resulting_heads = ARRAY[NULL]::uuid[]
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND receipt_id = $3::text::uuid";
+    let null_no_effect_heads = admin
+        .execute(
+            null_no_effect_receipt,
+            &[&USER, &PROJECT, &outcomes[1].ids.receipt_id],
+        )
+        .await;
+    assert!(null_no_effect_heads.is_err());
+
+    let null_conflict_receipt = "UPDATE storyos.domain_receipts
+            SET result_payload =
+                  '{\"reason\":null,\"current_authoritative_revision_id\":null}'::jsonb
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND receipt_id = $3::text::uuid";
+    let null_conflict_payload = admin
+        .execute(
+            null_conflict_receipt,
+            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
+        )
+        .await;
+    assert!(null_conflict_payload.is_err());
+
+    let null_refusal_receipt = "UPDATE storyos.domain_receipts
+          SET result_payload = '{\"reason\":null}'::jsonb
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND receipt_id = $3::text::uuid";
+    let null_refusal_reason = admin
+        .execute(
+            null_refusal_receipt,
+            &[&USER, &PROJECT, &outcomes[2].ids.receipt_id],
+        )
+        .await;
+    assert!(null_refusal_reason.is_err());
+
     let applied_revision_id = replay_applied_ids.revision_id.as_str();
     let head_corruption_cases: [(&ApplyAuthorEditCommand, &str, [&str; 3], [&str; 3]); 4] = [
         (
@@ -623,6 +662,17 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await;
     assert!(rejected_stale_receipt.is_err());
 
+    let common_shape_definition = admin
+        .query_one(
+            "SELECT pg_get_constraintdef(oid)
+               FROM pg_constraint
+              WHERE conrelid = 'storyos.domain_receipts'::regclass
+                AND conname = 'domain_receipts_common_shape'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, String>(0);
     let result_shape_definition = admin
         .query_one(
             "SELECT pg_get_constraintdef(oid)
@@ -637,10 +687,93 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     admin
         .batch_execute(
             "ALTER TABLE storyos.domain_receipts
+               DROP CONSTRAINT domain_receipts_common_shape;
+             ALTER TABLE storyos.domain_receipts
                DROP CONSTRAINT domain_receipts_result_shape",
         )
         .await
         .unwrap();
+
+    admin
+        .execute(
+            null_no_effect_receipt,
+            &[&USER, &PROJECT, &outcomes[1].ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &outcome_commands[1]).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET expected_heads = ARRAY[$4::text::uuid],
+                    prior_heads = ARRAY[$4::text::uuid],
+                    resulting_heads = ARRAY[$4::text::uuid]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &outcomes[1].ids.receipt_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+
+    admin
+        .execute(
+            null_conflict_receipt,
+            &[&USER, &PROJECT, &outcomes[0].ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &outcome_commands[0]).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET result_payload = jsonb_build_object(
+                      'reason', 'stale_authoritative_head',
+                      'current_authoritative_revision_id', $4::text)
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &outcomes[0].ids.receipt_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+
+    admin
+        .execute(
+            null_refusal_receipt,
+            &[&USER, &PROJECT, &outcomes[2].ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &outcome_commands[2]).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET result_payload = '{\"reason\":\"invalid_selection\"}'::jsonb
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[&USER, &PROJECT, &outcomes[2].ids.receipt_id],
+        )
+        .await
+        .unwrap();
+
     admin
         .execute(
             impossible_stale_receipt,
@@ -669,6 +802,13 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
                 &replay_applied_ids.revision_id,
             ],
         )
+        .await
+        .unwrap();
+    admin
+        .batch_execute(&format!(
+            "ALTER TABLE storyos.domain_receipts
+               ADD CONSTRAINT domain_receipts_common_shape {common_shape_definition}"
+        ))
         .await
         .unwrap();
     admin

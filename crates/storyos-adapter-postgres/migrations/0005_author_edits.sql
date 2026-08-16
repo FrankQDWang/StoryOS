@@ -215,8 +215,17 @@ CREATE TABLE storyos.domain_receipts (
     AND cardinality(draft_artifact_refs) = 0
     AND cardinality(artifact_lifecycle_event_refs) = 0
     AND cardinality(condition_refs) = 0
+    AND array_position(expected_heads, NULL) IS NULL
+    AND array_position(prior_heads, NULL) IS NULL
+    AND array_position(resulting_heads, NULL) IS NULL
+    AND array_position(authoritative_revision_ids, NULL) IS NULL
+    AND array_position(proposal_revision_ids, NULL) IS NULL
+    AND array_position(authoritative_commit_ids, NULL) IS NULL
+    AND array_position(draft_artifact_refs, NULL) IS NULL
+    AND array_position(artifact_lifecycle_event_refs, NULL) IS NULL
+    AND array_position(condition_refs, NULL) IS NULL
   ),
-  CONSTRAINT domain_receipts_result_shape CHECK (
+  CONSTRAINT domain_receipts_result_shape CHECK ((
     (result_kind = 'authoritative_applied'
       AND result_payload = '{}'::jsonb
       AND cardinality(authoritative_revision_ids) = 1
@@ -232,6 +241,8 @@ CREATE TABLE storyos.domain_receipts (
       AND result_payload ? 'reason'
       AND result_payload ? 'current_authoritative_revision_id'
       AND result_payload - 'reason' - 'current_authoritative_revision_id' = '{}'::jsonb
+      AND jsonb_typeof(result_payload->'reason') = 'string'
+      AND jsonb_typeof(result_payload->'current_authoritative_revision_id') = 'string'
       AND result_payload->>'reason' IN (
         'stale_authoritative_head', 'proposal_head_present', 'ownership_changed'
       )
@@ -244,6 +255,7 @@ CREATE TABLE storyos.domain_receipts (
     OR (result_kind = 'refused'
       AND result_payload ? 'reason'
       AND result_payload - 'reason' = '{}'::jsonb
+      AND jsonb_typeof(result_payload->'reason') = 'string'
       AND result_payload->>'reason' IN (
         'unsupported_intent_shape', 'invalid_selection', 'target_mismatch'
       )
@@ -251,7 +263,7 @@ CREATE TABLE storyos.domain_receipts (
       AND cardinality(authoritative_commit_ids) = 0
       AND prior_heads = resulting_heads
       AND expected_heads = resulting_heads)
-  ),
+  ) IS TRUE),
   FOREIGN KEY (
     owner_user_id, project_id, author_command_admission_id, command_id,
     command_kind, command_digest, idempotency_key
