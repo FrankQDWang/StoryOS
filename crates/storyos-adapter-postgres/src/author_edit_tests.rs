@@ -558,6 +558,42 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await;
     assert!(null_refusal_reason.is_err());
 
+    let zero_based_heads_receipt = "UPDATE storyos.domain_receipts
+            SET expected_heads = array_fill($4::text::uuid, ARRAY[1], ARRAY[0]),
+                prior_heads = array_fill($4::text::uuid, ARRAY[1], ARRAY[0]),
+                resulting_heads = array_fill($4::text::uuid, ARRAY[1], ARRAY[0])
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND receipt_id = $3::text::uuid";
+    let zero_based_heads = admin
+        .execute(
+            zero_based_heads_receipt,
+            &[
+                &USER,
+                &PROJECT,
+                &outcomes[1].ids.receipt_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await;
+    assert!(zero_based_heads.is_err());
+
+    let zero_based_commit_ids_receipt = "UPDATE storyos.domain_receipts
+          SET authoritative_commit_ids = array_fill($4::text::uuid, ARRAY[1], ARRAY[0])
+          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+            AND receipt_id = $3::text::uuid";
+    let zero_based_commit_ids = admin
+        .execute(
+            zero_based_commit_ids_receipt,
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.receipt_id,
+                &replay_applied_ids.authoritative_commit_id,
+            ],
+        )
+        .await;
+    assert!(zero_based_commit_ids.is_err());
+
     let applied_revision_id = replay_applied_ids.revision_id.as_str();
     let head_corruption_cases: [(&ApplyAuthorEditCommand, &str, [&str; 3], [&str; 3]); 4] = [
         (
@@ -690,6 +726,72 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
                DROP CONSTRAINT domain_receipts_common_shape;
              ALTER TABLE storyos.domain_receipts
                DROP CONSTRAINT domain_receipts_result_shape",
+        )
+        .await
+        .unwrap();
+
+    admin
+        .execute(
+            zero_based_heads_receipt,
+            &[
+                &USER,
+                &PROJECT,
+                &outcomes[1].ids.receipt_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &outcome_commands[1]).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET expected_heads = ARRAY[$4::text::uuid],
+                    prior_heads = ARRAY[$4::text::uuid],
+                    resulting_heads = ARRAY[$4::text::uuid]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &outcomes[1].ids.receipt_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+
+    admin
+        .execute(
+            zero_based_commit_ids_receipt,
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.receipt_id,
+                &replay_applied_ids.authoritative_commit_id,
+            ],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &command).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET authoritative_commit_ids = ARRAY[$4::text::uuid]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.receipt_id,
+                &replay_applied_ids.authoritative_commit_id,
+            ],
         )
         .await
         .unwrap();

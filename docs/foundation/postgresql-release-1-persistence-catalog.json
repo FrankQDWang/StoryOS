@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v2",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v2",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:b8cb4d228c4d4ec50d77c82fa618c3b98851813bbc3731e702320fef9ee27d12",
+    "migration_chain_digest": "sha256:430199c7f1beba2ff6f03f6a26648393eb5d3338bb415fe2a2d81aec42c0de54",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -49,7 +49,7 @@
     "applied_relation_cardinality": "exactly_one_complete_activity_authority_relation",
     "authority_relation_binding": "composite_applied_receipt_admission_object_prior_revision",
     "zero_relation_cardinality": "no_activity_revision_payload_commit_head_or_author_action",
-    "typed_value_guard": "no_sql_null_array_elements_or_json_null_typed_values",
+    "typed_value_guard": "one_based_single_identity_arrays_no_sql_or_json_null",
     "zero_settlement_write_set": [
       "typed_domain_receipt",
       "admission_receipt_settled",
@@ -177,7 +177,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:ab81ac5935a3158d8d4904d181701cdeb64ecf978946042cd7a7d36fe0470b66",
+      "manifest_sha256": "sha256:2f73c597ac488081fd888f7db05ac03fc448c0f826cefcda152f348b7e188d6d",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -197,7 +197,7 @@
         },
         {
           "path": "crates/storyos-adapter-postgres/migrations/0005_author_edits.sql",
-          "lf_sha256": "sha256:f04bf91c93e663dc3ce6eedbfcd59076e16ec551aad232b2719a9069be3dc5ed"
+          "lf_sha256": "sha256:d917fb17b1c984d4d4f6458f60ab0bd8ae92563e3924e6f43e7ed5e63612841e"
         }
       ]
     },
