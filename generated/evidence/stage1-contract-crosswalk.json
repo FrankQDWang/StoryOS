@@ -11,9 +11,9 @@
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-16-v14",
-      "baseline_commit": "814c0e04b193b0362b78ec2c8287e57cf349f332",
-      "baseline_tree": "a0593106ef4b5de57205a40f9901adf46f263c8d",
+      "revision": "stage1-ticketed-delivery-2026-08-17-v15",
+      "baseline_commit": "9c8e9d4659169e2490acd53558a77e8bc409a3e7",
+      "baseline_tree": "0f20f666868aaa34c3c4802feb0ac1165d95de33",
       "ticket_set_sha256": "sha256:9b67b2f490e22867438ee696fea2f522ecfaa3d133743c402bcfa394c157a32c",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
