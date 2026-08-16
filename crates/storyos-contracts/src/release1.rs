@@ -37,7 +37,11 @@ pub(super) const GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
     "storyos.query.editor-session.response.v1";
 pub const APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID: &str =
     "storyos.command.apply-author-edit.request.v1";
-pub const EDITOR_CONTRACT_REVISION: &str = "storyos.editor-contract.release-1.v1";
+pub const EDITOR_CONTRACT_REVISION: &str = "storyos.editor-contract.release-1.v2";
+pub const AUTHOR_EDIT_BATCH_POLICY_REVISION: &str =
+    "storyos.author-edit-batch.release-1.preview.v1";
+pub const MAX_AUTHOR_EDIT_UNITS: usize = 240;
+pub const MAX_NORMALIZED_AUTHOR_EDIT_PRIMITIVES: usize = 240;
 pub(super) const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID: &str =
     "storyos.command.apply-author-edit.response.v1";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";

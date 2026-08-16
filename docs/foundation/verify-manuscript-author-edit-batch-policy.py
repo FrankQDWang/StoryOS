@@ -21,6 +21,10 @@ PROJECTIONS = (
     ROOT / "docs/foundation/manuscript-revision-proposal-state-machine.md",
     ROOT / "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",
     ROOT / "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
+    ROOT / "crates/storyos-contracts/src/release1.rs",
+    ROOT / "crates/storyos-core/src/lib.rs",
+    ROOT / "crates/storyos-application/src/author_edit.rs",
+    ROOT / "apps/web/src/editor-session.mjs",
 )
 REVISION = "storyos.author-edit-batch.release-1.preview.v1"
 EDITOR_REVISION = "storyos.editor-contract.release-1.v2"
@@ -37,6 +41,15 @@ PROJECTION_REQUIREMENTS = {
                      EDITOR_REVISION, "240 consecutive typing"),
     PROJECTIONS[4]: ("`DVG-01`", "`DVG-02`", "`DVG-03`", "#70-owned structured source",
                      REVISION, EDITOR_REVISION, "captured synthetic evidence binding"),
+    PROJECTIONS[5]: (f'EDITOR_CONTRACT_REVISION: &str = "{EDITOR_REVISION}"',
+                     f'AUTHOR_EDIT_BATCH_POLICY_REVISION: &str =\n    "{REVISION}"',
+                     "MAX_AUTHOR_EDIT_UNITS: usize = 240",
+                     "MAX_NORMALIZED_AUTHOR_EDIT_PRIMITIVES: usize = 240"),
+    PROJECTIONS[6]: ("MAX_AUTHOR_EDIT_UNITS: usize = 240",
+                     "MAX_NORMALIZED_PRIMITIVES: usize = 240"),
+    PROJECTIONS[7]: (f'command.editor_contract_revision != "{EDITOR_REVISION}"',
+                     "MAX_AUTHOR_EDIT_UNITS", "MAX_NORMALIZED_PRIMITIVES"),
+    PROJECTIONS[8]: (f'EDITOR_CONTRACT_REVISION = "{EDITOR_REVISION}"',),
 }
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()

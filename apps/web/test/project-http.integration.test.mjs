@@ -386,7 +386,7 @@ test("one current writer settles one Author Edit and exact retries return one re
       target_refs: currentSession.base_snapshot.target_refs,
       observed_ownership_partition:
         currentSession.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v1",
+      editor_contract_revision: "storyos.editor-contract.release-1.v2",
       undo_group_id: "018f0000-0000-7001-8000-000000000025",
       completed_intent_record_id: "018f0000-0000-7001-8000-000000000026",
       local_intent_sequence: "1",

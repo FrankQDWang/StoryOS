@@ -66,6 +66,8 @@ pub enum AuthorEditRefusal {
 }
 
 pub const UTF16_COORDINATE_PROFILE: &str = "storyos.editor.utf16-code-unit.v1";
+pub const MAX_AUTHOR_EDIT_UNITS: usize = 240;
+pub const MAX_NORMALIZED_PRIMITIVES: usize = 240;
 
 pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
     if command.expected_authoritative_revision_id != command.current_authoritative_revision_id {
@@ -106,47 +108,54 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
             reason: AuthorEditRefusal::TargetMismatch,
         };
     }
-    let [unit] = command.author_edit_units.as_slice() else {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape,
-        };
-    };
-    let [AuthorEditPrimitive::ReplaceSelection { from, to, text }] =
-        unit.normalized_primitives.as_slice()
-    else {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::UnsupportedIntentShape,
-        };
-    };
-    if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE
-        || unit.selection_snapshot.from != *from
-        || unit.selection_snapshot.to != *to
+    let primitive_count = command
+        .author_edit_units
+        .iter()
+        .try_fold(0_usize, |count, unit| {
+            count.checked_add(unit.normalized_primitives.len())
+        });
+    if command.author_edit_units.is_empty()
+        || command.author_edit_units.len() > MAX_AUTHOR_EDIT_UNITS
+        || primitive_count.is_none_or(|count| count > MAX_NORMALIZED_PRIMITIVES)
     {
         return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection,
+            reason: AuthorEditRefusal::UnsupportedIntentShape,
         };
     }
-    let Some(from_byte) = utf16_offset_to_byte(&command.current_body, *from) else {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection,
+    let mut body = command.current_body.clone();
+    for unit in &command.author_edit_units {
+        let [AuthorEditPrimitive::ReplaceSelection { from, to, text }] =
+            unit.normalized_primitives.as_slice()
+        else {
+            return ApplyAuthorEditResult::Refused {
+                reason: AuthorEditRefusal::UnsupportedIntentShape,
+            };
         };
-    };
-    let Some(to_byte) = utf16_offset_to_byte(&command.current_body, *to) else {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection,
+        if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE
+            || unit.selection_snapshot.from != *from
+            || unit.selection_snapshot.to != *to
+        {
+            return ApplyAuthorEditResult::Refused {
+                reason: AuthorEditRefusal::InvalidSelection,
+            };
+        }
+        let Some(from_byte) = utf16_offset_to_byte(&body, *from) else {
+            return ApplyAuthorEditResult::Refused {
+                reason: AuthorEditRefusal::InvalidSelection,
+            };
         };
-    };
-    if from_byte > to_byte {
-        return ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection,
+        let Some(to_byte) = utf16_offset_to_byte(&body, *to) else {
+            return ApplyAuthorEditResult::Refused {
+                reason: AuthorEditRefusal::InvalidSelection,
+            };
         };
+        if from_byte > to_byte {
+            return ApplyAuthorEditResult::Refused {
+                reason: AuthorEditRefusal::InvalidSelection,
+            };
+        }
+        body = format!("{}{}{}", &body[..from_byte], text, &body[to_byte..]);
     }
-    let body = format!(
-        "{}{}{}",
-        &command.current_body[..from_byte],
-        text,
-        &command.current_body[to_byte..]
-    );
     if body == command.current_body {
         ApplyAuthorEditResult::NoEffect {
             reason: AuthorEditNoEffect::ContentUnchanged,

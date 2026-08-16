@@ -88,7 +88,7 @@ fn author_command(
         expected_proposal_head_revision_ids: Vec::new(),
         target_refs: vec![format!("manuscript:{CHAPTER}")],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v1".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
         undo_group_id: format!("018f0000-0000-7001-8000-000000000{suffix}8"),
         completed_intent_record_id: format!("018f0000-0000-7001-8000-000000000{suffix}9"),
         local_intent_sequence: suffix.parse().unwrap(),

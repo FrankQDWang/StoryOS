@@ -52,7 +52,7 @@ fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
 }
 
 #[test]
-fn apply_author_edit_contract_is_one_bounded_replace_selection() {
+fn apply_author_edit_contract_has_ordered_replace_selection_units() {
     let request = ApplyAuthorEditRequest {
         command_schema: APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
         client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
@@ -69,18 +69,32 @@ fn apply_author_edit_contract_is_one_bounded_replace_selection() {
         undo_group_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
         completed_intent_record_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
         local_intent_sequence: "1".to_owned(),
-        author_edit_units: vec![AuthorEditUnit {
-            normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
-                from: 4,
-                to: 4,
-                text: "!".to_owned(),
-            }],
-            selection_snapshot: SelectionSnapshot {
-                coordinate_profile: "storyos.editor.utf16-code-unit.v1".to_owned(),
-                from: 4,
-                to: 4,
+        author_edit_units: vec![
+            AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                    from: 4,
+                    to: 4,
+                    text: "!".to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: "storyos.editor.utf16-code-unit.v1".to_owned(),
+                    from: 4,
+                    to: 4,
+                },
             },
-        }],
+            AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                    from: 5,
+                    to: 5,
+                    text: "?".to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: "storyos.editor.utf16-code-unit.v1".to_owned(),
+                    from: 5,
+                    to: 5,
+                },
+            },
+        ],
     };
 
     assert_eq!(APPLY_AUTHOR_EDIT_METHOD, "POST");
@@ -93,4 +107,5 @@ fn apply_author_edit_contract_is_one_bounded_replace_selection() {
             [0]["kind"],
         "replace_selection"
     );
+    assert_eq!(request.author_edit_units.len(), 2);
 }

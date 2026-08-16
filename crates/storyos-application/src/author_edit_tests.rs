@@ -72,7 +72,7 @@ fn command() -> ApplyAuthorEditCommand {
         expected_proposal_head_revision_ids: Vec::new(),
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v1".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
         undo_group_id: "undo".to_owned(),
         completed_intent_record_id: "intent".to_owned(),
         local_intent_sequence: 1,
@@ -103,6 +103,33 @@ async fn matching_bindings_reach_the_atomic_store_once() {
         }
     );
     assert_eq!(*store.0.lock().unwrap(), 1);
+}
+
+#[tokio::test]
+async fn editor_contract_v2_admits_one_bounded_multi_unit_command() {
+    let store = Store(Mutex::new(0));
+    let mut batch = command();
+    batch.editor_contract_revision = "storyos.editor-contract.release-1.v2".to_owned();
+    batch
+        .author_edit_units
+        .push(batch.author_edit_units[0].clone());
+
+    assert!(apply_author_edit(&store, &batch).await.is_ok());
+    assert_eq!(*store.0.lock().unwrap(), 1);
+}
+
+#[tokio::test]
+async fn an_over_limit_batch_never_reaches_the_atomic_store() {
+    let store = Store(Mutex::new(0));
+    let mut batch = command();
+    batch.editor_contract_revision = "storyos.editor-contract.release-1.v2".to_owned();
+    batch.author_edit_units = vec![batch.author_edit_units[0].clone(); 241];
+
+    assert!(matches!(
+        apply_author_edit(&store, &batch).await,
+        Err(AuthorEditError::BindingConflict)
+    ));
+    assert_eq!(*store.0.lock().unwrap(), 0);
 }
 
 #[tokio::test]

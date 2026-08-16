@@ -1,6 +1,9 @@
 use std::future::Future;
 
-use storyos_core::{AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, AuthorEditUnit};
+use storyos_core::{
+    AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal, AuthorEditUnit,
+    MAX_AUTHOR_EDIT_UNITS, MAX_NORMALIZED_PRIMITIVES,
+};
 
 use crate::{EditorClientBinding, EditorSessionId, ProjectCommandChallengeBinding, ProjectScope};
 
@@ -125,6 +128,12 @@ pub async fn apply_author_edit(
             });
         format!("sha256:storyos.command.applyAuthorEdit.jcs.v1:{value}")
     };
+    let primitive_count = command
+        .author_edit_units
+        .iter()
+        .try_fold(0_usize, |count, unit| {
+            count.checked_add(unit.normalized_primitives.len())
+        });
     if challenge.project_scope != command.project_scope
         || challenge.client_session_binding_digest != command.client_binding.binding_ref
         || challenge.client_session_generation != command.client_binding.session_generation
@@ -135,8 +144,10 @@ pub async fn apply_author_edit(
         || challenge.method != "POST"
         || challenge.route_template != "/api/v1/projects/{project_id}/manuscript/author-edits"
         || challenge.command_schema != "storyos.command.apply-author-edit.request.v1"
-        || command.editor_contract_revision != "storyos.editor-contract.release-1.v1"
-        || command.author_edit_units.len() != 1
+        || command.editor_contract_revision != "storyos.editor-contract.release-1.v2"
+        || command.author_edit_units.is_empty()
+        || command.author_edit_units.len() > MAX_AUTHOR_EDIT_UNITS
+        || primitive_count.is_none_or(|count| count > MAX_NORMALIZED_PRIMITIVES)
     {
         return Err(AuthorEditError::BindingConflict);
     }

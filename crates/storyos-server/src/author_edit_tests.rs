@@ -38,6 +38,45 @@ fn request_validation_rejects_a_foreign_target() {
     assert!(validate_request(&request).is_err());
 }
 
+#[test]
+fn request_validation_accepts_v2_multi_unit_and_rejects_the_next_unit() {
+    let mut request = contracts::ApplyAuthorEditRequest {
+        command_schema: contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
+        client_contract_revision: "client".to_owned(),
+        security_policy_revision: "security".to_owned(),
+        correlation_id: "018f0000-0000-7001-8000-000000000030".to_owned(),
+        editor_session_id: "018f0000-0000-7001-8000-000000000021".to_owned(),
+        writer_generation: "1".to_owned(),
+        chapter_id: "018f0000-0000-7001-8000-000000000003".to_owned(),
+        expected_authoritative_revision_id: "018f0000-0000-7001-8000-000000000004".to_owned(),
+        expected_proposal_head_revision_ids: Vec::new(),
+        target_refs: vec!["manuscript:018f0000-0000-7001-8000-000000000003".to_owned()],
+        observed_ownership_partition: "authoritative".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        undo_group_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
+        completed_intent_record_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
+        local_intent_sequence: "1".to_owned(),
+        author_edit_units: Vec::new(),
+    };
+    let unit = contracts::AuthorEditUnit {
+        normalized_primitives: vec![contracts::AuthorEditPrimitive::ReplaceSelection {
+            from: 4,
+            to: 4,
+            text: "!".to_owned(),
+        }],
+        selection_snapshot: contracts::SelectionSnapshot {
+            coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 4,
+            to: 4,
+        },
+    };
+    request.author_edit_units = vec![unit.clone(), unit.clone()];
+    assert!(validate_request(&request).is_ok());
+
+    request.author_edit_units = vec![unit; 241];
+    assert!(validate_request(&request).is_err());
+}
+
 #[tokio::test]
 async fn apply_author_edit_rejects_referer_without_origin() {
     let response = router()

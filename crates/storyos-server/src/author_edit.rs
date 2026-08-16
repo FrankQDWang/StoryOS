@@ -286,12 +286,24 @@ pub(super) async fn apply_author_edit(
 }
 
 fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiError> {
+    let primitive_count = body
+        .author_edit_units
+        .iter()
+        .try_fold(0_usize, |count, unit| {
+            count.checked_add(unit.normalized_primitives.len())
+        });
     if body.command_schema != contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID
         || body.observed_ownership_partition != "authoritative"
         || body.editor_contract_revision != contracts::EDITOR_CONTRACT_REVISION
         || !body.expected_proposal_head_revision_ids.is_empty()
-        || body.author_edit_units.len() != 1
-        || body.author_edit_units[0].normalized_primitives.len() != 1
+        || body.author_edit_units.is_empty()
+        || body.author_edit_units.len() > contracts::MAX_AUTHOR_EDIT_UNITS
+        || primitive_count
+            .is_none_or(|count| count > contracts::MAX_NORMALIZED_AUTHOR_EDIT_PRIMITIVES)
+        || body
+            .author_edit_units
+            .iter()
+            .any(|unit| unit.normalized_primitives.len() != 1)
     {
         return Err(command_target_refused());
     }

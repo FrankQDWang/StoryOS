@@ -12,7 +12,7 @@ export {
 
 const DATABASE_VERSION = 2;
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
-const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v1";
+const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v2";
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const boundedU64 = (value) => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
