@@ -15,6 +15,9 @@ ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / "docs/foundation/author-edit-batch-release-1-policy.json"
 EVIDENCE_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-evidence.json"
 CANDIDATES_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-candidates.jsonl"
+APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH = (
+    ROOT / "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json"
+)
 PROJECTIONS = (
     ROOT / "CONTEXT.md",
     ROOT / "docs/adr/0003-specify-manuscript-revision-and-proposal-state-machine.md",
@@ -40,17 +43,163 @@ PROJECTION_REQUIREMENTS = {
 }
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
-def current_sources() -> tuple[dict, dict, list[dict], dict[str, str]]:
+def current_sources() -> tuple[dict, dict, list[dict], dict, dict[str, str]]:
     return (
         json.loads(POLICY_PATH.read_text(encoding="utf-8")),
         json.loads(EVIDENCE_PATH.read_text(encoding="utf-8")),
         [json.loads(line) for line in CANDIDATES_PATH.read_text(encoding="utf-8").splitlines()],
+        json.loads(APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH.read_text(encoding="utf-8")),
         {path.as_posix(): path.read_text(encoding="utf-8") for path in PROJECTIONS},
     )
 def visible_markdown(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+def union_variant_body(text: str, variant: str, next_variant: str) -> str | None:
+    match = re.search(
+        rf"\|\s*{variant}\s*\{{(?P<body>.*?)(?=\n\s*\|\s*{next_variant})",
+        text,
+        flags=re.DOTALL,
+    )
+    return match.group("body") if match else None
+def union_variant_names(text: str) -> tuple[str, ...]:
+    return tuple(re.findall(r"^  (?:\| )?([A-Z][A-Za-z0-9]*)\b", text, flags=re.MULTILINE))
+def require_union_variant_shape(
+    errors: list[str],
+    union: str,
+    variant: str,
+    next_variant: str,
+    required: tuple[str, ...],
+    forbidden: tuple[str, ...] = (),
+) -> None:
+    body = union_variant_body(union, variant, next_variant)
+    if (body is None or any(value not in body for value in required)
+            or any(value in body for value in forbidden)):
+        errors.append(f"Web {variant} shape drifted")
+def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]:
+    errors: list[str] = []
+    effect_variants = schema.get("$defs", {}).get("ApplyAuthorEditEffect", {}).get("oneOf", [])
+    variants = {}
+    for variant in effect_variants:
+        kind = variant.get("properties", {}).get("kind", {}).get("const")
+        if isinstance(kind, str):
+            variants[kind] = variant
+    if len(effect_variants) != len(variants):
+        errors.append("applyAuthorEdit effect branches are not unique tagged objects")
+    expected_fields = {
+        "authoritative_applied": {
+            "kind", "authoritative_revision", "authoritative_commit_id",
+            "author_action_sequence", "project_activity_position"},
+        "no_effect": {"kind", "reason"},
+        "conflicted": {"kind", "reason", "current_authoritative_revision_id"},
+        "refused": {"kind", "reason"},
+    }
+    if set(variants) != set(expected_fields):
+        errors.append("applyAuthorEdit response effect variants drifted")
+    for kind, expected_variant_fields in expected_fields.items():
+        variant = variants.get(kind, {})
+        properties = variant.get("properties", {})
+        required = variant.get("required", [])
+        if set(properties) != expected_variant_fields or set(required) != expected_variant_fields:
+            errors.append(f"applyAuthorEdit {kind} effect shape drifted")
+        if variant.get("additionalProperties") is not False:
+            errors.append(f"applyAuthorEdit {kind} no-extra-field guard drifted")
+    visible_web = visible_markdown(web_projection)
+    group_settlement = re.search(
+        r"GroupSettlement\s*=.*?(?=\n\nAuthorSurfaceConvergence\s*=)",
+        visible_web,
+        flags=re.DOTALL,
+    )
+    if not group_settlement:
+        errors.append("Web GroupSettlement union is missing")
+    else:
+        settlement = group_settlement.group(0)
+        if union_variant_names(settlement) != (
+            "Unsettled", "PreAdmissionRefused", "AppliedReceiptSettled",
+            "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled", "RequiresReconfirmation"):
+            errors.append("Web GroupSettlement variants drifted")
+        require_union_variant_shape(
+            errors, settlement, "AppliedReceiptSettled", "ZeroAuthorityReceiptSettled",
+            ("receipt_ref: DomainReceiptRef", "project_activity_position"),
+        )
+        require_union_variant_shape(
+            errors, settlement, "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled",
+            ("receipt_ref: DomainReceiptRef", "result: NoEffect | Conflicted | Refused"),
+            ("project_activity_position",),
+        )
+        require_union_variant_shape(
+            errors, settlement, "OtherEditorReceiptSettled", "RequiresReconfirmation",
+            ("receipt_ref: ReceiptRef", "project_activity_position"),
+        )
+    convergence = re.search(
+        r"AuthorSurfaceConvergence\s*=.*?(?=\n\nAuthorAttention\s*=)",
+        visible_web,
+        flags=re.DOTALL,
+    )
+    if not convergence:
+        errors.append("Web AuthorSurfaceConvergence union is missing")
+    else:
+        convergence_union = convergence.group(0)
+        if union_variant_names(convergence_union) != (
+            "Pending", "AppliedReceiptConverged", "ZeroAuthorityReceiptVisible",
+            "OtherEditorReceiptConverged", "PreAdmissionRefusalConverged",
+            "ReconfirmationConverged"):
+            errors.append("Web AuthorSurfaceConvergence variants drifted")
+        require_union_variant_shape(
+            errors, convergence_union, "AppliedReceiptConverged", "ZeroAuthorityReceiptVisible",
+            ("receipt_ref: DomainReceiptRef", "project_activity_position", "projection_proof:"),
+        )
+        require_union_variant_shape(
+            errors, convergence_union, "ZeroAuthorityReceiptVisible",
+            "OtherEditorReceiptConverged",
+            ("receipt_ref: DomainReceiptRef", "result: NoEffect | Conflicted | Refused"),
+            ("project_activity_position",),
+        )
+        require_union_variant_shape(
+            errors, convergence_union, "OtherEditorReceiptConverged",
+            "PreAdmissionRefusalConverged",
+            ("receipt_ref: ReceiptRef", "project_activity_position", "projection_proof:"),
+        )
+    observations = re.search(
+        r"BrowserProtocolObservation\s*=.*?(?=\n```)",
+        visible_web,
+        flags=re.DOTALL,
+    )
+    if not observations:
+        errors.append("Web BrowserProtocolObservation union is missing")
+    else:
+        observation_union = observations.group(0)
+        if union_variant_names(observation_union) != (
+            "PreAdmissionProblemObservation", "UnresolvedTransportProblemObservation",
+            "AcceptedObservation", "ApplyAuthorEditAppliedObservation",
+            "ApplyAuthorEditZeroAuthorityObservation", "OtherEditorCommittedObservation",
+            "RequiresReconfirmationObservation", "OutcomeUnknownProblemObservation"):
+            errors.append("Web BrowserProtocolObservation variants drifted")
+        require_union_variant_shape(
+            errors, observation_union, "ApplyAuthorEditAppliedObservation",
+            "ApplyAuthorEditZeroAuthorityObservation",
+            ("receipt: DomainReceipt { result: AuthoritativeApplied }",
+             "effect: AuthoritativeApplied {", "project_activity_position"),
+        )
+        require_union_variant_shape(
+            errors, observation_union, "ApplyAuthorEditZeroAuthorityObservation",
+            "OtherEditorCommittedObservation",
+            ("receipt: DomainReceipt { result: NoEffect | Conflicted | Refused }",
+             "effect: NoEffect | Conflicted | Refused"),
+            ("project_activity_position",),
+        )
+        require_union_variant_shape(
+            errors, observation_union, "OtherEditorCommittedObservation",
+            "RequiresReconfirmationObservation",
+            ("receipt_ref: ReceiptRef", "project_activity_position"),
+        )
+    return errors
+
+
 def policy_errors(
-    policy: dict, evidence: dict, candidate_metrics: list[dict], projections: dict[str, str]
+    policy: dict,
+    evidence: dict,
+    candidate_metrics: list[dict],
+    apply_author_edit_response_schema: dict,
+    projections: dict[str, str],
 ) -> list[str]:
     errors: list[str] = []
     selected = policy.get("selected", {})
@@ -144,10 +293,14 @@ def policy_errors(
         for required in required_values:
             if required not in projection:
                 errors.append(f"{path.name} projection lost {required}")
+    errors.extend(apply_author_edit_web_errors(
+        apply_author_edit_response_schema,
+        projections.get(PROJECTIONS[3].as_posix(), ""),
+    ))
     return errors
 def self_test() -> None:
-    policy, evidence, candidate_metrics, projections = current_sources()
-    assert policy_errors(policy, evidence, candidate_metrics, projections) == []
+    policy, evidence, candidate_metrics, response_schema, projections = current_sources()
+    assert policy_errors(policy, evidence, candidate_metrics, response_schema, projections) == []
     for path, value in (
         (("selected", "max_author_edit_units"), 999),
         (("identity_binding", "wire_change"), True),
@@ -155,32 +308,80 @@ def self_test() -> None:
     ):
         changed = deepcopy(policy)
         changed[path[0]][path[1]] = value
-        assert policy_errors(changed, evidence, candidate_metrics, projections)
+        assert policy_errors(changed, evidence, candidate_metrics, response_schema, projections)
     changed_evidence = deepcopy(evidence)
     changed_evidence["semantic_oracle"]["whole_batch_has_one_final_settlement"] = False
-    assert policy_errors(policy, changed_evidence, candidate_metrics, projections)
-    assert policy_errors(policy, evidence, candidate_metrics[:-1], projections)
+    assert policy_errors(policy, changed_evidence, candidate_metrics, response_schema, projections)
+    assert policy_errors(policy, evidence, candidate_metrics[:-1], response_schema, projections)
     changed_metrics = deepcopy(candidate_metrics)
     changed_metrics[0]["scenarios"]["pressure"]["grouping_evaluation_latency_ms"] = "fast"
-    assert policy_errors(policy, evidence, changed_metrics, projections)
+    assert policy_errors(policy, evidence, changed_metrics, response_schema, projections)
     for path, required_values in PROJECTION_REQUIREMENTS.items():
         changed_projections = dict(projections)
         changed_projections[path.as_posix()] = changed_projections[path.as_posix()].replace(
             required_values[0], ""
         )
         assert path.name in "\n".join(
-            policy_errors(policy, evidence, candidate_metrics, changed_projections)
+            policy_errors(policy, evidence, candidate_metrics, response_schema, changed_projections)
         )
     changed_projections = dict(projections)
     adr = PROJECTIONS[1].as_posix()
     changed_projections[adr] = changed_projections[adr].replace("240-intent", "999-intent")
     assert PROJECTIONS[1].name in "\n".join(
-        policy_errors(policy, evidence, candidate_metrics, changed_projections)
+        policy_errors(policy, evidence, candidate_metrics, response_schema, changed_projections)
     )
     changed_projections[adr] = f"<!--{projections[adr]}-->"
     assert PROJECTIONS[1].name in "\n".join(
-        policy_errors(policy, evidence, candidate_metrics, changed_projections)
+        policy_errors(policy, evidence, candidate_metrics, response_schema, changed_projections)
     )
+    changed_schema = deepcopy(response_schema)
+    zero_variant = next(
+        variant for variant in changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+        if variant["properties"]["kind"]["const"] == "no_effect"
+    )
+    zero_variant["properties"]["project_activity_position"] = {"type": "string"}
+    zero_variant["required"].append("project_activity_position")
+    assert "no_effect effect shape drifted" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
+    changed_schema = deepcopy(response_schema)
+    applied_variant = next(
+        variant for variant in changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+        if variant["properties"]["kind"]["const"] == "authoritative_applied"
+    )
+    del applied_variant["properties"]["project_activity_position"]
+    applied_variant["required"].remove("project_activity_position")
+    assert "authoritative_applied effect shape drifted" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections)
+    )
+    changed_schema = deepcopy(response_schema)
+    effects = changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+    effects.append(deepcopy(effects[0]))
+    assert "effect branches are not unique tagged objects" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
+    effects[-1] = {"type": "null"}
+    assert "effect branches are not unique tagged objects" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
+    web = PROJECTIONS[3].as_posix()
+    for old, new, expected_error in (
+        ("receipt_ref: DomainReceiptRef\n      result: NoEffect | Conflicted | Refused",
+         "receipt_ref: DomainReceiptRef\n      project_activity_position\n"
+         "      result: NoEffect | Conflicted | Refused",
+         "ZeroAuthorityReceiptSettled shape drifted"),
+        ("  | AppliedReceiptConverged {", "  | LostAppliedReceiptConverged {",
+         "AppliedReceiptConverged shape drifted"),
+        ("      receipt_ref: DomainReceiptRef\n      project_activity_position",
+         "      project_activity_position", "AppliedReceiptSettled shape drifted"),
+        ("      result: NoEffect | Conflicted | Refused\n      committed_at",
+         "      committed_at", "ZeroAuthorityReceiptSettled shape drifted"),
+        ("  | ZeroAuthorityReceiptSettled {",
+         "  | ReceiptSettled {\n      receipt_ref: ReceiptRef\n"
+         "      project_activity_position\n    }\n  | ZeroAuthorityReceiptSettled {",
+         "GroupSettlement variants drifted"),
+    ):
+        changed_projections = dict(projections)
+        changed_projections[web] = changed_projections[web].replace(old, new, 1)
+        assert expected_error in "\n".join(policy_errors(
+            policy, evidence, candidate_metrics, response_schema, changed_projections))
 def main() -> None:
     errors = policy_errors(*current_sources())
     if errors:
