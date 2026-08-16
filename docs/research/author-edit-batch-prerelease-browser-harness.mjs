@@ -250,6 +250,11 @@ const semanticOracle = {
   admitted_conflicted_typed_zero_authority: validOracleState(conflicted),
   admitted_no_effect_typed_zero_authority: validOracleState(noEffect),
   invalid_later_unit_typed_zero_authority: validOracleState(invalidLaterUnit),
+  admitted_refused_fake_activity_rejected: !validOracleState({ ...refused, activity: 1 }),
+  admitted_conflicted_fake_activity_rejected: !validOracleState({ ...conflicted, activity: 1 }),
+  admitted_no_effect_fake_activity_rejected: !validOracleState({ ...noEffect, activity: 1 }),
+  invalid_later_unit_fake_activity_rejected:
+    !validOracleState({ ...invalidLaterUnit, activity: 1 }),
   pre_commit_transaction_failure_receipt_free: validOracleState(transactionFailure),
   whole_batch_has_one_final_settlement: validOracleState(success),
   no_prefix_authority: invalidLaterUnit.revision === 0 && success.revision === 1,

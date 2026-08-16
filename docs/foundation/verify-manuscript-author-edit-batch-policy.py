@@ -41,6 +41,43 @@ PROJECTION_REQUIREMENTS = {
     PROJECTIONS[4]: ("`DVG-01`", "`DVG-02`", "`DVG-03`", "#70-owned structured source",
                      REVISION, EDITOR_REVISION, "captured synthetic evidence binding"),
 }
+ZERO_ACTIVITY_ORACLE_CASES = {
+    "admitted_refused_fake_activity_rejected",
+    "admitted_conflicted_fake_activity_rejected",
+    "admitted_no_effect_fake_activity_rejected",
+    "invalid_later_unit_fake_activity_rejected",
+}
+DVG_ZERO_ACTIVITY_ROWS = {
+    "DVG-03": (
+        "only `AuthoritativeApplied` creates Project Activity",
+        "a zero-authority Receipt creates no Project Activity",
+    ),
+    "S1-REQ-003": (
+        "`AuthoritativeApplied` produces the authoritative Revision",
+        "produce only their typed zero-authority Receipt and no Project Activity",
+    ),
+    "S1-JRN-001": (
+        "one applied author effect/Receipt/Activity or one zero-authority Receipt with no Activity",
+    ),
+    "S1-EVD-003": ("the zero-authority Receipt/no-Activity relation",),
+}
+DVG_DISPOSITION_ROWS = {
+    "DVG-03": (
+        "an admitted zero-authority settlement is `PASS-POS`",
+        "`PASS-REFUSAL` only for a pre-Admission refusal",
+        "`PASS-HOLD` only for an owner-defined recovery hold",
+    ),
+    "S1-REQ-003": (
+        "`PASS-POS` for applied and admitted zero-authority settlements",
+        "`PASS-REFUSAL` only before Admission",
+        "`PASS-HOLD` only for recovery",
+    ),
+    "S1-EVD-003": (
+        "`PASS-POS` for applied and admitted zero-authority settlements",
+        "`PASS-REFUSAL` only before Admission",
+        "`PASS-HOLD` only for recovery",
+    ),
+}
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 def current_sources() -> tuple[dict, dict, list[dict], dict, dict[str, str]]:
@@ -74,6 +111,24 @@ def require_union_variant_shape(
     if (body is None or any(value not in body for value in required)
             or any(value in body for value in forbidden)):
         errors.append(f"Web {variant} shape drifted")
+def dvg_projection_errors(dvg_projection: str) -> list[str]:
+    errors: list[str] = []
+    visible_dvg = visible_markdown(dvg_projection)
+    for label, requirements_by_row in (
+        ("zero-Activity semantics", DVG_ZERO_ACTIVITY_ROWS),
+        ("disposition", DVG_DISPOSITION_ROWS),
+    ):
+        for row_id, required_values in requirements_by_row.items():
+            rows = re.findall(
+                rf"^\|\s*`{re.escape(row_id)}`.*$",
+                visible_dvg,
+                flags=re.MULTILINE,
+            )
+            if len(rows) != 1 or any(value not in rows[0] for value in required_values):
+                errors.append(
+                    f"{PROJECTIONS[4].name}: {row_id} {label} drifted"
+                )
+    return errors
 def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]:
     errors: list[str] = []
     effect_variants = schema.get("$defs", {}).get("ApplyAuthorEditEffect", {}).get("oneOf", [])
@@ -279,8 +334,11 @@ def policy_errors(
         errors.append("captured per-candidate metric matrix is incomplete")
     if evidence.get("candidate_metric_records") != policy.get("evidence", {}).get("captured_candidates"):
         errors.append("candidate metric evidence path drifted")
-    if not evidence.get("semantic_oracle") or not all(evidence["semantic_oracle"].values()):
+    semantic_oracle = evidence.get("semantic_oracle", {})
+    if not semantic_oracle or not all(semantic_oracle.values()):
         errors.append("captured semantic oracle is incomplete or failed")
+    if not ZERO_ACTIVITY_ORACLE_CASES.issubset(semantic_oracle):
+        errors.append("captured semantic oracle lost explicit fake-Activity rejection")
     adoption = evidence.get("adoption", {})
     if adoption.get("decision") != "adopt_conservative_prerelease" \
             or adoption.get("idle_ms") != selected.get("adjacent_completed_intent_idle_ms") \
@@ -293,6 +351,7 @@ def policy_errors(
         for required in required_values:
             if required not in projection:
                 errors.append(f"{path.name} projection lost {required}")
+    errors.extend(dvg_projection_errors(projections.get(PROJECTIONS[4].as_posix(), "")))
     errors.extend(apply_author_edit_web_errors(
         apply_author_edit_response_schema,
         projections.get(PROJECTIONS[3].as_posix(), ""),
@@ -312,6 +371,11 @@ def self_test() -> None:
     changed_evidence = deepcopy(evidence)
     changed_evidence["semantic_oracle"]["whole_batch_has_one_final_settlement"] = False
     assert policy_errors(policy, changed_evidence, candidate_metrics, response_schema, projections)
+    changed_evidence = deepcopy(evidence)
+    del changed_evidence["semantic_oracle"]["admitted_no_effect_fake_activity_rejected"]
+    assert "lost explicit fake-Activity rejection" in "\n".join(
+        policy_errors(policy, changed_evidence, candidate_metrics, response_schema, projections)
+    )
     assert policy_errors(policy, evidence, candidate_metrics[:-1], response_schema, projections)
     changed_metrics = deepcopy(candidate_metrics)
     changed_metrics[0]["scenarios"]["pressure"]["grouping_evaluation_latency_ms"] = "fast"
@@ -334,6 +398,39 @@ def self_test() -> None:
     assert PROJECTIONS[1].name in "\n".join(
         policy_errors(policy, evidence, candidate_metrics, response_schema, changed_projections)
     )
+    dvg = PROJECTIONS[4].as_posix()
+    for label, requirements_by_row in (
+        ("zero-Activity semantics", DVG_ZERO_ACTIVITY_ROWS),
+        ("disposition", DVG_DISPOSITION_ROWS),
+    ):
+        for row_id, required_values in requirements_by_row.items():
+            row = re.findall(
+                rf"^\|\s*`{re.escape(row_id)}`.*$",
+                projections[dvg],
+                flags=re.MULTILINE,
+            )[0]
+            changed_row = row.replace(required_values[0], "drifted", 1)
+            changed_projections = dict(projections)
+            changed_projections[dvg] = changed_projections[dvg].replace(
+                row, changed_row, 1
+            )
+            assert f"{row_id} {label} drifted" in "\n".join(
+                policy_errors(policy, evidence, candidate_metrics, response_schema,
+                              changed_projections)
+            )
+    for row_id in ("S1-REQ-003", "S1-EVD-003"):
+        changed_projections = dict(projections)
+        changed_projections[dvg] = re.sub(
+            rf"(^\| `{row_id}` \|.*?)`PASS-POS`",
+            rf"\1`PASS-REFUSAL`",
+            changed_projections[dvg],
+            count=1,
+            flags=re.MULTILINE,
+        )
+        assert f"{row_id} disposition drifted" in "\n".join(
+            policy_errors(policy, evidence, candidate_metrics, response_schema,
+                          changed_projections)
+        )
     changed_schema = deepcopy(response_schema)
     zero_variant = next(
         variant for variant in changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
