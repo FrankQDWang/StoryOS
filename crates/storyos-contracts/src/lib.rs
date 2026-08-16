@@ -11,8 +11,8 @@ mod stage1_delivery;
 mod stage1_selection;
 
 pub use release1::{
-    APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, AuthoritativeChapterRevision,
-    CREATE_EDITOR_SESSION_METHOD, CREATE_EDITOR_SESSION_PATH,
+    APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
+    AuthoritativeChapterRevision, CREATE_EDITOR_SESSION_METHOD, CREATE_EDITOR_SESSION_PATH,
     CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID, CREATE_PROJECT_COMMAND_CHALLENGE_METHOD,
     CREATE_PROJECT_COMMAND_CHALLENGE_PATH, ControlledProject, CreateEditorSessionRequest,
     CreateEditorSessionResponse, CreateProjectCommandChallengeRequest,

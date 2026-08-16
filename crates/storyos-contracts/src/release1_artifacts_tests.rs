@@ -4,6 +4,10 @@ use super::{
     REVIEW_CATALOG_PATH, fixture_corpus_bytes, release1_protocol_profile, validate_review_bindings,
 };
 use crate::digest::sha256_prefixed;
+use crate::{
+    ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
+    AuthoritativeChapterRevision, NoEffectReason,
+};
 
 #[test]
 fn controlled_project_queries_are_generated_from_the_release_1_contract() {
@@ -118,14 +122,39 @@ fn fixture_digest_uses_the_declared_self_normalization() {
 }
 
 #[test]
-fn author_edit_receipt_is_complete_and_no_effect_has_no_allocations() {
+fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let generated = super::generated_files()
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
+    let profile = release1_protocol_profile();
+    assert_eq!(
+        profile.contract_revision,
+        "release1-wire-catalog-2026-08-16-author-edit-response-v2"
+    );
+    assert_eq!(
+        profile.release_identity.web_client_contract_revision,
+        "storyos.web-client.release-1.v2"
+    );
+    assert_eq!(
+        profile.release_identity.server_contract_revision,
+        "storyos.server.release-1.v2"
+    );
+    assert_eq!(
+        profile.release_identity.worker_contract_revision,
+        "storyos.worker.release-1.v2"
+    );
+    assert_eq!(
+        profile.release_identity.generated_client_revision,
+        "storyos.typescript-client.release-1.v2"
+    );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
     )
     .expect("response schema must be JSON");
+    assert_eq!(
+        schema["$id"],
+        "storyos.command.apply-author-edit.response.v2"
+    );
     assert_eq!(
         schema["$defs"]["DomainReceipt"]["required"],
         serde_json::json!([
@@ -150,6 +179,15 @@ fn author_edit_receipt_is_complete_and_no_effect_has_no_allocations() {
             "created_at"
         ])
     );
+    let outcomes = schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+        .as_array()
+        .expect("Author Edit outcomes are a union");
+    assert!(
+        outcomes[0]["required"]
+            .as_array()
+            .expect("applied required fields are an array")
+            .contains(&serde_json::json!("project_activity_position"))
+    );
     for outcome in schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
         .as_array()
         .expect("Author Edit outcomes are a union")
@@ -157,21 +195,82 @@ fn author_edit_receipt_is_complete_and_no_effect_has_no_allocations() {
         .skip(1)
     {
         assert!(
-            outcome["required"]
+            !outcome["required"]
                 .as_array()
                 .expect("outcome required fields are an array")
                 .contains(&serde_json::json!("project_activity_position"))
         );
-        assert_eq!(
-            outcome["properties"]["project_activity_position"]["type"],
-            "string"
-        );
         assert!(
-            outcome["properties"]["project_activity_position"]["pattern"]
-                .as_str()
-                .is_some()
+            outcome["properties"]
+                .as_object()
+                .expect("outcome properties are an object")
+                .get("project_activity_position")
+                .is_none()
         );
+        assert_eq!(outcome["additionalProperties"], false);
     }
+
+    let applied = serde_json::to_value(ApplyAuthorEditEffect::AuthoritativeApplied {
+        authoritative_revision: AuthoritativeChapterRevision {
+            revision_id: "revision-1".to_owned(),
+            body: "body".to_owned(),
+        },
+        authoritative_commit_id: "commit-1".to_owned(),
+        author_action_sequence: "1".to_owned(),
+        project_activity_position: "1".to_owned(),
+    })
+    .expect("applied effect serializes");
+    assert_eq!(applied["project_activity_position"], "1");
+
+    let zero_authority = [
+        ApplyAuthorEditEffect::NoEffect {
+            reason: NoEffectReason::ContentUnchanged,
+        },
+        ApplyAuthorEditEffect::Conflicted {
+            reason: AuthorEditConflictReason::StaleAuthoritativeHead,
+            current_authoritative_revision_id: "revision-1".to_owned(),
+        },
+        ApplyAuthorEditEffect::Refused {
+            reason: AuthorEditRefusalReason::InvalidSelection,
+        },
+    ];
+    for effect in zero_authority {
+        let mut value = serde_json::to_value(effect).expect("zero-authority effect serializes");
+        assert!(value.get("project_activity_position").is_none());
+        value["project_activity_position"] = serde_json::json!("1");
+        assert!(serde_json::from_value::<ApplyAuthorEditEffect>(value).is_err());
+    }
+
+    let declarations = crate::release1_author_edit_artifacts::typescript_type_declarations();
+    let effect_declaration = declarations
+        .lines()
+        .find(|line| line.starts_with("export type ApplyAuthorEditEffect ="))
+        .expect("generated TypeScript effect declaration exists");
+    let variants = effect_declaration.split(" | ").collect::<Vec<_>>();
+    assert!(variants[0].contains("project_activity_position: string"));
+    assert!(
+        variants
+            .iter()
+            .skip(1)
+            .all(|variant| !variant.contains("project_activity_position"))
+    );
+    let generated_client = String::from_utf8(
+        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
+    )
+    .expect("generated client is UTF-8");
+    assert!(generated_client.contains(
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v2\";"
+    ));
+    let boundary: serde_json::Value =
+        serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])
+            .expect("boundary fixture is JSON");
+    assert_eq!(boundary["receipt"]["result"], "refused");
+    assert_eq!(boundary["effect"]["kind"], "refused");
+    assert!(
+        boundary["effect"]
+            .get("project_activity_position")
+            .is_none()
+    );
     assert!(
         generated[CHAPTER_RESPONSE_SCHEMA_PATH]
             .windows(b"project_activity_position".len())

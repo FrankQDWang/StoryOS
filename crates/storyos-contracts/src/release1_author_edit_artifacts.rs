@@ -84,17 +84,15 @@ pub(super) fn apply_u64_wire_constraints(schema: &mut Value, canonical_u64: &Val
             json!({"anyOf": [canonical_u64, {"type": "null"}]});
     }
     if schema["$defs"].get("ApplyAuthorEditEffect").is_some() {
-        let applied = &mut schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"][0];
+        let variants = schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+            .as_array_mut()
+            .expect("Author Edit response variants must exist");
+        for variant in variants.iter_mut() {
+            variant["additionalProperties"] = Value::Bool(false);
+        }
+        let applied = &mut variants[0];
         applied["properties"]["author_action_sequence"] = canonical_u64.clone();
         applied["properties"]["project_activity_position"] = canonical_u64.clone();
-        for variant in schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
-            .as_array_mut()
-            .expect("Author Edit response variants must exist")
-            .iter_mut()
-            .skip(1)
-        {
-            variant["properties"]["project_activity_position"] = canonical_u64.clone();
-        }
     }
 }
 
@@ -188,8 +186,15 @@ pub(super) fn invalid_fixture_bytes() -> Vec<u8> {
 
 pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
     let mut value = fixture();
-    value["project_scope"]["project_id"] =
-        Value::String("018f0000-0000-7001-8000-000000000102".to_owned());
+    value["receipt"]["resulting_heads"] = value["receipt"]["prior_heads"].clone();
+    value["receipt"]["authoritative_revision_ids"] = json!([]);
+    value["receipt"]["authoritative_commit_ids"] = json!([]);
+    value["receipt"]["author_action_sequence"] = Value::Null;
+    value["receipt"]["result"] = json!("refused");
+    value["effect"] = json!({
+        "kind": "refused",
+        "reason": "invalid_selection"
+    });
     json_bytes(&value)
 }
 

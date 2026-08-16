@@ -33,7 +33,7 @@ StorageCompatibilityIdentity {
   migration_chain_digest: sha256 over the catalogued migration chain
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
-  route_catalog_contract_revision: release1-wire-catalog-2026-07-31
+  route_catalog_contract_revision: release1-wire-catalog-2026-08-16-author-edit-response-v2
   route_catalog_sha256: sha256 over the LF-normalized Release 1 route catalog
   compatibility_profile: storyos.public.same-release.v1
   release_identity_schema_id: storyos.compatibility.release-identity.v1

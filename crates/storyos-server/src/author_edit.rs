@@ -196,7 +196,6 @@ pub(super) async fn apply_author_edit(
                         contracts::NoEffectReason::ContentUnchanged
                     }
                 },
-                project_activity_position: settlement.project_activity_position.to_string(),
             },
         ),
         AuthorEditSettlementEffect::Conflicted {
@@ -222,7 +221,6 @@ pub(super) async fn apply_author_edit(
                     }
                 },
                 current_authoritative_revision_id,
-                project_activity_position: settlement.project_activity_position.to_string(),
             },
         ),
         AuthorEditSettlementEffect::Refused { reason } => (
@@ -244,12 +242,11 @@ pub(super) async fn apply_author_edit(
                         contracts::AuthorEditRefusalReason::TargetMismatch
                     }
                 },
-                project_activity_position: settlement.project_activity_position.to_string(),
             },
         ),
     };
     Ok(Json(contracts::ApplyAuthorEditResponse {
-        schema_id: "storyos.command.apply-author-edit.response.v1".to_owned(),
+        schema_id: contracts::APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: body.correlation_id,
         project_scope: contract_project_scope.clone(),
         command_id: settlement.ids.command_id,

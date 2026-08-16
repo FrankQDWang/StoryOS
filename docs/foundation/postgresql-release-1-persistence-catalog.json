@@ -23,11 +23,11 @@
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-07-31",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde",
+      "route_catalog_sha256": "sha256:18f3d7a3f7e86712032eb01c45a83f52afdf1249594e9af31afb06914e906148",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",

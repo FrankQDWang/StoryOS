@@ -56,5 +56,5 @@
       "018f0000-0000-7001-8000-000000000034"
     ]
   },
-  "schema_id": "storyos.command.apply-author-edit.response.v1"
+  "schema_id": "storyos.command.apply-author-edit.response.v2"
 }

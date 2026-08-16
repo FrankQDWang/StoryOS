@@ -288,7 +288,7 @@ test("one current writer settles one Author Edit and exact retries return one re
   const { baseUrl, server } = await startRealServer();
   const requests = [20, 21].map((suffix) => ({
     command_schema: "storyos.command.create-editor-session.request.v1",
-    client_contract_revision: "storyos.web-client.release-1.v1",
+    client_contract_revision: "storyos.web-client.release-1.v2",
     security_policy_revision: "storyos.web-security-policy.release-1.v1",
     correlation_id: `018f0000-0000-7001-8000-${String(suffix).padStart(12, "0")}`,
   }));
@@ -373,7 +373,7 @@ test("one current writer settles one Author Edit and exact retries return one re
     const currentSession = sessions[currentIndex];
     const authorEditRequest = {
       command_schema: "storyos.command.apply-author-edit.request.v1",
-      client_contract_revision: "storyos.web-client.release-1.v1",
+      client_contract_revision: "storyos.web-client.release-1.v2",
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
       correlation_id: "018f0000-0000-7001-8000-000000000024",
       editor_session_id: currentSession.editor_session.editor_session_id,
@@ -442,6 +442,11 @@ test("one current writer settles one Author Edit and exact retries return one re
     const outcomeRequests = [
       {
         expected: "conflicted",
+        effect: {
+          kind: "conflicted",
+          reason: "stale_authoritative_head",
+          current_authoritative_revision_id: settlement.effect.authoritative_revision.revision_id,
+        },
         request: {
           ...authorEditRequest,
           correlation_id: "018f0000-0000-7001-8000-000000000040",
@@ -452,6 +457,7 @@ test("one current writer settles one Author Edit and exact retries return one re
       },
       {
         expected: "no_effect",
+        effect: { kind: "no_effect", reason: "content_unchanged" },
         request: {
           ...authorEditRequest,
           correlation_id: "018f0000-0000-7001-8000-000000000043",
@@ -469,6 +475,7 @@ test("one current writer settles one Author Edit and exact retries return one re
       },
       {
         expected: "refused",
+        effect: { kind: "refused", reason: "invalid_selection" },
         request: {
           ...authorEditRequest,
           correlation_id: "018f0000-0000-7001-8000-000000000046",
@@ -502,11 +509,10 @@ test("one current writer settles one Author Edit and exact retries return one re
         antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
       });
       assert.equal(result.receipt.result, outcome.expected);
-      assert.equal(result.effect.kind, outcome.expected);
+      assert.deepEqual(result.effect, outcome.effect);
       assert.deepEqual(result.receipt.authoritative_revision_ids, []);
       assert.deepEqual(result.receipt.authoritative_commit_ids, []);
       assert.equal(result.receipt.author_action_sequence, null);
-      assert.match(result.effect.project_activity_position, /^[1-9][0-9]*$/);
     }
 
     const staleSession = sessions.find((session) => session.writer.kind === "read_only");

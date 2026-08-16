@@ -59,7 +59,7 @@ export type AuthorEditConflictReason = "stale_authoritative_head" | "proposal_he
 
 export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_selection" | "target_mismatch";
 
-export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "no_effect", reason: NoEffectReason, project_activity_position: string, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, project_activity_position: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, project_activity_position: string, };
+export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
 
 export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
 

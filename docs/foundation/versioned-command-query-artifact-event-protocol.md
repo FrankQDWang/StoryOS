@@ -2,7 +2,7 @@
 
 Status: accepted Foundation protocol specification
 
-Contract revision: `release1-wire-catalog-2026-07-31`
+Contract revision: `release1-wire-catalog-2026-08-16-author-edit-response-v2`
 
 Decision owner: [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58)
 
@@ -682,7 +682,6 @@ CommandAcknowledgement =
     project_scope
     correlation_id
     receipt_ref: ReceiptRef
-    project_activity_position
     committed_at
     limit_profile_revision
   }
@@ -722,10 +721,13 @@ terminal. For an Author Command Admission, Receipt-backed `Committed` maps to
 terminal settlement. `Accepted` is not an Author Command Admission terminal
 settlement and cannot add a third terminal state.
 
-`Committed` is returned only after the complete Core Transition, including a
-no-change transition, its Receipt, required Events and sequence facts,
-invalidation, and outbox intent commit. It means that settlement evidence
-committed, not that the requested domain effect was accepted or changed state.
+`Committed` is returned only after the complete Core Transition and its typed
+Receipt commit. It means that settlement evidence committed, not that the
+requested domain effect was accepted or changed state. Activity, sequence,
+invalidation, and outbox facts exist only when the owning tagged result
+explicitly authorizes them. A command-specific response places an Activity
+position only in an Activity-backed result variant; a receipt-only result has
+no Activity member rather than a null, sentinel, or fabricated position.
 The `receipt_ref` is mandatory and uses the closed generated `ReceiptRef` union
 from section 4.2. The owning command contract selects its exact identity:
 Validation, Acceptance, Undo Acceptance, and Author Undo remain distinct
@@ -1069,9 +1071,10 @@ generation. `run_sequence` is present only for an Event that advances the
 named Agent Run and is contiguous within that Run. Consumers order by the
 typed sequence for their boundary, never by UUID or timestamp.
 
-One canonical transaction commits the domain transition or no-change Receipt,
-Project Activity rows, Project/Run sequence advancement, projection
-invalidation, and outbox intent. An Event is visible only after that commit.
+One canonical transaction commits the domain transition or no-change Receipt
+and every result-authorized Project Activity row, Project/Run sequence advance,
+projection invalidation, and outbox intent. A receipt-only result commits none
+of those Activity-backed facts. An Event is visible only after that commit.
 The SSE delivery process reads committed Events and may deliver duplicates; it
 never allocates a new Event or changes settlement.
 
@@ -1100,10 +1103,11 @@ not place a cursor or session token in the URL.
 
 The route catalog's `events` array is the complete Release 1 public Event
 schema catalog. Each command entry names every possible Project Activity Event
-schema for its successful or Receipt-backed no-effect settlement; query,
-challenge, and stream entries name no produced Event. The generic
-`storyos.event.domain-receipt-settled.v1` projection carries the already-owned
-typed Receipt reference and disposition without redefining Core result meaning.
+schema for the result variants that publish Activity; receipt-only results,
+queries, challenges, and streams name no produced Event. When an owning result
+does publish the generic `storyos.event.domain-receipt-settled.v1` projection,
+that Event carries the already-owned typed Receipt reference and disposition
+without redefining Core result meaning.
 Core-only records that have no public Event schema, such as
 `AuthorActionRecorded`, are listed explicitly under `non_public_events` rather
 than being silently omitted. Internal producer operations may still emit
@@ -1342,10 +1346,10 @@ For an internal authoritative transition, one PostgreSQL transaction commits:
 
 - the domain transition or no-change Receipt;
 - immutable command and Attempt settlement evidence;
-- Project Activity Events and sequence allocation;
-- projection invalidation and affected generation facts;
+- any result-authorized Project Activity Events and sequence allocation;
+- any result-authorized projection invalidation and affected generation facts;
 - idempotency acknowledgement/result references; and
-- outbox intents for post-commit workers or delivery.
+- any result-authorized outbox intents for post-commit workers or delivery.
 
 If it rolls back, none of those facts exists. An outbox worker may redeliver,
 but consumers deduplicate the stable outbox item and validate the current
@@ -2500,7 +2504,6 @@ not Markdown formatting, own exact production bytes.
     "kind": "domain_receipt",
     "id": "018f0000-0000-7001-8000-000000000012"
   },
-  "project_activity_position": "42",
   "committed_at": "2026-07-21T10:15:30.123Z",
   "limit_profile_revision": "storyos.foundation.absolute.v1"
 }
@@ -2508,7 +2511,7 @@ not Markdown formatting, own exact production bytes.
 
 The Server returns this only after the owning PostgreSQL transaction commits.
 An identical submission under the same key and digest returns the same selected-
-release representation; it does not create activity position `43`.
+release representation.
 
 ### 17.2 Accepted asynchronous acknowledgement
 

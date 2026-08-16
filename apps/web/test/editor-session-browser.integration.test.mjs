@@ -54,13 +54,13 @@ const chapter = { project_scope: project.project_scope,
   chapter: { chapter_id: CHAPTER, current_revision: { revision_id: REVISION, body: "Base" } } };
 const profile = { limit_profile_revision: "storyos.foundation.absolute.v1",
   max_json_string_utf8_bytes: 1048576,
-  release_identity: { web_client_contract_revision: "storyos.web-client.release-1.v1" } };
+  release_identity: { web_client_contract_revision: "storyos.web-client.release-1.v2" } };
 const session = {
   schema_id: "storyos.command.create-editor-session.response.v1",
   correlation_id: "018f0000-0000-7001-8000-000000000020",
   project_scope: project.project_scope,
   editor_session: { editor_session_id: SESSION, client_session_binding_ref: "binding:test",
-    client_session_generation: "1", client_contract_revision: "storyos.web-client.release-1.v1",
+    client_session_generation: "1", client_contract_revision: "storyos.web-client.release-1.v2",
     security_policy_revision: "storyos.web-security-policy.release-1.v1",
     opened_at: "2026-08-13T08:00:00.000Z", disposition: "open" },
   writer: { kind: "current_writer", writer_generation: "1" },
@@ -113,7 +113,7 @@ const fetchImpl = async (url, options = {}) => {
       : authorEditDigest;
     corruptAuthorEditAcknowledgement = false;
     return jsonResponse({
-      schema_id: "storyos.command.apply-author-edit.response.v1",
+      schema_id: "storyos.command.apply-author-edit.response.v2",
       correlation_id: request.correlation_id,
       project_scope: project.project_scope,
       command_id: "018f0000-0000-7001-8000-000000000031",
