@@ -207,7 +207,7 @@ CREATE TABLE storyos.domain_receipts (
     owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind
   ),
   UNIQUE (owner_user_id, project_id, receipt_id, result_kind),
-  CONSTRAINT domain_receipts_common_shape CHECK (
+  CHECK (
     cardinality(expected_heads) = 1
     AND cardinality(prior_heads) = 1
     AND cardinality(resulting_heads) = 1
@@ -216,7 +216,7 @@ CREATE TABLE storyos.domain_receipts (
     AND cardinality(artifact_lifecycle_event_refs) = 0
     AND cardinality(condition_refs) = 0
   ),
-  CONSTRAINT domain_receipts_result_shape CHECK (
+  CHECK (
     (result_kind = 'authoritative_applied'
       AND result_payload = '{}'::jsonb
       AND cardinality(authoritative_revision_ids) = 1
@@ -238,9 +238,7 @@ CREATE TABLE storyos.domain_receipts (
       AND result_payload->>'current_authoritative_revision_id' = resulting_heads[1]::text
       AND cardinality(authoritative_revision_ids) = 0
       AND cardinality(authoritative_commit_ids) = 0
-      AND prior_heads = resulting_heads
-      AND (result_payload->>'reason' <> 'stale_authoritative_head'
-        OR expected_heads <> resulting_heads))
+      AND prior_heads = resulting_heads)
     OR (result_kind = 'refused'
       AND result_payload ? 'reason'
       AND result_payload - 'reason' = '{}'::jsonb

@@ -267,18 +267,15 @@ impl PostgresProjectReader {
                 let current_revision_id = result_payload
                     .get("current_authoritative_revision_id")
                     .and_then(serde_json::Value::as_str);
-                let reason = parse_conflict_reason(reason)?;
                 if result_payload.as_object().map(serde_json::Map::len) != Some(2)
                     || current_revision_id != Some(resulting_head.as_str())
                     || prior_head != resulting_head
-                    || (reason == storyos_core::AuthorEditConflict::StaleAuthoritativeHead
-                        && expected_head == resulting_head)
                 {
                     return Err(AuthorEditError::BindingConflict);
                 }
                 verify_zero_authority_relations(&client, command, receipt_id).await?;
                 AuthorEditSettlementEffect::Conflicted {
-                    reason,
+                    reason: parse_conflict_reason(reason)?,
                     current_authoritative_revision_id: resulting_head,
                 }
             }
