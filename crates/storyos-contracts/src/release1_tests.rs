@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use super::APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID;
 use crate::project_command_targets::PROJECT_COMMAND_TARGETS;
 use crate::{
     APPLY_AUTHOR_EDIT_METHOD, APPLY_AUTHOR_EDIT_PATH, APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
@@ -93,4 +94,45 @@ fn apply_author_edit_contract_is_one_bounded_replace_selection() {
             [0]["kind"],
         "replace_selection"
     );
+}
+
+#[test]
+fn apply_author_edit_route_uses_response_v2_and_zero_activity_for_zero_authority() {
+    let catalog: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(
+            super::super::repository_root()
+                .join("docs/foundation/versioned-protocol-release-1-route-catalog.json"),
+        )
+        .expect("Release 1 route catalog must exist"),
+    )
+    .expect("Release 1 route catalog must be valid JSON");
+    let operation = catalog["operations"]
+        .as_array()
+        .expect("operations must be an array")
+        .iter()
+        .find(|operation| operation["operation_id"] == "applyAuthorEdit")
+        .expect("applyAuthorEdit operation exists");
+
+    assert_eq!(
+        APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
+        "storyos.command.apply-author-edit.response.v2"
+    );
+    assert_eq!(
+        operation["schemas"]["response"],
+        APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID
+    );
+    assert_eq!(operation["activity"]["no_effect"], serde_json::json!([]));
+    assert_eq!(
+        operation["generated"]["json_schema_ids"][1],
+        APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID
+    );
+
+    let event_ids = catalog["events"]
+        .as_array()
+        .expect("events must be an array")
+        .iter()
+        .filter_map(|event| event["schema_id"].as_str())
+        .collect::<BTreeSet<_>>();
+    assert!(!event_ids.contains("storyos.event.author-edit-conflicted.v1"));
+    assert!(!event_ids.contains("storyos.event.author-edit-no-effect.v1"));
 }

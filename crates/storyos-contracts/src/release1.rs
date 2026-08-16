@@ -11,11 +11,12 @@ pub(super) const ACTIVITY_PROFILE: &str = "storyos.project-activity.v1";
 pub const LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
 const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
-pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-08-15-author-edit";
-pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v1";
-pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v1";
-pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v1";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v1";
+pub(super) const CONTRACT_REVISION: &str =
+    "release1-wire-catalog-2026-08-16-author-edit-response-v2";
+pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v2";
+pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v2";
+pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v2";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v2";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -38,8 +39,8 @@ pub(super) const GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
 pub const APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID: &str =
     "storyos.command.apply-author-edit.request.v1";
 pub const EDITOR_CONTRACT_REVISION: &str = "storyos.editor-contract.release-1.v1";
-pub(super) const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID: &str =
-    "storyos.command.apply-author-edit.response.v1";
+pub const APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID: &str =
+    "storyos.command.apply-author-edit.response.v2";
 pub(super) const RELEASE_IDENTITY_SCHEMA_ID: &str = "storyos.compatibility.release-identity.v1";
 pub(super) const POSITIVE_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.positive.v1";
 pub(super) const INVALID_FIXTURE_ID: &str = "storyos.golden.getProtocolProfile.invalid.v1";

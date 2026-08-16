@@ -151,7 +151,7 @@ pub enum AuthorEditRefusalReason {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ApplyAuthorEditEffect {
     AuthoritativeApplied {
         authoritative_revision: AuthoritativeChapterRevision,
@@ -161,16 +161,13 @@ pub enum ApplyAuthorEditEffect {
     },
     NoEffect {
         reason: NoEffectReason,
-        project_activity_position: String,
     },
     Conflicted {
         reason: AuthorEditConflictReason,
         current_authoritative_revision_id: String,
-        project_activity_position: String,
     },
     Refused {
         reason: AuthorEditRefusalReason,
-        project_activity_position: String,
     },
 }
 

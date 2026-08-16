@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-07-31",
+  "contract_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",
@@ -1828,7 +1828,7 @@
       "wire_owner": "protocol",
       "schemas": {
         "request": "storyos.command.apply-author-edit.request.v1",
-        "response": "storyos.command.apply-author-edit.response.v1",
+        "response": "storyos.command.apply-author-edit.response.v2",
         "request_source": "protocol",
         "response_source": "protocol",
         "semantic_source": "core"
@@ -1886,11 +1886,7 @@
           "storyos.event.editor-flow-draft-closed.v1",
           "storyos.event.recovery-draft-created.v1"
         ],
-        "no_effect": [
-          "storyos.event.domain-receipt-settled.v1",
-          "storyos.event.author-edit-conflicted.v1",
-          "storyos.event.author-edit-no-effect.v1"
-        ],
+        "no_effect": [],
         "pre_admission": "none",
         "visibility": "only after the durable transition or async settlement named by the operation"
       },
@@ -1906,7 +1902,7 @@
         "typescript_operation": "applyAuthorEdit",
         "json_schema_ids": [
           "storyos.command.apply-author-edit.request.v1",
-          "storyos.command.apply-author-edit.response.v1"
+          "storyos.command.apply-author-edit.response.v2"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
@@ -5461,24 +5457,6 @@
       "description": "",
       "positive_fixture": "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1"
-    },
-    {
-      "schema_id": "storyos.event.author-edit-conflicted.v1",
-      "event_kind": "author_edit_conflicted",
-      "semantic_owner": "core",
-      "wire_profile": "storyos.project-activity.v1",
-      "description": "",
-      "positive_fixture": "storyos.golden.storyos.event.author-edit-conflicted.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.author-edit-conflicted.v1.negative.v1"
-    },
-    {
-      "schema_id": "storyos.event.author-edit-no-effect.v1",
-      "event_kind": "author_edit_no_effect",
-      "semantic_owner": "core",
-      "wire_profile": "storyos.project-activity.v1",
-      "description": "",
-      "positive_fixture": "storyos.golden.storyos.event.author-edit-no-effect.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.author-edit-no-effect.v1.negative.v1"
     },
     {
       "schema_id": "storyos.event.editor-flow-draft-closed.v1",

@@ -4,30 +4,20 @@
   "completed_intent_record_id": "018f0000-0000-7001-8000-000000000036",
   "correlation_id": "018f0000-0000-7001-8000-000000000030",
   "effect": {
-    "author_action_sequence": "1",
-    "authoritative_commit_id": "018f0000-0000-7001-8000-000000000035",
-    "authoritative_revision": {
-      "body": "雨落在窗沿。",
-      "revision_id": "018f0000-0000-7001-8000-000000000034"
-    },
-    "kind": "authoritative_applied",
-    "project_activity_position": "1"
+    "kind": "refused",
+    "reason": "invalid_selection"
   },
   "local_intent_sequence": "1",
   "project_scope": {
     "owner_user_id": "018f0000-0000-7001-8000-000000000001",
-    "project_id": "018f0000-0000-7001-8000-000000000102"
+    "project_id": "018f0000-0000-7001-8000-000000000002"
   },
   "receipt": {
     "artifact_lifecycle_event_refs": [],
-    "author_action_sequence": "1",
+    "author_action_sequence": null,
     "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
-    "authoritative_commit_ids": [
-      "018f0000-0000-7001-8000-000000000035"
-    ],
-    "authoritative_revision_ids": [
-      "018f0000-0000-7001-8000-000000000034"
-    ],
+    "authoritative_commit_ids": [],
+    "authoritative_revision_ids": [],
     "command_digest": {
       "algorithm": "sha256",
       "profile": "storyos.command.applyAuthorEdit.jcs.v1",
@@ -51,10 +41,10 @@
     },
     "proposal_revision_ids": [],
     "receipt_id": "018f0000-0000-7001-8000-000000000033",
-    "result": "authoritative_applied",
+    "result": "refused",
     "resulting_heads": [
-      "018f0000-0000-7001-8000-000000000034"
+      "018f0000-0000-7001-8000-000000000004"
     ]
   },
-  "schema_id": "storyos.command.apply-author-edit.response.v1"
+  "schema_id": "storyos.command.apply-author-edit.response.v2"
 }

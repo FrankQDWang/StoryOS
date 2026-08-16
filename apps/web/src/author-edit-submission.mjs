@@ -225,7 +225,7 @@ export async function submitOnePendingAuthorEdit({
   const pending = await rebuildPendingProjection(workspace);
   const effect = response.effect;
   const receipt = response.receipt;
-  if (response.schema_id !== "storyos.command.apply-author-edit.response.v1"
+  if (response.schema_id !== "storyos.command.apply-author-edit.response.v2"
     || response.correlation_id !== group.frozen_request_body.correlation_id
     || !UUID.test(response.command_id ?? "")
     || !UUID.test(response.author_command_admission_id ?? "")

@@ -78,8 +78,8 @@
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json",
-      "schema_id": "storyos.command.apply-author-edit.response.v1",
-      "sha256": "sha256:6fed3a3fa44983fdce86c73056fcb3fb648ab5fe72ceb06d0e088512746a6f64"
+      "schema_id": "storyos.command.apply-author-edit.response.v2",
+      "sha256": "sha256:2a12d84593dce1906234850be6f91c7e8e4cc2fafc1467802398a7d810c1918a"
     }
   ]
 }
