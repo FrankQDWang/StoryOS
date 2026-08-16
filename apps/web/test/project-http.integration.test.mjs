@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
@@ -21,6 +22,7 @@ const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const execFileAsync = promisify(execFile);
 
 class TestNode {
   constructor(tag = "div") { this.tag = tag; this.children = []; this.dataset = {}; this.attributes = {}; this.ownText = ""; }
@@ -87,6 +89,39 @@ async function stopRealServer(server) {
 
 async function responseSnapshot(response) {
   return { status: response.status, body: await response.text() };
+}
+
+async function projectAuthoritySnapshot() {
+  const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
+  assert.ok(container, "run through scripts/verify-project-scope.sh");
+  const query = `
+    SELECT json_build_object(
+      'receipts', (SELECT count(*) FROM storyos.domain_receipts
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'activities', (SELECT count(*) FROM storyos.project_activity_events
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'revision_envelopes', (SELECT count(*) FROM storyos.authoritative_revision_envelopes
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'commits', (SELECT count(*) FROM storyos.authoritative_commits
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'actions', (SELECT count(*) FROM storyos.author_action_entries
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'counter', (SELECT concat(author_action_sequence, '/', authoritative_commit_sequence,
+        '/', project_activity_position) FROM storyos.scope_counters
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'zero_authority_activities', (SELECT count(*)
+        FROM storyos.domain_receipts AS receipt
+        JOIN storyos.project_activity_events AS activity
+          ON (activity.owner_user_id, activity.project_id, activity.receipt_id) =
+             (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+        WHERE receipt.owner_user_id = '${USER_A}'::uuid
+          AND receipt.project_id = '${PROJECT_A}'::uuid
+          AND receipt.result_kind <> 'authoritative_applied')
+    )::text`;
+  const { stdout } = await execFileAsync("docker", [
+    "exec", container, "psql", "-XAt", "-U", "postgres", "-c", query,
+  ]);
+  return JSON.parse(stdout.trim());
 }
 
 function httpGet(url, headers) {
@@ -504,16 +539,28 @@ test("one current writer settles one Author Edit and exact retries return one re
           idempotency_key: idempotencyKey,
         },
       });
-      const result = await applyAuthorEdit({
+      const options = {
         baseUrl, projectId: PROJECT_A, request: outcome.request, idempotencyKey,
         antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
-      });
+      };
+      const result = await applyAuthorEdit(options);
       assert.equal(result.receipt.result, outcome.expected);
       assert.deepEqual(result.effect, outcome.effect);
       assert.deepEqual(result.receipt.authoritative_revision_ids, []);
       assert.deepEqual(result.receipt.authoritative_commit_ids, []);
       assert.equal(result.receipt.author_action_sequence, null);
+      assert.deepEqual(await applyAuthorEdit(options), result);
     }
+
+    assert.deepEqual(await projectAuthoritySnapshot(), {
+      receipts: 4,
+      activities: 1,
+      revision_envelopes: 1,
+      commits: 1,
+      actions: 1,
+      counter: "1/1/1",
+      zero_authority_activities: 0,
+    });
 
     const staleSession = sessions.find((session) => session.writer.kind === "read_only");
     const staleRequest = {

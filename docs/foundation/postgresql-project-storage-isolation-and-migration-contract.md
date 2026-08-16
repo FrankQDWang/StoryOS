@@ -1,7 +1,7 @@
 # PostgreSQL Project Storage, Isolation, and Migration Contract
 
 - Status: accepted
-- Contract revision: `release1-storage-contract-2026-08-13-author-edit`
+- Contract revision: `release1-storage-contract-2026-08-16-zero-authority-receipt-activity`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
@@ -26,11 +26,11 @@ The active storage identity is the exact tuple below:
 
 ```text
 StorageCompatibilityIdentity {
-  database_schema_identity: storyos.postgresql.schema.v1
-  active_schema_version: storyos.persistence.release-1.v1
-  persisted_format_catalog_id: storyos.persistence.catalog.release-1.v1
-  migration_chain_id: storyos.persistence.bootstrap.release-1.v1
-  migration_chain_digest: sha256 over the catalogued migration chain
+  database_schema_identity: storyos.postgresql.schema.v2
+  active_schema_version: storyos.persistence.release-1.v2
+  persisted_format_catalog_id: storyos.persistence.catalog.release-1.v2
+  migration_chain_id: storyos.persistence.bootstrap.release-1.v2
+  migration_chain_digest: sha256 over the catalogued chain and LF-normalized bootstrap manifest
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
   route_catalog_contract_revision: release1-wire-catalog-2026-08-16-author-edit-response-v2
@@ -51,13 +51,20 @@ Project Activity cursor advancement, external effect, or reopening live
 traffic. A matching semantic version alone is never sufficient.
 
 Release 1 is the initial persisted baseline. It has no supported stored
-predecessor and no migration edge: a new installation creates the schema,
+predecessor and no migration edge. A new installation creates the schema,
 catalog, roles, forced-RLS policies, constraints, and administrative records in
-one atomic bootstrap before verification and activation. The empty migration
-chain identity and digest remain part of the same-release identity so a future
-Release 2 can add a real edge only with a source-backed predecessor catalog,
-schema, persisted rows, and checksums. A semantic version or invented
-predecessor name never creates compatibility.
+one atomic bootstrap before verification and activation. The catalog names the
+closed SQL source set and the LF-normalized SHA-256 for every source. Its
+manifest checksum is part of the migration-chain digest. A future Release 2
+can add a real edge only with a source-backed predecessor catalog, schema,
+persisted rows, and checksums. A semantic version or invented predecessor name
+never creates compatibility.
+
+The tracked bootstrap creates the runtime role without a password or other
+credential material. A deployment secret sets the runtime credential only
+after the atomic bootstrap commits and before runtime traffic starts. The local
+verification deployment injects one disposable test password after it proves
+that the tracked bootstrap stored no password.
 
 The entry verifier above remains the only public review command:
 `python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py
@@ -365,15 +372,31 @@ partition grants. Partitioning never changes aggregate or Project identity.
 
 ### 4.5 Release 1 atomic write sets and physical record mapping
 
-The Core Transition is the physical boundary for a successful author-owned
-command. In one scoped transaction it resolves the idempotency arbiter, locks
-the exact Heads and counters, appends any immutable Canonical or Artifact
-Revision, writes the selected typed Receipt, writes the Author Action when the
-result allocates one, advances normalized Heads, appends the required Project
-Activity position/Event, records projection invalidations, and inserts the
-outbox or wakeup intent. For an admitted command it also settles the
-`AuthorCommandAdmission` with `ReceiptSettled` in that same write set. No row
-from that set is published as committed before the transaction commits.
+The Core Transition is the physical boundary for every Core-started
+author-owned command. Every result writes one independent, immutable, typed
+Domain Receipt. The same scoped transaction settles the
+`AuthorCommandAdmission` with `ReceiptSettled` and writes the idempotency
+`result_reference`.
+
+Only `AuthoritativeApplied` locks and advances the Author Action,
+Authoritative Commit, and Project Activity counters. Only that result writes a
+Canonical Revision and payload, Authoritative Commit, resulting Head, Author
+Action, and Project Activity Event. `NoEffect`, `Conflicted`, and `Refused`
+write no authority row and no Project Activity row. No row from either write
+set is published as committed before the transaction commits.
+
+Every Author Edit Revision Envelope and Authoritative Commit carries the same
+non-null applied Receipt identity and result kind. Composite foreign keys bind
+the Envelope to the Receipt and bind the Commit to both the Receipt and the
+Envelope's exact object, parent Revision, and resulting Revision. Author Action
+and Project Activity references continue the same Receipt and Commit tuple.
+These references cannot name a zero-authority Receipt.
+
+Every single-identity Receipt array has the canonical PostgreSQL dimension
+`[1:1]` and rejects SQL `NULL` elements. Typed result discriminants and
+identity values are JSON strings, never JSON `null`. The complete common-shape
+and result-shape constraints must evaluate `TRUE`; PostgreSQL `UNKNOWN` cannot
+admit a durable Receipt.
 
 The physical mapping is closed as follows:
 
@@ -381,13 +404,13 @@ The physical mapping is closed as follows:
 |---|---|---|
 | Authoritative State, Authoritative Revision, Authoritative Commit, Head, and canonical payload | `project-canonical` | Immutable Revision/Payload and Commit rows plus one scoped current Head; Commit and counter sequence are gapless on commit |
 | Artifact, Proposal, Draft, provenance, lifecycle source, and source Snapshot | `artifact-proposal-draft` | Immutable Artifact/Proposal/Draft revisions and typed lifecycle/provenance edges; no shared Head or payload identity with Canonical State |
-| Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt | `operational-receipts-actions` | One typed immutable Receipt identity per first attempt; exact retry returns the same row and every allocation is explained by its result variant |
+| Domain, Validation, Acceptance, Undo Acceptance, and Author Undo Receipt | `operational-receipts-actions` | One independent typed immutable Receipt identity per first attempt; the typed payload contains no nullable or sentinel authority representation, and exact retry returns the same row |
 | Author Action and Author Undo Frontier evidence | `operational-receipts-actions` | One independent scoped Author Action sequence; successful author Proposal edits receive a Forward action, while Admission/Fence/refusal/conflict/no-effect evidence does not |
 | Author Command Admission, terminal settlement, anti-forgery challenge, and idempotency | `operational-admission-editor` and `operational-receipts-actions` | Exact User, Project Scope, client/session/writer generation, action class, digest, target, nonce, lifetime, and one terminal settlement; `outcome_unknown` is nonterminal |
 | Editor Session, current writer generation, Input Fence, and Proposal Pause Fence | `operational-admission-editor` | Scope-bound operational evidence; stale generations are fenced and no browser Local Edit Journal row becomes PostgreSQL authority |
 | Application Wire Record | `operational-wire-history` | Store exact accepted schema-valid message-content bytes once with route, method, release, schema, content type, digest profile, idempotency/Command reference, and resulting identity; never store cookies, headers, nonces, secrets, malformed bodies, or query-response archives |
 | Public Event wire representation | `operational-wire-history` | Store the first compact JSON representation with Event identity, Activity profile, schema, redaction profile, and representation digest; duplicate delivery is not another Wire Record |
-| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position`; bind replay generation, Event schema, typed Receipt reference, cause, resulting Heads, and redaction profile |
+| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position` only when the result has client-visible Activity; for Author Edit this is only `AuthoritativeApplied`, with one exact Receipt, Commit, Revision, and Author Action relation |
 | Snapshot, cursor, replay floor, generation, and handoff evidence | `operational-snapshot-replay` and `operational-project-activity` | Snapshot is an authorized Server reading boundary; cursor is bound to Scope/requester/filter/profile/generation; old generation either has exact verified handoff or returns `activity_cursor_too_old` |
 | Run Event, Mailbox, Transcript, Approval, Attempt, budget, lease, and outbox evidence | `operational-run-mailbox` and `operational-context-disclosure` | Immutable events and delivery evidence plus fenced live state; retention/compaction semantics remain owned by [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) |
 | Context Assembly Manifest, external-use binding, compatibility Decision, Destination Attempt, disclosure, and external wire projection | `operational-context-disclosure` | Manifest and exact non-secret wire projection commit before dispatch claim; OutcomeUnknown disclosure is durable before possible I/O; binding and Decision are separate records |
@@ -408,8 +431,9 @@ or network is never part of the Core transaction. Before external I/O the
 Context Assembly Manifest, non-secret Application Wire Record/Projection,
 pending Destination Attempt, fenced dispatch claim, and OutcomeUnknown
 Disclosure Event must be committed in the order already specified in section
-5.6. A lost acknowledgement is reconciled from the typed Receipt, idempotency,
-Activity, and Attempt records; it is never interpreted as a negative outcome.
+5.6. A lost acknowledgement is reconciled from the typed Receipt and
+idempotency result reference, plus Activity and Attempt records only when the
+typed result requires them. It is never interpreted as a negative outcome.
 
 ## 5. Transactions, concurrency, and recovery cuts
 
@@ -484,8 +508,25 @@ arbitrates concurrent first attempts.
 For an author-owned command, the admission transaction atomically claims the
 pre-domain idempotency record, consumes its one-use nonce, and inserts the
 immutable `author_command_admission`. The Core transaction atomically writes
-the typed Receipt, command outcome, Project Activity intent, and the admission's
-terminal Receipt settlement.
+the typed Receipt, the admission's terminal Receipt settlement, and the
+idempotency result reference. Only an authority-changing result adds the
+authority graph and Project Activity Event to that transaction.
+
+An exact retry first resolves `command_idempotency.result_reference`, then
+reads that exact `receipt_id` without joining an authority or Activity table.
+It validates Scope, command digest, Admission, `ReceiptSettled`, and idempotency
+linkage. It also validates the Admission target and expected Head, and proves
+that every Receipt Head belongs to that target. It then branches on the Receipt
+`result_kind`. `AuthoritativeApplied`
+must have exactly one complete Activity, Author Action, Commit, Revision, and
+payload relation. Its prior Receipt Head, Commit prior Revision, Envelope parent
+Revision, target object, and payload digest must agree. `NoEffect`, `Conflicted`,
+and `Refused` must have no authority relation. A `stale_authoritative_head`
+conflict must preserve an expected Head that differs from its recorded current
+Head. A
+missing, duplicate, mixed, malformed, or surplus relation fails closed. The
+read path never uses an empty identity, zero position, nullable authority field,
+fallback join, or guessed current Head.
 
 A crash after admission but before Core settlement leaves one inspectable
 pending admission. Recovery first queries the idempotency and Receipt facts.
@@ -505,7 +546,12 @@ cannot begin, commit, or detach those changes. The outer operation commits all
 Admission and business writes together. Any error or rollback preserves the
 unconsumed challenge and pending idempotency record.
 
-The Release 1 Server derives new challenge session-binding digests and nonces with the versioned HMAC-SHA256 profiles in the public protocol contract. This change lands before the challenge Server route has a merged release, so it requires no production schema edge or data backfill. A database created by an earlier unmerged development head is not a supported predecessor. Its pending challenge and pre-domain idempotency rows must be discarded with that test database and issued again. The Server must not accept the earlier custom SHA-256 derivation as a compatibility fallback. Existing Release 1 table shapes and generated public wire artifacts do not change.
+The Release 1 Server derives challenge session-binding digests and nonces with
+the versioned HMAC-SHA256 profiles in the public protocol contract. A database
+created by an earlier unmerged development head is not a supported predecessor.
+Its pending challenge and pre-domain idempotency rows must be discarded with
+that test database and issued again. The Server must not accept the earlier
+custom SHA-256 derivation as a compatibility fallback.
 
 `project_command_challenge_rate_windows` is a Project-scoped Operational
 Record for policy
@@ -789,7 +835,7 @@ future transactional or nontransactional migration phase and its verified
 postcondition; the initial Release 1 bootstrap has the separate catalogued
 `bootstrap_phases` contract. The migrator acquires one database-level advisory
 lock only to exclude another migrator, verifies the entire applied checksum
-chain, and refuses drift.
+chain and every catalogued LF-normalized bootstrap source, and refuses drift.
 
 Transactional DDL commits atomically. Operations such as concurrent index
 builds run as explicit resumable phases, detect and remove invalid remnants,
@@ -824,13 +870,26 @@ it does not claim a production data backfill or a migration Recovery Copy.
 ### 9.3 Release 1 initial baseline and future migration boundary
 
 The active Release 1 persistence contract is an initial baseline, catalogued as
-`storyos.persistence.bootstrap.release-1.v1`. It has no supported stored
+`storyos.persistence.bootstrap.release-1.v2`. It has no supported stored
 predecessor, no migration edge, and no production data migration claim. A fresh
 database enters the positive path by creating the schema, catalog, roles,
 forced-RLS policies, composite constraints, and administrative records in one
 atomic bootstrap. The empty migration-chain identity and digest are still
 checked against the public same-release identity; a matching semantic version
 alone never activates storage.
+
+The active bootstrap source set is exactly the five catalogued SQL files under
+`crates/storyos-adapter-postgres/migrations/`. It contains the roles, controlled
+Project schema, challenge/idempotency schema, Editor Session schema, and Author
+Edit schema. The files contain no inner transaction boundary. The runner
+executes the ordered set in one PostgreSQL transaction. The catalog stores each
+LF-normalized source SHA-256 and the canonical manifest SHA-256. An unlisted
+SQL file, a missing file, source drift, manifest drift, or partial transaction
+blocks activation.
+
+The role source contains no password or secret material. Runtime credential
+provisioning is a deployment-secret step after the atomic bootstrap. It is not
+part of the catalogued SQL manifest, a schema default, or a repository fixture.
 
 Future Release 2 or later may introduce a migration edge only after its owning
 contract supplies a real predecessor schema identity, persisted-format catalog,
@@ -1114,6 +1173,10 @@ covers at least:
 25. the catalog's protocol route-catalog digest and migration-chain digest
     agree with the checked-in Release 1 inputs, so a same-release activation
     cannot skip storage migration by reusing a public protocol identity.
+26. one applied Author Edit plus `NoEffect`, `Conflicted`, and `Refused`
+    produces four typed Domain Receipts but only one Activity Event, Revision,
+    payload, Commit, Head change, and Author Action; exact retry returns each
+    original settlement and refuses every impossible authority relation.
 
 ## 12. Normative invariants and handoff
 
@@ -1125,8 +1188,10 @@ covers at least:
    caller filtering and UUID uniqueness are insufficient.
 4. Authoritative State, Artifacts, and Operational Records remain disjoint
    durable spaces even when one transaction spans them.
-5. A successful transition, its Receipt, committed sequence, invalidation, and
-   outbox intent are one atomic fact.
+5. Every Core-started author result has one independent typed Receipt. Only an
+   authority-changing result has a committed authority sequence, Revision,
+   Commit, Head change, Author Action, and Project Activity Event; its complete
+   allocation is one atomic fact.
 6. External I/O never occurs before the required durable manifest and dispatch
    evidence, and never decides transaction success.
 7. Committed domain order is transactionally gapless and never derived from a
@@ -1168,6 +1233,10 @@ covers at least:
 19. The machine-readable persistence catalog and its verifier are review-time
     contract proof, not production DDL or executable recovery. Their derived
     statistics never become hard limits, retention defaults, or RPO/RTO claims.
+20. Exact retry reads the idempotency result reference and Receipt first, then
+    validates the result-specific relation cardinality. It never reconstructs
+    a result from a fake Activity, nullable or sentinel authority value,
+    compatibility view, wrapper, dual read, or dual write.
 
 The versioned command/query/event protocol owns exact wire DTOs and byte-limit
 values while preserving every key, scope, digest, and compatibility field in
@@ -1207,3 +1276,4 @@ defined here, and this contract does not decide their unowned semantics.
 | PGS-REC-007 | Sections 8–10.5 | portability and secret-exclusion classification checks |
 | PGS-BOUND-008 | Sections 10.1, 10.5, and 12.1 | owner anchors plus explicit non-normative measurement/retention boundaries |
 | PGS-VERIFY-009 | Sections 0, 11.19–11.25, and 12.2 | positive verifier, route/Event cross-check, Markdown links, and negative self-test |
+| PGS-RECEIPT-010 | Sections 4.5, 5.4, 11.26, and invariants 5 and 20 | `author_edit_receipt_activity`, SQL constraints, bootstrap checksums, and PostgreSQL/HTTP exact-retry gates |

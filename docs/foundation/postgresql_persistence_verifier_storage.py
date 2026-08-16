@@ -21,11 +21,13 @@ from postgresql_persistence_verifier_common import (
     ALLOWED_SCOPE_KINDS,
     ALLOWED_WIRE_HISTORY,
     PROJECT_SCOPE_PROFILE,
+    ROOT,
     STORAGE_CONTRACT_PATH,
     canonical_bytes,
     dependency_path_count,
     fail,
     graph_has_cycle,
+    normalized_file_bytes,
     selector_events,
     selector_operations,
     validate_source,
@@ -35,12 +37,16 @@ from postgresql_persistence_verifier_common import (
 def validate_migration(catalog: dict[str, Any], errors: list[str]) -> None:
     identity = catalog.get("schema_identity", {})
     migration = catalog.get("migration_chain", {})
+    if identity.get("database_schema_identity") != "storyos.postgresql.schema.v2":
+        fail(errors, "database_schema_identity must be the hard-cut PostgreSQL schema v2")
     if identity.get("active_schema_version") != ACTIVE_SCHEMA:
         fail(errors, "schema_identity.active_schema_version must be the Release 1 schema")
     if identity.get("persisted_format_catalog_id") != catalog.get("catalog_id"):
         fail(errors, "persisted_format_catalog_id must equal catalog_id")
     if identity.get("migration_chain_id") != migration.get("chain_id"):
         fail(errors, "schema identity and migration chain identities disagree")
+    if migration.get("chain_id") != "storyos.persistence.bootstrap.release-1.v2":
+        fail(errors, "migration chain must be the hard-cut Release 1 bootstrap v2")
     if migration.get("current_version") != ACTIVE_SCHEMA:
         fail(errors, "migration_chain.current_version must be the active schema")
     predecessors = migration.get("supported_predecessors")
@@ -97,6 +103,7 @@ def validate_migration(catalog: dict[str, Any], errors: list[str]) -> None:
             fail(errors, "initial Release 1 baseline must have an empty predecessor and edge set")
         if migration.get("new_install_terminal") != ACTIVE_SCHEMA:
             fail(errors, "initial Release 1 baseline must terminate new installation at the active schema")
+    validate_bootstrap_sources(migration, errors)
     phases = catalog.get("bootstrap_phases")
     if not isinstance(phases, list) or not phases:
         fail(errors, "bootstrap_phases must be non-empty")
@@ -148,6 +155,107 @@ def validate_migration(catalog: dict[str, Any], errors: list[str]) -> None:
     }
     if not required_gates <= set(active_gates):
         fail(errors, "active write gates omit initial bootstrap, release, migration, or recovery visibility proof")
+    validate_author_edit_receipt_activity(catalog, errors)
+
+
+def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> None:
+    bootstrap = migration.get("bootstrap", {})
+    expected_paths = [
+        "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
+        "crates/storyos-adapter-postgres/migrations/0001_controlled_project.sql",
+        "crates/storyos-adapter-postgres/migrations/0002_project_command_challenges.sql",
+        "crates/storyos-adapter-postgres/migrations/0004_editor_sessions.sql",
+        "crates/storyos-adapter-postgres/migrations/0005_author_edits.sql",
+    ]
+    if bootstrap.get("transaction_boundary") != "one_postgresql_transaction":
+        fail(errors, "Release 1 bootstrap must use one PostgreSQL transaction")
+    if bootstrap.get("digest_profile") != "storyos.persistence.bootstrap-manifest-jcs.v1":
+        fail(errors, "Release 1 bootstrap digest profile is missing or incorrect")
+    if bootstrap.get("runtime_credential_source") != "external_secret_after_atomic_bootstrap":
+        fail(errors, "Release 1 bootstrap must not own the runtime credential")
+    sources = bootstrap.get("sources")
+    if not isinstance(sources, list):
+        fail(errors, "Release 1 bootstrap sources must be an ordered array")
+        return
+    paths = [source.get("path") for source in sources if isinstance(source, dict)]
+    if paths != expected_paths or len(paths) != len(sources):
+        fail(errors, "Release 1 bootstrap sources do not equal the closed active SQL set")
+        return
+    migration_dir = ROOT / "crates/storyos-adapter-postgres/migrations"
+    checked_in_paths = sorted(
+        path.relative_to(ROOT).as_posix() for path in migration_dir.glob("*.sql")
+    )
+    if checked_in_paths != expected_paths:
+        fail(errors, "checked-in SQL sources do not equal the catalogued bootstrap set")
+    actual_manifest: list[dict[str, str]] = []
+    for source in sources:
+        source_path = ROOT / source["path"]
+        if not source_path.is_file():
+            fail(errors, f"missing bootstrap SQL source {source['path']}")
+            continue
+        normalized = normalized_file_bytes(source_path)
+        actual_digest = "sha256:" + hashlib.sha256(normalized).hexdigest()
+        if source.get("lf_sha256") != actual_digest:
+            fail(errors, f"bootstrap SQL checksum mismatch for {source['path']}: expected {actual_digest}")
+        if re.search(rb"(?im)^\s*(?:BEGIN|COMMIT)\s*;\s*$", normalized):
+            fail(errors, f"bootstrap SQL source contains an inner transaction boundary: {source['path']}")
+        if source["path"].endswith("/0000_roles.sql") and re.search(
+            rb"(?i)\bPASSWORD\b", normalized
+        ):
+            fail(errors, "Release 1 role bootstrap contains tracked password material")
+        actual_manifest.append({"path": source["path"], "lf_sha256": actual_digest})
+    manifest_digest = "sha256:" + hashlib.sha256(canonical_bytes(actual_manifest)).hexdigest()
+    if bootstrap.get("manifest_sha256") != manifest_digest:
+        fail(errors, f"bootstrap manifest checksum mismatch: expected {manifest_digest}")
+
+
+def validate_author_edit_receipt_activity(
+    catalog: dict[str, Any], errors: list[str]
+) -> None:
+    contract = catalog.get("author_edit_receipt_activity", {})
+    expected_scalars = {
+        "schema_id": "storyos.persistence.author-edit-receipt-activity.v1",
+        "receipt_table_family": "domain_receipts",
+        "activity_table_family": "project_activity_events",
+        "receipt_identity": "independent_immutable_typed",
+        "applied_result_kind": "authoritative_applied",
+        "applied_relation_cardinality": "exactly_one_complete_activity_authority_relation",
+        "authority_relation_binding": "composite_applied_receipt_admission_object_prior_revision",
+        "zero_relation_cardinality": "no_activity_revision_payload_commit_head_or_author_action",
+        "typed_value_guard": "one_based_single_identity_arrays_no_sql_or_json_null",
+    }
+    for field, expected in expected_scalars.items():
+        if contract.get(field) != expected:
+            fail(errors, f"author-edit Receipt/Activity contract has invalid {field}")
+    expected_lists = {
+        "zero_authority_result_kinds": ["no_effect", "conflicted", "refused"],
+        "zero_settlement_write_set": [
+            "typed_domain_receipt",
+            "admission_receipt_settled",
+            "idempotency_result_reference",
+        ],
+        "exact_retry_order": [
+            "read_idempotency_result_reference",
+            "read_receipt_by_receipt_id",
+            "validate_admission_target_and_expected_head",
+            "validate_receipt_heads_in_target",
+            "branch_on_receipt_result_kind",
+            "validate_result_reason_and_head_semantics",
+            "validate_exact_authority_activity_cardinality_and_binding",
+            "validate_applied_prior_and_payload_digest",
+            "return_original_settlement",
+        ],
+        "prohibited_representation": [
+            "nullable_or_sentinel_authority",
+            "fake_activity",
+            "shadow_or_zero_receipt_table",
+            "dual_read_or_dual_write",
+            "compatibility_view_or_wrapper",
+        ],
+    }
+    for field, expected in expected_lists.items():
+        if contract.get(field) != expected:
+            fail(errors, f"author-edit Receipt/Activity contract has invalid {field}")
 
 
 def validate_families(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str]) -> tuple[dict[str, dict[str, Any]], dict[str, set[str]], dict[str, set[str]]]:
