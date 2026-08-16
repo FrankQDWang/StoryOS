@@ -53,6 +53,7 @@
     "measurement_report": "docs/research/representative-writing-path-performance-and-storage-growth-envelope.md",
     "browser_harness": "docs/research/author-edit-batch-prerelease-browser-harness.mjs",
     "captured_result": "docs/research/author-edit-batch-prerelease-browser-evidence.json",
+    "captured_candidates": "docs/research/author-edit-batch-prerelease-browser-candidates.jsonl",
     "uses_real_user_content": false
   },
   "future_anonymous_calibration": {

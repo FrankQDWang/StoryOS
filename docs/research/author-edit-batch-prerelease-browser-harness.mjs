@@ -8,8 +8,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const policyPath = join(root, "docs/foundation/author-edit-batch-release-1-policy.json");
 const evidencePath = join(root, "docs/research/author-edit-batch-prerelease-browser-evidence.json");
+const candidatesPath = join(root, "docs/research/author-edit-batch-prerelease-browser-candidates.jsonl");
 const policy = JSON.parse(readFileSync(policyPath, "utf8"));
 const captured = JSON.parse(readFileSync(evidencePath, "utf8"));
+const capturedCandidates = readFileSync(candidatesPath, "utf8").trim().split("\n").map(JSON.parse);
 const chrome = [
   process.env.CHROME_BIN,
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -37,6 +39,7 @@ const hardOrigins = new Set(["composition_confirmation", "paste", "cut", "drop",
   "policy_identity_change", "shared_binding_change"]);
 const record = (origin, text = "x", from = 0, to = 0) => intents.push({
   sequence: nextSequence++, at_ms: now, origin,
+  coverage: { first: nextSequence - 1, last: nextSequence - 1 },
   unit: { kind: "replace_selection", selection: { from, to }, text },
 });
 editor.addEventListener("compositionstart", () => { composing = true; });
@@ -48,10 +51,11 @@ editor.addEventListener("compositionend", (event) => {
 editor.addEventListener("input", (event) => {
   if (composing || event.isComposing || event.inputType === "insertCompositionText") return;
   const origins = { insertText: "typing", insertFromPaste: "paste",
-    deleteByCut: "cut", deleteContentBackward: "deletion",
+    insertFromDrop: "drop", deleteByCut: "cut", deleteContentBackward: "deletion",
     insertReplacementText: "selection_replacement" };
   record(origins[event.inputType] ?? "explicit_editor_command", event.data ?? "");
 });
+editor.addEventListener("storyos-boundary", event => record(event.detail));
 function emit(type, init, advance = 0) {
   now += advance;
   const started = performance.now();
@@ -60,6 +64,28 @@ function emit(type, init, advance = 0) {
   latencies.push(performance.now() - started);
 }
 function reset() { now = 0; nextSequence = 1; intents = []; latencies = []; }
+function emitBoundary(origin) {
+  if (origin === "composition_confirmation") {
+    emit("compositionstart", { data: "" }, 10);
+    emit("compositionend", { data: "你" }, 10);
+    return;
+  }
+  const inputTypes = { paste: "insertFromPaste", cut: "deleteByCut", drop: "insertFromDrop" };
+  if (inputTypes[origin]) {
+    emit("input", { inputType: inputTypes[origin], data: origin }, 10);
+    return;
+  }
+  now += 10;
+  const started = performance.now();
+  editor.dispatchEvent(new CustomEvent("storyos-boundary", { detail: origin }));
+  latencies.push(performance.now() - started);
+}
+function snapshot(action) {
+  reset(); action();
+  const sorted = latencies.slice().sort((a, b) => a - b);
+  return { records: intents.slice(), browser_input_latency_ms: { max: Math.max(...latencies),
+    p95: sorted[Math.floor(sorted.length * 0.95)] ?? 0, classification: "advisory" } };
+}
 function english(count, gap) {
   for (let i = 0; i < count; i += 1) emit("input", { inputType: "insertText", data: "a" }, gap);
 }
@@ -87,99 +113,140 @@ function batch(records, idleMs, maxUnits) {
 }
 function bytes(value) { return encoder.encode(JSON.stringify(value)).byteLength; }
 function metrics(records, idleMs, maxUnits) {
+  const started = performance.now();
   const groups = batch(records, idleMs, maxUnits);
   return { request_count: groups.length, max_units_per_request: Math.max(...groups.map(g => g.length)),
     max_payload_bytes: Math.max(...groups.map(g => bytes({ author_edit_units: g.map(x => x.unit) }))),
     journal_storage_bytes: bytes(records),
     submission_group_storage_bytes: bytes(groups.map(group => ({ ordered_sequences:
-      group.map(item => item.sequence), units: group.map(item => item.unit) }))) };
+      group.map(item => item.sequence), units: group.map(item => item.unit) }))),
+    grouping_evaluation_latency_ms: performance.now() - started };
 }
-function state() { return { receipt: null, revision: 0, head: 0, action: 0, activity: 0,
-  checkpoint: 0, projection: 0, base: 0 }; }
-function settle(kind) {
-  const value = state();
-  if (["refused", "conflicted", "no_effect"].includes(kind)) value.receipt = { result: kind };
-  if (kind === "success") Object.assign(value, { receipt: { result: kind }, revision: 1, head: 1,
-    action: 1, activity: 1, checkpoint: 1, projection: 1, base: 1 });
-  return value;
-}
+function state(classification = "pending") { return { classification, receipt: null, revision: 0,
+  head: 0, action: 0, activity: 0, checkpoint: 0, projection: 0, base: 0,
+  retry_reused: false }; }
 const zeroAuthority = value => ["revision", "head", "action", "activity", "checkpoint",
   "projection", "base"].every(key => value[key] === 0);
+function executeTrace(trace) {
+  let value = state();
+  let admitted = false;
+  let coreStarted = false;
+  for (const step of trace) {
+    if (step.kind === "admit") {
+      const refused = step.policy_revision !== policy.revision
+        || step.unit_count > policy.selected.max_author_edit_units
+        || step.primitive_count > policy.selected.max_normalized_primitives
+        || step.body_bytes > policy.selected.max_public_json_command_body_bytes;
+      if (refused) return state("pre_admission_refusal");
+      admitted = true;
+    } else if (step.kind === "core_start" && admitted) coreStarted = true;
+    else if (step.kind === "unit" && coreStarted && !step.valid) {
+      value = state("refused"); value.receipt = { result: "refused" }; return value;
+    } else if (step.kind === "result" && coreStarted) {
+      value = state(step.outcome); value.receipt = { result: step.outcome }; return value;
+    } else if (step.kind === "fault" && coreStarted && step.point === "CFP-CORE-BEFORE-COMMIT") {
+      return state("transaction_failure_before_commit");
+    } else if (step.kind === "commit" && coreStarted) {
+      value = state("success"); Object.assign(value, { receipt: { result: "success" }, revision: 1,
+        head: 1, action: 1, activity: 1, checkpoint: 1, projection: 1, base: 1 });
+    } else if (step.kind === "retry" && value.classification === "success") value.retry_reused = true;
+  }
+  return value;
+}
+function validOracleState(value) {
+  if (["pre_admission_refusal", "transaction_failure_before_commit"].includes(value.classification))
+    return value.receipt === null && zeroAuthority(value);
+  if (["refused", "conflicted", "no_effect"].includes(value.classification))
+    return value.receipt?.result === value.classification && zeroAuthority(value);
+  return value.classification === "success" && value.receipt?.result === "success"
+    && ["revision", "head", "action", "activity", "checkpoint", "projection", "base"]
+      .every(key => value[key] === 1);
+}
 function validCoverage(records, units, policyRevision) {
   return policyRevision === policy.revision && records.length === units.length
     && records.every((record, index) => record.sequence === index + 1
       && JSON.stringify(record.unit) === JSON.stringify(units[index]))
-    && new Set(records.map(record => record.sequence)).size === records.length;
+    && new Set(records.map(record => record.sequence)).size === records.length
+    && records.every((record, index) => index === 0
+      || records[index - 1].coverage.last < record.coverage.first);
 }
 
-reset(); english(300, 25); const continuous = intents.slice();
-reset(); english(20, 600); const slow = intents.slice();
-reset(); english(16, 250); const boundary = intents.slice();
-reset(); ime(); const imeIntents = intents.slice();
-reset(); emit("input", { inputType: "insertFromPaste", data: "paste" }, 10);
-emit("input", { inputType: "deleteContentBackward", data: null }, 10);
-emit("input", { inputType: "insertReplacementText", data: "replace" }, 10);
-const editing = intents.slice();
-reset(); english(1024, 1); const pressure = intents.slice();
-
-const scenarios = { continuous_english: continuous, slow_english: slow,
-  boundary_english: boundary, chinese_ime_confirm_cancel: imeIntents,
-  paste_delete_replace: editing, pressure };
+const scenarios = {
+  continuous_english: snapshot(() => english(300, 25)),
+  slow_english: snapshot(() => english(20, 600)),
+  boundary_english: snapshot(() => english(16, 250)),
+  chinese_ime_confirm_cancel: snapshot(ime),
+  paste_delete_replace: snapshot(() => {
+    emit("input", { inputType: "insertFromPaste", data: "paste" }, 10);
+    emit("input", { inputType: "deleteContentBackward", data: null }, 10);
+    emit("input", { inputType: "insertReplacementText", data: "replace" }, 10);
+  }),
+  hard_boundaries: snapshot(() => [...hardOrigins].forEach(emitBoundary)),
+  pressure: snapshot(() => english(1024, 1)),
+};
 const candidates = [];
 for (const idleMs of policy.candidates.adjacent_completed_intent_idle_ms) {
   for (const maxUnits of policy.candidates.max_author_edit_units) {
     candidates.push({ idle_ms: idleMs, max_units: maxUnits,
       scenarios: Object.fromEntries(Object.entries(scenarios)
-        .map(([name, records]) => [name, metrics(records, idleMs, maxUnits)])) });
+        .map(([name, scenario]) => [name, { ...metrics(scenario.records, idleMs, maxUnits),
+          browser_input_latency_ms: scenario.browser_input_latency_ms }])) });
   }
 }
-const preAdmission = settle("pre_admission_refusal");
-const transactionFailure = settle("transaction_failure_before_commit");
-const refused = settle("refused");
-const conflicted = settle("conflicted");
-const noEffect = settle("no_effect");
-const success = settle("success");
-const retry = structuredClone(success);
-const coverage = continuous.slice(0, 3).map((record, index) => ({ ...record, sequence: index + 1 }));
+const admitted = { kind: "admit", policy_revision: policy.revision, unit_count: 2,
+  primitive_count: 2, body_bytes: 200 };
+const run = (...steps) => executeTrace([admitted, { kind: "core_start" }, ...steps]);
+const over = field => executeTrace([{ ...admitted, [field]: 1048577 }]);
+const preAdmission = over("unit_count");
+const transactionFailure = run({ kind: "unit", valid: true },
+  { kind: "fault", point: "CFP-CORE-BEFORE-COMMIT" });
+const refused = run({ kind: "result", outcome: "refused" });
+const conflicted = run({ kind: "result", outcome: "conflicted" });
+const noEffect = run({ kind: "result", outcome: "no_effect" });
+const success = run({ kind: "unit", valid: true }, { kind: "unit", valid: true },
+  { kind: "commit" }, { kind: "retry" });
+const coverage = scenarios.continuous_english.records.slice(0, 3)
+  .map((record, index) => ({ ...record, sequence: index + 1,
+    coverage: { first: index + 1, last: index + 1 } }));
 const coverageUnits = coverage.map(record => record.unit);
-const invalidLaterUnit = settle("refused");
+const invalidLaterUnit = run({ kind: "unit", valid: true }, { kind: "unit", valid: false });
+const hardGroups = batch(scenarios.hard_boundaries.records, 750, 256);
+const hardBoundaryOracle = Object.fromEntries([...hardOrigins].map(origin => [
+  "hard_boundary_" + origin + "_isolated",
+  hardGroups.some(group => group.length === 1 && group[0].origin === origin),
+]));
 const semanticOracle = {
-  ime_update_and_cancel_not_durable: imeIntents.length === 1 && imeIntents[0].origin === "composition_confirmation",
-  hard_boundaries_isolated: batch(editing, 750, 256)
-    .filter(group => hardOrigins.has(group[0].origin)).every(group => group.length === 1),
+  ime_update_and_cancel_not_durable: scenarios.chinese_ime_confirm_cancel.records.length === 1,
+  ...hardBoundaryOracle,
   complete_local_coverage_accepted: validCoverage(coverage, coverageUnits, policy.revision),
   duplicate_local_coverage_rejected: !validCoverage([coverage[0], coverage[0], coverage[2]], coverageUnits, policy.revision),
   skipped_local_coverage_rejected: !validCoverage([coverage[0], coverage[2]], coverageUnits, policy.revision),
   reordered_local_coverage_rejected: !validCoverage([coverage[1], coverage[0], coverage[2]], coverageUnits, policy.revision),
+  overlapping_local_coverage_rejected: !validCoverage([coverage[0],
+    { ...coverage[1], coverage: { first: 1, last: 2 } }, coverage[2]], coverageUnits, policy.revision),
   policy_mismatched_coverage_rejected: !validCoverage(coverage, coverageUnits, "wrong-policy"),
-  pre_admission_refusal_receipt_free: preAdmission.receipt === null && zeroAuthority(preAdmission),
-  over_limit_command_refused_before_admission: pressure.slice(0, 241).length === 241
-    && preAdmission.receipt === null && zeroAuthority(preAdmission),
-  primitive_limit_refused_before_admission: pressure.slice(0, 241)
-    .reduce(count => count + 1, 0) === 241 && preAdmission.receipt === null,
-  body_limit_refused_before_admission: bytes({ body: "x".repeat(1048577) }) > 1048576
-    && preAdmission.receipt === null && zeroAuthority(preAdmission),
-  admitted_refused_typed_zero_authority: refused.receipt?.result === "refused" && zeroAuthority(refused),
-  admitted_conflicted_typed_zero_authority: conflicted.receipt?.result === "conflicted" && zeroAuthority(conflicted),
-  admitted_no_effect_typed_zero_authority: noEffect.receipt?.result === "no_effect" && zeroAuthority(noEffect),
-  invalid_later_unit_typed_zero_authority: invalidLaterUnit.receipt?.result === "refused"
-    && zeroAuthority(invalidLaterUnit),
-  pre_commit_transaction_failure_receipt_free: transactionFailure.receipt === null && zeroAuthority(transactionFailure),
-  whole_batch_has_one_final_settlement: success.receipt?.result === "success" && success.revision === 1
-    && success.head === 1 && success.action === 1 && success.activity === 1,
+  unit_limit_refused_before_admission: validOracleState(preAdmission),
+  primitive_limit_refused_before_admission: validOracleState(over("primitive_count")),
+  body_limit_refused_before_admission: validOracleState(over("body_bytes")),
+  policy_mismatch_refused_before_admission: validOracleState(executeTrace([
+    { ...admitted, policy_revision: "wrong-policy" }])),
+  admitted_refused_typed_zero_authority: validOracleState(refused),
+  admitted_conflicted_typed_zero_authority: validOracleState(conflicted),
+  admitted_no_effect_typed_zero_authority: validOracleState(noEffect),
+  invalid_later_unit_typed_zero_authority: validOracleState(invalidLaterUnit),
+  pre_commit_transaction_failure_receipt_free: validOracleState(transactionFailure),
+  whole_batch_has_one_final_settlement: validOracleState(success),
   no_prefix_authority: invalidLaterUnit.revision === 0 && success.revision === 1,
-  contradictory_prefix_state_rejected: !zeroAuthority({ ...invalidLaterUnit, revision: 1 }),
-  exact_retry_has_no_second_effect: JSON.stringify(retry) === JSON.stringify(success),
-  grouping_never_exceeds_selected_limit: metrics(pressure, 750, 240).max_units_per_request <= 240,
+  contradictory_prefix_state_rejected: !validOracleState({ ...invalidLaterUnit, revision: 1 }),
+  exact_retry_has_no_second_effect: success.retry_reused && success.revision === 1,
+  grouping_never_exceeds_selected_limit: metrics(scenarios.pressure.records, 750, 240)
+    .max_units_per_request <= 240,
 };
 if (!Object.values(semanticOracle).every(Boolean)) throw new Error("semantic oracle failed "
   + JSON.stringify(semanticOracle));
-const sorted = latencies.slice().sort((a, b) => a - b);
 const result = { schema: "storyos.author-edit-batch-prerelease-browser-evidence.v1",
   policy_revision: policy.revision, synthetic_only: true, real_user_content: false,
-  selected: policy.selected, candidates, semantic_oracle: semanticOracle,
-  browser_input_latency_ms: { max: Math.max(...latencies),
-    p95: sorted[Math.floor(sorted.length * 0.95)] ?? 0, classification: "advisory" } };
+  selected: policy.selected, candidates, semantic_oracle: semanticOracle };
 document.querySelector("#result").textContent = btoa(unescape(encodeURIComponent(JSON.stringify(result))));
 </script>`;
 
@@ -199,40 +266,21 @@ try {
   assert.equal(result.policy_revision, policy.revision);
   assert.ok(Object.values(result.semantic_oracle).every(Boolean));
   assert.ok(result.candidates.some(candidate => candidate.idle_ms === 250 && candidate.max_units === 240));
-  const at = (idleMs, maxUnits) => result.candidates.find(candidate =>
-    candidate.idle_ms === idleMs && candidate.max_units === maxUnits).scenarios;
-  const comparison = captured.deterministic_comparison;
-  assert.deepEqual(comparison.continuous_english_300_request_count_by_max_units,
-    policy.candidates.max_author_edit_units.map(units => at(250, units).continuous_english.request_count));
-  assert.deepEqual(comparison.pressure_1024_request_count_by_max_units,
-    policy.candidates.max_author_edit_units.map(units => at(250, units).pressure.request_count));
-  assert.deepEqual(comparison.slow_english_20_request_count_by_idle_ms,
-    policy.candidates.adjacent_completed_intent_idle_ms.map(idle => at(idle, 240).slow_english.request_count));
-  assert.deepEqual(comparison.max_payload_bytes_by_max_units,
-    policy.candidates.max_author_edit_units.map(units => at(250, units).continuous_english.max_payload_bytes));
-  const selected = at(policy.selected.adjacent_completed_intent_idle_ms,
-    policy.selected.max_author_edit_units);
-  assert.deepEqual(comparison.journal_storage_bytes, {
-    continuous_english_300: selected.continuous_english.journal_storage_bytes,
-    slow_english_20: selected.slow_english.journal_storage_bytes,
-    boundary_english_16: selected.boundary_english.journal_storage_bytes,
-    chinese_ime_confirm_cancel: selected.chinese_ime_confirm_cancel.journal_storage_bytes,
-    paste_delete_replace: selected.paste_delete_replace.journal_storage_bytes,
-    pressure_1024: selected.pressure.journal_storage_bytes,
-  });
-  assert.deepEqual(comparison.selected_250ms_240_units, {
-    continuous_english_300_request_count: selected.continuous_english.request_count,
-    pressure_1024_request_count: selected.pressure.request_count,
-    slow_english_20_request_count: selected.slow_english.request_count,
-    max_units_per_request: selected.pressure.max_units_per_request,
-    max_payload_bytes: selected.pressure.max_payload_bytes,
-    payload_fraction_of_1mib: selected.pressure.max_payload_bytes
-      / policy.selected.max_public_json_command_body_bytes,
-    continuous_submission_group_storage_bytes: selected.continuous_english.submission_group_storage_bytes,
-    pressure_submission_group_storage_bytes: selected.pressure.submission_group_storage_bytes,
-  });
-  assert.deepEqual(captured.semantic_oracle, result.semantic_oracle);
-  if (process.argv.includes("--json")) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+  if (!process.argv.includes("--capture")) {
+    const deterministic = candidates => candidates.map(candidate => ({ ...candidate,
+      scenarios: Object.fromEntries(Object.entries(candidate.scenarios).map(([name, metrics]) => {
+        const { grouping_evaluation_latency_ms, browser_input_latency_ms, ...stable } = metrics;
+        return [name, stable];
+      })) }));
+    assert.deepEqual(deterministic(capturedCandidates), deterministic(result.candidates));
+    assert.ok(capturedCandidates.every(candidate => Object.values(candidate.scenarios).every(metrics =>
+      Number.isFinite(metrics.grouping_evaluation_latency_ms)
+      && Number.isFinite(metrics.browser_input_latency_ms.max)
+      && Number.isFinite(metrics.browser_input_latency_ms.p95))));
+    assert.deepEqual(captured.semantic_oracle, result.semantic_oracle);
+  }
+  if (process.argv.some(argument => ["--capture", "--json"].includes(argument)))
+    process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else console.log(`verified ${result.policy_revision} in a real browser with ${result.candidates.length} candidate runs`);
 } finally {
   rmSync(directory, { recursive: true, force: true });
