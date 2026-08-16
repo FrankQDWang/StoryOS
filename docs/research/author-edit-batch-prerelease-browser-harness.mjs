@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -268,10 +268,22 @@ const directory = mkdtempSync(join(tmpdir(), "storyos-author-edit-batch-"));
 try {
   const html = join(directory, "harness.html");
   writeFileSync(html, page);
-  const run = spawnSync(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox",
-    `--user-data-dir=${join(directory, "profile")}`, "--virtual-time-budget=10000", "--dump-dom",
-    pathToFileURL(html).href], { encoding: "utf8", killSignal: "SIGKILL",
-    maxBuffer: 16 * 1024 * 1024, timeout: 15000 });
+  const run = await new Promise((resolve, reject) => {
+    const child = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox",
+    `--user-data-dir=${join(directory, "profile")}`, "--timeout=5000", "--dump-dom",
+    pathToFileURL(html).href]);
+    let stdout = ""; let stderr = ""; let settled = false;
+    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
+    const finish = () => {
+      if (settled) return;
+      settled = true; clearTimeout(timer); child.kill("SIGKILL"); resolve({ stdout, stderr });
+    };
+    child.stdout.on("data", data => { stdout += data; if (stdout.includes("</pre>")) finish(); });
+    child.stderr.on("data", data => { stderr += data; });
+    child.once("error", reject); child.once("close", finish);
+    const timer = setTimeout(() => { settled = true; child.kill("SIGKILL");
+      reject(new Error(`browser harness timed out: ${stderr}`)); }, 15000);
+  });
   const encoded = run.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
   assert.ok(encoded && encoded !== "running",
     `browser harness did not produce a result: ${run.stderr}`);
