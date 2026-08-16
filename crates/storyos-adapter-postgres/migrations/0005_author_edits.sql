@@ -1,4 +1,5 @@
 BEGIN;
+
 ALTER TABLE storyos.project_writer_generations
   ADD CONSTRAINT project_writer_generations_session_generation_key
   UNIQUE (owner_user_id, project_id, current_editor_session_id, writer_generation);
@@ -107,6 +108,7 @@ CREATE TABLE storyos.authoritative_revision_envelopes (
   payload_digest text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (owner_user_id, project_id, manuscript_object_id, revision_id),
+  UNIQUE (owner_user_id, project_id, creator_ref),
   FOREIGN KEY (owner_user_id, project_id, manuscript_object_id, revision_id)
     REFERENCES storyos.authoritative_revisions
       (owner_user_id, project_id, manuscript_object_id, revision_id) MATCH FULL,
@@ -175,32 +177,60 @@ CREATE TABLE storyos.domain_receipts (
   authoritative_revision_ids uuid[] NOT NULL,
   proposal_revision_ids uuid[] NOT NULL,
   authoritative_commit_ids uuid[] NOT NULL,
-  author_action_sequence numeric(20, 0),
   draft_artifact_refs text[] NOT NULL,
   artifact_lifecycle_event_refs text[] NOT NULL,
   condition_refs text[] NOT NULL,
   result_kind text NOT NULL CHECK (
     result_kind IN ('authoritative_applied', 'no_effect', 'conflicted', 'refused')
   ),
-  result_reason text,
-  project_activity_position numeric(20, 0) NOT NULL
-    CHECK (project_activity_position BETWEEN 1 AND 18446744073709551615),
-  authoritative_commit_id uuid,
-  resulting_revision_id uuid,
+  result_payload jsonb NOT NULL CHECK (jsonb_typeof(result_payload) = 'object'),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (owner_user_id, project_id, receipt_id),
   UNIQUE (owner_user_id, project_id, author_command_admission_id),
   UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id),
-  UNIQUE (owner_user_id, project_id, receipt_id, authoritative_commit_id),
-  UNIQUE (owner_user_id, project_id, receipt_id, resulting_revision_id),
+  UNIQUE (owner_user_id, project_id, receipt_id, result_kind),
+  CHECK (
+    cardinality(expected_heads) = 1
+    AND cardinality(prior_heads) = 1
+    AND cardinality(resulting_heads) = 1
+    AND cardinality(proposal_revision_ids) = 0
+    AND cardinality(draft_artifact_refs) = 0
+    AND cardinality(artifact_lifecycle_event_refs) = 0
+    AND cardinality(condition_refs) = 0
+  ),
   CHECK (
     (result_kind = 'authoritative_applied'
-      AND authoritative_commit_id IS NOT NULL AND resulting_revision_id IS NOT NULL
-      AND author_action_sequence IS NOT NULL)
-    OR
-    (result_kind <> 'authoritative_applied'
-      AND authoritative_commit_id IS NULL AND resulting_revision_id IS NULL
-      AND author_action_sequence IS NULL)
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 1
+      AND cardinality(authoritative_commit_ids) = 1
+      AND resulting_heads = authoritative_revision_ids)
+    OR (result_kind = 'no_effect'
+      AND result_payload = '{"reason":"content_unchanged"}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND expected_heads = resulting_heads)
+    OR (result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload ? 'current_authoritative_revision_id'
+      AND result_payload - 'reason' - 'current_authoritative_revision_id' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'stale_authoritative_head', 'proposal_head_present', 'ownership_changed'
+      )
+      AND result_payload->>'current_authoritative_revision_id' = resulting_heads[1]::text
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads)
+    OR (result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'unsupported_intent_shape', 'invalid_selection', 'target_mismatch'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND expected_heads = resulting_heads)
   ),
   FOREIGN KEY (
     owner_user_id, project_id, author_command_admission_id, command_id,
@@ -208,21 +238,12 @@ CREATE TABLE storyos.domain_receipts (
   ) REFERENCES storyos.author_command_admissions (
     owner_user_id, project_id, author_command_admission_id, command_id,
     command_kind, canonical_command_digest, idempotency_key
-  ) MATCH FULL,
-  FOREIGN KEY (
-    owner_user_id, project_id, authoritative_commit_id, resulting_revision_id
-  ) REFERENCES storyos.authoritative_commits (
-    owner_user_id, project_id, authoritative_commit_id, resulting_revision_id
-  )
+  ) MATCH FULL
 );
 CREATE INDEX domain_receipts_admission_fk_idx
   ON storyos.domain_receipts
     (owner_user_id, project_id, author_command_admission_id, command_id,
      command_kind, command_digest, idempotency_key);
-CREATE INDEX domain_receipts_commit_result_fk_idx
-  ON storyos.domain_receipts
-    (owner_user_id, project_id, authoritative_commit_id, resulting_revision_id);
-
 CREATE TABLE storyos.author_command_admission_settlements (
   owner_user_id uuid NOT NULL,
   project_id uuid NOT NULL,
@@ -247,36 +268,61 @@ CREATE TABLE storyos.author_action_entries (
   disposition text NOT NULL CHECK (disposition = 'forward'),
   authoritative_commit_id uuid NOT NULL,
   receipt_id uuid NOT NULL,
+  receipt_result_kind text NOT NULL CHECK (receipt_result_kind = 'authoritative_applied'),
   PRIMARY KEY (owner_user_id, project_id, author_action_sequence),
-  FOREIGN KEY (owner_user_id, project_id, receipt_id, authoritative_commit_id)
+  UNIQUE (owner_user_id, project_id, receipt_id),
+  UNIQUE (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id, author_action_sequence
+  ),
+  FOREIGN KEY (owner_user_id, project_id, receipt_id, receipt_result_kind)
     REFERENCES storyos.domain_receipts
-      (owner_user_id, project_id, receipt_id, authoritative_commit_id) MATCH FULL
+      (owner_user_id, project_id, receipt_id, result_kind) MATCH FULL,
+  FOREIGN KEY (owner_user_id, project_id, authoritative_commit_id)
+    REFERENCES storyos.authoritative_commits
+      (owner_user_id, project_id, authoritative_commit_id) MATCH FULL
 );
 CREATE INDEX author_action_entries_receipt_commit_fk_idx
   ON storyos.author_action_entries
-    (owner_user_id, project_id, receipt_id, authoritative_commit_id);
+    (owner_user_id, project_id, receipt_id, receipt_result_kind,
+     authoritative_commit_id, author_action_sequence);
 
 CREATE TABLE storyos.project_activity_events (
   owner_user_id uuid NOT NULL,
   project_id uuid NOT NULL,
   project_activity_position numeric(20, 0) NOT NULL,
   project_activity_event_id uuid NOT NULL,
-  event_kind text NOT NULL CHECK (event_kind = 'author_edit_settled'),
+  event_kind text NOT NULL CHECK (event_kind = 'authoritative_author_edit_applied'),
   receipt_id uuid NOT NULL,
-  resulting_revision_id uuid,
+  receipt_result_kind text NOT NULL CHECK (receipt_result_kind = 'authoritative_applied'),
+  authoritative_commit_id uuid NOT NULL,
+  resulting_revision_id uuid NOT NULL,
+  author_action_sequence numeric(20, 0) NOT NULL
+    CHECK (author_action_sequence BETWEEN 1 AND 18446744073709551615),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (owner_user_id, project_id, project_activity_position),
   UNIQUE (owner_user_id, project_id, project_activity_event_id),
   UNIQUE (owner_user_id, project_id, receipt_id),
-  FOREIGN KEY (owner_user_id, project_id, receipt_id)
-    REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL,
-  FOREIGN KEY (owner_user_id, project_id, receipt_id, resulting_revision_id)
+  FOREIGN KEY (owner_user_id, project_id, receipt_id, receipt_result_kind)
     REFERENCES storyos.domain_receipts
-      (owner_user_id, project_id, receipt_id, resulting_revision_id)
+      (owner_user_id, project_id, receipt_id, result_kind) MATCH FULL,
+  FOREIGN KEY (
+    owner_user_id, project_id, authoritative_commit_id, resulting_revision_id
+  ) REFERENCES storyos.authoritative_commits (
+    owner_user_id, project_id, authoritative_commit_id, resulting_revision_id
+  ) MATCH FULL,
+  FOREIGN KEY (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id, author_action_sequence
+  ) REFERENCES storyos.author_action_entries (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id, author_action_sequence
+  ) MATCH FULL
 );
 CREATE INDEX project_activity_events_receipt_result_fk_idx
   ON storyos.project_activity_events
-    (owner_user_id, project_id, receipt_id, resulting_revision_id);
+    (owner_user_id, project_id, receipt_id, receipt_result_kind,
+     authoritative_commit_id, author_action_sequence);
 
 DO $policy$
 DECLARE relation_name text;

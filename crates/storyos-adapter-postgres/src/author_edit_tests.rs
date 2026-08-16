@@ -76,10 +76,6 @@ fn author_command(
             command_id: format!("018f0000-0000-7001-8000-000000000{suffix}1"),
             author_command_admission_id: format!("018f0000-0000-7001-8000-000000000{suffix}2"),
             receipt_id: format!("018f0000-0000-7001-8000-000000000{suffix}3"),
-            revision_id: format!("018f0000-0000-7001-8000-000000000{suffix}4"),
-            payload_id: format!("018f0000-0000-7001-8000-000000000{suffix}5"),
-            authoritative_commit_id: format!("018f0000-0000-7001-8000-000000000{suffix}6"),
-            project_activity_event_id: format!("018f0000-0000-7001-8000-000000000{suffix}7"),
         },
         editor_session_id: EditorSessionId::new(editor_session_id),
         writer_generation: 1,
@@ -245,11 +241,19 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     let replay = storyos_application::apply_author_edit(&store, &command)
         .await
         .unwrap();
+    let replay_applied_ids = match &replay.effect {
+        storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => {
+            ids.clone()
+        }
+        _ => unreachable!(),
+    };
     assert_eq!(
         replay.effect,
         storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied {
+            ids: replay_applied_ids.clone(),
             body: "Authoritative A!".to_owned(),
             author_action_sequence: 1,
+            project_activity_position: 1,
         }
     );
     assert_eq!(replay.ids, command.ids);
@@ -276,7 +280,8 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         let mut outcome_command =
             author_command(&scope, editor_session_id, key, nonce_digest, suffix);
         if index > 0 {
-            outcome_command.expected_authoritative_revision_id = command.ids.revision_id.clone();
+            outcome_command.expected_authoritative_revision_id =
+                replay_applied_ids.revision_id.clone();
         }
         if index == 1 {
             let storyos_core::AuthorEditPrimitive::ReplaceSelection { from, to, text } =
@@ -300,11 +305,14 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-        outcomes.push(
-            storyos_application::apply_author_edit(&store, &outcome_command)
-                .await
-                .unwrap(),
-        );
+        let settlement = storyos_application::apply_author_edit(&store, &outcome_command)
+            .await
+            .unwrap();
+        let exact_retry = storyos_application::apply_author_edit(&store, &outcome_command)
+            .await
+            .unwrap();
+        assert_eq!(exact_retry, settlement);
+        outcomes.push(settlement);
     }
     assert!(matches!(
         outcomes[0].effect,
@@ -328,6 +336,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
 
     let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
+
     let evidence = admin
         .query_one(
             "SELECT
@@ -357,12 +366,18 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid),
            (SELECT count(*) FROM storyos.domain_receipts
              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-               AND ((result_kind = 'authoritative_applied'
-                     AND (authoritative_commit_id IS NULL OR resulting_revision_id IS NULL
-                          OR author_action_sequence IS NULL))
-                 OR (result_kind <> 'authoritative_applied'
-                     AND (authoritative_commit_id IS NOT NULL OR resulting_revision_id IS NOT NULL
-                          OR author_action_sequence IS NOT NULL)))),
+               AND ((result_kind = 'authoritative_applied' AND NOT EXISTS (
+                       SELECT 1 FROM storyos.project_activity_events AS activity
+                        WHERE (activity.owner_user_id, activity.project_id,
+                               activity.receipt_id, activity.receipt_result_kind) =
+                              (domain_receipts.owner_user_id, domain_receipts.project_id,
+                               domain_receipts.receipt_id, domain_receipts.result_kind)))
+                 OR (result_kind <> 'authoritative_applied' AND EXISTS (
+                       SELECT 1 FROM storyos.project_activity_events AS activity
+                        WHERE (activity.owner_user_id, activity.project_id,
+                               activity.receipt_id) =
+                              (domain_receipts.owner_user_id, domain_receipts.project_id,
+                               domain_receipts.receipt_id))))),
            (SELECT concat(author_action_sequence, '/', authoritative_commit_sequence, '/',
                           project_activity_position)
               FROM storyos.scope_counters
@@ -400,12 +415,12 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             6,
             4,
             1,
-            4,
+            1,
             2,
             6,
             4,
             0,
-            "1/1/4".to_owned(),
+            "1/1/1".to_owned(),
             "Authoritative A!".to_owned()
         )
     );
@@ -449,7 +464,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             "DELETE FROM storyos.authoritative_revisions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND revision_id = $3::text::uuid",
-            &[&USER, &PROJECT, &command.ids.revision_id],
+            &[&USER, &PROJECT, &replay_applied_ids.revision_id],
         )
         .await
         .unwrap();
@@ -458,7 +473,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             "DELETE FROM storyos.authoritative_payloads
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND payload_id = $3::text::uuid",
-            &[&USER, &PROJECT, &command.ids.payload_id],
+            &[&USER, &PROJECT, &replay_applied_ids.payload_id],
         )
         .await
         .unwrap();

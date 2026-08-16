@@ -6,13 +6,12 @@ rust-version.workspace = true
 
 [dependencies]
 sha2.workspace = true
+serde_json.workspace = true
 storyos-application = { path = "../storyos-application" }
 storyos-core = { path = "../storyos-core" }
 tokio.workspace = true
 tokio-postgres.workspace = true
-
-[dev-dependencies]
-serde_json.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
