@@ -1,5 +1,3 @@
-BEGIN;
-
 ALTER TABLE storyos.project_writer_generations
   ADD CONSTRAINT project_writer_generations_session_generation_key
   UNIQUE (owner_user_id, project_id, current_editor_session_id, writer_generation);
@@ -324,6 +322,78 @@ CREATE INDEX project_activity_events_receipt_result_fk_idx
     (owner_user_id, project_id, receipt_id, receipt_result_kind,
      authoritative_commit_id, author_action_sequence);
 
+CREATE FUNCTION storyos.require_author_edit_receipt_relation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $function$
+DECLARE
+  scoped_owner_user_id uuid := COALESCE(NEW.owner_user_id, OLD.owner_user_id);
+  scoped_project_id uuid := COALESCE(NEW.project_id, OLD.project_id);
+  scoped_receipt_id uuid := COALESCE(NEW.receipt_id, OLD.receipt_id);
+  scoped_admission_id uuid;
+  scoped_result_kind text;
+  activity_count bigint;
+  action_count bigint;
+  commit_count bigint;
+  revision_envelope_count bigint;
+BEGIN
+  SELECT receipt.author_command_admission_id, receipt.result_kind
+    INTO scoped_admission_id, scoped_result_kind
+    FROM storyos.domain_receipts AS receipt
+   WHERE receipt.owner_user_id = scoped_owner_user_id
+     AND receipt.project_id = scoped_project_id
+     AND receipt.receipt_id = scoped_receipt_id;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT count(*) INTO activity_count
+    FROM storyos.project_activity_events AS activity
+   WHERE activity.owner_user_id = scoped_owner_user_id
+     AND activity.project_id = scoped_project_id
+     AND activity.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO action_count
+    FROM storyos.author_action_entries AS action
+   WHERE action.owner_user_id = scoped_owner_user_id
+     AND action.project_id = scoped_project_id
+     AND action.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO commit_count
+    FROM storyos.authoritative_commits AS authoritative_commit
+   WHERE authoritative_commit.owner_user_id = scoped_owner_user_id
+     AND authoritative_commit.project_id = scoped_project_id
+     AND authoritative_commit.author_command_admission_id = scoped_admission_id;
+  SELECT count(*) INTO revision_envelope_count
+    FROM storyos.authoritative_revision_envelopes AS envelope
+   WHERE envelope.owner_user_id = scoped_owner_user_id
+     AND envelope.project_id = scoped_project_id
+     AND envelope.creator_ref = scoped_admission_id;
+
+  IF scoped_result_kind = 'authoritative_applied' THEN
+    IF (activity_count, action_count, commit_count, revision_envelope_count) <> (1, 1, 1, 1) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'AuthoritativeApplied requires one complete authority and Activity relation';
+    END IF;
+  ELSIF (activity_count, action_count, commit_count, revision_envelope_count) <> (0, 0, 0, 0) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23514',
+      MESSAGE = 'A zero-authority Receipt cannot have an authority or Activity relation';
+  END IF;
+  RETURN NULL;
+END
+$function$;
+
+CREATE CONSTRAINT TRIGGER domain_receipts_author_edit_relation_complete
+AFTER INSERT OR UPDATE ON storyos.domain_receipts
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION storyos.require_author_edit_receipt_relation();
+
+CREATE CONSTRAINT TRIGGER project_activity_author_edit_relation_complete
+AFTER INSERT OR UPDATE OR DELETE ON storyos.project_activity_events
+DEFERRABLE INITIALLY DEFERRED
+FOR EACH ROW EXECUTE FUNCTION storyos.require_author_edit_receipt_relation();
+
 DO $policy$
 DECLARE relation_name text;
 BEGIN
@@ -354,5 +424,3 @@ GRANT SELECT, INSERT ON storyos.author_command_admissions,
 GRANT SELECT, INSERT, UPDATE ON storyos.scope_counters TO storyos_runtime;
 GRANT INSERT ON storyos.authoritative_payloads, storyos.authoritative_revisions TO storyos_runtime;
 GRANT UPDATE ON storyos.authoritative_heads TO storyos_runtime;
-
-COMMIT;

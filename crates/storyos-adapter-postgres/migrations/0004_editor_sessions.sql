@@ -1,4 +1,3 @@
-BEGIN;
 SET LOCAL ROLE storyos_owner;
 
 CREATE TABLE storyos.editor_sessions (
@@ -73,5 +72,3 @@ $policy$;
 
 GRANT SELECT, INSERT ON storyos.editor_sessions,
   storyos.project_writer_generations, storyos.editor_session_base_snapshots TO storyos_runtime;
-
-COMMIT;

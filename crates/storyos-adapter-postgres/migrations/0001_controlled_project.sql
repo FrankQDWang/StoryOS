@@ -1,4 +1,3 @@
-BEGIN;
 CREATE SCHEMA storyos AUTHORIZATION storyos_owner;
 SET LOCAL ROLE storyos_owner;
 
@@ -106,4 +105,3 @@ GRANT USAGE ON SCHEMA storyos TO storyos_runtime;
 GRANT SELECT ON storyos.users, storyos.projects, storyos.manuscript_objects,
   storyos.authoritative_payloads, storyos.authoritative_revisions,
   storyos.authoritative_heads TO storyos_runtime;
-COMMIT;

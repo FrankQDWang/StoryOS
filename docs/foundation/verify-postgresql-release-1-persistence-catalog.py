@@ -41,7 +41,7 @@ from postgresql_persistence_verifier_storage import (
 def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str], check_digests: bool = True) -> dict[str, int]:
     if catalog.get("catalog_id") != catalog.get("schema_identity", {}).get("persisted_format_catalog_id"):
         fail(errors, "catalog identity does not bind persisted-format identity")
-    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-13-author-edit":
+    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-16-zero-authority-receipt-activity":
         fail(errors, "unexpected storage contract revision")
     binding = catalog.get("schema_identity", {}).get("protocol_binding", {})
     for key, expected in {
@@ -94,6 +94,7 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
     required_verifier_flags = {
         "require_negative_self_test",
         "require_physical_ledger_boundary",
+        "require_bootstrap_source_checksum",
         "require_table_family_registry_digest",
         "require_route_settlement_and_activity_coverage",
     }
@@ -156,6 +157,13 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
     if not any("table-family registry digest mismatch" in error for error in table_errors):
         errors.append("negative self-test did not reject an invented table family")
 
+    bootstrap_probe = copy.deepcopy(catalog)
+    bootstrap_probe["migration_chain"]["bootstrap"]["sources"][0]["lf_sha256"] = "sha256:" + "0" * 64
+    bootstrap_errors: list[str] = []
+    validate_catalog(bootstrap_probe, route_catalog, bootstrap_errors, check_digests=False)
+    if not any("bootstrap SQL checksum mismatch" in error for error in bootstrap_errors):
+        errors.append("negative self-test did not reject bootstrap SQL checksum drift")
+
 
 def main() -> int:
     raw = CATALOG_PATH.read_bytes()
@@ -195,6 +203,7 @@ def main() -> int:
         print("OK: portability negative self-test rejected a bad catalog")
         print("OK: predecessor-set negative self-test rejected a bad catalog")
         print("OK: invented-table-family negative self-test rejected a bad catalog")
+        print("OK: bootstrap-checksum negative self-test rejected a bad catalog")
     return 0
 
 
