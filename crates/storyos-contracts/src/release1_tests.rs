@@ -103,9 +103,28 @@ fn apply_author_edit_contract_has_ordered_replace_selection_units() {
         "/api/v1/projects/{project_id}/manuscript/author-edits"
     );
     assert_eq!(
-        serde_json::to_value(&request).expect("request serializes")["author_edit_units"][0]["normalized_primitives"]
-            [0]["kind"],
-        "replace_selection"
+        serde_json::to_value(&request).expect("request serializes")["author_edit_units"],
+        serde_json::json!([
+            {
+                "normalized_primitives": [
+                    {"kind": "replace_selection", "from": 4, "to": 4, "text": "!"}
+                ],
+                "selection_snapshot": {
+                    "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+                    "from": 4,
+                    "to": 4
+                }
+            },
+            {
+                "normalized_primitives": [
+                    {"kind": "replace_selection", "from": 5, "to": 5, "text": "?"}
+                ],
+                "selection_snapshot": {
+                    "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+                    "from": 5,
+                    "to": 5
+                }
+            }
+        ])
     );
-    assert_eq!(request.author_edit_units.len(), 2);
 }

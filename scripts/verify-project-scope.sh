@@ -54,6 +54,7 @@ published=$(docker port "$container" 5432/tcp)
 port=${published##*:}
 export STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$port/postgres"
 export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$port/postgres"
+export STORYOS_TEST_POSTGRES_CONTAINER="$container"
 echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture

@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { once } from "node:events";
 import { request as httpRequest } from "node:http";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+import { promisify } from "node:util";
 
 import {
   applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
@@ -21,6 +22,54 @@ const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const execFileAsync = promisify(execFile);
+
+async function projectAuthoritySnapshot() {
+  const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
+  assert.ok(container, "the PostgreSQL verification fixture must expose its container");
+  const scopedRows = (table, order) => `COALESCE((
+    SELECT jsonb_agg(to_jsonb(row) ORDER BY ${order})
+      FROM storyos.${table} AS row
+     WHERE row.owner_user_id = '${USER_A}'::uuid
+       AND row.project_id = '${PROJECT_A}'::uuid
+  ), '[]'::jsonb)`;
+  const sql = `SELECT jsonb_build_object(
+    'idempotency', ${scopedRows("command_idempotency", "command_kind, idempotency_key")},
+    'challenges', ${scopedRows("project_command_challenges", "command_kind, idempotency_key")},
+    'admissions', ${scopedRows("author_command_admissions", "author_command_admission_id")},
+    'admission_settlements', ${scopedRows("author_command_admission_settlements", "author_command_admission_id")},
+    'payloads', ${scopedRows("authoritative_payloads", "payload_id")},
+    'revisions', ${scopedRows("authoritative_revisions", "revision_id")},
+    'revision_envelopes', ${scopedRows("authoritative_revision_envelopes", "revision_id")},
+    'heads', ${scopedRows("authoritative_heads", "manuscript_object_id")},
+    'commits', ${scopedRows("authoritative_commits", "authoritative_commit_id")},
+    'receipts', ${scopedRows("domain_receipts", "receipt_id")},
+    'author_actions', ${scopedRows("author_action_entries", "author_action_sequence")},
+    'activity', ${scopedRows("project_activity_events", "project_activity_position")},
+    'scope_counters', ${scopedRows("scope_counters", "project_id")}
+  )::text;`;
+  const { stdout } = await execFileAsync("docker", [
+    "exec", container, "psql", "--set", "ON_ERROR_STOP=1", "--username", "postgres",
+    "--tuples-only", "--no-align", "--command", sql,
+  ], { maxBuffer: 16 * 1024 * 1024 });
+  return JSON.parse(stdout.trim());
+}
+
+function addedRow(before, after, collection, identity, expectedDelta = 1) {
+  assert.equal(after[collection].length, before[collection].length + expectedDelta, collection);
+  const row = after[collection].find(identity);
+  assert.ok(row, `new ${collection} row must be observable`);
+  return row;
+}
+
+function replaceSelectionUnit(from, to, text) {
+  return {
+    normalized_primitives: [{ kind: "replace_selection", from, to, text }],
+    selection_snapshot: {
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from, to,
+    },
+  };
+}
 
 class TestNode {
   constructor(tag = "div") { this.tag = tag; this.children = []; this.dataset = {}; this.attributes = {}; this.ownText = ""; }
@@ -284,7 +333,7 @@ test("Project command challenges bind Origin, Scope, nonce, and idempotency on r
   }
 });
 
-test("one current writer settles one Author Edit and exact retries return one result", async () => {
+test("one current writer settles ordered Author Edit batches atomically", async () => {
   const { baseUrl, server } = await startRealServer();
   const requests = [20, 21].map((suffix) => ({
     command_schema: "storyos.command.create-editor-session.request.v1",
@@ -371,6 +420,10 @@ test("one current writer settles one Author Edit and exact retries return one re
     }), (error) => error.status === 422);
 
     const currentSession = sessions[currentIndex];
+    const chapterBeforeAuthorEdit = await getChapter({
+      baseUrl, projectId: PROJECT_A, chapterId: currentSession.base_snapshot.chapter_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
     const authorEditRequest = {
       command_schema: "storyos.command.apply-author-edit.request.v1",
       client_contract_revision: "storyos.web-client.release-1.v1",
@@ -390,12 +443,20 @@ test("one current writer settles one Author Edit and exact retries return one re
       undo_group_id: "018f0000-0000-7001-8000-000000000025",
       completed_intent_record_id: "018f0000-0000-7001-8000-000000000026",
       local_intent_sequence: "1",
-      author_edit_units: [{
-        normalized_primitives: [{ kind: "replace_selection", from: 15, to: 15, text: "!" }],
-        selection_snapshot: {
-          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 15, to: 15,
+      author_edit_units: [
+        {
+          normalized_primitives: [{ kind: "replace_selection", from: 15, to: 15, text: "!" }],
+          selection_snapshot: {
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 15, to: 15,
+          },
         },
-      }],
+        {
+          normalized_primitives: [{ kind: "replace_selection", from: 16, to: 16, text: "?" }],
+          selection_snapshot: {
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 16, to: 16,
+          },
+        },
+      ],
     };
     const authorEditKey = "018f0000-0000-7001-8000-000000000027";
     const authorEditChallenge = await createProjectCommandChallenge({
@@ -423,6 +484,12 @@ test("one current writer settles one Author Edit and exact retries return one re
       body: JSON.stringify(authorEditRequest),
     });
     assert.equal(refererOnlyAuthorEdit.status, 403);
+    const beforeAuthorEdit = await projectAuthoritySnapshot();
+    const unconsumedChallenge = beforeAuthorEdit.challenges.find(
+      (row) => row.idempotency_key === authorEditKey,
+    );
+    assert.ok(unconsumedChallenge);
+    assert.equal(unconsumedChallenge.consumed_at, null);
     const authorEditOptions = {
       baseUrl,
       projectId: PROJECT_A,
@@ -432,12 +499,157 @@ test("one current writer settles one Author Edit and exact retries return one re
       fetchImpl: browserFetch(baseUrl, "session-a"),
     };
     const settlement = await applyAuthorEdit(authorEditOptions);
+    const afterAuthorEdit = await projectAuthoritySnapshot();
+    const chapterAfterAuthorEdit = await getChapter({
+      baseUrl, projectId: PROJECT_A, chapterId: currentSession.base_snapshot.chapter_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
     assert.equal(settlement.receipt.result, "authoritative_applied");
     assert.equal(settlement.effect.kind, "authoritative_applied");
-    assert.equal(settlement.effect.authoritative_revision.body, "Authoritative A!");
+    assert.equal(settlement.effect.authoritative_revision.body, "Authoritative A!?");
     assert.equal(settlement.completed_intent_record_id,
       authorEditRequest.completed_intent_record_id);
+    assert.deepEqual(chapterBeforeAuthorEdit.chapter.current_revision, {
+      revision_id: currentSession.base_snapshot.authoritative_head_revision_id,
+      body: "Authoritative A",
+    });
+    assert.deepEqual(chapterAfterAuthorEdit.chapter.current_revision,
+      settlement.effect.authoritative_revision);
+
+    const admission = addedRow(beforeAuthorEdit, afterAuthorEdit, "admissions",
+      (row) => row.author_command_admission_id === settlement.author_command_admission_id);
+    assert.deepEqual(admission.command_payload, authorEditRequest);
+    assert.equal(admission.command_id, settlement.command_id);
+    assert.equal(admission.editor_contract_revision, "storyos.editor-contract.release-1.v2");
+    assert.equal(admission.idempotency_key, authorEditKey);
+    assert.equal(admission.chapter_object_id, CHAPTER_A);
+    assert.equal(admission.expected_authoritative_revision_id,
+      chapterBeforeAuthorEdit.chapter.current_revision.revision_id);
+    assert.deepEqual(admission.expected_proposal_head_revision_ids, []);
+    assert.deepEqual(admission.target_refs, [`manuscript:${CHAPTER_A}`]);
+    assert.equal(admission.observed_ownership_partition, "authoritative");
+
+    const consumedChallenge = afterAuthorEdit.challenges.find(
+      (row) => row.idempotency_key === authorEditKey,
+    );
+    assert.ok(consumedChallenge?.consumed_at);
+    assert.equal(consumedChallenge.nonce_digest, unconsumedChallenge.nonce_digest);
+    const idempotency = afterAuthorEdit.idempotency.find(
+      (row) => row.idempotency_key === authorEditKey,
+    );
+    assert.deepEqual({ outcome_kind: idempotency?.outcome_kind,
+      result_reference: idempotency?.result_reference }, {
+      outcome_kind: "settled", result_reference: settlement.receipt.receipt_id,
+    });
+
+    const receipt = addedRow(beforeAuthorEdit, afterAuthorEdit, "receipts",
+      (row) => row.receipt_id === settlement.receipt.receipt_id);
+    assert.equal(receipt.author_command_admission_id, settlement.author_command_admission_id);
+    assert.equal(receipt.command_id, settlement.command_id);
+    assert.equal(receipt.command_kind, "applyAuthorEdit");
+    assert.equal(receipt.idempotency_key, authorEditKey);
+    assert.equal(receipt.producer_cause, "author_command_admission");
+    assert.deepEqual(receipt.expected_heads, settlement.receipt.expected_heads);
+    assert.deepEqual(receipt.prior_heads, settlement.receipt.prior_heads);
+    assert.deepEqual(receipt.resulting_heads, settlement.receipt.resulting_heads);
+    assert.deepEqual(receipt.authoritative_revision_ids,
+      settlement.receipt.authoritative_revision_ids);
+    assert.deepEqual(receipt.proposal_revision_ids, []);
+    assert.deepEqual(receipt.authoritative_commit_ids,
+      settlement.receipt.authoritative_commit_ids);
+    assert.equal(receipt.author_action_sequence,
+      Number(settlement.receipt.author_action_sequence));
+    assert.deepEqual(receipt.draft_artifact_refs, []);
+    assert.deepEqual(receipt.artifact_lifecycle_event_refs, []);
+    assert.deepEqual(receipt.condition_refs, []);
+    assert.equal(receipt.result_kind, settlement.receipt.result);
+    assert.equal(receipt.result_reason, null);
+    assert.equal(receipt.project_activity_position,
+      Number(settlement.effect.project_activity_position));
+    assert.equal(receipt.authoritative_commit_id,
+      settlement.effect.authoritative_commit_id);
+    assert.equal(receipt.resulting_revision_id,
+      settlement.effect.authoritative_revision.revision_id);
+    assert.equal(new Date(receipt.created_at).toISOString(), settlement.receipt.created_at);
+
+    const revision = addedRow(beforeAuthorEdit, afterAuthorEdit, "revisions",
+      (row) => row.revision_id === settlement.effect.authoritative_revision.revision_id);
+    const revisionEnvelope = addedRow(beforeAuthorEdit, afterAuthorEdit, "revision_envelopes",
+      (row) => row.revision_id === revision.revision_id);
+    const commit = addedRow(beforeAuthorEdit, afterAuthorEdit, "commits",
+      (row) => row.authoritative_commit_id === settlement.effect.authoritative_commit_id);
+    const admissionSettlement = addedRow(
+      beforeAuthorEdit, afterAuthorEdit, "admission_settlements",
+      (row) => row.author_command_admission_id === settlement.author_command_admission_id,
+    );
+    const authorAction = addedRow(beforeAuthorEdit, afterAuthorEdit, "author_actions",
+      (row) => row.receipt_id === settlement.receipt.receipt_id);
+    const activity = addedRow(beforeAuthorEdit, afterAuthorEdit, "activity",
+      (row) => row.receipt_id === settlement.receipt.receipt_id);
+    const payload = addedRow(beforeAuthorEdit, afterAuthorEdit, "payloads",
+      (row) => row.payload_id === revision.payload_id);
+    assert.ok(payload.canonical_bytes);
+    assert.deepEqual(revision, {
+      owner_user_id: USER_A, project_id: PROJECT_A, manuscript_object_id: CHAPTER_A,
+      revision_id: settlement.effect.authoritative_revision.revision_id,
+      payload_id: payload.payload_id,
+    });
+    assert.equal(revisionEnvelope.parent_revision_id,
+      chapterBeforeAuthorEdit.chapter.current_revision.revision_id);
+    assert.equal(revisionEnvelope.creator_ref, settlement.author_command_admission_id);
+    assert.equal(revisionEnvelope.cause_kind, "direct_author_action");
+    assert.equal(commit.prior_revision_id,
+      chapterBeforeAuthorEdit.chapter.current_revision.revision_id);
+    assert.equal(commit.resulting_revision_id, revision.revision_id);
+    assert.equal(commit.author_command_admission_id, settlement.author_command_admission_id);
+    const { settled_at: settledAt, ...admissionSettlementIdentity } = admissionSettlement;
+    assert.deepEqual(admissionSettlementIdentity, {
+      owner_user_id: USER_A,
+      project_id: PROJECT_A,
+      author_command_admission_id: settlement.author_command_admission_id,
+      settlement_kind: "receipt_settled",
+      receipt_id: settlement.receipt.receipt_id,
+    });
+    assert.ok(Number.isFinite(Date.parse(settledAt)));
+    assert.equal(authorAction.authoritative_commit_id, commit.authoritative_commit_id);
+    assert.equal(authorAction.receipt_id, receipt.receipt_id);
+    assert.equal(activity.event_kind, "author_edit_settled");
+    assert.equal(activity.project_activity_position,
+      Number(settlement.effect.project_activity_position));
+    assert.equal(activity.receipt_id, receipt.receipt_id);
+    assert.equal(activity.resulting_revision_id, revision.revision_id);
+    const head = afterAuthorEdit.heads.find(
+      (row) => row.manuscript_object_id === CHAPTER_A,
+    );
+    assert.deepEqual(head, {
+      owner_user_id: USER_A, project_id: PROJECT_A, manuscript_object_id: CHAPTER_A,
+      current_revision_id: revision.revision_id,
+    });
     assert.deepEqual(await applyAuthorEdit(authorEditOptions), settlement);
+    assert.deepEqual(await projectAuthoritySnapshot(), afterAuthorEdit);
+
+    async function applyPreparedAuthorEdit(request, idempotencyKey, challenge) {
+      return applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request, idempotencyKey,
+        antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+      });
+    }
+
+    async function assertPreAdmissionRefusal(
+      request, idempotencyKey, challenge, status, code,
+    ) {
+      const before = await projectAuthoritySnapshot();
+      const beforeChallenge = before.challenges.find(
+        (row) => row.idempotency_key === idempotencyKey,
+      );
+      assert.ok(beforeChallenge);
+      assert.equal(beforeChallenge.consumed_at, null);
+      await assert.rejects(
+        applyPreparedAuthorEdit(request, idempotencyKey, challenge),
+        (error) => error.status === status && JSON.parse(error.responseBody).code === code,
+      );
+      assert.deepEqual(await projectAuthoritySnapshot(), before);
+    }
 
     const outcomeRequests = [
       {
@@ -476,12 +688,10 @@ test("one current writer settles one Author Edit and exact retries return one re
           undo_group_id: "018f0000-0000-7001-8000-000000000047",
           completed_intent_record_id: "018f0000-0000-7001-8000-000000000048",
           local_intent_sequence: "4",
-          author_edit_units: [{
-            normalized_primitives: [{ kind: "replace_selection", from: 16, to: 16, text: "?" }],
-            selection_snapshot: {
-              coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 16, to: 15,
-            },
-          }],
+          author_edit_units: [
+            replaceSelectionUnit(17, 17, "X"),
+            replaceSelectionUnit(18, 17, "must-not-commit"),
+          ],
         },
       },
     ];
@@ -497,6 +707,13 @@ test("one current writer settles one Author Edit and exact retries return one re
           idempotency_key: idempotencyKey,
         },
       });
+      const beforeOutcome = outcome.expected === "refused"
+        ? await projectAuthoritySnapshot() : null;
+      const chapterBeforeOutcome = outcome.expected === "refused"
+        ? await getChapter({
+          baseUrl, projectId: PROJECT_A, chapterId: CHAPTER_A,
+          fetchImpl: browserFetch(baseUrl, "session-a"),
+        }) : null;
       const result = await applyAuthorEdit({
         baseUrl, projectId: PROJECT_A, request: outcome.request, idempotencyKey,
         antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -507,6 +724,55 @@ test("one current writer settles one Author Edit and exact retries return one re
       assert.deepEqual(result.receipt.authoritative_commit_ids, []);
       assert.equal(result.receipt.author_action_sequence, null);
       assert.match(result.effect.project_activity_position, /^[1-9][0-9]*$/);
+      if (outcome.expected === "refused") {
+        const afterOutcome = await projectAuthoritySnapshot();
+        const chapterAfterOutcome = await getChapter({
+          baseUrl, projectId: PROJECT_A, chapterId: CHAPTER_A,
+          fetchImpl: browserFetch(baseUrl, "session-a"),
+        });
+        assert.deepEqual(chapterAfterOutcome.chapter, chapterBeforeOutcome.chapter);
+        const refusedAdmission = addedRow(beforeOutcome, afterOutcome, "admissions",
+          (row) => row.author_command_admission_id === result.author_command_admission_id);
+        assert.deepEqual(refusedAdmission.command_payload, outcome.request);
+        const refusedReceipt = addedRow(beforeOutcome, afterOutcome, "receipts",
+          (row) => row.receipt_id === result.receipt.receipt_id);
+        const refusedSettlement = addedRow(beforeOutcome, afterOutcome,
+          "admission_settlements",
+          (row) => row.author_command_admission_id === result.author_command_admission_id);
+        const refusedActivity = addedRow(beforeOutcome, afterOutcome, "activity",
+          (row) => row.receipt_id === result.receipt.receipt_id);
+        assert.equal(refusedReceipt.result_kind, "refused");
+        assert.equal(refusedReceipt.result_reason, "invalid_selection");
+        assert.equal(result.effect.reason, "invalid_selection");
+        assert.deepEqual(refusedReceipt.prior_heads, result.receipt.prior_heads);
+        assert.deepEqual(refusedReceipt.resulting_heads, result.receipt.resulting_heads);
+        assert.equal(refusedReceipt.authoritative_commit_id, null);
+        assert.equal(refusedReceipt.resulting_revision_id, null);
+        assert.equal(refusedReceipt.author_action_sequence, null);
+        assert.deepEqual(refusedReceipt.authoritative_revision_ids, []);
+        assert.deepEqual(refusedReceipt.authoritative_commit_ids, []);
+        assert.equal(refusedSettlement.receipt_id, refusedReceipt.receipt_id);
+        assert.equal(refusedActivity.receipt_id, refusedReceipt.receipt_id);
+        assert.equal(refusedActivity.resulting_revision_id, null);
+        const refusedChallenge = afterOutcome.challenges.find(
+          (row) => row.idempotency_key === idempotencyKey,
+        );
+        assert.ok(refusedChallenge?.consumed_at);
+        const refusedIdempotency = afterOutcome.idempotency.find(
+          (row) => row.idempotency_key === idempotencyKey,
+        );
+        assert.deepEqual({ outcome_kind: refusedIdempotency?.outcome_kind,
+          result_reference: refusedIdempotency?.result_reference }, {
+          outcome_kind: "settled", result_reference: result.receipt.receipt_id,
+        });
+        assert.equal(afterOutcome.payloads.length, beforeOutcome.payloads.length);
+        assert.equal(afterOutcome.revisions.length, beforeOutcome.revisions.length);
+        assert.equal(afterOutcome.revision_envelopes.length,
+          beforeOutcome.revision_envelopes.length);
+        assert.equal(afterOutcome.commits.length, beforeOutcome.commits.length);
+        assert.equal(afterOutcome.author_actions.length, beforeOutcome.author_actions.length);
+        assert.deepEqual(afterOutcome.heads, beforeOutcome.heads);
+      }
     }
 
     const staleSession = sessions.find((session) => session.writer.kind === "read_only");
@@ -540,6 +806,59 @@ test("one current writer settles one Author Edit and exact retries return one re
       antiForgery: staleChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
     }), (error) => error.status === 412
       && JSON.parse(error.responseBody).code === "editor_writer_stale");
+
+    const boundaryBase = {
+      ...authorEditRequest,
+      expected_authoritative_revision_id: settlement.effect.authoritative_revision.revision_id,
+    };
+    const tooManyUnits = {
+      ...boundaryBase,
+      correlation_id: "018f0000-0000-7001-8000-000000000068",
+      undo_group_id: "018f0000-0000-7001-8000-000000000069",
+      completed_intent_record_id: "018f0000-0000-7001-8000-000000000070",
+      local_intent_sequence: "6",
+      author_edit_units: Array.from({ length: 241 }, () =>
+        replaceSelectionUnit(17, 17, "")),
+    };
+    await assertPreAdmissionRefusal(
+      tooManyUnits, staleKey, staleChallenge, 422, "command_target_refused",
+    );
+
+    const tooManyPrimitives = {
+      ...boundaryBase,
+      correlation_id: "018f0000-0000-7001-8000-000000000072",
+      undo_group_id: "018f0000-0000-7001-8000-000000000073",
+      completed_intent_record_id: "018f0000-0000-7001-8000-000000000074",
+      local_intent_sequence: "7",
+      author_edit_units: Array.from({ length: 240 }, (_, index) => ({
+        ...replaceSelectionUnit(17, 17, ""),
+        normalized_primitives: Array.from({ length: index === 0 ? 2 : 1 }, () => ({
+          kind: "replace_selection", from: 17, to: 17, text: "",
+        })),
+      })),
+    };
+    await assertPreAdmissionRefusal(
+      tooManyPrimitives, staleKey, staleChallenge, 422, "command_target_refused",
+    );
+
+    const tooManyBytes = {
+      ...boundaryBase,
+      correlation_id: "018f0000-0000-7001-8000-000000000076",
+      undo_group_id: "018f0000-0000-7001-8000-000000000077",
+      completed_intent_record_id: "018f0000-0000-7001-8000-000000000078",
+      local_intent_sequence: "8",
+      author_edit_units: [replaceSelectionUnit(17, 17, "x".repeat(1024 * 1024))],
+    };
+    await assertPreAdmissionRefusal(
+      tooManyBytes, staleKey, staleChallenge, 413, "payload_too_large",
+    );
+    const chapterAfterPreAdmissionRefusals = await getChapter({
+      baseUrl, projectId: PROJECT_A, chapterId: CHAPTER_A,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    assert.deepEqual(
+      chapterAfterPreAdmissionRefusals.chapter, chapterAfterAuthorEdit.chapter,
+    );
   } finally {
     await stopRealServer(server);
   }
