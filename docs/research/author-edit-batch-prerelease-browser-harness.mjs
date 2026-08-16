@@ -272,17 +272,22 @@ try {
     const child = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox",
     `--user-data-dir=${join(directory, "profile")}`, "--timeout=5000", "--dump-dom",
     pathToFileURL(html).href]);
-    let stdout = ""; let stderr = ""; let settled = false;
+    let stdout = ""; let stderr = ""; let settled = false; let failure; let timer;
     child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
-    const finish = () => {
+    const stop = error => {
       if (settled) return;
-      settled = true; clearTimeout(timer); child.kill("SIGKILL"); resolve({ stdout, stderr });
+      if (error) failure = error;
+      if (!child.killed) child.kill("SIGKILL");
     };
-    child.stdout.on("data", data => { stdout += data; if (stdout.includes("</pre>")) finish(); });
+    child.stdout.on("data", data => { stdout += data; if (stdout.includes("</pre>")) stop(); });
     child.stderr.on("data", data => { stderr += data; });
-    child.once("error", reject); child.once("close", finish);
-    const timer = setTimeout(() => { settled = true; child.kill("SIGKILL");
-      reject(new Error(`browser harness timed out: ${stderr}`)); }, 15000);
+    child.once("error", error => { failure = error; finish(); }); child.once("close", finish);
+    timer = setTimeout(() => stop(new Error(`browser harness timed out: ${stderr}`)), 15000);
+    function finish() {
+      if (settled) return;
+      settled = true; clearTimeout(timer);
+      if (failure) reject(failure); else resolve({ stdout, stderr });
+    }
   });
   const encoded = run.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
   assert.ok(encoded && encoded !== "running",
@@ -314,5 +319,5 @@ try {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   else console.log(`verified ${result.policy_revision} in a real browser with ${result.candidates.length} candidate runs`);
 } finally {
-  rmSync(directory, { recursive: true, force: true });
+  rmSync(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
