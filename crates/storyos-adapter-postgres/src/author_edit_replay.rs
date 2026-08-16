@@ -126,6 +126,16 @@ impl PostgresProjectReader {
         let expected_head = receipt.get::<_, String>(8);
         let prior_head = receipt.get::<_, String>(9);
         let resulting_head = receipt.get::<_, String>(10);
+        let result_payload = match result_kind.as_str() {
+            "authoritative_applied" if result_reason.is_none() => serde_json::json!({}),
+            "no_effect" => serde_json::json!({"reason": result_reason}),
+            "conflicted" => serde_json::json!({
+                "reason": result_reason,
+                "current_authoritative_revision_id": resulting_head,
+            }),
+            "refused" => serde_json::json!({"reason": result_reason}),
+            _ => return Err(AuthorEditError::BindingConflict),
+        };
         let common_cardinalities =
             [11, 12, 13, 15, 17, 18, 19].map(|index| receipt.get::<_, i32>(index));
         if common_cardinalities != [1, 1, 1, 0, 0, 0, 0] {
@@ -134,7 +144,7 @@ impl PostgresProjectReader {
 
         let (effect, revision_id, payload_id, commit_id, activity) = match result_kind.as_str() {
             "authoritative_applied"
-                if result_reason.is_none()
+                if result_payload == serde_json::json!({})
                     && receipt.get::<_, i32>(14) == 1
                     && receipt.get::<_, i32>(16) == 1 =>
             {
@@ -264,7 +274,7 @@ impl PostgresProjectReader {
                 )
             }
             "no_effect"
-                if result_reason.as_deref() == Some("content_unchanged")
+                if result_payload == serde_json::json!({"reason": "content_unchanged"})
                     && expected_head == prior_head
                     && prior_head == resulting_head =>
             {
@@ -279,11 +289,23 @@ impl PostgresProjectReader {
                     activity,
                 )
             }
-            "conflicted" if prior_head == resulting_head => {
+            "conflicted" => {
+                let reason = result_payload
+                    .get("reason")
+                    .and_then(serde_json::Value::as_str);
+                let current_revision_id = result_payload
+                    .get("current_authoritative_revision_id")
+                    .and_then(serde_json::Value::as_str);
+                if result_payload.as_object().map(serde_json::Map::len) != Some(2)
+                    || current_revision_id != Some(resulting_head.as_str())
+                    || prior_head != resulting_head
+                {
+                    return Err(AuthorEditError::BindingConflict);
+                }
                 let activity = read_zero_authority_activity(&client, command, receipt_id).await?;
                 (
                     AuthorEditSettlementEffect::Conflicted {
-                        reason: parse_conflict_reason(result_reason.as_deref())?,
+                        reason: parse_conflict_reason(reason)?,
                         current_authoritative_revision_id: resulting_head,
                     },
                     String::new(),
@@ -292,11 +314,20 @@ impl PostgresProjectReader {
                     activity,
                 )
             }
-            "refused" if expected_head == prior_head && prior_head == resulting_head => {
+            "refused" => {
+                let reason = result_payload
+                    .get("reason")
+                    .and_then(serde_json::Value::as_str);
+                if result_payload.as_object().map(serde_json::Map::len) != Some(1)
+                    || prior_head != resulting_head
+                    || expected_head != resulting_head
+                {
+                    return Err(AuthorEditError::BindingConflict);
+                }
                 let activity = read_zero_authority_activity(&client, command, receipt_id).await?;
                 (
                     AuthorEditSettlementEffect::Refused {
-                        reason: parse_refusal_reason(result_reason.as_deref())?,
+                        reason: parse_refusal_reason(reason)?,
                     },
                     String::new(),
                     String::new(),
