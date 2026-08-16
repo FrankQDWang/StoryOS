@@ -276,6 +276,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         ),
     ];
     let mut outcomes = Vec::new();
+    let mut outcome_commands = Vec::new();
     for (index, (key, nonce_digest, suffix)) in outcome_specs.into_iter().enumerate() {
         let mut outcome_command =
             author_command(&scope, editor_session_id, key, nonce_digest, suffix);
@@ -313,6 +314,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             .unwrap();
         assert_eq!(exact_retry, settlement);
         outcomes.push(settlement);
+        outcome_commands.push(outcome_command);
     }
     assert!(matches!(
         outcomes[0].effect,
@@ -377,8 +379,8 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
                      '018f0000-0000-7001-8000-000000000782'::uuid,
                      $4::text::uuid, 'storyos.authoritative-revision-envelope.v1',
                      'author_command_admission', $5::text::uuid, $6::text::uuid,
-                     'authoritative_applied', 'direct_author_action',
-                     'sha256:forbidden-zero-authority')",
+                     'authoritative_applied',
+                     'direct_author_action', 'sha256:forbidden-zero-authority')",
             &[
                 &USER,
                 &PROJECT,
@@ -393,7 +395,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     injected
         .execute(
             "INSERT INTO storyos.authoritative_commits
-               (owner_user_id, project_id, authoritative_commit_id,
+                (owner_user_id, project_id, authoritative_commit_id,
                 authoritative_commit_sequence, manuscript_object_id, prior_revision_id,
                 resulting_revision_id, author_command_admission_id,
                 receipt_id, receipt_result_kind)
@@ -418,18 +420,39 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
 
+    let activity = admin
+        .query_one(
+            "SELECT project_activity_position::text, project_activity_event_id::text,
+                    event_kind, receipt_id::text, receipt_result_kind,
+                    authoritative_commit_id::text, resulting_revision_id::text,
+                    author_action_sequence::text,
+                    to_char(created_at AT TIME ZONE 'UTC',
+                            'YYYY-MM-DD\"T\"HH24:MI:SS.US\"Z\"')
+               FROM storyos.project_activity_events
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    admin
+        .batch_execute(
+            "ALTER TABLE storyos.project_activity_events
+               DISABLE TRIGGER project_activity_author_edit_relation_complete",
+        )
+        .await
+        .unwrap();
     admin
         .execute(
-            "UPDATE storyos.domain_receipts
-                SET expected_heads = ARRAY[$4::text::uuid]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &command.ids.receipt_id,
-                &replay_applied_ids.revision_id,
-            ],
+            "DELETE FROM storyos.project_activity_events
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    admin
+        .batch_execute(
+            "ALTER TABLE storyos.project_activity_events
+               ENABLE TRIGGER project_activity_author_edit_relation_complete",
         )
         .await
         .unwrap();
@@ -439,14 +462,150 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     ));
     admin
         .execute(
-            "UPDATE storyos.domain_receipts
-                SET expected_heads = ARRAY[$4::text::uuid]
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND receipt_id = $3::text::uuid",
-            &[&USER, &PROJECT, &command.ids.receipt_id, &REVISION],
+            "INSERT INTO storyos.project_activity_events
+               (owner_user_id, project_id, project_activity_position,
+                project_activity_event_id, event_kind, receipt_id,
+                receipt_result_kind, authoritative_commit_id,
+                resulting_revision_id, author_action_sequence, created_at)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric,
+                     $4::text::uuid, $5, $6::text::uuid, $7,
+                     $8::text::uuid, $9::text::uuid, $10::text::numeric,
+                     $11::text::timestamptz)",
+            &[
+                &USER,
+                &PROJECT,
+                &activity.get::<_, String>(0),
+                &activity.get::<_, String>(1),
+                &activity.get::<_, String>(2),
+                &activity.get::<_, String>(3),
+                &activity.get::<_, String>(4),
+                &activity.get::<_, String>(5),
+                &activity.get::<_, String>(6),
+                &activity.get::<_, String>(7),
+                &activity.get::<_, String>(8),
+            ],
         )
         .await
         .unwrap();
+    let duplicate_activity = admin
+        .execute(
+            "INSERT INTO storyos.project_activity_events
+               (owner_user_id, project_id, project_activity_position,
+                project_activity_event_id, event_kind, receipt_id,
+                receipt_result_kind, authoritative_commit_id,
+                resulting_revision_id, author_action_sequence)
+             VALUES ($1::text::uuid, $2::text::uuid, 2,
+                     '018f0000-0000-7001-8000-000000000799'::uuid,
+                     'authoritative_author_edit_applied', $3::text::uuid,
+                     'authoritative_applied', $4::text::uuid, $5::text::uuid, 1)",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.receipt_id,
+                &replay_applied_ids.authoritative_commit_id,
+                &replay_applied_ids.revision_id,
+            ],
+        )
+        .await;
+    assert!(duplicate_activity.is_err());
+
+    let malformed_zero_receipt = admin
+        .execute(
+            "UPDATE storyos.domain_receipts SET result_payload = '{}'::jsonb
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[&USER, &PROJECT, &outcomes[1].ids.receipt_id],
+        )
+        .await;
+    assert!(malformed_zero_receipt.is_err());
+
+    let applied_revision_id = replay_applied_ids.revision_id.as_str();
+    let head_corruption_cases: [(&ApplyAuthorEditCommand, &str, [&str; 3], [&str; 3]); 4] = [
+        (
+            &command,
+            command.ids.receipt_id.as_str(),
+            [
+                applied_revision_id,
+                applied_revision_id,
+                applied_revision_id,
+            ],
+            [REVISION, REVISION, applied_revision_id],
+        ),
+        (
+            &outcome_commands[0],
+            outcomes[0].ids.receipt_id.as_str(),
+            [
+                applied_revision_id,
+                applied_revision_id,
+                applied_revision_id,
+            ],
+            [REVISION, applied_revision_id, applied_revision_id],
+        ),
+        (
+            &outcome_commands[1],
+            outcomes[1].ids.receipt_id.as_str(),
+            [REVISION, REVISION, REVISION],
+            [
+                applied_revision_id,
+                applied_revision_id,
+                applied_revision_id,
+            ],
+        ),
+        (
+            &outcome_commands[2],
+            outcomes[2].ids.receipt_id.as_str(),
+            [REVISION, REVISION, REVISION],
+            [
+                applied_revision_id,
+                applied_revision_id,
+                applied_revision_id,
+            ],
+        ),
+    ];
+    for (case_command, receipt_id, corrupt_heads, original_heads) in head_corruption_cases {
+        admin
+            .execute(
+                "UPDATE storyos.domain_receipts
+                    SET expected_heads = ARRAY[$4::text::uuid],
+                        prior_heads = ARRAY[$5::text::uuid],
+                        resulting_heads = ARRAY[$6::text::uuid]
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND receipt_id = $3::text::uuid",
+                &[
+                    &USER,
+                    &PROJECT,
+                    &receipt_id,
+                    &corrupt_heads[0],
+                    &corrupt_heads[1],
+                    &corrupt_heads[2],
+                ],
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            storyos_application::apply_author_edit(&store, case_command).await,
+            Err(storyos_application::AuthorEditError::BindingConflict)
+        ));
+        admin
+            .execute(
+                "UPDATE storyos.domain_receipts
+                    SET expected_heads = ARRAY[$4::text::uuid],
+                        prior_heads = ARRAY[$5::text::uuid],
+                        resulting_heads = ARRAY[$6::text::uuid]
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND receipt_id = $3::text::uuid",
+                &[
+                    &USER,
+                    &PROJECT,
+                    &receipt_id,
+                    &original_heads[0],
+                    &original_heads[1],
+                    &original_heads[2],
+                ],
+            )
+            .await
+            .unwrap();
+    }
 
     admin
         .execute(
@@ -478,74 +637,121 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .await
         .unwrap();
 
-    let corrupt_prior = admin.transaction().await.unwrap();
-    corrupt_prior
+    let prior_corruption = admin.transaction().await.unwrap();
+    prior_corruption
         .execute(
             "UPDATE storyos.authoritative_revision_envelopes
                 SET parent_revision_id = $4::text::uuid,
                     payload_digest = 'sha256:corrupt'
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND creator_ref = $3::text::uuid",
+                AND receipt_id = $3::text::uuid",
             &[
                 &USER,
                 &PROJECT,
-                &command.ids.author_command_admission_id,
+                &command.ids.receipt_id,
                 &replay_applied_ids.revision_id,
             ],
         )
         .await
         .unwrap();
-    corrupt_prior
+    prior_corruption
         .execute(
             "UPDATE storyos.authoritative_commits SET prior_revision_id = $4::text::uuid
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
+                AND receipt_id = $3::text::uuid",
             &[
                 &USER,
                 &PROJECT,
-                &command.ids.author_command_admission_id,
+                &command.ids.receipt_id,
                 &replay_applied_ids.revision_id,
             ],
         )
         .await
         .unwrap();
-    corrupt_prior.commit().await.unwrap();
+    prior_corruption.commit().await.unwrap();
     assert!(matches!(
         storyos_application::apply_author_edit(&store, &command).await,
         Err(storyos_application::AuthorEditError::BindingConflict)
     ));
-    let restore_prior = admin.transaction().await.unwrap();
-    restore_prior
+    let prior_restoration = admin.transaction().await.unwrap();
+    prior_restoration
         .execute(
             "UPDATE storyos.authoritative_revision_envelopes
-                SET parent_revision_id = $4::text::uuid, payload_digest = $5
+                SET parent_revision_id = $4::text::uuid,
+                    payload_digest = $5
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND creator_ref = $3::text::uuid",
+                AND receipt_id = $3::text::uuid",
             &[
                 &USER,
                 &PROJECT,
-                &command.ids.author_command_admission_id,
+                &command.ids.receipt_id,
                 &REVISION,
                 &sha256_hex(b"Authoritative A!"),
             ],
         )
         .await
         .unwrap();
-    restore_prior
+    prior_restoration
         .execute(
             "UPDATE storyos.authoritative_commits SET prior_revision_id = $4::text::uuid
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND author_command_admission_id = $3::text::uuid",
+                AND receipt_id = $3::text::uuid",
+            &[&USER, &PROJECT, &command.ids.receipt_id, &REVISION],
+        )
+        .await
+        .unwrap();
+    prior_restoration.commit().await.unwrap();
+
+    admin
+        .batch_execute("ALTER TABLE storyos.authoritative_commits DISABLE TRIGGER ALL")
+        .await
+        .unwrap();
+    admin
+        .execute(
+            "UPDATE storyos.authoritative_commits
+                SET author_command_admission_id = $4::text::uuid
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND authoritative_commit_id = $3::text::uuid",
             &[
                 &USER,
                 &PROJECT,
-                &command.ids.author_command_admission_id,
-                &REVISION,
+                &replay_applied_ids.authoritative_commit_id,
+                &outcomes[0].ids.author_command_admission_id,
             ],
         )
         .await
         .unwrap();
-    restore_prior.commit().await.unwrap();
+    admin
+        .batch_execute("ALTER TABLE storyos.authoritative_commits ENABLE TRIGGER ALL")
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &outcome_commands[0]).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .batch_execute("ALTER TABLE storyos.authoritative_commits DISABLE TRIGGER ALL")
+        .await
+        .unwrap();
+    admin
+        .execute(
+            "UPDATE storyos.authoritative_commits
+                SET author_command_admission_id = $4::text::uuid
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND authoritative_commit_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &replay_applied_ids.authoritative_commit_id,
+                &command.ids.author_command_admission_id,
+            ],
+        )
+        .await
+        .unwrap();
+    admin
+        .batch_execute("ALTER TABLE storyos.authoritative_commits ENABLE TRIGGER ALL")
+        .await
+        .unwrap();
 
     let evidence = admin
         .query_one(
