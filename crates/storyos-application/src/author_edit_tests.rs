@@ -16,10 +16,16 @@ impl AuthorEditStore for Store {
         Ok(AuthorEditSettlement {
             ids: command.ids.clone(),
             effect: AuthorEditSettlementEffect::AuthoritativeApplied {
+                ids: AuthoritativeAppliedIds {
+                    revision_id: "revision-2".to_owned(),
+                    payload_id: "payload".to_owned(),
+                    authoritative_commit_id: "commit".to_owned(),
+                    project_activity_event_id: "event".to_owned(),
+                },
                 body: "Base!".to_owned(),
                 author_action_sequence: 1,
+                project_activity_position: 1,
             },
-            project_activity_position: 1,
             receipt_created_at: "2026-08-15T00:00:00.000Z".to_owned(),
             completed_intent_record_id: command.completed_intent_record_id.clone(),
             local_intent_sequence: command.local_intent_sequence,
@@ -60,10 +66,6 @@ fn command() -> ApplyAuthorEditCommand {
             command_id: "command".to_owned(),
             author_command_admission_id: "admission".to_owned(),
             receipt_id: "receipt".to_owned(),
-            revision_id: "revision-2".to_owned(),
-            payload_id: "payload".to_owned(),
-            authoritative_commit_id: "commit".to_owned(),
-            project_activity_event_id: "event".to_owned(),
         },
         editor_session_id: EditorSessionId::new("editor"),
         writer_generation: 1,
@@ -98,8 +100,15 @@ async fn matching_bindings_reach_the_atomic_store_once() {
     assert_eq!(
         settlement.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {
+            ids: AuthoritativeAppliedIds {
+                revision_id: "revision-2".to_owned(),
+                payload_id: "payload".to_owned(),
+                authoritative_commit_id: "commit".to_owned(),
+                project_activity_event_id: "event".to_owned(),
+            },
             body: "Base!".to_owned(),
             author_action_sequence: 1,
+            project_activity_position: 1,
         }
     );
     assert_eq!(*store.0.lock().unwrap(), 1);

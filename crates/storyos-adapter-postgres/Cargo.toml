@@ -11,6 +11,7 @@ storyos-application = { path = "../storyos-application" }
 storyos-core = { path = "../storyos-core" }
 tokio.workspace = true
 tokio-postgres.workspace = true
+uuid.workspace = true
 
 [lints]
 workspace = true
