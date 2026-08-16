@@ -430,7 +430,7 @@ GroupSettlement =
     }
   | AppliedReceiptSettled {
       apply_author_edit_applied_observation_id
-      receipt_ref: ReceiptRef
+      receipt_ref: DomainReceiptRef
       project_activity_position
       committed_at
     }
@@ -443,7 +443,7 @@ GroupSettlement =
   | OtherEditorReceiptSettled {
       other_editor_committed_observation_id
       receipt_ref: ReceiptRef
-      owning_result_evidence
+      project_activity_position
       committed_at
     }
   | RequiresReconfirmation {
@@ -480,7 +480,17 @@ AuthorSurfaceConvergence =
   | OtherEditorReceiptConverged {
       other_editor_committed_observation_id
       receipt_ref: ReceiptRef
-      owning_result_convergence_proof
+      project_activity_position
+      projection_proof:
+        ProcessedProjectActivity {
+          processed_through_project_activity_position
+        }
+        | SnapshotProjection {
+            snapshot_id
+            snapshot_activity_position
+          }
+      resulting_heads
+      resulting_surface_refs
     }
   | PreAdmissionRefusalConverged {
       pre_admission_problem_observation_id
@@ -705,7 +715,7 @@ BrowserProtocolObservation =
       project_scope
       correlation_id
       receipt_ref: ReceiptRef
-      owning_result_evidence
+      project_activity_position
       committed_at
       limit_profile_revision
     }
@@ -760,8 +770,9 @@ the group `TransportOrAdmissionUnknown`.
 an Author Command Admission identity or terminal state.
 `ApplyAuthorEditAppliedObservation` maps to `AppliedReceiptSettled`.
 `ApplyAuthorEditZeroAuthorityObservation` maps to
-`ZeroAuthorityReceiptSettled`. `OtherEditorCommittedObservation` follows only
-its owning result contract and maps to `OtherEditorReceiptSettled`.
+`ZeroAuthorityReceiptSettled`. `OtherEditorCommittedObservation` retains the
+pre-correction Receipt/Activity shape and maps to
+`OtherEditorReceiptSettled`.
 `RequiresReconfirmationObservation` has no Receipt or settlement query.
 `OutcomeUnknownProblemObservation` records a separate `StoryOSProblem`, makes
 no Receipt-presence claim, and carries the exact non-null settlement query
@@ -861,7 +872,7 @@ The attempt-to-GC closure matrix is:
 | terminal pre-admission Problem, including after fresh-challenge resend | `TerminalResolved { PreAdmissionProblem }` / `PreAdmissionRefused` | collect the attempt capsule; journal GC still requires refusal-surface convergence and an exact complete successor |
 | applied `ApplyAuthorEdit` v2 response, including after exact replay or fresh-challenge resend | `TerminalResolved { Committed }` / `AppliedReceiptSettled` | collect the attempt capsule; journal GC waits for applied Activity/Snapshot convergence and successor proof |
 | zero-authority `ApplyAuthorEdit` v2 response, including after exact replay or fresh-challenge resend | `TerminalResolved { Committed }` / `ZeroAuthorityReceiptSettled` | collect the attempt capsule; never wait for or fabricate Activity; journal GC still requires the result-visible branch and an exact successor proof |
-| other editor `Committed` response | `TerminalResolved { Committed }` / `OtherEditorReceiptSettled` | follow only the owning result's convergence and successor rules |
+| other editor `Committed` response | `TerminalResolved { Committed }` / `OtherEditorReceiptSettled` | retain its Receipt/Activity convergence and successor rules |
 | `RequiresReconfirmation`, including after a supplied settlement query | `TerminalResolved { RequiresReconfirmation }` / matching terminal settlement | collect the attempt capsule; journal GC waits for the visible terminal surface and section 9's exact successor rule |
 
 The original capsule is collected only after a replayable response observation
@@ -900,6 +911,17 @@ Every typed Core result reaches one explicit Receipt settlement branch.
 without a Project Activity member. Settlement, result visibility, applied
 convergence, attention, and payload retention remain separate axes and never
 override one another.
+
+This correction is a contract-only hard cut, not an IndexedDB migration. At
+the locked baseline, the implemented Web journal writes its existing
+`receipt_settled` value only after it validates `AuthoritativeApplied` and its
+required Activity position; it cannot persist a zero-authority settlement.
+The logical variant names above do not silently reinterpret an existing
+record. A later runtime delivery that adopts these variants must version or
+migrate its stored representation: it may map an old record to
+`AppliedReceiptSettled` only when the exact applied Receipt and Activity fields
+prove that branch, and it must fail closed for every other old shape. This
+correction changes no IndexedDB version or persisted runtime value.
 
 ## 4. Completed intent and pre-Admission coalescing
 
@@ -1051,7 +1073,7 @@ Action Sequence, and Project Activity that an owning result actually creates.
 | unexpected HTTP `Accepted` for a Release-1 editor command | exact asynchronous operation reference and settlement query; no browser-visible Admission identity or terminal fact | enter `ProtocolIncompatibleAccepted`; preserve payload, pause the queue, and fail closed for protocol resync/compatible deployment without claiming query convergence |
 | HTTP `applyAuthorEdit` v2 `AuthoritativeApplied` | terminal `AppliedReceiptSettled`, exact typed Receipt, and applied-only Activity position | append `ApplyAuthorEditAppliedObservation`; wait for applied author-facing Activity/Snapshot convergence if not already observed |
 | HTTP `applyAuthorEdit` v2 `NoEffect`, `Conflicted`, or `Refused` | terminal `ZeroAuthorityReceiptSettled` and exact typed Receipt; no Activity exists for this result | append `ApplyAuthorEditZeroAuthorityObservation`; make the exact result visible without advancing checkpoint, Activity watermark, authoritative projection, or active base |
-| other editor HTTP `Committed` | terminal `OtherEditorReceiptSettled` and exact typed Receipt | follow only the owning result's Activity and convergence contract |
+| other editor HTTP `Committed` | terminal `OtherEditorReceiptSettled`, exact typed Receipt, and its existing Activity position | retain its Activity/Snapshot convergence contract |
 | HTTP `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | show the exact reconfirmation reason and applicable preserved payload/Draft; a later author confirmation creates a new command and Admission |
 | post-admission `outcome_unknown` Problem | exact Admission identity and settlement query from that Problem; no claim about Receipt presence | enter `KnownSettlementQuery`; forbid blind retry or a new command derived from the uncertain one |
 | Project Activity before an Activity-backed HTTP result | committed Event position, not necessarily the client's matching acknowledgement observation | retain/deduplicate the Event; use an actually supplied `outcome_unknown` settlement query, otherwise wait for HTTP or use an available exact replay capsule; converge only after the exact Receipt/result is known |
@@ -1096,7 +1118,7 @@ state, missing HTTP, or Event arrival is never an effect oracle.
 | exact replay returns `PreAdmissionProblemObservation` that positively proves the original attempt created no Admission | enter `ProvenNoAdmission`; either terminally resolve that refusal or, only when its retry semantics and every frozen local fact allow, obtain a fresh challenge and append a fresh physical attempt |
 | exact replay or settlement Query returns `applyAuthorEdit` v2 `AuthoritativeApplied` | append `ApplyAuthorEditAppliedObservation`, enter terminal `AppliedReceiptSettled`, wait for its exact Activity/Snapshot convergence, and never invoke again |
 | exact replay or settlement Query returns `applyAuthorEdit` v2 `NoEffect`, `Conflicted`, or `Refused` | append `ApplyAuthorEditZeroAuthorityObservation`, enter terminal `ZeroAuthorityReceiptSettled`, make only that Receipt result visible with no Activity/checkpoint/projection/base advance, and never invoke again |
-| exact replay or settlement Query returns another editor `Committed` result | append `OtherEditorCommittedObservation`, enter `OtherEditorReceiptSettled`, follow the owning result contract, and never invoke again |
+| exact replay or settlement Query returns another editor `Committed` result | append `OtherEditorCommittedObservation`, enter `OtherEditorReceiptSettled`, retain its existing Activity/Snapshot convergence contract, and never invoke again |
 | settlement Query returns `RequiresReconfirmation` | append that exact observation, enter the terminal no-Receipt settlement, and never invoke the old command |
 | exact replay or Query remains `outcome_unknown` | retain `TransportOrAdmissionUnknown` or `KnownSettlementQuery` as applicable; block blind invocation and dependent submissions |
 | exact replay or Query unexpectedly returns `Accepted` for a Release-1 editor command | enter `ProtocolIncompatibleAccepted`; retain all evidence/payload and fail closed without assuming or polling an unspecified terminal |
@@ -1169,7 +1191,7 @@ Convergence is positive and branches by settlement kind:
 | --- | --- |
 | `AppliedReceiptSettled` | the exact `ApplyAuthorEditAppliedObservation`, `DomainReceiptRef`, and applied-only canonical `project_activity_position`; processed Project Activity or a Snapshot must prove projection at or beyond that same position; the resulting authoritative Head and Commit are reflected before `AppliedReceiptConverged` |
 | `ZeroAuthorityReceiptSettled` | the exact `ApplyAuthorEditZeroAuthorityObservation`, `DomainReceiptRef`, and `NoEffect | Conflicted | Refused` effect are visible as `ZeroAuthorityReceiptVisible`; no Project Activity position, checkpoint advance, authoritative projection advance, or active-base roll-forward exists or is fabricated |
-| `OtherEditorReceiptSettled` | the exact `OtherEditorCommittedObservation` and only the convergence evidence required by its owning result contract; `ApplyAuthorEdit` rules are not generalized to it |
+| `OtherEditorReceiptSettled` | the exact `OtherEditorCommittedObservation`, `ReceiptRef`, and canonical `project_activity_position`; processed Project Activity or a Snapshot proves projection at or beyond it, preserving the pre-correction convergence rule |
 | `PreAdmissionRefused` | the exact `PreAdmissionProblemObservation`, typed refusal surface, and complete preserved local payload are visible; no Activity position or resulting Head is required or fabricated |
 | `RequiresReconfirmation` | the exact `RequiresReconfirmationObservation`, reason, and applicable retained payload or returned `recovery_draft_ref` plus reconfirmation controls are visible; no Receipt, Core effect, Activity position, or resulting Head is required or fabricated |
 
