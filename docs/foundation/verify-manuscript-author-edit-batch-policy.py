@@ -76,13 +76,14 @@ def require_union_variant_shape(
         errors.append(f"Web {variant} shape drifted")
 def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]:
     errors: list[str] = []
+    effect_variants = schema.get("$defs", {}).get("ApplyAuthorEditEffect", {}).get("oneOf", [])
     variants = {}
-    for variant in schema.get("$defs", {}).get("ApplyAuthorEditEffect", {}).get("oneOf", []):
+    for variant in effect_variants:
         kind = variant.get("properties", {}).get("kind", {}).get("const")
         if isinstance(kind, str):
-            if kind in variants:
-                errors.append(f"applyAuthorEdit response repeats {kind} effect")
             variants[kind] = variant
+    if len(effect_variants) != len(variants):
+        errors.append("applyAuthorEdit effect branches are not unique tagged objects")
     expected_fields = {
         "authoritative_applied": {
             "kind", "authoritative_revision", "authoritative_commit_id",
@@ -355,7 +356,10 @@ def self_test() -> None:
     changed_schema = deepcopy(response_schema)
     effects = changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
     effects.append(deepcopy(effects[0]))
-    assert "response repeats authoritative_applied effect" in "\n".join(
+    assert "effect branches are not unique tagged objects" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
+    effects[-1] = {"type": "null"}
+    assert "effect branches are not unique tagged objects" in "\n".join(
         policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
     web = PROJECTIONS[3].as_posix()
     for old, new, expected_error in (

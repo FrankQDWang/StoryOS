@@ -912,16 +912,12 @@ without a Project Activity member. Settlement, result visibility, applied
 convergence, attention, and payload retention remain separate axes and never
 override one another.
 
-This correction is a contract-only hard cut, not an IndexedDB migration. At
-the locked baseline, the implemented Web journal writes its existing
-`receipt_settled` value only after it validates `AuthoritativeApplied` and its
-required Activity position; it cannot persist a zero-authority settlement.
-The logical variant names above do not silently reinterpret an existing
-record. A later runtime delivery that adopts these variants must version or
-migrate its stored representation: it may map an old record to
-`AppliedReceiptSettled` only when the exact applied Receipt and Activity fields
-prove that branch, and it must fail closed for every other old shape. This
-correction changes no IndexedDB version or persisted runtime value.
+This correction is a contract-only hard cut, not an IndexedDB migration. At the
+locked baseline, the Web journal writes `receipt_settled` only after it validates
+`AuthoritativeApplied` and its Activity position; it cannot persist zero authority
+or reinterpret an old record. A later runtime must version or migrate that record
+and map it to `AppliedReceiptSettled` only when exact applied Receipt and Activity
+fields prove the branch; every other old shape fails closed. This correction changes no IndexedDB version or persisted runtime value.
 
 ## 4. Completed intent and pre-Admission coalescing
 
