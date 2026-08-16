@@ -239,6 +239,7 @@ def validate_author_edit_receipt_activity(
             "validate_admission_target_and_expected_head",
             "validate_receipt_heads_in_target",
             "branch_on_receipt_result_kind",
+            "validate_result_reason_and_head_semantics",
             "validate_exact_authority_activity_cardinality_and_binding",
             "validate_applied_prior_and_payload_digest",
             "return_original_settlement",
