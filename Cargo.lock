@@ -973,7 +973,6 @@ dependencies = [
  "storyos-core",
  "tokio",
  "tokio-postgres",
- "uuid",
 ]
 
 [[package]]

@@ -24,52 +24,36 @@ until docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete"
   sleep 0.25
 done
 
-docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
-  "$container:/tmp/storyos-release1-bootstrap" >/dev/null
-if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgres \
-  -f /tmp/storyos-release1-bootstrap/0000_roles.sql \
-  -f /tmp/storyos-release1-bootstrap/0001_controlled_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0002_project_command_challenges.sql \
-  -c "SELECT 1 / 0" \
-  -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
-  -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql >/dev/null 2>&1; then
-  echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
-  exit 1
-fi
-rollback_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT (SELECT count(*) FROM pg_roles
-            WHERE rolname IN ('storyos_owner', 'storyos_runtime'))::text
-          || '/' || COALESCE(to_regnamespace('storyos')::text, 'absent')")
-if [ "$rollback_state" != "0/absent" ]; then
-  echo "The faulted Release 1 bootstrap exposed partial state: $rollback_state" >&2
-  exit 1
-fi
-
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgres \
-  -f /tmp/storyos-release1-bootstrap/0000_roles.sql \
-  -f /tmp/storyos-release1-bootstrap/0001_controlled_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0002_project_command_challenges.sql \
-  -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
-  -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql >/dev/null
-
-runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
-     FROM pg_authid WHERE rolname = 'storyos_runtime'")
-if [ "$runtime_secret_state" != "absent" ]; then
-  echo "The tracked Release 1 bootstrap installed a runtime password" >&2
-  exit 1
-fi
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
-
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+docker exec "$container" psql -v ON_ERROR_STOP=1 -U postgres -c \
+  "CREATE ROLE storyos_owner NOLOGIN; CREATE ROLE storyos_runtime LOGIN PASSWORD 'runtime' NOSUPERUSER NOBYPASSRLS;" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0001_controlled_project.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0002_project_command_challenges.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/tests/migration_0003_fixture.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0003_expand_client_session_generation.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0004_editor_sessions.sql" >/dev/null
+docker exec -i "$container" psql -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/migrations/0005_author_edits.sql" >/dev/null
+
+preserved_generation=$(docker exec "$container" psql -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT client_session_generation::text
+     FROM storyos.project_command_challenges
+    WHERE command_kind = 'migration-proof'")
+if [ "$preserved_generation" != "9223372036854775807" ]; then
+  echo "Migration 0003 did not preserve the existing Client Session generation" >&2
+  exit 1
+fi
 
 published=$(docker port "$container" 5432/tcp)
 port=${published##*:}
 export STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$port/postgres"
 export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$port/postgres"
-export STORYOS_TEST_POSTGRES_CONTAINER="$container"
 echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture

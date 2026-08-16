@@ -16,8 +16,7 @@ CREATE TABLE storyos.command_idempotency (
 CREATE TABLE storyos.project_command_challenge_rate_guards (
   owner_user_id uuid NOT NULL,
   project_id uuid NOT NULL,
-  client_session_generation numeric(20, 0) NOT NULL
-    CHECK (client_session_generation BETWEEN 0 AND 18446744073709551615),
+  client_session_generation bigint NOT NULL CHECK (client_session_generation >= 0),
   policy_revision text NOT NULL,
   PRIMARY KEY (owner_user_id, project_id, client_session_generation, policy_revision),
   FOREIGN KEY (owner_user_id, project_id)
@@ -27,8 +26,7 @@ CREATE TABLE storyos.project_command_challenge_rate_guards (
 CREATE TABLE storyos.project_command_challenge_rate_windows (
   owner_user_id uuid NOT NULL,
   project_id uuid NOT NULL,
-  client_session_generation numeric(20, 0) NOT NULL
-    CHECK (client_session_generation BETWEEN 0 AND 18446744073709551615),
+  client_session_generation bigint NOT NULL CHECK (client_session_generation >= 0),
   policy_revision text NOT NULL,
   window_started_at timestamptz NOT NULL,
   issued_count smallint NOT NULL DEFAULT 0 CHECK (issued_count BETWEEN 0 AND 10),
@@ -47,8 +45,7 @@ CREATE TABLE storyos.project_command_challenges (
   command_kind text NOT NULL,
   idempotency_key uuid NOT NULL,
   client_session_binding_digest text NOT NULL,
-  client_session_generation numeric(20, 0) NOT NULL
-    CHECK (client_session_generation BETWEEN 0 AND 18446744073709551615),
+  client_session_generation bigint NOT NULL CHECK (client_session_generation >= 0),
   client_contract_revision text NOT NULL,
   security_policy_revision text NOT NULL,
   limit_profile_revision text NOT NULL,

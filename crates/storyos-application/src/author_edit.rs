@@ -9,10 +9,6 @@ pub struct AuthorCommandAdmissionIds {
     pub command_id: String,
     pub author_command_admission_id: String,
     pub receipt_id: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthoritativeAppliedIds {
     pub revision_id: String,
     pub payload_id: String,
     pub authoritative_commit_id: String,
@@ -46,6 +42,7 @@ pub struct ApplyAuthorEditCommand {
 pub struct AuthorEditSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub effect: AuthorEditSettlementEffect,
+    pub project_activity_position: u64,
     pub receipt_created_at: String,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: u64,
@@ -54,10 +51,8 @@ pub struct AuthorEditSettlement {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorEditSettlementEffect {
     AuthoritativeApplied {
-        ids: AuthoritativeAppliedIds,
         body: String,
         author_action_sequence: u64,
-        project_activity_position: u64,
     },
     NoEffect {
         reason: AuthorEditNoEffect,

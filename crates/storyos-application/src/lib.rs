@@ -29,7 +29,7 @@ mod editor_session;
 
 pub use author_edit::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditSettlement,
-    AuthorEditSettlementEffect, AuthorEditStore, AuthoritativeAppliedIds, apply_author_edit,
+    AuthorEditSettlementEffect, AuthorEditStore, apply_author_edit,
 };
 
 pub use editor_session::{

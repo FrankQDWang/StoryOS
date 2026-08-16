@@ -88,6 +88,10 @@ pub(super) async fn apply_author_edit(
         command_id: Uuid::now_v7().to_string(),
         author_command_admission_id: Uuid::now_v7().to_string(),
         receipt_id: Uuid::now_v7().to_string(),
+        revision_id: Uuid::now_v7().to_string(),
+        payload_id: Uuid::now_v7().to_string(),
+        authoritative_commit_id: Uuid::now_v7().to_string(),
+        project_activity_event_id: Uuid::now_v7().to_string(),
     };
     let author_edit_units = body
         .author_edit_units
@@ -160,25 +164,23 @@ pub(super) async fn apply_author_edit(
         effect,
     ) = match settlement.effect {
         AuthorEditSettlementEffect::AuthoritativeApplied {
-            ids,
             body,
             author_action_sequence,
-            project_activity_position,
         } => (
             contracts::DomainReceiptResult::AuthoritativeApplied,
             vec![command.expected_authoritative_revision_id.clone()],
-            vec![ids.revision_id.clone()],
-            vec![ids.revision_id.clone()],
-            vec![ids.authoritative_commit_id.clone()],
+            vec![settlement.ids.revision_id.clone()],
+            vec![settlement.ids.revision_id.clone()],
+            vec![settlement.ids.authoritative_commit_id.clone()],
             Some(author_action_sequence.to_string()),
             contracts::ApplyAuthorEditEffect::AuthoritativeApplied {
                 authoritative_revision: contracts::AuthoritativeChapterRevision {
-                    revision_id: ids.revision_id.clone(),
+                    revision_id: settlement.ids.revision_id.clone(),
                     body,
                 },
-                authoritative_commit_id: ids.authoritative_commit_id,
+                authoritative_commit_id: settlement.ids.authoritative_commit_id.clone(),
                 author_action_sequence: author_action_sequence.to_string(),
-                project_activity_position: project_activity_position.to_string(),
+                project_activity_position: settlement.project_activity_position.to_string(),
             },
         ),
         AuthorEditSettlementEffect::NoEffect { reason } => (
