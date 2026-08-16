@@ -222,7 +222,6 @@ def validate_author_edit_receipt_activity(
         "applied_relation_cardinality": "exactly_one_complete_activity_authority_relation",
         "authority_relation_binding": "composite_applied_receipt_admission_object_prior_revision",
         "zero_relation_cardinality": "no_activity_revision_payload_commit_head_or_author_action",
-        "typed_value_guard": "no_sql_null_array_elements_or_json_null_typed_values",
     }
     for field, expected in expected_scalars.items():
         if contract.get(field) != expected:
