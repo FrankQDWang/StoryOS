@@ -1,0 +1,78 @@
+{
+  "schema": "storyos.author-edit-batch-policy.v1",
+  "revision": "storyos.author-edit-batch.release-1.preview.v1",
+  "status": "conservative_prerelease",
+  "owner": {
+    "policy_issue": "https://github.com/FrankQDWang/StoryOS/issues/70",
+    "core_semantics_issue": "https://github.com/FrankQDWang/StoryOS/issues/46",
+    "wire_issue": "https://github.com/FrankQDWang/StoryOS/issues/58",
+    "gate_issue": "https://github.com/FrankQDWang/StoryOS/issues/60"
+  },
+  "identity_binding": {
+    "editor_contract_revision": "storyos.editor-contract.release-1.v2",
+    "request_digest_field": "editor_contract_revision",
+    "wire_change": false,
+    "core_local_coverage_claim": false
+  },
+  "selected": {
+    "adjacent_completed_intent_idle_ms": 250,
+    "max_author_edit_units": 240,
+    "max_normalized_primitives": 240,
+    "max_public_json_command_body_bytes": 1048576,
+    "limit_profile_revision": "storyos.foundation.absolute.v1"
+  },
+  "candidates": {
+    "adjacent_completed_intent_idle_ms": [250, 500, 750],
+    "max_author_edit_units": [64, 128, 240, 256]
+  },
+  "hard_flush_boundaries": [
+    "composition_confirmation",
+    "paste",
+    "cut",
+    "drop",
+    "split_block",
+    "join_blocks",
+    "move_block",
+    "retype_block",
+    "explicit_editor_command",
+    "policy_identity_change",
+    "shared_binding_change"
+  ],
+  "receipt_boundary": {
+    "receipt_free": [
+      "pre_admission_refusal",
+      "infrastructure_or_transaction_failure_before_commit"
+    ],
+    "typed_zero_authority_receipt_after_core_starts": [
+      "refused",
+      "conflicted",
+      "no_effect"
+    ]
+  },
+  "evidence": {
+    "measurement_report": "docs/research/representative-writing-path-performance-and-storage-growth-envelope.md",
+    "browser_harness": "docs/research/author-edit-batch-prerelease-browser-harness.mjs",
+    "captured_result": "docs/research/author-edit-batch-prerelease-browser-evidence.json",
+    "uses_real_user_content": false
+  },
+  "future_anonymous_calibration": {
+    "minimum_opted_in_sessions": 30,
+    "minimum_completed_intent_counters": 100000,
+    "minimum_english_sessions": 5,
+    "minimum_chinese_ime_sessions": 5,
+    "reopen_if": {
+      "cap_flush_rate_gt": 0.01,
+      "p95_command_body_fraction_gt": 0.5,
+      "p95_local_input_processing_ms_gt": 33,
+      "semantic_redline_failures_gt": 0
+    },
+    "allowed_data": "aggregated counters and histograms only",
+    "forbidden_data": [
+      "prose",
+      "composition_text",
+      "selection_content",
+      "user_or_project_identifiers",
+      "raw_input_trajectories"
+    ]
+  }
+}

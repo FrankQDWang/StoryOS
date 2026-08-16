@@ -1,0 +1,77 @@
+{
+  "schema": "storyos.author-edit-batch-prerelease-browser-evidence.v1",
+  "policy_revision": "storyos.author-edit-batch.release-1.preview.v1",
+  "policy_sha256": "e9570bcebb460c5d0c76e312091d12f61902819247728bc87e553800bd9e7cb8",
+  "captured_at": "2026-08-16T06:36:00Z",
+  "browser": "Google Chrome 151.0.7922.138",
+  "synthetic_only": true,
+  "real_user_content": false,
+  "candidate_order": {
+    "idle_ms": [250, 500, 750],
+    "max_units": [64, 128, 240, 256]
+  },
+  "deterministic_comparison": {
+    "continuous_english_300_request_count_by_max_units": [5, 3, 2, 2],
+    "pressure_1024_request_count_by_max_units": [16, 8, 5, 4],
+    "slow_english_20_request_count_by_idle_ms": [20, 20, 1],
+    "max_payload_bytes_by_max_units": [4503, 8983, 16823, 17943],
+    "journal_storage_bytes": {
+      "continuous_english_300": 37351,
+      "slow_english_20": 2475,
+      "boundary_english_16": 1973,
+      "chinese_ime_confirm_cancel": 142,
+      "paste_delete_replace": 389,
+      "pressure_1024": 126811
+    },
+    "selected_250ms_240_units": {
+      "continuous_english_300_request_count": 2,
+      "pressure_1024_request_count": 5,
+      "slow_english_20_request_count": 20,
+      "max_units_per_request": 240,
+      "max_payload_bytes": 16823,
+      "payload_fraction_of_1mib": 0.016043663024902344,
+      "continuous_submission_group_storage_bytes": 22161,
+      "pressure_submission_group_storage_bytes": 75864
+    }
+  },
+  "semantic_oracle": {
+    "ime_update_and_cancel_not_durable": true,
+    "hard_boundaries_isolated": true,
+    "complete_local_coverage_accepted": true,
+    "duplicate_local_coverage_rejected": true,
+    "skipped_local_coverage_rejected": true,
+    "reordered_local_coverage_rejected": true,
+    "policy_mismatched_coverage_rejected": true,
+    "pre_admission_refusal_receipt_free": true,
+    "over_limit_command_refused_before_admission": true,
+    "primitive_limit_refused_before_admission": true,
+    "body_limit_refused_before_admission": true,
+    "admitted_refused_typed_zero_authority": true,
+    "admitted_conflicted_typed_zero_authority": true,
+    "admitted_no_effect_typed_zero_authority": true,
+    "invalid_later_unit_typed_zero_authority": true,
+    "pre_commit_transaction_failure_receipt_free": true,
+    "whole_batch_has_one_final_settlement": true,
+    "no_prefix_authority": true,
+    "contradictory_prefix_state_rejected": true,
+    "exact_retry_has_no_second_effect": true,
+    "grouping_never_exceeds_selected_limit": true
+  },
+  "browser_input_latency_ms": {
+    "max": 0.3,
+    "p95": 0.0,
+    "classification": "advisory_single_machine_observation"
+  },
+  "adoption": {
+    "decision": "adopt_conservative_prerelease",
+    "idle_ms": 250,
+    "max_units": 240,
+    "rationale": "The smallest candidate window avoids joining the synthetic 600 ms slow path. The 240-unit ceiling keeps the established sustained-input case while remaining below the tested 256-unit candidate. The selected synthetic maximum payload is 1.61% of the inherited 1 MiB command-body ceiling.",
+    "not_claimed": [
+      "permanent product default",
+      "real-user validation",
+      "foreground-browser latency SLA",
+      "production runtime conformance"
+    ]
+  }
+}

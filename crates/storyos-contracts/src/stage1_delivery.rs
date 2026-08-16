@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-15-v12";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-16-v13";
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "7d5857cd9b65a97015d65e2caacb649a9d4c5bd2";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "207788ff5d98ed32c47391397f9630dcf22ac433";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:f6aa6158d90b8e186a5166b9f899e75111b98156e1adf613baad9ba058588163";
+    "sha256:ad4bb2cc1cb6d84d3d8221ba476a1d4a19e24f9970e0674414fc883524612d69";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -190,17 +190,26 @@ const COVERAGE_05: TicketCoverage = TicketCoverage {
 };
 const COVERAGE_06: TicketCoverage = TicketCoverage {
     requirements: &["S1-REQ-002", "S1-JRN-001", "S1-EVD-002"],
-    operations: &[],
-    gates: &["DVG-02"],
-    evidence_classes: &["EC-02", "EV-INT"],
-    fixtures: &["FX-EDITOR-IME"],
+    operations: &[
+        "createEditorSession",
+        "getEditorSession",
+        "createProjectCommandChallenge",
+        "applyAuthorEdit",
+        "getChapter",
+    ],
+    gates: &["DVG-01", "DVG-02", "DVG-03"],
+    evidence_classes: &["EC-01", "EC-02", "EC-03", "EV-IT", "EV-INT"],
+    fixtures: &["FX-CONTRACT-R1", "FX-EDITOR-IME", "FX-JOURNAL-GROUP"],
     fault_points: &[
-        "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+        "CFP-ADMISSION-BEFORE-CORE",
+        "CFP-CORE-BEFORE-COMMIT",
+        "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
         "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+        "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
     ],
     schedules: &["SCH-NORMAL"],
-    oracles: &["ORC-EDITOR-JOURNAL"],
-    bundles: &["B-EDITOR"],
+    oracles: &["ORC-ATOMIC-AUTHORITY", "ORC-CONTRACT", "ORC-EDITOR-JOURNAL"],
+    bundles: &["B-CONTRACT", "B-CORE", "B-EDITOR"],
     aggregate: None,
 };
 const COVERAGE_07: TicketCoverage = TicketCoverage {
@@ -340,8 +349,8 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-06",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/108",
         title: "Complete Bounded Manual Input and IME Semantics",
-        issue_body_sha256: "d7d6e6c55be9be5baab6a9f9ef6fd0cf800fed2541651db988752d99d42fd168",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/46"),
+        issue_body_sha256: "1989df5942675d9ba7785144890dc3d7d24e134d420578fb16e28a99fa79552f",
+        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/60"),
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "complete bounded manual input, IME, and same-session base roll-forward semantics",
         contract_coverage: COVERAGE_06,

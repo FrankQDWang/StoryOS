@@ -236,7 +236,7 @@ One completed semantic editor intent, or a bounded idle-coalesced sequence forme
 _Avoid_: Client-selected write path, ProseMirror transaction as authority, fixed-window batching, partial mixed edit
 
 **Editor Verification Split**:
-The two complementary deterministic gates for an Author Edit. Browser integration verifies complete IME and editor intent capture, local journal durability, pending projection, and recovery continuity; Core verification proves command ownership classification, atomic durable settlement, and the exact Receipt.
+The two complementary deterministic gates for an Author Edit. Browser integration proves complete IME and editor intent capture plus local group coverage before Admission; Core proves ordered atomic settlement, with a typed zero-authority Receipt for an admitted refusal, conflict, or no effect and no Receipt for a pre-Admission refusal or infrastructure failure before commit.
 _Avoid_: UI-only authority proof, server-only input-continuity proof, raw editor event as command truth
 
 **Author Command Admission**:
