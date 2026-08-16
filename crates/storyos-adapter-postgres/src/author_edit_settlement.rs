@@ -14,39 +14,51 @@ pub(super) async fn persist_author_edit_settlement(
     current_revision_id: &str,
     core_result: ApplyAuthorEditResult,
 ) -> Result<AuthorEditSettlement, AuthorEditError> {
+    client
+        .execute(
+            "INSERT INTO storyos.scope_counters (owner_user_id, project_id)
+             VALUES ($1::text::uuid, $2::text::uuid) ON CONFLICT DO NOTHING",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+            ],
+        )
+        .await
+        .map_err(author_edit_database_error)?;
+
+    let changes_authority = matches!(
+        core_result,
+        ApplyAuthorEditResult::AuthoritativeApplied { .. }
+    );
+    let counter_row = client
+        .query_one(
+            "UPDATE storyos.scope_counters
+                SET author_action_sequence = author_action_sequence
+                      + CASE WHEN $3 THEN 1 ELSE 0 END,
+                    authoritative_commit_sequence = authoritative_commit_sequence
+                      + CASE WHEN $3 THEN 1 ELSE 0 END,
+                    project_activity_position = project_activity_position + 1
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+          RETURNING author_action_sequence::text, authoritative_commit_sequence::text,
+                    project_activity_position::text",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &changes_authority,
+            ],
+        )
+        .await
+        .map_err(author_edit_database_error)?;
+    let author_action_sequence = changes_authority
+        .then(|| parse_u64(counter_row.get(0)))
+        .transpose()?;
+    let authoritative_commit_sequence = changes_authority
+        .then(|| parse_u64(counter_row.get(1)))
+        .transpose()?;
+    let project_activity_position = parse_u64(counter_row.get(2))?;
+
     let prepared = match core_result {
         ApplyAuthorEditResult::AuthoritativeApplied { body } => {
-            client
-                .execute(
-                    "INSERT INTO storyos.scope_counters (owner_user_id, project_id)
-                     VALUES ($1::text::uuid, $2::text::uuid) ON CONFLICT DO NOTHING",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                    ],
-                )
-                .await
-                .map_err(author_edit_database_error)?;
-            let counter_row = client
-                .query_one(
-                    "UPDATE storyos.scope_counters
-                        SET author_action_sequence = author_action_sequence + 1,
-                            authoritative_commit_sequence = authoritative_commit_sequence + 1,
-                            project_activity_position = project_activity_position + 1
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                  RETURNING author_action_sequence::text,
-                            authoritative_commit_sequence::text,
-                            project_activity_position::text",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                    ],
-                )
-                .await
-                .map_err(author_edit_database_error)?;
-            let author_action_sequence = parse_u64(counter_row.get(0))?;
-            let authoritative_commit_sequence = parse_u64(counter_row.get(1))?;
-            let project_activity_position = parse_u64(counter_row.get(2))?;
             let ids = PreparedAppliedIds {
                 revision_id: command.ids.revision_id.clone(),
                 payload_id: command.ids.payload_id.clone(),
@@ -59,32 +71,25 @@ pub(super) async fn persist_author_edit_settlement(
                 current_revision_id,
                 &ids,
                 &body,
-                authoritative_commit_sequence,
+                authoritative_commit_sequence
+                    .expect("authority change allocates a Commit sequence"),
             )
             .await?;
             PreparedSettlement::AuthoritativeApplied {
                 ids,
                 body,
-                author_action_sequence,
-                project_activity_position,
+                author_action_sequence: author_action_sequence
+                    .expect("authority change allocates an Author Action sequence"),
             }
         }
-        ApplyAuthorEditResult::NoEffect { reason } => PreparedSettlement::NoEffect {
-            reason,
-            project_activity_position: allocate_zero_activity_position(client, command).await?,
-        },
+        ApplyAuthorEditResult::NoEffect { reason } => PreparedSettlement::NoEffect { reason },
         ApplyAuthorEditResult::Conflicted { reason } => PreparedSettlement::Conflicted {
             reason,
             current_authoritative_revision_id: current_revision_id.to_owned(),
-            project_activity_position: allocate_zero_activity_position(client, command).await?,
         },
-        ApplyAuthorEditResult::Refused { reason } => PreparedSettlement::Refused {
-            reason,
-            project_activity_position: allocate_zero_activity_position(client, command).await?,
-        },
+        ApplyAuthorEditResult::Refused { reason } => PreparedSettlement::Refused { reason },
     };
 
-    let project_activity_position = prepared.project_activity_position();
     let (result_kind, result_payload, resulting_head, revision_ids, commit_ids) = match &prepared {
         PreparedSettlement::AuthoritativeApplied { ids, .. } => (
             "authoritative_applied",
@@ -93,7 +98,7 @@ pub(super) async fn persist_author_edit_settlement(
             vec![ids.revision_id.clone()],
             vec![ids.authoritative_commit_id.clone()],
         ),
-        PreparedSettlement::NoEffect { reason, .. } => (
+        PreparedSettlement::NoEffect { reason } => (
             "no_effect",
             serde_json::json!({"reason": no_effect_reason(reason)}),
             current_revision_id,
@@ -103,7 +108,6 @@ pub(super) async fn persist_author_edit_settlement(
         PreparedSettlement::Conflicted {
             reason,
             current_authoritative_revision_id,
-            ..
         } => (
             "conflicted",
             serde_json::json!({
@@ -114,7 +118,7 @@ pub(super) async fn persist_author_edit_settlement(
             Vec::new(),
             Vec::new(),
         ),
-        PreparedSettlement::Refused { reason, .. } => (
+        PreparedSettlement::Refused { reason } => (
             "refused",
             serde_json::json!({"reason": refusal_reason(reason)}),
             current_revision_id,
@@ -125,15 +129,8 @@ pub(super) async fn persist_author_edit_settlement(
     let result_reason = result_payload
         .get("reason")
         .and_then(serde_json::Value::as_str);
-    let author_action_sequence = match &prepared {
-        PreparedSettlement::AuthoritativeApplied {
-            author_action_sequence,
-            ..
-        } => Some(author_action_sequence.to_string()),
-        PreparedSettlement::NoEffect { .. }
-        | PreparedSettlement::Conflicted { .. }
-        | PreparedSettlement::Refused { .. } => None,
-    };
+    let author_action_sequence_text = author_action_sequence.map(|value| value.to_string());
+    let project_activity_position_text = project_activity_position.to_string();
     let (allocated_revision_id, allocated_commit_id) = match &prepared {
         PreparedSettlement::AuthoritativeApplied { ids, .. } => (
             Some(ids.revision_id.as_str()),
@@ -175,10 +172,10 @@ pub(super) async fn persist_author_edit_settlement(
                 &resulting_head,
                 &revision_ids,
                 &commit_ids,
-                &author_action_sequence,
+                &author_action_sequence_text,
                 &result_kind,
                 &result_reason,
-                &project_activity_position.to_string(),
+                &project_activity_position_text,
                 &allocated_commit_id,
                 &allocated_revision_id,
             ],
@@ -187,89 +184,76 @@ pub(super) async fn persist_author_edit_settlement(
         .map_err(author_edit_database_error)?;
     let receipt_created_at = receipt_row.get::<_, String>(0);
 
+    if let PreparedSettlement::AuthoritativeApplied {
+        ids,
+        author_action_sequence,
+        ..
+    } = &prepared
+    {
+        client
+            .execute(
+                "INSERT INTO storyos.author_action_entries
+                   (owner_user_id, project_id, author_action_sequence, disposition,
+                    authoritative_commit_id, receipt_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
+                         $4::text::uuid, $5::text::uuid)",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &author_action_sequence.to_string(),
+                    &ids.authoritative_commit_id,
+                    &command.ids.receipt_id,
+                ],
+            )
+            .await
+            .map_err(author_edit_database_error)?;
+    }
+    client
+        .execute(
+            "INSERT INTO storyos.project_activity_events
+               (owner_user_id, project_id, project_activity_position, project_activity_event_id,
+                event_kind, receipt_id, resulting_revision_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
+                     'author_edit_settled', $5::text::uuid, $6::text::uuid)",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &project_activity_position_text,
+                &match &prepared {
+                    PreparedSettlement::AuthoritativeApplied { ids, .. } => {
+                        ids.project_activity_event_id.as_str()
+                    }
+                    PreparedSettlement::NoEffect { .. }
+                    | PreparedSettlement::Conflicted { .. }
+                    | PreparedSettlement::Refused { .. } => {
+                        command.ids.project_activity_event_id.as_str()
+                    }
+                },
+                &command.ids.receipt_id,
+                &allocated_revision_id,
+            ],
+        )
+        .await
+        .map_err(author_edit_database_error)?;
+
     let effect = match prepared {
         PreparedSettlement::AuthoritativeApplied {
-            ids,
             body,
             author_action_sequence,
-            project_activity_position,
-        } => {
-            client
-                .execute(
-                    "INSERT INTO storyos.author_action_entries
-                       (owner_user_id, project_id, author_action_sequence, disposition,
-                        authoritative_commit_id, receipt_id)
-                     VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
-                             $4::text::uuid, $5::text::uuid)",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                        &author_action_sequence.to_string(),
-                        &ids.authoritative_commit_id,
-                        &command.ids.receipt_id,
-                    ],
-                )
-                .await
-                .map_err(author_edit_database_error)?;
-            persist_activity(
-                client,
-                command,
-                project_activity_position,
-                &ids.project_activity_event_id,
-                Some(ids.revision_id.as_str()),
-            )
-            .await?;
-            AuthorEditSettlementEffect::AuthoritativeApplied {
-                body,
-                author_action_sequence,
-            }
-        }
-        PreparedSettlement::NoEffect {
-            reason,
-            project_activity_position,
-        } => {
-            persist_activity(
-                client,
-                command,
-                project_activity_position,
-                &command.ids.project_activity_event_id,
-                None,
-            )
-            .await?;
-            AuthorEditSettlementEffect::NoEffect { reason }
-        }
+            ..
+        } => AuthorEditSettlementEffect::AuthoritativeApplied {
+            body,
+            author_action_sequence,
+        },
+        PreparedSettlement::NoEffect { reason } => AuthorEditSettlementEffect::NoEffect { reason },
         PreparedSettlement::Conflicted {
             reason,
             current_authoritative_revision_id,
-            project_activity_position,
-        } => {
-            persist_activity(
-                client,
-                command,
-                project_activity_position,
-                &command.ids.project_activity_event_id,
-                None,
-            )
-            .await?;
-            AuthorEditSettlementEffect::Conflicted {
-                reason,
-                current_authoritative_revision_id,
-            }
-        }
-        PreparedSettlement::Refused {
+        } => AuthorEditSettlementEffect::Conflicted {
             reason,
-            project_activity_position,
-        } => {
-            persist_activity(
-                client,
-                command,
-                project_activity_position,
-                &command.ids.project_activity_event_id,
-                None,
-            )
-            .await?;
-            AuthorEditSettlementEffect::Refused { reason }
-        }
+            current_authoritative_revision_id,
+        },
+        PreparedSettlement::Refused { reason } => AuthorEditSettlementEffect::Refused { reason },
     };
     let settlement_inserts = client
         .execute(
@@ -316,65 +300,6 @@ pub(super) async fn persist_author_edit_settlement(
         completed_intent_record_id: command.completed_intent_record_id.clone(),
         local_intent_sequence: command.local_intent_sequence,
     })
-}
-
-async fn allocate_zero_activity_position(
-    client: &Client,
-    command: &ApplyAuthorEditCommand,
-) -> Result<u64, AuthorEditError> {
-    client
-        .execute(
-            "INSERT INTO storyos.scope_counters (owner_user_id, project_id)
-             VALUES ($1::text::uuid, $2::text::uuid) ON CONFLICT DO NOTHING",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(author_edit_database_error)?;
-    let row = client
-        .query_one(
-            "UPDATE storyos.scope_counters
-                SET project_activity_position = project_activity_position + 1
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-          RETURNING project_activity_position::text",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(author_edit_database_error)?;
-    parse_u64(row.get(0))
-}
-
-async fn persist_activity(
-    client: &Client,
-    command: &ApplyAuthorEditCommand,
-    project_activity_position: u64,
-    activity_id: &str,
-    revision_id: Option<&str>,
-) -> Result<(), AuthorEditError> {
-    client
-        .execute(
-            "INSERT INTO storyos.project_activity_events
-               (owner_user_id, project_id, project_activity_position, project_activity_event_id,
-                event_kind, receipt_id, resulting_revision_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                     'author_edit_settled', $5::text::uuid, $6::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &project_activity_position.to_string(),
-                &activity_id,
-                &command.ids.receipt_id,
-                &revision_id,
-            ],
-        )
-        .await
-        .map_err(author_edit_database_error)?;
-    Ok(())
 }
 
 async fn persist_authority_change(
@@ -481,44 +406,17 @@ enum PreparedSettlement {
         ids: PreparedAppliedIds,
         body: String,
         author_action_sequence: u64,
-        project_activity_position: u64,
     },
     NoEffect {
         reason: AuthorEditNoEffect,
-        project_activity_position: u64,
     },
     Conflicted {
         reason: AuthorEditConflict,
         current_authoritative_revision_id: String,
-        project_activity_position: u64,
     },
     Refused {
         reason: AuthorEditRefusal,
-        project_activity_position: u64,
     },
-}
-
-impl PreparedSettlement {
-    fn project_activity_position(&self) -> u64 {
-        match self {
-            Self::AuthoritativeApplied {
-                project_activity_position,
-                ..
-            }
-            | Self::NoEffect {
-                project_activity_position,
-                ..
-            }
-            | Self::Conflicted {
-                project_activity_position,
-                ..
-            }
-            | Self::Refused {
-                project_activity_position,
-                ..
-            } => *project_activity_position,
-        }
-    }
 }
 
 struct PreparedAppliedIds {
