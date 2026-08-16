@@ -52,6 +52,16 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
   -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql >/dev/null
 
+runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
+     FROM pg_authid WHERE rolname = 'storyos_runtime'")
+if [ "$runtime_secret_state" != "absent" ]; then
+  echo "The tracked Release 1 bootstrap installed a runtime password" >&2
+  exit 1
+fi
+docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 

@@ -307,10 +307,12 @@ async fn persist_authority_change(
         .execute(
             "INSERT INTO storyos.authoritative_revision_envelopes
            (owner_user_id, project_id, manuscript_object_id, revision_id, parent_revision_id,
-            schema_revision, creator_kind, creator_ref, cause_kind, payload_digest)
+            schema_revision, creator_kind, creator_ref, receipt_id, receipt_result_kind,
+            cause_kind, payload_digest)
          VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                  $5::text::uuid, 'storyos.authoritative-revision-envelope.v1',
-                 'author_command_admission', $6::text::uuid, 'direct_author_action', $7)",
+                 'author_command_admission', $6::text::uuid, $7::text::uuid,
+                 'authoritative_applied', 'direct_author_action', $8)",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -318,6 +320,7 @@ async fn persist_authority_change(
                 &ids.revision_id,
                 &current_revision_id,
                 &command.ids.author_command_admission_id,
+                &command.ids.receipt_id,
                 &sha256_hex(body.as_bytes()),
             ],
         )
@@ -346,9 +349,10 @@ async fn persist_authority_change(
             "INSERT INTO storyos.authoritative_commits
            (owner_user_id, project_id, authoritative_commit_id, authoritative_commit_sequence,
             manuscript_object_id, prior_revision_id, resulting_revision_id,
-            author_command_admission_id)
+            author_command_admission_id, receipt_id, receipt_result_kind)
          VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::numeric,
-                 $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid)",
+                 $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
+                 $9::text::uuid, 'authoritative_applied')",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -358,6 +362,7 @@ async fn persist_authority_change(
                 &current_revision_id,
                 &ids.revision_id,
                 &command.ids.author_command_admission_id,
+                &command.ids.receipt_id,
             ],
         )
         .await

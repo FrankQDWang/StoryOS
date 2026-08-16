@@ -171,6 +171,8 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
         fail(errors, "Release 1 bootstrap must use one PostgreSQL transaction")
     if bootstrap.get("digest_profile") != "storyos.persistence.bootstrap-manifest-jcs.v1":
         fail(errors, "Release 1 bootstrap digest profile is missing or incorrect")
+    if bootstrap.get("runtime_credential_source") != "external_secret_after_atomic_bootstrap":
+        fail(errors, "Release 1 bootstrap must not own the runtime credential")
     sources = bootstrap.get("sources")
     if not isinstance(sources, list):
         fail(errors, "Release 1 bootstrap sources must be an ordered array")
@@ -197,6 +199,10 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
             fail(errors, f"bootstrap SQL checksum mismatch for {source['path']}: expected {actual_digest}")
         if re.search(rb"(?im)^\s*(?:BEGIN|COMMIT)\s*;\s*$", normalized):
             fail(errors, f"bootstrap SQL source contains an inner transaction boundary: {source['path']}")
+        if source["path"].endswith("/0000_roles.sql") and re.search(
+            rb"(?i)\bPASSWORD\b", normalized
+        ):
+            fail(errors, "Release 1 role bootstrap contains tracked password material")
         actual_manifest.append({"path": source["path"], "lf_sha256": actual_digest})
     manifest_digest = "sha256:" + hashlib.sha256(canonical_bytes(actual_manifest)).hexdigest()
     if bootstrap.get("manifest_sha256") != manifest_digest:
@@ -214,6 +220,7 @@ def validate_author_edit_receipt_activity(
         "receipt_identity": "independent_immutable_typed",
         "applied_result_kind": "authoritative_applied",
         "applied_relation_cardinality": "exactly_one_complete_activity_authority_relation",
+        "authority_relation_binding": "composite_applied_receipt_admission_object_prior_revision",
         "zero_relation_cardinality": "no_activity_revision_payload_commit_head_or_author_action",
     }
     for field, expected in expected_scalars.items():
@@ -229,8 +236,11 @@ def validate_author_edit_receipt_activity(
         "exact_retry_order": [
             "read_idempotency_result_reference",
             "read_receipt_by_receipt_id",
+            "validate_admission_target_and_expected_head",
+            "validate_receipt_heads_in_target",
             "branch_on_receipt_result_kind",
-            "validate_exact_authority_activity_cardinality",
+            "validate_exact_authority_activity_cardinality_and_binding",
+            "validate_applied_prior_and_payload_digest",
             "return_original_settlement",
         ],
         "prohibited_representation": [

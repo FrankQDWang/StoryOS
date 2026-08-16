@@ -102,11 +102,18 @@ CREATE TABLE storyos.authoritative_revision_envelopes (
   schema_revision text NOT NULL,
   creator_kind text NOT NULL CHECK (creator_kind = 'author_command_admission'),
   creator_ref uuid NOT NULL,
+  receipt_id uuid NOT NULL,
+  receipt_result_kind text NOT NULL CHECK (receipt_result_kind = 'authoritative_applied'),
   cause_kind text NOT NULL CHECK (cause_kind = 'direct_author_action'),
   payload_digest text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (owner_user_id, project_id, manuscript_object_id, revision_id),
   UNIQUE (owner_user_id, project_id, creator_ref),
+  UNIQUE (owner_user_id, project_id, receipt_id),
+  UNIQUE (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    manuscript_object_id, parent_revision_id, revision_id
+  ),
   FOREIGN KEY (owner_user_id, project_id, manuscript_object_id, revision_id)
     REFERENCES storyos.authoritative_revisions
       (owner_user_id, project_id, manuscript_object_id, revision_id) MATCH FULL,
@@ -134,10 +141,20 @@ CREATE TABLE storyos.authoritative_commits (
   prior_revision_id uuid NOT NULL,
   resulting_revision_id uuid NOT NULL,
   author_command_admission_id uuid NOT NULL,
+  receipt_id uuid NOT NULL,
+  receipt_result_kind text NOT NULL CHECK (receipt_result_kind = 'authoritative_applied'),
   committed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY (owner_user_id, project_id, authoritative_commit_id),
   UNIQUE (owner_user_id, project_id, authoritative_commit_sequence),
   UNIQUE (owner_user_id, project_id, author_command_admission_id),
+  UNIQUE (owner_user_id, project_id, receipt_id),
+  UNIQUE (
+    owner_user_id, project_id, receipt_id, receipt_result_kind, authoritative_commit_id
+  ),
+  UNIQUE (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id, resulting_revision_id
+  ),
   UNIQUE (owner_user_id, project_id, authoritative_commit_id, resulting_revision_id),
   FOREIGN KEY (owner_user_id, project_id, manuscript_object_id, prior_revision_id)
     REFERENCES storyos.authoritative_revisions
@@ -186,6 +203,9 @@ CREATE TABLE storyos.domain_receipts (
   PRIMARY KEY (owner_user_id, project_id, receipt_id),
   UNIQUE (owner_user_id, project_id, author_command_admission_id),
   UNIQUE (owner_user_id, project_id, author_command_admission_id, receipt_id),
+  UNIQUE (
+    owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind
+  ),
   UNIQUE (owner_user_id, project_id, receipt_id, result_kind),
   CHECK (
     cardinality(expected_heads) = 1
@@ -242,6 +262,28 @@ CREATE INDEX domain_receipts_admission_fk_idx
   ON storyos.domain_receipts
     (owner_user_id, project_id, author_command_admission_id, command_id,
      command_kind, command_digest, idempotency_key);
+ALTER TABLE storyos.authoritative_revision_envelopes
+  ADD CONSTRAINT authoritative_revision_envelopes_applied_receipt_fk
+  FOREIGN KEY (
+    owner_user_id, project_id, creator_ref, receipt_id, receipt_result_kind
+  ) REFERENCES storyos.domain_receipts (
+    owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind
+  ) MATCH FULL DEFERRABLE INITIALLY DEFERRED;
+ALTER TABLE storyos.authoritative_commits
+  ADD CONSTRAINT authoritative_commits_applied_receipt_fk
+  FOREIGN KEY (
+    owner_user_id, project_id, author_command_admission_id, receipt_id, receipt_result_kind
+  ) REFERENCES storyos.domain_receipts (
+    owner_user_id, project_id, author_command_admission_id, receipt_id, result_kind
+  ) MATCH FULL DEFERRABLE INITIALLY DEFERRED,
+  ADD CONSTRAINT authoritative_commits_envelope_fk
+  FOREIGN KEY (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    manuscript_object_id, prior_revision_id, resulting_revision_id
+  ) REFERENCES storyos.authoritative_revision_envelopes (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    manuscript_object_id, parent_revision_id, revision_id
+  ) MATCH FULL DEFERRABLE INITIALLY DEFERRED;
 CREATE TABLE storyos.author_command_admission_settlements (
   owner_user_id uuid NOT NULL,
   project_id uuid NOT NULL,
@@ -276,9 +318,13 @@ CREATE TABLE storyos.author_action_entries (
   FOREIGN KEY (owner_user_id, project_id, receipt_id, receipt_result_kind)
     REFERENCES storyos.domain_receipts
       (owner_user_id, project_id, receipt_id, result_kind) MATCH FULL,
-  FOREIGN KEY (owner_user_id, project_id, authoritative_commit_id)
-    REFERENCES storyos.authoritative_commits
-      (owner_user_id, project_id, authoritative_commit_id) MATCH FULL
+  FOREIGN KEY (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id
+  ) REFERENCES storyos.authoritative_commits (
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id
+  ) MATCH FULL
 );
 CREATE INDEX author_action_entries_receipt_commit_fk_idx
   ON storyos.author_action_entries
@@ -305,9 +351,11 @@ CREATE TABLE storyos.project_activity_events (
     REFERENCES storyos.domain_receipts
       (owner_user_id, project_id, receipt_id, result_kind) MATCH FULL,
   FOREIGN KEY (
-    owner_user_id, project_id, authoritative_commit_id, resulting_revision_id
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id, resulting_revision_id
   ) REFERENCES storyos.authoritative_commits (
-    owner_user_id, project_id, authoritative_commit_id, resulting_revision_id
+    owner_user_id, project_id, receipt_id, receipt_result_kind,
+    authoritative_commit_id, resulting_revision_id
   ) MATCH FULL,
   FOREIGN KEY (
     owner_user_id, project_id, receipt_id, receipt_result_kind,
@@ -331,15 +379,14 @@ DECLARE
   scoped_owner_user_id uuid := COALESCE(NEW.owner_user_id, OLD.owner_user_id);
   scoped_project_id uuid := COALESCE(NEW.project_id, OLD.project_id);
   scoped_receipt_id uuid := COALESCE(NEW.receipt_id, OLD.receipt_id);
-  scoped_admission_id uuid;
   scoped_result_kind text;
   activity_count bigint;
   action_count bigint;
   commit_count bigint;
   revision_envelope_count bigint;
 BEGIN
-  SELECT receipt.author_command_admission_id, receipt.result_kind
-    INTO scoped_admission_id, scoped_result_kind
+  SELECT receipt.result_kind
+    INTO scoped_result_kind
     FROM storyos.domain_receipts AS receipt
    WHERE receipt.owner_user_id = scoped_owner_user_id
      AND receipt.project_id = scoped_project_id
@@ -362,12 +409,12 @@ BEGIN
     FROM storyos.authoritative_commits AS authoritative_commit
    WHERE authoritative_commit.owner_user_id = scoped_owner_user_id
      AND authoritative_commit.project_id = scoped_project_id
-     AND authoritative_commit.author_command_admission_id = scoped_admission_id;
+     AND authoritative_commit.receipt_id = scoped_receipt_id;
   SELECT count(*) INTO revision_envelope_count
     FROM storyos.authoritative_revision_envelopes AS envelope
    WHERE envelope.owner_user_id = scoped_owner_user_id
      AND envelope.project_id = scoped_project_id
-     AND envelope.creator_ref = scoped_admission_id;
+     AND envelope.receipt_id = scoped_receipt_id;
 
   IF scoped_result_kind = 'authoritative_applied' THEN
     IF (activity_count, action_count, commit_count, revision_envelope_count) <> (1, 1, 1, 1) THEN

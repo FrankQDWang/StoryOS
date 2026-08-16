@@ -60,6 +60,12 @@ can add a real edge only with a source-backed predecessor catalog, schema,
 persisted rows, and checksums. A semantic version or invented predecessor name
 never creates compatibility.
 
+The tracked bootstrap creates the runtime role without a password or other
+credential material. A deployment secret sets the runtime credential only
+after the atomic bootstrap commits and before runtime traffic starts. The local
+verification deployment injects one disposable test password after it proves
+that the tracked bootstrap stored no password.
+
 The entry verifier above remains the only public review command:
 `python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py
 --self-test`. It delegates shared source/link/digest helpers, storage and
@@ -379,6 +385,13 @@ Action, and Project Activity Event. `NoEffect`, `Conflicted`, and `Refused`
 write no authority row and no Project Activity row. No row from either write
 set is published as committed before the transaction commits.
 
+Every Author Edit Revision Envelope and Authoritative Commit carries the same
+non-null applied Receipt identity and result kind. Composite foreign keys bind
+the Envelope to the Receipt and bind the Commit to both the Receipt and the
+Envelope's exact object, parent Revision, and resulting Revision. Author Action
+and Project Activity references continue the same Receipt and Commit tuple.
+These references cannot name a zero-authority Receipt.
+
 The physical mapping is closed as follows:
 
 | Logical record | Catalog family | Required physical rule |
@@ -496,9 +509,13 @@ authority graph and Project Activity Event to that transaction.
 An exact retry first resolves `command_idempotency.result_reference`, then
 reads that exact `receipt_id` without joining an authority or Activity table.
 It validates Scope, command digest, Admission, `ReceiptSettled`, and idempotency
-linkage. It then branches on the Receipt `result_kind`. `AuthoritativeApplied`
+linkage. It also validates the Admission target and expected Head, and proves
+that every Receipt Head belongs to that target. It then branches on the Receipt
+`result_kind`. `AuthoritativeApplied`
 must have exactly one complete Activity, Author Action, Commit, Revision, and
-payload relation. `NoEffect`, `Conflicted`, and `Refused` must have none. A
+payload relation. Its prior Receipt Head, Commit prior Revision, Envelope parent
+Revision, target object, and payload digest must agree. `NoEffect`, `Conflicted`,
+and `Refused` must have no authority relation. A
 missing, duplicate, mixed, malformed, or surplus relation fails closed. The
 read path never uses an empty identity, zero position, nullable authority field,
 fallback join, or guessed current Head.
@@ -861,6 +878,10 @@ executes the ordered set in one PostgreSQL transaction. The catalog stores each
 LF-normalized source SHA-256 and the canonical manifest SHA-256. An unlisted
 SQL file, a missing file, source drift, manifest drift, or partial transaction
 blocks activation.
+
+The role source contains no password or secret material. Runtime credential
+provisioning is a deployment-secret step after the atomic bootstrap. It is not
+part of the catalogued SQL manifest, a schema default, or a repository fixture.
 
 Future Release 2 or later may introduce a migration edge only after its owning
 contract supplies a real predecessor schema identity, persisted-format catalog,

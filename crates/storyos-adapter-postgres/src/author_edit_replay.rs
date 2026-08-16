@@ -3,7 +3,9 @@ use storyos_application::{
     AuthorEditSettlementEffect, AuthoritativeAppliedIds,
 };
 
-use super::author_edit::{author_edit_challenge_error, author_edit_database_error, parse_u64};
+use super::author_edit::{
+    author_edit_challenge_error, author_edit_database_error, parse_u64, sha256_hex,
+};
 use super::*;
 
 impl PostgresProjectReader {
@@ -80,13 +82,35 @@ impl PostgresProjectReader {
                     AND receipt.idempotency_key = $5::text::uuid
                     AND settlement.settlement_kind = 'receipt_settled'
                     AND idempotency.outcome_kind = 'settled'
-                    AND idempotency.result_reference = receipt.receipt_id::text",
+                    AND idempotency.result_reference = receipt.receipt_id::text
+                    AND admission.chapter_object_id = $6::text::uuid
+                    AND admission.expected_authoritative_revision_id = $7::text::uuid
+                    AND admission.target_refs = $8::text[]
+                    AND admission.expected_proposal_head_revision_ids =
+                        receipt.proposal_revision_ids
+                    AND receipt.expected_heads =
+                        ARRAY[admission.expected_authoritative_revision_id]
+                    AND EXISTS (
+                      SELECT 1 FROM storyos.authoritative_revisions AS prior_revision
+                       WHERE prior_revision.owner_user_id = receipt.owner_user_id
+                         AND prior_revision.project_id = receipt.project_id
+                         AND prior_revision.manuscript_object_id = admission.chapter_object_id
+                         AND prior_revision.revision_id = receipt.prior_heads[1])
+                    AND EXISTS (
+                      SELECT 1 FROM storyos.authoritative_revisions AS resulting_revision
+                       WHERE resulting_revision.owner_user_id = receipt.owner_user_id
+                         AND resulting_revision.project_id = receipt.project_id
+                         AND resulting_revision.manuscript_object_id = admission.chapter_object_id
+                         AND resulting_revision.revision_id = receipt.resulting_heads[1])",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
                     &receipt_id,
                     &command.challenge_binding.canonical_command_digest,
                     &command.challenge_binding.idempotency_key,
+                    &command.chapter_id,
+                    &command.expected_authoritative_revision_id,
+                    &command.target_refs,
                 ],
             )
             .await
@@ -137,7 +161,11 @@ impl PostgresProjectReader {
                                   WHERE candidate.owner_user_id = activity.owner_user_id
                                     AND candidate.project_id = activity.project_id
                                     AND candidate.author_command_admission_id =
-                                        receipt.author_command_admission_id)
+                                        receipt.author_command_admission_id),
+                                commit.manuscript_object_id::text,
+                                commit.prior_revision_id::text,
+                                envelope.parent_revision_id::text,
+                                envelope.payload_digest
                            FROM storyos.domain_receipts AS receipt
                            JOIN storyos.project_activity_events AS activity
                              ON (activity.owner_user_id, activity.project_id,
@@ -154,9 +182,11 @@ impl PostgresProjectReader {
                                  activity.author_action_sequence)
                            JOIN storyos.authoritative_commits AS commit
                              ON (commit.owner_user_id, commit.project_id,
+                                 commit.receipt_id, commit.receipt_result_kind,
                                  commit.authoritative_commit_id, commit.resulting_revision_id,
                                  commit.author_command_admission_id) =
                                 (activity.owner_user_id, activity.project_id,
+                                 activity.receipt_id, activity.receipt_result_kind,
                                  activity.authoritative_commit_id,
                                  activity.resulting_revision_id,
                                  receipt.author_command_admission_id)
@@ -167,9 +197,11 @@ impl PostgresProjectReader {
                                  commit.manuscript_object_id, commit.resulting_revision_id)
                            JOIN storyos.authoritative_revision_envelopes AS envelope
                              ON (envelope.owner_user_id, envelope.project_id,
+                                 envelope.receipt_id, envelope.receipt_result_kind,
                                  envelope.manuscript_object_id, envelope.revision_id,
                                  envelope.creator_ref) =
                                 (revision.owner_user_id, revision.project_id,
+                                 receipt.receipt_id, receipt.result_kind,
                                  revision.manuscript_object_id, revision.revision_id,
                                  receipt.author_command_admission_id)
                            JOIN storyos.authoritative_payloads AS payload
@@ -191,12 +223,18 @@ impl PostgresProjectReader {
                     return Err(AuthorEditError::BindingConflict);
                 }
                 let relation = &relations[0];
+                let body = relation.get::<_, String>(7);
                 if relation.get::<_, String>(2) != "authoritative_author_edit_applied"
                     || relation.get::<_, String>(3) != commit_id
                     || relation.get::<_, String>(4) != revision_id
                     || resulting_head != revision_id
                     || relation.get::<_, i64>(8) != 1
                     || relation.get::<_, i64>(9) != 1
+                    || relation.get::<_, String>(10) != command.chapter_id
+                    || relation.get::<_, String>(11) != prior_head
+                    || relation.get::<_, String>(12) != prior_head
+                    || expected_head != prior_head
+                    || relation.get::<_, String>(13) != sha256_hex(body.as_bytes())
                 {
                     return Err(AuthorEditError::BindingConflict);
                 }
@@ -207,12 +245,16 @@ impl PostgresProjectReader {
                         authoritative_commit_id: commit_id,
                         project_activity_event_id: relation.get(0),
                     },
-                    body: relation.get(7),
+                    body,
                     author_action_sequence: parse_u64(relation.get(5))?,
                     project_activity_position: parse_u64(relation.get(1))?,
                 }
             }
-            "no_effect" if result_payload == serde_json::json!({"reason": "content_unchanged"}) => {
+            "no_effect"
+                if result_payload == serde_json::json!({"reason": "content_unchanged"})
+                    && expected_head == prior_head
+                    && prior_head == resulting_head =>
+            {
                 verify_zero_authority_relations(&client, command, receipt_id).await?;
                 AuthorEditSettlementEffect::NoEffect {
                     reason: storyos_core::AuthorEditNoEffect::ContentUnchanged,
@@ -289,16 +331,18 @@ async fn verify_zero_authority_relations(
                    AND receipt_id = $3::text::uuid),
                (SELECT count(*) FROM storyos.authoritative_commits
                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                   AND author_command_admission_id = (
-                     SELECT author_command_admission_id FROM storyos.domain_receipts
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND receipt_id = $3::text::uuid)),
+                   AND (receipt_id = $3::text::uuid
+                     OR author_command_admission_id = (
+                       SELECT author_command_admission_id FROM storyos.domain_receipts
+                        WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                          AND receipt_id = $3::text::uuid))),
                (SELECT count(*) FROM storyos.authoritative_revision_envelopes
                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                   AND creator_ref = (
-                     SELECT author_command_admission_id FROM storyos.domain_receipts
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND receipt_id = $3::text::uuid))",
+                   AND (receipt_id = $3::text::uuid
+                     OR creator_ref = (
+                       SELECT author_command_admission_id FROM storyos.domain_receipts
+                        WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                          AND receipt_id = $3::text::uuid)))",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),

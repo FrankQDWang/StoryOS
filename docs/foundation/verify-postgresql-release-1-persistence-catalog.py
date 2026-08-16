@@ -164,6 +164,15 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
     if not any("bootstrap SQL checksum mismatch" in error for error in bootstrap_errors):
         errors.append("negative self-test did not reject bootstrap SQL checksum drift")
 
+    credential_probe = copy.deepcopy(catalog)
+    credential_probe["migration_chain"]["bootstrap"]["runtime_credential_source"] = (
+        "tracked_bootstrap_password"
+    )
+    credential_errors: list[str] = []
+    validate_catalog(credential_probe, route_catalog, credential_errors, check_digests=False)
+    if not any("runtime credential" in error for error in credential_errors):
+        errors.append("negative self-test did not reject tracked runtime credential ownership")
+
 
 def main() -> int:
     raw = CATALOG_PATH.read_bytes()
@@ -204,6 +213,7 @@ def main() -> int:
         print("OK: predecessor-set negative self-test rejected a bad catalog")
         print("OK: invented-table-family negative self-test rejected a bad catalog")
         print("OK: bootstrap-checksum negative self-test rejected a bad catalog")
+        print("OK: bootstrap-credential negative self-test rejected a bad catalog")
     return 0
 
 
