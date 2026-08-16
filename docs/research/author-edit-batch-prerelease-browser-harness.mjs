@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+
+import { captureBrowserDom } from "./author-edit-batch-browser-process.mjs";
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const policyPath = join(root, "docs/foundation/author-edit-batch-release-1-policy.json");
 const evidencePath = join(root, "docs/research/author-edit-batch-prerelease-browser-evidence.json");
@@ -268,26 +270,14 @@ const directory = mkdtempSync(join(tmpdir(), "storyos-author-edit-batch-"));
 try {
   const html = join(directory, "harness.html");
   writeFileSync(html, page);
-  const run = await new Promise((resolve, reject) => {
-    const child = spawn(chrome, ["--headless=new", "--disable-gpu", "--no-sandbox",
+  const run = await captureBrowserDom({
+    chrome,
+    args: ["--headless=new", "--disable-gpu", "--no-sandbox",
     `--user-data-dir=${join(directory, "profile")}`, "--timeout=5000", "--dump-dom",
-    pathToFileURL(html).href]);
-    let stdout = ""; let stderr = ""; let settled = false; let failure; let timer;
-    child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8");
-    const stop = error => {
-      if (settled) return;
-      if (error) failure = error;
-      if (!child.killed) child.kill("SIGKILL");
-    };
-    child.stdout.on("data", data => { stdout += data; if (stdout.includes("</pre>")) stop(); });
-    child.stderr.on("data", data => { stderr += data; });
-    child.once("error", error => { failure = error; finish(); }); child.once("close", finish);
-    timer = setTimeout(() => stop(new Error(`browser harness timed out: ${stderr}`)), 15000);
-    function finish() {
-      if (settled) return;
-      settled = true; clearTimeout(timer);
-      if (failure) reject(failure); else resolve({ stdout, stderr });
-    }
+    pathToFileURL(html).href],
+    outputIsComplete: output => output.includes("</pre>"),
+    executionTimeoutMs: 15000,
+    shutdownTimeoutMs: 1000,
   });
   const encoded = run.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
   assert.ok(encoded && encoded !== "running",

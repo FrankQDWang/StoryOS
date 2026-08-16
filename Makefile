@@ -8,6 +8,7 @@ contracts:
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py --self-test
+	node --test docs/research/author-edit-batch-browser-process.test.mjs
 	node docs/research/author-edit-batch-prerelease-browser-harness.mjs
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	cargo run --quiet -p storyos-contracts -- check
