@@ -300,11 +300,15 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-        outcomes.push(
-            storyos_application::apply_author_edit(&store, &outcome_command)
-                .await
-                .unwrap(),
-        );
+        let settlement = storyos_application::apply_author_edit(&store, &outcome_command)
+            .await
+            .unwrap();
+        let exact_retry = storyos_application::apply_author_edit(&store, &outcome_command)
+            .await
+            .unwrap();
+        assert_eq!(exact_retry.effect, settlement.effect);
+        assert_eq!(exact_retry.ids.receipt_id, settlement.ids.receipt_id);
+        outcomes.push(settlement);
     }
     assert!(matches!(
         outcomes[0].effect,
@@ -328,6 +332,136 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
 
     let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
+
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET expected_heads = ARRAY[$4::text::uuid]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.receipt_id,
+                &command.ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &command).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET expected_heads = ARRAY[$4::text::uuid]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND receipt_id = $3::text::uuid",
+            &[&USER, &PROJECT, &command.ids.receipt_id, &REVISION],
+        )
+        .await
+        .unwrap();
+
+    admin
+        .execute(
+            "UPDATE storyos.author_command_admissions
+                SET target_refs = ARRAY['manuscript:corrupt']::text[]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[&USER, &PROJECT, &command.ids.author_command_admission_id],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &command).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.author_command_admissions
+                SET target_refs = ARRAY[$4]::text[]
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.author_command_admission_id,
+                &format!("manuscript:{CHAPTER}"),
+            ],
+        )
+        .await
+        .unwrap();
+
+    let corrupt_prior = admin.transaction().await.unwrap();
+    corrupt_prior
+        .execute(
+            "UPDATE storyos.authoritative_revision_envelopes
+                SET parent_revision_id = $4::text::uuid,
+                    payload_digest = 'sha256:corrupt'
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND creator_ref = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.author_command_admission_id,
+                &command.ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+    corrupt_prior
+        .execute(
+            "UPDATE storyos.authoritative_commits SET prior_revision_id = $4::text::uuid
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.author_command_admission_id,
+                &command.ids.revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+    corrupt_prior.commit().await.unwrap();
+    assert!(matches!(
+        storyos_application::apply_author_edit(&store, &command).await,
+        Err(storyos_application::AuthorEditError::BindingConflict)
+    ));
+    let restore_prior = admin.transaction().await.unwrap();
+    restore_prior
+        .execute(
+            "UPDATE storyos.authoritative_revision_envelopes
+                SET parent_revision_id = $4::text::uuid, payload_digest = $5
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND creator_ref = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.author_command_admission_id,
+                &REVISION,
+                &sha256_hex(b"Authoritative A!"),
+            ],
+        )
+        .await
+        .unwrap();
+    restore_prior
+        .execute(
+            "UPDATE storyos.authoritative_commits SET prior_revision_id = $4::text::uuid
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &command.ids.author_command_admission_id,
+                &REVISION,
+            ],
+        )
+        .await
+        .unwrap();
+    restore_prior.commit().await.unwrap();
+
     let evidence = admin
         .query_one(
             "SELECT
