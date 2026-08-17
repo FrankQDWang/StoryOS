@@ -123,8 +123,24 @@ ACK_LOSS_GATE_PROFILE = {
         "bundles": ["B-CONTRACT", "B-CORE", "B-EDITOR", "B-SCOPE"],
     },
     "external_dispatch_branch": {
+        "owners": ["OWN-PROTO", "OWN-CTX", "OWN-PG", "OWN-RET"],
+        "fixtures": [
+            "FX-CONTEXT-DISCLOSURE", "FX-FAKE-MODEL", "FX-REAL-MODEL-ADVISORY",
+        ],
+        "fault_points": [
+            "CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO",
+            "CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION",
+            "CFP-RECONCILIATION-BEFORE-SETTLEMENT",
+            "CFP-LATE-RESULT",
+        ],
+        "schedules": ["SCH-UNKNOWN", "SCH-FENCE"],
+        "oracle": "ORC-OUTCOME-UNKNOWN",
+        "bundles": ["B-CONTEXT", "B-FAKE"],
         "unknown_disposition": "PASS-UNKNOWN",
+        "reconciled_disposition": "PASS-POS",
+        "unresolved_disposition": "PASS-HOLD",
         "reconciliation": "separately_admitted_reconciliation_or_new_attempt",
+        "fence_and_late_result": "preserved",
         "author_command_outcome_read": False,
     },
     "author_command_branch": {
@@ -213,6 +229,25 @@ ACK_LOSS_GATE_PROFILE = {
         ],
     },
 }
+ACK_LOSS_ROW_SHA256 = {
+    "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL":
+        "1b9647400c92a5bba11fe3e7f00f5571426c271ffaa6b7bfa527a46e61c2593a",
+    "SCH-UNKNOWN": "3c762c82fb2c46527211e9f4477684034d85c3a25549a96cd4667d8ba66cc2a1",
+    "DVG-08": "1fd599932d12e0fabf57440215e14b21baf7841e09ea9eb13e6b6788c3e66579",
+    "ORC-OUTCOME-UNKNOWN":
+        "2cf2ec76df8c930a6764695c6b8ea055107f576b1d6c8203c2cd51bddac2ce97",
+}
+
+
+def strict_json_object(pairs: list[tuple[str, object]]) -> dict:
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 def current_sources() -> tuple[dict, dict, list[dict], dict, dict[str, str]]:
@@ -291,8 +326,8 @@ def dvg_ack_loss_errors(dvg_projection: str) -> list[str]:
     if not profile_match:
         return ["DVG acknowledgement-loss profile is missing"]
     try:
-        profile = json.loads(profile_match.group(1))
-    except json.JSONDecodeError:
+        profile = json.loads(profile_match.group(1), object_pairs_hook=strict_json_object)
+    except (json.JSONDecodeError, ValueError):
         return ["DVG acknowledgement-loss profile is not valid JSON"]
     if profile != ACK_LOSS_GATE_PROFILE:
         errors.append("DVG acknowledgement-loss profile drifted")
@@ -327,7 +362,10 @@ def dvg_ack_loss_errors(dvg_projection: str) -> list[str]:
         rows = re.findall(
             rf"^\|\s*`{re.escape(row_id)}`.*$", visible_dvg, flags=re.MULTILINE
         )
-        if len(rows) != 1 or any(requirement not in rows[0] for requirement in requirements):
+        if (len(rows) != 1
+                or any(requirement not in rows[0] for requirement in requirements)
+                or hashlib.sha256(rows[0].encode()).hexdigest()
+                != ACK_LOSS_ROW_SHA256[row_id]):
             errors.append(f"DVG {row_id} acknowledgement-loss row drifted")
     return errors
 def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]:
@@ -976,6 +1014,12 @@ def self_test() -> None:
         ('"post_replay": "forbidden"', '"post_replay": "permitted"'),
         ('"author_command_outcome_read": false',
          '"author_command_outcome_read": true'),
+        ('"unknown_disposition": "PASS-UNKNOWN"',
+         '"unknown_disposition": "PASS-POS"'),
+        ('"fence_and_late_result": "preserved"',
+         '"fence_and_late_result": "removed"'),
+        ('"CFP-LATE-RESULT"', '"CFP-EDITOR-BEFORE-GROUP-ADMISSION"'),
+        ('"FX-REAL-MODEL-ADVISORY"', '"FX-RECOVERY-EDITOR"'),
         ('"applyAuthorEdit",', ""),
         ('"fixtures": ["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"]',
          '"fixtures": ["FX-RECOVERY-EDITOR"]'),
@@ -988,14 +1032,35 @@ def self_test() -> None:
             policy_errors(policy, evidence, candidate_metrics, response_schema,
                           changed_projections)
         )
+    changed_projections = dict(projections)
+    changed_projections[dvg] = changed_projections[dvg].replace(
+        '"post_replay": "forbidden",',
+        '"post_replay": "permitted",\n    "post_replay": "forbidden",',
+        1,
+    )
+    assert "profile is not valid JSON" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, response_schema,
+                      changed_projections)
+    )
     for row_id, old, new in (
         ("CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
          "repeat only the protected outcome GET", "repeat the POST"),
+        ("CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+         "No saved, rejected, settled, queue-release, Receipt, Activity, or authority projection",
+         "A saved projection"),
         ("SCH-UNKNOWN", "no POST replay, process termination, or restart",
          "POST replay is allowed"),
+        ("SCH-UNKNOWN", "before command commit", "after command commit"),
         ("DVG-08", "Author Command branch", "External-only branch"),
+        ("DVG-08", "never creates a reconciliation command or POST Attempt",
+         "may create a new challenge and Admission"),
         ("ORC-OUTCOME-UNKNOWN", "`Rejected` is `PASS-REFUSAL`",
          "`Rejected` is `PASS-POS`"),
+        ("ORC-OUTCOME-UNKNOWN",
+         "A scheduled canonical security or input Problem is gate-level `PASS-REFUSAL` but leaves the Journal unresolved",
+         "A canonical Problem terminally rejects the Journal"),
+        ("ORC-OUTCOME-UNKNOWN", "No unresolved branch invents success",
+         "`StillUnknown` is also `PASS-POS`. No unresolved branch invents success"),
     ):
         changed_projections = dict(projections)
         changed_projections[dvg] = changed_projections[dvg].replace(old, new, 1)
