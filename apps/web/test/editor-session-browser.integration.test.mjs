@@ -73,6 +73,25 @@ const session = {
       value_hex_lowercase: "7b47361aad19bb483aeab081a7df0a55f7cb0fdb3327efe6dd016e6353a17880" },
     created_at: "2026-08-13T08:00:00.000Z" }
 };
+const freshSession = {
+  ...session,
+  schema_id: "storyos.query.editor-session.response.v1",
+  correlation_id: "018f0000-0000-7001-8000-000000000037",
+  base_snapshot: {
+    ...session.base_snapshot,
+    snapshot_id: "018f0000-0000-7001-8000-000000000038",
+    project_activity_position: "1",
+    authoritative_head_revision_id: "018f0000-0000-7001-8000-000000000034",
+    materialized_revision: {
+      revision_id: "018f0000-0000-7001-8000-000000000034", body: "Base!",
+    },
+    materialized_payload_digest: {
+      algorithm: "sha256", profile: "storyos.canonical-payload.sha256.v1",
+      value_hex_lowercase: "f284a09f33779160d1efe782e2ad3f630b0ece4127b45c9f4caf3715c980fae0",
+    },
+    created_at: "2026-08-15T08:00:00.000Z",
+  },
+};
 const requestPaths = [];
 const authorEditRequests = [];
 const challengeRequests = [];
@@ -99,9 +118,11 @@ const fetchImpl = async (url, options = {}) => {
       limit_profile_revision: "storyos.foundation.absolute.v1" });
   }
   if (path.endsWith("/editor-sessions")) return jsonResponse(session);
-  if (path.endsWith("/editor-sessions/" + SESSION)) return jsonResponse({
-    ...session, schema_id: "storyos.query.editor-session.response.v1",
-  });
+  if (path.endsWith("/editor-sessions/" + SESSION)) return jsonResponse(
+    authorEditRequests.length === 0
+      ? { ...session, schema_id: "storyos.query.editor-session.response.v1" }
+      : freshSession,
+  );
   if (path.endsWith("/manuscript/author-edits")) {
     const request = JSON.parse(options.body);
     authorEditRequests.push({
@@ -394,6 +415,7 @@ test("a real browser reload submits one frozen Author Edit and settles its Recei
     const pathname = new URL(request.url, "http://storyos.test").pathname;
     const allowed = pathname === "/apps/web/src/editor-session.mjs"
       || pathname === "/apps/web/src/author-edit-submission.mjs"
+      || pathname === "/apps/web/src/local-edit-journal.mjs"
       || pathname === "/generated/typescript/storyos-public-release-1/client.mjs";
     if (!allowed) {
       response.writeHead(404).end();

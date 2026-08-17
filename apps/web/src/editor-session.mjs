@@ -4,15 +4,19 @@ import {
   digestCreateEditorSession,
   getEditorSession,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  JOURNAL_DATABASE_VERSION,
+  persistReplaceSelection,
+  rebuildPendingProjection,
+} from "./local-edit-journal.mjs";
 
 export {
   freezeOneIntentSubmission,
   submitOnePendingAuthorEdit,
 } from "./author-edit-submission.mjs";
+export { persistReplaceSelection, rebuildPendingProjection } from "./local-edit-journal.mjs";
 
-const DATABASE_VERSION = 2;
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
-const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v2";
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const boundedU64 = (value) => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
@@ -38,21 +42,10 @@ function uuidV7(cryptoImpl = globalThis.crypto, now = Date.now()) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-async function digestJson(value, cryptoImpl) {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
-  return {
-    algorithm: "sha256",
-    profile: "storyos.local-edit-journal.payload.sha256.v1",
-    value_hex_lowercase: [...digest]
-      .map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  };
-}
-
 async function openJournalDatabase(indexedDBImpl, scope) {
   if (!indexedDBImpl) throw new Error("IndexedDB is unavailable");
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
-  const request = indexedDBImpl.open(name, DATABASE_VERSION);
+  const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
     if (event.oldVersion > 1) {
       request.transaction.abort();
@@ -73,7 +66,8 @@ async function openJournalDatabase(indexedDBImpl, scope) {
       keyPath: "journal_submission_group_id",
     });
     groups.createIndex("partition", "journal_partition_id", { unique: false });
-    request.transaction.objectStore("metadata").put({ key: "schema", version: DATABASE_VERSION });
+    request.transaction.objectStore("metadata")
+      .put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
   };
   const database = await requestResult(request);
   if (["metadata", "partitions", "payload_chains", "intents", "submission_groups"]
@@ -83,7 +77,7 @@ async function openJournalDatabase(indexedDBImpl, scope) {
   }
   const schema = await requestResult(database.transaction("metadata", "readonly")
     .objectStore("metadata").get("schema"));
-  if (schema?.version !== DATABASE_VERSION) {
+  if (schema?.version !== JOURNAL_DATABASE_VERSION) {
     database.close();
     throw new Error("Local Edit Journal schema is incompatible");
   }
@@ -200,14 +194,25 @@ export async function openEditorWorkspace({
       : await createSession({ baseUrl, project, profile, fetchImpl, cryptoImpl });
     await validateSession(session, scope, chapter, profile, cryptoImpl);
     const partition = partitionFrom(session, scope, profile);
-    const transaction = database.transaction("partitions", "readwrite");
+    const transaction = database.transaction(["metadata", "partitions"], "readwrite");
     const partitions = transaction.objectStore("partitions");
-    const existingPartition = await requestResult(partitions.get(partition.journal_partition_id));
+    const activeBaseKey = `active_base:${partition.journal_partition_id}`;
+    const [existingPartition, activeBase] = await Promise.all([
+      requestResult(partitions.get(partition.journal_partition_id)),
+      requestResult(transaction.objectStore("metadata").get(activeBaseKey)),
+    ]);
     if (existingPartition && JSON.stringify(existingPartition) !== JSON.stringify(partition)) {
       transaction.abort();
       throw new Error("Local Edit Journal partition is corrupt");
     }
+    if (activeBase && JSON.stringify(activeBase.value) !== JSON.stringify(session.base_snapshot)) {
+      transaction.abort();
+      throw new Error("Local Edit Journal active base is corrupt");
+    }
     if (!existingPartition) partitions.add(partition);
+    if (!activeBase) {
+      transaction.objectStore("metadata").add({ key: activeBaseKey, value: session.base_snapshot });
+    }
     await transactionResult(transaction);
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
     const workspace = { database, partition, session, cryptoImpl,
@@ -223,210 +228,4 @@ export async function openEditorWorkspace({
     database?.close();
     return { kind: "editor-read-only-recovery", code: "local_journal_unavailable", error };
   }
-}
-
-export async function persistReplaceSelection(workspace, edit, cryptoImpl = globalThis.crypto) {
-  if (workspace.partition.disposition !== "current_writer_open") throw new Error("Editor Session is read only");
-  const base = workspace.session.base_snapshot;
-  if (!Number.isSafeInteger(edit.from) || !Number.isSafeInteger(edit.to)
-    || edit.from < 0 || edit.to < edit.from || typeof edit.text !== "string"
-    || typeof edit.resultingBody !== "string"
-    || new TextEncoder().encode(edit.text).byteLength > workspace.maxJsonStringUtf8Bytes
-    || new TextEncoder().encode(edit.resultingBody).byteLength
-      > workspace.maxJsonStringUtf8Bytes) {
-    throw new Error("Local Edit Journal limit failed");
-  }
-  const completedIntentRecordId = uuidV7(cryptoImpl);
-  const payloadChainId = uuidV7(cryptoImpl);
-  const patchId = uuidV7(cryptoImpl);
-  const resultingPayloadDigest = await digestJson(edit.resultingBody, cryptoImpl);
-  const payloadChain = {
-    payload_chain_id: payloadChainId,
-    journal_partition_id: workspace.partition.journal_partition_id,
-    checkpoint_ref: {
-      chapter_object_id: base.chapter_id,
-      materialized_payload: base.materialized_revision.body,
-      materialized_payload_digest: base.materialized_payload_digest,
-      source_snapshot_id: base.snapshot_id,
-      source_heads: [base.authoritative_head_revision_id],
-    },
-    ordered_patch_refs: [{
-      patch_id: patchId,
-      completed_intent_record_id: completedIntentRecordId,
-      normalized_primitives: [{ kind: "replace_selection", from: edit.from, to: edit.to,
-        text: edit.text }],
-      resulting_payload_digest: resultingPayloadDigest,
-    }],
-  };
-  const authorEditUnit = {
-    normalized_primitives: [{ kind: "replace_selection", from: edit.from, to: edit.to,
-      text: edit.text }],
-    selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-      from: edit.from, to: edit.to },
-  };
-  const payloadDigest = await digestJson(authorEditUnit, cryptoImpl);
-  const transaction = workspace.database
-    .transaction(["metadata", "partitions", "payload_chains", "intents"], "readwrite");
-  const metadata = transaction.objectStore("metadata");
-  const intents = transaction.objectStore("intents");
-  const [schema, partition, current, partitionIntentCount] = await Promise.all([
-    requestResult(metadata.get("schema")),
-    requestResult(transaction.objectStore("partitions")
-      .get(workspace.partition.journal_partition_id)),
-    requestResult(metadata.get("local_intent_sequence")),
-    requestResult(intents.index("partition").count(workspace.partition.journal_partition_id)),
-  ]);
-  if (schema?.version !== DATABASE_VERSION
-    || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
-    || partitionIntentCount !== 0) {
-    transaction.abort();
-    throw new Error("Local Edit Journal schema or partition is incompatible");
-  }
-  const sequence = (current?.value ?? 0) + 1;
-  if (!Number.isSafeInteger(sequence)) {
-    transaction.abort();
-    throw new Error("Local Edit Journal limit failed");
-  }
-  const record = {
-    completed_intent_record_id: completedIntentRecordId,
-    local_intent_sequence: sequence,
-    journal_partition_id: workspace.partition.journal_partition_id,
-    project_scope: workspace.partition.project_scope,
-    editor_session_id: workspace.partition.editor_session_id,
-    writer_generation: workspace.partition.writer_generation,
-    limit_profile_revision: workspace.partition.limit_profile_revision,
-    chapter_object_id: base.chapter_id,
-    base_snapshot_id: base.snapshot_id,
-    base_activity_position: base.project_activity_position,
-    target_refs: base.target_refs,
-    expected_authoritative_heads: [base.authoritative_head_revision_id],
-    expected_proposal_heads: base.proposal_head_revision_ids,
-    proposal_anchors: [],
-    observed_ownership_partition: base.observed_ownership_partition,
-    author_edit_unit: authorEditUnit,
-    retry_source: { kind: "fresh_editor_intent" },
-    editor_contract_revision: EDITOR_CONTRACT_REVISION,
-    undo_group_binding: { kind: "ordinary_typing", undo_group_id: uuidV7(cryptoImpl) },
-    payload_chain_ref: payloadChainId,
-    payload_digest: payloadDigest,
-    projection_dependency: { snapshot_id: base.snapshot_id, prior_sequence: sequence - 1 },
-    created_at: new Date().toISOString(),
-  };
-  metadata.put({ key: "local_intent_sequence", value: sequence });
-  metadata.put({ key: `durable_high_watermark:${workspace.partition.journal_partition_id}`,
-    value: sequence });
-  payloadChain.ordered_patch_refs[0].local_intent_sequence = sequence;
-  transaction.objectStore("payload_chains").add(payloadChain);
-  intents.add(record);
-  await transactionResult(transaction);
-  return rebuildPendingProjection(workspace);
-}
-
-export async function rebuildPendingProjection(workspace) {
-  const transaction = workspace.database
-    .transaction(["metadata", "payload_chains", "intents", "submission_groups"], "readonly");
-  const recordsRequest = transaction.objectStore("intents")
-    .index("partition").getAll(workspace.partition.journal_partition_id, 2);
-  const payloadChainsRequest = transaction.objectStore("payload_chains").index("partition")
-    .getAll(workspace.partition.journal_partition_id, 2);
-  const watermarkRequest = transaction.objectStore("metadata")
-    .get(`durable_high_watermark:${workspace.partition.journal_partition_id}`);
-  const groupsRequest = transaction.objectStore("submission_groups")
-    .index("partition").getAll(workspace.partition.journal_partition_id, 2);
-  const [records, payloadChains, watermark, groups] = await Promise.all([
-    requestResult(recordsRequest), requestResult(payloadChainsRequest), requestResult(watermarkRequest),
-    requestResult(groupsRequest),
-  ]);
-  const chainsById = new Map(payloadChains.map((chain) => [chain.payload_chain_id, chain]));
-  if (records.length > 1 || payloadChains.length > 1 || groups.length > 1) {
-    throw new Error("Local Edit Journal exceeds this Editor Session scope");
-  }
-  records.sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
-  const base = workspace.session.base_snapshot;
-  let body = base.materialized_revision.body;
-  let priorSequence = 0;
-  for (const record of records) {
-    const payloadChain = chainsById.get(record.payload_chain_ref);
-    const checkpoint = payloadChain?.checkpoint_ref;
-    const patchRefs = payloadChain?.ordered_patch_refs ?? [];
-    const [patchRef] = patchRefs;
-    const expectedDigest = await digestJson(record.author_edit_unit, workspace.cryptoImpl);
-    if (record.journal_partition_id !== workspace.partition.journal_partition_id
-      || record.editor_session_id !== workspace.partition.editor_session_id
-      || record.writer_generation !== workspace.partition.writer_generation
-      || record.limit_profile_revision !== workspace.partition.limit_profile_revision
-      || record.chapter_object_id !== base.chapter_id
-      || record.base_snapshot_id !== base.snapshot_id
-      || record.base_activity_position !== base.project_activity_position
-      || JSON.stringify(record.project_scope) !== JSON.stringify(workspace.partition.project_scope)
-      || record.local_intent_sequence !== priorSequence + 1
-      || record.projection_dependency?.snapshot_id !== base.snapshot_id
-      || record.projection_dependency?.prior_sequence !== record.local_intent_sequence - 1
-      || record.retry_source?.kind !== "fresh_editor_intent"
-      || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
-      || record.undo_group_binding?.kind !== "ordinary_typing"
-      || !record.undo_group_binding?.undo_group_id
-      || JSON.stringify(record.target_refs) !== JSON.stringify(base.target_refs)
-      || JSON.stringify(record.expected_authoritative_heads)
-        !== JSON.stringify([base.authoritative_head_revision_id])
-      || JSON.stringify(record.expected_proposal_heads)
-        !== JSON.stringify(base.proposal_head_revision_ids)
-      || JSON.stringify(record.proposal_anchors) !== JSON.stringify([])
-      || record.observed_ownership_partition !== base.observed_ownership_partition
-      || payloadChain?.payload_chain_id !== record.payload_chain_ref
-      || payloadChain?.journal_partition_id !== workspace.partition.journal_partition_id
-      || patchRefs.length !== 1
-      || checkpoint?.chapter_object_id !== base.chapter_id
-      || checkpoint?.source_snapshot_id !== base.snapshot_id
-      || checkpoint?.materialized_payload !== base.materialized_revision.body
-      || JSON.stringify(checkpoint?.source_heads)
-        !== JSON.stringify([base.authoritative_head_revision_id])
-      || JSON.stringify(checkpoint?.materialized_payload_digest)
-        !== JSON.stringify(base.materialized_payload_digest)
-      || patchRef?.completed_intent_record_id !== record.completed_intent_record_id
-      || patchRef?.local_intent_sequence !== record.local_intent_sequence
-      || JSON.stringify(patchRef?.normalized_primitives)
-        !== JSON.stringify(record.author_edit_unit.normalized_primitives)
-      || JSON.stringify(record.payload_digest) !== JSON.stringify(expectedDigest)) {
-      throw new Error("Local Edit Journal is corrupt");
-    }
-    const primitives = patchRef.normalized_primitives;
-    const [patch] = primitives;
-    if (primitives.length !== 1 || !patch || patch.kind !== "replace_selection"
-      || patch.from < 0 || patch.to < patch.from
-      || patch.to > body.length) throw new Error("Local Edit Journal reconstruction failed");
-    body = `${body.slice(0, patch.from)}${patch.text}${body.slice(patch.to)}`;
-    if (new TextEncoder().encode(body).byteLength > workspace.maxJsonStringUtf8Bytes) {
-      throw new Error("Local Edit Journal limit failed");
-    }
-    const resultingDigest = await digestJson(body, workspace.cryptoImpl);
-    if (JSON.stringify(resultingDigest) !== JSON.stringify(patchRef.resulting_payload_digest)) {
-      throw new Error("Local Edit Journal is corrupt");
-    }
-    priorSequence = record.local_intent_sequence;
-  }
-  if ((records.length === 0 && watermark !== undefined)
-    || (records.length > 0 && watermark?.value !== records.at(-1).local_intent_sequence)) {
-    throw new Error("Local Edit Journal is corrupt");
-  }
-  const [group] = groups;
-  if (group && (group.journal_partition_id !== workspace.partition.journal_partition_id
-    || group.ordered_coverage.length !== 1
-    || group.ordered_coverage[0].intent_record_ref !== records[0]?.completed_intent_record_id
-    || group.covered_sequence_range.first !== records[0]?.local_intent_sequence
-    || group.covered_sequence_range.last !== records[0]?.local_intent_sequence)) {
-    throw new Error("Journal Submission Group is corrupt");
-  }
-  const settled = group?.settlement?.kind === "receipt_settled";
-  if (settled) {
-    body = group.settlement.authoritative_revision.body;
-  }
-  return {
-    body,
-    save_state: settled ? "saved" : records.length ? "saving" : "clean",
-    unsettled_intent_count: settled ? 0 : records.length,
-    authoritative_revision_id: settled
-      ? group.settlement.authoritative_revision.revision_id
-      : workspace.session.base_snapshot.authoritative_head_revision_id,
-  };
 }
