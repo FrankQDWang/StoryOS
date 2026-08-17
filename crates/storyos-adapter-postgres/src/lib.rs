@@ -4,7 +4,12 @@
 #[path = "project_command_challenge_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "author_edit_outcome_tests.rs"]
+mod author_edit_outcome_tests;
+
 mod author_edit;
+mod author_edit_outcome;
 mod author_edit_replay;
 mod author_edit_settlement;
 mod editor_session;

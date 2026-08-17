@@ -1,8 +1,10 @@
 use storyos_application::{
-    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
+    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditUnknownObservation,
+    AuthorCommandAdmissionIds, CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId,
     EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, create_editor_session,
-    get_editor_session, issue_project_command_challenge,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, ReadApplyAuthorEditOutcome, UserId,
+    create_editor_session, get_apply_author_edit_outcome, get_editor_session,
+    issue_project_command_challenge,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use tokio_postgres::NoTls;
@@ -260,14 +262,65 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             AuthorEditFault::None => unreachable!(),
         };
         assert!(format!("{error:?}").contains(expected_point), "{error:?}");
+        if fault != AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
+            let outcome = get_apply_author_edit_outcome(
+                &store,
+                &ReadApplyAuthorEditOutcome {
+                    project_scope: scope.clone(),
+                    client_binding: command.client_binding.clone(),
+                    limit_profile_revision: command
+                        .challenge_binding
+                        .limit_profile_revision
+                        .clone(),
+                    idempotency_key: command.challenge_binding.idempotency_key.clone(),
+                    nonce_digest: command.nonce_digest.clone(),
+                },
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                outcome,
+                ApplyAuthorEditOutcome::StillUnknown {
+                    observation: ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+                        command_id: command.ids.command_id.clone(),
+                        author_command_admission_id: command
+                            .ids
+                            .author_command_admission_id
+                            .clone(),
+                    },
+                }
+            );
+        }
         if fault == AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
             committed_command = Some(command);
         }
     }
     let command = committed_command.unwrap();
+    let committed_outcome = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: command.client_binding.clone(),
+            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
     let replay = storyos_application::apply_author_edit(&store, &command)
         .await
         .unwrap();
+    assert_eq!(
+        committed_outcome,
+        ApplyAuthorEditOutcome::Committed(Box::new(CommittedApplyAuthorEdit {
+            correlation_id: command.correlation_id.clone(),
+            canonical_command_digest: command.challenge_binding.canonical_command_digest.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
+            settlement: replay.clone(),
+        }))
+    );
     let replay_applied_ids = match &replay.effect {
         storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => {
             ids.clone()
@@ -368,6 +421,25 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         let settlement = storyos_application::apply_author_edit(&store, &outcome_command)
             .await
             .unwrap();
+        let queried_outcome = get_apply_author_edit_outcome(
+            &store,
+            &ReadApplyAuthorEditOutcome {
+                project_scope: scope.clone(),
+                client_binding: outcome_command.client_binding.clone(),
+                limit_profile_revision: outcome_command
+                    .challenge_binding
+                    .limit_profile_revision
+                    .clone(),
+                idempotency_key: outcome_command.challenge_binding.idempotency_key.clone(),
+                nonce_digest: outcome_command.nonce_digest.clone(),
+            },
+        )
+        .await
+        .unwrap();
+        let ApplyAuthorEditOutcome::Committed(queried) = queried_outcome else {
+            panic!("a settled zero-authority Receipt must read as Committed")
+        };
+        assert_eq!(queried.settlement, settlement);
         let exact_retry = storyos_application::apply_author_edit(&store, &outcome_command)
             .await
             .unwrap();
@@ -478,6 +550,61 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
 
     let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
+
+    let payload_command = &outcome_commands[2];
+    admin
+        .execute(
+            "UPDATE storyos.author_command_admissions
+                SET command_payload = jsonb_set(
+                  command_payload,
+                  '{author_edit_units,0,selection_snapshot,to}',
+                  '999'::jsonb,
+                  false)
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &payload_command.ids.author_command_admission_id,
+            ],
+        )
+        .await
+        .unwrap();
+    let payload_error = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: payload_command.client_binding.clone(),
+            limit_profile_revision: payload_command
+                .challenge_binding
+                .limit_profile_revision
+                .clone(),
+            idempotency_key: payload_command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: payload_command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .expect_err("a changed stored command payload must fail its durable digest");
+    assert_eq!(
+        payload_error.to_string(),
+        "Apply Author Edit outcome read is unavailable"
+    );
+    admin
+        .execute(
+            "UPDATE storyos.author_command_admissions SET command_payload = $4::text::jsonb
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &payload_command.ids.author_command_admission_id,
+                &String::from_utf8(payload_command.canonical_command_bytes.clone()).unwrap(),
+            ],
+        )
+        .await
+        .unwrap();
 
     let activity = admin
         .query_one(
@@ -1046,6 +1173,22 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         storyos_application::apply_author_edit(&store, &command).await,
         Err(storyos_application::AuthorEditError::BindingConflict)
     ));
+    let corrupt_outcome_error = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: command.client_binding.clone(),
+            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .expect_err("a corrupt Receipt-first relation must not produce Committed");
+    assert_eq!(
+        corrupt_outcome_error.to_string(),
+        "Apply Author Edit outcome read is unavailable"
+    );
     let prior_restoration = admin.transaction().await.unwrap();
     prior_restoration
         .execute(
