@@ -2,9 +2,18 @@ import {
   applyAuthorEdit,
   createProjectCommandChallenge,
   digestApplyAuthorEdit,
-  getChapter,
+  getEditorSession,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { rebuildPendingProjection } from "./editor-session.mjs";
+import {
+  AUTHOR_EDIT_BATCH_POLICY_REVISION,
+  AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES,
+  AUTHOR_EDIT_MAX_UNITS,
+  AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
+  mayAppendJournalSubmissionRecord,
+  rebuildPendingProjection,
+  readJournalSnapshot,
+  validateJournalSnapshot,
+} from "./local-edit-journal.mjs";
 
 const DATABASE_VERSION = 2;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -12,6 +21,13 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12
 const boundedU64 = (value) => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 const positiveU64 = (value) => boundedU64(value) && BigInt(value) > 0n;
+
+async function canonicalBodyDigest(body, cryptoImpl) {
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest(
+    "SHA-256", new TextEncoder().encode(body),
+  ));
+  return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 const requestResult = (request) => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
@@ -46,8 +62,11 @@ async function digestSubmissionCoverage(coverage, cryptoImpl) {
   };
 }
 
-async function validateFrozenGroup(group, workspace, record, cryptoImpl) {
+const HARD_FLUSH_ORIGINS = new Set(["composition_confirmation", "paste", "cut"]);
+
+async function validateFrozenGroup(group, workspace, records, cryptoImpl) {
   const request = group.frozen_request_body;
+  const firstRecord = records[0];
   const [requestDigest, coverageDigest] = await Promise.all([
     digestApplyAuthorEdit(group.frozen_request_body, cryptoImpl),
     digestSubmissionCoverage({ ordered_coverage: group.ordered_coverage,
@@ -58,6 +77,7 @@ async function validateFrozenGroup(group, workspace, record, cryptoImpl) {
     || JSON.stringify(group.project_scope) !== JSON.stringify(workspace.partition.project_scope)
     || group.editor_session_id !== workspace.partition.editor_session_id
     || group.writer_generation !== workspace.partition.writer_generation
+    || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
     || group.action_class !== "direct_editor_action"
     || group.api_major !== 1
     || group.method !== "POST"
@@ -67,28 +87,45 @@ async function validateFrozenGroup(group, workspace, record, cryptoImpl) {
     || group.digest_profile !== "storyos.command.applyAuthorEdit.jcs.v1"
     || !UUID.test(group.idempotency_key ?? "")
     || group.settlement?.kind !== "unsettled"
-    || group.ordered_coverage?.length !== 1
-    || group.ordered_coverage[0].intent_record_ref !== record.completed_intent_record_id
-    || group.covered_sequence_range?.first !== record.local_intent_sequence
-    || group.covered_sequence_range?.last !== record.local_intent_sequence
-    || JSON.stringify(group.ordered_coverage[0].payload_digest)
-      !== JSON.stringify(record.payload_digest)
+    || records.length === 0
+    || records.length > AUTHOR_EDIT_MAX_UNITS
+    || group.ordered_coverage?.length !== records.length
+    || group.covered_sequence_range?.first !== firstRecord.local_intent_sequence
+    || group.covered_sequence_range?.last !== records.at(-1).local_intent_sequence
     || request?.command_schema !== group.command_schema
     || request?.editor_session_id !== workspace.partition.editor_session_id
     || request?.writer_generation !== workspace.partition.writer_generation
-    || request?.chapter_id !== record.chapter_object_id
-    || request?.expected_authoritative_revision_id !== record.expected_authoritative_heads[0]
+    || request?.chapter_id !== firstRecord.chapter_object_id
+    || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
-      !== JSON.stringify(record.expected_proposal_heads)
-    || JSON.stringify(request?.target_refs) !== JSON.stringify(record.target_refs)
-    || request?.observed_ownership_partition !== record.observed_ownership_partition
-    || request?.undo_group_id !== record.undo_group_binding.undo_group_id
-    || request?.completed_intent_record_id !== record.completed_intent_record_id
-    || request?.local_intent_sequence !== String(record.local_intent_sequence)
-    || JSON.stringify(request?.author_edit_units) !== JSON.stringify([record.author_edit_unit])
+      !== JSON.stringify(firstRecord.expected_proposal_heads)
+    || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord.target_refs)
+    || request?.observed_ownership_partition !== firstRecord.observed_ownership_partition
+    || request?.undo_group_id !== firstRecord.undo_group_binding.undo_group_id
+    || request?.completed_intent_record_id !== firstRecord.completed_intent_record_id
+    || request?.local_intent_sequence !== String(firstRecord.local_intent_sequence)
+    || JSON.stringify(request?.author_edit_units)
+      !== JSON.stringify(records.map((record) => record.author_edit_unit))
+    || records.reduce((count, record) =>
+      count + record.author_edit_unit.normalized_primitives.length, 0)
+      > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES
+    || new TextEncoder().encode(JSON.stringify(request)).byteLength
+      > AUTHOR_EDIT_MAX_WIRE_BODY_BYTES
     || JSON.stringify(group.frozen_request_digest) !== JSON.stringify(requestDigest)
     || JSON.stringify(group.frozen_payload_coverage_digest) !== JSON.stringify(coverageDigest)) {
     throw new Error("Journal Submission Group is corrupt");
+  }
+  for (const [index, record] of records.entries()) {
+    const coverage = group.ordered_coverage[index];
+    if (record.local_intent_sequence !== firstRecord.local_intent_sequence + index
+      || coverage.local_intent_sequence !== record.local_intent_sequence
+      || coverage.intent_record_ref !== record.completed_intent_record_id
+      || JSON.stringify(coverage.payload_digest) !== JSON.stringify(record.payload_digest)
+      || (index > 0 && !mayAppendJournalSubmissionRecord(
+        firstRecord, records[index - 1], record,
+      ))) {
+      throw new Error("Journal Submission Group is corrupt");
+    }
   }
 }
 
@@ -97,29 +134,41 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     throw new Error("Editor Session is read only");
   }
   await rebuildPendingProjection(workspace);
-  const snapshot = workspace.database
-    .transaction(["intents", "payload_chains", "submission_groups"], "readonly");
-  const [records, payloadChains, existingGroups] = await Promise.all([
-    requestResult(snapshot.objectStore("intents").index("partition")
-      .getAll(workspace.partition.journal_partition_id, 2)),
-    requestResult(snapshot.objectStore("payload_chains").index("partition")
-      .getAll(workspace.partition.journal_partition_id, 2)),
-    requestResult(snapshot.objectStore("submission_groups").index("partition")
-      .getAll(workspace.partition.journal_partition_id, 2)),
-  ]);
-  if (records.length !== 1 || payloadChains.length !== 1 || existingGroups.length > 1) {
-    throw new Error("One pending Author Edit is required");
-  }
-  const [record] = records;
-  const [payloadChain] = payloadChains;
-  if (payloadChain.payload_chain_id !== record.payload_chain_ref) {
-    throw new Error("Local Edit Journal is corrupt");
-  }
-  if (existingGroups.length === 1) {
-    const [existing] = existingGroups;
-    await validateFrozenGroup(existing, workspace, record, cryptoImpl);
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
+  if (existing) {
+    const existingRecords = existing.ordered_coverage.map((coverage) =>
+      snapshot.records.find((record) =>
+        record.local_intent_sequence === coverage.local_intent_sequence));
+    await validateFrozenGroup(existing, workspace, existingRecords, cryptoImpl);
     return existing;
   }
+  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
+    group.ordered_coverage.map((coverage) => coverage.local_intent_sequence)));
+  const firstUncovered = snapshot.records.find((record) =>
+    !coveredSequences.has(record.local_intent_sequence));
+  if (firstUncovered
+    && firstUncovered.base_snapshot_id !== workspace.session.base_snapshot.snapshot_id) {
+    throw new Error("Local Edit Journal is corrupt");
+  }
+  const candidates = snapshot.records.filter((record) =>
+    !coveredSequences.has(record.local_intent_sequence)
+    && record.base_snapshot_id === workspace.session.base_snapshot.snapshot_id);
+  if (candidates.length === 0) {
+    throw new Error("One pending Author Edit is required");
+  }
+  if (candidates[0].local_intent_sequence !== firstUncovered?.local_intent_sequence) {
+    throw new Error("Local Edit Journal is corrupt");
+  }
+  const records = [candidates[0]];
+  if (!HARD_FLUSH_ORIGINS.has(candidates[0].input_origin)) {
+    for (const candidate of candidates.slice(1)) {
+      if (records.length === AUTHOR_EDIT_MAX_UNITS
+        || !mayAppendJournalSubmissionRecord(records[0], records.at(-1), candidate)) break;
+      records.push(candidate);
+    }
+  }
+  const firstRecord = records[0];
   const request = {
     command_schema: "storyos.command.apply-author-edit.request.v1",
     client_contract_revision: workspace.partition.client_contract_revision,
@@ -127,21 +176,24 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     correlation_id: uuidV7(cryptoImpl),
     editor_session_id: workspace.partition.editor_session_id,
     writer_generation: workspace.partition.writer_generation,
-    chapter_id: record.chapter_object_id,
-    expected_authoritative_revision_id: record.expected_authoritative_heads[0],
-    expected_proposal_head_revision_ids: record.expected_proposal_heads,
-    target_refs: record.target_refs,
-    observed_ownership_partition: record.observed_ownership_partition,
-    editor_contract_revision: record.editor_contract_revision,
-    undo_group_id: record.undo_group_binding.undo_group_id,
-    completed_intent_record_id: record.completed_intent_record_id,
-    local_intent_sequence: String(record.local_intent_sequence),
-    author_edit_units: [record.author_edit_unit],
+    chapter_id: firstRecord.chapter_object_id,
+    expected_authoritative_revision_id: firstRecord.expected_authoritative_heads[0],
+    expected_proposal_head_revision_ids: firstRecord.expected_proposal_heads,
+    target_refs: firstRecord.target_refs,
+    observed_ownership_partition: firstRecord.observed_ownership_partition,
+    editor_contract_revision: firstRecord.editor_contract_revision,
+    undo_group_id: firstRecord.undo_group_binding.undo_group_id,
+    completed_intent_record_id: firstRecord.completed_intent_record_id,
+    local_intent_sequence: String(firstRecord.local_intent_sequence),
+    author_edit_units: records.map((record) => record.author_edit_unit),
   };
-  const orderedCoverage = [{ local_intent_sequence: record.local_intent_sequence,
-    intent_record_ref: record.completed_intent_record_id, payload_digest: record.payload_digest }];
+  const orderedCoverage = records.map((record) => ({
+    local_intent_sequence: record.local_intent_sequence,
+    intent_record_ref: record.completed_intent_record_id,
+    payload_digest: record.payload_digest,
+  }));
   const coveredSequenceRange = {
-    first: record.local_intent_sequence, last: record.local_intent_sequence,
+    first: firstRecord.local_intent_sequence, last: records.at(-1).local_intent_sequence,
   };
   const [frozenRequestDigest, frozenPayloadCoverageDigest] = await Promise.all([
     digestApplyAuthorEdit(request, cryptoImpl),
@@ -154,6 +206,7 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     project_scope: workspace.partition.project_scope,
     editor_session_id: workspace.partition.editor_session_id,
     writer_generation: workspace.partition.writer_generation,
+    batch_policy_revision: AUTHOR_EDIT_BATCH_POLICY_REVISION,
     ordered_coverage: orderedCoverage,
     covered_sequence_range: coveredSequenceRange,
     action_class: "direct_editor_action",
@@ -170,26 +223,28 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     settlement: { kind: "unsettled" },
     frozen_at: new Date().toISOString(),
   };
+  await validateFrozenGroup(group, workspace, records, cryptoImpl);
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "payload_chains", "intents", "submission_groups"], "readwrite",
   );
   const durableGroups = transaction.objectStore("submission_groups");
-  const [schema, partition, durableRecords, durablePayloadChain, durableExistingGroups] =
+  const [schema, partition, durableRecords, durablePayloadChains, durableExistingGroups] =
     await Promise.all([
       requestResult(transaction.objectStore("metadata").get("schema")),
       requestResult(transaction.objectStore("partitions")
         .get(workspace.partition.journal_partition_id)),
       requestResult(transaction.objectStore("intents").index("partition")
-        .getAll(workspace.partition.journal_partition_id, 2)),
-      requestResult(transaction.objectStore("payload_chains").get(record.payload_chain_ref)),
+        .getAll(workspace.partition.journal_partition_id, 2401)),
+      requestResult(transaction.objectStore("payload_chains").index("partition")
+        .getAll(workspace.partition.journal_partition_id, 2401)),
       requestResult(durableGroups.index("partition")
-        .getAll(workspace.partition.journal_partition_id, 2)),
+        .getAll(workspace.partition.journal_partition_id, 2401)),
     ]);
   if (schema?.version !== DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
-    || JSON.stringify(durableRecords) !== JSON.stringify(records)
-    || JSON.stringify(durablePayloadChain) !== JSON.stringify(payloadChain)
-    || durableExistingGroups.length !== 0) {
+    || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
+    || JSON.stringify(durablePayloadChains) !== JSON.stringify(snapshot.payloadChains)
+    || JSON.stringify(durableExistingGroups) !== JSON.stringify(snapshot.groups)) {
     transaction.abort();
     throw new Error("Local Edit Journal changed before submission freeze");
   }
@@ -241,56 +296,122 @@ export async function submitOnePendingAuthorEdit({
     || receipt?.author_command_admission_id !== response.author_command_admission_id
     || JSON.stringify(receipt?.expected_heads)
       !== JSON.stringify([group.frozen_request_body.expected_authoritative_revision_id])
-    || JSON.stringify(receipt?.prior_heads)
-      !== JSON.stringify([group.frozen_request_body.expected_authoritative_revision_id])
-    || receipt?.result !== "authoritative_applied"
-    || effect?.kind !== "authoritative_applied"
-    || effect.authoritative_revision?.body !== pending.body
-    || JSON.stringify(receipt.resulting_heads)
-      !== JSON.stringify([effect.authoritative_revision?.revision_id])
-    || JSON.stringify(receipt.authoritative_revision_ids)
-      !== JSON.stringify([effect.authoritative_revision?.revision_id])
     || JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([])
-    || JSON.stringify(receipt.authoritative_commit_ids)
-      !== JSON.stringify([effect.authoritative_commit_id])
-    || receipt.author_action_sequence !== effect.author_action_sequence
     || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.condition_refs) !== JSON.stringify([])
     || typeof receipt.created_at !== "string"
-    || Number.isNaN(Date.parse(receipt.created_at))
+    || Number.isNaN(Date.parse(receipt.created_at))) {
+    throw new Error("Author Edit acknowledgement does not converge");
+  }
+  if (effect?.kind !== "authoritative_applied") {
+    const currentHead = effect?.kind === "conflicted"
+      ? effect.current_authoritative_revision_id
+      : group.frozen_request_body.expected_authoritative_revision_id;
+    const validEffect = effect?.kind === "no_effect"
+      ? effect.reason === "content_unchanged" && receipt.result === "no_effect"
+      : effect?.kind === "conflicted"
+        ? ["stale_authoritative_head", "proposal_head_present", "ownership_changed"]
+          .includes(effect.reason)
+          && UUID.test(effect.current_authoritative_revision_id ?? "")
+          && receipt.result === "conflicted"
+        : effect?.kind === "refused"
+          && ["unsupported_intent_shape", "invalid_selection", "target_mismatch"]
+            .includes(effect.reason)
+          && receipt.result === "refused";
+    if (!validEffect
+      || JSON.stringify(receipt.prior_heads) !== JSON.stringify([currentHead])
+      || JSON.stringify(receipt.resulting_heads) !== JSON.stringify([currentHead])
+      || JSON.stringify(receipt.authoritative_revision_ids) !== JSON.stringify([])
+      || JSON.stringify(receipt.authoritative_commit_ids) !== JSON.stringify([])
+      || receipt.author_action_sequence !== null) {
+      throw new Error("Author Edit acknowledgement does not converge");
+    }
+    const transaction = workspace.database.transaction("submission_groups", "readwrite");
+    const groups = transaction.objectStore("submission_groups");
+    const durable = await requestResult(groups.get(group.journal_submission_group_id));
+    if (JSON.stringify(durable) !== JSON.stringify(group)) {
+      transaction.abort();
+      throw new Error("Journal Submission Group changed after challenge issuance");
+    }
+    durable.settlement = {
+      kind: "zero_authority_receipt_settled",
+      command_id: response.command_id,
+      author_command_admission_id: response.author_command_admission_id,
+      receipt,
+      effect,
+    };
+    groups.put(durable);
+    await transactionResult(transaction);
+    return rebuildPendingProjection(workspace);
+  }
+  if (receipt.result !== "authoritative_applied"
+    || effect.authoritative_revision?.body !== pending.body
+    || JSON.stringify(receipt.prior_heads)
+      !== JSON.stringify([group.frozen_request_body.expected_authoritative_revision_id])
+    || JSON.stringify(receipt.resulting_heads)
+      !== JSON.stringify([effect.authoritative_revision?.revision_id])
+    || JSON.stringify(receipt.authoritative_revision_ids)
+      !== JSON.stringify([effect.authoritative_revision?.revision_id])
+    || JSON.stringify(receipt.authoritative_commit_ids)
+      !== JSON.stringify([effect.authoritative_commit_id])
+    || receipt.author_action_sequence !== effect.author_action_sequence
     || !UUID.test(effect.authoritative_revision?.revision_id ?? "")
     || !UUID.test(effect.authoritative_commit_id ?? "")
     || !positiveU64(effect.author_action_sequence)
     || !positiveU64(effect.project_activity_position)) {
     throw new Error("Author Edit acknowledgement does not converge");
   }
-  const canonical = await getChapter({
+  const canonical = await getEditorSession({
     baseUrl,
     projectId: workspace.partition.project_scope.project_id,
-    chapterId: group.frozen_request_body.chapter_id,
+    editorSessionId: workspace.partition.editor_session_id,
     fetchImpl,
   });
-  if (canonical.schema_id !== "storyos.query.chapter.response.v1"
+  const freshBase = canonical.base_snapshot;
+  if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
-    || !boundedU64(canonical.project_activity_position)
-    || BigInt(canonical.project_activity_position) < BigInt(effect.project_activity_position)
-    || canonical.chapter?.chapter_id !== group.frozen_request_body.chapter_id
-    || canonical.chapter?.current_revision?.revision_id
-      !== effect.authoritative_revision.revision_id
-    || canonical.chapter?.current_revision?.body !== effect.authoritative_revision.body) {
-    throw new Error("Authoritative Chapter did not converge");
+    || JSON.stringify(canonical.editor_session) !== JSON.stringify(workspace.session.editor_session)
+    || JSON.stringify(canonical.writer) !== JSON.stringify(workspace.session.writer)
+    || !UUID.test(freshBase?.snapshot_id ?? "")
+    || freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id
+    || freshBase.chapter_id !== group.frozen_request_body.chapter_id
+    || freshBase.project_activity_position !== effect.project_activity_position
+    || freshBase.authoritative_head_revision_id !== effect.authoritative_revision.revision_id
+    || JSON.stringify(freshBase.proposal_head_revision_ids)
+      !== JSON.stringify(group.frozen_request_body.expected_proposal_head_revision_ids)
+    || JSON.stringify(freshBase.target_refs)
+      !== JSON.stringify(group.frozen_request_body.target_refs)
+    || freshBase.observed_ownership_partition
+      !== group.frozen_request_body.observed_ownership_partition
+    || JSON.stringify(freshBase.materialized_revision)
+      !== JSON.stringify(effect.authoritative_revision)
+    || freshBase.materialized_payload_digest?.algorithm !== "sha256"
+    || freshBase.materialized_payload_digest?.profile
+      !== "storyos.canonical-payload.sha256.v1"
+    || freshBase.materialized_payload_digest?.value_hex_lowercase
+      !== await canonicalBodyDigest(effect.authoritative_revision.body, cryptoImpl)
+    || typeof freshBase.created_at !== "string"
+    || Number.isNaN(Date.parse(freshBase.created_at))) {
+    throw new Error("Editor Base Snapshot did not converge");
   }
-  const transaction = workspace.database.transaction("submission_groups", "readwrite");
+  const transaction = workspace.database.transaction(
+    ["metadata", "submission_groups"], "readwrite",
+  );
   const groups = transaction.objectStore("submission_groups");
-  const durable = await requestResult(groups.get(group.journal_submission_group_id));
-  if (JSON.stringify(durable) !== JSON.stringify(group)) {
+  const [durable, activeBase] = await Promise.all([
+    requestResult(groups.get(group.journal_submission_group_id)),
+    requestResult(transaction.objectStore("metadata")
+      .get(`active_base:${workspace.partition.journal_partition_id}`)),
+  ]);
+  if (JSON.stringify(durable) !== JSON.stringify(group)
+    || JSON.stringify(activeBase?.value) !== JSON.stringify(workspace.session.base_snapshot)) {
     transaction.abort();
     throw new Error("Journal Submission Group changed after challenge issuance");
   }
   durable.settlement = {
-    kind: "receipt_settled",
+    kind: "applied_receipt_settled",
     command_id: response.command_id,
     author_command_admission_id: response.author_command_admission_id,
     receipt,
@@ -298,8 +419,14 @@ export async function submitOnePendingAuthorEdit({
     authoritative_commit_id: effect.authoritative_commit_id,
     author_action_sequence: effect.author_action_sequence,
     project_activity_position: effect.project_activity_position,
+    installed_base_snapshot: freshBase,
   };
   groups.put(durable);
+  transaction.objectStore("metadata").put({
+    key: `active_base:${workspace.partition.journal_partition_id}`,
+    value: freshBase,
+  });
   await transactionResult(transaction);
+  workspace.session = canonical;
   return rebuildPendingProjection(workspace);
 }
