@@ -1,4 +1,5 @@
 use crate::stage1_selection::{OPERATION_IDS, proof_selection, requirement_bindings};
+use serde_json::json;
 
 use super::{DeliveryContract, delivery_contract, delivery_coverage};
 
@@ -35,4 +36,36 @@ fn stale_requirement_gate_and_evidence_bindings_are_rejected() {
     let mut evidence = delivery_contract();
     evidence.tickets[0].contract_coverage.evidence_classes = &["EC-01"];
     assert!(delivery_error(&evidence).contains("evidence class coverage drifted"));
+}
+
+#[test]
+fn delivery_ticket_blockers_serialize_as_closed_arrays() {
+    let value = serde_json::to_value(delivery_contract()).expect("delivery contract serializes");
+    let blockers: Vec<_> = value["tickets"]
+        .as_array()
+        .expect("delivery tickets are an array")
+        .iter()
+        .map(|ticket| ticket["blocked_by"].clone())
+        .collect();
+
+    assert_eq!(
+        blockers,
+        vec![
+            json!([]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/103"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/104"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/105"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/119"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/121"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/106"]),
+            json!([]),
+            json!([
+                "https://github.com/FrankQDWang/StoryOS/issues/108",
+                "https://github.com/FrankQDWang/StoryOS/issues/56"
+            ]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/109"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/110"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/111"]),
+        ]
+    );
 }

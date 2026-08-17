@@ -170,7 +170,7 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
         delivery_coverage(&delivery_contract, &requirements, OPERATION_IDS, &proof)
             .map_err(CrosswalkError::Invalid)?;
     let mut bytes = serde_json::to_vec_pretty(&Crosswalk {
-        schema_id: "storyos.evidence.stage1-contract-crosswalk.v2",
+        schema_id: "storyos.evidence.stage1-contract-crosswalk.v3",
         claim_ceiling: "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
         declarations: Declarations {
             authority: "Issue #100 accepted Stage 1 specification with delivery owned by 12 child tickets, including #119 and #121",

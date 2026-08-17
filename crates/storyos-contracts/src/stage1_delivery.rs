@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-17-v15";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "9c8e9d4659169e2490acd53558a77e8bc409a3e7";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "0f20f666868aaa34c3c4802feb0ac1165d95de33";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-17-v16";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "f5fee494cdcd074b19c7689609a00c67cf620b2d";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "044c3aad1a8deb1378d1f729b46c1bda648190e4";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:9b67b2f490e22867438ee696fea2f522ecfaa3d133743c402bcfa394c157a32c";
+    "sha256:8572a0163e9196da68ec41ba627b4037e315e4279cb7f3773051fecc8bb6e62c";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -68,7 +68,7 @@ struct DeliveryTicket {
     parent: &'static str,
     title: &'static str,
     issue_body_sha256: &'static str,
-    blocked_by: Option<&'static str>,
+    blocked_by: &'static [&'static str],
     evidence_role: EvidenceRole,
     responsibility: &'static str,
     contract_coverage: TicketCoverage,
@@ -80,7 +80,7 @@ struct TicketDefinition {
     issue: &'static str,
     title: &'static str,
     issue_body_sha256: &'static str,
-    blocked_by: Option<&'static str>,
+    blocked_by: &'static [&'static str],
     evidence_role: EvidenceRole,
     responsibility: &'static str,
     contract_coverage: TicketCoverage,
@@ -279,8 +279,8 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-01",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
         title: "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
-        issue_body_sha256: "cf70e95a41dbe1b031a4f034ab7d615b4131cd5e67da9debce71be505489490b",
-        blocked_by: None,
+        issue_body_sha256: "de4a4fda4ad2de60d8bc9f3c8caf8724070ca5b6e36c8aaa74454f7e634abf30",
+        blocked_by: &[],
         evidence_role: EvidenceRole::ContractBinding,
         responsibility: "bind the accepted Stage 1 specification and ticket sequence",
         contract_coverage: COVERAGE_01,
@@ -290,7 +290,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/104",
         title: "Boot the Protected Web Client Against the Release 1 Protocol Profile",
         issue_body_sha256: "cd1a9130c041f01be000ce87cef1b43df46afdbcc94fc4bf697b3061b78d1650",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/103"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/103"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "validate the protected client protocol identity",
         contract_coverage: COVERAGE_02,
@@ -300,7 +300,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/105",
         title: "Open the Controlled Project and Current Chapter End to End",
         issue_body_sha256: "2ea7e9fdcaec104c9cc3911ca3104e8d0c8392987fa29306d273147e53803d4f",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/104"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/104"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "open one isolated Project and current Chapter",
         contract_coverage: COVERAGE_03,
@@ -310,7 +310,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/119",
         title: "Harden Sensitive Read Origin Admission with Standard URL Parsing",
         issue_body_sha256: "e28c601251b1fd0905f0b1bf1d38a249102f41613a6cfc7096eec869097d9f6e",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/105"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/105"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "harden sensitive read origin admission",
         contract_coverage: COVERAGE_03,
@@ -320,7 +320,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/121",
         title: "Implement Project-Scoped Anti-Forgery Challenge Admission",
         issue_body_sha256: "f9fa15fd8b28fcc6857f16c48cbca164db571bd945369a9204210e7789b67f0f",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/119"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/119"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "establish the Project-scoped command challenge and pre-domain idempotency fence",
         contract_coverage: COVERAGE_03B,
@@ -330,7 +330,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
         issue_body_sha256: "db44ffa60cf52d0e59c54e11c6496ac4c48ea3d1ef4c038dc40e00a3e2b1a9f9",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/121"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/121"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",
         contract_coverage: COVERAGE_04,
@@ -340,7 +340,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/107",
         title: "Settle One Direct Author Edit into an Authoritative Revision",
         issue_body_sha256: "755e6d56422445da42ce4ab904f1c2894e5ab1552e67f52497ba74fd07bf3b77",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/106"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/106"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "settle one Direct Author Action as an authoritative Revision",
         contract_coverage: COVERAGE_05,
@@ -350,7 +350,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/108",
         title: "Complete Bounded Manual Input and IME Semantics",
         issue_body_sha256: "faeaf13ab0a8689797523b4e4b3ced6d2776080876f67e60d974bf7642984a4c",
-        blocked_by: None,
+        blocked_by: &[],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "complete bounded manual input, IME, and same-session base roll-forward semantics",
         contract_coverage: COVERAGE_06,
@@ -360,7 +360,10 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/109",
         title: "Reconcile Acknowledgement Loss without Duplicate Authority",
         issue_body_sha256: "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/108"),
+        blocked_by: &[
+            "https://github.com/FrankQDWang/StoryOS/issues/108",
+            "https://github.com/FrankQDWang/StoryOS/issues/56",
+        ],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "reconcile acknowledgement loss without duplicate authority",
         contract_coverage: COVERAGE_07,
@@ -370,7 +373,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/110",
         title: "Recover Settled and Unsettled Edits across Reload and Restart",
         issue_body_sha256: "526e75701f2b9acb1461fc99a6e68c6bf533f96aaa86c4e7e5a18244109ce196",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/109"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/109"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "recover settled and unsettled edits after reload and restart",
         contract_coverage: COVERAGE_08,
@@ -380,7 +383,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/111",
         title: "Fence Stale Writers and Resync across Replay Generations",
         issue_body_sha256: "78ac6a7fbec0886fc4c993140b1b3dd4c9da13db3b15fb36706a4f4021c7839f",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/110"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/110"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "fence stale writers and resync replay generations",
         contract_coverage: COVERAGE_09,
@@ -390,7 +393,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         issue: "https://github.com/FrankQDWang/StoryOS/issues/112",
         title: "Complete the Stage 1 Mandatory Evidence and Handoff",
         issue_body_sha256: "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
-        blocked_by: Some("https://github.com/FrankQDWang/StoryOS/issues/111"),
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/111"],
         evidence_role: EvidenceRole::AcceptanceHandoff,
         responsibility: "assemble the mandatory Stage 1 evidence and handoff",
         contract_coverage: COVERAGE_10,
