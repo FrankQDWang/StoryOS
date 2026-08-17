@@ -131,3 +131,59 @@ fn acknowledgement_loss_ticket_matches_the_current_process_profile() {
         })
     );
 }
+
+#[test]
+fn acknowledgement_loss_global_selection_is_exact_and_ordered() {
+    let proof = proof_selection();
+
+    assert_eq!(
+        json!({
+            "operations": OPERATION_IDS,
+            "fault_points": proof.fault_points,
+            "schedules": proof.schedules
+        }),
+        json!({
+            "operations": [
+                "getProtocolProfile",
+                "getProject",
+                "getChapter",
+                "createEditorSession",
+                "getEditorSession",
+                "createProjectCommandChallenge",
+                "applyAuthorEdit",
+                "getApplyAuthorEditOutcome",
+                "getCommand",
+                "activityStream",
+                "getSnapshot"
+            ],
+            "fault_points": [
+                "CFP-ADMISSION-BEFORE-CORE",
+                "CFP-ADMISSION-EXPIRY",
+                "CFP-CONTRACT-DRIFT",
+                "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+                "CFP-CORE-BEFORE-COMMIT",
+                "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+                "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+                "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+                "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+                "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+                "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
+                "CFP-FENCE-AFTER-TAKEOVER",
+                "CFP-LATE-RESULT",
+                "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+                "CFP-REPLAY-BELOW-FLOOR",
+                "CFP-SCOPE-BEFORE-QUERY"
+            ],
+            "schedules": [
+                "SCH-CRASH",
+                "SCH-DRIFT",
+                "SCH-FENCE",
+                "SCH-NORMAL",
+                "SCH-REORDER",
+                "SCH-REPLAY",
+                "SCH-SCOPE",
+                "SCH-UNKNOWN"
+            ]
+        })
+    );
+}
