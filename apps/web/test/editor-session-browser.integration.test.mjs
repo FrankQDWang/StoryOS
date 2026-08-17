@@ -23,6 +23,8 @@ const harness = `<!doctype html>
 import { openEditorWorkspace, persistReplaceSelection, rebuildPendingProjection,
   submitOnePendingAuthorEdit }
   from "/apps/web/src/editor-session.mjs";
+import { readJournalSnapshot, validateJournalSnapshot }
+  from "/apps/web/src/local-edit-journal.mjs";
 
 const assert = {
   equal(actual, expected) {
@@ -83,20 +85,38 @@ const freshSession = {
     project_activity_position: "1",
     authoritative_head_revision_id: "018f0000-0000-7001-8000-000000000034",
     materialized_revision: {
-      revision_id: "018f0000-0000-7001-8000-000000000034", body: "Base!",
+      revision_id: "018f0000-0000-7001-8000-000000000034", body: "Base!?",
     },
     materialized_payload_digest: {
       algorithm: "sha256", profile: "storyos.canonical-payload.sha256.v1",
-      value_hex_lowercase: "f284a09f33779160d1efe782e2ad3f630b0ece4127b45c9f4caf3715c980fae0",
+      value_hex_lowercase: "d069d6b9c6ce7a4d9e97bb9d91c7096917777a2e31377dd589ba5720eb8a319c",
     },
     created_at: "2026-08-15T08:00:00.000Z",
+  },
+};
+const secondFreshSession = {
+  ...freshSession,
+  correlation_id: "018f0000-0000-7001-8000-000000000047",
+  base_snapshot: {
+    ...freshSession.base_snapshot,
+    snapshot_id: "018f0000-0000-7001-8000-000000000048",
+    project_activity_position: "2",
+    authoritative_head_revision_id: "018f0000-0000-7001-8000-000000000044",
+    materialized_revision: {
+      revision_id: "018f0000-0000-7001-8000-000000000044", body: "Base!?+",
+    },
+    materialized_payload_digest: {
+      algorithm: "sha256", profile: "storyos.canonical-payload.sha256.v1",
+      value_hex_lowercase: "342b8d7a51ca015a1e91d09858779299e742f72020ae6c5441cd6101d69720cc",
+    },
+    created_at: "2026-08-15T08:01:00.000Z",
   },
 };
 const requestPaths = [];
 const authorEditRequests = [];
 const challengeRequests = [];
-let failAuthorEditChallenge = sessionStorage.getItem("storyos-browser-reload") === "pending";
-let corruptAuthorEditAcknowledgement = failAuthorEditChallenge;
+let failAuthorEditChallenge = true;
+let corruptAuthorEditAcknowledgement = true;
 let authorEditDigest;
 const jsonResponse = (body) => new Response(JSON.stringify(body), {
   status: 200, headers: { "content-type": "application/json" },
@@ -121,10 +141,40 @@ const fetchImpl = async (url, options = {}) => {
   if (path.endsWith("/editor-sessions/" + SESSION)) return jsonResponse(
     authorEditRequests.length === 0
       ? { ...session, schema_id: "storyos.query.editor-session.response.v1" }
-      : freshSession,
+      : JSON.parse(authorEditRequests.at(-1).body).expected_authoritative_revision_id
+          === freshSession.base_snapshot.authoritative_head_revision_id
+        ? secondFreshSession
+        : freshSession,
   );
   if (path.endsWith("/manuscript/author-edits")) {
     const request = JSON.parse(options.body);
+    const zeroEffect = request.author_edit_units.length === 1
+      && request.author_edit_units[0].normalized_primitives[0].text === "";
+    const secondEdit = request.expected_authoritative_revision_id
+      === freshSession.base_snapshot.authoritative_head_revision_id;
+    const revisionId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000044"
+      : "018f0000-0000-7001-8000-000000000034";
+    const commitId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000045"
+      : "018f0000-0000-7001-8000-000000000035";
+    const commandId = zeroEffect
+      ? "018f0000-0000-7001-8000-000000000051"
+      : secondEdit
+      ? "018f0000-0000-7001-8000-000000000041"
+      : "018f0000-0000-7001-8000-000000000031";
+    const admissionId = zeroEffect
+      ? "018f0000-0000-7001-8000-000000000052"
+      : secondEdit
+      ? "018f0000-0000-7001-8000-000000000042"
+      : "018f0000-0000-7001-8000-000000000032";
+    const receiptId = zeroEffect
+      ? "018f0000-0000-7001-8000-000000000053"
+      : secondEdit
+      ? "018f0000-0000-7001-8000-000000000043"
+      : "018f0000-0000-7001-8000-000000000033";
+    const finalBody = secondEdit ? "Base!?+" : "Base!?";
+    const position = secondEdit ? "2" : "1";
     authorEditRequests.push({
       body: options.body,
       idempotencyKey: options.headers["idempotency-key"],
@@ -137,29 +187,33 @@ const fetchImpl = async (url, options = {}) => {
       schema_id: "storyos.command.apply-author-edit.response.v2",
       correlation_id: request.correlation_id,
       project_scope: project.project_scope,
-      command_id: "018f0000-0000-7001-8000-000000000031",
-      author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
+      command_id: commandId,
+      author_command_admission_id: admissionId,
       receipt: {
-        receipt_id: "018f0000-0000-7001-8000-000000000033",
+        receipt_id: receiptId,
         project_scope: project.project_scope, command_kind: "applyAuthorEdit",
         command_digest: responseDigest,
         idempotency_key: options.headers["idempotency-key"],
         producer_cause: "author_command_admission",
-        author_command_admission_id: "018f0000-0000-7001-8000-000000000032",
-        expected_heads: [REVISION], prior_heads: [REVISION],
-        resulting_heads: ["018f0000-0000-7001-8000-000000000034"],
-        authoritative_revision_ids: ["018f0000-0000-7001-8000-000000000034"],
+        author_command_admission_id: admissionId,
+        expected_heads: [request.expected_authoritative_revision_id],
+        prior_heads: [request.expected_authoritative_revision_id],
+        resulting_heads: zeroEffect
+          ? [request.expected_authoritative_revision_id] : [revisionId],
+        authoritative_revision_ids: zeroEffect ? [] : [revisionId],
         proposal_revision_ids: [],
-        authoritative_commit_ids: ["018f0000-0000-7001-8000-000000000035"],
-        author_action_sequence: "1", draft_artifact_refs: [],
+        authoritative_commit_ids: zeroEffect ? [] : [commitId],
+        author_action_sequence: zeroEffect ? null : position, draft_artifact_refs: [],
         artifact_lifecycle_event_refs: [], condition_refs: [],
-        result: "authoritative_applied", created_at: "2026-08-15T08:00:00.000Z",
+        result: zeroEffect ? "no_effect" : "authoritative_applied",
+        created_at: "2026-08-15T08:00:00.000Z",
       },
-      effect: { kind: "authoritative_applied",
-        authoritative_revision: { revision_id: "018f0000-0000-7001-8000-000000000034",
-          body: "Base!" },
-        authoritative_commit_id: "018f0000-0000-7001-8000-000000000035",
-        author_action_sequence: "1", project_activity_position: "1" },
+      effect: zeroEffect
+        ? { kind: "no_effect", reason: "content_unchanged" }
+        : { kind: "authoritative_applied",
+          authoritative_revision: { revision_id: revisionId, body: finalBody },
+          authoritative_commit_id: commitId,
+          author_action_sequence: position, project_activity_position: position },
       completed_intent_record_id: request.completed_intent_record_id,
       local_intent_sequence: request.local_intent_sequence,
     });
@@ -171,7 +225,7 @@ const fetchImpl = async (url, options = {}) => {
     project_activity_position: "1",
     chapter: { chapter_id: CHAPTER, title: "Chapter",
       current_revision: { revision_id: "018f0000-0000-7001-8000-000000000034",
-        body: "Base!" } },
+        body: "Base!?" } },
   });
   throw new Error("Unexpected request: " + path);
 };
@@ -188,10 +242,10 @@ const intentCount = (database) => requestResult(database.transaction("intents", 
   .objectStore("intents").count());
 
 async function run() {
-  const workspace = await openEditorWorkspace({ baseUrl: location.origin, project, chapter, profile,
+  let workspace = await openEditorWorkspace({ baseUrl: location.origin, project, chapter, profile,
     fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   assert.equal(workspace.kind, "editor-ready");
-  if (!sessionStorage.getItem("storyos-browser-reload")) {
+  {
     const partitionTransaction = workspace.database.transaction("partitions", "readwrite");
     partitionTransaction.objectStore("partitions").delete(workspace.partition.journal_partition_id);
     await transactionResult(partitionTransaction);
@@ -208,22 +262,27 @@ async function run() {
 
     const pending = await persistReplaceSelection(reopened, {
       from: 4, to: 4, text: "!", resultingBody: "Base!",
+      inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000040",
     });
     assert.deepEqual(pending, { body: "Base!", save_state: "saving",
       unsettled_intent_count: 1, authoritative_revision_id: REVISION });
-    assert.equal(await intentCount(reopened.database), 1);
+    const secondPending = await persistReplaceSelection(reopened, {
+      from: 5, to: 5, text: "?", resultingBody: "Base!?",
+      inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+    });
+    assert.deepEqual(secondPending, { body: "Base!?", save_state: "saving",
+      unsettled_intent_count: 2, authoritative_revision_id: REVISION });
+    reopened.pending = secondPending;
+    assert.equal(await intentCount(reopened.database), 2);
     assert.equal(requestPaths.some((path) => path.includes("author-edits")), false);
-    reopened.database.close();
-    sessionStorage.setItem("storyos-browser-reload", "pending");
-    location.reload();
-    return;
+    workspace = reopened;
   }
 
   assert.equal(workspace.session.editor_session.editor_session_id, SESSION);
-  assert.deepEqual(workspace.pending, { body: "Base!", save_state: "saving",
-    unsettled_intent_count: 1, authoritative_revision_id: REVISION });
-  assert.equal(await intentCount(workspace.database), 1);
-  assert.deepEqual(requestPaths, ["/api/v1/projects/" + PROJECT + "/editor-sessions/" + SESSION]);
+  assert.deepEqual(workspace.pending, { body: "Base!?", save_state: "saving",
+    unsettled_intent_count: 2, authoritative_revision_id: REVISION });
+  assert.equal(await intentCount(workspace.database), 2);
+  assert.equal(requestPaths.some((path) => path.includes("author-edits")), false);
 
   await assert.rejects(submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
     fetchImpl, cryptoImpl: crypto }), /simulated pre-send challenge failure/);
@@ -231,10 +290,21 @@ async function run() {
     fetchImpl, cryptoImpl: crypto }), /acknowledgement does not converge/);
   const settled = await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
     fetchImpl, cryptoImpl: crypto });
-  assert.deepEqual(settled, { body: "Base!", save_state: "saved",
+  assert.deepEqual(settled, { body: "Base!?", save_state: "saved",
     unsettled_intent_count: 0,
     authoritative_revision_id: "018f0000-0000-7001-8000-000000000034" });
   assert.equal(authorEditRequests.length, 2);
+  assert.deepEqual(JSON.parse(authorEditRequests[0].body).author_edit_units, [{
+    normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
+    selection_snapshot: {
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 4, to: 4,
+    },
+  }, {
+    normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
+    selection_snapshot: {
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 5, to: 5,
+    },
+  }]);
   const editChallenges = challengeRequests.filter((request) =>
     request.command_schema === "storyos.command.apply-author-edit.request.v1");
   assert.equal(editChallenges.length, 3);
@@ -242,18 +312,189 @@ async function run() {
   assert.equal(editChallenges[1].idempotency_key, editChallenges[2].idempotency_key);
   assert.deepEqual(editChallenges[0].canonical_command_digest,
     editChallenges[1].canonical_command_digest);
+  assert.deepEqual(workspace.session, freshSession);
+
+  const secondPending = await persistReplaceSelection(workspace, {
+    from: 6, to: 6, text: "+", resultingBody: "Base!?+",
+    inputOrigin: "paste", undoGroupId: "018f0000-0000-7001-8000-000000000049",
+  });
+  assert.deepEqual(secondPending, { body: "Base!?+", save_state: "saving",
+    unsettled_intent_count: 1,
+    authoritative_revision_id: "018f0000-0000-7001-8000-000000000034" });
+  const secondSettled = await submitOnePendingAuthorEdit({
+    workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+  });
+  assert.deepEqual(secondSettled, { body: "Base!?+", save_state: "saved",
+    unsettled_intent_count: 0,
+    authoritative_revision_id: "018f0000-0000-7001-8000-000000000044" });
+  assert.deepEqual(workspace.session, secondFreshSession);
+  const finalJournal = await validateJournalSnapshot(
+    workspace, await readJournalSnapshot(workspace),
+  );
+  assert.deepEqual(finalJournal.records.map((record) => ({
+    local_intent_sequence: record.local_intent_sequence,
+    input_origin: record.input_origin,
+    base_snapshot_id: record.base_snapshot_id,
+    base_activity_position: record.base_activity_position,
+    expected_authoritative_heads: record.expected_authoritative_heads,
+    author_edit_unit: record.author_edit_unit,
+    editor_contract_revision: record.editor_contract_revision,
+    batch_policy_revision: record.batch_policy_revision,
+    projection_dependency: record.projection_dependency,
+  })), [{
+    local_intent_sequence: 1, input_origin: "typing",
+    base_snapshot_id: session.base_snapshot.snapshot_id, base_activity_position: "0",
+    expected_authoritative_heads: [REVISION],
+    author_edit_unit: {
+      normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
+      selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 4, to: 4,
+      },
+    },
+    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+    projection_dependency: { snapshot_id: session.base_snapshot.snapshot_id, prior_sequence: 0 },
+  }, {
+    local_intent_sequence: 2, input_origin: "typing",
+    base_snapshot_id: session.base_snapshot.snapshot_id, base_activity_position: "0",
+    expected_authoritative_heads: [REVISION],
+    author_edit_unit: {
+      normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
+      selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 5, to: 5,
+      },
+    },
+    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+    projection_dependency: { snapshot_id: session.base_snapshot.snapshot_id, prior_sequence: 1 },
+  }, {
+    local_intent_sequence: 3, input_origin: "paste",
+    base_snapshot_id: freshSession.base_snapshot.snapshot_id, base_activity_position: "1",
+    expected_authoritative_heads: [freshSession.base_snapshot.authoritative_head_revision_id],
+    author_edit_unit: {
+      normalized_primitives: [{ kind: "replace_selection", from: 6, to: 6, text: "+" }],
+      selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 6, to: 6,
+      },
+    },
+    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+    projection_dependency: {
+      snapshot_id: freshSession.base_snapshot.snapshot_id, prior_sequence: 2,
+    },
+  }]);
+  assert.deepEqual(finalJournal.groups.map((group) => ({
+    covered_sequence_range: group.covered_sequence_range,
+    ordered_coverage: group.ordered_coverage.map((coverage) => coverage.local_intent_sequence),
+    batch_policy_revision: group.batch_policy_revision,
+    editor_contract_revision: group.frozen_request_body.editor_contract_revision,
+    author_edit_units: group.frozen_request_body.author_edit_units,
+    settlement_kind: group.settlement.kind,
+    installed_base_snapshot: group.settlement.installed_base_snapshot,
+  })), [{
+    covered_sequence_range: { first: 1, last: 2 },
+    ordered_coverage: [1, 2],
+    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    author_edit_units: finalJournal.records.slice(0, 2).map((record) => record.author_edit_unit),
+    settlement_kind: "applied_receipt_settled",
+    installed_base_snapshot: freshSession.base_snapshot,
+  }, {
+    covered_sequence_range: { first: 3, last: 3 },
+    ordered_coverage: [3],
+    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    author_edit_units: [finalJournal.records[2].author_edit_unit],
+    settlement_kind: "applied_receipt_settled",
+    installed_base_snapshot: secondFreshSession.base_snapshot,
+  }]);
+
+  const challengeCountBeforeCoverageFailures = challengeRequests.length;
+  const replaceGroups = async (groups) => {
+    const transaction = workspace.database.transaction("submission_groups", "readwrite");
+    const store = transaction.objectStore("submission_groups");
+    for (const group of groups) store.put(group);
+    await transactionResult(transaction);
+  };
+  const originalGroups = finalJournal.groups.map((group) => JSON.parse(JSON.stringify(group)));
+  const coverageFailures = [
+    (groups) => { groups[0].ordered_coverage.pop(); },
+    (groups) => { groups[0].ordered_coverage[1] = groups[0].ordered_coverage[0]; },
+    (groups) => { groups[0].ordered_coverage[1].local_intent_sequence = 3; },
+    (groups) => { groups[0].ordered_coverage.reverse(); },
+    (groups) => {
+      groups[1].covered_sequence_range.first = 2;
+      groups[1].ordered_coverage.unshift(groups[0].ordered_coverage[1]);
+    },
+    (groups) => { groups[1].batch_policy_revision = "storyos.author-edit-batch.invalid"; },
+    (groups) => {
+      groups[1].frozen_request_body.editor_contract_revision =
+        "storyos.editor-contract.release-1.invalid";
+    },
+  ];
+  for (const corrupt of coverageFailures) {
+    const groups = originalGroups.map((group) => JSON.parse(JSON.stringify(group)));
+    corrupt(groups);
+    await replaceGroups(groups);
+    await assert.rejects(submitOnePendingAuthorEdit({
+      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    }), /corrupt/);
+    assert.equal(challengeRequests.length, challengeCountBeforeCoverageFailures);
+    await replaceGroups(originalGroups);
+  }
+
+  const baseBeforeNoEffect = JSON.parse(JSON.stringify(workspace.session));
+  const noEffectPending = await persistReplaceSelection(workspace, {
+    from: 7, to: 7, text: "", resultingBody: "Base!?+",
+    inputOrigin: "deletion", undoGroupId: "018f0000-0000-7001-8000-000000000054",
+  });
+  assert.deepEqual(noEffectPending, { body: "Base!?+", save_state: "saving",
+    unsettled_intent_count: 1,
+    authoritative_revision_id: "018f0000-0000-7001-8000-000000000044" });
+  const noEffect = await submitOnePendingAuthorEdit({
+    workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+  });
+  assert.deepEqual(noEffect, { body: "Base!?+", save_state: "needs_attention",
+    unsettled_intent_count: 1,
+    authoritative_revision_id: "018f0000-0000-7001-8000-000000000044" });
+  assert.deepEqual(workspace.session, baseBeforeNoEffect);
+  const noEffectJournal = await validateJournalSnapshot(
+    workspace, await readJournalSnapshot(workspace),
+  );
+  assert.deepEqual(noEffectJournal.groups.at(-1).settlement, {
+    kind: "zero_authority_receipt_settled",
+    command_id: "018f0000-0000-7001-8000-000000000051",
+    author_command_admission_id: "018f0000-0000-7001-8000-000000000052",
+    receipt: {
+      receipt_id: "018f0000-0000-7001-8000-000000000053",
+      project_scope: project.project_scope,
+      command_kind: "applyAuthorEdit",
+      command_digest: noEffectJournal.groups.at(-1).frozen_request_digest,
+      idempotency_key: noEffectJournal.groups.at(-1).idempotency_key,
+      producer_cause: "author_command_admission",
+      author_command_admission_id: "018f0000-0000-7001-8000-000000000052",
+      expected_heads: ["018f0000-0000-7001-8000-000000000044"],
+      prior_heads: ["018f0000-0000-7001-8000-000000000044"],
+      resulting_heads: ["018f0000-0000-7001-8000-000000000044"],
+      authoritative_revision_ids: [], proposal_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: null,
+      draft_artifact_refs: [], artifact_lifecycle_event_refs: [], condition_refs: [],
+      result: "no_effect", created_at: "2026-08-15T08:00:00.000Z",
+    },
+    effect: { kind: "no_effect", reason: "content_unchanged" },
+  });
 
   await assert.rejects(persistReplaceSelection(workspace, {
     from: 5, to: 5, text: "?", resultingBody: "x".repeat(1048577),
   }), /limit failed/);
-  assert.equal(await intentCount(workspace.database), 1);
+  assert.equal(await intentCount(workspace.database), 4);
 
   workspace.partition.disposition = "read_only_observer";
   await assert.rejects(persistReplaceSelection(workspace, {
     from: 5, to: 5, text: "?", resultingBody: "Base!?",
   }), /read only/);
   workspace.partition.disposition = "current_writer_open";
-  assert.equal(await intentCount(workspace.database), 1);
+  assert.equal(await intentCount(workspace.database), 4);
 
   const corruptTransaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
   const intents = corruptTransaction.objectStore("intents");
@@ -275,7 +516,7 @@ async function run() {
     fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
   assert.equal(recovery.kind, "editor-read-only-recovery");
   document.body.dataset.result = "pass";
-  document.body.textContent = "real IndexedDB reload passed";
+  document.body.textContent = "bounded IndexedDB journal passed";
 }
 run().catch((error) => {
   document.body.dataset.result = "fail";
@@ -402,7 +643,7 @@ async function startBrowser() {
   throw lastError;
 }
 
-test("a real browser reload submits one frozen Author Edit and settles its Receipt", {
+test("a real browser journal settles bounded groups and installs the complete next base", {
   skip: chromeExecutable ? false : "Chrome or Chromium is unavailable",
   timeout: 60_000,
 }, async () => {
@@ -436,7 +677,7 @@ test("a real browser reload submits one frozen Author Edit and settles its Recei
       launchedBrowser.browserWebSocketUrl,
       `http://127.0.0.1:${port}/harness`,
     );
-    assert.equal(state.text, "real IndexedDB reload passed");
+    assert.equal(state.text, "bounded IndexedDB journal passed");
   } finally {
     server.close();
     if (launchedBrowser) {
