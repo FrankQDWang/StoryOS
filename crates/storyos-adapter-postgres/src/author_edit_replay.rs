@@ -1,6 +1,6 @@
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditSettlement,
-    AuthorEditSettlementEffect, AuthoritativeAppliedIds,
+    AuthorEditSettlementEffect, AuthoritativeAppliedIds, ProjectScope,
 };
 
 use super::author_edit::{
@@ -8,10 +8,43 @@ use super::author_edit::{
 };
 use super::*;
 
+pub(super) struct AuthorEditReplayIdentity {
+    pub(super) project_scope: ProjectScope,
+    pub(super) canonical_command_digest: String,
+    pub(super) idempotency_key: String,
+    pub(super) chapter_id: String,
+    pub(super) expected_authoritative_revision_id: String,
+    pub(super) target_refs: Vec<String>,
+}
+
 impl PostgresProjectReader {
     pub(super) async fn read_author_edit_settlement(
         &self,
         command: &ApplyAuthorEditCommand,
+        receipt_id: &str,
+    ) -> Result<AuthorEditSettlement, AuthorEditError> {
+        self.read_author_edit_settlement_by_identity(
+            &AuthorEditReplayIdentity {
+                project_scope: command.project_scope.clone(),
+                canonical_command_digest: command
+                    .challenge_binding
+                    .canonical_command_digest
+                    .clone(),
+                idempotency_key: command.challenge_binding.idempotency_key.clone(),
+                chapter_id: command.chapter_id.clone(),
+                expected_authoritative_revision_id: command
+                    .expected_authoritative_revision_id
+                    .clone(),
+                target_refs: command.target_refs.clone(),
+            },
+            receipt_id,
+        )
+        .await
+    }
+
+    pub(super) async fn read_author_edit_settlement_by_identity(
+        &self,
+        identity: &AuthorEditReplayIdentity,
         receipt_id: &str,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
         let client = self
@@ -22,7 +55,7 @@ impl PostgresProjectReader {
             .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .await
             .map_err(author_edit_database_error)?;
-        set_challenge_scope_on_client(&client, &command.project_scope)
+        set_challenge_scope_on_client(&client, &identity.project_scope)
             .await
             .map_err(author_edit_challenge_error)?;
 
@@ -103,14 +136,14 @@ impl PostgresProjectReader {
                          AND resulting_revision.manuscript_object_id = admission.chapter_object_id
                          AND resulting_revision.revision_id = receipt.resulting_heads[1])",
                 &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
+                    &identity.project_scope.owner_user_id.as_ref(),
+                    &identity.project_scope.project_id.as_ref(),
                     &receipt_id,
-                    &command.challenge_binding.canonical_command_digest,
-                    &command.challenge_binding.idempotency_key,
-                    &command.chapter_id,
-                    &command.expected_authoritative_revision_id,
-                    &command.target_refs,
+                    &identity.canonical_command_digest,
+                    &identity.idempotency_key,
+                    &identity.chapter_id,
+                    &identity.expected_authoritative_revision_id,
+                    &identity.target_refs,
                 ],
             )
             .await
@@ -212,8 +245,8 @@ impl PostgresProjectReader {
                             AND receipt.project_id = $2::text::uuid
                             AND receipt.receipt_id = $3::text::uuid",
                         &[
-                            &command.project_scope.owner_user_id.as_ref(),
-                            &command.project_scope.project_id.as_ref(),
+                            &identity.project_scope.owner_user_id.as_ref(),
+                            &identity.project_scope.project_id.as_ref(),
                             &receipt_id,
                         ],
                     )
@@ -230,7 +263,7 @@ impl PostgresProjectReader {
                     || resulting_head != revision_id
                     || relation.get::<_, i64>(8) != 1
                     || relation.get::<_, i64>(9) != 1
-                    || relation.get::<_, String>(10) != command.chapter_id
+                    || relation.get::<_, String>(10) != identity.chapter_id
                     || relation.get::<_, String>(11) != prior_head
                     || relation.get::<_, String>(12) != prior_head
                     || expected_head != prior_head
@@ -255,7 +288,7 @@ impl PostgresProjectReader {
                     && expected_head == prior_head
                     && prior_head == resulting_head =>
             {
-                verify_zero_authority_relations(&client, command, receipt_id).await?;
+                verify_zero_authority_relations(&client, identity, receipt_id).await?;
                 AuthorEditSettlementEffect::NoEffect {
                     reason: storyos_core::AuthorEditNoEffect::ContentUnchanged,
                 }
@@ -276,7 +309,7 @@ impl PostgresProjectReader {
                 {
                     return Err(AuthorEditError::BindingConflict);
                 }
-                verify_zero_authority_relations(&client, command, receipt_id).await?;
+                verify_zero_authority_relations(&client, identity, receipt_id).await?;
                 AuthorEditSettlementEffect::Conflicted {
                     reason,
                     current_authoritative_revision_id: resulting_head,
@@ -292,7 +325,7 @@ impl PostgresProjectReader {
                 {
                     return Err(AuthorEditError::BindingConflict);
                 }
-                verify_zero_authority_relations(&client, command, receipt_id).await?;
+                verify_zero_authority_relations(&client, identity, receipt_id).await?;
                 AuthorEditSettlementEffect::Refused {
                     reason: parse_refusal_reason(reason)?,
                 }
@@ -320,7 +353,7 @@ impl PostgresProjectReader {
 
 async fn verify_zero_authority_relations(
     client: &tokio_postgres::Client,
-    command: &ApplyAuthorEditCommand,
+    identity: &AuthorEditReplayIdentity,
     receipt_id: &str,
 ) -> Result<(), AuthorEditError> {
     let counts = client
@@ -347,8 +380,8 @@ async fn verify_zero_authority_relations(
                         WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                           AND receipt_id = $3::text::uuid)))",
             &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
+                &identity.project_scope.owner_user_id.as_ref(),
+                &identity.project_scope.project_id.as_ref(),
                 &receipt_id,
             ],
         )
