@@ -60,8 +60,10 @@ fn delivery_ticket_blockers_serialize_as_closed_arrays() {
             json!(["https://github.com/FrankQDWang/StoryOS/issues/106"]),
             json!([]),
             json!([
+                "https://github.com/FrankQDWang/StoryOS/issues/103",
                 "https://github.com/FrankQDWang/StoryOS/issues/108",
-                "https://github.com/FrankQDWang/StoryOS/issues/56"
+                "https://github.com/FrankQDWang/StoryOS/issues/56",
+                "https://github.com/FrankQDWang/StoryOS/issues/60"
             ]),
             json!(["https://github.com/FrankQDWang/StoryOS/issues/109"]),
             json!(["https://github.com/FrankQDWang/StoryOS/issues/110"]),

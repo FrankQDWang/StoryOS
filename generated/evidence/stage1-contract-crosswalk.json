@@ -11,10 +11,10 @@
       "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-17-v16",
-      "baseline_commit": "f5fee494cdcd074b19c7689609a00c67cf620b2d",
-      "baseline_tree": "044c3aad1a8deb1378d1f729b46c1bda648190e4",
-      "ticket_set_sha256": "sha256:8572a0163e9196da68ec41ba627b4037e315e4279cb7f3773051fecc8bb6e62c",
+      "revision": "stage1-ticketed-delivery-2026-08-18-v17",
+      "baseline_commit": "df9330f95ed0434807417512b1bc36942d1615fd",
+      "baseline_tree": "0d4fd32f06605b69ba406e97f435152961ad0214",
+      "ticket_set_sha256": "sha256:6114892a5c46d558f2c17bc186af82a874639f8898f5b1a9e7abfe3bac21ade3",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -40,7 +40,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/103",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
-          "issue_body_sha256": "de4a4fda4ad2de60d8bc9f3c8caf8724070ca5b6e36c8aaa74454f7e634abf30",
+          "issue_body_sha256": "bb827075cfd61443577f3b9499850a699dbc916b84602e71b1edb26afe9bc65d",
           "blocked_by": [],
           "evidence_role": "contract-binding",
           "responsibility": "bind the accepted Stage 1 specification and ticket sequence",
@@ -431,8 +431,10 @@
           "title": "Reconcile Acknowledgement Loss without Duplicate Authority",
           "issue_body_sha256": "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
           "blocked_by": [
+            "https://github.com/FrankQDWang/StoryOS/issues/103",
             "https://github.com/FrankQDWang/StoryOS/issues/108",
-            "https://github.com/FrankQDWang/StoryOS/issues/56"
+            "https://github.com/FrankQDWang/StoryOS/issues/56",
+            "https://github.com/FrankQDWang/StoryOS/issues/60"
           ],
           "evidence_role": "planned-runtime-evidence",
           "responsibility": "reconcile acknowledgement loss without duplicate authority",

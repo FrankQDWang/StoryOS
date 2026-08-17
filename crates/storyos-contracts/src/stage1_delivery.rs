@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-17-v16";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "f5fee494cdcd074b19c7689609a00c67cf620b2d";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "044c3aad1a8deb1378d1f729b46c1bda648190e4";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-18-v17";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "df9330f95ed0434807417512b1bc36942d1615fd";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "0d4fd32f06605b69ba406e97f435152961ad0214";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:8572a0163e9196da68ec41ba627b4037e315e4279cb7f3773051fecc8bb6e62c";
+    "sha256:6114892a5c46d558f2c17bc186af82a874639f8898f5b1a9e7abfe3bac21ade3";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -279,7 +279,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-01",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
         title: "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
-        issue_body_sha256: "de4a4fda4ad2de60d8bc9f3c8caf8724070ca5b6e36c8aaa74454f7e634abf30",
+        issue_body_sha256: "bb827075cfd61443577f3b9499850a699dbc916b84602e71b1edb26afe9bc65d",
         blocked_by: &[],
         evidence_role: EvidenceRole::ContractBinding,
         responsibility: "bind the accepted Stage 1 specification and ticket sequence",
@@ -361,8 +361,10 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         title: "Reconcile Acknowledgement Loss without Duplicate Authority",
         issue_body_sha256: "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
         blocked_by: &[
+            "https://github.com/FrankQDWang/StoryOS/issues/103",
             "https://github.com/FrankQDWang/StoryOS/issues/108",
             "https://github.com/FrankQDWang/StoryOS/issues/56",
+            "https://github.com/FrankQDWang/StoryOS/issues/60",
         ],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "reconcile acknowledgement loss without duplicate authority",
