@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,7 @@ if ENTRY_DIR not in sys.path:
 
 from postgresql_persistence_verifier_common import (
     CATALOG_PATH,
+    ROOT,
     ROUTE_CATALOG_PATH,
     STORAGE_CONTRACT_PATH,
     canonical_bytes,
@@ -33,6 +35,7 @@ from postgresql_persistence_verifier_common import (
 from postgresql_persistence_verifier_route import validate_route_coverage
 from postgresql_persistence_verifier_storage import (
     validate_families,
+    validate_author_command_outcome_unknown_sql,
     validate_migration,
     validate_physical_ledger_boundary,
 )
@@ -41,7 +44,9 @@ from postgresql_persistence_verifier_storage import (
 def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str], check_digests: bool = True) -> dict[str, int]:
     if catalog.get("catalog_id") != catalog.get("schema_identity", {}).get("persisted_format_catalog_id"):
         fail(errors, "catalog identity does not bind persisted-format identity")
-    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-16-zero-authority-receipt-activity":
+    if catalog.get("catalog_id") != "storyos.persistence.catalog.release-1.v3":
+        fail(errors, "catalog identity must equal the hard-cut Release 1 catalog v3")
+    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-17-author-command-outcome-unknown":
         fail(errors, "unexpected storage contract revision")
     binding = catalog.get("schema_identity", {}).get("protocol_binding", {})
     for key, expected in {
@@ -92,7 +97,9 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
     route_stats = validate_route_coverage(catalog, route_catalog, family_map, operation_owners, event_owners, errors)
     verification_contract = catalog.get("verification_contract", {})
     required_verifier_flags = {
+        "require_author_command_outcome_unknown",
         "require_negative_self_test",
+        "require_named_author_edit_outcome_query_read",
         "require_physical_ledger_boundary",
         "require_bootstrap_source_checksum",
         "require_table_family_registry_digest",
@@ -111,6 +118,21 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
 
 
 def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str]) -> None:
+    catalog_identity_probe = copy.deepcopy(catalog)
+    catalog_identity_probe["catalog_id"] = "storyos.persistence.catalog.release-1.v4"
+    catalog_identity_probe["schema_identity"]["persisted_format_catalog_id"] = (
+        "storyos.persistence.catalog.release-1.v4"
+    )
+    catalog_identity_errors: list[str] = []
+    validate_catalog(
+        catalog_identity_probe,
+        route_catalog,
+        catalog_identity_errors,
+        check_digests=False,
+    )
+    if not any("hard-cut Release 1 catalog v3" in error for error in catalog_identity_errors):
+        errors.append("negative self-test did not reject paired catalog identity drift")
+
     probe = copy.deepcopy(catalog)
     probe["families"][-1]["family_id"] = probe["families"][0]["family_id"]
     probe_errors: list[str] = []
@@ -213,6 +235,233 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
     if not any("getApplyAuthorEditOutcome must map exactly" in error for error in outcome_query_errors):
         errors.append("negative self-test did not reject incomplete outcome Query family coverage")
 
+    unknown_mutations = [
+        (
+            "missing-table-family",
+            lambda probe: next(
+                family
+                for family in probe["families"]
+                if family["family_id"] == "operational-admission-editor"
+            )["table_families"].remove(
+                "author_command_admission_outcome_unknown_observations"
+            ),
+        ),
+        (
+            "false-reconciliation",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "reconciliation_required", "boolean"
+            ),
+        ),
+        (
+            "open-boundary",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "last_provable_boundaries", ["admission_committed", "network_missing"]
+            ),
+        ),
+        (
+            "open-reason",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "reasons", ["acknowledgement_missing", "unknown"]
+            ),
+        ),
+        (
+            "global-observation-identity",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "row_identity", ["observation_id"]
+            ),
+        ),
+        (
+            "unbounded-sequence",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "sequence", "unbounded"
+            ),
+        ),
+        (
+            "post-terminal-append",
+            lambda probe: probe["author_command_outcome_unknown"].__setitem__(
+                "new_after_terminal", "append"
+            ),
+        ),
+    ]
+    for name, mutate in unknown_mutations:
+        unknown_probe = copy.deepcopy(catalog)
+        mutate(unknown_probe)
+        unknown_errors: list[str] = []
+        validate_catalog(
+            unknown_probe,
+            route_catalog,
+            unknown_errors,
+            check_digests=False,
+        )
+        if not any("outcome_unknown" in error for error in unknown_errors):
+            errors.append(f"negative self-test did not reject {name} outcome_unknown drift")
+
+    outcome_sql = normalized_file_bytes(
+        ROOT / "crates/storyos-adapter-postgres/migrations/0005_author_edits.sql"
+    ).decode("utf-8")
+    sql_mutations = [
+        (
+            "nullable-reconciliation-column",
+            lambda value: value.replace(
+                "reconciliation_required boolean NOT NULL DEFAULT true",
+                "reconciliation_required boolean DEFAULT true",
+                1,
+            ),
+        ),
+        (
+            "nullable-boundary-column",
+            lambda value: value.replace(
+                "last_provable_boundary text NOT NULL",
+                "last_provable_boundary text",
+                1,
+            ),
+        ),
+        (
+            "nonliteral-reconciliation-column",
+            lambda value: value.replace(
+                "CHECK (reconciliation_required)",
+                "CHECK (true)",
+                1,
+            ),
+        ),
+        (
+            "wrong-arbiter-lock",
+            lambda value: value.replace(
+                "FROM storyos.command_idempotency\n"
+                "   WHERE owner_user_id = NEW.owner_user_id",
+                "FROM storyos.project_command_challenges\n"
+                "   WHERE owner_user_id = NEW.owner_user_id",
+                1,
+            ),
+        ),
+        (
+            "caller-command-identity",
+            lambda value: value.replace(
+                "NEW.command_id := admission.command_id;",
+                "NEW.command_id := NEW.command_id;",
+                1,
+            ),
+        ),
+        (
+            "missing-in-progress-guard",
+            lambda value: value.replace(
+                "IF NOT FOUND OR arbiter_outcome_kind <> 'in_progress' THEN",
+                "IF NOT FOUND THEN",
+                1,
+            ),
+        ),
+        (
+            "missing-terminal-guard",
+            lambda value: re.sub(
+                r"  IF EXISTS \(\n"
+                r"    SELECT 1\n"
+                r"      FROM storyos\.author_command_admission_settlements\n"
+                r"     WHERE owner_user_id = NEW\.owner_user_id\n"
+                r"       AND project_id = NEW\.project_id\n"
+                r"       AND author_command_admission_id = NEW\.author_command_admission_id\n"
+                r"  \) THEN\n"
+                r"    RAISE EXCEPTION USING\n"
+                r"      ERRCODE = '23514',\n"
+                r"      MESSAGE = 'a terminal Admission cannot append outcome_unknown';\n"
+                r"  END IF;\n",
+                "",
+                value,
+                count=1,
+            ),
+        ),
+        (
+            "caller-sequence",
+            lambda value: value.replace(
+                "NEW.observation_sequence := next_sequence;",
+                "NEW.observation_sequence := NEW.observation_sequence;",
+                1,
+            ),
+        ),
+        (
+            "caller-observed-time",
+            lambda value: value.replace(
+                "NEW.observed_at := clock_timestamp();",
+                "NEW.observed_at := NEW.observed_at;",
+                1,
+            ),
+        ),
+        (
+            "missing-admission-foreign-key",
+            lambda value: value.replace(
+                "  FOREIGN KEY (\n"
+                "    owner_user_id, project_id, author_command_admission_id, command_id,\n"
+                "    command_kind, canonical_command_digest, idempotency_key\n"
+                "  ) REFERENCES storyos.author_command_admissions (\n"
+                "    owner_user_id, project_id, author_command_admission_id, command_id,\n"
+                "    command_kind, canonical_command_digest, idempotency_key\n"
+                "  ) MATCH FULL\n",
+                "",
+                1,
+            ),
+        ),
+        (
+            "permissive-scope-policy",
+            lambda value: value.replace(
+                "  USING (\n"
+                "    owner_user_id = current_setting('storyos.owner_user_id')::uuid\n"
+                "    AND project_id = current_setting('storyos.project_id')::uuid\n"
+                "  )",
+                "  USING (true)",
+                1,
+            ),
+        ),
+        (
+            "indirect-runtime-update-grant",
+            lambda value: value.replace(
+                "GRANT SELECT, INSERT ON storyos.author_command_admissions,",
+                "GRANT UPDATE ON storyos.author_command_admissions,\n"
+                "  storyos.author_command_admission_outcome_unknown_observations "
+                "TO storyos_runtime;\n\n"
+                "GRANT SELECT, INSERT ON storyos.author_command_admissions,",
+                1,
+            ),
+        ),
+    ]
+    for name, mutate in sql_mutations:
+        mutated_sql = mutate(outcome_sql)
+        if mutated_sql == outcome_sql:
+            errors.append(f"negative self-test could not apply {name} SQL mutation")
+            continue
+        sql_errors: list[str] = []
+        validate_author_command_outcome_unknown_sql(mutated_sql, sql_errors)
+        if not sql_errors:
+            errors.append(f"negative self-test did not reject {name} outcome_unknown SQL drift")
+
+    outcome_read_mutations = [
+        (
+            "missing-family",
+            lambda relation: relation["family_ids"].remove("project-canonical"),
+        ),
+        (
+            "surplus-family",
+            lambda relation: relation["family_ids"].append("operational-run-mailbox"),
+        ),
+        (
+            "write-capability",
+            lambda relation: relation["capabilities"].append("write"),
+        ),
+        (
+            "lifecycle-append",
+            lambda relation: relation.__setitem__("lifecycle_append", "outcome_unknown"),
+        ),
+        (
+            "observation-table-read",
+            lambda relation: relation.__setitem__("outcome_unknown_table_access", "read"),
+        ),
+    ]
+    for name, mutate in outcome_read_mutations:
+        read_probe = copy.deepcopy(catalog)
+        mutate(read_probe["author_edit_outcome_query_read"])
+        read_errors: list[str] = []
+        validate_catalog(read_probe, route_catalog, read_errors, check_digests=False)
+        if not any("named read relation" in error for error in read_errors):
+            errors.append(f"negative self-test did not reject {name} outcome Query drift")
+
 
 def main() -> int:
     raw = CATALOG_PATH.read_bytes()
@@ -246,6 +495,7 @@ def main() -> int:
         f"{stats['covered_event_count']}/{stats['required_event_count']} public Events covered"
     )
     if "--self-test" in sys.argv:
+        print("OK: paired catalog-identity negative self-test rejected v3 drift")
         print("OK: duplicate-family negative self-test rejected a bad catalog")
         print("OK: missing-owner-anchor negative self-test rejected a bad catalog")
         print("OK: settlement-mode negative self-test rejected a bad catalog")
@@ -257,6 +507,8 @@ def main() -> int:
         print("OK: nullable-Receipt negative self-test rejected a bad catalog")
         print("OK: bootstrap-credential negative self-test rejected a bad catalog")
         print("OK: outcome-Query-family negative self-test rejected a bad catalog")
+        print("OK: outcome_unknown negative self-tests rejected seven bad catalogs and twelve bad SQL shapes")
+        print("OK: named-outcome-read negative self-tests rejected five bad catalogs")
     return 0
 
 

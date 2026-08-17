@@ -114,6 +114,25 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
             errors,
             "getApplyAuthorEditOutcome must map exactly to its canonical, Receipt, Admission, and applied-Activity read families",
         )
+    expected_outcome_read_relation = {
+        "schema_id": "storyos.persistence.apply-author-edit-outcome-read.v1",
+        "operation_id": "getApplyAuthorEditOutcome",
+        "family_ids": [
+            "project-canonical",
+            "operational-receipts-actions",
+            "operational-admission-editor",
+            "operational-project-activity",
+        ],
+        "committed_projection": "receipt_first_exact_replay",
+        "outcomes": ["committed", "rejected", "still_unknown"],
+        "capabilities": ["read"],
+        "nonce_consumption": "none",
+        "core_invocation": "none",
+        "lifecycle_append": "none",
+        "outcome_unknown_table_access": "none",
+    }
+    if catalog.get("author_edit_outcome_query_read") != expected_outcome_read_relation:
+        fail(errors, "getApplyAuthorEditOutcome named read relation must equal the closed v1 shape")
     routed_families = set().union(*operation_owners.values(), *event_owners.values()) if operation_owners or event_owners else set()
     internal_without_route = sum(
         1

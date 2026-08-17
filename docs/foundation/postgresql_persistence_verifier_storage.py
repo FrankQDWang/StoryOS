@@ -37,16 +37,16 @@ from postgresql_persistence_verifier_common import (
 def validate_migration(catalog: dict[str, Any], errors: list[str]) -> None:
     identity = catalog.get("schema_identity", {})
     migration = catalog.get("migration_chain", {})
-    if identity.get("database_schema_identity") != "storyos.postgresql.schema.v2":
-        fail(errors, "database_schema_identity must be the hard-cut PostgreSQL schema v2")
+    if identity.get("database_schema_identity") != "storyos.postgresql.schema.v3":
+        fail(errors, "database_schema_identity must be the hard-cut PostgreSQL schema v3")
     if identity.get("active_schema_version") != ACTIVE_SCHEMA:
         fail(errors, "schema_identity.active_schema_version must be the Release 1 schema")
     if identity.get("persisted_format_catalog_id") != catalog.get("catalog_id"):
         fail(errors, "persisted_format_catalog_id must equal catalog_id")
     if identity.get("migration_chain_id") != migration.get("chain_id"):
         fail(errors, "schema identity and migration chain identities disagree")
-    if migration.get("chain_id") != "storyos.persistence.bootstrap.release-1.v2":
-        fail(errors, "migration chain must be the hard-cut Release 1 bootstrap v2")
+    if migration.get("chain_id") != "storyos.persistence.bootstrap.release-1.v3":
+        fail(errors, "migration chain must be the hard-cut Release 1 bootstrap v3")
     if migration.get("current_version") != ACTIVE_SCHEMA:
         fail(errors, "migration_chain.current_version must be the active schema")
     predecessors = migration.get("supported_predecessors")
@@ -156,6 +156,7 @@ def validate_migration(catalog: dict[str, Any], errors: list[str]) -> None:
     if not required_gates <= set(active_gates):
         fail(errors, "active write gates omit initial bootstrap, release, migration, or recovery visibility proof")
     validate_author_edit_receipt_activity(catalog, errors)
+    validate_author_command_outcome_unknown(catalog, errors)
 
 
 def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> None:
@@ -256,6 +257,203 @@ def validate_author_edit_receipt_activity(
     for field, expected in expected_lists.items():
         if contract.get(field) != expected:
             fail(errors, f"author-edit Receipt/Activity contract has invalid {field}")
+
+
+def validate_author_command_outcome_unknown(
+    catalog: dict[str, Any], errors: list[str]
+) -> None:
+    expected = {
+        "schema_id": "storyos.persistence.author-command-outcome-unknown.v1",
+        "table_family": "author_command_admission_outcome_unknown_observations",
+        "owner_family_id": "operational-admission-editor",
+        "row_identity": ["owner_user_id", "project_id", "observation_id"],
+        "sequence_identity": [
+            "owner_user_id",
+            "project_id",
+            "author_command_admission_id",
+            "observation_sequence",
+        ],
+        "append_request_fields": [
+            "project_scope",
+            "author_command_admission_id",
+            "observation_id",
+            "last_provable_boundary",
+            "reason",
+        ],
+        "copied_admission_identity": [
+            "command_id",
+            "command_kind",
+            "idempotency_key",
+            "canonical_command_digest",
+        ],
+        "last_provable_boundaries": ["admission_committed"],
+        "reasons": ["acknowledgement_missing"],
+        "reconciliation_required": "literal_true",
+        "observed_at": "postgresql_clock",
+        "sequence": "one_based_u64_database_serialized",
+        "arbiter": "same_scoped_command_idempotency_row_as_receipt_settlement",
+        "open_condition": "idempotency_in_progress_and_no_terminal_settlement",
+        "current_lifecycle_projection": {
+            "pending": "no_terminal_and_zero_observations",
+            "outcome_unknown": "no_terminal_and_one_or_more_observations",
+            "receipt_settled": "terminal_precedes_historical_observations",
+        },
+        "exact_retry": "same_complete_scoped_observation_returns_original_row_and_time_even_after_terminal",
+        "new_after_terminal": "reject",
+        "new_after_sequence_exhaustion": "reject_atomically",
+        "runtime_grants": ["select", "insert"],
+        "prohibited_effects": [
+            "update_or_delete_observation",
+            "command_idempotency_update",
+            "challenge_consumption",
+            "core_invocation",
+            "receipt_or_settlement_creation",
+            "activity_or_authority_creation",
+            "retry_permission",
+            "success_or_rejection_projection",
+        ],
+    }
+    if catalog.get("author_command_outcome_unknown") != expected:
+        fail(errors, "author-command outcome_unknown contract must equal the closed v1 shape")
+
+    family = next(
+        (
+            family
+            for family in catalog.get("families", [])
+            if isinstance(family, dict)
+            and family.get("family_id") == "operational-admission-editor"
+        ),
+        {},
+    )
+    if expected["table_family"] not in family.get("table_families", []):
+        fail(errors, "outcome_unknown table must belong to operational-admission-editor")
+
+    sql_path = ROOT / "crates/storyos-adapter-postgres/migrations/0005_author_edits.sql"
+    sql = normalized_file_bytes(sql_path).decode("utf-8")
+    validate_author_command_outcome_unknown_sql(sql, errors)
+
+
+def validate_author_command_outcome_unknown_sql(sql: str, errors: list[str]) -> None:
+    required_fragments = [
+        "CREATE TABLE storyos.author_command_admission_outcome_unknown_observations (",
+        "observation_id uuid NOT NULL",
+        "observation_sequence numeric(20, 0) NOT NULL",
+        "PRIMARY KEY (owner_user_id, project_id, observation_id)",
+        "UNIQUE (owner_user_id, project_id, author_command_admission_id, observation_sequence)",
+        "CHECK (observation_sequence BETWEEN 1 AND 18446744073709551615)",
+        "last_provable_boundary text NOT NULL\n    CHECK (last_provable_boundary = 'admission_committed')",
+        "reason text NOT NULL CHECK (reason = 'acknowledgement_missing')",
+        "reconciliation_required boolean NOT NULL DEFAULT true\n    CHECK (reconciliation_required)",
+        "observed_at timestamptz NOT NULL DEFAULT clock_timestamp()",
+        "FOREIGN KEY (\n    owner_user_id, project_id, author_command_admission_id, command_id,\n    command_kind, canonical_command_digest, idempotency_key\n  ) REFERENCES storyos.author_command_admissions (\n    owner_user_id, project_id, author_command_admission_id, command_id,\n    command_kind, canonical_command_digest, idempotency_key\n  ) MATCH FULL",
+        "CREATE TRIGGER author_command_outcome_unknown_prepare",
+        "BEFORE INSERT ON storyos.author_command_admission_outcome_unknown_observations",
+        "NEW.command_id := admission.command_id;",
+        "NEW.command_kind := admission.command_kind;",
+        "NEW.canonical_command_digest := admission.canonical_command_digest;",
+        "NEW.idempotency_key := admission.idempotency_key;",
+        "NEW.observation_sequence := next_sequence;",
+        "NEW.observed_at := clock_timestamp();",
+        "ALTER TABLE storyos.author_command_admission_outcome_unknown_observations\n  ENABLE ROW LEVEL SECURITY;",
+        "ALTER TABLE storyos.author_command_admission_outcome_unknown_observations\n  FORCE ROW LEVEL SECURITY;",
+        "CREATE POLICY author_command_outcome_unknown_exact_scope",
+        "storyos.author_command_admission_outcome_unknown_observations,",
+    ]
+    for fragment in required_fragments:
+        if fragment not in sql:
+            fail(errors, f"outcome_unknown bootstrap is missing locked SQL: {fragment}")
+    if not re.search(
+        r"SELECT\s+command_id,\s*command_kind,\s*canonical_command_digest,\s*"
+        r"idempotency_key\s+INTO\s+admission\s+"
+        r"FROM\s+storyos\.author_command_admissions\s+"
+        r"WHERE\s+owner_user_id\s*=\s*NEW\.owner_user_id\s+"
+        r"AND\s+project_id\s*=\s*NEW\.project_id\s+"
+        r"AND\s+author_command_admission_id\s*=\s*NEW\.author_command_admission_id\s*;",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fail(errors, "outcome_unknown append must load one exact scoped Admission")
+    if not re.search(
+        r"SELECT\s+outcome_kind\s+INTO\s+arbiter_outcome_kind\s+"
+        r"FROM\s+storyos\.command_idempotency\s+"
+        r"WHERE\s+owner_user_id\s*=\s*NEW\.owner_user_id\s+"
+        r"AND\s+project_id\s*=\s*NEW\.project_id\s+"
+        r"AND\s+command_kind\s*=\s*admission\.command_kind\s+"
+        r"AND\s+idempotency_key\s*=\s*admission\.idempotency_key\s+"
+        r"FOR\s+UPDATE\s*;",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fail(errors, "outcome_unknown append must lock the exact scoped idempotency arbiter")
+    if not re.search(
+        r"IF\s+NOT\s+FOUND\s+OR\s+arbiter_outcome_kind\s*<>\s*'in_progress'\s+THEN",
+        sql,
+        flags=re.IGNORECASE,
+    ):
+        fail(errors, "outcome_unknown append must require the in-progress arbiter state")
+    if not re.search(
+        r"IF\s+EXISTS\s*\(\s*SELECT\s+1\s+"
+        r"FROM\s+storyos\.author_command_admission_settlements\s+"
+        r"WHERE\s+owner_user_id\s*=\s*NEW\.owner_user_id\s+"
+        r"AND\s+project_id\s*=\s*NEW\.project_id\s+"
+        r"AND\s+author_command_admission_id\s*=\s*NEW\.author_command_admission_id\s*"
+        r"\)\s+THEN",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fail(errors, "outcome_unknown append must reject a terminal Admission")
+    if not re.search(
+        r"SELECT\s+COALESCE\(max\(observation_sequence\),\s*0\)\s*\+\s*1\s+"
+        r"INTO\s+next_sequence\s+"
+        r"FROM\s+storyos\.author_command_admission_outcome_unknown_observations\s+"
+        r"WHERE\s+owner_user_id\s*=\s*NEW\.owner_user_id\s+"
+        r"AND\s+project_id\s*=\s*NEW\.project_id\s+"
+        r"AND\s+author_command_admission_id\s*=\s*NEW\.author_command_admission_id\s*;",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fail(errors, "outcome_unknown sequence must be database-allocated within one Admission")
+    scope_expression = (
+        r"owner_user_id\s*=\s*current_setting\('storyos\.owner_user_id'\)::uuid\s+"
+        r"AND\s+project_id\s*=\s*current_setting\('storyos\.project_id'\)::uuid"
+    )
+    if not re.search(
+        r"CREATE\s+POLICY\s+author_command_outcome_unknown_exact_scope\s+"
+        r"ON\s+storyos\.author_command_admission_outcome_unknown_observations\s+"
+        rf"USING\s*\(\s*{scope_expression}\s*\)\s+"
+        rf"WITH\s+CHECK\s*\(\s*{scope_expression}\s*\)\s*;",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fail(errors, "outcome_unknown table needs exact User and Project Scope RLS")
+    if not re.search(
+        r"GRANT\s+SELECT,\s*INSERT\s+ON\s+[^;]*"
+        r"storyos\.author_command_admission_outcome_unknown_observations[^;]*"
+        r"TO\s+storyos_runtime\s*;",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        fail(errors, "outcome_unknown table needs SELECT and INSERT runtime grants")
+    for grant in re.finditer(
+        r"GRANT\s+(?P<privileges>[^;]+?)\s+ON\s+(?P<tables>[^;]+?)\s+"
+        r"TO\s+(?P<roles>[^;]+)\s*;",
+        sql,
+        flags=re.IGNORECASE | re.DOTALL,
+    ):
+        tables = grant.group("tables")
+        if "storyos.author_command_admission_outcome_unknown_observations" not in tables:
+            continue
+        privileges = {
+            privilege.strip().upper()
+            for privilege in grant.group("privileges").split(",")
+        }
+        if "STORYOS_RUNTIME" in grant.group("roles").upper() and privileges != {
+            "SELECT",
+            "INSERT",
+        }:
+            fail(errors, "outcome_unknown runtime grants must equal SELECT and INSERT")
+        if privileges - {"SELECT", "INSERT"}:
+            fail(errors, "outcome_unknown table must not grant mutation privileges")
 
 
 def validate_families(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str]) -> tuple[dict[str, dict[str, Any]], dict[str, set[str]], dict[str, set[str]]]:
