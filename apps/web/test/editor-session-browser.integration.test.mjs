@@ -20,10 +20,10 @@ const chromeExecutable = chromeCandidates.find(existsSync);
 
 const harness = `<!doctype html>
 <html><body data-result="running"><script type="module">
-import { openEditorWorkspace, persistReplaceSelection, rebuildPendingProjection,
-  submitOnePendingAuthorEdit }
+import { freezeOneIntentSubmission, openEditorWorkspace, persistReplaceSelection,
+  rebuildPendingProjection, submitOnePendingAuthorEdit }
   from "/apps/web/src/editor-session.mjs";
-import { readJournalSnapshot, validateJournalSnapshot }
+import { digestJournalValue, readJournalSnapshot, validateJournalSnapshot }
   from "/apps/web/src/local-edit-journal.mjs";
 
 const assert = {
@@ -118,6 +118,8 @@ const challengeRequests = [];
 let failAuthorEditChallenge = true;
 let corruptAuthorEditAcknowledgement = true;
 let authorEditDigest;
+let canonicalSession = session;
+let nextZeroAuthorityResult;
 const jsonResponse = (body) => new Response(JSON.stringify(body), {
   status: 200, headers: { "content-type": "application/json" },
 });
@@ -138,18 +140,13 @@ const fetchImpl = async (url, options = {}) => {
       limit_profile_revision: "storyos.foundation.absolute.v1" });
   }
   if (path.endsWith("/editor-sessions")) return jsonResponse(session);
-  if (path.endsWith("/editor-sessions/" + SESSION)) return jsonResponse(
-    authorEditRequests.length === 0
-      ? { ...session, schema_id: "storyos.query.editor-session.response.v1" }
-      : JSON.parse(authorEditRequests.at(-1).body).expected_authoritative_revision_id
-          === freshSession.base_snapshot.authoritative_head_revision_id
-        ? secondFreshSession
-        : freshSession,
-  );
+  if (path.endsWith("/editor-sessions/" + SESSION)) return jsonResponse({
+    ...canonicalSession, schema_id: "storyos.query.editor-session.response.v1",
+  });
   if (path.endsWith("/manuscript/author-edits")) {
     const request = JSON.parse(options.body);
-    const zeroEffect = request.author_edit_units.length === 1
-      && request.author_edit_units[0].normalized_primitives[0].text === "";
+    const zeroAuthorityResult = nextZeroAuthorityResult;
+    const zeroEffect = zeroAuthorityResult !== undefined;
     const secondEdit = request.expected_authoritative_revision_id
       === freshSession.base_snapshot.authoritative_head_revision_id;
     const revisionId = secondEdit
@@ -158,18 +155,26 @@ const fetchImpl = async (url, options = {}) => {
     const commitId = secondEdit
       ? "018f0000-0000-7001-8000-000000000045"
       : "018f0000-0000-7001-8000-000000000035";
+    const zeroIds = {
+      no_effect: ["018f0000-0000-7001-8000-000000000051",
+        "018f0000-0000-7001-8000-000000000052", "018f0000-0000-7001-8000-000000000053"],
+      conflicted: ["018f0000-0000-7001-8000-000000000061",
+        "018f0000-0000-7001-8000-000000000062", "018f0000-0000-7001-8000-000000000063"],
+      refused: ["018f0000-0000-7001-8000-000000000071",
+        "018f0000-0000-7001-8000-000000000072", "018f0000-0000-7001-8000-000000000073"],
+    };
     const commandId = zeroEffect
-      ? "018f0000-0000-7001-8000-000000000051"
+      ? zeroIds[zeroAuthorityResult][0]
       : secondEdit
       ? "018f0000-0000-7001-8000-000000000041"
       : "018f0000-0000-7001-8000-000000000031";
     const admissionId = zeroEffect
-      ? "018f0000-0000-7001-8000-000000000052"
+      ? zeroIds[zeroAuthorityResult][1]
       : secondEdit
       ? "018f0000-0000-7001-8000-000000000042"
       : "018f0000-0000-7001-8000-000000000032";
     const receiptId = zeroEffect
-      ? "018f0000-0000-7001-8000-000000000053"
+      ? zeroIds[zeroAuthorityResult][2]
       : secondEdit
       ? "018f0000-0000-7001-8000-000000000043"
       : "018f0000-0000-7001-8000-000000000033";
@@ -183,6 +188,13 @@ const fetchImpl = async (url, options = {}) => {
       ? { ...authorEditDigest, value_hex_lowercase: "0".repeat(64) }
       : authorEditDigest;
     corruptAuthorEditAcknowledgement = false;
+    if (!zeroEffect) canonicalSession = secondEdit ? secondFreshSession : freshSession;
+    const zeroCurrentHead = zeroAuthorityResult === "conflicted"
+      ? "018f0000-0000-7001-8000-000000000064"
+      : request.expected_authoritative_revision_id;
+    const zeroReason = zeroAuthorityResult === "no_effect"
+      ? "content_unchanged"
+      : zeroAuthorityResult === "conflicted" ? "stale_authoritative_head" : "invalid_selection";
     return jsonResponse({
       schema_id: "storyos.command.apply-author-edit.response.v2",
       correlation_id: request.correlation_id,
@@ -197,19 +209,22 @@ const fetchImpl = async (url, options = {}) => {
         producer_cause: "author_command_admission",
         author_command_admission_id: admissionId,
         expected_heads: [request.expected_authoritative_revision_id],
-        prior_heads: [request.expected_authoritative_revision_id],
+        prior_heads: [zeroEffect ? zeroCurrentHead : request.expected_authoritative_revision_id],
         resulting_heads: zeroEffect
-          ? [request.expected_authoritative_revision_id] : [revisionId],
+          ? [zeroCurrentHead] : [revisionId],
         authoritative_revision_ids: zeroEffect ? [] : [revisionId],
         proposal_revision_ids: [],
         authoritative_commit_ids: zeroEffect ? [] : [commitId],
         author_action_sequence: zeroEffect ? null : position, draft_artifact_refs: [],
         artifact_lifecycle_event_refs: [], condition_refs: [],
-        result: zeroEffect ? "no_effect" : "authoritative_applied",
+        result: zeroEffect ? zeroAuthorityResult : "authoritative_applied",
         created_at: "2026-08-15T08:00:00.000Z",
       },
       effect: zeroEffect
-        ? { kind: "no_effect", reason: "content_unchanged" }
+        ? zeroAuthorityResult === "conflicted"
+          ? { kind: "conflicted", reason: zeroReason,
+            current_authoritative_revision_id: zeroCurrentHead }
+          : { kind: zeroAuthorityResult, reason: zeroReason }
         : { kind: "authoritative_applied",
           authoritative_revision: { revision_id: revisionId, body: finalBody },
           authoritative_commit_id: commitId,
@@ -238,6 +253,29 @@ const transactionResult = (transaction) => new Promise((resolve, reject) => {
   transaction.onabort = () => reject(transaction.error);
   transaction.onerror = () => reject(transaction.error);
 });
+const journalDatabaseName = "storyos-local-edit-journal:" + OWNER + ":" + PROJECT;
+const deleteJournalDatabase = async (workspace) => {
+  workspace.database.close();
+  const request = indexedDB.deleteDatabase(journalDatabaseName);
+  await requestResult(request);
+};
+const chapterForSession = (editorSession) => ({
+  project_scope: project.project_scope,
+  project_activity_position: editorSession.base_snapshot.project_activity_position,
+  chapter: {
+    chapter_id: CHAPTER,
+    current_revision: editorSession.base_snapshot.materialized_revision,
+  },
+});
+const openCurrentWorkspace = () => openEditorWorkspace({
+  baseUrl: location.origin,
+  project,
+  chapter: chapterForSession(canonicalSession),
+  profile,
+  fetchImpl,
+  indexedDBImpl: indexedDB,
+  cryptoImpl: crypto,
+});
 const intentCount = (database) => requestResult(database.transaction("intents", "readonly")
   .objectStore("intents").count());
 
@@ -263,19 +301,32 @@ async function run() {
     const pending = await persistReplaceSelection(reopened, {
       from: 4, to: 4, text: "!", resultingBody: "Base!",
       inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-15T08:00:00.000Z",
     });
     assert.deepEqual(pending, { body: "Base!", save_state: "saving",
       unsettled_intent_count: 1, authoritative_revision_id: REVISION });
-    const secondPending = await persistReplaceSelection(reopened, {
+    await assert.rejects(persistReplaceSelection(reopened, {
       from: 5, to: 5, text: "?", resultingBody: "Base!?",
       inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-15T08:00:00.251Z",
+    }), /requires prior group settlement/);
+    assert.equal(await intentCount(reopened.database), 1);
+    await deleteJournalDatabase(reopened);
+    const regrouped = await openCurrentWorkspace();
+    await persistReplaceSelection(regrouped, {
+      from: 4, to: 4, text: "!", resultingBody: "Base!",
+      inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-15T08:00:00.000Z",
     });
-    assert.deepEqual(secondPending, { body: "Base!?", save_state: "saving",
-      unsettled_intent_count: 2, authoritative_revision_id: REVISION });
-    reopened.pending = secondPending;
-    assert.equal(await intentCount(reopened.database), 2);
+    const secondPending = await persistReplaceSelection(regrouped, {
+      from: 5, to: 5, text: "?", resultingBody: "Base!?",
+      inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-15T08:00:00.250Z",
+    });
+    regrouped.pending = secondPending;
+    assert.equal(await intentCount(regrouped.database), 2);
     assert.equal(requestPaths.some((path) => path.includes("author-edits")), false);
-    workspace = reopened;
+    workspace = regrouped;
   }
 
   assert.equal(workspace.session.editor_session.editor_session_id, SESSION);
@@ -317,6 +368,7 @@ async function run() {
   const secondPending = await persistReplaceSelection(workspace, {
     from: 6, to: 6, text: "+", resultingBody: "Base!?+",
     inputOrigin: "paste", undoGroupId: "018f0000-0000-7001-8000-000000000049",
+    createdAt: "2026-08-15T08:00:00.500Z",
   });
   assert.deepEqual(secondPending, { body: "Base!?+", save_state: "saving",
     unsettled_intent_count: 1,
@@ -331,93 +383,221 @@ async function run() {
   const finalJournal = await validateJournalSnapshot(
     workspace, await readJournalSnapshot(workspace),
   );
-  assert.deepEqual(finalJournal.records.map((record) => ({
-    local_intent_sequence: record.local_intent_sequence,
-    input_origin: record.input_origin,
-    base_snapshot_id: record.base_snapshot_id,
-    base_activity_position: record.base_activity_position,
-    expected_authoritative_heads: record.expected_authoritative_heads,
-    author_edit_unit: record.author_edit_unit,
-    editor_contract_revision: record.editor_contract_revision,
-    batch_policy_revision: record.batch_policy_revision,
-    projection_dependency: record.projection_dependency,
-  })), [{
-    local_intent_sequence: 1, input_origin: "typing",
-    base_snapshot_id: session.base_snapshot.snapshot_id, base_activity_position: "0",
-    expected_authoritative_heads: [REVISION],
-    author_edit_unit: {
-      normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 4, to: 4,
+  const expectedRecord = (record, { sequence, origin, base, unit, undoGroupId, createdAt }) => ({
+    completed_intent_record_id: record.completed_intent_record_id,
+    local_intent_sequence: sequence,
+    journal_partition_id: workspace.partition.journal_partition_id,
+    project_scope: project.project_scope,
+    editor_session_id: SESSION,
+    writer_generation: "1",
+    limit_profile_revision: "storyos.foundation.absolute.v1",
+    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+    input_origin: origin,
+    chapter_object_id: CHAPTER,
+    base_snapshot_id: base.snapshot_id,
+    base_activity_position: base.project_activity_position,
+    target_refs: base.target_refs,
+    expected_authoritative_heads: [base.authoritative_head_revision_id],
+    expected_proposal_heads: [],
+    proposal_anchors: [],
+    observed_ownership_partition: "authoritative",
+    author_edit_unit: unit,
+    retry_source: { kind: "fresh_editor_intent" },
+    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    undo_group_binding: { kind: "direct_author_input", undo_group_id: undoGroupId },
+    payload_chain_ref: record.payload_chain_ref,
+    payload_digest: record.payload_digest,
+    projection_dependency: { snapshot_id: base.snapshot_id, prior_sequence: sequence - 1 },
+    created_at: createdAt,
+  });
+  const expectedRecords = [
+    expectedRecord(finalJournal.records[0], {
+      sequence: 1, origin: "typing", base: session.base_snapshot,
+      unit: {
+        normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
+        selection_snapshot: {
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 4, to: 4,
+        },
       },
-    },
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
-    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
-    projection_dependency: { snapshot_id: session.base_snapshot.snapshot_id, prior_sequence: 0 },
-  }, {
-    local_intent_sequence: 2, input_origin: "typing",
-    base_snapshot_id: session.base_snapshot.snapshot_id, base_activity_position: "0",
-    expected_authoritative_heads: [REVISION],
-    author_edit_unit: {
-      normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 5, to: 5,
+      undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-15T08:00:00.000Z",
+    }),
+    expectedRecord(finalJournal.records[1], {
+      sequence: 2, origin: "typing", base: session.base_snapshot,
+      unit: {
+        normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
+        selection_snapshot: {
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 5, to: 5,
+        },
       },
-    },
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
-    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
-    projection_dependency: { snapshot_id: session.base_snapshot.snapshot_id, prior_sequence: 1 },
-  }, {
-    local_intent_sequence: 3, input_origin: "paste",
-    base_snapshot_id: freshSession.base_snapshot.snapshot_id, base_activity_position: "1",
-    expected_authoritative_heads: [freshSession.base_snapshot.authoritative_head_revision_id],
-    author_edit_unit: {
-      normalized_primitives: [{ kind: "replace_selection", from: 6, to: 6, text: "+" }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 6, to: 6,
+      undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-15T08:00:00.250Z",
+    }),
+    expectedRecord(finalJournal.records[2], {
+      sequence: 3, origin: "paste", base: freshSession.base_snapshot,
+      unit: {
+        normalized_primitives: [{ kind: "replace_selection", from: 6, to: 6, text: "+" }],
+        selection_snapshot: {
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 6, to: 6,
+        },
       },
+      undoGroupId: "018f0000-0000-7001-8000-000000000049",
+      createdAt: "2026-08-15T08:00:00.500Z",
+    }),
+  ];
+  assert.deepEqual(finalJournal.records, expectedRecords);
+  const expectedPayloadChains = [];
+  for (const chain of finalJournal.payloadChains) {
+    const records = expectedRecords.filter((record) =>
+      record.payload_chain_ref === chain.payload_chain_id);
+    const base = records[0].base_snapshot_id === session.base_snapshot.snapshot_id
+      ? session.base_snapshot : freshSession.base_snapshot;
+    expectedPayloadChains.push({
+      payload_chain_id: chain.payload_chain_id,
+      journal_partition_id: workspace.partition.journal_partition_id,
+      checkpoint_ref: {
+        chapter_object_id: CHAPTER,
+        materialized_payload: base.materialized_revision.body,
+        materialized_payload_digest: base.materialized_payload_digest,
+        source_snapshot_id: base.snapshot_id,
+        source_heads: [base.authoritative_head_revision_id],
+      },
+      ordered_patch_refs: await Promise.all(records.map(async (record, index) => ({
+        patch_id: chain.ordered_patch_refs[index].patch_id,
+        completed_intent_record_id: record.completed_intent_record_id,
+        local_intent_sequence: record.local_intent_sequence,
+        normalized_primitives: record.author_edit_unit.normalized_primitives,
+        resulting_payload_digest: await digestJournalValue(
+          finalJournal.bodyBySequence.get(record.local_intent_sequence), crypto,
+        ),
+      }))),
+    });
+  }
+  assert.deepEqual(finalJournal.payloadChains, expectedPayloadChains);
+  const expectedAppliedSettlement = (group, {
+    commandId, admissionId, receiptId, priorHead, revision, commitId, sequence,
+    position, installedBase,
+  }) => ({
+    kind: "applied_receipt_settled",
+    command_id: commandId,
+    author_command_admission_id: admissionId,
+    receipt: {
+      receipt_id: receiptId,
+      project_scope: project.project_scope,
+      command_kind: "applyAuthorEdit",
+      command_digest: group.frozen_request_digest,
+      idempotency_key: group.idempotency_key,
+      producer_cause: "author_command_admission",
+      author_command_admission_id: admissionId,
+      expected_heads: [priorHead], prior_heads: [priorHead],
+      resulting_heads: [revision.revision_id],
+      authoritative_revision_ids: [revision.revision_id], proposal_revision_ids: [],
+      authoritative_commit_ids: [commitId], author_action_sequence: position,
+      draft_artifact_refs: [], artifact_lifecycle_event_refs: [], condition_refs: [],
+      result: "authoritative_applied", created_at: "2026-08-15T08:00:00.000Z",
     },
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    authoritative_revision: revision,
+    authoritative_commit_id: commitId,
+    author_action_sequence: position,
+    project_activity_position: position,
+    installed_base_snapshot: installedBase,
+  });
+  const expectedGroup = (group, records, settlement) => ({
+    journal_submission_group_id: group.journal_submission_group_id,
+    journal_partition_id: workspace.partition.journal_partition_id,
+    project_scope: project.project_scope,
+    editor_session_id: SESSION,
+    writer_generation: "1",
     batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
-    projection_dependency: {
-      snapshot_id: freshSession.base_snapshot.snapshot_id, prior_sequence: 2,
+    ordered_coverage: records.map((record) => ({
+      local_intent_sequence: record.local_intent_sequence,
+      intent_record_ref: record.completed_intent_record_id,
+      payload_digest: record.payload_digest,
+    })),
+    covered_sequence_range: {
+      first: records[0].local_intent_sequence, last: records.at(-1).local_intent_sequence,
     },
-  }]);
-  assert.deepEqual(finalJournal.groups.map((group) => ({
-    covered_sequence_range: group.covered_sequence_range,
-    ordered_coverage: group.ordered_coverage.map((coverage) => coverage.local_intent_sequence),
-    batch_policy_revision: group.batch_policy_revision,
-    editor_contract_revision: group.frozen_request_body.editor_contract_revision,
-    author_edit_units: group.frozen_request_body.author_edit_units,
-    settlement_kind: group.settlement.kind,
-    installed_base_snapshot: group.settlement.installed_base_snapshot,
-  })), [{
-    covered_sequence_range: { first: 1, last: 2 },
-    ordered_coverage: [1, 2],
-    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
-    author_edit_units: finalJournal.records.slice(0, 2).map((record) => record.author_edit_unit),
-    settlement_kind: "applied_receipt_settled",
-    installed_base_snapshot: freshSession.base_snapshot,
-  }, {
-    covered_sequence_range: { first: 3, last: 3 },
-    ordered_coverage: [3],
-    batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
-    author_edit_units: [finalJournal.records[2].author_edit_unit],
-    settlement_kind: "applied_receipt_settled",
-    installed_base_snapshot: secondFreshSession.base_snapshot,
-  }]);
+    action_class: "direct_editor_action",
+    api_major: 1,
+    method: "POST",
+    route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+    command_schema: "storyos.command.apply-author-edit.request.v1",
+    command_kind: "applyAuthorEdit",
+    digest_profile: "storyos.command.applyAuthorEdit.jcs.v1",
+    idempotency_key: group.idempotency_key,
+    frozen_request_body: {
+      command_schema: "storyos.command.apply-author-edit.request.v1",
+      client_contract_revision: "storyos.web-client.release-1.v2",
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: group.frozen_request_body.correlation_id,
+      editor_session_id: SESSION,
+      writer_generation: "1",
+      chapter_id: CHAPTER,
+      expected_authoritative_revision_id: records[0].expected_authoritative_heads[0],
+      expected_proposal_head_revision_ids: [],
+      target_refs: records[0].target_refs,
+      observed_ownership_partition: "authoritative",
+      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      undo_group_id: records[0].undo_group_binding.undo_group_id,
+      completed_intent_record_id: records[0].completed_intent_record_id,
+      local_intent_sequence: String(records[0].local_intent_sequence),
+      author_edit_units: records.map((record) => record.author_edit_unit),
+    },
+    frozen_request_digest: group.frozen_request_digest,
+    frozen_payload_coverage_digest: group.frozen_payload_coverage_digest,
+    settlement,
+    frozen_at: group.frozen_at,
+  });
+  const expectedGroups = [
+    expectedGroup(finalJournal.groups[0], expectedRecords.slice(0, 2),
+      expectedAppliedSettlement(finalJournal.groups[0], {
+        commandId: "018f0000-0000-7001-8000-000000000031",
+        admissionId: "018f0000-0000-7001-8000-000000000032",
+        receiptId: "018f0000-0000-7001-8000-000000000033",
+        priorHead: REVISION,
+        revision: freshSession.base_snapshot.materialized_revision,
+        commitId: "018f0000-0000-7001-8000-000000000035",
+        position: "1", installedBase: freshSession.base_snapshot,
+      })),
+    expectedGroup(finalJournal.groups[1], expectedRecords.slice(2),
+      expectedAppliedSettlement(finalJournal.groups[1], {
+        commandId: "018f0000-0000-7001-8000-000000000041",
+        admissionId: "018f0000-0000-7001-8000-000000000042",
+        receiptId: "018f0000-0000-7001-8000-000000000043",
+        priorHead: freshSession.base_snapshot.authoritative_head_revision_id,
+        revision: secondFreshSession.base_snapshot.materialized_revision,
+        commitId: "018f0000-0000-7001-8000-000000000045",
+        position: "2", installedBase: secondFreshSession.base_snapshot,
+      })),
+  ];
+  assert.deepEqual(finalJournal.groups, expectedGroups);
+  assert.deepEqual(finalJournal.watermark, {
+    key: "durable_high_watermark:" + workspace.partition.journal_partition_id, value: 3,
+  });
+  assert.deepEqual(finalJournal.activeBase, secondFreshSession.base_snapshot);
+  assert.deepEqual([...finalJournal.bodyBySequence.entries()], [
+    [1, "Base!"], [2, "Base!?"], [3, "Base!?+"],
+  ]);
+  assert.deepEqual([...finalJournal.covered], [1, 2, 3]);
 
   const challengeCountBeforeCoverageFailures = challengeRequests.length;
   const replaceGroups = async (groups) => {
     const transaction = workspace.database.transaction("submission_groups", "readwrite");
     const store = transaction.objectStore("submission_groups");
+    store.clear();
     for (const group of groups) store.put(group);
+    await transactionResult(transaction);
+  };
+  const replaceRecords = async (records) => {
+    const transaction = workspace.database.transaction("intents", "readwrite");
+    const store = transaction.objectStore("intents");
+    store.clear();
+    for (const record of records) store.put(record);
     await transactionResult(transaction);
   };
   const originalGroups = finalJournal.groups.map((group) => JSON.parse(JSON.stringify(group)));
   const coverageFailures = [
+    (groups) => { groups.shift(); },
     (groups) => { groups[0].ordered_coverage.pop(); },
     (groups) => { groups[0].ordered_coverage[1] = groups[0].ordered_coverage[0]; },
     (groups) => { groups[0].ordered_coverage[1].local_intent_sequence = 3; },
@@ -431,6 +611,7 @@ async function run() {
       groups[1].frozen_request_body.editor_contract_revision =
         "storyos.editor-contract.release-1.invalid";
     },
+    (groups) => { groups[0].frozen_payload_coverage_digest.value_hex_lowercase = "0".repeat(64); },
   ];
   for (const corrupt of coverageFailures) {
     const groups = originalGroups.map((group) => JSON.parse(JSON.stringify(group)));
@@ -443,58 +624,156 @@ async function run() {
     await replaceGroups(originalGroups);
   }
 
-  const baseBeforeNoEffect = JSON.parse(JSON.stringify(workspace.session));
-  const noEffectPending = await persistReplaceSelection(workspace, {
-    from: 7, to: 7, text: "", resultingBody: "Base!?+",
-    inputOrigin: "deletion", undoGroupId: "018f0000-0000-7001-8000-000000000054",
-  });
-  assert.deepEqual(noEffectPending, { body: "Base!?+", save_state: "saving",
-    unsettled_intent_count: 1,
-    authoritative_revision_id: "018f0000-0000-7001-8000-000000000044" });
-  const noEffect = await submitOnePendingAuthorEdit({
-    workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
-  });
-  assert.deepEqual(noEffect, { body: "Base!?+", save_state: "needs_attention",
-    unsettled_intent_count: 1,
-    authoritative_revision_id: "018f0000-0000-7001-8000-000000000044" });
-  assert.deepEqual(workspace.session, baseBeforeNoEffect);
-  const noEffectJournal = await validateJournalSnapshot(
-    workspace, await readJournalSnapshot(workspace),
-  );
-  assert.deepEqual(noEffectJournal.groups.at(-1).settlement, {
-    kind: "zero_authority_receipt_settled",
-    command_id: "018f0000-0000-7001-8000-000000000051",
-    author_command_admission_id: "018f0000-0000-7001-8000-000000000052",
-    receipt: {
-      receipt_id: "018f0000-0000-7001-8000-000000000053",
-      project_scope: project.project_scope,
-      command_kind: "applyAuthorEdit",
-      command_digest: noEffectJournal.groups.at(-1).frozen_request_digest,
-      idempotency_key: noEffectJournal.groups.at(-1).idempotency_key,
-      producer_cause: "author_command_admission",
-      author_command_admission_id: "018f0000-0000-7001-8000-000000000052",
-      expected_heads: ["018f0000-0000-7001-8000-000000000044"],
-      prior_heads: ["018f0000-0000-7001-8000-000000000044"],
-      resulting_heads: ["018f0000-0000-7001-8000-000000000044"],
-      authoritative_revision_ids: [], proposal_revision_ids: [],
-      authoritative_commit_ids: [], author_action_sequence: null,
-      draft_artifact_refs: [], artifact_lifecycle_event_refs: [], condition_refs: [],
-      result: "no_effect", created_at: "2026-08-15T08:00:00.000Z",
-    },
-    effect: { kind: "no_effect", reason: "content_unchanged" },
-  });
-
   await assert.rejects(persistReplaceSelection(workspace, {
     from: 5, to: 5, text: "?", resultingBody: "x".repeat(1048577),
   }), /limit failed/);
-  assert.equal(await intentCount(workspace.database), 4);
+  assert.equal(await intentCount(workspace.database), 3);
 
   workspace.partition.disposition = "read_only_observer";
   await assert.rejects(persistReplaceSelection(workspace, {
     from: 5, to: 5, text: "?", resultingBody: "Base!?",
   }), /read only/);
   workspace.partition.disposition = "current_writer_open";
-  assert.equal(await intentCount(workspace.database), 4);
+  assert.equal(await intentCount(workspace.database), 3);
+
+  workspace.pending = await persistReplaceSelection(workspace, {
+    from: 7, to: 7, text: "Z", resultingBody: "Base!?+Z",
+    inputOrigin: "typing", undoGroupId: "018f0000-0000-7001-8000-000000000050",
+    createdAt: "2026-08-15T08:00:00.501Z",
+  });
+  const policyJournal = await validateJournalSnapshot(
+    workspace, await readJournalSnapshot(workspace),
+  );
+  const originalRecords = policyJournal.records.map((record) => JSON.parse(JSON.stringify(record)));
+  const historicalPolicyFailures = [
+    (records) => { records[1].created_at = "2026-08-15T08:00:00.251Z"; },
+    (records) => { records[1].input_origin = "paste"; },
+    (records) => {
+      records[1].undo_group_binding.undo_group_id = "018f0000-0000-7001-8000-000000000099";
+    },
+  ];
+  const challengeCountBeforeHistoricalPolicyFailures = challengeRequests.length;
+  for (const corrupt of historicalPolicyFailures) {
+    const records = originalRecords.map((record) => JSON.parse(JSON.stringify(record)));
+    corrupt(records);
+    await replaceRecords(records);
+    await assert.rejects(submitOnePendingAuthorEdit({
+      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    }), /corrupt/);
+    assert.equal(challengeRequests.length, challengeCountBeforeHistoricalPolicyFailures);
+    await replaceRecords(originalRecords);
+  }
+
+  await deleteJournalDatabase(workspace);
+  workspace = await openCurrentWorkspace();
+  assert.equal(workspace.kind, "editor-ready");
+  const limitUndoGroupId = "018f0000-0000-7001-8000-000000000081";
+  let limitBody = canonicalSession.base_snapshot.materialized_revision.body;
+  for (let index = 0; index < 240; index += 1) {
+    const nextBody = limitBody + "a";
+    workspace.pending = await persistReplaceSelection(workspace, {
+      from: limitBody.length, to: limitBody.length, text: "a", resultingBody: nextBody,
+      inputOrigin: "typing", undoGroupId: limitUndoGroupId,
+      createdAt: new Date(Date.parse("2026-08-15T09:00:00.000Z") + index).toISOString(),
+    });
+    limitBody = nextBody;
+  }
+  assert.equal(await intentCount(workspace.database), 240);
+  await assert.rejects(persistReplaceSelection(workspace, {
+    from: limitBody.length, to: limitBody.length, text: "a", resultingBody: limitBody + "a",
+    inputOrigin: "typing", undoGroupId: limitUndoGroupId,
+    createdAt: "2026-08-15T09:00:00.240Z",
+  }), /limit failed/);
+  const challengeCountBeforeLimitFreeze = challengeRequests.length;
+  const limitGroup = await freezeOneIntentSubmission(workspace, crypto);
+  assert.deepEqual(limitGroup.covered_sequence_range, { first: 1, last: 240 });
+  assert.equal(limitGroup.ordered_coverage.length, 240);
+  assert.equal(limitGroup.frozen_request_body.author_edit_units.length, 240);
+  assert.equal(challengeRequests.length, challengeCountBeforeLimitFreeze);
+  await deleteJournalDatabase(workspace);
+
+  const zeroCases = [{
+    result: "no_effect", text: "", suffix: "", reason: "content_unchanged",
+    commandId: "018f0000-0000-7001-8000-000000000051",
+    admissionId: "018f0000-0000-7001-8000-000000000052",
+    receiptId: "018f0000-0000-7001-8000-000000000053",
+  }, {
+    result: "conflicted", text: "C", suffix: "C", reason: "stale_authoritative_head",
+    commandId: "018f0000-0000-7001-8000-000000000061",
+    admissionId: "018f0000-0000-7001-8000-000000000062",
+    receiptId: "018f0000-0000-7001-8000-000000000063",
+  }, {
+    result: "refused", text: "R", suffix: "R", reason: "invalid_selection",
+    commandId: "018f0000-0000-7001-8000-000000000071",
+    admissionId: "018f0000-0000-7001-8000-000000000072",
+    receiptId: "018f0000-0000-7001-8000-000000000073",
+  }];
+  for (const [index, zeroCase] of zeroCases.entries()) {
+    workspace = await openCurrentWorkspace();
+    assert.equal(workspace.kind, "editor-ready");
+    const baseBeforeZero = JSON.parse(JSON.stringify(workspace.session));
+    const baseBody = baseBeforeZero.base_snapshot.materialized_revision.body;
+    const localBody = baseBody + zeroCase.suffix;
+    workspace.pending = await persistReplaceSelection(workspace, {
+      from: baseBody.length, to: baseBody.length, text: zeroCase.text,
+      resultingBody: localBody,
+      inputOrigin: zeroCase.result === "no_effect" ? "deletion" : "typing",
+      undoGroupId: "018f0000-0000-7001-8000-00000000008" + (index + 2),
+      createdAt: "2026-08-15T10:00:00.00" + index + "Z",
+    });
+    assert.deepEqual(workspace.pending, { body: localBody, save_state: "saving",
+      unsettled_intent_count: 1,
+      authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id });
+    const challengeCountBeforeZero = challengeRequests.length;
+    nextZeroAuthorityResult = zeroCase.result;
+    const projection = await submitOnePendingAuthorEdit({
+      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    assert.deepEqual(projection, { body: localBody, save_state: "needs_attention",
+      unsettled_intent_count: 1,
+      authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id });
+    assert.equal(challengeRequests.length, challengeCountBeforeZero + 1);
+    assert.deepEqual(workspace.session, baseBeforeZero);
+    const zeroJournal = await validateJournalSnapshot(
+      workspace, await readJournalSnapshot(workspace),
+    );
+    assert.equal(zeroJournal.records.length, 1);
+    assert.equal(zeroJournal.payloadChains.length, 1);
+    assert.equal(zeroJournal.groups.length, 1);
+    assert.deepEqual(zeroJournal.activeBase, baseBeforeZero.base_snapshot);
+    assert.deepEqual([...zeroJournal.bodyBySequence.entries()], [[1, localBody]]);
+    assert.deepEqual([...zeroJournal.covered], [1]);
+    const group = zeroJournal.groups[0];
+    const currentHead = zeroCase.result === "conflicted"
+      ? "018f0000-0000-7001-8000-000000000064"
+      : baseBeforeZero.base_snapshot.authoritative_head_revision_id;
+    const expectedEffect = zeroCase.result === "conflicted"
+      ? { kind: "conflicted", reason: zeroCase.reason,
+        current_authoritative_revision_id: currentHead }
+      : { kind: zeroCase.result, reason: zeroCase.reason };
+    assert.deepEqual(group.settlement, {
+      kind: "zero_authority_receipt_settled",
+      command_id: zeroCase.commandId,
+      author_command_admission_id: zeroCase.admissionId,
+      receipt: {
+        receipt_id: zeroCase.receiptId,
+        project_scope: project.project_scope,
+        command_kind: "applyAuthorEdit",
+        command_digest: group.frozen_request_digest,
+        idempotency_key: group.idempotency_key,
+        producer_cause: "author_command_admission",
+        author_command_admission_id: zeroCase.admissionId,
+        expected_heads: [baseBeforeZero.base_snapshot.authoritative_head_revision_id],
+        prior_heads: [currentHead], resulting_heads: [currentHead],
+        authoritative_revision_ids: [], proposal_revision_ids: [],
+        authoritative_commit_ids: [], author_action_sequence: null,
+        draft_artifact_refs: [], artifact_lifecycle_event_refs: [], condition_refs: [],
+        result: zeroCase.result, created_at: "2026-08-15T08:00:00.000Z",
+      },
+      effect: expectedEffect,
+    });
+    if (index < zeroCases.length - 1) await deleteJournalDatabase(workspace);
+  }
 
   const corruptTransaction = workspace.database.transaction(["intents", "payload_chains"], "readwrite");
   const intents = corruptTransaction.objectStore("intents");
@@ -512,8 +791,7 @@ async function run() {
   schemaTransaction.objectStore("metadata").put({ key: "schema", version: 999 });
   await transactionResult(schemaTransaction);
   workspace.database.close();
-  const recovery = await openEditorWorkspace({ baseUrl: location.origin, project, chapter, profile,
-    fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto });
+  const recovery = await openCurrentWorkspace();
   assert.equal(recovery.kind, "editor-read-only-recovery");
   document.body.dataset.result = "pass";
   document.body.textContent = "bounded IndexedDB journal passed";
@@ -593,7 +871,7 @@ async function waitForHarness(browserWebSocketUrl, harnessUrl) {
     socket.send(JSON.stringify({ id: commandId, method, params }));
   });
   await command("Runtime.enable");
-  const deadline = Date.now() + 20_000;
+  const deadline = Date.now() + 90_000;
   try {
     while (Date.now() < deadline) {
       const evaluation = await command("Runtime.evaluate", {
@@ -645,7 +923,7 @@ async function startBrowser() {
 
 test("a real browser journal settles bounded groups and installs the complete next base", {
   skip: chromeExecutable ? false : "Chrome or Chromium is unavailable",
-  timeout: 60_000,
+  timeout: 120_000,
 }, async () => {
   const server = createServer(async (request, response) => {
     if (request.url === "/harness") {
