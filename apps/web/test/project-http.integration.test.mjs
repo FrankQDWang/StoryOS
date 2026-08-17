@@ -98,6 +98,12 @@ async function projectAuthoritySnapshot() {
     SELECT json_build_object(
       'receipts', (SELECT count(*) FROM storyos.domain_receipts
         WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
+      'admissions', (SELECT count(*) FROM storyos.author_command_admissions
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+          AND command_kind = 'applyAuthorEdit'),
+      'consumed_challenges', (SELECT count(*) FROM storyos.project_command_challenges
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+          AND command_kind = 'applyAuthorEdit' AND consumed_at IS NOT NULL),
       'activities', (SELECT count(*) FROM storyos.project_activity_events
         WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid),
       'revision_envelopes', (SELECT count(*) FROM storyos.authoritative_revision_envelopes
@@ -421,17 +427,88 @@ test("one current writer settles one Author Edit and exact retries return one re
       target_refs: currentSession.base_snapshot.target_refs,
       observed_ownership_partition:
         currentSession.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v1",
+      editor_contract_revision: "storyos.editor-contract.release-1.v2",
       undo_group_id: "018f0000-0000-7001-8000-000000000025",
       completed_intent_record_id: "018f0000-0000-7001-8000-000000000026",
       local_intent_sequence: "1",
       author_edit_units: [{
-        normalized_primitives: [{ kind: "replace_selection", from: 15, to: 15, text: "!" }],
+        normalized_primitives: [{ kind: "replace_selection", from: 15, to: 15, text: "x" }],
         selection_snapshot: {
           coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 15, to: 15,
         },
+      }, {
+        normalized_primitives: [{ kind: "replace_selection", from: 15, to: 16, text: "!" }],
+        selection_snapshot: {
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 15, to: 16,
+        },
       }],
     };
+    const emptyAuthority = {
+      receipts: 0,
+      admissions: 0,
+      consumed_challenges: 0,
+      activities: 0,
+      revision_envelopes: 0,
+      commits: 0,
+      actions: 0,
+      counter: null,
+      zero_authority_activities: 0,
+    };
+    const limitCases = [
+      {
+        name: "unit count",
+        status: 422,
+        suffix: "080",
+        author_edit_units: Array.from({ length: 241 }, () => authorEditRequest.author_edit_units[0]),
+      },
+      {
+        name: "primitive count",
+        status: 422,
+        suffix: "081",
+        author_edit_units: [{
+          ...authorEditRequest.author_edit_units[0],
+          normalized_primitives: Array.from(
+            { length: 241 }, () => authorEditRequest.author_edit_units[0].normalized_primitives[0],
+          ),
+        }],
+      },
+      {
+        name: "wire body bytes",
+        status: 413,
+        suffix: "082",
+        author_edit_units: [{
+          normalized_primitives: [{
+            kind: "replace_selection", from: 15, to: 15, text: "x".repeat(1048576),
+          }],
+          selection_snapshot: {
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 15, to: 15,
+          },
+        }],
+      },
+    ];
+    for (const limitCase of limitCases) {
+      const request = {
+        ...authorEditRequest,
+        correlation_id: `018f0000-0000-7001-8000-000000000${limitCase.suffix}`,
+        undo_group_id: `018f0000-0000-7001-8000-000000000${String(
+          Number(limitCase.suffix) + 10,
+        ).padStart(3, "0")}`,
+        completed_intent_record_id:
+          `018f0000-0000-7001-8000-000000000${String(
+            Number(limitCase.suffix) + 20,
+          ).padStart(3, "0")}`,
+        author_edit_units: limitCase.author_edit_units,
+      };
+      const idempotencyKey =
+        `018f0000-0000-7001-8000-000000000${String(
+          Number(limitCase.suffix) + 30,
+        ).padStart(3, "0")}`;
+      await assert.rejects(applyAuthorEdit({
+        baseUrl, projectId: PROJECT_A, request, idempotencyKey,
+        antiForgery: "0".repeat(64), fetchImpl: browserFetch(baseUrl, "session-a"),
+      }), (error) => error.status === limitCase.status, limitCase.name);
+      assert.deepEqual(await projectAuthoritySnapshot(), emptyAuthority, limitCase.name);
+    }
     const authorEditKey = "018f0000-0000-7001-8000-000000000027";
     const authorEditChallenge = await createProjectCommandChallenge({
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -554,6 +631,8 @@ test("one current writer settles one Author Edit and exact retries return one re
 
     assert.deepEqual(await projectAuthoritySnapshot(), {
       receipts: 4,
+      admissions: 4,
+      consumed_challenges: 4,
       activities: 1,
       revision_envelopes: 1,
       commits: 1,

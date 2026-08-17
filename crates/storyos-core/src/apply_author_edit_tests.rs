@@ -40,6 +40,64 @@ fn one_replace_selection_is_classified_as_one_authoritative_result() {
 }
 
 #[test]
+fn ordered_units_apply_against_one_transient_body() {
+    let mut batch = command();
+    batch.author_edit_units = vec![
+        AuthorEditUnit {
+            normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                from: 1,
+                to: 3,
+                text: "xy".to_owned(),
+            }],
+            selection_snapshot: SelectionSnapshot {
+                coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+                from: 1,
+                to: 3,
+            },
+        },
+        AuthorEditUnit {
+            normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                from: 3,
+                to: 3,
+                text: "!".to_owned(),
+            }],
+            selection_snapshot: SelectionSnapshot {
+                coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+                from: 3,
+                to: 3,
+            },
+        },
+    ];
+
+    assert_eq!(
+        apply_author_edit(&batch),
+        ApplyAuthorEditResult::AuthoritativeApplied {
+            body: "Axy!B".to_owned()
+        }
+    );
+}
+
+#[test]
+fn invalid_later_unit_refuses_the_complete_batch() {
+    let mut batch = command();
+    let mut invalid_later = batch.author_edit_units[0].clone();
+    invalid_later.selection_snapshot.to = 2;
+    let AuthorEditPrimitive::ReplaceSelection { from, to, text } =
+        &mut invalid_later.normalized_primitives[0];
+    *from = 4;
+    *to = 4;
+    *text = "!".to_owned();
+    batch.author_edit_units.push(invalid_later);
+
+    assert_eq!(
+        apply_author_edit(&batch),
+        ApplyAuthorEditResult::Refused {
+            reason: AuthorEditRefusal::InvalidSelection
+        }
+    );
+}
+
+#[test]
 fn stale_head_and_surrogate_split_fail_without_a_partial_result() {
     let mut stale = command();
     stale.expected_authoritative_revision_id = "revision-0".to_owned();

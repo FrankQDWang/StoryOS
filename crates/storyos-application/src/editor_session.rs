@@ -53,6 +53,7 @@ pub struct EditorSessionSnapshot {
     pub snapshot_id: String,
     pub chapter_id: String,
     pub authoritative_revision_id: String,
+    pub project_activity_position: u64,
     pub body: String,
     pub payload_digest_hex: String,
     pub created_at: String,

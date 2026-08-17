@@ -1,7 +1,8 @@
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
-    IssueProjectCommandChallenge, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UserId, create_editor_session, issue_project_command_challenge,
+    EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, create_editor_session,
+    get_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use tokio_postgres::NoTls;
@@ -84,31 +85,62 @@ fn author_command(
         expected_proposal_head_revision_ids: Vec::new(),
         target_refs: vec![format!("manuscript:{CHAPTER}")],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v1".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
         undo_group_id: format!("018f0000-0000-7001-8000-000000000{suffix}8"),
         completed_intent_record_id: format!("018f0000-0000-7001-8000-000000000{suffix}9"),
         local_intent_sequence: suffix.parse().unwrap(),
-        author_edit_units: vec![AuthorEditUnit {
-            normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
-                from: 15,
-                to: 15,
-                text: "!".to_owned(),
-            }],
-            selection_snapshot: SelectionSnapshot {
-                coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
-                from: 15,
-                to: 15,
+        author_edit_units: vec![
+            AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                    from: 15,
+                    to: 15,
+                    text: "x".to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+                    from: 15,
+                    to: 15,
+                },
             },
-        }],
+            AuthorEditUnit {
+                normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+                    from: 15,
+                    to: 16,
+                    text: "!".to_owned(),
+                }],
+                selection_snapshot: SelectionSnapshot {
+                    coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+                    from: 15,
+                    to: 16,
+                },
+            },
+        ],
     };
     bind_canonical_payload(&mut command);
     command
 }
 
 fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
-    let storyos_core::AuthorEditPrimitive::ReplaceSelection { from, to, text } =
-        &command.author_edit_units[0].normalized_primitives[0];
-    let snapshot = &command.author_edit_units[0].selection_snapshot;
+    let author_edit_units = command
+        .author_edit_units
+        .iter()
+        .map(|unit| {
+            let [storyos_core::AuthorEditPrimitive::ReplaceSelection { from, to, text }] =
+                unit.normalized_primitives.as_slice()
+            else {
+                panic!("test Author Edit unit must contain one ReplaceSelection")
+            };
+            serde_json::json!({
+                "normalized_primitives": [{"kind": "replace_selection", "from": from,
+                    "to": to, "text": text}],
+                "selection_snapshot": {
+                    "coordinate_profile": unit.selection_snapshot.coordinate_profile,
+                    "from": unit.selection_snapshot.from,
+                    "to": unit.selection_snapshot.to,
+                }
+            })
+        })
+        .collect::<Vec<_>>();
     let payload = serde_json::json!({
         "command_schema": command.challenge_binding.command_schema,
         "client_contract_revision": command.client_binding.client_contract_revision,
@@ -125,12 +157,7 @@ fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
         "undo_group_id": command.undo_group_id,
         "completed_intent_record_id": command.completed_intent_record_id,
         "local_intent_sequence": command.local_intent_sequence.to_string(),
-        "author_edit_units": [{
-            "normalized_primitives": [{"kind": "replace_selection", "from": from,
-                "to": to, "text": text}],
-            "selection_snapshot": {"coordinate_profile": snapshot.coordinate_profile,
-                "from": snapshot.from, "to": snapshot.to}
-        }]
+        "author_edit_units": author_edit_units,
     });
     command.canonical_command_bytes = serde_json::to_vec(&payload).unwrap();
     command.challenge_binding.canonical_command_digest = format!(
@@ -257,6 +284,38 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         }
     );
     assert_eq!(replay.ids, command.ids);
+    let refreshed_session = get_editor_session(
+        &store,
+        &EditorSessionLookup {
+            project_scope: scope.clone(),
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            client_binding: EditorClientBinding {
+                binding_ref: "binding:author-edit".to_owned(),
+                session_generation: 1,
+                client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
+                security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+            },
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_ne!(
+        refreshed_session.base_snapshot.snapshot_id,
+        "018f0000-0000-7001-8000-000000000703"
+    );
+    assert_eq!(
+        refreshed_session.base_snapshot,
+        EditorSessionSnapshot {
+            snapshot_id: refreshed_session.base_snapshot.snapshot_id.clone(),
+            chapter_id: CHAPTER.to_owned(),
+            authoritative_revision_id: replay_applied_ids.revision_id.clone(),
+            project_activity_position: 1,
+            body: "Authoritative A!".to_owned(),
+            payload_digest_hex: sha256_hex(b"Authoritative A!"),
+            created_at: refreshed_session.base_snapshot.created_at.clone(),
+        }
+    );
 
     let outcome_specs = [
         (
@@ -293,7 +352,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             outcome_command.author_edit_units[0].selection_snapshot.from = 16;
             outcome_command.author_edit_units[0].selection_snapshot.to = 16;
         } else if index == 2 {
-            outcome_command.author_edit_units[0].selection_snapshot.to = 14;
+            outcome_command.author_edit_units[1].selection_snapshot.to = 15;
         }
         bind_canonical_payload(&mut outcome_command);
         issue_project_command_challenge(
@@ -1191,6 +1250,15 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     }
     cleanup
         .execute(
+            "DELETE FROM storyos.editor_session_base_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND editor_session_id = $3::text::uuid",
+            &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
             "DELETE FROM storyos.authoritative_revisions
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND revision_id = $3::text::uuid",
@@ -1204,15 +1272,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND payload_id = $3::text::uuid",
             &[&USER, &PROJECT, &replay_applied_ids.payload_id],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.editor_session_base_snapshots
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND editor_session_id = $3::text::uuid",
-            &[&USER, &PROJECT, &editor_session_id],
         )
         .await
         .unwrap();

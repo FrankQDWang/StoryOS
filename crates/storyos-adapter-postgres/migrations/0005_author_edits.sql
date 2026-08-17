@@ -490,3 +490,4 @@ GRANT SELECT, INSERT ON storyos.author_command_admissions,
 GRANT SELECT, INSERT, UPDATE ON storyos.scope_counters TO storyos_runtime;
 GRANT INSERT ON storyos.authoritative_payloads, storyos.authoritative_revisions TO storyos_runtime;
 GRANT UPDATE ON storyos.authoritative_heads TO storyos_runtime;
+GRANT UPDATE ON storyos.editor_session_base_snapshots TO storyos_runtime;

@@ -203,6 +203,39 @@ pub(super) async fn persist_author_edit_settlement(
                 )
                 .await
                 .map_err(author_edit_database_error)?;
+            let base_snapshot_id = Uuid::now_v7().to_string();
+            let base_snapshot_updates = client
+                .execute(
+                    "UPDATE storyos.editor_session_base_snapshots AS snapshot
+                        SET snapshot_id = $4::text::uuid,
+                            authoritative_revision_id = $5::text::uuid,
+                            project_activity_position = $6::text::numeric,
+                            created_at = clock_timestamp()
+                       FROM storyos.project_writer_generations AS writer
+                      WHERE snapshot.owner_user_id = $1::text::uuid
+                        AND snapshot.project_id = $2::text::uuid
+                        AND snapshot.editor_session_id = $3::text::uuid
+                        AND snapshot.authoritative_revision_id = $7::text::uuid
+                        AND (writer.owner_user_id, writer.project_id,
+                             writer.current_editor_session_id, writer.writer_generation) =
+                            (snapshot.owner_user_id, snapshot.project_id,
+                             snapshot.editor_session_id, $8::text::numeric)",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &command.editor_session_id.as_ref(),
+                        &base_snapshot_id,
+                        &ids.revision_id,
+                        &project_activity_position.to_string(),
+                        &current_revision_id,
+                        &command.writer_generation.to_string(),
+                    ],
+                )
+                .await
+                .map_err(author_edit_database_error)?;
+            if base_snapshot_updates != 1 {
+                return Err(AuthorEditError::BindingConflict);
+            }
             AuthorEditSettlementEffect::AuthoritativeApplied {
                 ids,
                 body,
