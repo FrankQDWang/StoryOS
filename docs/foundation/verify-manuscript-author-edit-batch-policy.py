@@ -18,6 +18,12 @@ CANDIDATES_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-can
 APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH = (
     ROOT / "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json"
 )
+APPLY_AUTHOR_EDIT_OUTCOME_SCHEMA_PATH = (
+    ROOT
+    / "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json"
+)
+ROUTE_CATALOG_PATH = ROOT / "docs/foundation/versioned-protocol-release-1-route-catalog.json"
+TYPESCRIPT_CLIENT_PATH = ROOT / "generated/typescript/storyos-public-release-1/client.d.mts"
 AUTHOR_ADMISSION_PATH = ROOT / "docs/foundation/author-command-admission.md"
 PROJECTIONS = (
     ROOT / "CONTEXT.md",
@@ -80,6 +86,14 @@ DVG_DISPOSITION_ROWS = {
         "`PASS-HOLD` only for recovery",
     ),
 }
+OUTCOME_QUERY_BOOTSTRAP_REQUIREMENTS = (
+    "For an `ApplyAuthorEdit` initial attempt whose acknowledgement is wholly absent",
+    "`getApplyAuthorEditOutcome` is the first reconciliation action",
+    "the original `idempotency_key` in the route and the original challenge nonce only in the "
+    "`X-StoryOS-Anti-Forgery` header",
+    "does not perform `ExactTransportReplay`, obtain a new challenge, or send the command again "
+    "before this read",
+)
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 def current_sources() -> tuple[dict, dict, list[dict], dict, dict[str, str]]:
@@ -89,6 +103,16 @@ def current_sources() -> tuple[dict, dict, list[dict], dict, dict[str, str]]:
         [json.loads(line) for line in CANDIDATES_PATH.read_text(encoding="utf-8").splitlines()],
         json.loads(APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH.read_text(encoding="utf-8")),
         {path.as_posix(): path.read_text(encoding="utf-8") for path in PROJECTIONS},
+    )
+
+
+def current_outcome_sources() -> tuple[dict, dict, dict, str, str]:
+    return (
+        json.loads(APPLY_AUTHOR_EDIT_OUTCOME_SCHEMA_PATH.read_text(encoding="utf-8")),
+        json.loads(APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH.read_text(encoding="utf-8")),
+        json.loads(ROUTE_CATALOG_PATH.read_text(encoding="utf-8")),
+        TYPESCRIPT_CLIENT_PATH.read_text(encoding="utf-8"),
+        PROJECTIONS[3].read_text(encoding="utf-8"),
     )
 def visible_markdown(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
@@ -170,9 +194,15 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
     else:
         settlement = group_settlement.group(0)
         if union_variant_names(settlement) != (
-            "Unsettled", "PreAdmissionRefused", "AppliedReceiptSettled",
-            "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled", "RequiresReconfirmation"):
+            "Unsettled", "PreAdmissionRefused", "OutcomeQueryRejectedNoAdmission",
+            "AppliedReceiptSettled", "ZeroAuthorityReceiptSettled",
+            "OtherEditorReceiptSettled", "RequiresReconfirmation"):
             errors.append("Web GroupSettlement variants drifted")
+        require_union_variant_shape(
+            errors, settlement, "OutcomeQueryRejectedNoAdmission", "AppliedReceiptSettled",
+            ("outcome_query_observation_id", "reason: challenge_expired_unconsumed", "observed_at"),
+            ("receipt", "project_activity_position"),
+        )
         require_union_variant_shape(
             errors, settlement, "AppliedReceiptSettled", "ZeroAuthorityReceiptSettled",
             ("receipt_ref: DomainReceiptRef", "project_activity_position"),
@@ -198,7 +228,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         if union_variant_names(convergence_union) != (
             "Pending", "AppliedReceiptConverged", "ZeroAuthorityReceiptVisible",
             "OtherEditorReceiptConverged", "PreAdmissionRefusalConverged",
-            "ReconfirmationConverged"):
+            "OutcomeQueryRejectedVisible", "ReconfirmationConverged"):
             errors.append("Web AuthorSurfaceConvergence variants drifted")
         require_union_variant_shape(
             errors, convergence_union, "AppliedReceiptConverged", "ZeroAuthorityReceiptVisible",
@@ -214,6 +244,13 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
             errors, convergence_union, "OtherEditorReceiptConverged",
             "PreAdmissionRefusalConverged",
             ("receipt_ref: ReceiptRef", "project_activity_position", "projection_proof:"),
+        )
+        require_union_variant_shape(
+            errors, convergence_union, "OutcomeQueryRejectedVisible",
+            "ReconfirmationConverged",
+            ("outcome_query_observation_id", "local_rejected_surface_id",
+             "preserved_local_payload_ref"),
+            ("receipt", "project_activity_position"),
         )
     observations = re.search(
         r"BrowserProtocolObservation\s*=.*?(?=\n```)",
@@ -248,6 +285,254 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
             "RequiresReconfirmationObservation",
             ("receipt_ref: ReceiptRef", "project_activity_position"),
         )
+    return errors
+
+
+def apply_author_edit_outcome_web_errors(web_projection: str) -> list[str]:
+    canonical_web = re.sub(r"\s+", " ", visible_markdown(web_projection))
+    if any(requirement not in canonical_web
+           for requirement in OUTCOME_QUERY_BOOTSTRAP_REQUIREMENTS):
+        return ["Web missing-first-ack outcome Query bootstrap drifted"]
+    return []
+
+
+def apply_author_edit_outcome_contract_errors(
+    outcome_schema: dict,
+    response_schema: dict,
+    route_catalog: dict,
+    typescript_client: str,
+    web_projection: str,
+) -> list[str]:
+    errors: list[str] = []
+    if hashlib.sha256(json.dumps(
+            outcome_schema, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest() != "82a045190c5050d9f9935d49608ccbb1fbf02345db5f1e4b3bb00764be76922c":
+        errors.append("outcome Query generated schema drifted")
+    root_properties = outcome_schema.get("properties", {})
+    if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
+            or outcome_schema.get("type") != "object"
+            or set(root_properties) != {"schema_id", "correlation_id", "project_scope", "outcome"}
+            or set(outcome_schema.get("required", [])) != set(root_properties)
+            or outcome_schema.get("additionalProperties") is not False
+            or root_properties.get("outcome") != {"$ref": "#/$defs/ApplyAuthorEditOutcome"}
+            or root_properties.get("project_scope") != {"$ref": "#/$defs/ProjectScope"}
+            or root_properties.get("schema_id") != {"type": "string"}
+            or root_properties.get("correlation_id") != {"type": "string"}):
+        errors.append("outcome Query response envelope drifted")
+    definitions = outcome_schema.get("$defs", {})
+    outcome_variants = definitions.get("ApplyAuthorEditOutcome", {}).get("oneOf", [])
+    tagged_outcomes = {
+        variant.get("properties", {}).get("outcome_kind", {}).get("const"): variant
+        for variant in outcome_variants
+    }
+    expected_outcomes = {
+        "committed": {"outcome_kind", "response"},
+        "rejected": {"outcome_kind", "reason"},
+        "still_unknown": {"outcome_kind", "observation"},
+    }
+    if set(tagged_outcomes) != set(expected_outcomes) or len(tagged_outcomes) != len(outcome_variants):
+        errors.append("outcome Query public branches drifted")
+    for kind, expected_fields in expected_outcomes.items():
+        variant = tagged_outcomes.get(kind, {})
+        if (variant.get("type") != "object"
+                or variant.get("properties", {}).get("outcome_kind")
+                != {"const": kind, "type": "string"}
+                or set(variant.get("properties", {})) != expected_fields
+                or set(variant.get("required", [])) != expected_fields
+                or variant.get("additionalProperties") is not False):
+            errors.append(f"outcome Query {kind} branch drifted")
+    for kind, field, target in (
+        ("committed", "response", "ApplyAuthorEditResponse"),
+        ("rejected", "reason", "ApplyAuthorEditRejectionReason"),
+        ("still_unknown", "observation", "ApplyAuthorEditUnknownObservation"),
+    ):
+        if tagged_outcomes.get(kind, {}).get("properties", {}).get(field) != {
+            "$ref": f"#/$defs/{target}"
+        }:
+            errors.append(f"outcome Query {kind} payload binding drifted")
+    unknown_variants = definitions.get("ApplyAuthorEditUnknownObservation", {}).get("oneOf", [])
+    tagged_unknowns = {
+        variant.get("properties", {}).get("observation_kind", {}).get("const"): variant
+        for variant in unknown_variants
+    }
+    expected_unknowns = {
+        "challenge_issued": {"observation_kind", "expires_at"},
+        "admission_committed": {
+            "observation_kind", "command_id", "author_command_admission_id",
+            "reconciliation_required",
+        },
+    }
+    if set(tagged_unknowns) != set(expected_unknowns) or len(tagged_unknowns) != len(unknown_variants):
+        errors.append("outcome Query unknown observation branches drifted")
+    for kind, expected_fields in expected_unknowns.items():
+        variant = tagged_unknowns.get(kind, {})
+        if (variant.get("type") != "object"
+                or variant.get("properties", {}).get("observation_kind")
+                != {"const": kind, "type": "string"}
+                or set(variant.get("properties", {})) != expected_fields
+                or set(variant.get("required", [])) != expected_fields
+                or variant.get("additionalProperties") is not False):
+            errors.append(f"outcome Query {kind} observation drifted")
+    marker = tagged_unknowns.get("admission_committed", {}).get(
+        "properties", {}
+    ).get("reconciliation_required", {})
+    if marker != {"const": True, "type": "boolean"}:
+        errors.append("outcome Query reconciliation marker drifted")
+    if (tagged_unknowns.get("challenge_issued", {}).get("properties", {}).get("expires_at")
+            != {"format": "date-time", "type": "string"}
+            or any(tagged_unknowns.get("admission_committed", {}).get(
+                "properties", {}
+            ).get(field) != {"type": "string"}
+                for field in ("command_id", "author_command_admission_id"))):
+        errors.append("outcome Query unknown identity field drifted")
+    if definitions.get("ApplyAuthorEditRejectionReason") != {
+        "enum": ["challenge_expired_unconsumed"], "type": "string"
+    }:
+        errors.append("outcome Query rejection reason drifted")
+    response_root = {
+        key: response_schema.get(key)
+        for key in ("type", "additionalProperties", "properties", "required")
+    }
+    if (response_schema.get("$id") != "storyos.command.apply-author-edit.response.v2"
+            or definitions.get("ApplyAuthorEditResponse") != response_root
+            or any(definitions.get(name) != definition
+                   for name, definition in response_schema.get("$defs", {}).items())):
+        errors.append("outcome Query committed response-v2 binding drifted")
+
+    routes = [
+        operation for operation in route_catalog.get("operations", [])
+        if operation.get("operation_id") == "getApplyAuthorEditOutcome"
+    ]
+    if len(routes) != 1:
+        errors.append("outcome Query route identity drifted")
+    elif hashlib.sha256(json.dumps(
+            routes[0], sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest() != "683b155b07142e25ffe370fa1b10e533351b5aa42bcba88315afd623d33f3878":
+        errors.append("outcome Query route proof drifted")
+    for alias, expected_client_shape in (
+        ("ApplyAuthorEditRejectionReason",
+         'export type ApplyAuthorEditRejectionReason = "challenge_expired_unconsumed";'),
+        ("ApplyAuthorEditUnknownObservation",
+         'export type ApplyAuthorEditUnknownObservation = { "observation_kind": '
+         '"challenge_issued", expires_at: string, } | { "observation_kind": '
+         '"admission_committed", command_id: string, author_command_admission_id: string, '
+         'reconciliation_required: true, };'),
+        ("ApplyAuthorEditOutcome",
+         'export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: '
+         'ApplyAuthorEditResponse, } | { "outcome_kind": "rejected", reason: '
+         'ApplyAuthorEditRejectionReason, } | { "outcome_kind": "still_unknown", observation: '
+         'ApplyAuthorEditUnknownObservation, };'),
+        ("GetApplyAuthorEditOutcomeResponse",
+         "export type GetApplyAuthorEditOutcomeResponse = { schema_id: string, correlation_id: "
+         "string, project_scope: ProjectScope, outcome: ApplyAuthorEditOutcome, };")
+    ):
+        if re.findall(rf"^export type {alias} = .*;$", typescript_client, re.MULTILINE) != [
+            expected_client_shape
+        ]:
+            errors.append("outcome Query generated TypeScript drifted")
+            break
+    expected_method = (
+        "export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { "
+        "projectId: string; idempotencyKey: string; antiForgery: string }): "
+        "Promise<GetApplyAuthorEditOutcomeResponse>;"
+    )
+    if re.findall(r"^export declare function getApplyAuthorEditOutcome.*;$",
+                  typescript_client, re.MULTILINE) != [expected_method]:
+        errors.append("outcome Query generated TypeScript drifted")
+
+    visible_web = visible_markdown(web_projection)
+    for marker in (
+        "GroupReconciliation =", "GroupSettlement =", "AuthorSurfaceConvergence =",
+        "ApplyAuthorEditOutcomeQueryAttempt =", "ApplyAuthorEditOutcomeQueryObservation =",
+        "OutcomeQueryReducer =",
+    ):
+        if len(re.findall(rf"^{re.escape(marker)}", visible_web, re.MULTILINE)) != 1:
+            errors.append("Web outcome Query definition count drifted")
+    reconciliation = re.search(
+        r"GroupReconciliation\s*=.*?(?=\n\nGroupSettlement\s*=)",
+        visible_web,
+        flags=re.DOTALL,
+    )
+    if not reconciliation or union_variant_names(reconciliation.group(0)) != (
+        "NoReconciliationNeeded", "TransportOrAdmissionUnknown", "KnownSettlementQuery",
+        "ProtocolIncompatibleAccepted", "OutcomeQueryUnresolved", "ProvenNoAdmission",
+        "TerminalResolved",
+    ):
+        errors.append("Web GroupReconciliation outcome Query variants drifted")
+    elif hashlib.sha256((union_variant_body(
+            reconciliation.group(0), "OutcomeQueryUnresolved", "ProvenNoAdmission"
+    ) or "").encode()).hexdigest() != (
+        "80ddb41a2b9fe2aa9af56ba39abdd4dee274b59fd91d9511c441d5fcda1fb727"
+    ):
+        errors.append("Web OutcomeQueryUnresolved reconciliation shape drifted")
+    terminal = re.search(
+        r"\| TerminalResolved \{(?P<body>.*)\n    \}\s*$",
+        reconciliation.group(0) if reconciliation else "", re.DOTALL,
+    )
+    if (not terminal or hashlib.sha256(terminal.group("body").encode()).hexdigest()
+            != "5b76791464cca14c555916e9341a7dd6c45ffc71d14c01cde75c0cfc185d2b19"):
+        errors.append("Web outcome Query terminal relation drifted")
+    for label, pattern, variant, next_variant, expected_hash in (
+        ("settlement", r"GroupSettlement\s*=.*?(?=\n\nAuthorSurfaceConvergence\s*=)",
+         "OutcomeQueryRejectedNoAdmission", "AppliedReceiptSettled",
+         "a51546196f32b918f30f84592004fb3ad4ff3d990f841332df85a222d8c2c781"),
+        ("visible", r"AuthorSurfaceConvergence\s*=.*?(?=\n\nAuthorAttention\s*=)",
+         "OutcomeQueryRejectedVisible", "ReconfirmationConverged",
+         "e89fbcd0aedbcf9720f2542dadb6a1639d0bb0ae3b9657b8f6163c88938c77f9"),
+    ):
+        union = re.search(pattern, visible_web, re.DOTALL)
+        body = union_variant_body(union.group(0), variant, next_variant) if union else ""
+        if hashlib.sha256((body or "").encode()).hexdigest() != expected_hash:
+            errors.append(f"Web outcome Query rejected {label} relation drifted")
+    for label, start, end, expected_hash in (
+        ("attempt", "ApplyAuthorEditOutcomeQueryAttempt =",
+         "ApplyAuthorEditOutcomeQueryObservation =",
+         "e02c80e55ce08c985c2af6a461787c0d13a59fe9cf3dec706b598a72367d7773"),
+        ("observation", "ApplyAuthorEditOutcomeQueryObservation =", "OutcomeQueryReducer =",
+         "191508ba651a7c632a67385193afb5dbffdfaafb8bcc21f6b00c5412a6cee22f"),
+    ):
+        block = re.search(
+            rf"{re.escape(start)}.*?(?=\n\n{re.escape(end)})",
+            visible_web,
+            flags=re.DOTALL,
+        )
+        if (not block
+                or hashlib.sha256(block.group(0).encode()).hexdigest() != expected_hash):
+            errors.append(f"Web outcome Query {label} shape drifted")
+    reducer = re.search(r"OutcomeQueryReducer =.*?(?=\n```)", visible_web, flags=re.DOTALL)
+    expected_reducer = """OutcomeQueryReducer =
+  NoOutcomeObserved -> ChallengeIssued | AdmissionCommitted | Rejected | Committed
+  ChallengeIssued(exact same expires_at) -> ChallengeIssued | AdmissionCommitted | Rejected | Committed
+  AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)
+  QueryUnavailable -> preserve strongest_valid_observation
+  Rejected | Committed -> terminal immutable
+  late original POST acknowledgement + GET Committed -> one exact settlement"""
+    if not reducer or reducer.group(0) != expected_reducer:
+        errors.append("Web outcome Query reducer variants drifted")
+    canonical_web = re.sub(r"\s+", " ", visible_web)
+    for required_meaning in (
+        "OutcomeQueryRejectedNoAdmission { outcome_query_observation_id",
+        "OutcomeQueryRejectedVisible { outcome_query_observation_id",
+        "All three records name the same exact query observation",
+        "The safe outcome Query does not consume the nonce, append Server lifecycle state, "
+        "invoke Core, create a Receipt or Activity, or change authority",
+        "A query transport failure, malformed response, or canonical non-200 Problem remains "
+        "unresolved",
+        "No `Rejected` or `StillUnknown` branch releases the dependent queue, collects the "
+        "capsule or payload, invokes or replays the command, or silently succeeds",
+        "The editor does not display saved, rejected, or settled and does not release a "
+        "dependent group until that complete Journal transaction commits",
+        "A changed Project Scope, idempotency key, Command, Admission, Receipt, command "
+        "correlation, digest, or result relation fails closed",
+        "This client-first bootstrap applies only to `ApplyAuthorEdit`",
+        "Without a reload, an `ApplyAuthorEdit` `DeliveryUnknown` state permits only the "
+        "protected outcome Query before any command replay",
+        "The read uses `SensitiveSafeReadWithRefererFallback`. Every success and Problem "
+        "response is `Cache-Control: no-store`; a cache is never outcome evidence",
+    ):
+        if required_meaning not in canonical_web:
+            errors.append("Web outcome Query closed meaning drifted")
+            break
     return errors
 
 
@@ -416,6 +701,9 @@ def policy_errors(
         apply_author_edit_response_schema,
         projections.get(PROJECTIONS[3].as_posix(), ""),
     ))
+    errors.extend(apply_author_edit_outcome_web_errors(
+        projections.get(PROJECTIONS[3].as_posix(), ""),
+    ))
     errors.extend(author_admission_errors(
         projections.get(AUTHOR_ADMISSION_PATH.as_posix(), ""),
     ))
@@ -423,6 +711,12 @@ def policy_errors(
 def self_test() -> None:
     policy, evidence, candidate_metrics, response_schema, projections = current_sources()
     assert policy_errors(policy, evidence, candidate_metrics, response_schema, projections) == []
+    outcome_schema, outcome_response_schema, route_catalog, typescript_client, web_projection = (
+        current_outcome_sources()
+    )
+    assert apply_author_edit_outcome_contract_errors(
+        outcome_schema, outcome_response_schema, route_catalog, typescript_client, web_projection
+    ) == []
     for path, value in (
         (("selected", "max_author_edit_units"), 999),
         (("identity_binding", "wire_change"), True),
@@ -522,6 +816,12 @@ def self_test() -> None:
     assert "effect branches are not unique tagged objects" in "\n".join(
         policy_errors(policy, evidence, candidate_metrics, changed_schema, projections))
     web = PROJECTIONS[3].as_posix()
+    changed_projections = dict(projections)
+    changed_projections[web] = changed_projections[web].replace(
+        OUTCOME_QUERY_BOOTSTRAP_REQUIREMENTS[0], "drifted", 1
+    )
+    assert "outcome Query bootstrap drifted" in "\n".join(policy_errors(
+        policy, evidence, candidate_metrics, response_schema, changed_projections))
     for old, new, expected_error in (
         ("receipt_ref: DomainReceiptRef\n      result: NoEffect | Conflicted | Refused",
          "receipt_ref: DomainReceiptRef\n      project_activity_position\n"
@@ -568,8 +868,163 @@ def self_test() -> None:
         changed_projections[admission] = changed_projections[admission].replace(old, new, 1)
         assert expected_error in "\n".join(policy_errors(
             policy, evidence, candidate_metrics, response_schema, changed_projections))
+    changed_outcome_schema = deepcopy(outcome_schema)
+    changed_outcome_schema["$defs"]["ApplyAuthorEditOutcome"]["oneOf"].append({
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {"outcome_kind": {"const": "assumed_success", "type": "string"}},
+        "required": ["outcome_kind"],
+    })
+    assert "public branches drifted" in "\n".join(
+        apply_author_edit_outcome_contract_errors(
+            changed_outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+            web_projection
+        )
+    )
+    changed_outcome_schema = deepcopy(outcome_schema)
+    changed_outcome_schema["type"] = "array"
+    assert "response envelope drifted" in "\n".join(
+        apply_author_edit_outcome_contract_errors(
+            changed_outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+            web_projection
+        )
+    )
+    changed_outcome_schema = deepcopy(outcome_schema)
+    changed_outcome_schema["$defs"]["ApplyAuthorEditOutcome"]["oneOf"][0]["properties"][
+        "outcome_kind"
+    ]["type"] = "number"
+    assert "committed branch drifted" in "\n".join(
+        apply_author_edit_outcome_contract_errors(
+            changed_outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+            web_projection
+        )
+    )
+    changed_outcome_schema = deepcopy(outcome_schema)
+    del changed_outcome_schema["$defs"]["ApplyAuthorEditResponse"]["properties"]["command_id"]
+    assert "committed response-v2 binding drifted" in "\n".join(
+        apply_author_edit_outcome_contract_errors(
+            changed_outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+            web_projection
+        )
+    )
+    changed_response_schema = deepcopy(outcome_response_schema)
+    changed_response_schema["$id"] = "storyos.command.apply-author-edit.response.v3"
+    assert "committed response-v2 binding drifted" in "\n".join(
+        apply_author_edit_outcome_contract_errors(
+            outcome_schema, changed_response_schema, route_catalog, typescript_client,
+            web_projection))
+    changed_outcome_schema = deepcopy(outcome_schema)
+    changed_outcome_schema["$defs"]["ApplyAuthorEditUnknownObservation"]["oneOf"][1][
+        "properties"
+    ]["reconciliation_required"]["const"] = False
+    assert "reconciliation marker drifted" in "\n".join(
+        apply_author_edit_outcome_contract_errors(
+            changed_outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+            web_projection
+        )
+    )
+    for path, value in (
+        (("query_proof", "url"), "allowed"),
+        (("query_proof", "header"), "X-StoryOS-Proof-In-URL"),
+        (("admission",), "command"),
+        (("activity", "success"), ["ProjectActivity"]),
+    ):
+        changed_route_catalog = deepcopy(route_catalog)
+        outcome_route = next(operation for operation in changed_route_catalog["operations"]
+                             if operation["operation_id"] == "getApplyAuthorEditOutcome")
+        target = outcome_route
+        for segment in path[:-1]:
+            target = target[segment]
+        target[path[-1]] = value
+        assert "route proof drifted" in "\n".join(apply_author_edit_outcome_contract_errors(
+            outcome_schema, outcome_response_schema, changed_route_catalog, typescript_client,
+            web_projection))
+    for old, new in (
+        ("export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { "
+         "projectId: string; idempotencyKey: string; antiForgery: string })",
+         "export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { "
+         "projectId: string; idempotencyKey: string; proofInUrl: string })"),
+        ('} | { "outcome_kind": "rejected"',
+         '} | { "outcome_kind": "assumed_success" } | { "outcome_kind": "rejected"'),
+        ('export type ApplyAuthorEditRejectionReason = "challenge_expired_unconsumed";',
+         "export type ApplyAuthorEditRejectionReason = string;"),
+        ("Promise<GetApplyAuthorEditOutcomeResponse>", "Promise<unknown>"),
+    ):
+        assert "generated TypeScript drifted" in "\n".join(
+            apply_author_edit_outcome_contract_errors(
+                outcome_schema, outcome_response_schema, route_catalog,
+                typescript_client.replace(old, new, 1), web_projection))
+    for old, new, expected_error in (
+        ("  | OutcomeQueryUnresolved {", "  | LostOutcomeQueryUnresolved {",
+         "GroupReconciliation outcome Query variants drifted"),
+        ("      reconciliation_required: true", "      reconciliation_required: false",
+         "OutcomeQueryUnresolved reconciliation shape drifted"),
+        ("      latest_outcome_query_observation_id | null",
+         "      latest_outcome_query_observation_id | null\n      retry_permitted: true",
+         "OutcomeQueryUnresolved reconciliation shape drifted"),
+        ("| OutcomeQueryRejected { outcome_query_observation_id }",
+         "| OutcomeQueryRejected { wrong_outcome_query_observation_id }",
+         "outcome Query terminal relation drifted"),
+        ("reason: challenge_expired_unconsumed\n      observed_at",
+         "reason: challenge_expired_unconsumed\n      observed_at\n      retry_permitted: true",
+         "outcome Query rejected settlement relation drifted"),
+        ("local_rejected_surface_id\n      preserved_local_payload_ref",
+         "local_rejected_surface_id\n      preserved_local_payload_ref\n      saved: true",
+         "outcome Query rejected visible relation drifted"),
+        ("ApplyAuthorEditOutcomeQueryAttempt =", "LostOutcomeQueryAttempt =",
+         "outcome Query attempt shape drifted"),
+        ("      route_template: /api/v1/projects/{project_id}/manuscript/author-edit-outcomes/"
+         "{idempotency_key}\n", "", "outcome Query attempt shape drifted"),
+        ("evidence: delivery_unknown | safe_problem | invalid_envelope",
+         "evidence: delivery_unknown | invalid_envelope", "outcome Query attempt shape drifted"),
+        ("    local_response_payload_ref\n    exact_response_payload_digest",
+         "    local_response_payload_ref\n    lost_response_payload_digest",
+         "outcome Query observation shape drifted"),
+        ("      | StillUnknown {", "      | AssumedSuccess\n      | StillUnknown {",
+         "outcome Query observation shape drifted"),
+        ("QueryUnavailable -> preserve strongest_valid_observation",
+         "QueryUnavailable -> NoOutcomeObserved", "outcome Query reducer variants drifted"),
+        ("ChallengeIssued(exact same expires_at)", "ChallengeIssued(changed expires_at)",
+         "outcome Query reducer variants drifted"),
+        ("AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)",
+         "AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)\n"
+         "  AdmissionCommitted -> Rejected", "outcome Query reducer variants drifted"),
+        ("Rejected | Committed -> terminal immutable",
+         "Rejected | Committed -> may regress", "outcome Query reducer variants drifted"),
+        ("All three records\nname the same exact query observation",
+         "The records\nmay use different observations", "outcome Query closed meaning drifted"),
+        ("does not consume the nonce", "consumes the nonce",
+         "outcome Query closed meaning drifted"),
+        ("No\n`Rejected` or `StillUnknown` branch releases the dependent queue",
+         "A\n`StillUnknown` branch releases the dependent queue",
+         "outcome Query closed meaning drifted"),
+        ("does not display saved, rejected, or settled",
+         "displays saved before the Journal commit", "outcome Query closed meaning drifted"),
+        ("Without a reload, an `ApplyAuthorEdit`\n`DeliveryUnknown` state permits only the "
+         "protected outcome Query",
+         "Without a reload, an `ApplyAuthorEdit`\n`DeliveryUnknown` state permits only exact "
+         "transport replay", "outcome Query closed meaning drifted"),
+        ("applies only to `ApplyAuthorEdit`", "applies to every command",
+         "outcome Query closed meaning drifted"),
+    ):
+        changed_web_projection = web_projection.replace(old, new, 1)
+        mutation_errors = apply_author_edit_outcome_contract_errors(
+            outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+            changed_web_projection
+        )
+        assert expected_error in "\n".join(mutation_errors), (old, mutation_errors)
+    for duplicate in (
+        "GroupReconciliation =", "GroupSettlement =", "AuthorSurfaceConvergence =",
+        "ApplyAuthorEditOutcomeQueryAttempt =", "ApplyAuthorEditOutcomeQueryObservation =",
+        "OutcomeQueryReducer =",
+    ):
+        assert "definition count drifted" in "\n".join(
+            apply_author_edit_outcome_contract_errors(
+                outcome_schema, outcome_response_schema, route_catalog, typescript_client,
+                f"{web_projection}\n{duplicate}\n"))
 def main() -> None:
     errors = policy_errors(*current_sources())
+    errors.extend(apply_author_edit_outcome_contract_errors(*current_outcome_sources()))
     if errors:
         raise SystemExit("Author Edit batch policy verification failed:\n- " + "\n- ".join(errors))
     print(
