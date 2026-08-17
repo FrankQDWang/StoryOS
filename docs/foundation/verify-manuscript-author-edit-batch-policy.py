@@ -94,6 +94,160 @@ OUTCOME_QUERY_BOOTSTRAP_REQUIREMENTS = (
     "does not perform `ExactTransportReplay`, obtain a new challenge, or send the command again "
     "before this read",
 )
+ACK_LOSS_PROFILE_START = "<!-- ACK_LOSS_AUTHOR_COMMAND_PROFILE_START -->"
+ACK_LOSS_PROFILE_END = "<!-- ACK_LOSS_AUTHOR_COMMAND_PROFILE_END -->"
+ACK_LOSS_GATE_PROFILE = {
+    "profile_id": "storyos.dvg.apply-author-edit-ack-loss.v1",
+    "selection": {
+        "gates": ["DVG-01", "DVG-02", "DVG-03", "DVG-08", "DVG-11"],
+        "evidence_classes": [
+            "EC-01", "EC-02", "EC-03", "EC-04", "EC-05",
+            "EV-CP", "EV-IT", "EV-INT", "EV-SE",
+        ],
+        "fixtures": ["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"],
+        "fault_points": [
+            "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+            "CFP-ADMISSION-EXPIRY",
+            "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+            "CFP-CORE-BEFORE-COMMIT",
+            "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+            "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+            "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+            "CFP-SCOPE-BEFORE-QUERY",
+        ],
+        "schedules": ["SCH-NORMAL", "SCH-REORDER", "SCH-SCOPE", "SCH-UNKNOWN"],
+        "oracles": [
+            "ORC-ATOMIC-AUTHORITY", "ORC-CONTRACT", "ORC-EDITOR-JOURNAL",
+            "ORC-NEGATIVE-CLOSURE", "ORC-OUTCOME-UNKNOWN", "ORC-SCOPE",
+        ],
+        "bundles": ["B-CONTRACT", "B-CORE", "B-EDITOR", "B-SCOPE"],
+    },
+    "external_dispatch_branch": {
+        "owners": ["OWN-PROTO", "OWN-CTX", "OWN-PG", "OWN-RET"],
+        "fixtures": [
+            "FX-CONTEXT-DISCLOSURE", "FX-FAKE-MODEL", "FX-REAL-MODEL-ADVISORY",
+        ],
+        "fault_points": [
+            "CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO",
+            "CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION",
+            "CFP-RECONCILIATION-BEFORE-SETTLEMENT",
+            "CFP-LATE-RESULT",
+        ],
+        "schedules": ["SCH-UNKNOWN", "SCH-FENCE"],
+        "oracle": "ORC-OUTCOME-UNKNOWN",
+        "bundles": ["B-CONTEXT", "B-FAKE"],
+        "unknown_disposition": "PASS-UNKNOWN",
+        "reconciled_disposition": "PASS-POS",
+        "unresolved_disposition": "PASS-HOLD",
+        "reconciliation": "separately_admitted_reconciliation_or_new_attempt",
+        "fence_and_late_result": "preserved",
+        "author_command_outcome_read": False,
+    },
+    "author_command_branch": {
+        "owners": ["OWN-WEB", "OWN-ADM", "OWN-CORE", "OWN-PROTO", "OWN-PG"],
+        "operations": [
+            "createProjectCommandChallenge", "applyAuthorEdit",
+            "getApplyAuthorEditOutcome",
+        ],
+        "first_reconciliation_action": "getApplyAuthorEditOutcome",
+        "repeat": "protected_outcome_get_only",
+        "post_replay": "forbidden",
+        "new_challenge": "forbidden",
+        "new_admission": "forbidden",
+        "separately_admitted_reconciliation": "forbidden",
+        "process_termination_or_restart": "forbidden",
+        "dispositions": {
+            "committed": "PASS-POS",
+            "rejected": "PASS-REFUSAL",
+            "still_unknown_challenge_issued": "PASS-HOLD",
+            "still_unknown_admission_committed": "PASS-HOLD",
+            "query_transport_unavailable_or_malformed": "PASS-HOLD",
+            "canonical_security_or_input_problem_gate": "PASS-REFUSAL",
+            "canonical_security_or_input_problem_journal": "QueryUnavailable",
+        },
+        "journal": {
+            "unresolved": "OutcomeQueryUnresolved",
+            "dependent_submission": "blocked",
+            "payload_and_capsule": "retained",
+            "invented_success_or_rejection": "forbidden",
+        },
+        "authority": {
+            "authoritative_applied": "one_receipt_one_activity_one_authority_effect",
+            "no_effect_conflicted_refused": "one_receipt_zero_activity_zero_authority",
+            "rejected": "zero_admission_receipt_activity_core_authority",
+            "post_and_get": "one_settlement_same_command_admission_receipt",
+        },
+        "security": {
+            "bindings": [
+                "idempotency_key_path", "nonce_header", "Host", "ProjectScope",
+                "current_client_session", "full_stored_binding", "forced_RLS",
+            ],
+            "route_policy": "SensitiveSafeReadWithRefererFallback",
+            "nonce": "header_only_not_url_log_or_response",
+            "cache_control": "no-store_on_success_and_problem",
+            "failure": "uniform_non_oracular",
+            "read_effects": "zero_nonce_consumption_core_receipt_activity_authority",
+        },
+    },
+    "stage1_handoff": {
+        "requirements": ["S1-REQ-004:acknowledgement_loss", "S1-EVD-004:acknowledgement_loss"],
+        "operations": [
+            "createProjectCommandChallenge", "applyAuthorEdit",
+            "getApplyAuthorEditOutcome",
+        ],
+        "gates": ["DVG-01", "DVG-02", "DVG-03", "DVG-08", "DVG-11"],
+        "evidence_classes": [
+            "EC-01", "EC-02", "EC-03", "EC-04", "EC-05",
+            "EV-CP", "EV-IT", "EV-INT", "EV-SE",
+        ],
+        "fixtures": ["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"],
+        "fault_points": [
+            "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+            "CFP-ADMISSION-EXPIRY",
+            "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+            "CFP-CORE-BEFORE-COMMIT",
+            "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+            "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+            "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+            "CFP-SCOPE-BEFORE-QUERY",
+        ],
+        "schedules": ["SCH-NORMAL", "SCH-REORDER", "SCH-SCOPE", "SCH-UNKNOWN"],
+        "oracles": [
+            "ORC-ATOMIC-AUTHORITY", "ORC-CONTRACT", "ORC-EDITOR-JOURNAL",
+            "ORC-NEGATIVE-CLOSURE", "ORC-OUTCOME-UNKNOWN", "ORC-SCOPE",
+        ],
+        "bundles": ["B-CONTRACT", "B-CORE", "B-EDITOR", "B-SCOPE"],
+    },
+    "excluded": {
+        "identifiers": [
+            "DVG-07", "FX-RECOVERY-EDITOR", "SCH-CRASH",
+            "ORC-RECOVERY-ATOMICITY", "B-RECOVERY",
+        ],
+        "behaviors": [
+            "reload", "restart", "takeover", "replay_generation", "snapshot_resync",
+            "late_result", "retention", "proposal",
+        ],
+    },
+}
+ACK_LOSS_ROW_SHA256 = {
+    "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL":
+        "1b9647400c92a5bba11fe3e7f00f5571426c271ffaa6b7bfa527a46e61c2593a",
+    "SCH-UNKNOWN": "3c762c82fb2c46527211e9f4477684034d85c3a25549a96cd4667d8ba66cc2a1",
+    "DVG-08": "1fd599932d12e0fabf57440215e14b21baf7841e09ea9eb13e6b6788c3e66579",
+    "ORC-OUTCOME-UNKNOWN":
+        "2cf2ec76df8c930a6764695c6b8ea055107f576b1d6c8203c2cd51bddac2ce97",
+}
+
+
+def strict_json_object(pairs: list[tuple[str, object]]) -> dict:
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 def current_sources() -> tuple[dict, dict, list[dict], dict, dict[str, str]]:
@@ -154,6 +308,65 @@ def dvg_projection_errors(dvg_projection: str) -> list[str]:
                 errors.append(
                     f"{PROJECTIONS[4].name}: {row_id} {label} drifted"
                 )
+    return errors
+
+
+def dvg_ack_loss_errors(dvg_projection: str) -> list[str]:
+    errors: list[str] = []
+    visible_dvg = visible_markdown(dvg_projection)
+    if (dvg_projection.count(ACK_LOSS_PROFILE_START) != 1
+            or dvg_projection.count(ACK_LOSS_PROFILE_END) != 1):
+        return ["DVG acknowledgement-loss profile marker count drifted"]
+    profile_match = re.search(
+        rf"{re.escape(ACK_LOSS_PROFILE_START)}\s*```json\s*(.*?)\s*```\s*"
+        rf"{re.escape(ACK_LOSS_PROFILE_END)}",
+        dvg_projection,
+        flags=re.DOTALL,
+    )
+    if not profile_match:
+        return ["DVG acknowledgement-loss profile is missing"]
+    try:
+        profile = json.loads(profile_match.group(1), object_pairs_hook=strict_json_object)
+    except (json.JSONDecodeError, ValueError):
+        return ["DVG acknowledgement-loss profile is not valid JSON"]
+    if profile != ACK_LOSS_GATE_PROFILE:
+        errors.append("DVG acknowledgement-loss profile drifted")
+    row_requirements = {
+        "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL": (
+            "valid `getApplyAuthorEditOutcome` response exists only in memory",
+            "complete Journal query observation has not committed",
+            "repeat only the protected outcome GET",
+        ),
+        "SCH-UNKNOWN": (
+            "External dispatch",
+            "Author Command acknowledgement loss",
+            "getApplyAuthorEditOutcome",
+            "no POST replay, process termination, or restart",
+        ),
+        "DVG-08": (
+            "External-dispatch branch",
+            "Author Command branch",
+            "getApplyAuthorEditOutcome",
+            "`OWN-WEB` + `OWN-ADM` + `OWN-CORE`",
+            "`PASS-HOLD`",
+        ),
+        "ORC-OUTCOME-UNKNOWN": (
+            "External post-claim unknown",
+            "Author Command acknowledgement loss",
+            "`Committed` is `PASS-POS`",
+            "`Rejected` is `PASS-REFUSAL`",
+            "`StillUnknown` and Query failure are `PASS-HOLD`",
+        ),
+    }
+    for row_id, requirements in row_requirements.items():
+        rows = re.findall(
+            rf"^\|\s*`{re.escape(row_id)}`.*$", visible_dvg, flags=re.MULTILINE
+        )
+        if (len(rows) != 1
+                or any(requirement not in rows[0] for requirement in requirements)
+                or hashlib.sha256(rows[0].encode()).hexdigest()
+                != ACK_LOSS_ROW_SHA256[row_id]):
+            errors.append(f"DVG {row_id} acknowledgement-loss row drifted")
     return errors
 def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]:
     errors: list[str] = []
@@ -697,6 +910,7 @@ def policy_errors(
             if required not in projection:
                 errors.append(f"{path.name} projection lost {required}")
     errors.extend(dvg_projection_errors(projections.get(PROJECTIONS[4].as_posix(), "")))
+    errors.extend(dvg_ack_loss_errors(projections.get(PROJECTIONS[4].as_posix(), "")))
     errors.extend(apply_author_edit_web_errors(
         apply_author_edit_response_schema,
         projections.get(PROJECTIONS[3].as_posix(), ""),
@@ -785,6 +999,72 @@ def self_test() -> None:
             flags=re.MULTILINE,
         )
         assert f"{row_id} disposition drifted" in "\n".join(
+            policy_errors(policy, evidence, candidate_metrics, response_schema,
+                          changed_projections)
+        )
+    for old, new in (
+        ('"gates": ["DVG-01", "DVG-02", "DVG-03", "DVG-08", "DVG-11"]',
+         '"gates": ["DVG-08"]'),
+        ('"getApplyAuthorEditOutcome"', '"getCommand"'),
+        ('"CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",', ""),
+        ('"committed": "PASS-POS"', '"committed": "PASS-HOLD"'),
+        ('"rejected": "PASS-REFUSAL"', '"rejected": "PASS-POS"'),
+        ('"query_transport_unavailable_or_malformed": "PASS-HOLD"',
+         '"query_transport_unavailable_or_malformed": "PASS-POS"'),
+        ('"post_replay": "forbidden"', '"post_replay": "permitted"'),
+        ('"author_command_outcome_read": false',
+         '"author_command_outcome_read": true'),
+        ('"unknown_disposition": "PASS-UNKNOWN"',
+         '"unknown_disposition": "PASS-POS"'),
+        ('"fence_and_late_result": "preserved"',
+         '"fence_and_late_result": "removed"'),
+        ('"CFP-LATE-RESULT"', '"CFP-EDITOR-BEFORE-GROUP-ADMISSION"'),
+        ('"FX-REAL-MODEL-ADVISORY"', '"FX-RECOVERY-EDITOR"'),
+        ('"applyAuthorEdit",', ""),
+        ('"fixtures": ["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"]',
+         '"fixtures": ["FX-RECOVERY-EDITOR"]'),
+        ('"cache_control": "no-store_on_success_and_problem"',
+         '"cache_control": "cacheable"'),
+    ):
+        changed_projections = dict(projections)
+        changed_projections[dvg] = changed_projections[dvg].replace(old, new, 1)
+        assert "acknowledgement-loss profile drifted" in "\n".join(
+            policy_errors(policy, evidence, candidate_metrics, response_schema,
+                          changed_projections)
+        )
+    changed_projections = dict(projections)
+    changed_projections[dvg] = changed_projections[dvg].replace(
+        '"post_replay": "forbidden",',
+        '"post_replay": "permitted",\n    "post_replay": "forbidden",',
+        1,
+    )
+    assert "profile is not valid JSON" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, response_schema,
+                      changed_projections)
+    )
+    for row_id, old, new in (
+        ("CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+         "repeat only the protected outcome GET", "repeat the POST"),
+        ("CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+         "No saved, rejected, settled, queue-release, Receipt, Activity, or authority projection",
+         "A saved projection"),
+        ("SCH-UNKNOWN", "no POST replay, process termination, or restart",
+         "POST replay is allowed"),
+        ("SCH-UNKNOWN", "before command commit", "after command commit"),
+        ("DVG-08", "Author Command branch", "External-only branch"),
+        ("DVG-08", "never creates a reconciliation command or POST Attempt",
+         "may create a new challenge and Admission"),
+        ("ORC-OUTCOME-UNKNOWN", "`Rejected` is `PASS-REFUSAL`",
+         "`Rejected` is `PASS-POS`"),
+        ("ORC-OUTCOME-UNKNOWN",
+         "A scheduled canonical security or input Problem is gate-level `PASS-REFUSAL` but leaves the Journal unresolved",
+         "A canonical Problem terminally rejects the Journal"),
+        ("ORC-OUTCOME-UNKNOWN", "No unresolved branch invents success",
+         "`StillUnknown` is also `PASS-POS`. No unresolved branch invents success"),
+    ):
+        changed_projections = dict(projections)
+        changed_projections[dvg] = changed_projections[dvg].replace(old, new, 1)
+        assert f"{row_id} acknowledgement-loss row drifted" in "\n".join(
             policy_errors(policy, evidence, candidate_metrics, response_schema,
                           changed_projections)
         )

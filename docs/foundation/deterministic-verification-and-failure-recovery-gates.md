@@ -320,6 +320,7 @@ least one point from this registry.
 | `CFP-EDITOR-BEFORE-GROUP-ADMISSION` | A frozen group has not received admission; interruption leaves it pending/needs-attention without authority. |
 | `CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE` | Exact admitted group is waiting for Core; retry uses the same idempotency identity only under owner rules. |
 | `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK` | Durable settlement exists before browser acknowledgement. Only an Activity-bearing result can wait for Activity delivery; Receipt-only results converge from the exact response or settlement query without inventing Activity. Replay must converge without duplication. |
+| `CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL` | A valid `getApplyAuthorEditOutcome` response exists only in memory, and the complete Journal query observation has not committed. The prior durable reconciliation state stays authoritative. No saved, rejected, settled, queue-release, Receipt, Activity, or authority projection is visible. The client may repeat only the protected outcome GET. |
 | `CFP-PROPOSAL-BEFORE-DECISION` | Proposal is inspectable but no Acceptance/Rejection/Withdrawal decision has occurred. |
 | `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT` | Acceptance transaction boundary is crossed without a visible Receipt; only Core facts decide Applied/Invalid/Conflicted/Refused/NoEffect. |
 | `CFP-UNDO-BEFORE-SETTLEMENT` | Undo request is admitted but not settled; no compensating authority effect may be assumed. |
@@ -395,7 +396,7 @@ continuing.
 | `SCH-REPLAY` | Seal/settle root facts → create next replay generation/Snapshot → present old cursor and below-floor cursor → return typed gap/cursor-too-old → resync without guessing. |
 | `SCH-RESTORE` | Stage isolated Recovery Copy/PITR → verify role/RLS/migration/lifecycle/projections → hold ordinary visibility → pass Recovery Visibility Proof → continue writing in exact scope. |
 | `SCH-LIFECYCLE` | Start eligible record → commit redaction/suppression/archive/deletion at selected cut → attempt current read/retrieval/cache/export/egress → inspect historical truth, gap, invalidation, and non-revival. |
-| `SCH-UNKNOWN` | Commit manifest and dispatch claim → cut before/after external IO or response → persist `OutcomeUnknown` → forbid blind resend → separately admit reconciliation/new Attempt → settle truthful outcome. |
+| `SCH-UNKNOWN` | External dispatch: commit manifest and dispatch claim → cut before/after external IO or response → persist `OutcomeUnknown` → forbid blind resend → separately admit reconciliation/new Attempt → settle truthful outcome. Author Command acknowledgement loss: commit the frozen group and protected capsule → cut before Admission, after Admission before Core, before command commit, after commit before acknowledgement, at acknowledgement delivery, or after outcome response before Journal → call `getApplyAuthorEditOutcome` under fixed virtual time → retain or append exact Journal evidence → repeat only that safe GET; no POST replay, process termination, or restart. |
 | `SCH-SCOPE` | Run valid scope → substitute foreign user/project/Host/Origin/session/generation/credential/record → refuse non-oracularly → verify zero cross-scope effect/disclosure. |
 | `SCH-DRIFT` | Mutate source, generated schema, catalog, golden wire, migration identity, or release identity one at a time → detect mismatch → hold activation/release. |
 | `SCH-ABSENT` | Request one absent capability in normal and bounded variants → refusal/no-effect/non-oracular response → repeat with each excluded capability without execution or hidden fallback. |
@@ -416,14 +417,166 @@ repurpose an identifier.
 | `DVG-05` Model Gateway, Provider, Tool, MCP, and MCP App mediation | `OWN-CTX` + `OWN-MODEL` + `OWN-TOOL` + `OWN-MCP` + `OWN-TRUST`; proves destination identity/grant/capability/credential/policy, manifest, Attempt, disclosure, and no direct authority. For Stage 3/4 absent execution it proves refusal and zero fallback, not execution. | `FX-FAKE-MODEL`, `FX-REAL-MODEL-ADVISORY`, `FX-ABSENT-EXECUTION` · `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-LATE-RESULT` · `SCH-UNKNOWN`, `SCH-ABSENT`, `SCH-SCOPE` · `ORC-DISPATCH-DISCLOSURE`. | `B-FAKE` for deterministic proof, `B-REAL-ADVISORY` for advisory observation, `B-ABSENT` for excluded capabilities; `PASS-POS`, `PASS-UNKNOWN`, or `PASS-REFUSAL`. `BLOCK-ALL`; advisory never upgrades. |
 | `DVG-06` AgentRun, Subrun, Mailbox, and finalization boundary | `OWN-AGENT` + `OWN-RET` + `OWN-CORE`; proves one general Project Agent Loop, bounded run/step/mailbox settlement, finalization, fence, and no task-specific authority path. | `FX-FAKE-MODEL`, `FX-ABSENT-EXECUTION` · `CFP-MAILBOX-BEFORE-SEAL`, `CFP-MAILBOX-AFTER-SEAL`, `CFP-MAILBOX-LATE-DUPLICATE`, `CFP-FENCE-AFTER-TAKEOVER` · `SCH-FENCE`, `SCH-REPLAY`, `SCH-ABSENT` · `ORC-RUN-FINALIZATION`. | `B-FAKE` or `B-ABSENT`; `PASS-POS`, `PASS-REFUSAL`, or `PASS-HOLD`. `BLOCK-ALL`. |
 | `DVG-07` Transaction/outbox/lease/fence/crash recovery | `OWN-CORE` + `OWN-PG` + `OWN-WEB` + `OWN-RET`; proves atomic write sets, outbox order, idempotency, lease/fence ownership, process/crash/restart recovery, writer takeover, and no stale settlement. | `FX-RECOVERY-EDITOR`, `FX-CORE-PROPOSAL` · `CFP-CORE-BEFORE-COMMIT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-OUTBOX-BEFORE-CLAIM`, `CFP-OUTBOX-AFTER-CLAIM-BEFORE-ACK`, `CFP-LEASE-AFTER-EXPIRY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT` · `SCH-CRASH`, `SCH-FENCE`, `SCH-REORDER` · `ORC-RECOVERY-ATOMICITY`. | `B-RECOVERY` + `B-CORE`; `PASS-POS`, `PASS-HOLD`, or `PASS-REFUSAL`. `BLOCK-ALL`. |
-| `DVG-08` `OutcomeUnknown`, reconciliation, Attempts, and late settlement | `OWN-PROTO` + `OWN-CTX` + `OWN-PG` + `OWN-RET`; proves the post-claim boundary, durable unknown, no blind resend, separately admitted reconciliation/new Attempt, fence, and truthful late result. | `FX-CONTEXT-DISCLOSURE`, `FX-FAKE-MODEL`, `FX-REAL-MODEL-ADVISORY` · `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-LATE-RESULT` · `SCH-UNKNOWN`, `SCH-FENCE` · `ORC-OUTCOME-UNKNOWN`. | `B-CONTEXT` + `B-FAKE`; `PASS-UNKNOWN` for the unknown cut, then `PASS-POS` for owner-defined reconciliation, or `PASS-HOLD` while unresolved. `BLOCK-ALL`; unresolved operational unknown blocks settlement. |
+| `DVG-08` `OutcomeUnknown`, reconciliation, Attempts, and late settlement | External-dispatch branch: `OWN-PROTO` + `OWN-CTX` + `OWN-PG` + `OWN-RET`; keeps durable claim, separately admitted reconciliation/new Attempt, fence, and truthful late-result meaning. Author Command branch: `OWN-PROTO` + `OWN-PG` + `OWN-WEB` + `OWN-ADM` + `OWN-CORE`; reads the existing durable command identity through `getApplyAuthorEditOutcome` and never creates a reconciliation command or POST Attempt. | External dispatch selects `FX-CONTEXT-DISCLOSURE`, `FX-FAKE-MODEL`, `FX-REAL-MODEL-ADVISORY`; `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-LATE-RESULT`; `SCH-UNKNOWN`, `SCH-FENCE`; and `ORC-OUTCOME-UNKNOWN`. Author Command selects `FX-CONTRACT-R1`, `FX-JOURNAL-GROUP`, `FX-SCOPE-2U2P`; the Admission, Core, acknowledgement, outcome-response-before-Journal, and Scope cuts; `SCH-NORMAL`, `SCH-REORDER`, `SCH-SCOPE`, `SCH-UNKNOWN`; and `ORC-CONTRACT`, `ORC-EDITOR-JOURNAL`, `ORC-ATOMIC-AUTHORITY`, `ORC-OUTCOME-UNKNOWN`, `ORC-NEGATIVE-CLOSURE`, `ORC-SCOPE`. | External dispatch emits `B-CONTEXT` + `B-FAKE`; it uses `PASS-UNKNOWN` at the unknown cut, `PASS-POS` after owner-defined reconciliation, and `PASS-HOLD` while unresolved. Author Command uses `PASS-POS` for `Committed`, `PASS-REFUSAL` only for public `Rejected` or the scheduled negative gate, and `PASS-HOLD` for `StillUnknown` or Query failure. It emits `B-CONTRACT` + `B-EDITOR` + `B-CORE` + `B-SCOPE`. `BLOCK-ALL`; unresolved state blocks settlement and dependent submission. |
 | `DVG-09` Replay, compaction, redaction, archival, generation, floor, and unavailable content | `OWN-RET` + `OWN-PROTO` + `OWN-MEM`; proves Seal/Fence/settlement completeness, operational evidence floor, replay generations, Snapshot/cursor-too-old, redaction invalidation, archival, gaps, and truthful unavailable-content export. | `FX-REPLAY-RETENTION` · `CFP-MAILBOX-BEFORE-SEAL`, `CFP-MAILBOX-AFTER-SEAL`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP` · `SCH-REPLAY`, `SCH-LIFECYCLE`, `SCH-REORDER` · `ORC-REPLAY-TRUTH`. | `B-REPLAY`; `PASS-POS` or `PASS-REFUSAL` for stale/invalid cursor and lifecycle access. `BLOCK-ALL`. |
 | `DVG-10` Archive, restore, Recovery Visibility, project deletion, and non-revival | `OWN-PG` + `OWN-RET` + `OWN-PROTO` + `OWN-TRUST`; proves isolated Recovery Copy/PITR, roles/RLS, migrations, projection rebuild, lifecycle gaps, Recovery Visibility Proof before ordinary reads, continued writing, export/portability, deletion settlement, and non-revival. | `FX-RESTORE-LIFECYCLE` · `CFP-RESTORE-STAGING`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DELETE-AFTER-SETTLEMENT` · `SCH-RESTORE`, `SCH-LIFECYCLE`, `SCH-SCOPE` · `ORC-RESTORE-LIFECYCLE`. | `B-RESTORE`; `PASS-HOLD` before visibility, then `PASS-POS` after proof, or `PASS-REFUSAL` for deleted/nonexistent scope. `BLOCK-ALL`. |
 | `DVG-11` Security negative evidence | `OWN-TRUST` + `OWN-ADM` + `OWN-PROTO` + `OWN-PG` + `OWN-CTX`; proves cross-scope, Host/Origin/session, RLS, credential, stale-writer, injection, hidden retry, disclosure, non-oracle, and direct-authority negatives. | `FX-SCOPE-2U2P`, `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE` · all applicable substitution, expiry, fence, lifecycle, and dispatch fault points · `SCH-SCOPE`, `SCH-FENCE`, `SCH-ABSENT`, `SCH-UNKNOWN`, `SCH-LIFECYCLE` · `ORC-NEGATIVE-CLOSURE`. | `B-SCOPE` + `B-ABSENT` + `B-CONTEXT`; `PASS-REFUSAL` or `PASS-POS` for zero-effect/zero-disclosure expectations. `BLOCK-ALL`. |
 | `DVG-12` Standalone Eval boundary | `OWN-EVAL` + `OWN-CTX` + `OWN-RET`; proves Eval View/read/refresh is read-only, explicit assessment follows normal boundaries, evidence gaps/redaction remain visible, and Eval cannot execute a model, egress, write prose, or route authority. | `FX-EVAL-READONLY`, `FX-ABSENT-EXECUTION` · `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP` · `SCH-ABSENT`, `SCH-LIFECYCLE`, `SCH-UNKNOWN` · `ORC-EVAL-READONLY`. | `B-EVAL`; `PASS-POS` for read-only view or `PASS-REFUSAL` for execution. `BLOCK-ALL`; Eval/advisory output cannot upgrade a stage. |
 | `DVG-13` Foundation contract walks | `OWN-DVG` + `OWN-REL` + all named domain owners; proves every accepted obligation resolves to an owner, gate, fixture, fault point, schedule, oracle, bundle, disposition, and exact handoff boundary. Its walk result is consumed by stage evidence and handoff rows; it does not create a second release owner. | `FX-CONTRACT-R1`, `FX-HANDOFF` · `CFP-CONTRACT-DRIFT` plus every row-selected fault point · `SCH-DRIFT`, `SCH-NORMAL`, `SCH-ABSENT` · `ORC-CROSSWALK-COMPLETENESS`. | `B-CONTRACT` + `B-HANDOFF`; `PASS-STAGE` only when all required rows are current and passed; `BLOCK-ALL`. |
 
-### 10.1 Stable DVG coverage detail
+### 10.1 Acknowledgement-loss Author Command profile
+
+This closed profile is the exact handoff for the acknowledgement-loss part of
+`S1-REQ-004` and `S1-EVD-004`. It composes existing public, Web, Core,
+PostgreSQL, and trust evidence. It does not claim later reload, restart,
+takeover, replay-generation, Snapshot-resync, late-result, or retention proof.
+
+<!-- ACK_LOSS_AUTHOR_COMMAND_PROFILE_START -->
+```json
+{
+  "profile_id": "storyos.dvg.apply-author-edit-ack-loss.v1",
+  "selection": {
+    "gates": ["DVG-01", "DVG-02", "DVG-03", "DVG-08", "DVG-11"],
+    "evidence_classes": [
+      "EC-01", "EC-02", "EC-03", "EC-04", "EC-05",
+      "EV-CP", "EV-IT", "EV-INT", "EV-SE"
+    ],
+    "fixtures": ["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"],
+    "fault_points": [
+      "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+      "CFP-ADMISSION-EXPIRY",
+      "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+      "CFP-CORE-BEFORE-COMMIT",
+      "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+      "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+      "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+      "CFP-SCOPE-BEFORE-QUERY"
+    ],
+    "schedules": ["SCH-NORMAL", "SCH-REORDER", "SCH-SCOPE", "SCH-UNKNOWN"],
+    "oracles": [
+      "ORC-ATOMIC-AUTHORITY", "ORC-CONTRACT", "ORC-EDITOR-JOURNAL",
+      "ORC-NEGATIVE-CLOSURE", "ORC-OUTCOME-UNKNOWN", "ORC-SCOPE"
+    ],
+    "bundles": ["B-CONTRACT", "B-CORE", "B-EDITOR", "B-SCOPE"]
+  },
+  "external_dispatch_branch": {
+    "owners": ["OWN-PROTO", "OWN-CTX", "OWN-PG", "OWN-RET"],
+    "fixtures": [
+      "FX-CONTEXT-DISCLOSURE", "FX-FAKE-MODEL", "FX-REAL-MODEL-ADVISORY"
+    ],
+    "fault_points": [
+      "CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO",
+      "CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION",
+      "CFP-RECONCILIATION-BEFORE-SETTLEMENT",
+      "CFP-LATE-RESULT"
+    ],
+    "schedules": ["SCH-UNKNOWN", "SCH-FENCE"],
+    "oracle": "ORC-OUTCOME-UNKNOWN",
+    "bundles": ["B-CONTEXT", "B-FAKE"],
+    "unknown_disposition": "PASS-UNKNOWN",
+    "reconciled_disposition": "PASS-POS",
+    "unresolved_disposition": "PASS-HOLD",
+    "reconciliation": "separately_admitted_reconciliation_or_new_attempt",
+    "fence_and_late_result": "preserved",
+    "author_command_outcome_read": false
+  },
+  "author_command_branch": {
+    "owners": ["OWN-WEB", "OWN-ADM", "OWN-CORE", "OWN-PROTO", "OWN-PG"],
+    "operations": [
+      "createProjectCommandChallenge", "applyAuthorEdit",
+      "getApplyAuthorEditOutcome"
+    ],
+    "first_reconciliation_action": "getApplyAuthorEditOutcome",
+    "repeat": "protected_outcome_get_only",
+    "post_replay": "forbidden",
+    "new_challenge": "forbidden",
+    "new_admission": "forbidden",
+    "separately_admitted_reconciliation": "forbidden",
+    "process_termination_or_restart": "forbidden",
+    "dispositions": {
+      "committed": "PASS-POS",
+      "rejected": "PASS-REFUSAL",
+      "still_unknown_challenge_issued": "PASS-HOLD",
+      "still_unknown_admission_committed": "PASS-HOLD",
+      "query_transport_unavailable_or_malformed": "PASS-HOLD",
+      "canonical_security_or_input_problem_gate": "PASS-REFUSAL",
+      "canonical_security_or_input_problem_journal": "QueryUnavailable"
+    },
+    "journal": {
+      "unresolved": "OutcomeQueryUnresolved",
+      "dependent_submission": "blocked",
+      "payload_and_capsule": "retained",
+      "invented_success_or_rejection": "forbidden"
+    },
+    "authority": {
+      "authoritative_applied": "one_receipt_one_activity_one_authority_effect",
+      "no_effect_conflicted_refused": "one_receipt_zero_activity_zero_authority",
+      "rejected": "zero_admission_receipt_activity_core_authority",
+      "post_and_get": "one_settlement_same_command_admission_receipt"
+    },
+    "security": {
+      "bindings": [
+        "idempotency_key_path", "nonce_header", "Host", "ProjectScope",
+        "current_client_session", "full_stored_binding", "forced_RLS"
+      ],
+      "route_policy": "SensitiveSafeReadWithRefererFallback",
+      "nonce": "header_only_not_url_log_or_response",
+      "cache_control": "no-store_on_success_and_problem",
+      "failure": "uniform_non_oracular",
+      "read_effects": "zero_nonce_consumption_core_receipt_activity_authority"
+    }
+  },
+  "stage1_handoff": {
+    "requirements": [
+      "S1-REQ-004:acknowledgement_loss",
+      "S1-EVD-004:acknowledgement_loss"
+    ],
+    "operations": [
+      "createProjectCommandChallenge", "applyAuthorEdit",
+      "getApplyAuthorEditOutcome"
+    ],
+    "gates": ["DVG-01", "DVG-02", "DVG-03", "DVG-08", "DVG-11"],
+    "evidence_classes": [
+      "EC-01", "EC-02", "EC-03", "EC-04", "EC-05",
+      "EV-CP", "EV-IT", "EV-INT", "EV-SE"
+    ],
+    "fixtures": ["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"],
+    "fault_points": [
+      "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+      "CFP-ADMISSION-EXPIRY",
+      "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+      "CFP-CORE-BEFORE-COMMIT",
+      "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+      "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+      "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+      "CFP-SCOPE-BEFORE-QUERY"
+    ],
+    "schedules": ["SCH-NORMAL", "SCH-REORDER", "SCH-SCOPE", "SCH-UNKNOWN"],
+    "oracles": [
+      "ORC-ATOMIC-AUTHORITY", "ORC-CONTRACT", "ORC-EDITOR-JOURNAL",
+      "ORC-NEGATIVE-CLOSURE", "ORC-OUTCOME-UNKNOWN", "ORC-SCOPE"
+    ],
+    "bundles": ["B-CONTRACT", "B-CORE", "B-EDITOR", "B-SCOPE"]
+  },
+  "excluded": {
+    "identifiers": [
+      "DVG-07", "FX-RECOVERY-EDITOR", "SCH-CRASH",
+      "ORC-RECOVERY-ATOMICITY", "B-RECOVERY"
+    ],
+    "behaviors": [
+      "reload", "restart", "takeover", "replay_generation", "snapshot_resync",
+      "late_result", "retention", "proposal"
+    ]
+  }
+}
+```
+<!-- ACK_LOSS_AUTHOR_COMMAND_PROFILE_END -->
+
+The profile is not a Stage 1 artifact. The Stage 1 owner must later copy this
+exact selection into its ticket source and generated crosswalk. Until that
+binding closes, this owner stays open and #109 stays blocked.
+
+### 10.2 Stable DVG coverage detail
 
 The compact catalogue above is the selection index. The following detail is
 retained from the established gate contract so that a stable `DVG-*` reference
@@ -503,7 +656,13 @@ or a source-line fault hook.
   zero usage. Late confirmation enters only through ordinary immutable
   ingress; a successor has a new Attempt/disclosure/budget and respects
   cancellation/recovery fences. A fake receipt cannot settle the original
-  unknown.
+  unknown. This external-dispatch branch does not use the Author Command read.
+  For missing-first-acknowledgement `ApplyAuthorEdit`, cut at every selected
+  Admission, Core, acknowledgement, and Journal boundary. Query the original
+  protected identity with `getApplyAuthorEditOutcome` before any POST replay.
+  Accept only the closed `Committed | Rejected | StillUnknown` result. Compare
+  the complete Receipt, Activity, Journal, queue, capsule, and authority
+  snapshot. Only the safe GET may repeat while the Journal is unresolved.
 - **`DVG-09` replay/retention corpus.** Exercise cursor resume, retained
   duplicates, generation handoff, cursor-too-old/resync, compaction Evidence
   Floor, post-Seal Mailbox dedupe, historical wire preservation,
@@ -540,7 +699,7 @@ or a source-line fault hook.
   other gate. The walk proves conformance selection and handoff completeness;
   it is not a product-stage or real-Provider substitute.
 
-### 10.2 Cross-cutting property oracle
+### 10.3 Cross-cutting property oracle
 
 The following established fault families remain named semantic groupings. The
 `CFP-*` rows in section 7 are the concrete selection points for them.
@@ -618,7 +777,7 @@ corpus-quality, or model-quality number is declared verified here; accepted
 protocol ceilings, token counting, archive validation limits, and the
 Foundation Recovery Service Profile retain their owner-defined meanings.
 
-### 10.3 Independent oracle registry
+### 10.4 Independent oracle registry
 
 The oracle labels used above and in the crosswalk are expectations, not
 implementation APIs:
@@ -633,7 +792,7 @@ implementation APIs:
 | `ORC-DISPATCH-DISCLOSURE` | Attempt, manifest, dispatch claim, fence, wire digest, and disclosure facts are ordered and scope-bound. |
 | `ORC-RUN-FINALIZATION` | One general run/mailbox path settles under Seal/Fence; duplicate or late records do not reopen authority. |
 | `ORC-RECOVERY-ATOMICITY` | Restart/takeover/replay recovers from durable facts, preserves uncertainty, and produces no stale or duplicate effect. |
-| `ORC-OUTCOME-UNKNOWN` | Post-claim unknown remains unknown until separately admitted reconciliation/new Attempt; no blind resend. |
+| `ORC-OUTCOME-UNKNOWN` | External post-claim unknown remains unknown until separately admitted reconciliation/new Attempt; no blind resend. Author Command acknowledgement loss queries the original durable identity first: `Committed` is `PASS-POS`, public `Rejected` is `PASS-REFUSAL`, and `StillUnknown` and Query failure are `PASS-HOLD`. A scheduled canonical security or input Problem is gate-level `PASS-REFUSAL` but leaves the Journal unresolved. No unresolved branch invents success, rejection, Receipt, Activity, authority, queue release, collection, or POST retry. |
 | `ORC-REPLAY-TRUTH` | Generation/floor/Snapshot/gap/availability/deletion facts remain distinct and are never guessed or revived. |
 | `ORC-RESTORE-LIFECYCLE` | Isolated restore is held until visibility/lifecycle proof, then continues in exact scope; deleted scope never returns. |
 | `ORC-NEGATIVE-CLOSURE` | Every prohibited substitution or absent capability has no unauthorized record/effect/disclosure and a non-oracular result. |
