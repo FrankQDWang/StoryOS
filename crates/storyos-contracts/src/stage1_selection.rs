@@ -1,9 +1,9 @@
 pub(super) const CONTRACT_REVISION: &str =
-    "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5";
-pub(super) const BASELINE_COMMIT: &str = "af50f2340a8ef0775fc344bc374390fe1d355e49";
-pub(super) const BASELINE_TREE: &str = "0d0ed71354194f7b4289a5cb859644784c39ae70";
+    "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6";
+pub(super) const BASELINE_COMMIT: &str = "bab4c0ac5ca3da20b01ea1d61783aaba414f493f";
+pub(super) const BASELINE_TREE: &str = "b36933e1d9c7d6e7bb19879a728d3a35483937bc";
 pub(super) const ISSUE_BODY_SHA256: &str =
-    "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1";
+    "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6";
 pub(super) const ROUTE_CATALOG_PATH: &str =
     "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 pub(super) const PERSISTENCE_CATALOG_PATH: &str =
@@ -43,6 +43,7 @@ pub(super) const OPERATION_IDS: &[&str] = &[
     "getEditorSession",
     "createProjectCommandChallenge",
     "applyAuthorEdit",
+    "getApplyAuthorEditOutcome",
     "getCommand",
     "activityStream",
     "getSnapshot",
@@ -144,6 +145,7 @@ pub(super) fn proof_selection() -> ProofSelection {
             "CFP-CORE-BEFORE-COMMIT",
             "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
             "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+            "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
             "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
             "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
             "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
@@ -161,6 +163,7 @@ pub(super) fn proof_selection() -> ProofSelection {
             "SCH-REORDER",
             "SCH-REPLAY",
             "SCH-SCOPE",
+            "SCH-UNKNOWN",
         ],
         oracles: &[
             "ORC-ATOMIC-AUTHORITY",

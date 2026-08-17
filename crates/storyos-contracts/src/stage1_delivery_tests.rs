@@ -34,7 +34,7 @@ fn stale_requirement_gate_and_evidence_bindings_are_rejected() {
     assert!(delivery_error(&gate).contains("gate coverage drifted"));
 
     let mut evidence = delivery_contract();
-    evidence.tickets[0].contract_coverage.evidence_classes = &["EC-01"];
+    evidence.tickets[0].contract_coverage.evidence_classes = &["EC-FOREIGN"];
     assert!(delivery_error(&evidence).contains("evidence class coverage drifted"));
 }
 

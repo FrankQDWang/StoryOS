@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-18-v17";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "df9330f95ed0434807417512b1bc36942d1615fd";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "0d4fd32f06605b69ba406e97f435152961ad0214";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-18-v18";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "bab4c0ac5ca3da20b01ea1d61783aaba414f493f";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "b36933e1d9c7d6e7bb19879a728d3a35483937bc";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:6114892a5c46d558f2c17bc186af82a874639f8898f5b1a9e7abfe3bac21ade3";
+    "sha256:ebe309947189eb4836a2824feaca01d2c1ab3e0efa15f47b0c7d0096dcb146c7";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -214,17 +214,36 @@ const COVERAGE_06: TicketCoverage = TicketCoverage {
 };
 const COVERAGE_07: TicketCoverage = TicketCoverage {
     requirements: &["S1-REQ-004", "S1-EVD-004"],
-    operations: &["getCommand"],
-    gates: &["DVG-08"],
-    evidence_classes: &["EC-04"],
-    fixtures: &["FX-RECOVERY-EDITOR"],
+    operations: &[
+        "createProjectCommandChallenge",
+        "applyAuthorEdit",
+        "getApplyAuthorEditOutcome",
+    ],
+    gates: &["DVG-01", "DVG-02", "DVG-03", "DVG-08", "DVG-11"],
+    evidence_classes: &[
+        "EC-01", "EC-02", "EC-03", "EC-04", "EC-05", "EV-CP", "EV-IT", "EV-INT", "EV-SE",
+    ],
+    fixtures: &["FX-CONTRACT-R1", "FX-JOURNAL-GROUP", "FX-SCOPE-2U2P"],
     fault_points: &[
+        "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+        "CFP-ADMISSION-EXPIRY",
+        "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+        "CFP-CORE-BEFORE-COMMIT",
         "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
         "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+        "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+        "CFP-SCOPE-BEFORE-QUERY",
     ],
-    schedules: &["SCH-CRASH"],
-    oracles: &["ORC-OUTCOME-UNKNOWN", "ORC-RECOVERY-ATOMICITY"],
-    bundles: &["B-RECOVERY"],
+    schedules: &["SCH-NORMAL", "SCH-REORDER", "SCH-SCOPE", "SCH-UNKNOWN"],
+    oracles: &[
+        "ORC-ATOMIC-AUTHORITY",
+        "ORC-CONTRACT",
+        "ORC-EDITOR-JOURNAL",
+        "ORC-NEGATIVE-CLOSURE",
+        "ORC-OUTCOME-UNKNOWN",
+        "ORC-SCOPE",
+    ],
+    bundles: &["B-CONTRACT", "B-CORE", "B-EDITOR", "B-SCOPE"],
     aggregate: None,
 };
 const COVERAGE_08: TicketCoverage = TicketCoverage {
@@ -279,7 +298,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-01",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/103",
         title: "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
-        issue_body_sha256: "bb827075cfd61443577f3b9499850a699dbc916b84602e71b1edb26afe9bc65d",
+        issue_body_sha256: "d71e2c878f29172797530aa00293087067b95822a7943f698b8a755168e6163b",
         blocked_by: &[],
         evidence_role: EvidenceRole::ContractBinding,
         responsibility: "bind the accepted Stage 1 specification and ticket sequence",
@@ -359,7 +378,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-07",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/109",
         title: "Reconcile Acknowledgement Loss without Duplicate Authority",
-        issue_body_sha256: "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
+        issue_body_sha256: "bbedc3f73c27611cb688fe7e79662cb62b470343218760af5278b1d1866cf669",
         blocked_by: &[
             "https://github.com/FrankQDWang/StoryOS/issues/103",
             "https://github.com/FrankQDWang/StoryOS/issues/108",

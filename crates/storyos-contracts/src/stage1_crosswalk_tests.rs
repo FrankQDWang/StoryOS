@@ -55,11 +55,18 @@ fn missing_project_scope_precondition_is_rejected() {
 
 #[test]
 fn baseline_reader_never_falls_through_to_the_worktree() {
-    assert!(repository_root().join("Cargo.toml").exists());
-    assert!(matches!(
-        read_baseline_file(repository_root(), "Cargo.toml"),
-        Err(CrosswalkError::Invalid(_))
-    ));
+    let path = "crates/storyos-contracts/src/stage1_delivery_tests.rs";
+    let worktree = std::fs::read_to_string(repository_root().join(path))
+        .expect("worktree delivery tests should exist");
+    let baseline =
+        read_baseline_file(repository_root(), path).expect("baseline delivery tests should exist");
+
+    assert!(worktree.contains("acknowledgement_loss_ticket_matches_the_current_process_profile"));
+    assert!(
+        !String::from_utf8(baseline)
+            .expect("baseline delivery tests should be UTF-8")
+            .contains("acknowledgement_loss_ticket_matches_the_current_process_profile")
+    );
 }
 
 #[test]

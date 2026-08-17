@@ -5,22 +5,22 @@
     "authority": "Issue #100 accepted Stage 1 specification with delivery owned by 12 child tickets, including #119 and #121",
     "execution_contract": {
       "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
-      "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5",
-      "baseline_commit": "af50f2340a8ef0775fc344bc374390fe1d355e49",
-      "baseline_tree": "0d0ed71354194f7b4289a5cb859644784c39ae70",
-      "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1"
+      "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
+      "baseline_commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
+      "baseline_tree": "b36933e1d9c7d6e7bb19879a728d3a35483937bc",
+      "issue_body_sha256": "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-18-v17",
-      "baseline_commit": "df9330f95ed0434807417512b1bc36942d1615fd",
-      "baseline_tree": "0d4fd32f06605b69ba406e97f435152961ad0214",
-      "ticket_set_sha256": "sha256:6114892a5c46d558f2c17bc186af82a874639f8898f5b1a9e7abfe3bac21ade3",
+      "revision": "stage1-ticketed-delivery-2026-08-18-v18",
+      "baseline_commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
+      "baseline_tree": "b36933e1d9c7d6e7bb19879a728d3a35483937bc",
+      "ticket_set_sha256": "sha256:ebe309947189eb4836a2824feaca01d2c1ab3e0efa15f47b0c7d0096dcb146c7",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
         "title": "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice",
-        "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-04-v5",
-        "issue_body_sha256": "e913ec0fb61a558e1ab07a648ee8f7dc59fc04125da1fab1b10c6efd239882f1",
+        "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
+        "issue_body_sha256": "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6",
         "blocked_by": [
           "https://github.com/FrankQDWang/StoryOS/issues/77"
         ]
@@ -40,7 +40,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/103",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Rebind the Stage 1 Contract Spine to Ticketed Delivery",
-          "issue_body_sha256": "bb827075cfd61443577f3b9499850a699dbc916b84602e71b1edb26afe9bc65d",
+          "issue_body_sha256": "d71e2c878f29172797530aa00293087067b95822a7943f698b8a755168e6163b",
           "blocked_by": [],
           "evidence_role": "contract-binding",
           "responsibility": "bind the accepted Stage 1 specification and ticket sequence",
@@ -429,7 +429,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/109",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Reconcile Acknowledgement Loss without Duplicate Authority",
-          "issue_body_sha256": "1fd3e245a51e3eed5da7943793fa633098d5a4870756d7e6bf2b522867d83529",
+          "issue_body_sha256": "bbedc3f73c27611cb688fe7e79662cb62b470343218760af5278b1d1866cf669",
           "blocked_by": [
             "https://github.com/FrankQDWang/StoryOS/issues/103",
             "https://github.com/FrankQDWang/StoryOS/issues/108",
@@ -444,30 +444,62 @@
               "S1-EVD-004"
             ],
             "operations": [
-              "getCommand"
+              "createProjectCommandChallenge",
+              "applyAuthorEdit",
+              "getApplyAuthorEditOutcome"
             ],
             "gates": [
-              "DVG-08"
+              "DVG-01",
+              "DVG-02",
+              "DVG-03",
+              "DVG-08",
+              "DVG-11"
             ],
             "evidence_classes": [
-              "EC-04"
+              "EC-01",
+              "EC-02",
+              "EC-03",
+              "EC-04",
+              "EC-05",
+              "EV-CP",
+              "EV-IT",
+              "EV-INT",
+              "EV-SE"
             ],
             "fixtures": [
-              "FX-RECOVERY-EDITOR"
+              "FX-CONTRACT-R1",
+              "FX-JOURNAL-GROUP",
+              "FX-SCOPE-2U2P"
             ],
             "fault_points": [
+              "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+              "CFP-ADMISSION-EXPIRY",
+              "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+              "CFP-CORE-BEFORE-COMMIT",
               "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
-              "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK"
+              "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+              "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
+              "CFP-SCOPE-BEFORE-QUERY"
             ],
             "schedules": [
-              "SCH-CRASH"
+              "SCH-NORMAL",
+              "SCH-REORDER",
+              "SCH-SCOPE",
+              "SCH-UNKNOWN"
             ],
             "oracles": [
+              "ORC-ATOMIC-AUTHORITY",
+              "ORC-CONTRACT",
+              "ORC-EDITOR-JOURNAL",
+              "ORC-NEGATIVE-CLOSURE",
               "ORC-OUTCOME-UNKNOWN",
-              "ORC-RECOVERY-ATOMICITY"
+              "ORC-SCOPE"
             ],
             "bundles": [
-              "B-RECOVERY"
+              "B-CONTRACT",
+              "B-CORE",
+              "B-EDITOR",
+              "B-SCOPE"
             ],
             "aggregate": null
           }
@@ -779,6 +811,7 @@
         "CFP-CORE-BEFORE-COMMIT",
         "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
         "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+        "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
         "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
         "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
         "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
@@ -795,7 +828,8 @@
         "SCH-NORMAL",
         "SCH-REORDER",
         "SCH-REPLAY",
-        "SCH-SCOPE"
+        "SCH-SCOPE",
+        "SCH-UNKNOWN"
       ],
       "oracles": [
         "ORC-ATOMIC-AUTHORITY",
@@ -823,8 +857,8 @@
   },
   "verifications": {
     "baseline": {
-      "commit": "af50f2340a8ef0775fc344bc374390fe1d355e49",
-      "tree": "0d0ed71354194f7b4289a5cb859644784c39ae70"
+      "commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
+      "tree": "b36933e1d9c7d6e7bb19879a728d3a35483937bc"
     },
     "delivery_coverage": {
       "requirements": [
@@ -851,6 +885,7 @@
         "getEditorSession",
         "createProjectCommandChallenge",
         "applyAuthorEdit",
+        "getApplyAuthorEditOutcome",
         "getCommand",
         "activityStream",
         "getSnapshot"
@@ -895,6 +930,7 @@
           "CFP-CORE-BEFORE-COMMIT",
           "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
           "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+          "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL",
           "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
           "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
           "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
@@ -911,7 +947,8 @@
           "SCH-NORMAL",
           "SCH-REORDER",
           "SCH-REPLAY",
-          "SCH-SCOPE"
+          "SCH-SCOPE",
+          "SCH-UNKNOWN"
         ],
         "oracles": [
           "ORC-ATOMIC-AUTHORITY",
@@ -940,11 +977,11 @@
     "sources": [
       {
         "path": "AGENTS.md",
-        "sha256": "sha256:61f9aced95dec6ab112879517eb6a2ed65b0801f4c9197fad23d56c182e643fd"
+        "sha256": "sha256:021b4dbc8e6646df8c8fd774e2204ca5e9a833817212d383f6aab675e55c75a7"
       },
       {
         "path": "CONTEXT.md",
-        "sha256": "sha256:bf35697b484ffd6035f61581c64067c8f7511f2ab4d2187972f6f365b2bf0838"
+        "sha256": "sha256:2b8467690c32f8be8c5370bc984060b9c1e67b78036fae30621c91a02cb32f8c"
       },
       {
         "path": "GOAL.md",
@@ -988,15 +1025,15 @@
       },
       {
         "path": "docs/foundation/author-command-admission.md",
-        "sha256": "sha256:0255cf57a1aea06742dbdc12785bbde1193abb0ca62ae44be47a8e42a67c22a3"
+        "sha256": "sha256:43aafc31938343d9e8ac9f29cb473c5d430deb31011719da989af30d40a68ab7"
       },
       {
         "path": "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
-        "sha256": "sha256:c38220a15fb8ef08c93665aa3c4f63dc7778c319b4766ae17b5f86bddbfe9d90"
+        "sha256": "sha256:ebbd2ff64ec8f1b4d53f02ba91bcf2ad1a97b2c2482059c719a254a24677e29d"
       },
       {
         "path": "docs/foundation/manuscript-revision-proposal-state-machine.md",
-        "sha256": "sha256:c0491c8a23a553acff1711ec90f8ee76ad235bd6b30b162e632dedebb0b29bd4"
+        "sha256": "sha256:80e301a0fdf9d77d58f6a1fd85105401d8fb42fe53e00763a92a7ddeb3f69543"
       },
       {
         "path": "docs/foundation/modular-monolith-and-repository-governance-boundaries.md",
@@ -1004,11 +1041,11 @@
       },
       {
         "path": "docs/foundation/postgresql-project-storage-isolation-and-migration-contract.md",
-        "sha256": "sha256:fb5199d5d9aa004e96306dd26351658502b3d37b1678b03f3ad1654db39476d6"
+        "sha256": "sha256:712fffd39f92ca23a5fa1751d7aa53feefc92568c10d56e030ddb0e0310b20e1"
       },
       {
         "path": "docs/foundation/postgresql-release-1-persistence-catalog.json",
-        "sha256": "sha256:17d365ae303245fbd0c3f7c0a9ed83b71487e6ee572106c14672d41a760c2862"
+        "sha256": "sha256:f6df238828889c0c0515b272dfc93b3e7cd74d3fef88e66770a44ce62dd60b44"
       },
       {
         "path": "docs/foundation/run-event-mailbox-snapshot-retention-and-archival-semantics.md",
@@ -1016,33 +1053,33 @@
       },
       {
         "path": "docs/foundation/storyos-service-client-external-trust-boundaries-threat-model.md",
-        "sha256": "sha256:464346d569d462b62e465fa5656b48a68254cdd395866b6641b1691b5074eb4b"
+        "sha256": "sha256:9acc32105e9ed9cc6ed3e62d4f1cdf1bdac781b2d012d69499622fe188580686"
       },
       {
         "path": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
-        "sha256": "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde"
+        "sha256": "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e"
       },
       {
         "path": "docs/foundation/versioned-command-query-artifact-event-protocol.md",
-        "sha256": "sha256:2a3441728582565a82f9c9bd09f0511d64ccd8a45126ac408a1f1d3340a588fa"
+        "sha256": "sha256:5d8232ed9f3a599e424e7a10d3f8f16ac7bf7bffe1d9a52b3ae319c8f1c6e155"
       },
       {
         "path": "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",
-        "sha256": "sha256:2e062ce8f1cd1a05a20448f701d998cb9a1e9a484dc4636439af53855e09b1b6"
+        "sha256": "sha256:24d660d4748a41ce3a166c365821504f64ae7424b4866a6592d667743e0acac4"
       }
     ],
     "catalogs": [
       {
         "path": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
         "catalog_id": "storyos.public.route-catalog.release-1.v1",
-        "contract_revision": "release1-wire-catalog-2026-07-31",
-        "sha256": "sha256:d3d17c028b40d23b22791579c0df9151833baa0297c68370d33f9fbf3e881dde"
+        "contract_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
+        "sha256": "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e"
       },
       {
         "path": "docs/foundation/postgresql-release-1-persistence-catalog.json",
-        "catalog_id": "storyos.persistence.catalog.release-1.v1",
-        "contract_revision": "release1-storage-contract-2026-07-31",
-        "sha256": "sha256:17d365ae303245fbd0c3f7c0a9ed83b71487e6ee572106c14672d41a760c2862"
+        "catalog_id": "storyos.persistence.catalog.release-1.v3",
+        "contract_revision": "release1-storage-contract-2026-08-17-author-command-outcome-unknown",
+        "sha256": "sha256:f6df238828889c0c0515b272dfc93b3e7cd74d3fef88e66770a44ce62dd60b44"
       }
     ],
     "operations": [
@@ -1124,9 +1161,21 @@
         "method": "POST",
         "path": "/api/v1/projects/{project_id}/manuscript/author-edits",
         "request_schema": "storyos.command.apply-author-edit.request.v1",
-        "response_schema": "storyos.command.apply-author-edit.response.v1",
+        "response_schema": "storyos.command.apply-author-edit.response.v2",
         "semantic_owner": "core",
         "error_profile": "editor_command",
+        "project_scope": "exact-owner-user-id-and-project-id",
+        "scope_precondition": "server_derived_project_scope"
+      },
+      {
+        "operation_id": "getApplyAuthorEditOutcome",
+        "kind": "query",
+        "method": "GET",
+        "path": "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}",
+        "request_schema": "storyos.query.apply-author-edit-outcome.request.v1",
+        "response_schema": "storyos.query.apply-author-edit-outcome.response.v1",
+        "semantic_owner": "admission",
+        "error_profile": "query_canonical",
         "project_scope": "exact-owner-user-id-and-project-id",
         "scope_precondition": "server_derived_project_scope"
       },
