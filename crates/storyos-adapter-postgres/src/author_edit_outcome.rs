@@ -318,8 +318,8 @@ fn outcome_database_error(error: tokio_postgres::Error) -> ApplyAuthorEditOutcom
     ApplyAuthorEditOutcomeReadError::unavailable(error)
 }
 
-fn outcome_settlement_error(_: AuthorEditError) -> ApplyAuthorEditOutcomeReadError {
-    outcome_unavailable()
+fn outcome_settlement_error(error: AuthorEditError) -> ApplyAuthorEditOutcomeReadError {
+    ApplyAuthorEditOutcomeReadError::unavailable(error)
 }
 
 fn outcome_unavailable() -> ApplyAuthorEditOutcomeReadError {

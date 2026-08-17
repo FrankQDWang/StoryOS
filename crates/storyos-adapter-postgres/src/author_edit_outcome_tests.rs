@@ -220,10 +220,10 @@ async fn missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle
 async fn outcome_read_waits_for_consume_and_cannot_report_a_false_rejection() {
     let database_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let store = PostgresProjectReader::new(database_url);
+    let store = PostgresProjectReader::new(&database_url);
     let binding = challenge_binding("018f0000-0000-7001-8000-000000000113");
     let nonce_digest = "sha256:outcome-reader-nonce-113";
-    issue_project_command_challenge(
+    let challenge = issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
             binding: binding.clone(),
@@ -260,26 +260,57 @@ async fn outcome_read_waits_for_consume_and_cannot_report_a_false_rejection() {
         )
         .await
         .unwrap();
+    let blocker_pid: i32 = command_transaction
+        .client
+        .query_one("SELECT pg_backend_pid()", &[])
+        .await
+        .unwrap()
+        .get(0);
 
-    let query_store = store.clone();
+    let application_name = "storyos_outcome_lock_probe_113";
+    let query_separator = if database_url.contains('?') { '&' } else { '?' };
+    let query_store = PostgresProjectReader::new(format!(
+        "{database_url}{query_separator}application_name={application_name}"
+    ));
+    let observer = store.connect_challenge().await.unwrap();
     let query = outcome_query(&binding, nonce_digest);
     let read =
         tokio::spawn(async move { get_apply_author_edit_outcome(&query_store, &query).await });
-    for _ in 0..16 {
-        tokio::task::yield_now().await;
-    }
-    assert!(
-        !read.is_finished(),
-        "the outcome read must wait on the command arbiter rows"
-    );
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            let blocked_by_command: bool = observer
+                .query_one(
+                    "SELECT EXISTS (
+                         SELECT 1
+                           FROM pg_catalog.pg_stat_activity AS activity
+                          WHERE activity.application_name = $1
+                            AND activity.wait_event_type = 'Lock'
+                            AND $2::int = ANY(pg_catalog.pg_blocking_pids(activity.pid)))",
+                    &[&application_name, &blocker_pid],
+                )
+                .await
+                .unwrap()
+                .get(0);
+            if blocked_by_command {
+                break;
+            }
+            assert!(
+                !read.is_finished(),
+                "the outcome read completed before reaching the command arbiter lock"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("the outcome read must observably wait on the command arbiter rows");
 
-    command_transaction.commit().await.unwrap();
-    let error = read
-        .await
-        .unwrap()
-        .expect_err("consumed in-progress state without Admission is not Rejected");
+    command_transaction.rollback().await.unwrap();
     assert_eq!(
-        error.to_string(),
-        "Apply Author Edit outcome read is unavailable"
+        read.await.unwrap().unwrap(),
+        ApplyAuthorEditOutcome::StillUnknown {
+            observation: ApplyAuthorEditUnknownObservation::ChallengeIssued {
+                expires_at: challenge.expires_at,
+            },
+        }
     );
 }

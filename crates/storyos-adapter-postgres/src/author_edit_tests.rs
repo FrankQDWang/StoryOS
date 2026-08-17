@@ -1,7 +1,7 @@
 use storyos_application::{
     ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditUnknownObservation,
-    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, EditorSessionLookup,
-    EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
+    AuthorCommandAdmissionIds, CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId,
+    EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
     ProjectCommandChallengeBinding, ProjectId, ProjectScope, ReadApplyAuthorEditOutcome, UserId,
     create_editor_session, get_apply_author_edit_outcome, get_editor_session,
     issue_project_command_challenge,
@@ -308,26 +308,19 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     )
     .await
     .unwrap();
-    let ApplyAuthorEditOutcome::Committed(committed) = committed_outcome else {
-        panic!("post-commit acknowledgement loss must read as Committed")
-    };
-    assert_eq!(committed.correlation_id, command.correlation_id);
-    assert_eq!(
-        committed.canonical_command_digest,
-        command.challenge_binding.canonical_command_digest
-    );
-    assert_eq!(
-        committed.idempotency_key,
-        command.challenge_binding.idempotency_key
-    );
-    assert_eq!(
-        committed.expected_authoritative_revision_id,
-        command.expected_authoritative_revision_id
-    );
     let replay = storyos_application::apply_author_edit(&store, &command)
         .await
         .unwrap();
-    assert_eq!(committed.settlement, replay);
+    assert_eq!(
+        committed_outcome,
+        ApplyAuthorEditOutcome::Committed(Box::new(CommittedApplyAuthorEdit {
+            correlation_id: command.correlation_id.clone(),
+            canonical_command_digest: command.challenge_binding.canonical_command_digest.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
+            settlement: replay.clone(),
+        }))
+    );
     let replay_applied_ids = match &replay.effect {
         storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => {
             ids.clone()
