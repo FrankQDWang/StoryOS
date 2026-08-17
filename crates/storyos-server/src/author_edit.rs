@@ -1,13 +1,21 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditSettlementEffect,
-    EditorClientBinding, EditorSessionId, ProjectCommandChallengeBinding,
+    ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditSettlement,
+    AuthorEditSettlementEffect, EditorClientBinding, EditorSessionId,
+    ProjectCommandChallengeBinding,
 };
 
 use super::editor_session::{exact_header, session_binding_ref};
 use super::project_command_challenge::{plain_digest, valid_uuid_v7, validate_json_content_type};
 use super::*;
+
+pub(super) struct AuthorEditResponseIdentity {
+    pub(super) correlation_id: String,
+    pub(super) canonical_command_digest: String,
+    pub(super) idempotency_key: String,
+    pub(super) expected_authoritative_revision_id: String,
+}
 
 pub(super) async fn apply_author_edit(
     State(state): State<Arc<ServerState>>,
@@ -149,7 +157,35 @@ pub(super) async fn apply_author_edit(
     let settlement = storyos_application::apply_author_edit(&store, &command)
         .await
         .map_err(author_edit_error)?;
-    let contract_project_scope = contract_scope(&scope);
+    Ok(Json(author_edit_response(
+        &scope,
+        AuthorEditResponseIdentity {
+            correlation_id: command.correlation_id.clone(),
+            canonical_command_digest: command.challenge_binding.canonical_command_digest.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
+        },
+        settlement,
+    )?))
+}
+
+pub(super) fn author_edit_response(
+    scope: &ApplicationScope,
+    identity: AuthorEditResponseIdentity,
+    settlement: AuthorEditSettlement,
+) -> Result<contracts::ApplyAuthorEditResponse, ApiError> {
+    let digest_hex = identity
+        .canonical_command_digest
+        .strip_prefix("sha256:storyos.command.applyAuthorEdit.jcs.v1:")
+        .filter(|value| {
+            value.len() == 64
+                && value
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        })
+        .ok_or_else(resource_unavailable)?
+        .to_owned();
+    let contract_project_scope = contract_scope(scope);
     let (
         receipt_result,
         prior_heads,
@@ -166,7 +202,7 @@ pub(super) async fn apply_author_edit(
             project_activity_position,
         } => (
             contracts::DomainReceiptResult::AuthoritativeApplied,
-            vec![command.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
             vec![ids.revision_id.clone()],
             vec![ids.revision_id.clone()],
             vec![ids.authoritative_commit_id.clone()],
@@ -183,8 +219,8 @@ pub(super) async fn apply_author_edit(
         ),
         AuthorEditSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
-            vec![command.expected_authoritative_revision_id.clone()],
-            vec![command.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
             Vec::new(),
             Vec::new(),
             None,
@@ -223,8 +259,8 @@ pub(super) async fn apply_author_edit(
         ),
         AuthorEditSettlementEffect::Refused { reason } => (
             contracts::DomainReceiptResult::Refused,
-            vec![command.expected_authoritative_revision_id.clone()],
-            vec![command.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
             Vec::new(),
             Vec::new(),
             None,
@@ -243,9 +279,9 @@ pub(super) async fn apply_author_edit(
             },
         ),
     };
-    Ok(Json(contracts::ApplyAuthorEditResponse {
+    Ok(contracts::ApplyAuthorEditResponse {
         schema_id: contracts::APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID.to_owned(),
-        correlation_id: body.correlation_id,
+        correlation_id: identity.correlation_id,
         project_scope: contract_project_scope.clone(),
         command_id: settlement.ids.command_id,
         author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
@@ -258,10 +294,10 @@ pub(super) async fn apply_author_edit(
                 profile: "storyos.command.applyAuthorEdit.jcs.v1".to_owned(),
                 value_hex_lowercase: digest_hex,
             },
-            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            idempotency_key: identity.idempotency_key,
             producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
             author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
-            expected_heads: vec![command.expected_authoritative_revision_id.clone()],
+            expected_heads: vec![identity.expected_authoritative_revision_id],
             prior_heads,
             resulting_heads,
             authoritative_revision_ids,
@@ -277,7 +313,7 @@ pub(super) async fn apply_author_edit(
         effect,
         completed_intent_record_id: settlement.completed_intent_record_id,
         local_intent_sequence: settlement.local_intent_sequence.to_string(),
-    }))
+    })
 }
 
 fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiError> {

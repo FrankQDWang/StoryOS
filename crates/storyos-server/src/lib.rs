@@ -18,11 +18,13 @@ use storyos_contracts as contracts;
 use uuid::Uuid;
 
 mod author_edit;
+mod author_edit_outcome;
 mod editor_session;
 mod project_command_challenge;
 mod request_origin;
 
 use author_edit::apply_author_edit;
+use author_edit_outcome::get_apply_author_edit_outcome;
 use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
@@ -110,6 +112,16 @@ impl IntoResponse for ApiError {
     }
 }
 
+impl ApiError {
+    fn with_no_store(mut self) -> Self {
+        self.1.0.insert(
+            header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+        self
+    }
+}
+
 /// Build the protocol-only router used when no controlled Project store is configured.
 pub fn router() -> Router {
     router_with_config(ServerConfig::default())
@@ -124,6 +136,8 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let create_editor_method = method_filter(contracts::CREATE_EDITOR_SESSION_METHOD);
     let get_editor_method = method_filter(contracts::GET_EDITOR_SESSION_METHOD);
     let apply_author_edit_method = method_filter(contracts::APPLY_AUTHOR_EDIT_METHOD);
+    let get_author_edit_outcome_method =
+        method_filter(contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD);
     Router::new()
         .route(
             contracts::GET_PROTOCOL_PROFILE_PATH,
@@ -152,6 +166,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::APPLY_AUTHOR_EDIT_PATH,
             routing::on(apply_author_edit_method, apply_author_edit),
+        )
+        .route(
+            contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH,
+            routing::on(
+                get_author_edit_outcome_method,
+                get_apply_author_edit_outcome,
+            ),
         )
         .with_state(Arc::new(ServerState::new(config)))
 }
