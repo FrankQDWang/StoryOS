@@ -63,6 +63,16 @@ export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authorita
 
 export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
 
+export type GetApplyAuthorEditOutcomeRequest = { project_id: string, idempotency_key: string, };
+
+export type ApplyAuthorEditRejectionReason = "challenge_expired_unconsumed";
+
+export type ApplyAuthorEditUnknownObservation = { "observation_kind": "challenge_issued", expires_at: string, } | { "observation_kind": "admission_committed", command_id: string, author_command_admission_id: string, reconciliation_required: true, };
+
+export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: ApplyAuthorEditResponse, } | { "outcome_kind": "rejected", reason: ApplyAuthorEditRejectionReason, } | { "outcome_kind": "still_unknown", observation: ApplyAuthorEditUnknownObservation, };
+
+export type GetApplyAuthorEditOutcomeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, outcome: ApplyAuthorEditOutcome, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -84,3 +94,4 @@ export declare function createEditorSession(options: StoryOSQueryOptions & { pro
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
+export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

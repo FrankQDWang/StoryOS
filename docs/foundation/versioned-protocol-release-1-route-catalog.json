@@ -1,10 +1,10 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
+  "contract_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",
-  "source_of_truth": "future StoryOS-owned Rust contracts crate; this checked-in manifest is the pre-implementation review catalog, not a semantic owner",
+  "source_of_truth": "StoryOS-owned Rust contract graph plus this checked-in exhaustive review catalog; semantic meaning stays with each named owner",
   "owners": {
     "protocol": "docs/foundation/versioned-command-query-artifact-event-protocol.md#16-rust-source-generation-and-verification-contract",
     "core": "docs/foundation/manuscript-revision-proposal-state-machine.md#13-normative-commands-events-and-records",
@@ -66,7 +66,8 @@
       "editor_session_takeover",
       "snapshot_resync",
       "proposal_draft_lifecycle",
-      "project_activity"
+      "project_activity",
+      "acknowledgement_loss_outcome_query"
     ],
     "capabilities": [
       {
@@ -119,6 +120,11 @@
         "operation_actions": {
           "applyAuthorEdit": ["direct_author_edit"]
         }
+      },
+      {
+        "capability_id": "acknowledgement_loss_outcome_query",
+        "journey": "Read one exact Apply Author Edit outcome after a missing acknowledgement",
+        "required_operations": ["getApplyAuthorEditOutcome"]
       },
       {
         "capability_id": "single_match_replace",
@@ -4541,6 +4547,95 @@
         "typescript_client": true,
         "golden_wire_corpus": true
       }
+    },
+    {
+      "operation_id": "getApplyAuthorEditOutcome",
+      "kind": "query",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}",
+      "shape": "apply-author-edit-outcome:read-by-idempotency-proof",
+      "semantic_owner": "admission",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.query.apply-author-edit-outcome.request.v1",
+        "response": "storyos.query.apply-author-edit-outcome.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "admission"
+      },
+      "action_class": "none",
+      "admission": "query",
+      "editor": {
+        "session": "required",
+        "writer_generation": "bound-to-original-admission-when-present",
+        "takeover": "no"
+      },
+      "idempotency": "none",
+      "preconditions": [
+        "server_derived_project_scope",
+        "sensitive_safe_read_origin",
+        "current_client_session_binding",
+        "apply_author_edit_idempotency_key",
+        "original_project_command_challenge_nonce_header",
+        "complete_stored_challenge_binding",
+        "receipt_first_settlement_validation"
+      ],
+      "query_proof": {
+        "identity": "apply_author_edit_idempotency_key",
+        "header": "X-StoryOS-Anti-Forgery",
+        "source": "original_project_command_challenge_nonce",
+        "url": "forbidden",
+        "response": "forbidden",
+        "consumption": "none",
+        "cache_control": "no-store"
+      },
+      "settlement": {
+        "mode": "read",
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "query_canonical",
+      "activity": {
+        "success": [],
+        "no_effect": [],
+        "pre_admission": "none",
+        "visibility": "read-only current durable outcome; this Query allocates no Event or authority"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.getApplyAuthorEditOutcome.positive.v1",
+        "negative": [
+          "storyos.golden.getApplyAuthorEditOutcome.invalid.v1",
+          "storyos.golden.getApplyAuthorEditOutcome.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "getApplyAuthorEditOutcome",
+        "typescript_operation": "getApplyAuthorEditOutcome",
+        "json_schema_ids": [
+          "storyos.query.apply-author-edit-outcome.request.v1",
+          "storyos.query.apply-author-edit-outcome.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      },
+      "notes": "The protected Web Client may call this exact named GET after the first applyAuthorEdit acknowledgement is absent. It uses the client-first idempotency key plus the original challenge nonce only as a protected header, never as a URL or response value. Committed reuses the exact Receipt-backed response-v2 settlement; Rejected requires an expired unconsumed challenge under the arbiter locks; StillUnknown grants no retry or success and is not the durable Admission outcome_unknown condition. The route is not applyAuthorEdit.settlement_query and creates no Admission, Receipt, Activity, or Core invocation."
     },
     {
       "operation_id": "getCommand",

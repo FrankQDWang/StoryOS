@@ -1,0 +1,17 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000081",
+  "outcome": {
+    "observation": {
+      "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+      "command_id": "018f0000-0000-7001-8000-000000000031",
+      "observation_kind": "admission_committed",
+      "reconciliation_required": true
+    },
+    "outcome_kind": "still_unknown"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "schema_id": "storyos.query.apply-author-edit-outcome.response.v1"
+}

@@ -194,6 +194,25 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
     if not any("runtime credential" in error for error in credential_errors):
         errors.append("negative self-test did not reject tracked runtime credential ownership")
 
+    outcome_query_probe = copy.deepcopy(catalog)
+    outcome_activity_family = next(
+        family
+        for family in outcome_query_probe["families"]
+        if family["family_id"] == "operational-project-activity"
+    )
+    outcome_activity_family["public_contract"]["operation_ids"].remove(
+        "getApplyAuthorEditOutcome"
+    )
+    outcome_query_errors: list[str] = []
+    validate_catalog(
+        outcome_query_probe,
+        route_catalog,
+        outcome_query_errors,
+        check_digests=False,
+    )
+    if not any("getApplyAuthorEditOutcome must map exactly" in error for error in outcome_query_errors):
+        errors.append("negative self-test did not reject incomplete outcome Query family coverage")
+
 
 def main() -> int:
     raw = CATALOG_PATH.read_bytes()
@@ -237,6 +256,7 @@ def main() -> int:
         print("OK: Receipt/Activity negative self-test rejected a bad catalog")
         print("OK: nullable-Receipt negative self-test rejected a bad catalog")
         print("OK: bootstrap-credential negative self-test rejected a bad catalog")
+        print("OK: outcome-Query-family negative self-test rejected a bad catalog")
     return 0
 
 

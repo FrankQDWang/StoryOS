@@ -52,6 +52,126 @@ fn controlled_project_queries_are_generated_from_the_release_1_contract() {
 }
 
 #[test]
+fn apply_author_edit_outcome_query_is_one_protected_exact_get() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let request_path = "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json";
+    let response_path = "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json";
+    assert!(generated.contains_key(request_path));
+    assert!(generated.contains_key(response_path));
+
+    let request: serde_json::Value =
+        serde_json::from_slice(&generated[request_path]).expect("request schema must be JSON");
+    assert_eq!(
+        request["$id"],
+        "storyos.query.apply-author-edit-outcome.request.v1"
+    );
+    assert_eq!(
+        request["required"],
+        serde_json::json!(["project_id", "idempotency_key"])
+    );
+    assert!(request["properties"].get("nonce").is_none());
+
+    let response: serde_json::Value =
+        serde_json::from_slice(&generated[response_path]).expect("response schema must be JSON");
+    assert_eq!(
+        response["$id"],
+        "storyos.query.apply-author-edit-outcome.response.v1"
+    );
+    assert_eq!(response["additionalProperties"], false);
+    let outcomes = response["$defs"]["ApplyAuthorEditOutcome"]["oneOf"]
+        .as_array()
+        .expect("outcome must be a closed union");
+    assert_eq!(outcomes.len(), 3);
+    assert_eq!(
+        outcomes
+            .iter()
+            .map(|outcome| outcome["properties"]["outcome_kind"]["const"]
+                .as_str()
+                .expect("outcome discriminator must be a string"))
+            .collect::<Vec<_>>(),
+        ["committed", "rejected", "still_unknown"]
+    );
+    assert!(
+        response.to_string().contains("ApplyAuthorEditResponse"),
+        "committed outcome must reuse response v2"
+    );
+
+    let openapi =
+        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
+            .expect("OpenAPI must be UTF-8");
+    assert!(openapi.contains(
+        "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}:\n    get:"
+    ));
+    assert!(openapi.contains("operationId: getApplyAuthorEditOutcome"));
+    assert!(openapi.contains("- name: X-StoryOS-Anti-Forgery"));
+
+    let client = String::from_utf8(
+        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
+    )
+    .expect("generated client must be UTF-8");
+    assert!(client.contains("export async function getApplyAuthorEditOutcome"));
+    assert!(client.contains("queryHeaders: { \"x-storyos-anti-forgery\": antiForgery }"));
+    let function = client
+        .split("export async function getApplyAuthorEditOutcome")
+        .nth(1)
+        .expect("outcome client function exists")
+        .split("\n}\n")
+        .next()
+        .expect("outcome client function closes");
+    assert!(!function.contains("antiForgery)}"));
+    assert!(!function.contains("nonce"));
+}
+
+#[test]
+fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
+    let admitted = serde_json::json!({
+        "observation_kind": "admission_committed",
+        "command_id": "018f0000-0000-7001-8000-000000000031",
+        "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+        "reconciliation_required": true
+    });
+    assert_eq!(
+        serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(admitted.clone())
+            .expect("the required observation must deserialize"),
+        crate::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+            command_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
+            author_command_admission_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
+            reconciliation_required: crate::ReconciliationRequired,
+        }
+    );
+    assert_eq!(
+        serde_json::to_value(
+            crate::ApplyAuthorEditUnknownObservation::AdmissionCommitted {
+                command_id: "018f0000-0000-7001-8000-000000000031".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-000000000032".to_owned(),
+                reconciliation_required: crate::ReconciliationRequired,
+            }
+        )
+        .expect("required reconciliation observation must serialize"),
+        admitted
+    );
+    let mut disabled = admitted.clone();
+    disabled["reconciliation_required"] = serde_json::json!(false);
+    assert!(serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(disabled).is_err());
+    let mut surplus = admitted;
+    surplus["receipt_id"] = serde_json::json!("018f0000-0000-7001-8000-000000000033");
+    assert!(serde_json::from_value::<crate::ApplyAuthorEditUnknownObservation>(surplus).is_err());
+
+    assert_eq!(
+        serde_json::to_value(crate::ApplyAuthorEditOutcome::Rejected {
+            reason: crate::ApplyAuthorEditRejectionReason::ChallengeExpiredUnconsumed,
+        })
+        .expect("rejected outcome serializes"),
+        serde_json::json!({
+            "outcome_kind": "rejected",
+            "reason": "challenge_expired_unconsumed"
+        })
+    );
+}
+
+#[test]
 fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
     let generated = super::generated_files()
         .into_iter()
@@ -106,6 +226,7 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
             crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH,
         ]);
     }
+    expected_references.push(crate::release1_author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH);
     assert_eq!(
         resolved_references,
         expected_references.into_iter().map(str::to_owned).collect()
@@ -129,23 +250,23 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let profile = release1_protocol_profile();
     assert_eq!(
         profile.contract_revision,
-        "release1-wire-catalog-2026-08-16-author-edit-response-v2"
+        "release1-wire-catalog-2026-08-17-author-edit-outcome-v1"
     );
     assert_eq!(
         profile.release_identity.web_client_contract_revision,
-        "storyos.web-client.release-1.v2"
+        "storyos.web-client.release-1.v3"
     );
     assert_eq!(
         profile.release_identity.server_contract_revision,
-        "storyos.server.release-1.v2"
+        "storyos.server.release-1.v3"
     );
     assert_eq!(
         profile.release_identity.worker_contract_revision,
-        "storyos.worker.release-1.v2"
+        "storyos.worker.release-1.v3"
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v2"
+        "storyos.typescript-client.release-1.v3"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -259,7 +380,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v2\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v3\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])

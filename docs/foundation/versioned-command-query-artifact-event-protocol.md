@@ -357,7 +357,8 @@ record under the exact arbitration tuple from section 7.3 and binds the
 challenge to that record identity, its `idempotency_key`, canonical command
 digest, client contract, and security policy. It creates no Command, Receipt,
 domain Attempt, or authority and exposes no target-object existence. The
-returned nonce is sent only in the command header, never a URL or log. The
+returned nonce is sent only in the protected command header or the sole exact
+outcome Query header defined below, never a URL or log. The
 client performs this automatically; it is not an author setting or
 confirmation step.
 
@@ -409,6 +410,38 @@ record, key, and digest to its in-progress or immutable prior result; it cannot
 start another admission. Another method, target, body, scope, command kind, key,
 or record conflicts. A cookie or nonce is one validated input to the Server-created
 Author Command Admission.
+
+The sole read-only exception is `getApplyAuthorEditOutcome`:
+
+```text
+GET /api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}
+X-StoryOS-Anti-Forgery: <original Project command challenge nonce>
+```
+
+This exact named Query is available when the first `applyAuthorEdit`
+acknowledgement is absent and the client does not know the Server-assigned
+`CommandId`. The idempotency key is the durable command-attempt identity. The
+original nonce is proof for that identity, not reusable command authority. The
+Server derives Scope and the current Client Session, hashes the nonce, and
+matches every stored challenge binding for the one fixed method, route, schema,
+command kind, digest, key, session generation, and contract revisions. A
+committed result also passes the existing Receipt-first settlement validation.
+The Query does not consume the nonce or create an Admission, Command, Receipt,
+Activity, refusal record, lifecycle observation, or Core invocation. It never
+puts the nonce in a URL, log, response, or unrelated Query. Every success and
+Problem response uses `Cache-Control: no-store`.
+
+The result is the closed `Committed | Rejected | StillUnknown` union.
+`Committed` contains the exact `ApplyAuthorEditResponse` v2. `Rejected` is
+possible only when a lock-serialized read proves that the exact challenge is
+expired, unconsumed, and pending, with no Admission or Receipt.
+`StillUnknown.ChallengeIssued` preserves an unexpired challenge that may still
+be consumed. `StillUnknown.AdmissionCommitted` exposes only the authorized
+Command and Admission identities and requires reconciliation. Neither unknown
+branch permits invocation, retry, or success. `StillUnknown` is a read
+observation, not the durable Admission `outcome_unknown` condition. The Web
+Editor Session contract owns when a Local Edit Journal group calls this Query
+and how it records the result.
 
 ### 5.3 Reads and SSE
 

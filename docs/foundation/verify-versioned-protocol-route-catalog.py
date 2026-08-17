@@ -32,6 +32,7 @@ REQUIRED_RELEASE1_CAPABILITY_IDS = {
     "snapshot_resync",
     "proposal_draft_lifecycle",
     "project_activity",
+    "acknowledgement_loss_outcome_query",
 }
 
 
@@ -620,6 +621,49 @@ def main() -> int:
             fail("applyAuthorEdit must be a directly admitted ownership-classifying command", errors)
         if "Core classifies" not in op.get("notes", "") or "Web Client never chooses" not in op.get("notes", ""):
             fail("applyAuthorEdit notes must state the no-client-route-selection boundary", errors)
+        settlement = op.get("settlement", {})
+        if settlement.get("settlement_query") is not None or settlement.get("settlement_query_operation_id") is not None:
+            fail("applyAuthorEdit must not claim the acknowledgement-loss bootstrap Query as an Accepted settlement link", errors)
+
+    outcome_queries = [
+        op for op in operations if op.get("operation_id") == "getApplyAuthorEditOutcome"
+    ]
+    if len(outcome_queries) != 1:
+        fail("catalog must contain exactly one getApplyAuthorEditOutcome", errors)
+    else:
+        outcome_query = outcome_queries[0]
+        if (
+            outcome_query.get("kind") != "query"
+            or outcome_query.get("method") != "GET"
+            or outcome_query.get("path")
+            != "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}"
+        ):
+            fail("getApplyAuthorEditOutcome must be the exact named GET route", errors)
+        expected_proof = {
+            "identity": "apply_author_edit_idempotency_key",
+            "header": "X-StoryOS-Anti-Forgery",
+            "source": "original_project_command_challenge_nonce",
+            "url": "forbidden",
+            "response": "forbidden",
+            "consumption": "none",
+            "cache_control": "no-store",
+        }
+        if outcome_query.get("query_proof") != expected_proof:
+            fail("getApplyAuthorEditOutcome query proof must be header-only, non-consuming, and non-cacheable", errors)
+        if outcome_query.get("editor", {}).get("writer_generation") != "bound-to-original-admission-when-present":
+            fail("getApplyAuthorEditOutcome may require the original writer generation only after Admission", errors)
+        settlement = outcome_query.get("settlement", {})
+        if (
+            settlement.get("mode") != "read"
+            or settlement.get("acknowledgements") != []
+            or settlement.get("settlement_query") is not None
+            or settlement.get("operation_ref") is not None
+        ):
+            fail("getApplyAuthorEditOutcome must remain an independent read, not an Accepted settlement link", errors)
+        notes = outcome_query.get("notes", "")
+        for boundary in ("Rejected requires", "StillUnknown grants no retry", "creates no Admission"):
+            if boundary not in notes:
+                fail(f"getApplyAuthorEditOutcome notes omit boundary: {boundary}", errors)
 
     for non_public in catalog.get("non_public_operations", []):
         if non_public.get("public_route") is not None:

@@ -1,0 +1,71 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000081",
+  "outcome": {
+    "outcome_kind": "committed",
+    "response": {
+      "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+      "command_id": "018f0000-0000-7001-8000-000000000031",
+      "completed_intent_record_id": "018f0000-0000-7001-8000-000000000036",
+      "correlation_id": "018f0000-0000-7001-8000-000000000030",
+      "effect": {
+        "author_action_sequence": "1",
+        "authoritative_commit_id": "018f0000-0000-7001-8000-000000000035",
+        "authoritative_revision": {
+          "body": "雨落在窗沿。",
+          "revision_id": "018f0000-0000-7001-8000-000000000034"
+        },
+        "kind": "authoritative_applied",
+        "project_activity_position": "1"
+      },
+      "local_intent_sequence": "1",
+      "project_scope": {
+        "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+        "project_id": "018f0000-0000-7001-8000-000000000002"
+      },
+      "receipt": {
+        "artifact_lifecycle_event_refs": [],
+        "author_action_sequence": "1",
+        "author_command_admission_id": "018f0000-0000-7001-8000-000000000032",
+        "authoritative_commit_ids": [
+          "018f0000-0000-7001-8000-000000000035"
+        ],
+        "authoritative_revision_ids": [
+          "018f0000-0000-7001-8000-000000000034"
+        ],
+        "command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+          "value_hex_lowercase": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "command_kind": "applyAuthorEdit",
+        "condition_refs": [],
+        "created_at": "2026-08-15T08:00:00.000Z",
+        "draft_artifact_refs": [],
+        "expected_heads": [
+          "018f0000-0000-7001-8000-000000000004"
+        ],
+        "idempotency_key": "018f0000-0000-7001-8000-000000000037",
+        "prior_heads": [
+          "018f0000-0000-7001-8000-000000000004"
+        ],
+        "producer_cause": "author_command_admission",
+        "project_scope": {
+          "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+          "project_id": "018f0000-0000-7001-8000-000000000002"
+        },
+        "proposal_revision_ids": [],
+        "receipt_id": "018f0000-0000-7001-8000-000000000033",
+        "result": "authoritative_applied",
+        "resulting_heads": [
+          "018f0000-0000-7001-8000-000000000034"
+        ]
+      },
+      "schema_id": "storyos.command.apply-author-edit.response.v2"
+    }
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "schema_id": "storyos.query.apply-author-edit-outcome.response.v1"
+}

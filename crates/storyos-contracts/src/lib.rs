@@ -6,6 +6,8 @@ mod release1;
 mod release1_artifacts;
 mod release1_author_edit;
 mod release1_author_edit_artifacts;
+mod release1_author_edit_outcome;
+mod release1_author_edit_outcome_artifacts;
 mod stage1_crosswalk;
 mod stage1_delivery;
 mod stage1_selection;
@@ -34,6 +36,13 @@ pub use release1_author_edit::{
     ApplyAuthorEditRequest, ApplyAuthorEditResponse, AuthorEditConflictReason, AuthorEditPrimitive,
     AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt, DomainReceiptCommandKind,
     DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
+};
+pub use release1_author_edit_outcome::{
+    ApplyAuthorEditOutcome, ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD, GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
+    GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
