@@ -17,6 +17,7 @@ contracts:
 web:
 	node --test apps/web/test/protocol-boot.test.mjs
 	node --test apps/web/test/project-open.test.mjs
+	node --test apps/web/test/author-edit-outcome-browser.integration.test.mjs
 	node --test apps/web/test/editor-session-browser.integration.test.mjs
 	node --test apps/web/test/manual-input-browser.integration.test.mjs
 	cargo build --quiet -p storyos-server

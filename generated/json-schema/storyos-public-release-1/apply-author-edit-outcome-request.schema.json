@@ -1,0 +1,21 @@
+{
+  "$id": "storyos.query.apply-author-edit-outcome.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "idempotency_key": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "idempotency_key"
+  ],
+  "title": "StoryOS Apply Author Edit Outcome Request",
+  "type": "object"
+}

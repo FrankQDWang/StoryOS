@@ -78,7 +78,9 @@ pub(super) fn apply_u64_wire_constraints(schema: &mut Value, canonical_u64: &Val
     if schema["properties"].get("writer_generation").is_some() {
         schema["properties"]["writer_generation"] = canonical_u64.clone();
     }
-    schema["properties"]["local_intent_sequence"] = canonical_u64.clone();
+    if schema["properties"].get("local_intent_sequence").is_some() {
+        schema["properties"]["local_intent_sequence"] = canonical_u64.clone();
+    }
     if schema["$defs"].get("DomainReceipt").is_some() {
         schema["$defs"]["DomainReceipt"]["properties"]["author_action_sequence"] =
             json!({"anyOf": [canonical_u64, {"type": "null"}]});
@@ -131,7 +133,7 @@ pub(super) fn typescript_declarations() -> &'static str {
     }
 }
 
-fn fixture() -> Value {
+pub(super) fn fixture() -> Value {
     json!({
         "schema_id": APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
         "correlation_id": "018f0000-0000-7001-8000-000000000030",
@@ -208,10 +210,14 @@ fn schema_bytes<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Vec<u8
     let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
     schema["$id"] = Value::String(schema_id.to_owned());
     schema["title"] = Value::String(title.to_owned());
-    let canonical_u64 = json!({
-        "type": "string",
-        "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
-    });
+    let canonical_u64 = canonical_u64_wire_schema();
     apply_u64_wire_constraints(&mut schema, &canonical_u64);
     json_bytes(&schema)
+}
+
+pub(super) fn canonical_u64_wire_schema() -> Value {
+    json!({
+        "type": "string",
+        "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$"
+    })
 }

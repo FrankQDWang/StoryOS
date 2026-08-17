@@ -2,7 +2,7 @@
   "activity_profile": "storyos.project-activity.v1",
   "api_major": 1,
   "compatibility_profile": "storyos.public.same-release.v1",
-  "contract_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
+  "contract_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
   "envelope_version": 1,
   "limit_profile_revision": "storyos.foundation.absolute.v1",
   "max_json_string_utf8_bytes": 1048576,
@@ -22,7 +22,8 @@
     "editor_session_takeover",
     "snapshot_resync",
     "proposal_draft_lifecycle",
-    "project_activity"
+    "project_activity",
+    "acknowledgement_loss_outcome_query"
   ],
   "schema_id": "storyos.query.protocol-profile.response.v1"
 }

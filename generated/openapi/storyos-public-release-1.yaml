@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
-  x-storyos-contract-revision: release1-wire-catalog-2026-08-16-author-edit-response-v2
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit
+  x-storyos-contract-revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome
 paths:
   /api/v1/protocol:
     get:
@@ -337,4 +337,128 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
+  /api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}:
+    get:
+      operationId: getApplyAuthorEditOutcome
+      summary: Read one exact Apply Author Edit outcome
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: idempotency_key
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      responses:
+        '200':
+          description: Current Apply Author Edit outcome
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json'
+        '400':
+          description: Invalid request
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '401':
+          description: Authentication required
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '403':
+          description: Request origin refused
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '404':
+          description: Outcome unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '405':
+          description: Method not allowed
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '409':
+          description: Protocol or cursor conflict
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '413':
+          description: Request too large
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '415':
+          description: Unsupported content type
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '422':
+          description: Request refused
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '429':
+          description: Rate limited
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
+        '503':
+          description: Service unavailable
+          headers:
+            Cache-Control:
+              required: true
+              schema:
+                type: string
+                const: no-store
 components: {}

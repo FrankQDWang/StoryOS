@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:034cb825bde3f7459007477f00b52baef7205e84386dd2a023da4ac8937f9bb3",
+  "corpus_digest": "sha256:5284875a0895be3167ac74c651edc3ea58f59579f02503d69fe0012ef77d8a03",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -23,7 +23,10 @@
       "generated/golden-wire/storyos-public-release-1/get-editor-session.boundary.json",
       "generated/golden-wire/storyos-public-release-1/apply-author-edit.json",
       "generated/golden-wire/storyos-public-release-1/apply-author-edit.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.json",
+      "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json"
     ]
   },
   "fixtures": [
@@ -152,6 +155,24 @@
       "fixture_id": "storyos.golden.applyAuthorEdit.boundary.v1",
       "operation_id": "applyAuthorEdit",
       "path": "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getApplyAuthorEditOutcome.positive.v1",
+      "operation_id": "getApplyAuthorEditOutcome",
+      "path": "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getApplyAuthorEditOutcome.invalid.v1",
+      "operation_id": "getApplyAuthorEditOutcome",
+      "path": "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getApplyAuthorEditOutcome.boundary.v1",
+      "operation_id": "getApplyAuthorEditOutcome",
+      "path": "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

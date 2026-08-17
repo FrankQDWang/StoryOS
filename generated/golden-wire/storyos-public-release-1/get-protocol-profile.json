@@ -2,7 +2,7 @@
   "activity_profile": "storyos.project-activity.v1",
   "api_major": 1,
   "compatibility_profile": "storyos.public.same-release.v1",
-  "contract_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
+  "contract_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
   "envelope_version": 1,
   "limit_profile_revision": "storyos.foundation.absolute.v1",
   "max_json_string_utf8_bytes": 1048576,
@@ -11,20 +11,20 @@
   "release_identity": {
     "activity_profile": "storyos.project-activity.v1",
     "api_major": 1,
-    "contract_graph_digest": "sha256:caf3ff663de5078f6712676b1b5f1f633adfdd443760563198cacb82f5c0d269",
-    "contract_graph_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
+    "contract_graph_digest": "sha256:2b679edb3494de747eb5dd46532df21371791a7e673d1aa35b2fe01fbf8063c9",
+    "contract_graph_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
     "envelope_profile": "storyos.public.envelope.v1",
-    "fixture_corpus_digest": "sha256:034cb825bde3f7459007477f00b52baef7205e84386dd2a023da4ac8937f9bb3",
-    "generated_client_revision": "storyos.typescript-client.release-1.v2",
-    "json_schema_catalog_digest": "sha256:a72639d44f66e6a77e72a4f088661dbd0a451d12a51fd257def1a01bb054161a",
+    "fixture_corpus_digest": "sha256:5284875a0895be3167ac74c651edc3ea58f59579f02503d69fe0012ef77d8a03",
+    "generated_client_revision": "storyos.typescript-client.release-1.v3",
+    "json_schema_catalog_digest": "sha256:ebc9ff75788b76fbc28ca00f093b35844d9648e92ab2c0fee8330ca04348ca9f",
     "limit_profile_revision": "storyos.foundation.absolute.v1",
-    "openapi_digest": "sha256:f735a1ecf04623eb26774a07ccc0be0141802c43e65f85ecf75fdbfe8bbccd02",
+    "openapi_digest": "sha256:21d2561687fac10fe53d9b4094acd246572be654b94bcd66de0a85df6d3e1857",
     "public_protocol_release": "storyos.public.release.1",
     "schema_id": "storyos.compatibility.release-identity.v1",
-    "server_contract_revision": "storyos.server.release-1.v2",
-    "typescript_artifact_digest": "sha256:6a6bcd530055a10e8d23af9cfb30a12083166a7e809741f200db0be1a75deac8",
-    "web_client_contract_revision": "storyos.web-client.release-1.v2",
-    "worker_contract_revision": "storyos.worker.release-1.v2"
+    "server_contract_revision": "storyos.server.release-1.v3",
+    "typescript_artifact_digest": "sha256:9798756d74743f9004ea5e4451e1cccbde58db8a7f0f31ed40f3d1c4a826e2f1",
+    "web_client_contract_revision": "storyos.web-client.release-1.v3",
+    "worker_contract_revision": "storyos.worker.release-1.v3"
   },
   "required_capabilities": [
     "project_lifecycle",
@@ -40,7 +40,8 @@
     "editor_session_takeover",
     "snapshot_resync",
     "proposal_draft_lifecycle",
-    "project_activity"
+    "project_activity",
+    "acknowledgement_loss_outcome_query"
   ],
   "schema_id": "storyos.query.protocol-profile.response.v1"
 }

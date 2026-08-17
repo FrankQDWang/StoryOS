@@ -22,7 +22,7 @@
   },
   "correlation_id": "018f0000-0000-7001-8000-000000000020",
   "editor_session": {
-    "client_contract_revision": "storyos.web-client.release-1.v2",
+    "client_contract_revision": "storyos.web-client.release-1.v3",
     "client_session_binding_ref": "binding:7af2",
     "client_session_generation": "1",
     "disposition": "open",

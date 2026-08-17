@@ -101,6 +101,19 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
     for operation_id in projection_operations:
         if not any(family_map.get(family_id, {}).get("authority_class") == "projection" for family_id in operation_owners.get(operation_id, set())):
             fail(errors, f"projection-bearing operation lacks a projection family: {operation_id}")
+    outcome_query_families = {
+        "project-canonical",
+        "operational-receipts-actions",
+        "operational-admission-editor",
+        "operational-project-activity",
+    }
+    if "getApplyAuthorEditOutcome" in operation_by_id and operation_owners.get(
+        "getApplyAuthorEditOutcome", set()
+    ) != outcome_query_families:
+        fail(
+            errors,
+            "getApplyAuthorEditOutcome must map exactly to its canonical, Receipt, Admission, and applied-Activity read families",
+        )
     routed_families = set().union(*operation_owners.values(), *event_owners.values()) if operation_owners or event_owners else set()
     internal_without_route = sum(
         1

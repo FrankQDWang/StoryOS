@@ -23,11 +23,11 @@
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-08-16-author-edit-response-v2",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:18f3d7a3f7e86712032eb01c45a83f52afdf1249594e9af31afb06914e906148",
+      "route_catalog_sha256": "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -323,7 +323,7 @@
       "head": "scoped_head_and_counter",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "canonical_facts_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects", "getProject", "updateProject", "createVolume", "updateVolume", "deleteVolume", "createChapter", "updateChapter", "deleteChapter", "applyAuthorEdit", "getManuscriptTree", "getChapter", "getStatistics", "searchManuscript", "exportHumanReadableManuscript", "getHumanReadableManuscriptExport"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects", "getProject", "updateProject", "createVolume", "updateVolume", "deleteVolume", "createChapter", "updateChapter", "deleteChapter", "applyAuthorEdit", "getApplyAuthorEditOutcome", "getManuscriptTree", "getChapter", "getStatistics", "searchManuscript", "exportHumanReadableManuscript", "getHumanReadableManuscriptExport"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "artifact-proposal-draft",
@@ -355,7 +355,7 @@
       "head": "idempotency_arbiter",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "receipt_and_idempotency_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "settlement_persistence", "operation_ids": ["getCommand", "getReceipt"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "settlement_persistence", "operation_ids": ["getApplyAuthorEditOutcome", "getCommand", "getReceipt"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-admission-editor",
@@ -371,7 +371,7 @@
       "head": "current_writer_generation",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "admission_and_writer_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "deleteProject", "createEditorSession", "getEditorSession", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "deleteProject", "createEditorSession", "getEditorSession", "getApplyAuthorEditOutcome", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-run-mailbox",
@@ -435,7 +435,7 @@
       "head": "replay_generation_and_position",
       "projection": {"kind": "historical_projection", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "operational-receipts-actions", "operational-run-mailbox"], "dependency_closure": ["event_id", "project_activity_position", "replay_generation", "event_schema", "redaction_profile"], "generation_field": "replay_generation", "watermark_field": "project_activity_position", "invalidation_families": ["operational-lifecycle"], "rebuild": "rebuild_from_retained_events_and_receipts_without_guessing_cursor_translation", "visibility_gate": "snapshot_or_replay_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "activity_owner", "operation_ids": ["getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": {"mode": "all"}, "settlement_modes": ["read", "stream"], "activity_profile": "storyos.project-activity.v1", "wire_history": "event_representation_referenced", "internal_only": false}
+      "public_contract": {"mapping_role": "activity_owner", "operation_ids": ["getApplyAuthorEditOutcome", "getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": {"mode": "all"}, "settlement_modes": ["read", "stream"], "activity_profile": "storyos.project-activity.v1", "wire_history": "event_representation_referenced", "internal_only": false}
     },
     {
       "family_id": "operational-snapshot-replay",

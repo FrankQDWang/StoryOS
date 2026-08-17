@@ -56,13 +56,13 @@ const chapter = { project_scope: project.project_scope,
   chapter: { chapter_id: CHAPTER, current_revision: { revision_id: REVISION, body: "Base" } } };
 const profile = { limit_profile_revision: "storyos.foundation.absolute.v1",
   max_json_string_utf8_bytes: 1048576,
-  release_identity: { web_client_contract_revision: "storyos.web-client.release-1.v2" } };
+  release_identity: { web_client_contract_revision: "storyos.web-client.release-1.v3" } };
 const session = {
   schema_id: "storyos.command.create-editor-session.response.v1",
   correlation_id: "018f0000-0000-7001-8000-000000000020",
   project_scope: project.project_scope,
   editor_session: { editor_session_id: SESSION, client_session_binding_ref: "binding:test",
-    client_session_generation: "1", client_contract_revision: "storyos.web-client.release-1.v2",
+    client_session_generation: "1", client_contract_revision: "storyos.web-client.release-1.v3",
     security_policy_revision: "storyos.web-security-policy.release-1.v1",
     opened_at: "2026-08-13T08:00:00.000Z", disposition: "open" },
   writer: { kind: "current_writer", writer_generation: "1" },
@@ -527,7 +527,7 @@ async function run() {
     idempotency_key: group.idempotency_key,
     frozen_request_body: {
       command_schema: "storyos.command.apply-author-edit.request.v1",
-      client_contract_revision: "storyos.web-client.release-1.v2",
+      client_contract_revision: "storyos.web-client.release-1.v3",
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
       correlation_id: group.frozen_request_body.correlation_id,
       editor_session_id: SESSION,

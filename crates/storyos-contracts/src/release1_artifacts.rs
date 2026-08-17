@@ -29,6 +29,8 @@ use crate::release1::{
 };
 use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
+use crate::release1_author_edit_outcome::GET_APPLY_AUTHOR_EDIT_OUTCOME;
+use crate::release1_author_edit_outcome_artifacts as author_edit_outcome_artifacts;
 
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
@@ -96,9 +98,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:18f3d7a3f7e86712032eb01c45a83f52afdf1249594e9af31afb06914e906148";
+    "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:caf3ff663de5078f6712676b1b5f1f633adfdd443760563198cacb82f5c0d269";
+    "sha256:2b679edb3494de747eb5dd46532df21371791a7e673d1aa35b2fe01fbf8063c9";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -147,6 +149,8 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     ));
     let apply_edit_request_schema = author_edit_artifacts::request_schema_bytes();
     let apply_edit_response_schema = author_edit_artifacts::response_schema_bytes();
+    let apply_edit_outcome_request_schema = author_edit_outcome_artifacts::request_schema_bytes();
+    let apply_edit_outcome_response_schema = author_edit_outcome_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -217,6 +221,16 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
             APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
             author_edit_artifacts::RESPONSE_SCHEMA_PATH,
             &apply_edit_response_schema,
+        ),
+        (
+            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
+            author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
+            &apply_edit_outcome_request_schema,
+        ),
+        (
+            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
+            author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
+            &apply_edit_outcome_response_schema,
         ),
     ]);
     let client = typescript_client_bytes();
@@ -315,6 +329,8 @@ fn generated_files() -> Vec<GeneratedFile> {
     ));
     let apply_edit_request_schema = author_edit_artifacts::request_schema_bytes();
     let apply_edit_response_schema = author_edit_artifacts::response_schema_bytes();
+    let apply_edit_outcome_request_schema = author_edit_outcome_artifacts::request_schema_bytes();
+    let apply_edit_outcome_response_schema = author_edit_outcome_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -386,6 +402,16 @@ fn generated_files() -> Vec<GeneratedFile> {
             author_edit_artifacts::RESPONSE_SCHEMA_PATH,
             &apply_edit_response_schema,
         ),
+        (
+            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
+            author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
+            &apply_edit_outcome_request_schema,
+        ),
+        (
+            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
+            author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
+            &apply_edit_outcome_response_schema,
+        ),
     ]);
     let profile = release1_protocol_profile();
     let profile_json =
@@ -424,6 +450,14 @@ fn generated_files() -> Vec<GeneratedFile> {
         (
             author_edit_artifacts::RESPONSE_SCHEMA_PATH,
             apply_edit_response_schema,
+        ),
+        (
+            author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
+            apply_edit_outcome_request_schema,
+        ),
+        (
+            author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
+            apply_edit_outcome_response_schema,
         ),
         (TYPESCRIPT_CLIENT_PATH, typescript_client_bytes()),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration_bytes()),
@@ -484,6 +518,18 @@ fn generated_files() -> Vec<GeneratedFile> {
             author_edit_artifacts::FIXTURE_PATHS[2],
             author_edit_artifacts::boundary_fixture_bytes(),
         ),
+        (
+            author_edit_outcome_artifacts::FIXTURE_PATHS[0],
+            author_edit_outcome_artifacts::fixture_bytes(),
+        ),
+        (
+            author_edit_outcome_artifacts::FIXTURE_PATHS[1],
+            author_edit_outcome_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            author_edit_outcome_artifacts::FIXTURE_PATHS[2],
+            author_edit_outcome_artifacts::boundary_fixture_bytes(),
+        ),
     ]
 }
 
@@ -532,6 +578,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&CREATE_EDITOR_SESSION, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge"]),
             operation_graph(&GET_EDITOR_SESSION, &["server_derived_project_scope", "session_scope_join", "protected_client_session_binding"]),
             command_operation_graph(&APPLY_AUTHOR_EDIT, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge", "editor_session_writer_generation", "expected_authoritative_head"]),
+            operation_graph(&GET_APPLY_AUTHOR_EDIT_OUTCOME, &["server_derived_project_scope", "sensitive_safe_read_origin", "protected_client_session_binding", "idempotency_key", "project_command_challenge_proof", "receipt_first_settlement_validation"]),
         ],
         "release": {
             "api_major": API_MAJOR, "public_protocol_release": PUBLIC_PROTOCOL_RELEASE, "envelope_version": ENVELOPE_VERSION,
@@ -617,6 +664,7 @@ fn openapi_bytes() -> Vec<u8> {
     if author_edit_artifacts::IS_IMPLEMENTED {
         paths.push_str(&author_edit_artifacts::openapi());
     }
+    paths.push_str(&author_edit_outcome_artifacts::openapi());
     let implemented_slice = implemented_operation_ids().join(",");
     format!(
         "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: {implemented_slice}\npaths:\n{paths}components: {{}}\n",
@@ -783,21 +831,23 @@ fn implemented_operation_ids() -> Vec<&'static str> {
     if author_edit_artifacts::IS_IMPLEMENTED {
         operation_ids.push(APPLY_AUTHOR_EDIT.operation_id);
     }
+    operation_ids.push(GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id);
     operation_ids
 }
 
 fn typescript_client_bytes() -> Vec<u8> {
     let author_edit_client = author_edit_artifacts::typescript_client_source();
+    let author_edit_outcome_client = author_edit_outcome_artifacts::typescript_client_source();
     format!(concat!(
             "// @generated by storyos-contracts; do not edit.\n",
             "export const GENERATED_CLIENT_REVISION = \"{}\";\n\n",
             "export class StoryOSProtocolError extends Error {{\n",
             "  constructor(code, message, details = {{}}) {{\n    super(message);\n    this.name = \"StoryOSProtocolError\";\n",
             "    this.code = code;\n    this.status = details.status;\n    this.responseBody = details.responseBody;\n    this.retryAfterSeconds = details.retryAfterSeconds;\n  }}\n}}\n\n",
-            "async function queryJson({{ baseUrl, path, fetchImpl = globalThis.fetch, signal }}) {{\n",
+            "async function queryJson({{ baseUrl, path, queryHeaders = {{}}, fetchImpl = globalThis.fetch, signal }}) {{\n",
             "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS query requires a non-empty baseUrl\");\n",
             "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS query requires a fetch implementation\");\n",
-            "  const headers = {{ accept: \"application/json\" }};\n",
+            "  const headers = {{ accept: \"application/json\", ...queryHeaders }};\n",
             "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"GET\", headers, credentials: \"same-origin\", signal }});\n",
             "  const responseBody = await response.text();\n",
             "  if (!response.ok) throw new StoryOSProtocolError(\"query_http_error\", `StoryOS query failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody }});\n",
@@ -838,7 +888,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}",
+        "{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -863,6 +913,7 @@ fn typescript_client_bytes() -> Vec<u8> {
                 "${encodeURIComponent(editorSessionId)}"
             ),
         author_edit_client,
+        author_edit_outcome_client,
     ).into_bytes()
 }
 
@@ -888,8 +939,9 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
     let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}",
         author_edit_artifacts::typescript_type_declarations(),
+        author_edit_outcome_artifacts::typescript_type_declarations(),
     );
     declaration.push_str("\n\n");
     declaration.push_str(
@@ -907,6 +959,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
         )
     );
     declaration.push_str(author_edit_artifacts::typescript_declarations());
+    declaration.push_str(author_edit_outcome_artifacts::typescript_declarations());
     declaration.into_bytes()
 }
 
@@ -921,7 +974,8 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 CHALLENGE_FIXTURE_PATHS[0], CHALLENGE_FIXTURE_PATHS[1], CHALLENGE_FIXTURE_PATHS[2],
                 CREATE_EDITOR_SESSION_FIXTURE_PATHS[0], CREATE_EDITOR_SESSION_FIXTURE_PATHS[1], CREATE_EDITOR_SESSION_FIXTURE_PATHS[2],
                 GET_EDITOR_SESSION_FIXTURE_PATHS[0], GET_EDITOR_SESSION_FIXTURE_PATHS[1], GET_EDITOR_SESSION_FIXTURE_PATHS[2],
-                author_edit_artifacts::FIXTURE_PATHS[0], author_edit_artifacts::FIXTURE_PATHS[1], author_edit_artifacts::FIXTURE_PATHS[2]],
+                author_edit_artifacts::FIXTURE_PATHS[0], author_edit_artifacts::FIXTURE_PATHS[1], author_edit_artifacts::FIXTURE_PATHS[2],
+                author_edit_outcome_artifacts::FIXTURE_PATHS[0], author_edit_outcome_artifacts::FIXTURE_PATHS[1], author_edit_outcome_artifacts::FIXTURE_PATHS[2]],
             "normalization": format!("replace every release_identity.fixture_corpus_digest with {FIXTURE_DIGEST_PLACEHOLDER}")
         },
         "fixtures": [
@@ -948,7 +1002,10 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": GET_EDITOR_SESSION.fixtures[2], "classification": "boundary", "operation_id": GET_EDITOR_SESSION.operation_id, "path": GET_EDITOR_SESSION_FIXTURE_PATHS[2]},
             {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[0], "classification": "positive", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[1], "classification": "invalid", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[1]},
-            {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[2], "classification": "boundary", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[2]}
+            {"fixture_id": APPLY_AUTHOR_EDIT.fixtures[2], "classification": "boundary", "operation_id": APPLY_AUTHOR_EDIT.operation_id, "path": author_edit_artifacts::FIXTURE_PATHS[2]},
+            {"fixture_id": GET_APPLY_AUTHOR_EDIT_OUTCOME.fixtures[0], "classification": "positive", "operation_id": GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id, "path": author_edit_outcome_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": GET_APPLY_AUTHOR_EDIT_OUTCOME.fixtures[1], "classification": "invalid", "operation_id": GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id, "path": author_edit_outcome_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": GET_APPLY_AUTHOR_EDIT_OUTCOME.fixtures[2], "classification": "boundary", "operation_id": GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id, "path": author_edit_outcome_artifacts::FIXTURE_PATHS[2]}
         ]
     }))
 }
@@ -996,6 +1053,9 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         author_edit_artifacts::fixture_bytes(),
         author_edit_artifacts::invalid_fixture_bytes(),
         author_edit_artifacts::boundary_fixture_bytes(),
+        author_edit_outcome_artifacts::fixture_bytes(),
+        author_edit_outcome_artifacts::invalid_fixture_bytes(),
+        author_edit_outcome_artifacts::boundary_fixture_bytes(),
     ]
     .concat()
 }

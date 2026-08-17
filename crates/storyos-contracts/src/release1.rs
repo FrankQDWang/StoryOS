@@ -12,11 +12,11 @@ pub const LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
 const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
 pub(super) const CONTRACT_REVISION: &str =
-    "release1-wire-catalog-2026-08-16-author-edit-response-v2";
-pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v2";
-pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v2";
-pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v2";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v2";
+    "release1-wire-catalog-2026-08-17-author-edit-outcome-v1";
+pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
+pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v3";
+pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v3";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v3";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -213,7 +213,7 @@ pub const CREATE_EDITOR_SESSION_PATH: &str = CREATE_EDITOR_SESSION.path;
 pub const CREATE_EDITOR_SESSION_METHOD: &str = CREATE_EDITOR_SESSION.method;
 pub const GET_EDITOR_SESSION_PATH: &str = GET_EDITOR_SESSION.path;
 pub const GET_EDITOR_SESSION_METHOD: &str = GET_EDITOR_SESSION.method;
-pub(super) const REQUIRED_CAPABILITIES: [&str; 14] = [
+pub(super) const REQUIRED_CAPABILITIES: [&str; 15] = [
     "project_lifecycle",
     "volume_chapter_lifecycle",
     "chapter_navigation",
@@ -228,6 +228,7 @@ pub(super) const REQUIRED_CAPABILITIES: [&str; 14] = [
     "snapshot_resync",
     "proposal_draft_lifecycle",
     "project_activity",
+    "acknowledgement_loss_outcome_query",
 ];
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
