@@ -1,7 +1,7 @@
 # PostgreSQL Project Storage, Isolation, and Migration Contract
 
 - Status: accepted
-- Contract revision: `release1-storage-contract-2026-08-16-zero-authority-receipt-activity`
+- Contract revision: `release1-storage-contract-2026-08-17-author-command-outcome-unknown`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
@@ -26,15 +26,15 @@ The active storage identity is the exact tuple below:
 
 ```text
 StorageCompatibilityIdentity {
-  database_schema_identity: storyos.postgresql.schema.v2
-  active_schema_version: storyos.persistence.release-1.v2
-  persisted_format_catalog_id: storyos.persistence.catalog.release-1.v2
-  migration_chain_id: storyos.persistence.bootstrap.release-1.v2
+  database_schema_identity: storyos.postgresql.schema.v3
+  active_schema_version: storyos.persistence.release-1.v3
+  persisted_format_catalog_id: storyos.persistence.catalog.release-1.v3
+  migration_chain_id: storyos.persistence.bootstrap.release-1.v3
   migration_chain_digest: sha256 over the catalogued chain and LF-normalized bootstrap manifest
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
-  route_catalog_contract_revision: release1-wire-catalog-2026-08-16-author-edit-response-v2
-  route_catalog_sha256: sha256 over the LF-normalized Release 1 route catalog
+  route_catalog_contract_revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
+  route_catalog_sha256: sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e
   compatibility_profile: storyos.public.same-release.v1
   release_identity_schema_id: storyos.compatibility.release-identity.v1
 }
@@ -59,6 +59,75 @@ manifest checksum is part of the migration-chain digest. A future Release 2
 can add a real edge only with a source-backed predecessor catalog, schema,
 persisted rows, and checksums. A semantic version or invented predecessor name
 never creates compatibility.
+
+### 0.1 Durable Author Command `outcome_unknown`
+
+The active format stores Author Command Admission `outcome_unknown` evidence
+in `author_command_admission_outcome_unknown_observations`. The table is an
+append-only part of `operational-admission-editor`. Each row repeats exact User
+and Project Scope and has one Scope-bound `observation_id`. A one-based
+`observation_sequence` orders rows within one Admission and has the closed
+range `1..=18446744073709551615`.
+
+The append input contains only Project Scope, `author_command_admission_id`,
+`observation_id`, `last_provable_boundary`, and `reason`. PostgreSQL reads the
+exact Admission and copies its `command_id`, `command_kind`, idempotency key,
+and canonical command digest. The caller cannot supply those stored bindings.
+The closed Release 1 values are:
+
+```text
+last_provable_boundary = admission_committed
+reason = acknowledgement_missing
+reconciliation_required = true
+observed_at = PostgreSQL clock time
+```
+
+The diagnostic reason does not prove or deny a Core effect. Browser, network,
+process, cache, store availability, timeout, and a missing response are not
+settlement or authority oracles.
+
+The append locks the same scoped `command_idempotency` row that terminal
+Receipt settlement updates. A new row requires `outcome_kind = in_progress`
+and no terminal Admission settlement. The database allocates the next sequence
+while it holds that lock. If settlement wins, a new observation fails. If the
+observation wins, it commits before the later settlement. Sequence exhaustion
+fails atomically.
+
+An exact retry uses the same Scope-bound observation identity and complete
+value. It returns the original row and database time without another insert or
+sequence allocation, including after terminal settlement. A changed value or
+a new observation after settlement fails closed. Old observations stay
+immutable and inspectable after settlement.
+
+The current lifecycle projection is exact:
+
+```text
+no terminal + zero observations     -> pending
+no terminal + one or more rows       -> outcome_unknown
+ReceiptSettled terminal exists       -> ReceiptSettled
+```
+
+Terminal settlement has precedence. Earlier `outcome_unknown` rows then remain
+historical evidence only. The table has forced Project Scope RLS. The runtime
+role has only `SELECT` and `INSERT`. It has no `UPDATE` or `DELETE` grant.
+Appending or reading a row cannot update idempotency, consume a challenge,
+invoke Core, create a Receipt or settlement, create Activity or authority,
+grant retry permission, or report success or rejection.
+
+### 0.2 Named `getApplyAuthorEditOutcome` read relation
+
+The persistence catalog records one named read relation for
+`getApplyAuthorEditOutcome`. It covers exactly `project-canonical`,
+`operational-receipts-actions`, `operational-admission-editor`, and
+`operational-project-activity`. A `Committed` projection uses the existing
+Receipt-first exact replay and validates applied-only Activity. The closed
+public result remains `Committed | Rejected | StillUnknown`.
+
+This relation has read capability only. It does not consume the nonce, invoke
+Core, append lifecycle evidence, read the durable `outcome_unknown` table, or
+expose an observation row. The public Query remains the protocol owner's
+read-only observation. Storage adds no public route, DTO, Problem, Event, or
+TypeScript operation.
 
 The tracked bootstrap creates the runtime role without a password or other
 credential material. A deployment secret sets the runtime credential only
@@ -870,7 +939,7 @@ it does not claim a production data backfill or a migration Recovery Copy.
 ### 9.3 Release 1 initial baseline and future migration boundary
 
 The active Release 1 persistence contract is an initial baseline, catalogued as
-`storyos.persistence.bootstrap.release-1.v2`. It has no supported stored
+`storyos.persistence.bootstrap.release-1.v3`. It has no supported stored
 predecessor, no migration edge, and no production data migration claim. A fresh
 database enters the positive path by creating the schema, catalog, roles,
 forced-RLS policies, composite constraints, and administrative records in one

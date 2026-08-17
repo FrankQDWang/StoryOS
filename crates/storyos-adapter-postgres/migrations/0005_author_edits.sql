@@ -320,6 +320,127 @@ CREATE INDEX author_command_admission_settlements_receipt_fk_idx
   ON storyos.author_command_admission_settlements
     (owner_user_id, project_id, author_command_admission_id, receipt_id);
 
+CREATE TABLE storyos.author_command_admission_outcome_unknown_observations (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  observation_id uuid NOT NULL,
+  observation_sequence numeric(20, 0) NOT NULL
+    CHECK (observation_sequence BETWEEN 1 AND 18446744073709551615),
+  author_command_admission_id uuid NOT NULL,
+  command_id uuid NOT NULL,
+  command_kind text NOT NULL CHECK (command_kind = 'applyAuthorEdit'),
+  canonical_command_digest text NOT NULL,
+  idempotency_key uuid NOT NULL,
+  last_provable_boundary text NOT NULL
+    CHECK (last_provable_boundary = 'admission_committed'),
+  reason text NOT NULL CHECK (reason = 'acknowledgement_missing'),
+  reconciliation_required boolean NOT NULL DEFAULT true
+    CHECK (reconciliation_required),
+  observed_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (owner_user_id, project_id, observation_id),
+  UNIQUE (owner_user_id, project_id, author_command_admission_id, observation_sequence),
+  FOREIGN KEY (
+    owner_user_id, project_id, author_command_admission_id, command_id,
+    command_kind, canonical_command_digest, idempotency_key
+  ) REFERENCES storyos.author_command_admissions (
+    owner_user_id, project_id, author_command_admission_id, command_id,
+    command_kind, canonical_command_digest, idempotency_key
+  ) MATCH FULL
+);
+CREATE INDEX author_command_outcome_unknown_admission_fk_idx
+  ON storyos.author_command_admission_outcome_unknown_observations
+    (owner_user_id, project_id, author_command_admission_id, command_id,
+     command_kind, canonical_command_digest, idempotency_key);
+
+CREATE FUNCTION storyos.prepare_author_command_outcome_unknown_observation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $function$
+DECLARE
+  admission record;
+  arbiter_outcome_kind text;
+  next_sequence numeric(20, 0);
+BEGIN
+  SELECT command_id, command_kind, canonical_command_digest, idempotency_key
+    INTO admission
+    FROM storyos.author_command_admissions
+   WHERE owner_user_id = NEW.owner_user_id
+     AND project_id = NEW.project_id
+     AND author_command_admission_id = NEW.author_command_admission_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23503',
+      MESSAGE = 'outcome_unknown requires one exact Author Command Admission';
+  END IF;
+
+  NEW.command_id := admission.command_id;
+  NEW.command_kind := admission.command_kind;
+  NEW.canonical_command_digest := admission.canonical_command_digest;
+  NEW.idempotency_key := admission.idempotency_key;
+
+  SELECT outcome_kind
+    INTO arbiter_outcome_kind
+    FROM storyos.command_idempotency
+   WHERE owner_user_id = NEW.owner_user_id
+     AND project_id = NEW.project_id
+     AND command_kind = admission.command_kind
+     AND idempotency_key = admission.idempotency_key
+   FOR UPDATE;
+  IF NOT FOUND OR arbiter_outcome_kind <> 'in_progress' THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23514',
+      MESSAGE = 'outcome_unknown requires an in-progress idempotency arbiter';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+      FROM storyos.author_command_admission_settlements
+     WHERE owner_user_id = NEW.owner_user_id
+       AND project_id = NEW.project_id
+       AND author_command_admission_id = NEW.author_command_admission_id
+  ) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23514',
+      MESSAGE = 'a terminal Admission cannot append outcome_unknown';
+  END IF;
+
+  SELECT COALESCE(max(observation_sequence), 0) + 1
+    INTO next_sequence
+    FROM storyos.author_command_admission_outcome_unknown_observations
+   WHERE owner_user_id = NEW.owner_user_id
+     AND project_id = NEW.project_id
+     AND author_command_admission_id = NEW.author_command_admission_id;
+  IF next_sequence > 18446744073709551615 THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '22003',
+      MESSAGE = 'outcome_unknown observation sequence is exhausted';
+  END IF;
+
+  NEW.observation_sequence := next_sequence;
+  NEW.observed_at := clock_timestamp();
+  RETURN NEW;
+END
+$function$;
+
+CREATE TRIGGER author_command_outcome_unknown_prepare
+BEFORE INSERT ON storyos.author_command_admission_outcome_unknown_observations
+FOR EACH ROW EXECUTE FUNCTION storyos.prepare_author_command_outcome_unknown_observation();
+
+ALTER TABLE storyos.author_command_admission_outcome_unknown_observations
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.author_command_admission_outcome_unknown_observations
+  FORCE ROW LEVEL SECURITY;
+CREATE POLICY author_command_outcome_unknown_exact_scope
+  ON storyos.author_command_admission_outcome_unknown_observations
+  USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  )
+  WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+
 CREATE TABLE storyos.author_action_entries (
   owner_user_id uuid NOT NULL,
   project_id uuid NOT NULL,
@@ -484,6 +605,7 @@ $policy$;
 
 GRANT SELECT, INSERT ON storyos.author_command_admissions,
   storyos.author_command_admission_settlements,
+  storyos.author_command_admission_outcome_unknown_observations,
   storyos.authoritative_revision_envelopes,
   storyos.authoritative_commits, storyos.domain_receipts, storyos.author_action_entries,
   storyos.project_activity_events TO storyos_runtime;
