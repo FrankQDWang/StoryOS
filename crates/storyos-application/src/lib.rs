@@ -25,11 +25,17 @@
 use std::future::Future;
 
 mod author_edit;
+mod author_edit_outcome;
 mod editor_session;
 
 pub use author_edit::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditSettlement,
     AuthorEditSettlementEffect, AuthorEditStore, AuthoritativeAppliedIds, apply_author_edit,
+};
+pub use author_edit_outcome::{
+    ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError, ApplyAuthorEditOutcomeReader,
+    ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit,
+    ReadApplyAuthorEditOutcome, get_apply_author_edit_outcome,
 };
 
 pub use editor_session::{
