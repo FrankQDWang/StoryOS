@@ -9,7 +9,7 @@ import { promisify } from "node:util";
 
 import {
   applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
-  digestCreateEditorSession, getChapter, getEditorSession, getProject,
+  digestCreateEditorSession, getApplyAuthorEditOutcome, getChapter, getEditorSession, getProject,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { runStoryOSWeb } from "../src/app.mjs";
 
@@ -136,7 +136,9 @@ function httpGet(url, headers) {
       response.setEncoding("utf8");
       let body = "";
       response.on("data", (chunk) => { body += chunk; });
-      response.on("end", () => resolve({ status: response.statusCode, body }));
+      response.on("end", () => resolve({
+        status: response.statusCode, body, headers: response.headers,
+      }));
     });
     request.on("error", reject);
     request.end();
@@ -326,7 +328,9 @@ test("Project command challenges bind Origin, Scope, nonce, and idempotency on r
 });
 
 test("one current writer settles one Author Edit and exact retries return one result", async () => {
-  const { baseUrl, server } = await startRealServer();
+  const { baseUrl, server } = await startRealServer({
+    "session-a": USER_A, "session-a-alt": USER_A, "session-b": USER_B,
+  });
   const requests = [20, 21].map((suffix) => ({
     command_schema: "storyos.command.create-editor-session.request.v1",
     client_contract_revision: "storyos.web-client.release-1.v3",
@@ -520,6 +524,186 @@ test("one current writer settles one Author Edit and exact retries return one re
         idempotency_key: authorEditKey,
       },
     });
+    let pendingOutcomeResponse;
+    const pendingOutcome = await getApplyAuthorEditOutcome({
+      baseUrl, projectId: PROJECT_A, idempotencyKey: authorEditKey,
+      antiForgery: authorEditChallenge.nonce,
+      fetchImpl: async (url, options) => {
+        pendingOutcomeResponse = await browserFetch(baseUrl, "session-a")(url, options);
+        return pendingOutcomeResponse;
+      },
+    });
+    const { correlation_id: pendingQueryCorrelation, ...pendingOutcomePayload } = pendingOutcome;
+    assert.match(pendingQueryCorrelation, UUID);
+    assert.notEqual(pendingQueryCorrelation, authorEditRequest.correlation_id);
+    assert.equal(pendingOutcomeResponse.headers.get("cache-control"), "no-store");
+    assert.deepEqual(pendingOutcomePayload, {
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
+      outcome: {
+        outcome_kind: "still_unknown",
+        observation: {
+          observation_kind: "challenge_issued",
+          expires_at: authorEditChallenge.expires_at,
+        },
+      },
+    });
+    assert.deepEqual(await projectAuthoritySnapshot(), emptyAuthority);
+    const pendingOutcomeUrl = new URL(
+      `/api/v1/projects/${PROJECT_A}/manuscript/author-edit-outcomes/${authorEditKey}`,
+      baseUrl,
+    );
+    const refererOnlyOutcome = await fetch(pendingOutcomeUrl, {
+      headers: {
+        referer: `${baseUrl}/projects/${PROJECT_A}?panel=journal`,
+        cookie: "storyos_session=session-a",
+        "x-storyos-anti-forgery": authorEditChallenge.nonce,
+      },
+    });
+    assert.equal(refererOnlyOutcome.status, 200);
+    assert.equal(refererOnlyOutcome.headers.get("cache-control"), "no-store");
+    assert.equal((await refererOnlyOutcome.json()).outcome.outcome_kind, "still_unknown");
+    const hostileOrigin = await fetch(pendingOutcomeUrl, {
+      headers: {
+        origin: "https://attacker.invalid",
+        referer: `${baseUrl}/projects/${PROJECT_A}`,
+        cookie: "storyos_session=session-a",
+        "x-storyos-anti-forgery": authorEditChallenge.nonce,
+      },
+    });
+    assert.equal(hostileOrigin.status, 403);
+    assert.equal(hostileOrigin.headers.get("cache-control"), "no-store");
+    assert.equal((await hostileOrigin.json()).code, "request_site_refused");
+    const unauthenticatedOutcome = await fetch(pendingOutcomeUrl, {
+      headers: {
+        origin: baseUrl,
+        "x-storyos-anti-forgery": authorEditChallenge.nonce,
+      },
+    });
+    assert.equal(unauthenticatedOutcome.status, 401);
+    assert.equal(unauthenticatedOutcome.headers.get("cache-control"), "no-store");
+    assert.equal((await unauthenticatedOutcome.json()).code, "authentication_required");
+    const unavailableCases = [
+      {
+        url: pendingOutcomeUrl,
+        headers: {
+          origin: baseUrl,
+          cookie: "storyos_session=session-a",
+          "x-storyos-anti-forgery": "0".repeat(64),
+        },
+      },
+      {
+        url: new URL(
+          `/api/v1/projects/${PROJECT_A}/manuscript/author-edit-outcomes/`
+            + "018f0000-0000-7001-8000-000000000121",
+          baseUrl,
+        ),
+        headers: {
+          origin: baseUrl,
+          cookie: "storyos_session=session-a",
+          "x-storyos-anti-forgery": authorEditChallenge.nonce,
+        },
+      },
+      {
+        url: pendingOutcomeUrl,
+        headers: {
+          origin: baseUrl,
+          cookie: "storyos_session=session-a-alt",
+          "x-storyos-anti-forgery": authorEditChallenge.nonce,
+        },
+      },
+      {
+        url: new URL(
+          `/api/v1/projects/${PROJECT_B}/manuscript/author-edit-outcomes/${authorEditKey}`,
+          baseUrl,
+        ),
+        headers: {
+          origin: baseUrl,
+          cookie: "storyos_session=session-b",
+          "x-storyos-anti-forgery": authorEditChallenge.nonce,
+        },
+      },
+    ];
+    const unavailableProblem = {
+      schema_id: "storyos.problem.v1",
+      code: "resource_unavailable",
+      message: "The requested resource is unavailable.",
+    };
+    for (const unavailableCase of unavailableCases) {
+      const response = await fetch(unavailableCase.url, { headers: unavailableCase.headers });
+      assert.equal(response.status, 404);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      const problemBody = await response.json();
+      assert.deepEqual(problemBody, unavailableProblem);
+      assert.ok(!JSON.stringify(problemBody).includes(authorEditChallenge.nonce));
+      assert.ok(!JSON.stringify(problemBody).includes(authorEditKey));
+    }
+    for (const invalidProof of [undefined, "A".repeat(64)]) {
+      const headers = { origin: baseUrl, cookie: "storyos_session=session-a" };
+      if (invalidProof !== undefined) headers["x-storyos-anti-forgery"] = invalidProof;
+      const response = await fetch(pendingOutcomeUrl, { headers });
+      assert.equal(response.status, 400);
+      assert.equal(response.headers.get("cache-control"), "no-store");
+      await response.arrayBuffer();
+    }
+    const repeatedProof = await httpGet(pendingOutcomeUrl, {
+      origin: baseUrl,
+      cookie: "storyos_session=session-a",
+      "x-storyos-anti-forgery": [authorEditChallenge.nonce, authorEditChallenge.nonce],
+    });
+    assert.equal(repeatedProof.status, 400);
+    assert.equal(repeatedProof.headers["cache-control"], "no-store");
+    const wrongMethod = await fetch(pendingOutcomeUrl, {
+      method: "POST",
+      headers: {
+        origin: baseUrl,
+        cookie: "storyos_session=session-a",
+        "x-storyos-anti-forgery": authorEditChallenge.nonce,
+      },
+    });
+    assert.equal(wrongMethod.status, 405);
+    assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await wrongMethod.json(), {
+      schema_id: "storyos.problem.v1",
+      code: "method_not_allowed",
+      message: "The request method is not allowed.",
+    });
+    assert.deepEqual(await projectAuthoritySnapshot(), emptyAuthority);
+    const rejectedKey = "018f0000-0000-7001-8000-000000000120";
+    const rejectedChallenge = await createProjectCommandChallenge({
+      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+        command_schema: authorEditRequest.command_schema,
+        canonical_command_digest: await digestApplyAuthorEdit(authorEditRequest),
+        idempotency_key: rejectedKey,
+      },
+    });
+    const postgresContainer = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
+    assert.ok(postgresContainer, "run through scripts/verify-project-scope.sh");
+    await execFileAsync("docker", [
+      "exec", postgresContainer, "psql", "-X", "-v", "ON_ERROR_STOP=1", "-U", "postgres",
+      "-c", `UPDATE storyos.project_command_challenges
+        SET expires_at = clock_timestamp() - interval '1 second'
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+          AND command_kind = 'applyAuthorEdit' AND idempotency_key = '${rejectedKey}'::uuid`,
+    ]);
+    const rejectedOutcome = await getApplyAuthorEditOutcome({
+      baseUrl, projectId: PROJECT_A, idempotencyKey: rejectedKey,
+      antiForgery: rejectedChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    const { correlation_id: rejectedCorrelation, ...rejectedPayload } = rejectedOutcome;
+    assert.match(rejectedCorrelation, UUID);
+    assert.deepEqual(rejectedPayload, {
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
+      outcome: {
+        outcome_kind: "rejected",
+        reason: "challenge_expired_unconsumed",
+      },
+    });
+    assert.deepEqual(await projectAuthoritySnapshot(), emptyAuthority);
     const authorEditUrl = new URL(
       `/api/v1/projects/${PROJECT_A}/manuscript/author-edits`, baseUrl,
     );
@@ -543,13 +727,42 @@ test("one current writer settles one Author Edit and exact retries return one re
       antiForgery: authorEditChallenge.nonce,
       fetchImpl: browserFetch(baseUrl, "session-a"),
     };
-    const settlement = await applyAuthorEdit(authorEditOptions);
+    await assert.rejects(applyAuthorEdit({
+      ...authorEditOptions,
+      fetchImpl: async (url, options) => {
+        const response = await browserFetch(baseUrl, "session-a")(url, options);
+        await response.arrayBuffer();
+        throw new Error("simulated acknowledgement delivery loss");
+      },
+    }), /simulated acknowledgement delivery loss/);
+    let committedOutcomeResponse;
+    const committedOutcome = await getApplyAuthorEditOutcome({
+      baseUrl, projectId: PROJECT_A, idempotencyKey: authorEditKey,
+      antiForgery: authorEditChallenge.nonce,
+      fetchImpl: async (url, options) => {
+        committedOutcomeResponse = await browserFetch(baseUrl, "session-a")(url, options);
+        return committedOutcomeResponse;
+      },
+    });
+    assert.equal(committedOutcomeResponse.headers.get("cache-control"), "no-store");
+    assert.match(committedOutcome.correlation_id, UUID);
+    assert.notEqual(committedOutcome.correlation_id, authorEditRequest.correlation_id);
+    assert.equal(committedOutcome.outcome.outcome_kind, "committed");
+    const settlement = committedOutcome.outcome.response;
+    assert.equal(settlement.correlation_id, authorEditRequest.correlation_id);
     assert.equal(settlement.receipt.result, "authoritative_applied");
     assert.equal(settlement.effect.kind, "authoritative_applied");
     assert.equal(settlement.effect.authoritative_revision.body, "Authoritative A!");
     assert.equal(settlement.completed_intent_record_id,
       authorEditRequest.completed_intent_record_id);
     assert.deepEqual(await applyAuthorEdit(authorEditOptions), settlement);
+    const authorityAfterLostAcknowledgement = await projectAuthoritySnapshot();
+    const repeatedCommitted = await getApplyAuthorEditOutcome({
+      baseUrl, projectId: PROJECT_A, idempotencyKey: authorEditKey,
+      antiForgery: authorEditChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    assert.deepEqual(repeatedCommitted.outcome.response, settlement);
+    assert.deepEqual(await projectAuthoritySnapshot(), authorityAfterLostAcknowledgement);
 
     const outcomeRequests = [
       {
@@ -627,6 +840,16 @@ test("one current writer settles one Author Edit and exact retries return one re
       assert.deepEqual(result.receipt.authoritative_commit_ids, []);
       assert.equal(result.receipt.author_action_sequence, null);
       assert.deepEqual(await applyAuthorEdit(options), result);
+      const authorityBeforeOutcomeRead = await projectAuthoritySnapshot();
+      const queried = await getApplyAuthorEditOutcome({
+        baseUrl, projectId: PROJECT_A, idempotencyKey,
+        antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+      });
+      assert.match(queried.correlation_id, UUID);
+      assert.notEqual(queried.correlation_id, result.correlation_id);
+      assert.equal(queried.outcome.outcome_kind, "committed");
+      assert.deepEqual(queried.outcome.response, result);
+      assert.deepEqual(await projectAuthoritySnapshot(), authorityBeforeOutcomeRead);
     }
 
     assert.deepEqual(await projectAuthoritySnapshot(), {
