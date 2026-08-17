@@ -653,6 +653,21 @@ test("one current writer settles one Author Edit and exact retries return one re
     });
     assert.equal(repeatedProof.status, 400);
     assert.equal(repeatedProof.headers["cache-control"], "no-store");
+    const wrongMethod = await fetch(pendingOutcomeUrl, {
+      method: "POST",
+      headers: {
+        origin: baseUrl,
+        cookie: "storyos_session=session-a",
+        "x-storyos-anti-forgery": authorEditChallenge.nonce,
+      },
+    });
+    assert.equal(wrongMethod.status, 405);
+    assert.equal(wrongMethod.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await wrongMethod.json(), {
+      schema_id: "storyos.problem.v1",
+      code: "method_not_allowed",
+      message: "The request method is not allowed.",
+    });
     assert.deepEqual(await projectAuthoritySnapshot(), emptyAuthority);
     const rejectedKey = "018f0000-0000-7001-8000-000000000120";
     const rejectedChallenge = await createProjectCommandChallenge({

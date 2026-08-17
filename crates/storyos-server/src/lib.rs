@@ -24,7 +24,9 @@ mod project_command_challenge;
 mod request_origin;
 
 use author_edit::apply_author_edit;
-use author_edit_outcome::get_apply_author_edit_outcome;
+use author_edit_outcome::{
+    apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
+};
 use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
@@ -172,7 +174,8 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             routing::on(
                 get_author_edit_outcome_method,
                 get_apply_author_edit_outcome,
-            ),
+            )
+            .fallback(apply_author_edit_outcome_method_not_allowed),
         )
         .with_state(Arc::new(ServerState::new(config)))
 }

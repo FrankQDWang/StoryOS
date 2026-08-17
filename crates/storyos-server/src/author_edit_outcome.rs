@@ -32,6 +32,15 @@ pub(super) async fn get_apply_author_edit_outcome(
     }
 }
 
+pub(super) async fn apply_author_edit_outcome_method_not_allowed() -> ApiError {
+    problem(
+        StatusCode::METHOD_NOT_ALLOWED,
+        "method_not_allowed",
+        "The request method is not allowed.",
+    )
+    .with_no_store()
+}
+
 async fn read_outcome_response(
     state: &ServerState,
     headers: &HeaderMap,
