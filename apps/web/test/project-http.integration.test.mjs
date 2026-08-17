@@ -91,9 +91,16 @@ async function responseSnapshot(response) {
   return { status: response.status, body: await response.text() };
 }
 
-async function projectAuthoritySnapshot() {
+async function queryPostgres(query) {
   const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
   assert.ok(container, "run through scripts/verify-project-scope.sh");
+  const { stdout } = await execFileAsync("docker", [
+    "exec", container, "psql", "-XAt", "-U", "postgres", "-c", query,
+  ]);
+  return stdout.trim();
+}
+
+async function projectAuthoritySnapshot() {
   const query = `
     SELECT json_build_object(
       'receipts', (SELECT count(*) FROM storyos.domain_receipts
@@ -124,10 +131,7 @@ async function projectAuthoritySnapshot() {
           AND receipt.project_id = '${PROJECT_A}'::uuid
           AND receipt.result_kind <> 'authoritative_applied')
     )::text`;
-  const { stdout } = await execFileAsync("docker", [
-    "exec", container, "psql", "-XAt", "-U", "postgres", "-c", query,
-  ]);
-  return JSON.parse(stdout.trim());
+  return JSON.parse(await queryPostgres(query));
 }
 
 function httpGet(url, headers) {
@@ -863,6 +867,51 @@ test("one current writer settles one Author Edit and exact retries return one re
       counter: "1/1/1",
       zero_authority_activities: 0,
     });
+
+    const unknownKey = rejectedKey;
+    const unknownAdmission = "018f0000-0000-7001-8000-000000000065";
+    const unknownCommand = "018f0000-0000-7001-8000-000000000066";
+    const unknownChallenge = rejectedChallenge;
+    await queryPostgres(`WITH challenge AS (
+      UPDATE storyos.project_command_challenges SET consumed_at = clock_timestamp(), expires_at = clock_timestamp() + interval '5 minutes'
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid AND command_kind = 'applyAuthorEdit' AND idempotency_key = '${unknownKey}'::uuid RETURNING consumed_at, expires_at
+    ), progress AS (
+      UPDATE storyos.command_idempotency SET outcome_kind = 'in_progress'
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid AND command_kind = 'applyAuthorEdit' AND idempotency_key = '${unknownKey}'::uuid RETURNING 1
+    ), source AS (
+      SELECT admission FROM storyos.author_command_admissions AS admission
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid AND idempotency_key = '${authorEditKey}'::uuid
+    ) INSERT INTO storyos.author_command_admissions
+      SELECT (jsonb_populate_record(NULL::storyos.author_command_admissions,
+        to_jsonb(source.admission) || jsonb_build_object(
+          'author_command_admission_id', '${unknownAdmission}', 'command_id', '${unknownCommand}',
+          'idempotency_key', '${unknownKey}', 'challenge_consumed_at', challenge.consumed_at,
+          'challenge_expires_at', challenge.expires_at))).* FROM source, challenge, progress`);
+    const unknownOptions = {
+      baseUrl, projectId: PROJECT_A, idempotencyKey: unknownKey,
+      antiForgery: unknownChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    };
+    const unknownObservationCount = () => queryPostgres(`SELECT count(*)
+      FROM storyos.author_command_admission_outcome_unknown_observations
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+        AND author_command_admission_id = '${unknownAdmission}'::uuid`);
+    assert.equal(await unknownObservationCount(), "0");
+    const unknownBefore = await getApplyAuthorEditOutcome(unknownOptions);
+    assert.deepEqual(unknownBefore.outcome, { outcome_kind: "still_unknown", observation: {
+      observation_kind: "admission_committed", command_id: unknownCommand,
+      author_command_admission_id: unknownAdmission, reconciliation_required: true,
+    } });
+    assert.equal(await unknownObservationCount(), "0");
+    const authorityBeforeObservation = await projectAuthoritySnapshot();
+    await queryPostgres(`INSERT INTO storyos.author_command_admission_outcome_unknown_observations
+      (owner_user_id, project_id, observation_id, author_command_admission_id, last_provable_boundary, reason)
+      VALUES ('${USER_A}'::uuid, '${PROJECT_A}'::uuid, '018f0000-0000-7001-8000-000000000067'::uuid, '${unknownAdmission}'::uuid,
+       'admission_committed', 'acknowledgement_missing')`);
+    assert.equal(await unknownObservationCount(), "1");
+    const unknownAfter = await getApplyAuthorEditOutcome(unknownOptions);
+    assert.deepEqual(unknownAfter.outcome, unknownBefore.outcome);
+    assert.equal(await unknownObservationCount(), "1");
+    assert.deepEqual(await projectAuthoritySnapshot(), authorityBeforeObservation);
 
     const staleSession = sessions.find((session) => session.writer.kind === "read_only");
     const staleRequest = {

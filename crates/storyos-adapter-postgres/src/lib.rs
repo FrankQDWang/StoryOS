@@ -8,6 +8,7 @@ mod tests;
 #[path = "author_edit_outcome_tests.rs"]
 mod author_edit_outcome_tests;
 
+mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
 mod author_edit_replay;

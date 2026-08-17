@@ -24,9 +24,21 @@
 
 use std::future::Future;
 
+mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
 mod editor_session;
+
+#[cfg(test)]
+#[path = "author_command_outcome_unknown_tests.rs"]
+mod author_command_outcome_unknown_tests;
+
+pub use author_command_outcome_unknown::{
+    AppendAuthorCommandOutcomeUnknown, AuthorCommandOutcomeUnknownBoundary,
+    AuthorCommandOutcomeUnknownError, AuthorCommandOutcomeUnknownObservation,
+    AuthorCommandOutcomeUnknownReason, AuthorCommandOutcomeUnknownStore, ReconciliationRequired,
+    append_author_command_outcome_unknown,
+};
 
 pub use author_edit::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, AuthorEditSettlement,

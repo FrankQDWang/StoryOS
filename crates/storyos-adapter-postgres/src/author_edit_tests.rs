@@ -1,8 +1,11 @@
 use storyos_application::{
-    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditUnknownObservation,
-    AuthorCommandAdmissionIds, CommittedApplyAuthorEdit, EditorClientBinding, EditorSessionId,
-    EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, ReadApplyAuthorEditOutcome, UserId,
+    AppendAuthorCommandOutcomeUnknown, ApplyAuthorEditCommand, ApplyAuthorEditOutcome,
+    ApplyAuthorEditUnknownObservation, AuthorCommandAdmissionIds,
+    AuthorCommandOutcomeUnknownBoundary, AuthorCommandOutcomeUnknownError,
+    AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
+    EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    ReadApplyAuthorEditOutcome, UserId, append_author_command_outcome_unknown,
     create_editor_session, get_apply_author_edit_outcome, get_editor_session,
     issue_project_command_challenge,
 };
@@ -15,6 +18,7 @@ const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER: &str = "018f0000-0000-7001-8000-000000000003";
 const REVISION: &str = "018f0000-0000-7001-8000-000000000005";
+pub(super) static AUTHOR_EDIT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[test]
 fn payload_digest_is_lowercase_sha256() {
@@ -24,7 +28,7 @@ fn payload_digest_is_lowercase_sha256() {
     );
 }
 
-fn binding(
+pub(super) fn binding(
     scope: &ProjectScope,
     kind: &str,
     path: &str,
@@ -49,7 +53,7 @@ fn binding(
     }
 }
 
-fn author_command(
+pub(super) fn author_command(
     scope: &ProjectScope,
     editor_session_id: &str,
     key: &str,
@@ -171,6 +175,7 @@ fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
@@ -262,6 +267,27 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             AuthorEditFault::None => unreachable!(),
         };
         assert!(format!("{error:?}").contains(expected_point), "{error:?}");
+        let unknown = append_author_command_outcome_unknown(
+            &store,
+            &AppendAuthorCommandOutcomeUnknown {
+                project_scope: scope.clone(),
+                author_command_admission_id: command.ids.author_command_admission_id.clone(),
+                observation_id: format!("018f0000-0000-7001-8000-0000000008{suffix}"),
+                last_provable_boundary: AuthorCommandOutcomeUnknownBoundary::AdmissionCommitted,
+                reason: AuthorCommandOutcomeUnknownReason::AcknowledgementMissing,
+            },
+        )
+        .await;
+        assert!(match (fault, unknown) {
+            (
+                AuthorEditFault::CoreAfterCommitBeforeAcknowledgement,
+                Err(AuthorCommandOutcomeUnknownError::BindingConflict),
+            ) => true,
+            (_, Ok(observation)) => {
+                observation.author_command_admission_id == command.ids.author_command_admission_id
+            }
+            _ => false,
+        });
         if fault != AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
             let outcome = get_apply_author_edit_outcome(
                 &store,
@@ -1374,6 +1400,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     for table in [
         "project_activity_events",
         "author_action_entries",
+        "author_command_admission_outcome_unknown_observations",
         "author_command_admission_settlements",
         "domain_receipts",
         "authoritative_commits",
