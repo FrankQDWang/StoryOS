@@ -154,7 +154,9 @@ Exactly one terminal settlement may be appended:
 AuthorCommandAdmissionSettlement =
   ReceiptSettled {
     receipt_ref,
-    project_activity_position,
+    activity_relation:
+      ActivityBacked { project_activity_position }
+      | ReceiptOnly,
     settled_at
   }
   | RequiresReconfirmation {
@@ -170,9 +172,20 @@ AuthorCommandAdmissionSettlement =
 
 `ReceiptSettled` is linked atomically with the Core Transition that creates the
 typed Receipt. The Receipt owns the exhaustive domain result, including
-committed change, refusal, invalidity, conflict, and no effect. A lost HTTP
+committed change, refusal, invalidity, conflict, and no effect. Its owning typed
+result also selects the closed `activity_relation` branch. `ActivityBacked`
+records the exact position only when that result creates Project Activity;
+`ReceiptOnly` positively records that the result creates none. This branch is
+never a nullable field, sentinel position, or fabricated Activity. A lost HTTP
 acknowledgement cannot create a gap between that Receipt and admission
 settlement.
+
+The current `ApplyAuthorEdit` mapping is closed:
+
+| Typed Receipt result | Admission Activity relation |
+| --- | --- |
+| `AuthoritativeApplied` | `ActivityBacked { project_activity_position }`; exactly one Receipt-backed Project Activity relation |
+| `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; one typed Receipt and zero Project Activity |
 
 `RequiresReconfirmation` proves that this admission will create no Core effect.
 It carries no Receipt, cannot later become `ReceiptSettled`, and cannot be
@@ -297,8 +310,9 @@ Deterministic verification covers:
 - durable `outcome_unknown`, read-only reconciliation evidence, and no blind
   invocation;
 - exactly one terminal settlement per admission; and
-- for an executed command, one-to-one linkage among admission, command,
-  Receipt, and Project Activity.
+- for each Core-settled command, one-to-one linkage among Admission, Command, and typed Receipt;
+- one-to-one linkage between each `ActivityBacked` typed Receipt and its Project Activity; and
+- zero Project Activity for each `ReceiptOnly` settlement.
 
 Passing evidence reports the exact admitted claim and durable settlement. It
 never substitutes browser event cardinality, a session role, an Approval, a

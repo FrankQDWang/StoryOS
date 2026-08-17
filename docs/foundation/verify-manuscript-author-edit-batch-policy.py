@@ -18,12 +18,14 @@ CANDIDATES_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-can
 APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH = (
     ROOT / "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json"
 )
+AUTHOR_ADMISSION_PATH = ROOT / "docs/foundation/author-command-admission.md"
 PROJECTIONS = (
     ROOT / "CONTEXT.md",
     ROOT / "docs/adr/0003-specify-manuscript-revision-and-proposal-state-machine.md",
     ROOT / "docs/foundation/manuscript-revision-proposal-state-machine.md",
     ROOT / "docs/foundation/web-editor-session-synchronization-and-recovery-semantics.md",
     ROOT / "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
+    AUTHOR_ADMISSION_PATH,
 )
 REVISION = "storyos.author-edit-batch.release-1.preview.v1"
 EDITOR_REVISION = "storyos.editor-contract.release-1.v2"
@@ -249,6 +251,64 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
     return errors
 
 
+def author_admission_errors(admission_projection: str) -> list[str]:
+    errors: list[str] = []
+    visible_admission = visible_markdown(admission_projection)
+    settlement = re.search(
+        r"AuthorCommandAdmissionSettlement\s*=.*?(?=\n```)",
+        visible_admission,
+        flags=re.DOTALL,
+    )
+    if not settlement:
+        errors.append("Admission settlement union is missing")
+    else:
+        receipt_settled = re.search(
+            r"ReceiptSettled\s*\{(?P<body>.*?)(?=\n\s*\}\n\s*\|\s*RequiresReconfirmation)",
+            settlement.group(0),
+            flags=re.DOTALL,
+        )
+        body = receipt_settled.group("body") if receipt_settled else ""
+        canonical_body = re.sub(r"\s+", " ", body).strip()
+        expected_body = (
+            "receipt_ref, activity_relation: ActivityBacked "
+            "{ project_activity_position } | ReceiptOnly, settled_at"
+        )
+        if not receipt_settled or canonical_body != expected_body:
+            errors.append("Admission ReceiptSettled branch shape drifted")
+    applied_row = re.findall(
+        r"^\|\s*`AuthoritativeApplied`\s*\|.*$",
+        visible_admission,
+        flags=re.MULTILINE,
+    )
+    zero_row = re.findall(
+        r"^\|\s*`NoEffect`, `Conflicted`, or `Refused`\s*\|.*$",
+        visible_admission,
+        flags=re.MULTILINE,
+    )
+    if (len(applied_row) != 1
+            or "`ActivityBacked { project_activity_position }`" not in applied_row[0]
+            or "exactly one" not in applied_row[0]):
+        errors.append("Admission AuthoritativeApplied Activity mapping drifted")
+    if (len(zero_row) != 1 or "`ReceiptOnly`" not in zero_row[0]
+            or "one typed Receipt" not in zero_row[0]
+            or "zero Project Activity" not in zero_row[0]):
+        errors.append("Admission zero-authority Receipt-only mapping drifted")
+    for requirement in (
+        "one-to-one linkage among Admission, Command, and typed Receipt",
+        "one-to-one linkage between each `ActivityBacked` typed Receipt and its Project Activity",
+        "zero Project Activity for each `ReceiptOnly` settlement",
+    ):
+        if requirement not in visible_admission:
+            errors.append(f"Admission cardinality lost {requirement}")
+    stale_cardinality = (
+        "one-to-one linkage among admission, command,\n"
+        "  Receipt, and Project Activity"
+    )
+    if stale_cardinality in visible_admission:
+        errors.append("Admission retains mandatory four-way Activity cardinality")
+    return errors
+
+
 def policy_errors(
     policy: dict,
     evidence: dict,
@@ -355,6 +415,9 @@ def policy_errors(
     errors.extend(apply_author_edit_web_errors(
         apply_author_edit_response_schema,
         projections.get(PROJECTIONS[3].as_posix(), ""),
+    ))
+    errors.extend(author_admission_errors(
+        projections.get(AUTHOR_ADMISSION_PATH.as_posix(), ""),
     ))
     return errors
 def self_test() -> None:
@@ -477,6 +540,32 @@ def self_test() -> None:
     ):
         changed_projections = dict(projections)
         changed_projections[web] = changed_projections[web].replace(old, new, 1)
+        assert expected_error in "\n".join(policy_errors(
+            policy, evidence, candidate_metrics, response_schema, changed_projections))
+    admission = AUTHOR_ADMISSION_PATH.as_posix()
+    for old, new, expected_error in (
+        ("    receipt_ref,\n", "", "Admission ReceiptSettled branch shape drifted"),
+        ("      | ReceiptOnly,\n",
+         "      | ActivityBacked { project_activity_position },\n",
+         "Admission ReceiptSettled branch shape drifted"),
+        ("      | ReceiptOnly,\n",
+         "      | ReceiptOnly | OptionalActivity,\n",
+         "Admission ReceiptSettled branch shape drifted"),
+        ("| `AuthoritativeApplied` | `ActivityBacked { project_activity_position }`; exactly one",
+         "| `AuthoritativeApplied` | `ReceiptOnly`; exactly one",
+         "Admission AuthoritativeApplied Activity mapping drifted"),
+        ("| `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; one typed Receipt and zero Project Activity",
+         "| `NoEffect`, `Conflicted`, or `Refused` | `ActivityBacked { project_activity_position }`; one typed Receipt and zero Project Activity",
+         "Admission zero-authority Receipt-only mapping drifted"),
+        ("| `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; one typed Receipt and zero Project Activity",
+         "| `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; no typed Receipt and zero Project Activity",
+         "Admission zero-authority Receipt-only mapping drifted"),
+        ("one-to-one linkage among Admission, Command, and typed Receipt",
+         "one-to-one linkage among admission, command,\n  Receipt, and Project Activity",
+         "Admission cardinality lost"),
+    ):
+        changed_projections = dict(projections)
+        changed_projections[admission] = changed_projections[admission].replace(old, new, 1)
         assert expected_error in "\n".join(policy_errors(
             policy, evidence, candidate_metrics, response_schema, changed_projections))
 def main() -> None:
