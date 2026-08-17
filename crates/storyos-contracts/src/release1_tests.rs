@@ -4,6 +4,8 @@ use super::APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID;
 use crate::project_command_targets::PROJECT_COMMAND_TARGETS;
 use crate::{
     APPLY_AUTHOR_EDIT_METHOD, APPLY_AUTHOR_EDIT_PATH, APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
+    AUTHOR_EDIT_BATCH_IDLE_MS, AUTHOR_EDIT_BATCH_POLICY_REVISION,
+    AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES, AUTHOR_EDIT_MAX_UNITS, AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
     ApplyAuthorEditRequest, AuthorEditPrimitive, AuthorEditUnit, EDITOR_CONTRACT_REVISION,
     SelectionSnapshot,
 };
@@ -53,7 +55,7 @@ fn challenge_targets_equal_the_project_scoped_release_1_command_catalog() {
 }
 
 #[test]
-fn apply_author_edit_contract_is_one_bounded_replace_selection() {
+fn apply_author_edit_contract_activates_the_bounded_batch_policy() {
     let request = ApplyAuthorEditRequest {
         command_schema: APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID.to_owned(),
         client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
@@ -93,6 +95,35 @@ fn apply_author_edit_contract_is_one_bounded_replace_selection() {
         serde_json::to_value(&request).expect("request serializes")["author_edit_units"][0]["normalized_primitives"]
             [0]["kind"],
         "replace_selection"
+    );
+    assert_eq!(
+        EDITOR_CONTRACT_REVISION,
+        "storyos.editor-contract.release-1.v2"
+    );
+    let policy: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../docs/foundation/author-edit-batch-release-1-policy.json"
+    ))
+    .expect("Author Edit batch policy must be valid JSON");
+    assert_eq!(
+        policy["identity_binding"]["editor_contract_revision"],
+        EDITOR_CONTRACT_REVISION
+    );
+    assert_eq!(policy["revision"], AUTHOR_EDIT_BATCH_POLICY_REVISION);
+    assert_eq!(
+        policy["selected"]["adjacent_completed_intent_idle_ms"],
+        AUTHOR_EDIT_BATCH_IDLE_MS
+    );
+    assert_eq!(
+        policy["selected"]["max_author_edit_units"],
+        AUTHOR_EDIT_MAX_UNITS
+    );
+    assert_eq!(
+        policy["selected"]["max_normalized_primitives"],
+        AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES
+    );
+    assert_eq!(
+        policy["selected"]["max_public_json_command_body_bytes"],
+        AUTHOR_EDIT_MAX_WIRE_BODY_BYTES
     );
 }
 

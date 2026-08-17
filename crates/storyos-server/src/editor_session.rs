@@ -235,7 +235,7 @@ fn create_response(
         base_snapshot: contracts::EditorBaseSnapshot {
             snapshot_id: session.base_snapshot.snapshot_id,
             chapter_id: chapter_id.clone(),
-            project_activity_position: "0".to_owned(),
+            project_activity_position: session.base_snapshot.project_activity_position.to_string(),
             authoritative_head_revision_id: session.base_snapshot.authoritative_revision_id.clone(),
             proposal_head_revision_ids: Vec::new(),
             target_refs: vec![format!("manuscript:{chapter_id}")],

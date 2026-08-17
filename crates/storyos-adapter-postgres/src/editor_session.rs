@@ -159,6 +159,7 @@ async fn read_session(
                 writer.writer_generation::text, writer.current_editor_session_id::text,
                 snapshot.snapshot_id::text, snapshot.chapter_object_id::text,
                 snapshot.authoritative_revision_id::text,
+                snapshot.project_activity_position::text,
                 convert_from(payload.canonical_bytes, 'UTF8'),
                 to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
          FROM storyos.editor_sessions AS session
@@ -185,7 +186,11 @@ async fn read_session(
             .get::<_, String>(5)
             .parse::<u64>()
             .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-        let body = row.get::<_, String>(10);
+        let project_activity_position = row
+            .get::<_, String>(10)
+            .parse::<u64>()
+            .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
+        let body = row.get::<_, String>(11);
         Ok(EditorSession {
             editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
             client_binding: binding.clone(),
@@ -201,6 +206,7 @@ async fn read_session(
                 snapshot_id: row.get(7),
                 chapter_id: row.get(8),
                 authoritative_revision_id: row.get(9),
+                project_activity_position,
                 payload_digest_hex: Sha256::digest(body.as_bytes()).iter().fold(
                     String::with_capacity(64),
                     |mut encoded, byte| {
@@ -210,7 +216,7 @@ async fn read_session(
                     },
                 ),
                 body,
-                created_at: row.get(11),
+                created_at: row.get(12),
             },
         })
     })

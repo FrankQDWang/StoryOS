@@ -140,8 +140,7 @@ pub async fn apply_author_edit(
         || challenge.method != "POST"
         || challenge.route_template != "/api/v1/projects/{project_id}/manuscript/author-edits"
         || challenge.command_schema != "storyos.command.apply-author-edit.request.v1"
-        || command.editor_contract_revision != "storyos.editor-contract.release-1.v1"
-        || command.author_edit_units.len() != 1
+        || command.editor_contract_revision != "storyos.editor-contract.release-1.v2"
     {
         return Err(AuthorEditError::BindingConflict);
     }

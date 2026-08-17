@@ -23,7 +23,7 @@ pub(super) async fn apply_author_edit(
         RequestOriginPolicy::StateChanging,
     )?;
     validate_json_content_type(&headers)?;
-    let bytes = to_bytes(body_stream, 1024 * 1024)
+    let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
         .await
         .map_err(|_| payload_too_large())?;
     let body = serde_json::from_slice::<contracts::ApplyAuthorEditRequest>(&bytes)
@@ -281,12 +281,20 @@ pub(super) async fn apply_author_edit(
 }
 
 fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiError> {
+    let normalized_primitive_count = body
+        .author_edit_units
+        .iter()
+        .try_fold(0_usize, |count, unit| {
+            count.checked_add(unit.normalized_primitives.len())
+        })
+        .ok_or_else(command_target_refused)?;
     if body.command_schema != contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID
         || body.observed_ownership_partition != "authoritative"
         || body.editor_contract_revision != contracts::EDITOR_CONTRACT_REVISION
         || !body.expected_proposal_head_revision_ids.is_empty()
-        || body.author_edit_units.len() != 1
-        || body.author_edit_units[0].normalized_primitives.len() != 1
+        || body.author_edit_units.is_empty()
+        || body.author_edit_units.len() > contracts::AUTHOR_EDIT_MAX_UNITS
+        || normalized_primitive_count > contracts::AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES
     {
         return Err(command_target_refused());
     }

@@ -74,7 +74,7 @@ fn command() -> ApplyAuthorEditCommand {
         expected_proposal_head_revision_ids: Vec::new(),
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v1".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
         undo_group_id: "undo".to_owned(),
         completed_intent_record_id: "intent".to_owned(),
         local_intent_sequence: 1,
@@ -96,7 +96,20 @@ fn command() -> ApplyAuthorEditCommand {
 #[tokio::test]
 async fn matching_bindings_reach_the_atomic_store_once() {
     let store = Store(Mutex::new(0));
-    let settlement = apply_author_edit(&store, &command()).await.unwrap();
+    let mut command = command();
+    command.author_edit_units.push(AuthorEditUnit {
+        normalized_primitives: vec![AuthorEditPrimitive::ReplaceSelection {
+            from: 5,
+            to: 5,
+            text: "?".to_owned(),
+        }],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 5,
+            to: 5,
+        },
+    });
+    let settlement = apply_author_edit(&store, &command).await.unwrap();
     assert_eq!(
         settlement.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {
