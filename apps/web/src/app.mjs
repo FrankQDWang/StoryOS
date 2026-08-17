@@ -1,5 +1,5 @@
 import { openControlledProject } from "./boot.mjs";
-import { persistReplaceSelection, submitOnePendingAuthorEdit } from "./editor-session.mjs";
+import { attachManualInput } from "./manual-input.mjs";
 
 const PROJECT_PATH = /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
 
@@ -24,40 +24,18 @@ function render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl }) {
       ? state.editor.pending.save_state : "needs_attention";
     saveState.dataset.saveState = saveState.textContent;
     if (state.editor.kind === "editor-ready" && typeof editor.addEventListener === "function") {
-      let durableBody = initialBody;
-      let pendingWrite = Promise.resolve();
-      editor.addEventListener("input", () => {
-        const nextBody = editor.value;
-        pendingWrite = pendingWrite.then(async () => {
-          let from = 0;
-          while (from < durableBody.length && from < nextBody.length
-            && durableBody[from] === nextBody[from]) from += 1;
-          let oldEnd = durableBody.length;
-          let newEnd = nextBody.length;
-          while (oldEnd > from && newEnd > from
-            && durableBody[oldEnd - 1] === nextBody[newEnd - 1]) {
-            oldEnd -= 1; newEnd -= 1;
-          }
-          const pending = await persistReplaceSelection(state.editor, {
-            from, to: oldEnd, text: nextBody.slice(from, newEnd), resultingBody: nextBody,
-          });
-          durableBody = pending.body;
-          state.editor.pending = pending;
-          saveState.textContent = pending.save_state;
-          saveState.dataset.saveState = pending.save_state;
-          const settled = await submitOnePendingAuthorEdit({
-            workspace: state.editor, baseUrl, fetchImpl, cryptoImpl,
-          });
-          durableBody = settled.body;
-          state.editor.pending = settled;
-          editor.readOnly = true;
-          saveState.textContent = settled.save_state;
-          saveState.dataset.saveState = settled.save_state;
-        }).catch(() => {
+      attachManualInput({
+        editor, workspace: state.editor, baseUrl, fetchImpl, cryptoImpl,
+        onProjection(projection) {
+          state.editor.pending = projection;
+          saveState.textContent = projection.save_state;
+          saveState.dataset.saveState = projection.save_state;
+        },
+        onFailure() {
           editor.readOnly = true;
           saveState.textContent = "needs_attention";
           saveState.dataset.saveState = "needs_attention";
-        });
+        },
       });
     }
     project.append(

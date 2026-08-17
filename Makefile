@@ -18,6 +18,7 @@ web:
 	node --test apps/web/test/protocol-boot.test.mjs
 	node --test apps/web/test/project-open.test.mjs
 	node --test apps/web/test/editor-session-browser.integration.test.mjs
+	node --test apps/web/test/manual-input-browser.integration.test.mjs
 	cargo build --quiet -p storyos-server
 	node --test apps/web/test/protocol-http.integration.test.mjs
 	$(MAKE) project-scope
