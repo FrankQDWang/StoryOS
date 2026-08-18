@@ -1032,12 +1032,16 @@ an outcome Query `Committed` or `RejectedNoAdmission` observation, or positive
 no-Admission proof for the original attempt is durable. A crash
 before capsule commit sends nothing. A crash after capsule commit but before
 send leaves an unused replayable capsule. A crash after send but before
-response durability leaves the preceding durable state. After reload, process
-restart, or continued current-process recovery, an `ApplyAuthorEdit`
+response durability leaves the preceding durable state. After reload, crash,
+process restart, or continued current-process recovery, an `ApplyAuthorEdit`
 `DeliveryUnknown` state with an available exact capsule and still-valid Client
 Session permits only the protected outcome Query before any command replay.
 Section 10 consumes this same rule; it does not select `ExactTransportReplay`
 for `ApplyAuthorEdit`. Other command classes retain their exact replay rule.
+Server or PostgreSQL process interruption does not create a different first
+browser action. Durable Server facts remain owned by the PostgreSQL Project
+Storage, Isolation, and Migration Contract. The browser follows the same
+DeliveryUnknown or durable-observation matrix.
 Missing/corrupt capsule, invalid or expired Client Session binding, or
 unverifiable request equality remains in the applicable inspectable unknown
 state; it never permits a new challenge, changed request, or blind repeat.
@@ -1597,6 +1601,9 @@ result and closure follow section 8.2.
 | takeover `outcome_unknown` or `RequiresReconfirmation` | use only the actually supplied query or visible reconfirmation fields; after Admission exists, never invoke the explicit takeover automatically |
 | takeover unexpectedly returns `Accepted` | enter `ProtocolIncompatibleAccepted`; preserve evidence and fail closed rather than assuming an asynchronous takeover terminal |
 
+Server or PostgreSQL process interruption uses this same section 10 matrix. It
+does not create a different first browser action.
+
 ## 11. Deterministic journal garbage collection
 
 ### 11.1 Eligibility
@@ -1739,7 +1746,7 @@ Browser integration and the deterministic oracle cover:
   physical attempts; the at-most-one fresh-challenge bound; invalid/expired
   Client Session fail-closed behavior; the `ApplyAuthorEdit` GET-first path from
   delivery unknown to committed, rejected, or inspectable unknown, including
-  after reload or process restart; and no second command invocation;
+  after reload, crash, or process restart; and no second command invocation;
 - chapter switching with pending records/groups, one current-writer queue, and
   the separately fenced takeover coordination lane;
 - secondary read-only sessions; exact `TakeoverApplied`,
