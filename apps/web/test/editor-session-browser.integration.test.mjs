@@ -934,6 +934,7 @@ test("a real browser journal settles bounded groups and installs the complete ne
     const pathname = new URL(request.url, "http://storyos.test").pathname;
     const allowed = pathname === "/apps/web/src/editor-session.mjs"
       || pathname === "/apps/web/src/author-edit-submission.mjs"
+      || pathname === "/apps/web/src/author-edit-outcome-reconciliation.mjs"
       || pathname === "/apps/web/src/local-edit-journal.mjs"
       || pathname === "/generated/typescript/storyos-public-release-1/client.mjs";
     if (!allowed) {

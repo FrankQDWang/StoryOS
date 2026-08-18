@@ -120,7 +120,30 @@ function isAppliedSettlement(group) {
 }
 
 function isZeroAuthoritySettlement(group) {
-  return group?.settlement?.kind === "zero_authority_receipt_settled";
+  return group?.settlement?.kind === "zero_authority_receipt_settled"
+    || group?.settlement?.kind === "outcome_query_rejected_no_admission";
+}
+
+function closedReconciliation(group) {
+  const reconciliation = group?.reconciliation;
+  if (reconciliation === undefined) return true;
+  const strongest = reconciliation.strongest;
+  if (reconciliation.kind !== "outcome_query_unresolved"
+    || group.settlement?.kind !== "unsettled"
+    || Object.keys(reconciliation).length !== 2) {
+    return false;
+  }
+  if (strongest?.kind === "no_outcome_observed") {
+    return Object.keys(strongest).length === 1;
+  }
+  if (strongest?.kind === "challenge_issued") {
+    return typeof strongest.expires_at === "string" && Object.keys(strongest).length === 2;
+  }
+  return strongest?.kind === "admission_committed"
+    && strongest.reconciliation_required === true
+    && UUID.test(strongest.command_id ?? "")
+    && UUID.test(strongest.author_command_admission_id ?? "")
+    && Object.keys(strongest).length === 4;
 }
 
 export async function readJournalSnapshot(workspace) {
@@ -215,8 +238,9 @@ async function validateCoverage(workspace, records, groups) {
     const coverage = group.ordered_coverage ?? [];
     if (group.journal_partition_id !== workspace.partition.journal_partition_id
       || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
-      || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled"]
-        .includes(group.settlement?.kind)
+      || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
+        "outcome_query_rejected_no_admission"].includes(group.settlement?.kind)
+      || !closedReconciliation(group)
       || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last)
       || first !== nextCoveredSequence

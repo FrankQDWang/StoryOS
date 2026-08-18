@@ -14,6 +14,13 @@ import {
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "./local-edit-journal.mjs";
+import {
+  commitStrongerGroup,
+  markOutcomeQueryUnresolved,
+  readCommandProof,
+  rememberCommandProof,
+  reconcileLostAcknowledgement,
+} from "./author-edit-outcome-reconciliation.mjs";
 
 const DATABASE_VERSION = 2;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -137,6 +144,7 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   if (existing) {
+    if (existing.reconciliation?.kind === "outcome_query_unresolved") return existing;
     const existingRecords = existing.ordered_coverage.map((coverage) =>
       snapshot.records.find((record) =>
         record.local_intent_sequence === coverage.local_intent_sequence));
@@ -253,30 +261,9 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
   return group;
 }
 
-export async function submitOnePendingAuthorEdit({
-  workspace, baseUrl, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
+async function settleAuthorEditResponse({
+  workspace, group, response, baseUrl, fetchImpl, cryptoImpl,
 }) {
-  const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
-  const challenge = await createProjectCommandChallenge({
-    baseUrl,
-    projectId: workspace.partition.project_scope.project_id,
-    request: {
-      method: group.method,
-      route_template: group.route_template,
-      command_schema: group.command_schema,
-      canonical_command_digest: group.frozen_request_digest,
-      idempotency_key: group.idempotency_key,
-    },
-    fetchImpl,
-  });
-  const response = await applyAuthorEdit({
-    baseUrl,
-    projectId: workspace.partition.project_scope.project_id,
-    request: group.frozen_request_body,
-    idempotencyKey: group.idempotency_key,
-    antiForgery: challenge.nonce,
-    fetchImpl,
-  });
   const pending = await rebuildPendingProjection(workspace);
   const effect = response.effect;
   const receipt = response.receipt;
@@ -327,22 +314,18 @@ export async function submitOnePendingAuthorEdit({
       || receipt.author_action_sequence !== null) {
       throw new Error("Author Edit acknowledgement does not converge");
     }
-    const transaction = workspace.database.transaction("submission_groups", "readwrite");
-    const groups = transaction.objectStore("submission_groups");
-    const durable = await requestResult(groups.get(group.journal_submission_group_id));
-    if (JSON.stringify(durable) !== JSON.stringify(group)) {
-      transaction.abort();
-      throw new Error("Journal Submission Group changed after challenge issuance");
-    }
-    durable.settlement = {
-      kind: "zero_authority_receipt_settled",
-      command_id: response.command_id,
-      author_command_admission_id: response.author_command_admission_id,
-      receipt,
-      effect,
-    };
-    groups.put(durable);
-    await transactionResult(transaction);
+    const rest = { ...group };
+    delete rest.reconciliation;
+    await commitStrongerGroup(workspace, {
+      ...rest,
+      settlement: {
+        kind: "zero_authority_receipt_settled",
+        command_id: response.command_id,
+        author_command_admission_id: response.author_command_admission_id,
+        receipt,
+        effect,
+      },
+    });
     return rebuildPendingProjection(workspace);
   }
   if (receipt.result !== "authoritative_applied"
@@ -396,37 +379,75 @@ export async function submitOnePendingAuthorEdit({
     || Number.isNaN(Date.parse(freshBase.created_at))) {
     throw new Error("Editor Base Snapshot did not converge");
   }
-  const transaction = workspace.database.transaction(
-    ["metadata", "submission_groups"], "readwrite",
-  );
-  const groups = transaction.objectStore("submission_groups");
-  const [durable, activeBase] = await Promise.all([
-    requestResult(groups.get(group.journal_submission_group_id)),
-    requestResult(transaction.objectStore("metadata")
-      .get(`active_base:${workspace.partition.journal_partition_id}`)),
-  ]);
-  if (JSON.stringify(durable) !== JSON.stringify(group)
-    || JSON.stringify(activeBase?.value) !== JSON.stringify(workspace.session.base_snapshot)) {
-    transaction.abort();
-    throw new Error("Journal Submission Group changed after challenge issuance");
-  }
-  durable.settlement = {
-    kind: "applied_receipt_settled",
-    command_id: response.command_id,
-    author_command_admission_id: response.author_command_admission_id,
-    receipt,
-    authoritative_revision: effect.authoritative_revision,
-    authoritative_commit_id: effect.authoritative_commit_id,
-    author_action_sequence: effect.author_action_sequence,
-    project_activity_position: effect.project_activity_position,
-    installed_base_snapshot: freshBase,
-  };
-  groups.put(durable);
-  transaction.objectStore("metadata").put({
-    key: `active_base:${workspace.partition.journal_partition_id}`,
-    value: freshBase,
-  });
-  await transactionResult(transaction);
+  const rest = { ...group };
+  delete rest.reconciliation;
+  await commitStrongerGroup(workspace, {
+    ...rest,
+    settlement: {
+      kind: "applied_receipt_settled",
+      command_id: response.command_id,
+      author_command_admission_id: response.author_command_admission_id,
+      receipt,
+      authoritative_revision: effect.authoritative_revision,
+      authoritative_commit_id: effect.authoritative_commit_id,
+      author_action_sequence: effect.author_action_sequence,
+      project_activity_position: effect.project_activity_position,
+      installed_base_snapshot: freshBase,
+    },
+  }, freshBase);
   workspace.session = canonical;
   return rebuildPendingProjection(workspace);
+}
+
+export async function submitOnePendingAuthorEdit({
+  workspace, baseUrl, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
+}) {
+  const run = async () => {
+    const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
+    if (group.reconciliation?.kind === "outcome_query_unresolved") {
+      readCommandProof(workspace, group);
+      await reconcileLostAcknowledgement({
+        workspace, group, baseUrl, fetchImpl, cryptoImpl,
+        settleFromCommandResponse: settleAuthorEditResponse,
+      });
+      return rebuildPendingProjection(workspace);
+    }
+    const challenge = await createProjectCommandChallenge({
+      baseUrl,
+      projectId: workspace.partition.project_scope.project_id,
+      request: {
+        method: group.method,
+        route_template: group.route_template,
+        command_schema: group.command_schema,
+        canonical_command_digest: group.frozen_request_digest,
+        idempotency_key: group.idempotency_key,
+      },
+      fetchImpl,
+    });
+    rememberCommandProof(workspace, group, challenge);
+    let response;
+    try {
+      response = await applyAuthorEdit({
+        baseUrl,
+        projectId: workspace.partition.project_scope.project_id,
+        request: group.frozen_request_body,
+        idempotencyKey: group.idempotency_key,
+        antiForgery: challenge.nonce,
+        fetchImpl,
+      });
+    } catch {
+      const unresolved = await markOutcomeQueryUnresolved(workspace, group);
+      await reconcileLostAcknowledgement({
+        workspace, group: unresolved, baseUrl, fetchImpl, cryptoImpl,
+        settleFromCommandResponse: settleAuthorEditResponse,
+      });
+      return rebuildPendingProjection(workspace);
+    }
+    return settleAuthorEditResponse({
+      workspace, group, response, baseUrl, fetchImpl, cryptoImpl,
+    });
+  };
+  const queued = (workspace.submitQueue ?? Promise.resolve()).then(run, run);
+  workspace.submitQueue = queued.catch(() => {});
+  return queued;
 }

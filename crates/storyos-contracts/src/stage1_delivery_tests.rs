@@ -84,7 +84,7 @@ fn acknowledgement_loss_ticket_matches_the_current_process_profile() {
             "issue": "https://github.com/FrankQDWang/StoryOS/issues/109",
             "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
             "title": "Reconcile Acknowledgement Loss without Duplicate Authority",
-            "issue_body_sha256": "bbedc3f73c27611cb688fe7e79662cb62b470343218760af5278b1d1866cf669",
+            "issue_body_sha256": "e349093d8c79e93b51fc6b44dfd877b4fdd9cf0f238821b24d97f480e6842e2a",
             "blocked_by": [
                 "https://github.com/FrankQDWang/StoryOS/issues/103",
                 "https://github.com/FrankQDWang/StoryOS/issues/108",
