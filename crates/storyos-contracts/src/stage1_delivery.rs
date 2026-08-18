@@ -11,7 +11,7 @@ pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-20
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "bab4c0ac5ca3da20b01ea1d61783aaba414f493f";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "b36933e1d9c7d6e7bb19879a728d3a35483937bc";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:13c4832b6cdc324eb9d4f3f5212ba7e822007dbb15187df17b794a0306c1aa2b";
+    "sha256:789a8446dd3a7e9a7172501b904909095d5c09a9287cb969e23d2fefd4de840b";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -393,7 +393,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-08",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/110",
         title: "Recover Settled and Unsettled Edits across Reload and Restart",
-        issue_body_sha256: "526e75701f2b9acb1461fc99a6e68c6bf533f96aaa86c4e7e5a18244109ce196",
+        issue_body_sha256: "6f98456ba0e227d189ee1ce379223e7afb12bf0480ace0c2fe0f34ac518d957d",
         blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/109"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "recover settled and unsettled edits after reload and restart",
