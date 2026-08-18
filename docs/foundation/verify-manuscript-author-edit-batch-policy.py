@@ -738,13 +738,64 @@ def apply_author_edit_outcome_contract_errors(
         "A changed Project Scope, idempotency key, Command, Admission, Receipt, command "
         "correlation, digest, or result relation fails closed",
         "This client-first bootstrap applies only to `ApplyAuthorEdit`",
-        "Without a reload, an `ApplyAuthorEdit` `DeliveryUnknown` state permits only the "
-        "protected outcome Query before any command replay",
+        "After reload, crash, process restart, or continued current-process recovery, an "
+        "`ApplyAuthorEdit` `DeliveryUnknown` state with an available exact capsule and "
+        "still-valid Client Session permits only the protected outcome Query before any "
+        "command replay",
+        "Section 10 consumes this same rule; it does not select `ExactTransportReplay` "
+        "for `ApplyAuthorEdit`",
         "The read uses `SensitiveSafeReadWithRefererFallback`. Every success and Problem "
         "response is `Cache-Control: no-store`; a cache is never outcome evidence",
     ):
         if required_meaning not in canonical_web:
             errors.append("Web outcome Query closed meaning drifted")
+            break
+    errors.extend(web_reload_get_first_errors(canonical_web))
+    return errors
+
+
+def web_reload_get_first_errors(canonical_web: str) -> list[str]:
+    errors: list[str] = []
+    if (
+        "| send may have occurred, crash before response observation commits | "
+        "reopen the exact capsule and append only `ExactTransportReplay` through the "
+        "original command route |"
+    ) in canonical_web:
+        errors.append("Web reload matrix still requires ExactTransportReplay for ApplyAuthorEdit")
+    if (
+        "Without a reload, an `ApplyAuthorEdit` `DeliveryUnknown` state permits only the "
+        "protected outcome Query before any command replay"
+    ) in canonical_web:
+        errors.append("Web reload GET-first meaning drifted")
+    for required_meaning in (
+        "send may have occurred, crash before response observation commits, "
+        "`ApplyAuthorEdit`, capsule available, Client Session binding still exact",
+        "call `getApplyAuthorEditOutcome` first with the stored key and nonce",
+        "send may have occurred, crash before response observation commits, another "
+        "editor command, exact capsule and Client Session still valid | reopen the exact "
+        "capsule and append only `ExactTransportReplay`",
+        "`ApplyAuthorEdit` delivery unknown and Client Session binding is invalid/expired "
+        "or capsule/request equality is unverifiable | remain "
+        "`OutcomeQueryUnresolved { NoOutcomeObserved }`",
+        "Query before any command replay, including after reload, crash, or process "
+        "restart",
+        "for missing `ApplyAuthorEdit` acknowledgement use the protected outcome Query; "
+        "otherwise use an actually supplied `outcome_unknown` query",
+        "the `ApplyAuthorEdit` GET-first path from delivery unknown to committed, "
+        "rejected, or inspectable unknown, including after reload, crash, or process restart",
+        "Server or PostgreSQL process interruption does not create a different first "
+        "browser action",
+        "The browser follows the same DeliveryUnknown or durable-observation matrix",
+        "Server or PostgreSQL process interruption uses this same section 10 matrix",
+        "frozen/unsubmitted journal group, pre-admission refusal, or "
+        "delivery/Admission uncertainty | local journal/capsule only; no Host Artifact "
+        "ingress and no `RecoveryDraft` claim",
+        "takeover delivery unknown | exact transport replay is allowed only with its "
+        "available capsule and current binding",
+        "Event arrival alone does not settle the local group",
+    ):
+        if required_meaning not in canonical_web:
+            errors.append("Web reload GET-first meaning drifted")
             break
     return errors
 
@@ -1280,10 +1331,98 @@ def self_test() -> None:
          "outcome Query closed meaning drifted"),
         ("does not display saved, rejected, or settled",
          "displays saved before the Journal commit", "outcome Query closed meaning drifted"),
-        ("Without a reload, an `ApplyAuthorEdit`\n`DeliveryUnknown` state permits only the "
-         "protected outcome Query",
-         "Without a reload, an `ApplyAuthorEdit`\n`DeliveryUnknown` state permits only exact "
-         "transport replay", "outcome Query closed meaning drifted"),
+        ("After reload, crash,\nprocess restart, or continued current-process recovery, an "
+         "`ApplyAuthorEdit`\n`DeliveryUnknown` state with an available exact capsule and "
+         "still-valid Client\nSession permits only the protected outcome Query",
+         "After reload, crash,\nprocess restart, or continued current-process recovery, an "
+         "`ApplyAuthorEdit`\n`DeliveryUnknown` state with an available exact capsule and "
+         "still-valid Client\nSession permits only exact transport replay",
+         "outcome Query closed meaning drifted"),
+        ("After reload, crash,\nprocess restart, or continued current-process recovery",
+         "After reload, process\nrestart, or continued current-process recovery",
+         "outcome Query closed meaning drifted"),
+        ("Section 10 consumes this same rule; it does not select `ExactTransportReplay`\n"
+         "for `ApplyAuthorEdit`.",
+         "Section 10 may select `ExactTransportReplay`\nfor `ApplyAuthorEdit`.",
+         "outcome Query closed meaning drifted"),
+        ("| send may have occurred, crash before response observation commits, "
+         "`ApplyAuthorEdit`, capsule available, Client Session binding still exact | "
+         "reopen the exact capsule; enter `OutcomeQueryUnresolved { NoOutcomeObserved }` "
+         "if not already there; call `getApplyAuthorEditOutcome` first with the stored "
+         "key and nonce; do not replay the command, obtain a new challenge, or send again |",
+         "| send may have occurred, crash before response observation commits | "
+         "reopen the exact capsule and append only `ExactTransportReplay` through the "
+         "original command route |\n"
+         "| send may have occurred, crash before response observation commits, "
+         "`ApplyAuthorEdit`, capsule available, Client Session binding still exact | "
+         "reopen the exact capsule; enter `OutcomeQueryUnresolved { NoOutcomeObserved }` "
+         "if not already there; call `getApplyAuthorEditOutcome` first with the stored "
+         "key and nonce; do not replay the command, obtain a new challenge, or send again |",
+         "Web reload matrix still requires ExactTransportReplay for ApplyAuthorEdit"),
+        ("| send may have occurred, crash before response observation commits, "
+         "`ApplyAuthorEdit`, capsule available, Client Session binding still exact | "
+         "reopen the exact capsule; enter `OutcomeQueryUnresolved { NoOutcomeObserved }` "
+         "if not already there; call `getApplyAuthorEditOutcome` first with the stored "
+         "key and nonce; do not replay the command, obtain a new challenge, or send again |",
+         "| send may have occurred, crash before response observation commits, "
+         "`ApplyAuthorEdit`, capsule available, Client Session binding still exact | "
+         "reopen the exact capsule and append only `ExactTransportReplay` through the "
+         "original command route |",
+         "Web reload GET-first meaning drifted"),
+        ("| send may have occurred, crash before response observation commits, another "
+         "editor command, exact capsule and Client Session still valid | reopen the exact "
+         "capsule and append only `ExactTransportReplay` through the original command "
+         "route |",
+         "| send may have occurred, crash before response observation commits, another "
+         "editor command, exact capsule and Client Session still valid | call "
+         "`getApplyAuthorEditOutcome` first |",
+         "Web reload GET-first meaning drifted"),
+        ("| `ApplyAuthorEdit` delivery unknown and Client Session binding is "
+         "invalid/expired or capsule/request equality is unverifiable | remain "
+         "`OutcomeQueryUnresolved { NoOutcomeObserved }`; block replay, fresh challenge, "
+         "and dependent submission |",
+         "| `ApplyAuthorEdit` delivery unknown and Client Session binding is "
+         "invalid/expired or capsule/request equality is unverifiable | remain "
+         "`TransportOrAdmissionUnknown`; append `ExactTransportReplay` |",
+         "Web reload GET-first meaning drifted"),
+        ("including after reload, crash, or process\n    restart.",
+         "except after reload, crash, or process\n    restart.",
+         "Web reload GET-first meaning drifted"),
+        ("for missing `ApplyAuthorEdit` acknowledgement use the protected outcome Query;",
+         "for missing `ApplyAuthorEdit` acknowledgement use the available exact replay "
+         "capsule;",
+         "Web reload GET-first meaning drifted"),
+        ("Event arrival alone does not settle the local group",
+         "Event arrival alone settles the local group",
+         "Web reload GET-first meaning drifted"),
+        ("Server or PostgreSQL process interruption does not create a different first\n"
+         "browser action. Durable Server facts remain owned by the PostgreSQL Project\n"
+         "Storage, Isolation, and Migration Contract. The browser follows the same\n"
+         "DeliveryUnknown or durable-observation matrix.",
+         "Server or PostgreSQL process interruption may create a different first\n"
+         "browser action. Durable Server facts remain owned by the PostgreSQL Project\n"
+         "Storage, Isolation, and Migration Contract. The browser follows a distinct\n"
+         "server-down first-action matrix.",
+         "Web reload GET-first meaning drifted"),
+        ("Server or PostgreSQL process interruption uses this same section 10 matrix. It\n"
+         "does not create a different first browser action.",
+         "Server or PostgreSQL process interruption uses a distinct first browser action.",
+         "Web reload GET-first meaning drifted"),
+        ("after reload, crash, or process restart; and no second command invocation;",
+         "after reload or process restart; and no second command invocation;",
+         "Web reload GET-first meaning drifted"),
+        ("frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission "
+         "uncertainty | local journal/capsule only; no Host Artifact ingress and no "
+         "`RecoveryDraft` claim",
+         "frozen/unsubmitted journal group, pre-admission refusal, or delivery/Admission "
+         "uncertainty | create a `RecoveryDraft` from reload, journal, or capsule evidence",
+         "Web reload GET-first meaning drifted"),
+        ("takeover delivery unknown | exact transport replay is allowed only with its "
+         "available capsule and current binding; never obtain a fresh challenge until "
+         "positive no-Admission proof",
+         "takeover delivery unknown | call `getApplyAuthorEditOutcome` first with the "
+         "stored key and nonce; do not replay the command",
+         "Web reload GET-first meaning drifted"),
         ("applies only to `ApplyAuthorEdit`", "applies to every command",
          "outcome Query closed meaning drifted"),
     ):
