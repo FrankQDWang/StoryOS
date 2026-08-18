@@ -14,7 +14,7 @@
       "revision": "stage1-ticketed-delivery-2026-08-18-v18",
       "baseline_commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
       "baseline_tree": "b36933e1d9c7d6e7bb19879a728d3a35483937bc",
-      "ticket_set_sha256": "sha256:ebe309947189eb4836a2824feaca01d2c1ab3e0efa15f47b0c7d0096dcb146c7",
+      "ticket_set_sha256": "sha256:13c4832b6cdc324eb9d4f3f5212ba7e822007dbb15187df17b794a0306c1aa2b",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -429,7 +429,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/109",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Reconcile Acknowledgement Loss without Duplicate Authority",
-          "issue_body_sha256": "bbedc3f73c27611cb688fe7e79662cb62b470343218760af5278b1d1866cf669",
+          "issue_body_sha256": "e349093d8c79e93b51fc6b44dfd877b4fdd9cf0f238821b24d97f480e6842e2a",
           "blocked_by": [
             "https://github.com/FrankQDWang/StoryOS/issues/103",
             "https://github.com/FrankQDWang/StoryOS/issues/108",
