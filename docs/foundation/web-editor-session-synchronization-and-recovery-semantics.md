@@ -1032,10 +1032,12 @@ an outcome Query `Committed` or `RejectedNoAdmission` observation, or positive
 no-Admission proof for the original attempt is durable. A crash
 before capsule commit sends nothing. A crash after capsule commit but before
 send leaves an unused replayable capsule. A crash after send but before
-response durability leaves the preceding durable state; section 10's reload
-and recovery behavior is unchanged here. Without a reload, an `ApplyAuthorEdit`
-`DeliveryUnknown` state permits only the protected outcome Query before any
-command replay. Other command classes retain their exact replay rule.
+response durability leaves the preceding durable state. After reload, process
+restart, or continued current-process recovery, an `ApplyAuthorEdit`
+`DeliveryUnknown` state with an available exact capsule and still-valid Client
+Session permits only the protected outcome Query before any command replay.
+Section 10 consumes this same rule; it does not select `ExactTransportReplay`
+for `ApplyAuthorEdit`. Other command classes retain their exact replay rule.
 Missing/corrupt capsule, invalid or expired Client Session binding, or
 unverifiable request equality remains in the applicable inspectable unknown
 state; it never permits a new challenge, changed request, or blind repeat.
@@ -1572,8 +1574,10 @@ result and closure follow section 8.2.
 | intent record committed, before group freeze/Admission | rebuild complete intent; current writer may freeze a new group after all bindings revalidate |
 | group frozen, before capsule transaction commit | no send was permitted; obtain a challenge, commit the capsule, and append the initial attempt |
 | capsule committed, no attempt appended or send started | local atomic order positively proves no delivery/Admission; if the challenge remains valid append/send the initial attempt, otherwise collect the unused capsule and obtain a fresh challenge for the same frozen group |
-| send may have occurred, crash before response observation commits | reopen the exact capsule and append only `ExactTransportReplay` through the original command route |
-| delivery unknown and Client Session binding is invalid/expired or capsule/request equality is unverifiable | remain `TransportOrAdmissionUnknown`; no exact replay, fresh challenge, changed request, or blind repeat |
+| send may have occurred, crash before response observation commits, `ApplyAuthorEdit`, capsule available, Client Session binding still exact | reopen the exact capsule; enter `OutcomeQueryUnresolved { NoOutcomeObserved }` if not already there; call `getApplyAuthorEditOutcome` first with the stored key and nonce; do not replay the command, obtain a new challenge, or send again |
+| send may have occurred, crash before response observation commits, another editor command, exact capsule and Client Session still valid | reopen the exact capsule and append only `ExactTransportReplay` through the original command route |
+| `ApplyAuthorEdit` delivery unknown and Client Session binding is invalid/expired or capsule/request equality is unverifiable | remain `OutcomeQueryUnresolved { NoOutcomeObserved }`; block replay, fresh challenge, and dependent submission |
+| another editor-command delivery unknown and Client Session binding is invalid/expired or capsule/request equality is unverifiable | remain `TransportOrAdmissionUnknown`; no exact replay, fresh challenge, changed request, or blind repeat |
 | exact replay positively proves no Admission | enter `ProvenNoAdmission`; either converge the pre-admission refusal or, only when its exact retry semantics permit, commit a fresh-challenge capsule and append a new physical attempt |
 | unexpected `Accepted` observation recorded for a Release-1 editor command | enter `ProtocolIncompatibleAccepted`; retain its exact operation/query evidence and payload, pause the queue, and require protocol resync/compatible deployment without inferring Admission or query convergence |
 | `outcome_unknown` Problem recorded | `KnownSettlementQuery` from the exact Problem; no Receipt-presence claim and no blind invocation |
@@ -1581,7 +1585,7 @@ result and closure follow section 8.2.
 | applied Core result committed before HTTP or Activity observation | exact Receipt, applied effect, Activity relation, and Heads survive; replay them and converge without another invocation |
 | zero-authority Core result committed before HTTP observation | exact Receipt and zero-authority effect survive with no Activity relation; replay them into `ZeroAuthorityReceiptVisible` without another invocation or any checkpoint/projection/base advance |
 | Activity-backed Receipt observed before matching Activity | retain payload and replay/query from the required Activity position |
-| Activity observed before its Activity-backed HTTP result | retain/deduplicate Event; use an actually supplied `outcome_unknown` query, otherwise wait for HTTP or use the available exact replay capsule; Event arrival alone does not settle the local group |
+| Activity observed before its Activity-backed HTTP result | retain/deduplicate Event; for missing `ApplyAuthorEdit` acknowledgement use the protected outcome Query; otherwise use an actually supplied `outcome_unknown` query, wait for HTTP, or use the available exact replay capsule; Event arrival alone does not settle the local group |
 | pre-admission refusal or `RequiresReconfirmation` observed | converge through the applicable no-Receipt branch without requiring Activity/Heads; retain author attention and payload |
 | applied convergence or zero-authority result visibility proven before payload collection | group becomes GC-eligible only if section 11's exact successor proof also holds |
 | payload collected before reload | reconstruct from the recorded durable successor and retained collection fence; never from missing bytes |
@@ -1734,8 +1738,8 @@ Browser integration and the deterministic oracle cover:
 - initial, outcome-Query, exact-replay, and proven-no-Admission fresh-challenge
   physical attempts; the at-most-one fresh-challenge bound; invalid/expired
   Client Session fail-closed behavior; the `ApplyAuthorEdit` GET-first path from
-  delivery unknown to committed, rejected, or inspectable unknown; and no
-  second command invocation;
+  delivery unknown to committed, rejected, or inspectable unknown, including
+  after reload or process restart; and no second command invocation;
 - chapter switching with pending records/groups, one current-writer queue, and
   the separately fenced takeover coordination lane;
 - secondary read-only sessions; exact `TakeoverApplied`,
@@ -1843,7 +1847,8 @@ advisory until their numerical values are accepted by the appropriate owner.
     alone is not a successor, and unknown, unsettled, or only-complete-copy
     payloads remain retained.
 16. `ApplyAuthorEdit` delivery uncertainty permits only the protected outcome
-    Query before any command replay. Other editor commands retain exact
+    Query before any command replay, including after reload, crash, or process
+    restart. Other editor commands retain exact
     transport replay through their original command route. A missing capsule or
     invalid/expired Client Session remains in the applicable inspectable unknown
     state; it never creates a second Admission or blindly re-invokes an admitted
