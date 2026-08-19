@@ -6,6 +6,7 @@
 # Local machine and environment files
 .DS_Store
 .env
+__pycache__/
 
 # Per-conversation Cursor stop-gate files
 .cursor/hooks/state/

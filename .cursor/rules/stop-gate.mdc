@@ -5,7 +5,12 @@ alwaysApply: true
 
 # 停止门
 
-结束当前轮之前，先写入 `.cursor/hooks/state/pending.json`。只有这三种 `allow_stop` 可以通过 Cursor `stop` hook：
+结束当前轮之前，先写入停止门文件。会话开始时系统会告知你的 conversation id：
+
+- 优先写 `.cursor/hooks/state/<conversation_id>.json`
+- 没有 conversation id 时才写 `.cursor/hooks/state/pending.json`，并在 JSON 中带上 `"conversation_id"` 字段（如果你知道它）。属于其他会话的门文件不会被接受
+
+只有这三种 `allow_stop` 可以通过 Cursor `stop` hook：
 
 - `awaiting_authorization`：下一步必须得到用户明确同意
 - `awaiting_judgment`：下一步必须由用户在选项中选择
@@ -16,4 +21,9 @@ alwaysApply: true
 - 授权：要授权的具体事项；不授权时怎么做；为什么现在必须等
 - 判断：背景；选项；推荐项；推荐理由
 
-其余情况：用 Ask Matt 路由并继续工作。不要把「我认为做完了」当成停止条件。用户点击停止时不要拦截。
+两条边界规则：
+
+- 没有已认领的 GitHub Issue 执行契约时，不要自行开工。列出候选工作（含推荐项），按判断提问后停下
+- 任务完成且验证通过时，按判断收尾：汇报结果，列出下一步候选与推荐项
+
+其余情况：用 Ask Matt 路由并在已认领契约内继续工作。不要把「我认为做完了」当成停止条件。用户点击停止时不要拦截。
