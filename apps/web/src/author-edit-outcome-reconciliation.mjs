@@ -1,6 +1,11 @@
 import { getApplyAuthorEditOutcome }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { readAvailableCommandProof } from "./protected-transport-capsule.mjs";
+import {
+  beginOutcomeQueryAttempt,
+  completeOutcomeQueryObserved,
+  completeOutcomeQueryUnavailable,
+  readAvailableCommandProof,
+} from "./protected-transport-capsule.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -164,23 +169,41 @@ export async function reconcileLostAcknowledgement({
 }) {
   const proof = await readAvailableCommandProof(workspace, group);
   if (!proof) return group;
+  const attempt = await beginOutcomeQueryAttempt(workspace, group, proof.capsule);
   let payload;
+  let captured = "";
   try {
     payload = await getApplyAuthorEditOutcome({
       baseUrl,
       projectId: workspace.partition.project_scope.project_id,
       idempotencyKey: group.idempotency_key,
       antiForgery: proof.nonce,
-      fetchImpl,
+      fetchImpl: async (url, options) => {
+        const response = await fetchImpl(url, options);
+        captured = await response.clone().text();
+        return response;
+      },
     });
   } catch {
     payload = null;
   }
   const closed = payload ? closedOutcome(payload) : null;
-  if (!closed) return group;
-  if (JSON.stringify(payload.project_scope) !== JSON.stringify(group.project_scope)) {
+  if (!closed) {
+    await completeOutcomeQueryUnavailable(
+      workspace, group, attempt, payload ? "invalid_envelope" : "delivery_unknown",
+    );
+    return group;
+  }
+  if (JSON.stringify(payload.project_scope) !== JSON.stringify(group.project_scope)
+    || (closed.kind === "still_unknown"
+      && closed.strongest.kind === "challenge_issued"
+      && closed.strongest.expires_at !== proof.expiresAt)) {
+    await completeOutcomeQueryUnavailable(workspace, group, attempt, "invalid_envelope");
     throw new Error("Author Edit acknowledgement does not converge");
   }
+  await completeOutcomeQueryObserved(workspace, group, attempt, proof.capsule, {
+    payload, captured, closed,
+  });
   if (closed.kind === "committed") {
     return settleFromCommandResponse({
       workspace, group, response: closed.response, baseUrl, fetchImpl, cryptoImpl,
@@ -196,10 +219,6 @@ export async function reconcileLostAcknowledgement({
         reason: "challenge_expired_unconsumed",
       },
     });
-  }
-  if (closed.strongest.kind === "challenge_issued"
-    && closed.strongest.expires_at !== proof.expiresAt) {
-    throw new Error("Author Edit acknowledgement does not converge");
   }
   return commitStrongerGroup(workspace, {
     ...group,
