@@ -19,6 +19,7 @@ mod author_edit_replay;
 mod author_edit_settlement;
 mod editor_session;
 mod snapshot;
+mod takeover;
 
 use storyos_application::{
     Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,

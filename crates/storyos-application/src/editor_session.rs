@@ -43,9 +43,21 @@ pub struct EditorSessionLookup {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EditorReadOnlyReason {
+    SecondarySession,
+    SupersededByTakeover,
+    BindingInvalid,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EditorWriterState {
-    CurrentWriter { writer_generation: u64 },
-    ReadOnly { observed_writer_generation: u64 },
+    CurrentWriter {
+        writer_generation: u64,
+    },
+    ReadOnly {
+        observed_writer_generation: u64,
+        reason: EditorReadOnlyReason,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

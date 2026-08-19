@@ -212,9 +212,20 @@ fn create_response(
         }
         EditorWriterState::ReadOnly {
             observed_writer_generation,
+            reason,
         } => contracts::EditorWriterProjection::ReadOnly {
             observed_writer_generation: observed_writer_generation.to_string(),
-            reason: contracts::EditorReadOnlyReason::SecondarySession,
+            reason: match reason {
+                storyos_application::EditorReadOnlyReason::SecondarySession => {
+                    contracts::EditorReadOnlyReason::SecondarySession
+                }
+                storyos_application::EditorReadOnlyReason::SupersededByTakeover => {
+                    contracts::EditorReadOnlyReason::SupersededByTakeover
+                }
+                storyos_application::EditorReadOnlyReason::BindingInvalid => {
+                    contracts::EditorReadOnlyReason::BindingInvalid
+                }
+            },
         },
     };
     let chapter_id = session.base_snapshot.chapter_id.clone();
