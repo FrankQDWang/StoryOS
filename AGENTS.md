@@ -89,10 +89,14 @@ use_field_init_shorthand = true
 
 ### Tests and change review
 
+- Add a test only for a realistic observable regression, a non-trivial invariant or boundary, or a concrete bug. A code change or a coverage increase is not enough reason to add a test.
+- Prefer existing coverage at the public behavior boundary.
 - Changes to Agent Loop behavior, tool execution, authorization, recovery, or other user-visible Agent semantics require integration tests at the public boundary.
 - When writing tests, prefer comparing the equality of entire objects over fields one by one.
+- Do not add tests that copy literals, mappings, obvious control flow, or implementation details.
 - Do not add tests for values that are statically defined.
-- Do not add negative tests for logic that was removed.
+- Do not add tests for a removed feature unless the absence is itself a contract.
+- For concurrent work, use deterministic coordination or controlled scheduling. Do not use sleeps when a deterministic wait is available.
 - When adding a new test module, define its contents in a separate sibling file rather than inline in the implementation file.
 - Use an explicit `#[path = "..._tests.rs"]` attribute so the test filename is descriptive and easy to locate:
 
@@ -106,6 +110,8 @@ use_field_init_shorthand = true
 - Avoid test-only functions in the main implementation.
 - Check whether there are existing helpers to make tests more streamlined and readable.
 - Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
+- Write comments that explain non-obvious rationale, invariants, safety constraints, or external quirks. Do not restate the code.
+- Document a public API by its observable contract. Do not document incidental implementation details.
 - Treat changes to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as contract changes and review their breaking and migration impact explicitly.
 - Unless the change is mechanical the total number of changed lines should not exceed 800 lines.
 - For complex logic changes the size should be under 500 lines.
