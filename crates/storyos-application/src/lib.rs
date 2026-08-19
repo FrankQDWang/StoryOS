@@ -29,6 +29,7 @@ mod author_edit;
 mod author_edit_outcome;
 mod editor_session;
 mod snapshot;
+mod takeover;
 
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
@@ -52,9 +53,14 @@ pub use author_edit_outcome::{
 };
 
 pub use editor_session::{
-    EditorClientBinding, EditorSession, EditorSessionError, EditorSessionId, EditorSessionLookup,
-    EditorSessionSnapshot, EditorSessionStore, EditorWriterState, OpenEditorSession,
-    create_editor_session, get_editor_session,
+    EditorClientBinding, EditorReadOnlyReason, EditorSession, EditorSessionError, EditorSessionId,
+    EditorSessionLookup, EditorSessionSnapshot, EditorSessionStore, EditorWriterState,
+    OpenEditorSession, create_editor_session, get_editor_session,
+};
+
+pub use takeover::{
+    TakeOverProjectWriterCommand, TakeOverProjectWriterEffect, TakeOverProjectWriterError,
+    TakeOverProjectWriterSettlement, TakeOverProjectWriterStore, take_over_project_writer,
 };
 
 pub use snapshot::{

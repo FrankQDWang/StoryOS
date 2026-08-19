@@ -164,14 +164,28 @@ async fn read_session(
         "SELECT session.client_session_binding_ref, session.client_session_generation::text,
                 session.client_contract_revision, session.security_policy_revision,
                 to_char(session.opened_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                writer.writer_generation::text, writer.current_editor_session_id::text,
+                current_writer.writer_generation::text, current_writer.current_editor_session_id::text,
+                EXISTS (
+                  SELECT 1 FROM storyos.project_writer_generations AS prior
+                   WHERE prior.owner_user_id = session.owner_user_id
+                     AND prior.project_id = session.project_id
+                     AND prior.current_editor_session_id = session.editor_session_id
+                     AND prior.writer_generation < current_writer.writer_generation
+                ),
                 snapshot.snapshot_id::text, snapshot.chapter_object_id::text,
                 snapshot.authoritative_revision_id::text,
                 snapshot.project_activity_position::text,
                 convert_from(payload.canonical_bytes, 'UTF8'),
                 to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
          FROM storyos.editor_sessions AS session
-         JOIN storyos.project_writer_generations AS writer USING (owner_user_id, project_id)
+         JOIN LATERAL (
+           SELECT writer.writer_generation, writer.current_editor_session_id
+             FROM storyos.project_writer_generations AS writer
+            WHERE writer.owner_user_id = session.owner_user_id
+              AND writer.project_id = session.project_id
+            ORDER BY writer.writer_generation DESC
+            LIMIT 1
+         ) AS current_writer ON true
          JOIN storyos.editor_session_base_snapshots AS snapshot USING
            (owner_user_id, project_id, editor_session_id)
          JOIN storyos.authoritative_revisions AS revision
@@ -195,10 +209,10 @@ async fn read_session(
             .parse::<u64>()
             .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
         let project_activity_position = row
-            .get::<_, String>(10)
+            .get::<_, String>(11)
             .parse::<u64>()
             .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-        let body = row.get::<_, String>(11);
+        let body = row.get::<_, String>(12);
         Ok(EditorSession {
             editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
             client_binding: binding.clone(),
@@ -208,12 +222,17 @@ async fn read_session(
             } else {
                 EditorWriterState::ReadOnly {
                     observed_writer_generation: writer_generation,
+                    reason: if row.get::<_, bool>(7) {
+                        storyos_application::EditorReadOnlyReason::SupersededByTakeover
+                    } else {
+                        storyos_application::EditorReadOnlyReason::SecondarySession
+                    },
                 }
             },
             base_snapshot: EditorSessionSnapshot {
-                snapshot_id: row.get(7),
-                chapter_id: row.get(8),
-                authoritative_revision_id: row.get(9),
+                snapshot_id: row.get(8),
+                chapter_id: row.get(9),
+                authoritative_revision_id: row.get(10),
                 project_activity_position,
                 payload_digest_hex: Sha256::digest(body.as_bytes()).iter().fold(
                     String::with_capacity(64),
@@ -224,7 +243,7 @@ async fn read_session(
                     },
                 ),
                 body,
-                created_at: row.get(12),
+                created_at: row.get(13),
             },
         })
     })

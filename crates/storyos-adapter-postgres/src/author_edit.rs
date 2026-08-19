@@ -232,6 +232,12 @@ impl PostgresProjectReader {
                              writer.current_editor_session_id, writer.writer_generation) =
                             (session.owner_user_id, session.project_id,
                              session.editor_session_id, $6::text::numeric)
+                        AND writer.writer_generation = (
+                          SELECT max(current_writer.writer_generation)
+                            FROM storyos.project_writer_generations AS current_writer
+                           WHERE current_writer.owner_user_id = session.owner_user_id
+                             AND current_writer.project_id = session.project_id
+                        )
                        JOIN storyos.authoritative_revisions AS expected_revision
                          ON (expected_revision.owner_user_id, expected_revision.project_id,
                              expected_revision.manuscript_object_id,
@@ -300,7 +306,13 @@ impl PostgresProjectReader {
                             WHERE writer.owner_user_id = $1::text::uuid
                               AND writer.project_id = $2::text::uuid
                               AND writer.current_editor_session_id = $3::text::uuid
-                              AND writer.writer_generation = $4::text::numeric)",
+                              AND writer.writer_generation = $4::text::numeric
+                              AND writer.writer_generation = (
+                                SELECT max(current_writer.writer_generation)
+                                  FROM storyos.project_writer_generations AS current_writer
+                                 WHERE current_writer.owner_user_id = $1::text::uuid
+                                   AND current_writer.project_id = $2::text::uuid
+                              ))",
                             &[
                                 &command.project_scope.owner_user_id.as_ref(),
                                 &command.project_scope.project_id.as_ref(),
