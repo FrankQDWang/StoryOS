@@ -22,6 +22,13 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 - Fetch a ticket by reading its current body, labels, assignees, native dependencies, exact `main` baseline, and tracked contracts named by the body.
 - The current body plus its exact tracked-contract baseline is the execution contract. A resolution comment records evidence only: exact commit, pull request, verification, and closure.
 
+## Ticket sizing and ordering overrides
+
+These repository rules override the general skill text when a skill reads this file:
+
+- Size each ticket so its expected diff stays inside the review limits in `AGENTS.md`: at most 800 changed lines, or at most 500 for complex logic changes. Split a larger ticket before you publish it.
+- The frontier is a serial chain. Work exactly one issue at a time, in dependency order. Closed blockers do not give permission to take tickets in parallel.
+
 ## Current map operations
 
 - **Current map:** [Map the StoryOS Editor-First Product and Production Delivery Contract](https://github.com/FrankQDWang/StoryOS/issues/1) is the repository's permanent design-map entry point and the sole issue labelled `wayfinder:map`.

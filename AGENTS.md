@@ -7,7 +7,7 @@
 - Layering of authority: code and checked-in generated contracts state the current implementation reality; ADRs under `docs/adr/` and the current Wayfinder map record the product and architecture contract; this `AGENTS.md` states repository operating rules and coding style. When they diverge, code is the fact of what exists today, but a divergence from an ADR is either a defect to fix or an ADR-recorded exception — never a silent override.
 - One task has one execution owner. Subagents may investigate or review, but they do not independently mutate the same deliverable or authoritative state.
 - Preserve unrelated user changes. Do not rewrite, discard, or clean them up as part of another task.
-- Always talk in ASD-STE100 Simplified Technical English. Always read `CONTEXT.md` files, and use their ubiquitous language.
+- Write all repository artifacts in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Talk to the user in Simplified Chinese. Always read `CONTEXT.md` files, and use their ubiquitous language.
 
 ## GitHub Issue and stacked-PR execution
 
