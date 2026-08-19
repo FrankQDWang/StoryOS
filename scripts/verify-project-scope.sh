@@ -78,3 +78,5 @@ echo "Building the StoryOS Server"
 cargo build --quiet -p storyos-server
 echo "Running HTTP Project Scope tests"
 node --test apps/web/test/project-http.integration.test.mjs
+echo "Running HTTP ApplyAuthorEdit process-cut tests"
+node --test apps/web/test/apply-author-edit-process-cut.integration.test.mjs
