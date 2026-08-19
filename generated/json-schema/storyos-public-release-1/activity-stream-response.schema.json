@@ -1,0 +1,21 @@
+{
+  "$id": "storyos.stream.activity-stream.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "data_schema": {
+      "const": "storyos.project-activity.v1",
+      "type": "string"
+    },
+    "event": {
+      "const": "storyos.project-activity",
+      "type": "string"
+    }
+  },
+  "required": [
+    "event",
+    "data_schema"
+  ],
+  "title": "StoryOS Activity Stream SSE Frame",
+  "type": "object"
+}

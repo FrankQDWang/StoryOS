@@ -947,10 +947,10 @@ atomic bootstrap. The empty migration-chain identity and digest are still
 checked against the public same-release identity; a matching semantic version
 alone never activates storage.
 
-The active bootstrap source set is exactly the five catalogued SQL files under
+The active bootstrap source set is exactly the six catalogued SQL files under
 `crates/storyos-adapter-postgres/migrations/`. It contains the roles, controlled
-Project schema, challenge/idempotency schema, Editor Session schema, and Author
-Edit schema. The files contain no inner transaction boundary. The runner
+Project schema, challenge/idempotency schema, Editor Session schema, Author
+Edit schema, and Snapshot/replay schema. The files contain no inner transaction boundary. The runner
 executes the ordered set in one PostgreSQL transaction. The catalog stores each
 LF-normalized source SHA-256 and the canonical manifest SHA-256. An unlisted
 SQL file, a missing file, source drift, manifest drift, or partial transaction

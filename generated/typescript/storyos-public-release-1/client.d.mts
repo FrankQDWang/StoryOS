@@ -73,6 +73,18 @@ export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: Ap
 
 export type GetApplyAuthorEditOutcomeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, outcome: ApplyAuthorEditOutcome, };
 
+export type SnapshotKind = "canonical";
+
+export type CanonicalSnapshotMaps = Record<symbol, never>;
+
+export type SnapshotDescriptor = { snapshot_id: string, project_scope: ProjectScope, snapshot_kind: SnapshotKind, project_activity_position: string, source_watermarks: CanonicalSnapshotMaps, projection_generations: CanonicalSnapshotMaps, redaction_profile: string, schema_profile: string, replay_generation: string, created_at: string, expires_at: string | null, };
+
+export type GetSnapshotRequest = { project_id: string, snapshot_id: string, };
+
+export type GetSnapshotResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, snapshot: SnapshotDescriptor, };
+
+export type ActivityStreamRequest = { project_id: string, snapshot_id: string, protocol_release: string, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -95,3 +107,5 @@ export declare function getEditorSession(options: StoryOSQueryOptions & { projec
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;
+export declare function getSnapshot(options: StoryOSQueryOptions & { projectId: string; snapshotId: string }): Promise<GetSnapshotResponse>;
+export declare function activityStream(options: StoryOSQueryOptions & { projectId: string; snapshotId: string; protocolRelease: string; lastEventId?: string }): Promise<string>;

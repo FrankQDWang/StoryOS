@@ -28,6 +28,7 @@ mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
 mod editor_session;
+mod snapshot;
 
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
@@ -54,6 +55,11 @@ pub use editor_session::{
     EditorClientBinding, EditorSession, EditorSessionError, EditorSessionId, EditorSessionLookup,
     EditorSessionSnapshot, EditorSessionStore, EditorWriterState, OpenEditorSession,
     create_editor_session, get_editor_session,
+};
+
+pub use snapshot::{
+    CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore, activity_stream_resume,
+    get_snapshot,
 };
 
 pub const PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION: &str =

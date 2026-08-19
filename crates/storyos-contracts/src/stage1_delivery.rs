@@ -11,7 +11,7 @@ pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-20
 pub(super) const DELIVERY_BASELINE_COMMIT: &str = "bab4c0ac5ca3da20b01ea1d61783aaba414f493f";
 pub(super) const DELIVERY_BASELINE_TREE: &str = "b36933e1d9c7d6e7bb19879a728d3a35483937bc";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:789a8446dd3a7e9a7172501b904909095d5c09a9287cb969e23d2fefd4de840b";
+    "sha256:0536e9e8f54f647e81129b91ed30cbbdb4d6b9b28168c60dceb453079cd3f20d";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -403,7 +403,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-09",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/111",
         title: "Fence Stale Writers and Resync across Replay Generations",
-        issue_body_sha256: "78ac6a7fbec0886fc4c993140b1b3dd4c9da13db3b15fb36706a4f4021c7839f",
+        issue_body_sha256: "ced19e60eabf5df5ffaefeb920861e5cc17a138278bbbd98ee51e6549d447d4c",
         blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/110"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "fence stale writers and resync replay generations",

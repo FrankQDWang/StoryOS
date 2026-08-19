@@ -1007,6 +1007,7 @@ dependencies = [
  "axum",
  "hmac",
  "mime",
+ "serde",
  "serde_json",
  "sha2",
  "storyos-adapter-postgres",

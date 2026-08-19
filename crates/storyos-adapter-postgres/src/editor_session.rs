@@ -61,6 +61,14 @@ impl EditorSessionStore for PostgresProjectReader {
                     &[&request.project_scope.owner_user_id.as_ref(), &request.project_scope.project_id.as_ref(),
                       &request.snapshot_id, &request.editor_session_id.as_ref()],
                 ).await.map_err(session_database_error)?;
+                crate::snapshot::persist_canonical_snapshot(
+                    &transaction.client,
+                    &request.project_scope,
+                    &request.snapshot_id,
+                    /*project_activity_position*/ 0,
+                )
+                .await
+                .map_err(session_database_error)?;
                 transaction
                     .client
                     .execute(

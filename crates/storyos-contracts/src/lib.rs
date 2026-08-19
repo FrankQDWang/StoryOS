@@ -8,6 +8,8 @@ mod release1_author_edit;
 mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
+mod release1_snapshot;
+mod release1_snapshot_artifacts;
 mod stage1_crosswalk;
 mod stage1_delivery;
 mod stage1_selection;
@@ -25,8 +27,8 @@ pub use release1::{
     EditorWriterProjection, GET_CHAPTER_METHOD, GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD,
     GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD,
     GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetEditorSessionResponse, GetProjectResponse,
-    LIMIT_PROFILE_REVISION, ProjectScope, Release1CompatibilityIdentity, Release1ProtocolProfile,
-    StoryOSProblem, project_command_kind,
+    LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE, ProjectScope, Release1CompatibilityIdentity,
+    Release1ProtocolProfile, StoryOSProblem, project_command_kind,
 };
 pub use release1_artifacts::{
     check_release1_artifacts, release1_protocol_profile, write_release1_artifacts,
@@ -43,6 +45,12 @@ pub use release1_author_edit_outcome::{
     GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
     GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
+};
+pub use release1_snapshot::{
+    ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,
+    GET_SNAPSHOT_METHOD, GET_SNAPSHOT_PATH, GET_SNAPSHOT_REQUEST_SCHEMA_ID,
+    GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotRequest, GetSnapshotResponse, SnapshotDescriptor,
+    SnapshotKind,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,

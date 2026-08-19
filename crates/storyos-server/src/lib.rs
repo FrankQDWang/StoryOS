@@ -22,6 +22,7 @@ mod author_edit_outcome;
 mod editor_session;
 mod project_command_challenge;
 mod request_origin;
+mod snapshot;
 
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
@@ -30,6 +31,7 @@ use author_edit_outcome::{
 use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
+use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 
 /// The reviewed browser security policy accepted by this Server release.
 pub const RELEASE_1_SECURITY_POLICY_REVISION: &str = "storyos.web-security-policy.release-1.v1";
@@ -140,6 +142,8 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let apply_author_edit_method = method_filter(contracts::APPLY_AUTHOR_EDIT_METHOD);
     let get_author_edit_outcome_method =
         method_filter(contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD);
+    let get_snapshot_method = method_filter(contracts::GET_SNAPSHOT_METHOD);
+    let activity_stream_method = method_filter(contracts::ACTIVITY_STREAM_METHOD);
     Router::new()
         .route(
             contracts::GET_PROTOCOL_PROFILE_PATH,
@@ -176,6 +180,15 @@ pub fn router_with_config(config: ServerConfig) -> Router {
                 get_apply_author_edit_outcome,
             )
             .fallback(apply_author_edit_outcome_method_not_allowed),
+        )
+        .route(
+            contracts::GET_SNAPSHOT_PATH,
+            routing::on(get_snapshot_method, get_snapshot).fallback(snapshot_method_not_allowed),
+        )
+        .route(
+            contracts::ACTIVITY_STREAM_PATH,
+            routing::on(activity_stream_method, activity_stream)
+                .fallback(snapshot_method_not_allowed),
         )
         .with_state(Arc::new(ServerState::new(config)))
 }
