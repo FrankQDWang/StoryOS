@@ -112,7 +112,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/activity-stream-response.schema.json",
       "schema_id": "storyos.stream.activity-stream.response.v1",
-      "sha256": "sha256:1719672a6c642151518116deccb7d70d7e624394a4e8737932513eddf148b8b8"
+      "sha256": "sha256:4aa32056b73d1768db12b86b5136cfc338e5e8a1f94fd7c39155a2936a1480a6"
     }
   ]
 }

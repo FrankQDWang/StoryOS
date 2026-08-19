@@ -2,7 +2,7 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
-use crate::release1::PUBLIC_PROTOCOL_RELEASE;
+use crate::release1::{ACTIVITY_PROFILE, PUBLIC_PROTOCOL_RELEASE};
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_snapshot::{
     ACTIVITY_STREAM, ACTIVITY_STREAM_REQUEST_SCHEMA_ID, ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
@@ -67,18 +67,145 @@ pub(super) fn activity_stream_request_schema_bytes() -> Vec<u8> {
 }
 
 pub(super) fn activity_stream_response_schema_bytes() -> Vec<u8> {
+    let identity_ref = json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+            "kind": { "type": "string", "minLength": 1 },
+            "id": { "type": "string", "minLength": 1 }
+        }
+    });
+    let nullable_uuid = json!({ "type": ["string", "null"], "format": "uuid" });
+    let sequence = author_edit_artifacts::canonical_u64_wire_schema();
     json_bytes(&json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "$id": ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
         "title": "StoryOS Activity Stream SSE Frame",
         "type": "object",
         "additionalProperties": false,
-        "required": ["event", "data_schema"],
+        "required": ["id", "event", "data"],
         "properties": {
+            "id": { "type": "string", "minLength": 1 },
             "event": { "type": "string", "const": "storyos.project-activity" },
-            "data_schema": { "type": "string", "const": "storyos.project-activity.v1" }
+            "data": { "$ref": "#/$defs/ProjectActivityEvent" }
+        },
+        "$defs": {
+            "IdentityRef": identity_ref,
+            "ReceiptRef": {
+                "oneOf": [
+                    identity_ref_variant("domain_receipt"),
+                    identity_ref_variant("validation_receipt"),
+                    identity_ref_variant("acceptance_receipt"),
+                    identity_ref_variant("undo_acceptance_receipt"),
+                    identity_ref_variant("author_undo_receipt")
+                ]
+            },
+            "ProjectScope": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["owner_user_id", "project_id"],
+                "properties": {
+                    "owner_user_id": { "type": "string", "format": "uuid" },
+                    "project_id": { "type": "string", "format": "uuid" }
+                }
+            },
+            "DigestValue": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["algorithm", "profile", "value_hex_lowercase"],
+                "properties": {
+                    "algorithm": { "type": "string", "const": "sha256" },
+                    "profile": { "type": "string", "minLength": 1 },
+                    "value_hex_lowercase": { "type": "string", "minLength": 64, "maxLength": 64 }
+                }
+            },
+            "ProjectActivityEvent": project_activity_event_schema(sequence, nullable_uuid)
         }
     }))
+}
+
+fn project_activity_event_schema(sequence: Value, nullable_uuid: Value) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+            "envelope_version",
+            "activity_profile",
+            "event_id",
+            "event_schema",
+            "event_kind",
+            "project_scope",
+            "requester_user_id",
+            "actor",
+            "project_sequence",
+            "stream_sequence",
+            "agent_run_id",
+            "run_step_id",
+            "run_sequence",
+            "aggregate_ref",
+            "correlation_id",
+            "causation",
+            "command_id",
+            "receipt_ref",
+            "occurred_at",
+            "recorded_at",
+            "payload",
+            "payload_digest",
+            "application_wire_record_ref",
+            "limit_profile_revision"
+        ],
+        "properties": {
+            "envelope_version": { "type": "integer", "const": 1 },
+            "activity_profile": { "type": "string", "const": ACTIVITY_PROFILE },
+            "event_id": { "type": "string", "format": "uuid" },
+            "event_schema": { "type": "string", "minLength": 1 },
+            "event_kind": { "type": "string", "minLength": 1 },
+            "project_scope": { "$ref": "#/$defs/ProjectScope" },
+            "requester_user_id": { "type": "string", "format": "uuid" },
+            "actor": { "$ref": "#/$defs/IdentityRef" },
+            "project_sequence": sequence.clone(),
+            "stream_sequence": sequence.clone(),
+            "agent_run_id": nullable_uuid.clone(),
+            "run_step_id": nullable_uuid.clone(),
+            "run_sequence": {
+                "anyOf": [sequence, { "type": "null" }]
+            },
+            "aggregate_ref": {
+                "anyOf": [
+                    { "$ref": "#/$defs/IdentityRef" },
+                    { "type": "null" }
+                ]
+            },
+            "correlation_id": { "type": "string", "format": "uuid" },
+            "causation": { "$ref": "#/$defs/IdentityRef" },
+            "command_id": nullable_uuid,
+            "receipt_ref": {
+                "anyOf": [
+                    { "$ref": "#/$defs/ReceiptRef" },
+                    { "type": "null" }
+                ]
+            },
+            "occurred_at": { "type": "string", "format": "date-time" },
+            "recorded_at": { "type": "string", "format": "date-time" },
+            "payload": { "type": "object" },
+            "payload_digest": { "$ref": "#/$defs/DigestValue" },
+            "application_wire_record_ref": { "type": "string", "minLength": 1 },
+            "limit_profile_revision": { "type": "string", "minLength": 1 }
+        }
+    })
+}
+
+fn identity_ref_variant(kind: &str) -> Value {
+    json!({
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "id"],
+        "properties": {
+            "kind": { "type": "string", "const": kind },
+            "id": { "type": "string", "minLength": 1 }
+        }
+    })
 }
 
 pub(super) fn typescript_type_declarations() -> String {
@@ -139,7 +266,11 @@ pub(super) fn activity_stream_openapi() -> String {
         .responses
         .iter()
         .map(|(status, description)| {
-            format!("        '{status}':\n          description: {description}\n")
+            format!("        '{status}':\n          description: {description}\n{}", if *status == 200 {
+                "          content:\n            text/event-stream:\n              schema:\n                $ref: '../json-schema/storyos-public-release-1/activity-stream-response.schema.json'\n".to_string()
+            } else {
+                String::new()
+            })
         })
         .collect::<String>();
     format!(
@@ -173,14 +304,13 @@ pub(super) fn activity_stream_fixture_bytes() -> Vec<u8> {
 
 pub(super) fn activity_stream_invalid_fixture_bytes() -> Vec<u8> {
     json_bytes(&json!({
-        "schema_id": ACTIVITY_STREAM_REQUEST_SCHEMA_ID,
-        "project_id": "018f0000-0000-7001-8000-000000000002"
+        "event": "storyos.project-activity"
     }))
 }
 
 pub(super) fn activity_stream_boundary_fixture_bytes() -> Vec<u8> {
     let mut boundary = activity_fixture();
-    boundary["protocol_release"] = json!("storyos.public.release.0");
+    boundary["event"] = json!("message");
     json_bytes(&boundary)
 }
 
@@ -213,10 +343,56 @@ fn snapshot_fixture() -> Value {
 
 fn activity_fixture() -> Value {
     json!({
-        "schema_id": ACTIVITY_STREAM_REQUEST_SCHEMA_ID,
-        "project_id": "018f0000-0000-7001-8000-000000000002",
-        "snapshot_id": "018f0000-0000-7001-8000-000000000032",
-        "protocol_release": PUBLIC_PROTOCOL_RELEASE
+        "id": "eyJwcm9maWxlIjoic3Rvcnlvcy1zY29wZWQtY3Vyc29yIn0",
+        "event": "storyos.project-activity",
+        "data": {
+            "envelope_version": 1,
+            "activity_profile": ACTIVITY_PROFILE,
+            "event_id": "018f0000-0000-7001-8000-000000000041",
+            "event_schema": "storyos.event.proposal-conflict-detected.v1",
+            "event_kind": "proposal_conflict_detected",
+            "project_scope": {
+                "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+                "project_id": "018f0000-0000-7001-8000-000000000002"
+            },
+            "requester_user_id": "018f0000-0000-7001-8000-000000000001",
+            "actor": {
+                "kind": "author",
+                "id": "018f0000-0000-7001-8000-000000000001"
+            },
+            "project_sequence": "44",
+            "stream_sequence": "44",
+            "agent_run_id": null,
+            "run_step_id": null,
+            "run_sequence": null,
+            "aggregate_ref": {
+                "kind": "proposal",
+                "id": "018f0000-0000-7001-8000-000000000042"
+            },
+            "correlation_id": "018f0000-0000-7001-8000-000000000043",
+            "causation": {
+                "kind": "command",
+                "id": "018f0000-0000-7001-8000-000000000011"
+            },
+            "command_id": "018f0000-0000-7001-8000-000000000011",
+            "receipt_ref": {
+                "kind": "domain_receipt",
+                "id": "018f0000-0000-7001-8000-000000000044"
+            },
+            "occurred_at": "2026-07-21T10:17:00.000Z",
+            "recorded_at": "2026-07-21T10:17:00.005Z",
+            "payload": {
+                "proposal_id": "018f0000-0000-7001-8000-000000000042",
+                "observed_head_revision_id": "018f0000-0000-7001-8000-000000000045"
+            },
+            "payload_digest": {
+                "algorithm": "sha256",
+                "profile": "storyos.event-payload.jcs.v1",
+                "value_hex_lowercase": "073c643d461f8ce5d6a865fded918411ba1888f20cfd9a6a6418b1480cd9c62b"
+            },
+            "application_wire_record_ref": "018f0000-0000-7001-8000-000000000046",
+            "limit_profile_revision": "storyos.foundation.absolute.v1"
+        }
     })
 }
 

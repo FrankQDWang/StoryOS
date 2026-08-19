@@ -1,20 +1,331 @@
 {
+  "$defs": {
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "sha256",
+          "type": "string"
+        },
+        "profile": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "IdentityRef": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "type": "object"
+    },
+    "ProjectActivityEvent": {
+      "additionalProperties": false,
+      "properties": {
+        "activity_profile": {
+          "const": "storyos.project-activity.v1",
+          "type": "string"
+        },
+        "actor": {
+          "$ref": "#/$defs/IdentityRef"
+        },
+        "agent_run_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "aggregate_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "application_wire_record_ref": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "causation": {
+          "$ref": "#/$defs/IdentityRef"
+        },
+        "command_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "envelope_version": {
+          "const": 1,
+          "type": "integer"
+        },
+        "event_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "event_kind": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_schema": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "limit_profile_revision": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "occurred_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "payload_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "project_sequence": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "receipt_ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReceiptRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "recorded_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "requester_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "run_sequence": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "run_step_id": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "stream_sequence": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "envelope_version",
+        "activity_profile",
+        "event_id",
+        "event_schema",
+        "event_kind",
+        "project_scope",
+        "requester_user_id",
+        "actor",
+        "project_sequence",
+        "stream_sequence",
+        "agent_run_id",
+        "run_step_id",
+        "run_sequence",
+        "aggregate_ref",
+        "correlation_id",
+        "causation",
+        "command_id",
+        "receipt_ref",
+        "occurred_at",
+        "recorded_at",
+        "payload",
+        "payload_digest",
+        "application_wire_record_ref",
+        "limit_profile_revision"
+      ],
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "ReceiptRef": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "const": "domain_receipt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "const": "validation_receipt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "const": "acceptance_receipt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "const": "undo_acceptance_receipt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "kind": {
+              "const": "author_undo_receipt",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "id"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
   "$id": "storyos.stream.activity-stream.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "data_schema": {
-      "const": "storyos.project-activity.v1",
-      "type": "string"
+    "data": {
+      "$ref": "#/$defs/ProjectActivityEvent"
     },
     "event": {
       "const": "storyos.project-activity",
       "type": "string"
+    },
+    "id": {
+      "minLength": 1,
+      "type": "string"
     }
   },
   "required": [
+    "id",
     "event",
-    "data_schema"
+    "data"
   ],
   "title": "StoryOS Activity Stream SSE Frame",
   "type": "object"

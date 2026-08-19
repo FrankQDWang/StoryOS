@@ -136,6 +136,26 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
     assert!(openapi.contains("operationId: getSnapshot"));
     assert!(openapi.contains("/api/v1/projects/{project_id}/activity:"));
     assert!(openapi.contains("operationId: activityStream"));
+    assert!(openapi.contains("text/event-stream"));
+    assert!(openapi.contains("activity-stream-response.schema.json"));
+
+    let activity_schema = serde_json::from_slice::<serde_json::Value>(
+        &generated["generated/json-schema/storyos-public-release-1/activity-stream-response.schema.json"],
+    )
+    .expect("activity stream response schema is JSON");
+    assert_eq!(
+        activity_schema["required"],
+        serde_json::json!(["id", "event", "data"])
+    );
+    assert_eq!(
+        activity_schema["properties"]["event"]["const"],
+        "storyos.project-activity"
+    );
+    assert!(activity_schema["properties"].get("data_schema").is_none());
+    assert_eq!(
+        activity_schema["properties"]["data"]["$ref"],
+        "#/$defs/ProjectActivityEvent"
+    );
     assert!(openapi.contains(
         "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream"
     ));
@@ -254,6 +274,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
     }
     expected_references.push(crate::release1_author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH);
     expected_references.push(crate::release1_snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH);
+    expected_references
+        .push(crate::release1_snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH);
     assert_eq!(
         resolved_references,
         expected_references.into_iter().map(str::to_owned).collect()

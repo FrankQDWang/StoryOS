@@ -1,6 +1,52 @@
 {
-  "project_id": "018f0000-0000-7001-8000-000000000002",
-  "protocol_release": "storyos.public.release.1",
-  "schema_id": "storyos.stream.activity-stream.request.v1",
-  "snapshot_id": "018f0000-0000-7001-8000-000000000032"
+  "data": {
+    "activity_profile": "storyos.project-activity.v1",
+    "actor": {
+      "id": "018f0000-0000-7001-8000-000000000001",
+      "kind": "author"
+    },
+    "agent_run_id": null,
+    "aggregate_ref": {
+      "id": "018f0000-0000-7001-8000-000000000042",
+      "kind": "proposal"
+    },
+    "application_wire_record_ref": "018f0000-0000-7001-8000-000000000046",
+    "causation": {
+      "id": "018f0000-0000-7001-8000-000000000011",
+      "kind": "command"
+    },
+    "command_id": "018f0000-0000-7001-8000-000000000011",
+    "correlation_id": "018f0000-0000-7001-8000-000000000043",
+    "envelope_version": 1,
+    "event_id": "018f0000-0000-7001-8000-000000000041",
+    "event_kind": "proposal_conflict_detected",
+    "event_schema": "storyos.event.proposal-conflict-detected.v1",
+    "limit_profile_revision": "storyos.foundation.absolute.v1",
+    "occurred_at": "2026-07-21T10:17:00.000Z",
+    "payload": {
+      "observed_head_revision_id": "018f0000-0000-7001-8000-000000000045",
+      "proposal_id": "018f0000-0000-7001-8000-000000000042"
+    },
+    "payload_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.event-payload.jcs.v1",
+      "value_hex_lowercase": "073c643d461f8ce5d6a865fded918411ba1888f20cfd9a6a6418b1480cd9c62b"
+    },
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+    },
+    "project_sequence": "44",
+    "receipt_ref": {
+      "id": "018f0000-0000-7001-8000-000000000044",
+      "kind": "domain_receipt"
+    },
+    "recorded_at": "2026-07-21T10:17:00.005Z",
+    "requester_user_id": "018f0000-0000-7001-8000-000000000001",
+    "run_sequence": null,
+    "run_step_id": null,
+    "stream_sequence": "44"
+  },
+  "event": "storyos.project-activity",
+  "id": "eyJwcm9maWxlIjoic3Rvcnlvcy1zY29wZWQtY3Vyc29yIn0"
 }
