@@ -86,3 +86,5 @@ echo "Running HTTP ApplyAuthorEdit process-cut tests"
 node --test apps/web/test/apply-author-edit-process-cut.integration.test.mjs
 echo "Running HTTP Snapshot and Activity Stream tests"
 node --test apps/web/test/snapshot-replay-http.integration.test.mjs
+echo "Running HTTP takeOverProjectWriter tests"
+node --test apps/web/test/takeover-http.integration.test.mjs
