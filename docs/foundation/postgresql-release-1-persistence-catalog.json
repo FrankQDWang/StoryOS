@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.persistence.catalog.release-1.v3",
-  "contract_revision": "release1-storage-contract-2026-08-17-author-command-outcome-unknown",
+  "contract_revision": "release1-storage-contract-2026-08-19-takeover-admission-activity",
   "database_schema": "storyos",
   "physical_ledger": {
     "authority": "sole_exhaustive_table_family_ledger",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:ab60fc8468a97ff40a0b76df15060ba12497f866247accd4213dbcc8198c8ceb",
+    "migration_chain_digest": "sha256:f4373fb4d2ccb41f93f0921e17017e85005c99e9fb4d1499082ec11cbccf4eb3",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -72,6 +72,25 @@
       "shadow_or_zero_receipt_table",
       "dual_read_or_dual_write",
       "compatibility_view_or_wrapper"
+    ]
+  },
+  "takeover_receipt_activity": {
+    "schema_id": "storyos.persistence.takeover-receipt-activity.v1",
+    "receipt_table_family": "domain_receipts",
+    "activity_table_family": "project_activity_event_payloads",
+    "command_kind": "takeOverProjectWriter",
+    "action_class": "explicit_editor_command",
+    "result_kind": "no_effect",
+    "event_kinds": ["writer_takeover_applied", "writer_takeover_compare_failed"],
+    "writer_generation": "append_only_history",
+    "author_edit_zero_authority": "unchanged_no_activity",
+    "prohibited_representation": [
+      "nullable_or_sentinel_authority",
+      "fake_activity",
+      "shadow_or_zero_receipt_table",
+      "dual_read_or_dual_write",
+      "compatibility_view_or_wrapper",
+      "update_or_delete_writer_generation"
     ]
   },
   "author_command_outcome_unknown": {
@@ -215,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:4c15722b4713b79bfd7a364a14daba3d2672b52d69e38a0214877f7c9ac81a21",
+      "manifest_sha256": "sha256:9f59530ca73083457f576e7309d345b9727e54126b5f4f399b25548fe0a882b1",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -240,6 +259,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0006_snapshot_replay.sql",
           "lf_sha256": "sha256:cacf6c259fd9eb5b71f93de3526144b5e7c4e32084ed868835760602fba808bf"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0007_takeover_admission_activity.sql",
+          "lf_sha256": "sha256:2561c594b83ae52ba2bdec053a514a338956f240bcc06b09bc10390ab3e6dac9"
         }
       ]
     },
@@ -689,6 +712,7 @@
     "require_table_family_registry_digest": true,
     "require_route_settlement_and_activity_coverage": true,
     "require_author_command_outcome_unknown": true,
+    "require_takeover_admission_activity": true,
     "require_named_author_edit_outcome_query_read": true,
     "require_negative_self_test": true,
     "derived_statistics": ["family_count", "table_family_count", "project_scoped_family_count", "projection_family_count", "operation_coverage_count", "event_coverage_count"]

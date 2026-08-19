@@ -157,6 +157,7 @@ def validate_migration(catalog: dict[str, Any], errors: list[str]) -> None:
         fail(errors, "active write gates omit initial bootstrap, release, migration, or recovery visibility proof")
     validate_author_edit_receipt_activity(catalog, errors)
     validate_author_command_outcome_unknown(catalog, errors)
+    validate_takeover_receipt_activity(catalog, errors)
 
 
 def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> None:
@@ -168,6 +169,7 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
         "crates/storyos-adapter-postgres/migrations/0004_editor_sessions.sql",
         "crates/storyos-adapter-postgres/migrations/0005_author_edits.sql",
         "crates/storyos-adapter-postgres/migrations/0006_snapshot_replay.sql",
+        "crates/storyos-adapter-postgres/migrations/0007_takeover_admission_activity.sql",
     ]
     if bootstrap.get("transaction_boundary") != "one_postgresql_transaction":
         fail(errors, "Release 1 bootstrap must use one PostgreSQL transaction")
@@ -258,6 +260,66 @@ def validate_author_edit_receipt_activity(
     for field, expected in expected_lists.items():
         if contract.get(field) != expected:
             fail(errors, f"author-edit Receipt/Activity contract has invalid {field}")
+
+
+def validate_takeover_receipt_activity(
+    catalog: dict[str, Any], errors: list[str]
+) -> None:
+    contract = catalog.get("takeover_receipt_activity", {})
+    expected = {
+        "schema_id": "storyos.persistence.takeover-receipt-activity.v1",
+        "receipt_table_family": "domain_receipts",
+        "activity_table_family": "project_activity_event_payloads",
+        "command_kind": "takeOverProjectWriter",
+        "action_class": "explicit_editor_command",
+        "result_kind": "no_effect",
+        "writer_generation": "append_only_history",
+        "author_edit_zero_authority": "unchanged_no_activity",
+    }
+    for field, expected_value in expected.items():
+        if contract.get(field) != expected_value:
+            fail(errors, f"takeover Receipt/Activity contract has invalid {field}")
+    if contract.get("event_kinds") != [
+        "writer_takeover_applied",
+        "writer_takeover_compare_failed",
+    ]:
+        fail(errors, "takeover Receipt/Activity contract has invalid event_kinds")
+    if contract.get("prohibited_representation") != [
+        "nullable_or_sentinel_authority",
+        "fake_activity",
+        "shadow_or_zero_receipt_table",
+        "dual_read_or_dual_write",
+        "compatibility_view_or_wrapper",
+        "update_or_delete_writer_generation",
+    ]:
+        fail(errors, "takeover Receipt/Activity contract has invalid prohibited_representation")
+    family = next(
+        (
+            family
+            for family in catalog.get("families", [])
+            if isinstance(family, dict)
+            and family.get("family_id") == "operational-project-activity"
+        ),
+        {},
+    )
+    if expected["activity_table_family"] not in family.get("table_families", []):
+        fail(errors, "takeover Activity table must belong to operational-project-activity")
+    sql_path = ROOT / "crates/storyos-adapter-postgres/migrations/0007_takeover_admission_activity.sql"
+    sql = normalized_file_bytes(sql_path).decode("utf-8")
+    required_fragments = [
+        "PRIMARY KEY (owner_user_id, project_id, writer_generation)",
+        "command_kind = 'takeOverProjectWriter'",
+        "action_class = 'explicit_editor_command'",
+        "CREATE TABLE storyos.project_activity_event_payloads",
+        "writer_takeover_applied",
+        "writer_takeover_compare_failed",
+        "GRANT SELECT, INSERT ON storyos.project_activity_event_payloads TO storyos_runtime;",
+    ]
+    for fragment in required_fragments:
+        if fragment not in sql:
+            fail(errors, f"takeover bootstrap is missing locked SQL: {fragment}")
+    if re.search(r"GRANT\s+UPDATE\s+ON\s+storyos\.project_writer_generations", sql, flags=re.I):
+        fail(errors, "takeover bootstrap must not grant UPDATE on writer generations")
 
 
 def validate_author_command_outcome_unknown(

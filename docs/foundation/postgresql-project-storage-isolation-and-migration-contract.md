@@ -1,7 +1,7 @@
 # PostgreSQL Project Storage, Isolation, and Migration Contract
 
 - Status: accepted
-- Contract revision: `release1-storage-contract-2026-08-17-author-command-outcome-unknown`
+- Contract revision: `release1-storage-contract-2026-08-19-takeover-admission-activity`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
@@ -142,6 +142,38 @@ physical-ledger validation, and route/settlement/Activity coverage to the
 three sibling modules named in the header. Those modules are review-time
 implementation detail, not additional catalog or contract authorities and have
 no independent CLI or alternate validation path.
+
+### 0.3 Durable `takeOverProjectWriter` Admission and Activity
+
+`project_writer_generations` is append-only history. The primary key is
+`(owner_user_id, project_id, writer_generation)`. The current writer is the
+row with the maximum generation. A later takeover inserts generation `N+1`.
+It does not update or delete generation `N`. The runtime role has `SELECT` and
+`INSERT` only.
+
+`author_command_admissions` stores both `applyAuthorEdit` as
+`direct_editor_action` and catalogued `takeOverProjectWriter` as
+`explicit_editor_command`. ApplyAuthorEdit still requires the current writer
+session and generation. Takeover requires an observer session whose observed
+generation equals the current maximum.
+
+A takeover DomainReceipt stays on `domain_receipts` with
+`command_kind = takeOverProjectWriter`, `result_kind = no_effect`, and reason
+`writer_takeover_applied` or `writer_takeover_compare_failed`. It writes no
+Author Action, commit, or revision envelope.
+
+Catalogued `project_activity_event_payloads` stores that takeover Activity.
+`project_activity_events` remains Author Edit applied Activity. Positions in
+the two tables are disjoint. Author Edit `no_effect`, `conflicted`, and
+`refused` receipts still have no Activity. Author Edit `no_effect` reason is
+only `content_unchanged`. Takeover `no_effect` reason is only
+`writer_takeover_applied` or `writer_takeover_compare_failed`.
+
+Takeover Admission omits manuscript columns as SQL NULL. `MATCH FULL` cannot
+keep the ApplyAuthorEdit revision foreign key on those mixed-null columns.
+`0007` drops that foreign key. ApplyAuthorEdit still checks the same-scope
+authoritative revision at insert. Bootstrap `RESET ROLE` lets the superuser
+validate new `MATCH FULL` keys on FORCE RLS tables when GUC values are unset.
 
 ## 1. Scope and authority
 
@@ -947,10 +979,11 @@ atomic bootstrap. The empty migration-chain identity and digest are still
 checked against the public same-release identity; a matching semantic version
 alone never activates storage.
 
-The active bootstrap source set is exactly the six catalogued SQL files under
+The active bootstrap source set is exactly the seven catalogued SQL files under
 `crates/storyos-adapter-postgres/migrations/`. It contains the roles, controlled
 Project schema, challenge/idempotency schema, Editor Session schema, Author
-Edit schema, and Snapshot/replay schema. The files contain no inner transaction boundary. The runner
+Edit schema, Snapshot/replay schema, and takeover Admission/Activity schema.
+The files contain no inner transaction boundary. The runner
 executes the ordered set in one PostgreSQL transaction. The catalog stores each
 LF-normalized source SHA-256 and the canonical manifest SHA-256. An unlisted
 SQL file, a missing file, source drift, manifest drift, or partial transaction

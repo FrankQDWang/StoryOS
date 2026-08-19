@@ -46,7 +46,7 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
         fail(errors, "catalog identity does not bind persisted-format identity")
     if catalog.get("catalog_id") != "storyos.persistence.catalog.release-1.v3":
         fail(errors, "catalog identity must equal the hard-cut Release 1 catalog v3")
-    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-17-author-command-outcome-unknown":
+    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-19-takeover-admission-activity":
         fail(errors, "unexpected storage contract revision")
     binding = catalog.get("schema_identity", {}).get("protocol_binding", {})
     for key, expected in {
@@ -98,6 +98,7 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
     verification_contract = catalog.get("verification_contract", {})
     required_verifier_flags = {
         "require_author_command_outcome_unknown",
+        "require_takeover_admission_activity",
         "require_negative_self_test",
         "require_named_author_edit_outcome_query_read",
         "require_physical_ledger_boundary",
@@ -206,6 +207,13 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
     )
     if not any("Receipt/Activity contract" in error for error in nullable_receipt_errors):
         errors.append("negative self-test did not reject nullable Receipt contract drift")
+
+    takeover_probe = copy.deepcopy(catalog)
+    takeover_probe["takeover_receipt_activity"]["writer_generation"] = "update_in_place"
+    takeover_errors: list[str] = []
+    validate_catalog(takeover_probe, route_catalog, takeover_errors, check_digests=False)
+    if not any("takeover Receipt/Activity contract" in error for error in takeover_errors):
+        errors.append("negative self-test did not reject takeover Receipt/Activity contract drift")
 
     credential_probe = copy.deepcopy(catalog)
     credential_probe["migration_chain"]["bootstrap"]["runtime_credential_source"] = (
@@ -505,6 +513,7 @@ def main() -> int:
         print("OK: bootstrap-checksum negative self-test rejected a bad catalog")
         print("OK: Receipt/Activity negative self-test rejected a bad catalog")
         print("OK: nullable-Receipt negative self-test rejected a bad catalog")
+        print("OK: takeover Receipt/Activity negative self-test rejected a bad catalog")
         print("OK: bootstrap-credential negative self-test rejected a bad catalog")
         print("OK: outcome-Query-family negative self-test rejected a bad catalog")
         print("OK: outcome_unknown negative self-tests rejected seven bad catalogs and twelve bad SQL shapes")
