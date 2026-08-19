@@ -537,6 +537,10 @@ paths:
       responses:
         '200':
           description: Project Activity SSE stream
+          content:
+            text/event-stream:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/activity-stream-response.schema.json'
         '400':
           description: Invalid request
         '401':
