@@ -10,6 +10,8 @@ mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
 mod release1_snapshot;
 mod release1_snapshot_artifacts;
+mod release1_takeover;
+mod release1_takeover_artifacts;
 mod stage1_crosswalk;
 mod stage1_delivery;
 mod stage1_selection;
@@ -51,6 +53,12 @@ pub use release1_snapshot::{
     GET_SNAPSHOT_METHOD, GET_SNAPSHOT_PATH, GET_SNAPSHOT_REQUEST_SCHEMA_ID,
     GET_SNAPSHOT_RESPONSE_SCHEMA_ID, GetSnapshotRequest, GetSnapshotResponse, SnapshotDescriptor,
     SnapshotKind,
+};
+pub use release1_takeover::{
+    TAKE_OVER_PROJECT_WRITER_METHOD, TAKE_OVER_PROJECT_WRITER_PATH,
+    TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID, TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
+    TakeOverProjectWriterRequest, TakeOverProjectWriterResponse, TakeOverProjectWriterResult,
+    TakeoverCompareFailedReason,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,

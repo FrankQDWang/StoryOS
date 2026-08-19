@@ -25,7 +25,7 @@ export type CreateProjectCommandChallengeResponse = { nonce: string, expires_at:
 
 export type CreateEditorSessionRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
-export type EditorReadOnlyReason = "secondary_session";
+export type EditorReadOnlyReason = "secondary_session" | "superseded_by_takeover" | "binding_invalid";
 
 export type EditorWriterProjection = { "kind": "current_writer", writer_generation: string, } | { "kind": "read_only", observed_writer_generation: string, reason: EditorReadOnlyReason, };
 
@@ -45,7 +45,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -85,6 +85,14 @@ export type GetSnapshotResponse = { schema_id: string, correlation_id: string, p
 
 export type ActivityStreamRequest = { project_id: string, snapshot_id: string, protocol_release: string, };
 
+export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
+
+export type TakeoverCompareFailedReason = "writer_generation_advanced_after_admission" | "requester_became_current_after_admission";
+
+export type TakeOverProjectWriterResult = { "kind": "takeover_applied", prior_editor_session_id: string, prior_writer_generation: string, resulting_editor_session_id: string, resulting_writer_generation: string, resulting_snapshot_id: string, resulting_snapshot_activity_position: string, resulting_heads: Array<string>, } | { "kind": "takeover_compare_failed", observed_writer_generation: string, current_writer_generation: string, current_writer_projection: EditorWriterProjection, current_snapshot_id: string, current_snapshot_activity_position: string, current_heads: Array<string>, reason: TakeoverCompareFailedReason, };
+
+export type TakeOverProjectWriterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, result: TakeOverProjectWriterResult, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -109,3 +117,5 @@ export declare function applyAuthorEdit(options: StoryOSQueryOptions & { project
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;
 export declare function getSnapshot(options: StoryOSQueryOptions & { projectId: string; snapshotId: string }): Promise<GetSnapshotResponse>;
 export declare function activityStream(options: StoryOSQueryOptions & { projectId: string; snapshotId: string; protocolRelease: string; lastEventId?: string }): Promise<string>;
+export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;

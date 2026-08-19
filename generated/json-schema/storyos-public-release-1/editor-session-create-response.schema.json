@@ -99,7 +99,9 @@
     },
     "EditorReadOnlyReason": {
       "enum": [
-        "secondary_session"
+        "secondary_session",
+        "superseded_by_takeover",
+        "binding_invalid"
       ],
       "type": "string"
     },

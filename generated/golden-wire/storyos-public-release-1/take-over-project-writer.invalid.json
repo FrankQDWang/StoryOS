@@ -1,0 +1,52 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000042",
+  "command_id": "018f0000-0000-7001-8000-000000000041",
+  "correlation_id": "018f0000-0000-7001-8000-000000000040",
+  "receipt": {
+    "artifact_lifecycle_event_refs": [],
+    "author_action_sequence": null,
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000042",
+    "authoritative_commit_ids": [],
+    "authoritative_revision_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.takeOverProjectWriter.jcs.v1",
+      "value_hex_lowercase": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "command_kind": "takeOverProjectWriter",
+    "condition_refs": [],
+    "created_at": "2026-08-19T06:00:00.000Z",
+    "draft_artifact_refs": [],
+    "expected_heads": [
+      "018f0000-0000-7001-8000-000000000004"
+    ],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000044",
+    "prior_heads": [
+      "018f0000-0000-7001-8000-000000000004"
+    ],
+    "producer_cause": "author_command_admission",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+    },
+    "proposal_revision_ids": [],
+    "receipt_id": "018f0000-0000-7001-8000-000000000043",
+    "result": "no_effect",
+    "resulting_heads": [
+      "018f0000-0000-7001-8000-000000000004"
+    ]
+  },
+  "result": {
+    "kind": "takeover_applied",
+    "prior_editor_session_id": "018f0000-0000-7001-8000-000000000021",
+    "prior_writer_generation": "1",
+    "resulting_editor_session_id": "018f0000-0000-7001-8000-000000000040",
+    "resulting_heads": [
+      "018f0000-0000-7001-8000-000000000004"
+    ],
+    "resulting_snapshot_activity_position": "1",
+    "resulting_snapshot_id": "018f0000-0000-7001-8000-000000000032",
+    "resulting_writer_generation": "2"
+  },
+  "schema_id": "storyos.command.take-over-project-writer.response.v1"
+}

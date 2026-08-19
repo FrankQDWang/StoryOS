@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter
 paths:
   /api/v1/protocol:
     get:
@@ -553,6 +553,80 @@ paths:
           description: Method not allowed
         '409':
           description: Protocol or cursor conflict
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers:
+    post:
+      operationId: takeOverProjectWriter
+      summary: Take over the current Project writer generation
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: editor_session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/take-over-project-writer-request.schema.json'
+      responses:
+        '200':
+          description: Committed writer takeover
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or authoritative Head conflict
+        '412':
+          description: Session or writer binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Author command refused
+        '428':
+          description: Precondition required
         '429':
           description: Rate limited
         '503':
