@@ -1,7 +1,19 @@
 import { digestApplyAuthorEdit }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
-export const JOURNAL_DATABASE_VERSION = 2;
+export const JOURNAL_DATABASE_VERSION = 3;
+export const JOURNAL_OBJECT_STORES = Object.freeze([
+  "metadata",
+  "partitions",
+  "payload_chains",
+  "intents",
+  "submission_groups",
+  "transport_capsules",
+  "transport_attempts",
+  "protocol_observations",
+  "outcome_query_attempts",
+  "outcome_query_observations",
+]);
 export const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v2";
 export const AUTHOR_EDIT_BATCH_POLICY_REVISION =
   "storyos.author-edit-batch.release-1.preview.v1";

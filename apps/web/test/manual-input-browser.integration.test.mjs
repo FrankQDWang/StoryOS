@@ -305,6 +305,7 @@ test("trusted browser input and controlled Chrome IME reach bounded Journal sett
       "/apps/web/src/local-edit-journal.mjs",
       "/apps/web/src/author-edit-submission.mjs",
       "/apps/web/src/author-edit-outcome-reconciliation.mjs",
+      "/apps/web/src/protected-transport-capsule.mjs",
       "/generated/typescript/storyos-public-release-1/client.mjs",
     ]);
     if (!allowed.has(pathname)) {
