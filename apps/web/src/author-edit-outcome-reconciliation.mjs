@@ -1,5 +1,6 @@
 import { getApplyAuthorEditOutcome }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { readAvailableCommandProof } from "./protected-transport-capsule.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -29,25 +30,6 @@ export function groupEvidenceRank(group) {
   if (strongest === "challenge_issued") return 2;
   if (group?.reconciliation?.kind === "outcome_query_unresolved") return 1;
   return 0;
-}
-
-export function rememberCommandProof(workspace, group, challenge) {
-  workspace.commandProofs ??= new Map();
-  workspace.commandProofs.set(group.journal_submission_group_id, {
-    nonce: challenge.nonce,
-    expiresAt: challenge.expires_at,
-    idempotencyKey: group.idempotency_key,
-  });
-}
-
-export function readCommandProof(workspace, group) {
-  const proof = workspace.commandProofs?.get(group.journal_submission_group_id);
-  if (!proof?.nonce
-    || proof.idempotencyKey !== group.idempotency_key
-    || typeof proof.expiresAt !== "string") {
-    throw new Error("Author Edit acknowledgement does not converge");
-  }
-  return proof;
 }
 
 export function sameTerminalIdentity(left, right) {
@@ -180,7 +162,8 @@ export async function markOutcomeQueryUnresolved(workspace, group) {
 export async function reconcileLostAcknowledgement({
   workspace, group, baseUrl, fetchImpl, cryptoImpl, settleFromCommandResponse,
 }) {
-  const proof = readCommandProof(workspace, group);
+  const proof = await readAvailableCommandProof(workspace, group);
+  if (!proof) return group;
   let payload;
   try {
     payload = await getApplyAuthorEditOutcome({

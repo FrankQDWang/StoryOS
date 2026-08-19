@@ -5,24 +5,26 @@ import {
   getEditorSession,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
+  commitStrongerGroup,
+  markOutcomeQueryUnresolved,
+  reconcileLostAcknowledgement,
+} from "./author-edit-outcome-reconciliation.mjs";
+import {
   AUTHOR_EDIT_BATCH_POLICY_REVISION,
   AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES,
   AUTHOR_EDIT_MAX_UNITS,
   AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
+  JOURNAL_DATABASE_VERSION,
   mayAppendJournalSubmissionRecord,
   rebuildPendingProjection,
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "./local-edit-journal.mjs";
 import {
-  commitStrongerGroup,
-  markOutcomeQueryUnresolved,
-  readCommandProof,
-  rememberCommandProof,
-  reconcileLostAcknowledgement,
-} from "./author-edit-outcome-reconciliation.mjs";
+  commitProtectedTransportSend,
+  readAvailableCommandProof,
+} from "./protected-transport-capsule.mjs";
 
-const DATABASE_VERSION = 2;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const boundedU64 = (value) => typeof value === "string" && U64.test(value)
@@ -248,7 +250,7 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
       requestResult(durableGroups.index("partition")
         .getAll(workspace.partition.journal_partition_id, 2401)),
     ]);
-  if (schema?.version !== DATABASE_VERSION
+  if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
     || JSON.stringify(durablePayloadChains) !== JSON.stringify(snapshot.payloadChains)
@@ -404,10 +406,13 @@ export async function submitOnePendingAuthorEdit({
 }) {
   const run = async () => {
     const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
-    if (group.reconciliation?.kind === "outcome_query_unresolved") {
-      readCommandProof(workspace, group);
+    const proof = await readAvailableCommandProof(workspace, group);
+    if (group.reconciliation?.kind === "outcome_query_unresolved" || proof) {
+      const current = group.reconciliation?.kind === "outcome_query_unresolved"
+        ? group
+        : await markOutcomeQueryUnresolved(workspace, group);
       await reconcileLostAcknowledgement({
-        workspace, group, baseUrl, fetchImpl, cryptoImpl,
+        workspace, group: current, baseUrl, fetchImpl, cryptoImpl,
         settleFromCommandResponse: settleAuthorEditResponse,
       });
       return rebuildPendingProjection(workspace);
@@ -424,7 +429,7 @@ export async function submitOnePendingAuthorEdit({
       },
       fetchImpl,
     });
-    rememberCommandProof(workspace, group, challenge);
+    await commitProtectedTransportSend(workspace, group, challenge);
     let response;
     try {
       response = await applyAuthorEdit({

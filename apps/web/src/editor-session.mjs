@@ -6,6 +6,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   JOURNAL_DATABASE_VERSION,
+  JOURNAL_OBJECT_STORES,
   persistReplaceSelection,
   rebuildPendingProjection,
 } from "./local-edit-journal.mjs";
@@ -47,31 +48,47 @@ async function openJournalDatabase(indexedDBImpl, scope) {
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
-    if (event.oldVersion > 1) {
+    if (event.oldVersion !== 0) {
       request.transaction.abort();
       return;
     }
     const database = request.result;
-    if (event.oldVersion === 0) {
-      database.createObjectStore("metadata", { keyPath: "key" });
-      database.createObjectStore("partitions", { keyPath: "journal_partition_id" });
-      const payloadChains = database.createObjectStore("payload_chains", { keyPath: "payload_chain_id" });
-      payloadChains.createIndex("partition", "journal_partition_id", { unique: false });
-      const intents = database.createObjectStore("intents", {
-        keyPath: ["journal_partition_id", "local_intent_sequence"],
-      });
-      intents.createIndex("partition", "journal_partition_id", { unique: false });
-    }
-    const groups = database.createObjectStore("submission_groups", {
+    database.createObjectStore("metadata", { keyPath: "key" });
+    database.createObjectStore("partitions", { keyPath: "journal_partition_id" });
+    database.createObjectStore("payload_chains", { keyPath: "payload_chain_id" })
+      .createIndex("partition", "journal_partition_id", { unique: false });
+    database.createObjectStore("intents", {
+      keyPath: ["journal_partition_id", "local_intent_sequence"],
+    }).createIndex("partition", "journal_partition_id", { unique: false });
+    database.createObjectStore("submission_groups", {
       keyPath: "journal_submission_group_id",
-    });
-    groups.createIndex("partition", "journal_partition_id", { unique: false });
+    }).createIndex("partition", "journal_partition_id", { unique: false });
+    database.createObjectStore("transport_capsules", {
+      keyPath: "exact_transport_retry_capsule_id",
+    }).createIndex("group", "journal_submission_group_id", { unique: false });
+    database.createObjectStore("transport_attempts", {
+      keyPath: "transport_attempt_id",
+    }).createIndex("group", "journal_submission_group_id", { unique: false });
+    database.createObjectStore("protocol_observations", {
+      keyPath: "protocol_observation_id",
+    }).createIndex("group", "journal_submission_group_id", { unique: false });
+    database.createObjectStore("outcome_query_attempts", {
+      keyPath: "outcome_query_attempt_id",
+    }).createIndex("group", "journal_submission_group_id", { unique: false });
+    database.createObjectStore("outcome_query_observations", {
+      keyPath: "outcome_query_observation_id",
+    }).createIndex("group", "journal_submission_group_id", { unique: false });
     request.transaction.objectStore("metadata")
       .put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
   };
-  const database = await requestResult(request);
-  if (["metadata", "partitions", "payload_chains", "intents", "submission_groups"]
-    .some((name) => !database.objectStoreNames.contains(name))) {
+  let database;
+  try {
+    database = await requestResult(request);
+  } catch (error) {
+    request.result?.close();
+    throw error;
+  }
+  if (JOURNAL_OBJECT_STORES.some((name) => !database.objectStoreNames.contains(name))) {
     database.close();
     throw new Error("Local Edit Journal schema is incompatible");
   }

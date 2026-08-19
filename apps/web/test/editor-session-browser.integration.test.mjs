@@ -233,6 +233,74 @@ const fetchImpl = async (url, options = {}) => {
       local_intent_sequence: request.local_intent_sequence,
     });
   }
+  if (path.includes("/manuscript/author-edit-outcomes/")) {
+    const last = authorEditRequests.at(-1);
+    if (!last || options.method !== "GET" || options.body !== undefined) {
+      throw new Error("Unexpected outcome Query");
+    }
+    const request = JSON.parse(last.body);
+    const secondEdit = request.expected_authoritative_revision_id
+      === freshSession.base_snapshot.authoritative_head_revision_id;
+    const revisionId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000044"
+      : "018f0000-0000-7001-8000-000000000034";
+    const commitId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000045"
+      : "018f0000-0000-7001-8000-000000000035";
+    const commandId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000041"
+      : "018f0000-0000-7001-8000-000000000031";
+    const admissionId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000042"
+      : "018f0000-0000-7001-8000-000000000032";
+    const receiptId = secondEdit
+      ? "018f0000-0000-7001-8000-000000000043"
+      : "018f0000-0000-7001-8000-000000000033";
+    const finalBody = secondEdit ? "Base!?+" : "Base!?";
+    const position = secondEdit ? "2" : "1";
+    canonicalSession = secondEdit ? secondFreshSession : freshSession;
+    return jsonResponse({
+      schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+      correlation_id: "018f0000-0000-7001-8000-000000000081",
+      project_scope: project.project_scope,
+      outcome: {
+        outcome_kind: "committed",
+        response: {
+          schema_id: "storyos.command.apply-author-edit.response.v2",
+          correlation_id: request.correlation_id,
+          project_scope: project.project_scope,
+          command_id: commandId,
+          author_command_admission_id: admissionId,
+          receipt: {
+            receipt_id: receiptId,
+            project_scope: project.project_scope, command_kind: "applyAuthorEdit",
+            command_digest: authorEditDigest,
+            idempotency_key: last.idempotencyKey,
+            producer_cause: "author_command_admission",
+            author_command_admission_id: admissionId,
+            expected_heads: [request.expected_authoritative_revision_id],
+            prior_heads: [request.expected_authoritative_revision_id],
+            resulting_heads: [revisionId],
+            authoritative_revision_ids: [revisionId],
+            proposal_revision_ids: [],
+            authoritative_commit_ids: [commitId],
+            author_action_sequence: position, draft_artifact_refs: [],
+            artifact_lifecycle_event_refs: [], condition_refs: [],
+            result: "authoritative_applied",
+            created_at: "2026-08-15T08:00:00.000Z",
+          },
+          effect: {
+            kind: "authoritative_applied",
+            authoritative_revision: { revision_id: revisionId, body: finalBody },
+            authoritative_commit_id: commitId,
+            author_action_sequence: position, project_activity_position: position,
+          },
+          completed_intent_record_id: request.completed_intent_record_id,
+          local_intent_sequence: request.local_intent_sequence,
+        },
+      },
+    });
+  }
   if (path.endsWith("/chapters/" + CHAPTER)) return jsonResponse({
     schema_id: "storyos.query.chapter.response.v1",
     correlation_id: "018f0000-0000-7001-8000-000000000036",
@@ -344,7 +412,7 @@ async function run() {
   assert.deepEqual(settled, { body: "Base!?", save_state: "saved",
     unsettled_intent_count: 0,
     authoritative_revision_id: "018f0000-0000-7001-8000-000000000034" });
-  assert.equal(authorEditRequests.length, 2);
+  assert.equal(authorEditRequests.length, 1);
   assert.deepEqual(JSON.parse(authorEditRequests[0].body).author_edit_units, [{
     normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
     selection_snapshot: {
@@ -358,9 +426,8 @@ async function run() {
   }]);
   const editChallenges = challengeRequests.filter((request) =>
     request.command_schema === "storyos.command.apply-author-edit.request.v1");
-  assert.equal(editChallenges.length, 3);
+  assert.equal(editChallenges.length, 2);
   assert.equal(editChallenges[0].idempotency_key, editChallenges[1].idempotency_key);
-  assert.equal(editChallenges[1].idempotency_key, editChallenges[2].idempotency_key);
   assert.deepEqual(editChallenges[0].canonical_command_digest,
     editChallenges[1].canonical_command_digest);
   assert.deepEqual(workspace.session, freshSession);
@@ -936,6 +1003,7 @@ test("a real browser journal settles bounded groups and installs the complete ne
       || pathname === "/apps/web/src/author-edit-submission.mjs"
       || pathname === "/apps/web/src/author-edit-outcome-reconciliation.mjs"
       || pathname === "/apps/web/src/local-edit-journal.mjs"
+      || pathname === "/apps/web/src/protected-transport-capsule.mjs"
       || pathname === "/generated/typescript/storyos-public-release-1/client.mjs";
     if (!allowed) {
       response.writeHead(404).end();

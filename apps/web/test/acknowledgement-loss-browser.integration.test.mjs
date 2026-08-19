@@ -224,9 +224,11 @@ async function openReady() {
   if (workspace.kind !== "editor-ready") {
     fail("workspace unavailable: " + (workspace.error?.stack ?? workspace.code));
   }
-  equal(workspace.database.version, 2, "journal version");
+  equal(workspace.database.version, 3, "journal version");
   deepEqual([...workspace.database.objectStoreNames].sort(), [
-    "intents", "metadata", "partitions", "payload_chains", "submission_groups",
+    "intents", "metadata", "outcome_query_attempts", "outcome_query_observations",
+    "partitions", "payload_chains", "protocol_observations", "submission_groups",
+    "transport_attempts", "transport_capsules",
   ], "journal stores");
   return workspace;
 }
@@ -495,18 +497,16 @@ try {
       kind: "outcome_query_unresolved",
       strongest: { kind: "no_outcome_observed" },
     }), "unavailable group");
-    workspace.commandProofs.clear();
-    let missingNonce = false;
-    try {
-      await submitOnePendingAuthorEdit({
-        workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
-      });
-    } catch (error) {
-      missingNonce = /acknowledgement does not converge/.test(String(error?.message ?? error));
-    }
-    if (!missingNonce) fail("missing in-process nonce was accepted");
-    equal(counts.authorEdits, 1, "missing nonce did not POST");
-    equal(counts.outcomes, 1, "missing nonce did not query");
+    workspace.commandProofs?.clear();
+    const recovered = await submitOnePendingAuthorEdit({
+      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    deepEqual(recovered, {
+      body: "Base!?", save_state: "saving", unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    }, "capsule recovered without process memory");
+    equal(counts.authorEdits, 1, "capsule recovery did not POST");
+    equal(counts.outcomes, 2, "capsule recovery queried");
     await deleteJournal(workspace);
   }
 
@@ -579,6 +579,7 @@ test("lost ApplyAuthorEdit acknowledgement converges from persistent outcome evi
     "/apps/web/src/author-edit-submission.mjs",
     "/apps/web/src/author-edit-outcome-reconciliation.mjs",
     "/apps/web/src/local-edit-journal.mjs",
+    "/apps/web/src/protected-transport-capsule.mjs",
     "/generated/typescript/storyos-public-release-1/client.mjs",
   ]);
   const server = createServer(async (request, response) => {
