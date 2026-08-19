@@ -125,6 +125,32 @@ fn apply_author_edit_outcome_query_is_one_protected_exact_get() {
 }
 
 #[test]
+fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let openapi =
+        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
+            .expect("OpenAPI must be UTF-8");
+    assert!(openapi.contains("/api/v1/projects/{project_id}/snapshots/{snapshot_id}:"));
+    assert!(openapi.contains("operationId: getSnapshot"));
+    assert!(openapi.contains("/api/v1/projects/{project_id}/activity:"));
+    assert!(openapi.contains("operationId: activityStream"));
+    assert!(openapi.contains(
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream"
+    ));
+
+    let client = String::from_utf8(
+        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
+    )
+    .expect("generated client must be UTF-8");
+    assert!(client.contains("export async function getSnapshot"));
+    assert!(client.contains("export async function activityStream"));
+    assert!(client.contains("async function queryText"));
+    assert!(client.contains("text/event-stream"));
+}
+
+#[test]
 fn apply_author_edit_unknown_observation_cannot_disable_reconciliation() {
     let admitted = serde_json::json!({
         "observation_kind": "admission_committed",
@@ -227,6 +253,7 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         ]);
     }
     expected_references.push(crate::release1_author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH);
+    expected_references.push(crate::release1_snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH);
     assert_eq!(
         resolved_references,
         expected_references.into_iter().map(str::to_owned).collect()
@@ -266,7 +293,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v3"
+        "storyos.typescript-client.release-1.v4"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -380,7 +407,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v3\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v4\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])

@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:5284875a0895be3167ac74c651edc3ea58f59579f02503d69fe0012ef77d8a03",
+  "corpus_digest": "sha256:4e4a5dbd57a170ba160ae168169d7c8c03058cedb1d7c0a308480aca47cfa848",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -26,7 +26,13 @@
       "generated/golden-wire/storyos-public-release-1/apply-author-edit.boundary.json",
       "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.json",
       "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-snapshot.json",
+      "generated/golden-wire/storyos-public-release-1/get-snapshot.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-snapshot.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/activity-stream.json",
+      "generated/golden-wire/storyos-public-release-1/activity-stream.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json"
     ]
   },
   "fixtures": [
@@ -173,6 +179,42 @@
       "fixture_id": "storyos.golden.getApplyAuthorEditOutcome.boundary.v1",
       "operation_id": "getApplyAuthorEditOutcome",
       "path": "generated/golden-wire/storyos-public-release-1/get-apply-author-edit-outcome.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getSnapshot.positive.v1",
+      "operation_id": "getSnapshot",
+      "path": "generated/golden-wire/storyos-public-release-1/get-snapshot.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getSnapshot.invalid.v1",
+      "operation_id": "getSnapshot",
+      "path": "generated/golden-wire/storyos-public-release-1/get-snapshot.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getSnapshot.boundary.v1",
+      "operation_id": "getSnapshot",
+      "path": "generated/golden-wire/storyos-public-release-1/get-snapshot.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.activityStream.positive.v1",
+      "operation_id": "activityStream",
+      "path": "generated/golden-wire/storyos-public-release-1/activity-stream.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.activityStream.invalid.v1",
+      "operation_id": "activityStream",
+      "path": "generated/golden-wire/storyos-public-release-1/activity-stream.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.activityStream.boundary.v1",
+      "operation_id": "activityStream",
+      "path": "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

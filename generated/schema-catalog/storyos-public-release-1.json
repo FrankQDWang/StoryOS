@@ -7,7 +7,9 @@
     "createEditorSession",
     "getEditorSession",
     "applyAuthorEdit",
-    "getApplyAuthorEditOutcome"
+    "getApplyAuthorEditOutcome",
+    "getSnapshot",
+    "activityStream"
   ],
   "public_protocol_release": "storyos.public.release.1",
   "schema_id": "storyos.schema-catalog.v1",
@@ -91,6 +93,26 @@
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json",
       "schema_id": "storyos.query.apply-author-edit-outcome.response.v1",
       "sha256": "sha256:2b2ab6c2b5fbca58644eec43a21396866bc9e1b063f01daf60601e786528c781"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/snapshot-request.schema.json",
+      "schema_id": "storyos.query.snapshot.request.v1",
+      "sha256": "sha256:89677a77f9105c0a2b19c25c465e44d94d5f92b63acf144884f91433d4ce4f94"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/snapshot-response.schema.json",
+      "schema_id": "storyos.query.snapshot.response.v1",
+      "sha256": "sha256:47aa8ec4e6159d1cb3db5c97e0f2d251424a7550124d6f88bf534ad56c3905f5"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/activity-stream-request.schema.json",
+      "schema_id": "storyos.stream.activity-stream.request.v1",
+      "sha256": "sha256:d52091fc059db4e99a154bce538ba17aad6de13128aaa30cc6d58bcc3428ad9f"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/activity-stream-response.schema.json",
+      "schema_id": "storyos.stream.activity-stream.response.v1",
+      "sha256": "sha256:1719672a6c642151518116deccb7d70d7e624394a4e8737932513eddf148b8b8"
     }
   ]
 }

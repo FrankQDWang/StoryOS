@@ -236,6 +236,14 @@ pub(super) async fn persist_author_edit_settlement(
             if base_snapshot_updates != 1 {
                 return Err(AuthorEditError::BindingConflict);
             }
+            crate::snapshot::persist_canonical_snapshot(
+                client,
+                &command.project_scope,
+                &base_snapshot_id,
+                project_activity_position,
+            )
+            .await
+            .map_err(author_edit_database_error)?;
             AuthorEditSettlementEffect::AuthoritativeApplied {
                 ids,
                 body,

@@ -1,0 +1,25 @@
+{
+  "$id": "storyos.stream.activity-stream.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "protocol_release": {
+      "type": "string"
+    },
+    "snapshot_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "snapshot_id",
+    "protocol_release"
+  ],
+  "title": "StoryOS Activity Stream Request",
+  "type": "object"
+}
