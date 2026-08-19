@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:48f378d52876310a4dadb20c8923c2073677a9b2afb30c266ba7adaa665a9135",
+  "corpus_digest": "sha256:274180525b5a0e74842bc51d04a49ce5f163bd86d82ef5eed112d7a840a25bf7",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -32,7 +32,10 @@
       "generated/golden-wire/storyos-public-release-1/get-snapshot.boundary.json",
       "generated/golden-wire/storyos-public-release-1/activity-stream.json",
       "generated/golden-wire/storyos-public-release-1/activity-stream.invalid.json",
-      "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json"
+      "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json",
+      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json"
     ]
   },
   "fixtures": [
@@ -215,6 +218,24 @@
       "fixture_id": "storyos.golden.activityStream.boundary.v1",
       "operation_id": "activityStream",
       "path": "generated/golden-wire/storyos-public-release-1/activity-stream.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.takeOverProjectWriter.positive.v1",
+      "operation_id": "takeOverProjectWriter",
+      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.takeOverProjectWriter.invalid.v1",
+      "operation_id": "takeOverProjectWriter",
+      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.takeOverProjectWriter.boundary.v1",
+      "operation_id": "takeOverProjectWriter",
+      "path": "generated/golden-wire/storyos-public-release-1/take-over-project-writer.boundary.json"
     }
   ],
   "public_protocol_release": "storyos.public.release.1",

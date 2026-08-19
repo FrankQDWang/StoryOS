@@ -269,7 +269,8 @@
     },
     "DomainReceiptCommandKind": {
       "enum": [
-        "applyAuthorEdit"
+        "applyAuthorEdit",
+        "takeOverProjectWriter"
       ],
       "type": "string"
     },

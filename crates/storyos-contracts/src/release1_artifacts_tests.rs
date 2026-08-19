@@ -157,7 +157,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter"
     ));
 
     let client = String::from_utf8(
@@ -168,6 +168,180 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
     assert!(client.contains("export async function activityStream"));
     assert!(client.contains("async function queryText"));
     assert!(client.contains("text/event-stream"));
+}
+
+#[test]
+fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
+    assert!(
+        !crate::stage1_selection::OPERATION_IDS.contains(&"takeOverProjectWriter"),
+        "Stage 1 coverage stays closed; #58 publishes generated wire only"
+    );
+
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    let request_path = "generated/json-schema/storyos-public-release-1/take-over-project-writer-request.schema.json";
+    let response_path = "generated/json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json";
+    assert!(generated.contains_key(request_path));
+    assert!(generated.contains_key(response_path));
+
+    let request: serde_json::Value =
+        serde_json::from_slice(&generated[request_path]).expect("request schema must be JSON");
+    assert_eq!(
+        request["$id"],
+        "storyos.command.take-over-project-writer.request.v1"
+    );
+    assert_eq!(request["additionalProperties"], false);
+    assert_eq!(
+        request["required"],
+        serde_json::json!([
+            "command_schema",
+            "client_contract_revision",
+            "security_policy_revision",
+            "correlation_id",
+            "editor_session_id",
+            "observed_writer_generation",
+            "editor_contract_revision"
+        ])
+    );
+    assert!(request["properties"].get("writer_generation").is_none());
+    assert_eq!(
+        request["properties"]["observed_writer_generation"]["type"],
+        "string"
+    );
+
+    let response: serde_json::Value =
+        serde_json::from_slice(&generated[response_path]).expect("response schema must be JSON");
+    assert_eq!(
+        response["$id"],
+        "storyos.command.take-over-project-writer.response.v1"
+    );
+    assert_eq!(response["additionalProperties"], false);
+    assert_eq!(
+        response["required"],
+        serde_json::json!([
+            "schema_id",
+            "correlation_id",
+            "project_scope",
+            "command_id",
+            "author_command_admission_id",
+            "receipt",
+            "result"
+        ])
+    );
+    let results = response["$defs"]["TakeOverProjectWriterResult"]["oneOf"]
+        .as_array()
+        .expect("takeover result must be a closed union");
+    assert_eq!(
+        results
+            .iter()
+            .map(|variant| variant["properties"]["kind"]["const"]
+                .as_str()
+                .expect("result discriminator must be a string"))
+            .collect::<Vec<_>>(),
+        ["takeover_applied", "takeover_compare_failed"]
+    );
+    assert_eq!(
+        results[0]["required"],
+        serde_json::json!([
+            "kind",
+            "prior_editor_session_id",
+            "prior_writer_generation",
+            "resulting_editor_session_id",
+            "resulting_writer_generation",
+            "resulting_snapshot_id",
+            "resulting_snapshot_activity_position",
+            "resulting_heads"
+        ])
+    );
+    assert!(results[0]["properties"].get("base_snapshot").is_none());
+    assert_eq!(
+        results[1]["required"],
+        serde_json::json!([
+            "kind",
+            "observed_writer_generation",
+            "current_writer_generation",
+            "current_writer_projection",
+            "current_snapshot_id",
+            "current_snapshot_activity_position",
+            "current_heads",
+            "reason"
+        ])
+    );
+    assert_eq!(
+        response["$defs"]["TakeoverCompareFailedReason"]["enum"],
+        serde_json::json!([
+            "writer_generation_advanced_after_admission",
+            "requester_became_current_after_admission"
+        ])
+    );
+    assert_eq!(
+        response["$defs"]["DomainReceiptCommandKind"]["enum"],
+        serde_json::json!(["applyAuthorEdit", "takeOverProjectWriter"])
+    );
+
+    let editor_session: serde_json::Value =
+        serde_json::from_slice(&generated[super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH])
+            .expect("editor session schema must be JSON");
+    assert_eq!(
+        editor_session["$defs"]["EditorReadOnlyReason"]["enum"],
+        serde_json::json!([
+            "secondary_session",
+            "superseded_by_takeover",
+            "binding_invalid"
+        ])
+    );
+
+    let openapi =
+        String::from_utf8(generated["generated/openapi/storyos-public-release-1.yaml"].clone())
+            .expect("OpenAPI must be UTF-8");
+    assert!(openapi.contains(
+        "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers:\n    post:"
+    ));
+    assert!(openapi.contains("operationId: takeOverProjectWriter"));
+    assert!(openapi.contains("- name: Idempotency-Key"));
+    assert!(openapi.contains("- name: X-StoryOS-Anti-Forgery"));
+    assert!(!openapi.contains("x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream\n"));
+    assert!(openapi.contains("takeOverProjectWriter"));
+
+    let client = String::from_utf8(
+        generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
+    )
+    .expect("generated client must be UTF-8");
+    assert!(client.contains("export async function digestTakeOverProjectWriter"));
+    assert!(client.contains("export async function takeOverProjectWriter"));
+    assert!(client.contains("storyos.command.takeOverProjectWriter.jcs.v1"));
+    let function = client
+        .split("export async function takeOverProjectWriter")
+        .nth(1)
+        .expect("takeover client function exists")
+        .split("\n}\n")
+        .next()
+        .expect("takeover client function closes");
+    assert!(function.contains("editorSessionId"));
+    assert!(function.contains("idempotency-key"));
+    assert!(function.contains("x-storyos-anti-forgery"));
+
+    let positive: serde_json::Value = serde_json::from_slice(
+        &generated["generated/golden-wire/storyos-public-release-1/take-over-project-writer.json"],
+    )
+    .expect("positive fixture must be JSON");
+    assert_eq!(positive["receipt"]["command_kind"], "takeOverProjectWriter");
+    assert_eq!(positive["receipt"]["result"], "no_effect");
+    assert_eq!(
+        positive["receipt"]["author_action_sequence"],
+        serde_json::Value::Null
+    );
+    assert_eq!(
+        positive["receipt"]["authoritative_revision_ids"],
+        serde_json::json!([])
+    );
+    assert_eq!(
+        positive["receipt"]["authoritative_commit_ids"],
+        serde_json::json!([])
+    );
+    assert_eq!(positive["result"]["kind"], "takeover_applied");
+    assert!(positive["result"].get("base_snapshot").is_none());
 }
 
 #[test]
@@ -276,6 +450,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
     expected_references.push(crate::release1_snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH);
     expected_references
         .push(crate::release1_snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH);
+    expected_references.push(crate::release1_takeover_artifacts::REQUEST_SCHEMA_PATH);
+    expected_references.push(crate::release1_takeover_artifacts::RESPONSE_SCHEMA_PATH);
     assert_eq!(
         resolved_references,
         expected_references.into_iter().map(str::to_owned).collect()
@@ -315,7 +491,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v4"
+        "storyos.typescript-client.release-1.v5"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -429,7 +605,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v4\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v5\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])

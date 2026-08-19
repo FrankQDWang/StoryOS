@@ -33,6 +33,8 @@ use crate::release1_author_edit_outcome::GET_APPLY_AUTHOR_EDIT_OUTCOME;
 use crate::release1_author_edit_outcome_artifacts as author_edit_outcome_artifacts;
 use crate::release1_snapshot::{ACTIVITY_STREAM, GET_SNAPSHOT};
 use crate::release1_snapshot_artifacts as snapshot_artifacts;
+use crate::release1_takeover::TAKE_OVER_PROJECT_WRITER;
+use crate::release1_takeover_artifacts as takeover_artifacts;
 
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
@@ -102,7 +104,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:6b5cea06c107ed1d66c76588a17af6657e3fe0b3c0cce60a1ec7e0cc2ff1780c";
+    "sha256:9a1c0b318756617e0da495f69be80da4678a08bef46fc648b7a033a32131d64c";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -158,6 +160,8 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     let activity_stream_request_schema = snapshot_artifacts::activity_stream_request_schema_bytes();
     let activity_stream_response_schema =
         snapshot_artifacts::activity_stream_response_schema_bytes();
+    let takeover_request_schema = takeover_artifacts::request_schema_bytes();
+    let takeover_response_schema = takeover_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -258,6 +262,16 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
             crate::release1_snapshot::ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
             snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
             &activity_stream_response_schema,
+        ),
+        (
+            crate::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
+            takeover_artifacts::REQUEST_SCHEMA_PATH,
+            &takeover_request_schema,
+        ),
+        (
+            crate::TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
+            takeover_artifacts::RESPONSE_SCHEMA_PATH,
+            &takeover_response_schema,
         ),
     ]);
     let client = typescript_client_bytes();
@@ -363,6 +377,8 @@ fn generated_files() -> Vec<GeneratedFile> {
     let activity_stream_request_schema = snapshot_artifacts::activity_stream_request_schema_bytes();
     let activity_stream_response_schema =
         snapshot_artifacts::activity_stream_response_schema_bytes();
+    let takeover_request_schema = takeover_artifacts::request_schema_bytes();
+    let takeover_response_schema = takeover_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
@@ -464,6 +480,16 @@ fn generated_files() -> Vec<GeneratedFile> {
             snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
             &activity_stream_response_schema,
         ),
+        (
+            crate::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
+            takeover_artifacts::REQUEST_SCHEMA_PATH,
+            &takeover_request_schema,
+        ),
+        (
+            crate::TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
+            takeover_artifacts::RESPONSE_SCHEMA_PATH,
+            &takeover_response_schema,
+        ),
     ]);
     let profile = release1_protocol_profile();
     let profile_json =
@@ -526,6 +552,14 @@ fn generated_files() -> Vec<GeneratedFile> {
         (
             snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
             activity_stream_response_schema,
+        ),
+        (
+            takeover_artifacts::REQUEST_SCHEMA_PATH,
+            takeover_request_schema,
+        ),
+        (
+            takeover_artifacts::RESPONSE_SCHEMA_PATH,
+            takeover_response_schema,
         ),
         (TYPESCRIPT_CLIENT_PATH, typescript_client_bytes()),
         (TYPESCRIPT_DECLARATION_PATH, typescript_declaration_bytes()),
@@ -621,6 +655,18 @@ fn generated_files() -> Vec<GeneratedFile> {
         (
             snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[2],
             snapshot_artifacts::activity_stream_boundary_fixture_bytes(),
+        ),
+        (
+            takeover_artifacts::FIXTURE_PATHS[0],
+            takeover_artifacts::fixture_bytes(),
+        ),
+        (
+            takeover_artifacts::FIXTURE_PATHS[1],
+            takeover_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            takeover_artifacts::FIXTURE_PATHS[2],
+            takeover_artifacts::boundary_fixture_bytes(),
         ),
     ]
 }
@@ -770,6 +816,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&author_edit_outcome_artifacts::openapi());
     paths.push_str(&snapshot_artifacts::snapshot_openapi());
     paths.push_str(&snapshot_artifacts::activity_stream_openapi());
+    paths.push_str(&takeover_artifacts::openapi());
     let implemented_slice = implemented_operation_ids().join(",");
     format!(
         "openapi: 3.1.0\ninfo:\n  title: StoryOS Public Release 1\n  version: {PUBLIC_PROTOCOL_RELEASE}\n  x-storyos-contract-revision: {CONTRACT_REVISION}\n  x-storyos-implemented-slice: {implemented_slice}\npaths:\n{paths}components: {{}}\n",
@@ -939,6 +986,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
     operation_ids.push(GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id);
     operation_ids.push(GET_SNAPSHOT.operation_id);
     operation_ids.push(ACTIVITY_STREAM.operation_id);
+    operation_ids.push(TAKE_OVER_PROJECT_WRITER.operation_id);
     operation_ids
 }
 
@@ -1002,7 +1050,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}",
+        "{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1029,6 +1077,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         author_edit_client,
         author_edit_outcome_client,
         snapshot_artifacts::typescript_client_source(),
+        takeover_artifacts::typescript_client_source(),
     ).into_bytes()
 }
 
@@ -1054,10 +1103,11 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
     let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}",
         author_edit_artifacts::typescript_type_declarations(),
         author_edit_outcome_artifacts::typescript_type_declarations(),
         snapshot_artifacts::typescript_type_declarations(),
+        takeover_artifacts::typescript_type_declarations(),
     );
     declaration.push_str("\n\n");
     declaration.push_str(
@@ -1077,6 +1127,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(author_edit_artifacts::typescript_declarations());
     declaration.push_str(author_edit_outcome_artifacts::typescript_declarations());
     declaration.push_str(snapshot_artifacts::typescript_declarations());
+    declaration.push_str(takeover_artifacts::typescript_declarations());
     declaration.into_bytes()
 }
 
@@ -1094,7 +1145,8 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 author_edit_artifacts::FIXTURE_PATHS[0], author_edit_artifacts::FIXTURE_PATHS[1], author_edit_artifacts::FIXTURE_PATHS[2],
                 author_edit_outcome_artifacts::FIXTURE_PATHS[0], author_edit_outcome_artifacts::FIXTURE_PATHS[1], author_edit_outcome_artifacts::FIXTURE_PATHS[2],
                 snapshot_artifacts::SNAPSHOT_FIXTURE_PATHS[0], snapshot_artifacts::SNAPSHOT_FIXTURE_PATHS[1], snapshot_artifacts::SNAPSHOT_FIXTURE_PATHS[2],
-                snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[0], snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[1], snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[2]],
+                snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[0], snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[1], snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[2],
+                takeover_artifacts::FIXTURE_PATHS[0], takeover_artifacts::FIXTURE_PATHS[1], takeover_artifacts::FIXTURE_PATHS[2]],
             "normalization": format!("replace every release_identity.fixture_corpus_digest with {FIXTURE_DIGEST_PLACEHOLDER}")
         },
         "fixtures": [
@@ -1130,7 +1182,10 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": GET_SNAPSHOT.fixtures[2], "classification": "boundary", "operation_id": GET_SNAPSHOT.operation_id, "path": snapshot_artifacts::SNAPSHOT_FIXTURE_PATHS[2]},
             {"fixture_id": ACTIVITY_STREAM.fixtures[0], "classification": "positive", "operation_id": ACTIVITY_STREAM.operation_id, "path": snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[0]},
             {"fixture_id": ACTIVITY_STREAM.fixtures[1], "classification": "invalid", "operation_id": ACTIVITY_STREAM.operation_id, "path": snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[1]},
-            {"fixture_id": ACTIVITY_STREAM.fixtures[2], "classification": "boundary", "operation_id": ACTIVITY_STREAM.operation_id, "path": snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[2]}
+            {"fixture_id": ACTIVITY_STREAM.fixtures[2], "classification": "boundary", "operation_id": ACTIVITY_STREAM.operation_id, "path": snapshot_artifacts::ACTIVITY_STREAM_FIXTURE_PATHS[2]},
+            {"fixture_id": TAKE_OVER_PROJECT_WRITER.fixtures[0], "classification": "positive", "operation_id": TAKE_OVER_PROJECT_WRITER.operation_id, "path": takeover_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": TAKE_OVER_PROJECT_WRITER.fixtures[1], "classification": "invalid", "operation_id": TAKE_OVER_PROJECT_WRITER.operation_id, "path": takeover_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": TAKE_OVER_PROJECT_WRITER.fixtures[2], "classification": "boundary", "operation_id": TAKE_OVER_PROJECT_WRITER.operation_id, "path": takeover_artifacts::FIXTURE_PATHS[2]}
         ]
     }))
 }
@@ -1187,6 +1242,9 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         snapshot_artifacts::activity_stream_fixture_bytes(),
         snapshot_artifacts::activity_stream_invalid_fixture_bytes(),
         snapshot_artifacts::activity_stream_boundary_fixture_bytes(),
+        takeover_artifacts::fixture_bytes(),
+        takeover_artifacts::invalid_fixture_bytes(),
+        takeover_artifacts::boundary_fixture_bytes(),
     ]
     .concat()
 }
