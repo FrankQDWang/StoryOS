@@ -39,8 +39,7 @@ def emit(payload: dict[str, Any]) -> int:
     return 0
 
 
-def followup_message(conversation_id: str, loop_count: int) -> str:
-    gate_path = f".cursor/hooks/state/{conversation_id}.json"
+def followup_message(conversation_id: str | None, loop_count: int) -> str:
     near_limit = loop_count >= NEAR_LIMIT
     lead = (
         "上一轮在未通过停止门的情况下结束了。不要把工作当成已经完成。"
@@ -58,6 +57,17 @@ def followup_message(conversation_id: str, loop_count: int) -> str:
         )
     )
     next_index = 2 if near_limit else 3
+    pending = ".cursor/hooks/state/pending.json"
+    write_paths = (
+        f"- `.cursor/hooks/state/{conversation_id}.json`\n- `{pending}`"
+        if conversation_id is not None
+        else f"- `{pending}`"
+    )
+    conversation_line = (
+        f'\n  "conversation_id": "{conversation_id}",'
+        if conversation_id is not None
+        else ""
+    )
     return f"""{lead}
 
 停止门只有两种合法原因，外加一种用户已经点头结束的情况：
@@ -74,14 +84,12 @@ def followup_message(conversation_id: str, loop_count: int) -> str:
    - 判断：背景；选项；推荐项；推荐理由。
 {next_index + 2}. 只有用户刚刚明确允许结束本任务时，才写入 user_authorized_end。
 
-先写下面两个路径之一，再结束这一轮（JSON 一行即可）：
-- `{gate_path}`
-- `.cursor/hooks/state/pending.json`
+先写下面路径，再结束这一轮（JSON 一行即可）：
+{write_paths}
 
 ```json
 {{
-  "allow_stop": "awaiting_authorization",
-  "conversation_id": "{conversation_id}",
+  "allow_stop": "awaiting_authorization",{conversation_line}
   "what": "需要用户授权或判断的那一件事",
   "background": "判断时必填：背景",
   "options": ["判断时必填：选项 A", "选项 B"],
@@ -108,10 +116,10 @@ def load_gate(path: Path) -> dict[str, Any] | None:
     return data
 
 
-def gate_path(conversation_id: str) -> Path | None:
+def gate_path(conversation_id: str | None) -> Path | None:
     specific = (
         STATE_DIR / f"{conversation_id}.json"
-        if conversation_id != "unknown" and SAFE_ID.match(conversation_id)
+        if conversation_id is not None and SAFE_ID.match(conversation_id)
         else None
     )
     if specific is not None and specific.is_file():
@@ -142,10 +150,12 @@ def main() -> int:
     if status == "aborted":
         return emit({})
 
-    conversation_id = payload.get("conversation_id") or payload.get("session_id")
-    if not isinstance(conversation_id, str) or not conversation_id.strip():
-        conversation_id = "unknown"
-    conversation_id = conversation_id.strip()
+    raw_id = payload.get("conversation_id") or payload.get("session_id")
+    conversation_id = (
+        raw_id.strip()
+        if isinstance(raw_id, str) and SAFE_ID.match(raw_id.strip())
+        else None
+    )
 
     loop_count = payload.get("loop_count", 0)
     if not isinstance(loop_count, int) or loop_count < 0:
