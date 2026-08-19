@@ -5,6 +5,7 @@ import {
   getEditorSession,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
+  commitOutcomeQueryWithGroup,
   commitStrongerGroup,
   markOutcomeQueryUnresolved,
   reconcileLostAcknowledgement,
@@ -264,7 +265,7 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
 }
 
 async function settleAuthorEditResponse({
-  workspace, group, response, baseUrl, fetchImpl, cryptoImpl,
+  workspace, group, response, baseUrl, fetchImpl, cryptoImpl, durableQuery,
 }) {
   const pending = await rebuildPendingProjection(workspace);
   const effect = response.effect;
@@ -318,7 +319,7 @@ async function settleAuthorEditResponse({
     }
     const rest = { ...group };
     delete rest.reconciliation;
-    await commitStrongerGroup(workspace, {
+    const next = {
       ...rest,
       settlement: {
         kind: "zero_authority_receipt_settled",
@@ -327,7 +328,9 @@ async function settleAuthorEditResponse({
         receipt,
         effect,
       },
-    });
+    };
+    if (durableQuery) await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next });
+    else await commitStrongerGroup(workspace, next);
     return rebuildPendingProjection(workspace);
   }
   if (receipt.result !== "authoritative_applied"
@@ -383,7 +386,7 @@ async function settleAuthorEditResponse({
   }
   const rest = { ...group };
   delete rest.reconciliation;
-  await commitStrongerGroup(workspace, {
+  const next = {
     ...rest,
     settlement: {
       kind: "applied_receipt_settled",
@@ -396,7 +399,12 @@ async function settleAuthorEditResponse({
       project_activity_position: effect.project_activity_position,
       installed_base_snapshot: freshBase,
     },
-  }, freshBase);
+  };
+  if (durableQuery) {
+    await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next, activeBase: freshBase });
+  } else {
+    await commitStrongerGroup(workspace, next, freshBase);
+  }
   workspace.session = canonical;
   return rebuildPendingProjection(workspace);
 }

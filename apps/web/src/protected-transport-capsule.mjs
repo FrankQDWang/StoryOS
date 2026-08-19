@@ -3,7 +3,6 @@ import { createJournalUuid, JOURNAL_DATABASE_VERSION } from "./local-edit-journa
 const CAPSULE_STORE = "transport_capsules";
 const ATTEMPT_STORE = "transport_attempts";
 const QUERY_ATTEMPT_STORE = "outcome_query_attempts";
-const QUERY_OBSERVATION_STORE = "outcome_query_observations";
 const QUERY_ROUTE =
   "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}";
 
@@ -207,58 +206,5 @@ export async function completeOutcomeQueryUnavailable(workspace, group, attempt,
       exact_response_payload_digest: null,
     },
   });
-  await transactionResult(transaction);
-}
-
-export async function completeOutcomeQueryObserved(
-  workspace, group, attempt, capsule, { payload, captured, closed },
-) {
-  const observationId = createJournalUuid(workspace.cryptoImpl);
-  const digest = new Uint8Array(await workspace.cryptoImpl.subtle.digest(
-    "SHA-256", new TextEncoder().encode(captured),
-  ));
-  const observation = {
-    outcome_query_observation_id: observationId,
-    outcome_query_attempt_id: attempt.outcome_query_attempt_id,
-    journal_submission_group_id: group.journal_submission_group_id,
-    exact_transport_retry_capsule_id: capsule.exact_transport_retry_capsule_id,
-    local_response_payload_ref: observationId,
-    exact_response_payload_digest: {
-      algorithm: "sha256",
-      profile: "storyos.local-edit-journal.payload.sha256.v1",
-      value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-    },
-    schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
-    query_correlation_id: payload.correlation_id,
-    project_scope: payload.project_scope,
-    observed_at: new Date().toISOString(),
-    outcome: closed.kind === "committed"
-      ? { kind: "committed", exact_apply_author_edit_response_v2: closed.response }
-      : closed.kind === "rejected"
-        ? { kind: "rejected_no_admission", reason: "challenge_expired_unconsumed" }
-        : { kind: "still_unknown", observation: closed.strongest },
-  };
-  const transaction = workspace.database.transaction([
-    "submission_groups", QUERY_ATTEMPT_STORE, QUERY_OBSERVATION_STORE,
-  ], "readwrite");
-  const attempts = transaction.objectStore(QUERY_ATTEMPT_STORE);
-  const [durable, stored] = await Promise.all([
-    requestResult(transaction.objectStore("submission_groups")
-      .get(group.journal_submission_group_id)),
-    requestResult(attempts.get(attempt.outcome_query_attempt_id)),
-  ]);
-  if (!durable
-    || durable.idempotency_key !== group.idempotency_key
-    || stored?.outcome?.kind !== "in_flight"
-    || stored.journal_submission_group_id !== group.journal_submission_group_id
-    || durable.settlement?.kind !== "unsettled") {
-    transaction.abort();
-    throw new Error("Author Edit acknowledgement does not converge");
-  }
-  attempts.put({
-    ...stored,
-    outcome: { kind: "response_observed", outcome_query_observation_id: observationId },
-  });
-  transaction.objectStore(QUERY_OBSERVATION_STORE).add(observation);
   await transactionResult(transaction);
 }

@@ -241,6 +241,13 @@ async function countGroupRows(database, store, groupId) {
   )).length;
 }
 
+async function groupObservations(database, groupId) {
+  return requestResult(
+    database.transaction("outcome_query_observations", "readonly")
+      .objectStore("outcome_query_observations").index("group").getAll(groupId),
+  );
+}
+
 async function loseAcknowledgement() {
   canonicalSession = session;
   outcomeMode = "unavailable";
@@ -323,6 +330,16 @@ try {
     equal(await countGroupRows(reopened.database, "outcome_query_observations", groupId), 1,
       "query observation after committed GET");
     const settled = (await journalSnapshot(reopened)).groups[0];
+    const committedObserved = await groupObservations(reopened.database, groupId);
+    equal(committedObserved[0].outcome.kind, "committed",
+      "observation committed with group settlement");
+    equal(settled.settlement?.kind, "applied_receipt_settled",
+      "group settled in the same committed observation");
+    equal(committedObserved[0].local_response_payload_ref,
+      committedObserved[0].outcome_query_observation_id, "captured GET payload self-ref");
+    if (!String(committedObserved[0].local_response_payload).includes('"outcome_kind":"committed"')) {
+      fail("captured GET bytes missing the committed envelope");
+    }
     const weaker = {
       ...settled,
       settlement: { kind: "unsettled" },
@@ -363,7 +380,7 @@ try {
     counts.authorEdits = 0;
     counts.outcomes = 0;
     counts.paths = [];
-    const { workspace } = await loseAcknowledgement();
+    const { workspace, groupId } = await loseAcknowledgement();
     workspace.database.close();
     canonicalSession = session;
     outcomeMode = "rejected";
@@ -379,6 +396,8 @@ try {
     equal(counts.outcomes, 2, "rejected reload queried");
     equal((await journalSnapshot(reopened)).groups[0].settlement?.kind,
       "outcome_query_rejected_no_admission", "rejected settlement after reload");
+    equal((await groupObservations(reopened.database, groupId))[0].outcome.kind,
+      "rejected_no_admission", "rejected observation with group settlement");
     await deleteJournal(reopened);
   }
 
@@ -386,7 +405,7 @@ try {
     counts.authorEdits = 0;
     counts.outcomes = 0;
     counts.paths = [];
-    const { workspace } = await loseAcknowledgement();
+    const { workspace, groupId } = await loseAcknowledgement();
     workspace.database.close();
     canonicalSession = session;
     outcomeMode = "challenge";
@@ -404,6 +423,8 @@ try {
       kind: "outcome_query_unresolved",
       strongest: { kind: "challenge_issued", expires_at: EXPIRES },
     }, "StillUnknown group after reload");
+    equal((await groupObservations(reopened.database, groupId))[0].outcome.kind,
+      "still_unknown", "StillUnknown observation with group reconciliation");
     await deleteJournal(reopened);
   }
 
