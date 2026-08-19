@@ -21,6 +21,8 @@ const harness = `<!doctype html>
 <html><body data-result="running"><script type="module">
 import { openEditorWorkspace, persistReplaceSelection, submitOnePendingAuthorEdit }
   from "/apps/web/src/editor-session.mjs";
+import { commitStrongerGroup }
+  from "/apps/web/src/author-edit-outcome-reconciliation.mjs";
 import { readJournalSnapshot, validateJournalSnapshot }
   from "/apps/web/src/local-edit-journal.mjs";
 
@@ -36,6 +38,11 @@ const deepEqual = (actual, expected, label) => {
 const requestResult = (request) => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error);
+});
+const transactionResult = (transaction) => new Promise((resolve, reject) => {
+  transaction.oncomplete = resolve;
+  transaction.onabort = () => reject(transaction.error);
+  transaction.onerror = () => reject(transaction.error);
 });
 
 const OWNER = "018f0000-0000-7001-8000-000000000001";
@@ -103,12 +110,14 @@ let commandDigest;
 let lastEdit;
 let lastIdempotencyKey;
 let canonicalSession = session;
-const counts = { authorEdits: 0, outcomes: 0 };
+const counts = { authorEdits: 0, outcomes: 0, paths: [] };
 
 const fetchImpl = async (url, options = {}) => {
   const parsed = new URL(url);
   if (parsed.href.includes(NONCE)) fail("nonce entered the URL");
   const path = parsed.pathname;
+  counts.paths.push(path);
+  if (/draft/i.test(path)) fail("reload created a Recovery Draft route: " + path);
   if (path.endsWith("/anti-forgery-challenges")) {
     const request = JSON.parse(options.body);
     if (request.command_schema === "storyos.command.apply-author-edit.request.v1") {
@@ -132,6 +141,24 @@ const fetchImpl = async (url, options = {}) => {
     if (options.method !== "GET" || options.body !== undefined) fail("outcome Query shape changed");
     if (options.headers["x-storyos-anti-forgery"] !== NONCE) fail("proof header mismatch");
     if (outcomeMode === "unavailable") throw new Error("simulated query unavailable");
+    if (outcomeMode === "rejected") {
+      return jsonResponse({
+        schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000082",
+        project_scope: project.project_scope,
+        outcome: { outcome_kind: "rejected", reason: "challenge_expired_unconsumed" },
+      });
+    }
+    if (outcomeMode === "challenge") {
+      return jsonResponse({
+        schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000083",
+        project_scope: project.project_scope,
+        outcome: { outcome_kind: "still_unknown", observation: {
+          observation_kind: "challenge_issued", expires_at: EXPIRES,
+        } },
+      });
+    }
     canonicalSession = freshSession;
     return jsonResponse({
       schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
@@ -179,9 +206,9 @@ async function deleteJournal(workspace) {
   sessionStorage.removeItem("active_session:" + OWNER + ":" + PROJECT);
 }
 
-async function openReady() {
+async function openReady(currentChapter = chapter) {
   const workspace = await openEditorWorkspace({
-    baseUrl: location.origin, project, chapter, profile,
+    baseUrl: location.origin, project, chapter: currentChapter, profile,
     fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto,
   });
   if (workspace.kind !== "editor-ready") {
@@ -194,6 +221,49 @@ async function openReady() {
     "transport_attempts", "transport_capsules",
   ], "journal stores");
   return workspace;
+}
+
+async function persistPending(workspace) {
+  return persistReplaceSelection(workspace, {
+    from: 4, to: 4, text: "!?", resultingBody: "Base!?",
+    inputOrigin: "paste", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+    createdAt: "2026-08-15T08:00:00.000Z",
+  });
+}
+
+async function journalSnapshot(workspace) {
+  return validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+}
+
+async function countGroupRows(database, store, groupId) {
+  return (await requestResult(
+    database.transaction(store, "readonly").objectStore(store).index("group").getAll(groupId),
+  )).length;
+}
+
+async function groupObservations(database, groupId) {
+  return requestResult(
+    database.transaction("outcome_query_observations", "readonly")
+      .objectStore("outcome_query_observations").index("group").getAll(groupId),
+  );
+}
+
+async function loseAcknowledgement() {
+  canonicalSession = session;
+  outcomeMode = "unavailable";
+  const workspace = await openReady();
+  await persistPending(workspace);
+  const projection = await submitOnePendingAuthorEdit({
+    workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+  });
+  deepEqual(projection, {
+    body: "Base!?", save_state: "saving", unsettled_intent_count: 1,
+    authoritative_revision_id: REVISION,
+  }, "unresolved after lost acknowledgement");
+  const snapshot = await journalSnapshot(workspace);
+  equal(snapshot.groups[0].reconciliation?.kind, "outcome_query_unresolved",
+    "unresolved group");
+  return { workspace, groupId: snapshot.groups[0].journal_submission_group_id };
 }
 
 const report = (result, text) => fetch("/result", {
@@ -231,31 +301,16 @@ try {
   }
 
   {
-    canonicalSession = session;
-    outcomeMode = "unavailable";
     counts.authorEdits = 0;
     counts.outcomes = 0;
-    const workspace = await openReady();
-    await persistReplaceSelection(workspace, {
-      from: 4, to: 4, text: "!?", resultingBody: "Base!?",
-      inputOrigin: "paste", undoGroupId: "018f0000-0000-7001-8000-000000000040",
-      createdAt: "2026-08-15T08:00:00.000Z",
-    });
-    const first = await submitOnePendingAuthorEdit({
-      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
-    });
-    deepEqual(first, {
-      body: "Base!?", save_state: "saving", unsettled_intent_count: 1,
-      authoritative_revision_id: REVISION,
-    }, "unresolved after lost acknowledgement");
-    const snapshot = await validateJournalSnapshot(workspace,
-      await readJournalSnapshot(workspace));
-    equal(JSON.stringify(snapshot.groups[0]).includes(NONCE), false,
+    counts.paths = [];
+    const { workspace, groupId } = await loseAcknowledgement();
+    equal(JSON.stringify((await journalSnapshot(workspace)).groups[0]).includes(NONCE), false,
       "nonce stayed out of the Journal group");
-    equal(snapshot.groups[0].reconciliation?.kind, "outcome_query_unresolved",
-      "unresolved group");
     equal(counts.authorEdits, 1, "one POST before reload");
     equal(counts.outcomes, 1, "one GET before reload");
+    equal(await countGroupRows(workspace.database, "outcome_query_attempts", groupId), 1,
+      "query attempt before reload");
     workspace.database.close();
 
     canonicalSession = session;
@@ -270,6 +325,155 @@ try {
     }, "reload recovered from the persisted capsule");
     equal(counts.authorEdits, 1, "reload did not POST again");
     equal(counts.outcomes, 2, "reload queried the original outcome");
+    equal(await countGroupRows(reopened.database, "outcome_query_attempts", groupId), 2,
+      "query attempts after reload GET");
+    equal(await countGroupRows(reopened.database, "outcome_query_observations", groupId), 1,
+      "query observation after committed GET");
+    const settled = (await journalSnapshot(reopened)).groups[0];
+    const committedObserved = await groupObservations(reopened.database, groupId);
+    equal(committedObserved[0].outcome.kind, "committed",
+      "observation committed with group settlement");
+    equal(settled.settlement?.kind, "applied_receipt_settled",
+      "group settled in the same committed observation");
+    equal(committedObserved[0].local_response_payload_ref,
+      committedObserved[0].outcome_query_observation_id, "captured GET payload self-ref");
+    if (!String(committedObserved[0].local_response_payload).includes('"outcome_kind":"committed"')) {
+      fail("captured GET bytes missing the committed envelope");
+    }
+    const weaker = {
+      ...settled,
+      settlement: { kind: "unsettled" },
+      reconciliation: {
+        kind: "outcome_query_unresolved",
+        strongest: { kind: "no_outcome_observed" },
+      },
+    };
+    let weakerRejected = false;
+    try { await commitStrongerGroup(reopened, weaker); }
+    catch (error) {
+      weakerRejected = /acknowledgement does not converge/.test(String(error?.message ?? error));
+    }
+    if (!weakerRejected) fail("weaker write overwrote durable evidence after reload");
+    reopened.database.close();
+    canonicalSession = freshSession;
+    const afterSettle = await openReady({
+      project_scope: project.project_scope,
+      project_activity_position: "1",
+      chapter: { chapter_id: CHAPTER, current_revision: {
+        revision_id: NEXT_REVISION, body: "Base!?",
+      } },
+    });
+    let secondSubmit = false;
+    try {
+      await submitOnePendingAuthorEdit({
+        workspace: afterSettle, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+      });
+    } catch (error) {
+      secondSubmit = /One pending Author Edit is required/.test(String(error?.message ?? error));
+    }
+    if (!secondSubmit) fail("settled group accepted a second submit after reload");
+    equal(counts.authorEdits, 1, "settled reload did not POST");
+    await deleteJournal(afterSettle);
+  }
+
+  {
+    counts.authorEdits = 0;
+    counts.outcomes = 0;
+    counts.paths = [];
+    const { workspace, groupId } = await loseAcknowledgement();
+    workspace.database.close();
+    canonicalSession = session;
+    outcomeMode = "rejected";
+    const reopened = await openReady();
+    const rejected = await submitOnePendingAuthorEdit({
+      workspace: reopened, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    deepEqual(rejected, {
+      body: "Base!?", save_state: "needs_attention", unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    }, "reload rejected without a second POST");
+    equal(counts.authorEdits, 1, "rejected reload did not POST");
+    equal(counts.outcomes, 2, "rejected reload queried");
+    equal((await journalSnapshot(reopened)).groups[0].settlement?.kind,
+      "outcome_query_rejected_no_admission", "rejected settlement after reload");
+    equal((await groupObservations(reopened.database, groupId))[0].outcome.kind,
+      "rejected_no_admission", "rejected observation with group settlement");
+    await deleteJournal(reopened);
+  }
+
+  {
+    counts.authorEdits = 0;
+    counts.outcomes = 0;
+    counts.paths = [];
+    const { workspace, groupId } = await loseAcknowledgement();
+    workspace.database.close();
+    canonicalSession = session;
+    outcomeMode = "challenge";
+    const reopened = await openReady();
+    const unknown = await submitOnePendingAuthorEdit({
+      workspace: reopened, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    deepEqual(unknown, {
+      body: "Base!?", save_state: "saving", unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    }, "reload StillUnknown stayed unresolved");
+    equal(counts.authorEdits, 1, "StillUnknown reload did not POST");
+    equal(counts.outcomes, 2, "StillUnknown reload queried");
+    deepEqual((await journalSnapshot(reopened)).groups[0].reconciliation, {
+      kind: "outcome_query_unresolved",
+      strongest: { kind: "challenge_issued", expires_at: EXPIRES },
+    }, "StillUnknown group after reload");
+    equal((await groupObservations(reopened.database, groupId))[0].outcome.kind,
+      "still_unknown", "StillUnknown observation with group reconciliation");
+    await deleteJournal(reopened);
+  }
+
+  {
+    counts.authorEdits = 0;
+    counts.outcomes = 0;
+    counts.paths = [];
+    const { workspace } = await loseAcknowledgement();
+    workspace.database.close();
+    const opened = await requestResult(indexedDB.open(journalName));
+    const clear = opened.transaction("transport_capsules", "readwrite");
+    clear.objectStore("transport_capsules").clear();
+    await transactionResult(clear);
+    opened.close();
+    canonicalSession = session;
+    outcomeMode = "committed";
+    const reopened = await openReady();
+    const blocked = await submitOnePendingAuthorEdit({
+      workspace: reopened, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    deepEqual(blocked, {
+      body: "Base!?", save_state: "saving", unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    }, "missing capsule stayed unresolved");
+    equal(counts.authorEdits, 1, "missing capsule did not POST");
+    equal(counts.outcomes, 1, "missing capsule did not query");
+    equal((await journalSnapshot(reopened)).groups[0].reconciliation?.strongest?.kind,
+      "no_outcome_observed", "missing capsule kept NoOutcomeObserved");
+    await deleteJournal(reopened);
+  }
+
+  {
+    counts.authorEdits = 0;
+    counts.outcomes = 0;
+    counts.paths = [];
+    const { workspace } = await loseAcknowledgement();
+    workspace.database.close();
+    canonicalSession = session;
+    outcomeMode = "unavailable";
+    const reopened = await openReady();
+    const interrupted = await submitOnePendingAuthorEdit({
+      workspace: reopened, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    });
+    deepEqual(interrupted, {
+      body: "Base!?", save_state: "saving", unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    }, "query interruption stayed unresolved");
+    equal(counts.authorEdits, 1, "interruption reload did not POST");
+    equal(counts.outcomes, 2, "interruption reload still queried first");
     await deleteJournal(reopened);
   }
 
@@ -336,7 +540,7 @@ test("reload recovers ApplyAuthorEdit from a persisted capsule without a second 
       reported,
       once(browser, "exit").then(([code]) => { throw new Error(`Chrome exited early: ${code}`); }),
       new Promise((_, reject) => setTimeout(
-        () => reject(new Error("real-browser reload recovery timed out")), 20_000,
+        () => reject(new Error("real-browser reload recovery timed out")), 40_000,
       ).unref()),
     ]);
     assert.deepEqual(result, {
