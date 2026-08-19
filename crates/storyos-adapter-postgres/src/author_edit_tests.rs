@@ -18,7 +18,7 @@ const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER: &str = "018f0000-0000-7001-8000-000000000003";
 const REVISION: &str = "018f0000-0000-7001-8000-000000000005";
-pub(super) static AUTHOR_EDIT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(crate) static AUTHOR_EDIT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[test]
 fn payload_digest_is_lowercase_sha256() {
