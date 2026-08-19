@@ -8,6 +8,10 @@ mod tests;
 #[path = "author_edit_outcome_tests.rs"]
 mod author_edit_outcome_tests;
 
+#[cfg(test)]
+#[path = "takeover_persistence_tests.rs"]
+mod takeover_persistence_tests;
+
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;

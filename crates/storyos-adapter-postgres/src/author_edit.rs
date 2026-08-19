@@ -372,7 +372,7 @@ fn fault_error(point: &'static str) -> AuthorEditError {
 
 #[cfg(test)]
 #[path = "author_edit_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
