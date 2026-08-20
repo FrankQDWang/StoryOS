@@ -203,8 +203,8 @@ export async function openEditorWorkspace({
     database = await openJournalDatabase(indexedDBImpl, scope);
     const metadata = database.transaction("metadata", "readonly").objectStore("metadata");
     const activeSessionKey = `active_session:${scope.owner_user_id}:${scope.project_id}`;
-    const active = globalThis.sessionStorage
-      ? globalThis.sessionStorage.getItem(activeSessionKey) : undefined;
+    const storedActive = await requestResult(metadata.get(activeSessionKey));
+    const active = globalThis.sessionStorage?.getItem(activeSessionKey) ?? storedActive?.value;
     const session = active
       ? await getEditorSession({ baseUrl, projectId: scope.project_id,
         editorSessionId: active, fetchImpl })
@@ -230,6 +230,9 @@ export async function openEditorWorkspace({
     if (!activeBase) {
       transaction.objectStore("metadata").add({ key: activeBaseKey, value: session.base_snapshot });
     }
+    transaction.objectStore("metadata").put({
+      key: activeSessionKey, value: session.editor_session.editor_session_id,
+    });
     await transactionResult(transaction);
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
     const workspace = { database, partition, session, cryptoImpl,

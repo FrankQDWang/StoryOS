@@ -224,7 +224,9 @@ async function waitFor(command, expression, timeoutMs = 20_000) {
   const surface = await evaluate(command, SURFACE);
   let journal = null;
   try { journal = await evaluate(command, JOURNAL); } catch (error) { journal = String(error?.message ?? error); }
-  throw new Error(`Browser condition timed out: ${expression}\n${JSON.stringify({ surface, journal })}`);
+  let recovery = null;
+  try { recovery = await evaluate(command, RECOVERY); } catch (error) { recovery = String(error?.message ?? error); }
+  throw new Error(`Browser condition timed out: ${expression}\n${JSON.stringify({ surface, journal, recovery })}`);
 }
 
 const SURFACE = `({
@@ -265,6 +267,10 @@ const JOURNAL = `new Promise((resolve, reject) => {
     };
     tx.onerror = () => reject(tx.error);
   };
+})`;
+
+const RECOVERY = `({
+  sessionStorage: sessionStorage.getItem("active_session:${USER_A}:${PROJECT_A}")
 })`;
 
 async function focusEnd(command) {
