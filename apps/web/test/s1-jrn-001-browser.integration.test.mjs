@@ -244,7 +244,6 @@ async function waitForBackendUnsettledIntent(command, origin) {
       securityOrigin: origin,
       databaseName,
       objectStoreName: "intents",
-      indexName: "",
       skipCount: 0,
       pageSize: 50,
     });
