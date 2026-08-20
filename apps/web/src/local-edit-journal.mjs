@@ -164,18 +164,20 @@ export async function readJournalSnapshot(workspace) {
     "readonly",
   );
   const partitionId = workspace.partition.journal_partition_id;
-  const [schema, watermark, activeBase, records, payloadChains, groups] = await Promise.all([
-    requestResult(transaction.objectStore("metadata").get("schema")),
-    requestResult(transaction.objectStore("metadata")
-      .get(`durable_high_watermark:${partitionId}`)),
-    requestResult(transaction.objectStore("metadata").get(`active_base:${partitionId}`)),
-    requestResult(transaction.objectStore("intents").index("partition")
-      .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-    requestResult(transaction.objectStore("payload_chains").index("partition")
-      .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-    requestResult(transaction.objectStore("submission_groups").index("partition")
-      .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-  ]);
+  const [schema, watermark, activeBase, records, payloadChains, groups, storedFences] =
+    await Promise.all([
+      requestResult(transaction.objectStore("metadata").get("schema")),
+      requestResult(transaction.objectStore("metadata")
+        .get(`durable_high_watermark:${partitionId}`)),
+      requestResult(transaction.objectStore("metadata").get(`active_base:${partitionId}`)),
+      requestResult(transaction.objectStore("intents").index("partition")
+        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("payload_chains").index("partition")
+        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("submission_groups").index("partition")
+        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("metadata").get(`collection_fences:${partitionId}`)),
+    ]);
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || records.length > MAX_RETAINED_JOURNAL_ITEMS
     || payloadChains.length > MAX_RETAINED_JOURNAL_ITEMS
@@ -185,7 +187,10 @@ export async function readJournalSnapshot(workspace) {
   records.sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
-  return { watermark, activeBase: activeBase?.value, records, payloadChains, groups };
+  return {
+    watermark, activeBase: activeBase?.value, records, payloadChains, groups,
+    fences: storedFences?.value ?? [],
+  };
 }
 
 async function validatePayloadChains(workspace, records, payloadChains) {
@@ -199,6 +204,18 @@ async function validatePayloadChains(workspace, records, payloadChains) {
   for (const chain of payloadChains) {
     const chainRecords = recordsByChain.get(chain.payload_chain_id) ?? [];
     const patches = chain.ordered_patch_refs ?? [];
+    if (chain.payload_collection?.kind === "collected") {
+      if (chain.journal_partition_id !== workspace.partition.journal_partition_id
+        || chainRecords.length === 0
+        || patches.length !== chainRecords.length
+        || chain.checkpoint_ref?.materialized_payload !== undefined
+        || patches.some((patch) => patch.normalized_primitives !== undefined)
+        || chainRecords.some((record) => record.author_edit_unit !== undefined)) {
+        throw new Error("Local Edit Journal is corrupt");
+      }
+      recordsByChain.delete(chain.payload_chain_id);
+      continue;
+    }
     if (chain.journal_partition_id !== workspace.partition.journal_partition_id
       || chainRecords.length === 0
       || patches.length !== chainRecords.length
@@ -264,8 +281,11 @@ async function validateCoverage(workspace, records, groups) {
     const firstRecord = recordsBySequence.get(first);
     const request = group.frozen_request_body;
     const coveredRecords = coverage.map((_, index) => recordsBySequence.get(first + index));
+    const collected = group.payload_collection?.kind === "collected";
     const [requestDigest, coverageDigest] = await Promise.all([
-      digestApplyAuthorEdit(request, workspace.cryptoImpl),
+      collected
+        ? Promise.resolve(group.frozen_request_digest)
+        : digestApplyAuthorEdit(request, workspace.cryptoImpl),
       digestSubmissionCoverage({ ordered_coverage: coverage,
         covered_sequence_range: group.covered_sequence_range }, workspace.cryptoImpl),
     ]);
@@ -297,9 +317,13 @@ async function validateCoverage(workspace, records, groups) {
       || request?.editor_contract_revision !== EDITOR_CONTRACT_REVISION
       || request?.completed_intent_record_id !== firstRecord?.completed_intent_record_id
       || request?.local_intent_sequence !== String(first)
-      || JSON.stringify(request?.author_edit_units)
-        !== JSON.stringify(coveredRecords.map((record) => record?.author_edit_unit))
-      || JSON.stringify(group.frozen_request_digest) !== JSON.stringify(requestDigest)
+      || (collected
+        ? JSON.stringify(request?.author_edit_units) !== JSON.stringify([])
+          || coveredRecords.some((record) => record?.author_edit_unit !== undefined)
+          || !UUID.test(group.payload_collection.collection_fence_id ?? "")
+        : JSON.stringify(request?.author_edit_units)
+          !== JSON.stringify(coveredRecords.map((record) => record?.author_edit_unit))
+            || JSON.stringify(group.frozen_request_digest) !== JSON.stringify(requestDigest))
       || JSON.stringify(group.frozen_payload_coverage_digest) !== JSON.stringify(coverageDigest)
       || new TextEncoder().encode(JSON.stringify(request)).byteLength
         > AUTHOR_EDIT_MAX_WIRE_BODY_BYTES) {
