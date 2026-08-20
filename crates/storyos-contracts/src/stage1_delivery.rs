@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-20-v19";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "ebb53fa819623554a4cc5ac3aebcbb1be2db7a3b";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "5ddf62e17fee0f1aef27021a8163866ce574c183";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-20-v20";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "615408dabba489805f36aee83719cd0e8eb18dc3";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "6d1f5830978379140c51ee7840c488a216c1ba4d";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:d544671090b25285bcbc76b14a708758bbee515805bde4dbfb7d8645ade1a65b";
+    "sha256:00418ed41c376df780e27ac6356c309f819fda684cc337f98e189bcbb09de545";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -435,7 +435,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-10",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/112",
         title: "Complete the Stage 1 Mandatory Evidence and Handoff",
-        issue_body_sha256: "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
+        issue_body_sha256: "498355b2d620814580d9eecde8f71932145e77477f201339df9bd022d3baabc2",
         blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/209"],
         evidence_role: EvidenceRole::AcceptanceHandoff,
         responsibility: "assemble the mandatory Stage 1 evidence and handoff",

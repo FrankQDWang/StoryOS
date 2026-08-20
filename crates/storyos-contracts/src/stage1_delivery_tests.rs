@@ -122,7 +122,7 @@ fn protected_web_client_toolchain_ticket_matches_the_current_delivery_lock() {
             "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
             "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
             "title": "Complete the Stage 1 Mandatory Evidence and Handoff",
-            "issue_body_sha256": "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
+            "issue_body_sha256": "498355b2d620814580d9eecde8f71932145e77477f201339df9bd022d3baabc2",
             "blocked_by": ["https://github.com/FrankQDWang/StoryOS/issues/209"],
             "evidence_role": "acceptance-handoff",
             "responsibility": "assemble the mandatory Stage 1 evidence and handoff",
@@ -138,6 +138,23 @@ fn protected_web_client_toolchain_ticket_matches_the_current_delivery_lock() {
                 "bundles": ["B-HANDOFF"],
                 "aggregate": "B-S1-MANDATORY-SET"
             }
+        })
+    );
+}
+
+#[test]
+fn stage1_handoff_delivery_lock_matches_the_composed_main() {
+    let contract = serde_json::to_value(delivery_contract()).expect("delivery contract serializes");
+    assert_eq!(
+        json!({
+            "revision": contract["revision"],
+            "baseline_commit": contract["baseline_commit"],
+            "baseline_tree": contract["baseline_tree"],
+        }),
+        json!({
+            "revision": "stage1-ticketed-delivery-2026-08-20-v20",
+            "baseline_commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
+            "baseline_tree": "6d1f5830978379140c51ee7840c488a216c1ba4d",
         })
     );
 }
