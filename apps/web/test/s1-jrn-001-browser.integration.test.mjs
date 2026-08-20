@@ -243,21 +243,24 @@ const JOURNAL = `new Promise((resolve, reject) => {
   request.onerror = () => reject(request.error);
   request.onsuccess = () => {
     const db = request.result;
-    const tx = db.transaction(["submission_groups", "intents"], "readonly");
+    const tx = db.transaction(["submission_groups", "intents", "metadata"], "readonly");
     const groups = tx.objectStore("submission_groups").getAll();
     const intents = tx.objectStore("intents").getAll();
+    const metadata = tx.objectStore("metadata").getAll();
     tx.oncomplete = () => {
       db.close();
       resolve({
         groups: groups.result.map((group) => ({
           collected: group.payload_collection?.kind === "collected",
-          reason: group.payload_collection?.kind === "collected"
-            ? "applied_receipt_converged_with_durable_successor" : null,
           settlement: group.settlement?.kind ?? null,
         })),
         intents: intents.result.map((record) => ({
           retainedUnit: record.author_edit_unit !== undefined,
         })),
+        fenceReasons: metadata.result
+          .filter((row) => String(row.key).startsWith("collection_fences:"))
+          .flatMap((row) => row.value ?? [])
+          .map((fence) => fence.reason),
       });
     };
     tx.onerror = () => reject(tx.error);
@@ -405,15 +408,17 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
         body: AFTER_PASTE, saveState: "saved",
         journal: {
           groups: [
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
           ],
           intents: [
             { retainedUnit: false }, { retainedUnit: false }, { retainedUnit: false },
+          ],
+          fenceReasons: [
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
           ],
         },
       },
@@ -421,16 +426,18 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
         body: AFTER_UNSETTLED, saveState: "saving",
         journal: {
           groups: [
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
           ],
           intents: [
             { retainedUnit: false }, { retainedUnit: false }, { retainedUnit: false },
             { retainedUnit: true },
+          ],
+          fenceReasons: [
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
           ],
         },
       },
@@ -442,18 +449,20 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
         },
         journal: {
           groups: [
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
-            { collected: true, reason: "applied_receipt_converged_with_durable_successor",
-              settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
+            { collected: true, settlement: "applied_receipt_settled" },
           ],
           intents: [
             { retainedUnit: false }, { retainedUnit: false }, { retainedUnit: false },
             { retainedUnit: false },
+          ],
+          fenceReasons: [
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
+            "applied_receipt_converged_with_durable_successor",
           ],
         },
       },
