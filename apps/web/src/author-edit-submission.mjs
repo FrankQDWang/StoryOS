@@ -39,6 +39,21 @@ async function canonicalBodyDigest(body, cryptoImpl) {
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function writerProjectionAllowsLateDurableSettlement(
+  canonicalWriter, sessionWriter, partitionGeneration,
+) {
+  if (JSON.stringify(canonicalWriter) === JSON.stringify(sessionWriter)) return true;
+  // A fenced tab may observe generation N+1 while its journal partition stays
+  // bound to generation N. Do not treat that writer delta as Snapshot mismatch.
+  return sessionWriter?.kind === "current_writer"
+    && canonicalWriter?.kind === "read_only"
+    && canonicalWriter.reason === "superseded_by_takeover"
+    && !("writer_generation" in canonicalWriter)
+    && positiveU64(canonicalWriter.observed_writer_generation)
+    && sessionWriter.writer_generation === partitionGeneration
+    && BigInt(canonicalWriter.observed_writer_generation) > BigInt(sessionWriter.writer_generation);
+}
+
 const requestResult = (request) => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
@@ -361,7 +376,9 @@ async function settleAuthorEditResponse({
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
     || JSON.stringify(canonical.editor_session) !== JSON.stringify(workspace.session.editor_session)
-    || JSON.stringify(canonical.writer) !== JSON.stringify(workspace.session.writer)
+    || !writerProjectionAllowsLateDurableSettlement(
+      canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
+    )
     || !UUID.test(freshBase?.snapshot_id ?? "")
     || freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id
     || freshBase.chapter_id !== group.frozen_request_body.chapter_id
@@ -384,6 +401,12 @@ async function settleAuthorEditResponse({
     || Number.isNaN(Date.parse(freshBase.created_at))) {
     throw new Error("Editor Base Snapshot did not converge");
   }
+  const previousPartition = workspace.partition;
+  if (writerProjectionAllowsLateDurableSettlement(
+    canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
+  ) && canonical.writer?.kind === "read_only") {
+    workspace.partition = { ...previousPartition, disposition: "read_only_observer" };
+  }
   const rest = { ...group };
   delete rest.reconciliation;
   const next = {
@@ -400,10 +423,15 @@ async function settleAuthorEditResponse({
       installed_base_snapshot: freshBase,
     },
   };
-  if (durableQuery) {
-    await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next, activeBase: freshBase });
-  } else {
-    await commitStrongerGroup(workspace, next, freshBase);
+  try {
+    if (durableQuery) {
+      await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next, activeBase: freshBase });
+    } else {
+      await commitStrongerGroup(workspace, next, freshBase);
+    }
+  } catch (error) {
+    workspace.partition = previousPartition;
+    throw error;
   }
   workspace.session = canonical;
   return rebuildPendingProjection(workspace);

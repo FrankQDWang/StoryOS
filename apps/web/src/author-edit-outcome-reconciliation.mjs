@@ -83,10 +83,29 @@ function putStrongerGroup(transaction, durable, next, activeBase, partitionId) {
   return committed;
 }
 
+function takeoverFencePartitionConverges(durablePartition, nextPartition) {
+  if (JSON.stringify(durablePartition) === JSON.stringify(nextPartition)) return true;
+  if (!durablePartition || !nextPartition) return false;
+  const { disposition: durableDisposition, ...durableRest } = durablePartition;
+  const { disposition: nextDisposition, ...nextRest } = nextPartition;
+  // Takeover may fence the still-open partition in the same settlement write.
+  // Generation, session binding, and journal identity must stay unchanged.
+  return durableDisposition === "current_writer_open"
+    && nextDisposition === "read_only_observer"
+    && JSON.stringify(durableRest) === JSON.stringify(nextRest);
+}
+
+function putTakeoverFencePartition(transaction, durablePartition, nextPartition) {
+  if (JSON.stringify(durablePartition) === JSON.stringify(nextPartition)) return;
+  transaction.objectStore("partitions").put(nextPartition);
+}
+
 export async function commitStrongerGroup(workspace, next, activeBase) {
-  const stores = activeBase === undefined
-    ? ["submission_groups"]
-    : ["metadata", "submission_groups"];
+  const stores = [
+    ...(activeBase === undefined ? [] : ["metadata"]),
+    ...(workspace.partition.disposition === "read_only_observer" ? ["partitions"] : []),
+    "submission_groups",
+  ];
   const transaction = workspace.database.transaction(stores, "readwrite");
   const groups = transaction.objectStore("submission_groups");
   const durable = await requestResult(groups.get(next.journal_submission_group_id));
@@ -97,6 +116,16 @@ export async function commitStrongerGroup(workspace, next, activeBase) {
     || JSON.stringify(durable.project_scope) !== JSON.stringify(next.project_scope)) {
     transaction.abort();
     throw new Error("Journal Submission Group is corrupt");
+  }
+  if (workspace.partition.disposition === "read_only_observer") {
+    const durablePartition = await requestResult(
+      transaction.objectStore("partitions").get(workspace.partition.journal_partition_id),
+    );
+    if (!takeoverFencePartitionConverges(durablePartition, workspace.partition)) {
+      transaction.abort();
+      throw new Error("Author Edit acknowledgement does not converge");
+    }
+    putTakeoverFencePartition(transaction, durablePartition, workspace.partition);
   }
   const committed = putStrongerGroup(
     transaction, durable, next, activeBase, workspace.partition.journal_partition_id,
@@ -162,7 +191,7 @@ export async function commitOutcomeQueryWithGroup(
     throw new Error("Journal Submission Group is corrupt");
   }
   if (schema?.version !== JOURNAL_DATABASE_VERSION
-    || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
+    || !takeoverFencePartitionConverges(partition, workspace.partition)
     || next.journal_submission_group_id !== group.journal_submission_group_id
     || stored?.outcome?.kind !== "in_flight"
     || stored.journal_submission_group_id !== group.journal_submission_group_id
@@ -174,6 +203,7 @@ export async function commitOutcomeQueryWithGroup(
     transaction.abort();
     throw new Error("Author Edit acknowledgement does not converge");
   }
+  putTakeoverFencePartition(transaction, partition, workspace.partition);
   const committed = putStrongerGroup(
     transaction, durable, next, activeBase, workspace.partition.journal_partition_id,
   );
