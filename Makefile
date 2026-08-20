@@ -15,6 +15,10 @@ contracts:
 	pnpm --package=typescript@5.9.3 dlx tsc --noEmit --skipLibCheck false --lib es2022,dom --module nodenext --moduleResolution nodenext generated/typescript/storyos-public-release-1/client.d.mts
 	$(MAKE) web
 web:
+	pnpm install --frozen-lockfile
+	pnpm --dir apps/web exec vite build
+	node --test apps/web/test/production-build.test.mjs
+	node --test apps/web/test/production-page-browser.integration.test.mjs
 	node --test apps/web/test/protocol-boot.test.mjs
 	node --test apps/web/test/project-open.test.mjs
 	node --test apps/web/test/author-edit-outcome-browser.integration.test.mjs

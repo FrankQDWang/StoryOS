@@ -58,7 +58,7 @@ function render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl }) {
   }
 }
 
-export async function runStoryOSWeb({
+export async function loadStoryOSWebState({
   documentImpl = globalThis.document,
   locationImpl = globalThis.location,
   fetchImpl = globalThis.fetch,
@@ -77,6 +77,11 @@ export async function runStoryOSWeb({
         heading: "StoryOS 无法打开项目",
         message: "项目地址缺少有效的受控项目身份。",
       };
-  render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl });
-  return state;
+  return { documentImpl, root, state, baseUrl, fetchImpl, cryptoImpl };
+}
+
+export async function runStoryOSWeb(options = {}) {
+  const loaded = await loadStoryOSWebState(options);
+  render(loaded.documentImpl, loaded.root, loaded.state, loaded);
+  return loaded.state;
 }
