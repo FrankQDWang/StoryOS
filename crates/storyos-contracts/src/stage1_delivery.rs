@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-18-v18";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "bab4c0ac5ca3da20b01ea1d61783aaba414f493f";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "b36933e1d9c7d6e7bb19879a728d3a35483937bc";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-20-v19";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "ebb53fa819623554a4cc5ac3aebcbb1be2db7a3b";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "5ddf62e17fee0f1aef27021a8163866ce574c183";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:0536e9e8f54f647e81129b91ed30cbbdb4d6b9b28168c60dceb453079cd3f20d";
+    "sha256:d544671090b25285bcbc76b14a708758bbee515805bde4dbfb7d8645ade1a65b";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -278,6 +278,18 @@ const COVERAGE_09: TicketCoverage = TicketCoverage {
     bundles: &["B-REPLAY"],
     aggregate: None,
 };
+const COVERAGE_09A: TicketCoverage = TicketCoverage {
+    requirements: &[],
+    operations: &[],
+    gates: &[],
+    evidence_classes: &[],
+    fixtures: &[],
+    fault_points: &[],
+    schedules: &[],
+    oracles: &[],
+    bundles: &[],
+    aggregate: None,
+};
 const COVERAGE_10: TicketCoverage = TicketCoverage {
     requirements: &["S1-REQ-006", "S1-EVD-001", "S1-EVD-006", "SMAP-STAGE-1"],
     operations: &[],
@@ -291,7 +303,7 @@ const COVERAGE_10: TicketCoverage = TicketCoverage {
     aggregate: Some("B-S1-MANDATORY-SET"),
 };
 
-const STAGE_1_DELIVERY_TICKET_COUNT: usize = 12;
+const STAGE_1_DELIVERY_TICKET_COUNT: usize = 13;
 
 const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
     TicketDefinition {
@@ -410,11 +422,21 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         contract_coverage: COVERAGE_09,
     },
     TicketDefinition {
+        responsibility_id: "S1-TICKET-09A",
+        issue: "https://github.com/FrankQDWang/StoryOS/issues/209",
+        title: "Build the Protected Web Client with pnpm, Vite, Node, and React",
+        issue_body_sha256: "18316235c10aa76ac35ee976bc05b48a3762c76b3033efccbcfc4c943c89708f",
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/111"],
+        evidence_role: EvidenceRole::PlannedRuntimeEvidence,
+        responsibility: "lock the Protected Web Client pnpm/Vite/React toolchain and Stage 1 view host",
+        contract_coverage: COVERAGE_09A,
+    },
+    TicketDefinition {
         responsibility_id: "S1-TICKET-10",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/112",
         title: "Complete the Stage 1 Mandatory Evidence and Handoff",
         issue_body_sha256: "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
-        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/111"],
+        blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/209"],
         evidence_role: EvidenceRole::AcceptanceHandoff,
         responsibility: "assemble the mandatory Stage 1 evidence and handoff",
         contract_coverage: COVERAGE_10,

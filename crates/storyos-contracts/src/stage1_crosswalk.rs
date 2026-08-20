@@ -173,7 +173,7 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
         schema_id: "storyos.evidence.stage1-contract-crosswalk.v3",
         claim_ceiling: "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
         declarations: Declarations {
-            authority: "Issue #100 accepted Stage 1 specification with delivery owned by 12 child tickets, including #119 and #121",
+            authority: "Issue #100 accepted Stage 1 specification with delivery owned by 13 child tickets, including #119, #121, and #209",
             execution_contract: ExecutionContract {
                 issue: "https://github.com/FrankQDWang/StoryOS/issues/100",
                 revision: CONTRACT_REVISION,

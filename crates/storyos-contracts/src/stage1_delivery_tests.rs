@@ -25,12 +25,12 @@ fn stale_ticket_body_binding_is_rejected() {
 #[test]
 fn stale_requirement_gate_and_evidence_bindings_are_rejected() {
     let mut requirement = delivery_contract();
-    requirement.tickets[11].contract_coverage.requirements =
+    requirement.tickets[12].contract_coverage.requirements =
         &["S1-EVD-001", "S1-EVD-006", "SMAP-STAGE-1"];
     assert!(delivery_error(&requirement).contains("requirement coverage drifted"));
 
     let mut gate = delivery_contract();
-    gate.tickets[11].contract_coverage.gates = &[];
+    gate.tickets[12].contract_coverage.gates = &[];
     assert!(delivery_error(&gate).contains("gate coverage drifted"));
 
     let mut evidence = delivery_contract();
@@ -68,7 +68,77 @@ fn delivery_ticket_blockers_serialize_as_closed_arrays() {
             json!(["https://github.com/FrankQDWang/StoryOS/issues/109"]),
             json!(["https://github.com/FrankQDWang/StoryOS/issues/110"]),
             json!(["https://github.com/FrankQDWang/StoryOS/issues/111"]),
+            json!(["https://github.com/FrankQDWang/StoryOS/issues/209"]),
         ]
+    );
+}
+
+#[test]
+fn protected_web_client_toolchain_ticket_matches_the_current_delivery_lock() {
+    let contract = serde_json::to_value(delivery_contract()).expect("delivery contract serializes");
+    let tickets = contract["tickets"]
+        .as_array()
+        .expect("delivery tickets are an array");
+    let toolchain = tickets
+        .iter()
+        .find(|ticket| ticket["issue"] == "https://github.com/FrankQDWang/StoryOS/issues/209")
+        .expect("Stage 1 delivery must name the Protected Web Client toolchain Issue");
+    let handoff = tickets
+        .iter()
+        .find(|ticket| ticket["issue"] == "https://github.com/FrankQDWang/StoryOS/issues/112")
+        .expect("Stage 1 delivery must keep the evidence handoff Issue");
+
+    assert_eq!(
+        toolchain,
+        &json!({
+            "sequence": 12,
+            "responsibility_id": "S1-TICKET-09A",
+            "issue": "https://github.com/FrankQDWang/StoryOS/issues/209",
+            "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+            "title": "Build the Protected Web Client with pnpm, Vite, Node, and React",
+            "issue_body_sha256": "18316235c10aa76ac35ee976bc05b48a3762c76b3033efccbcfc4c943c89708f",
+            "blocked_by": ["https://github.com/FrankQDWang/StoryOS/issues/111"],
+            "evidence_role": "planned-runtime-evidence",
+            "responsibility": "lock the Protected Web Client pnpm/Vite/React toolchain and Stage 1 view host",
+            "contract_coverage": {
+                "requirements": [],
+                "operations": [],
+                "gates": [],
+                "evidence_classes": [],
+                "fixtures": [],
+                "fault_points": [],
+                "schedules": [],
+                "oracles": [],
+                "bundles": [],
+                "aggregate": null
+            }
+        })
+    );
+    assert_eq!(
+        handoff,
+        &json!({
+            "sequence": 13,
+            "responsibility_id": "S1-TICKET-10",
+            "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
+            "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+            "title": "Complete the Stage 1 Mandatory Evidence and Handoff",
+            "issue_body_sha256": "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
+            "blocked_by": ["https://github.com/FrankQDWang/StoryOS/issues/209"],
+            "evidence_role": "acceptance-handoff",
+            "responsibility": "assemble the mandatory Stage 1 evidence and handoff",
+            "contract_coverage": {
+                "requirements": ["S1-REQ-006", "S1-EVD-001", "S1-EVD-006", "SMAP-STAGE-1"],
+                "operations": [],
+                "gates": ["DVG-13"],
+                "evidence_classes": [],
+                "fixtures": ["FX-HANDOFF"],
+                "fault_points": [],
+                "schedules": [],
+                "oracles": [],
+                "bundles": ["B-HANDOFF"],
+                "aggregate": "B-S1-MANDATORY-SET"
+            }
+        })
     );
 }
 
