@@ -374,6 +374,25 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
     const interrupt = await evaluate(page.command, SURFACE);
     const unsettledJournal = await evaluate(page.command, JOURNAL);
     await waitFor(page.command, `(${JOURNAL}).then((journal) => journal.intents.some((intent) => intent.retainedUnit))`);
+    await evaluate(page.command, `new Promise((resolve, reject) => {
+      const request = indexedDB.open(
+        "storyos-local-edit-journal:${USER_A}:${PROJECT_A}", ${JOURNAL_DATABASE_VERSION});
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const tx = db.transaction(["intents"], "readonly");
+        const intents = tx.objectStore("intents").getAll();
+        tx.oncomplete = () => {
+          db.close();
+          if (!intents.result.some((record) => record.author_edit_unit !== undefined)) {
+            reject(new Error("unsettled journal intent missing before reload"));
+            return;
+          }
+          resolve(true);
+        };
+        tx.onerror = () => reject(tx.error);
+      };
+    })`);
     await page.command("Page.reload", { ignoreCache: false });
     await waitFor(page.command, "document.querySelector('#app')?.dataset.bootState === 'project-ready'");
     await waitFor(page.command, `document.querySelector('textarea')?.value === ${JSON.stringify(AFTER_UNSETTLED)}`);
