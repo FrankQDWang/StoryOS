@@ -1,5 +1,6 @@
 use storyos_application::{
-    CanonicalSnapshot, ProjectScope, SnapshotLookup, SnapshotReadError, SnapshotStore,
+    AppliedAuthorEditActivity, CanonicalSnapshot, ProjectScope, SnapshotLookup, SnapshotReadError,
+    SnapshotStore,
 };
 
 use super::*;
@@ -70,6 +71,14 @@ impl SnapshotStore for PostgresProjectReader {
                 SnapshotReadError::Unavailable("canonical snapshot is unavailable".into())
             })
     }
+
+    async fn list_applied_author_edit_activity(
+        &self,
+        lookup: &SnapshotLookup,
+        after_position: u64,
+    ) -> Result<Vec<AppliedAuthorEditActivity>, SnapshotReadError> {
+        list_applied_author_edit_activity(self, lookup, after_position).await
+    }
 }
 
 enum SnapshotEligibility {
@@ -103,7 +112,8 @@ async fn load_snapshot(
                     END,
                     snapshot.expires_at IS NOT NULL AND snapshot.expires_at <= clock_timestamp(),
                     snapshot.replay_generation < current_generation.replay_generation
-                      OR snapshot.project_activity_position < current_floor.floor_position
+                      OR snapshot.project_activity_position < current_floor.floor_position,
+                    current_floor.floor_position::text
              FROM storyos.project_snapshots AS snapshot
              JOIN LATERAL (
                SELECT replay_generation FROM storyos.replay_generations
@@ -145,6 +155,10 @@ async fn load_snapshot(
             .get::<_, String>(2)
             .parse()
             .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?,
+        floor_position: row
+            .get::<_, String>(9)
+            .parse()
+            .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?,
         redaction_profile: row.get(3),
         schema_profile: row.get(4),
         created_at: row.get(5),
@@ -154,4 +168,75 @@ async fn load_snapshot(
 
 fn snapshot_unavailable(source: tokio_postgres::Error) -> SnapshotReadError {
     SnapshotReadError::Unavailable(Box::new(source))
+}
+
+async fn list_applied_author_edit_activity(
+    store: &PostgresProjectReader,
+    lookup: &SnapshotLookup,
+    after_position: u64,
+) -> Result<Vec<AppliedAuthorEditActivity>, SnapshotReadError> {
+    let mut client = store
+        .connect()
+        .await
+        .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?;
+    let transaction = client.transaction().await.map_err(snapshot_unavailable)?;
+    set_scope(&transaction, &lookup.project_scope)
+        .await
+        .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?;
+    let after = after_position.to_string();
+    let rows = transaction
+        .query(
+            "SELECT activity.project_activity_event_id::text,
+                    activity.project_activity_position::text,
+                    receipt.command_id::text,
+                    admission.correlation_id::text,
+                    activity.receipt_id::text,
+                    admission.chapter_object_id::text,
+                    activity.resulting_revision_id::text,
+                    activity.authoritative_commit_id::text,
+                    activity.author_action_sequence::text,
+                    to_char(activity.created_at AT TIME ZONE 'UTC',
+                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+               FROM storyos.project_activity_events AS activity
+               JOIN storyos.domain_receipts AS receipt
+                 ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                    (activity.owner_user_id, activity.project_id, activity.receipt_id)
+               JOIN storyos.author_command_admissions AS admission
+                 ON (admission.owner_user_id, admission.project_id, admission.command_id) =
+                    (receipt.owner_user_id, receipt.project_id, receipt.command_id)
+              WHERE activity.owner_user_id = $1::text::uuid
+                AND activity.project_id = $2::text::uuid
+                AND activity.project_activity_position > $3::text::numeric
+                AND activity.event_kind = 'authoritative_author_edit_applied'
+              ORDER BY activity.project_activity_position",
+            &[
+                &lookup.project_scope.owner_user_id.as_ref(),
+                &lookup.project_scope.project_id.as_ref(),
+                &after,
+            ],
+        )
+        .await
+        .map_err(snapshot_unavailable)?;
+    transaction.commit().await.map_err(snapshot_unavailable)?;
+    rows.into_iter()
+        .map(|row| {
+            let project_sequence = row
+                .get::<_, String>(1)
+                .parse()
+                .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?;
+            Ok(AppliedAuthorEditActivity {
+                event_id: row.get(0),
+                project_sequence,
+                stream_sequence: project_sequence,
+                command_id: row.get(2),
+                correlation_id: row.get(3),
+                receipt_id: row.get(4),
+                chapter_id: row.get(5),
+                authoritative_revision_id: row.get(6),
+                authoritative_commit_id: row.get(7),
+                author_action_sequence: row.get(8),
+                occurred_at: row.get(9),
+            })
+        })
+        .collect()
 }

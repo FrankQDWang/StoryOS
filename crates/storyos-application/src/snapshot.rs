@@ -7,6 +7,7 @@ pub struct CanonicalSnapshot {
     pub snapshot_id: String,
     pub project_activity_position: u64,
     pub replay_generation: u64,
+    pub floor_position: u64,
     pub redaction_profile: String,
     pub schema_profile: String,
     pub created_at: String,
@@ -17,6 +18,21 @@ pub struct CanonicalSnapshot {
 pub struct SnapshotLookup {
     pub project_scope: ProjectScope,
     pub snapshot_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AppliedAuthorEditActivity {
+    pub event_id: String,
+    pub project_sequence: u64,
+    pub stream_sequence: u64,
+    pub command_id: String,
+    pub correlation_id: String,
+    pub receipt_id: String,
+    pub chapter_id: String,
+    pub authoritative_revision_id: String,
+    pub authoritative_commit_id: String,
+    pub author_action_sequence: String,
+    pub occurred_at: String,
 }
 
 #[derive(Debug)]
@@ -49,6 +65,12 @@ pub trait SnapshotStore {
         &self,
         lookup: &SnapshotLookup,
     ) -> impl Future<Output = Result<CanonicalSnapshot, SnapshotReadError>> + Send;
+
+    fn list_applied_author_edit_activity(
+        &self,
+        lookup: &SnapshotLookup,
+        after_position: u64,
+    ) -> impl Future<Output = Result<Vec<AppliedAuthorEditActivity>, SnapshotReadError>> + Send;
 }
 
 pub async fn get_snapshot(

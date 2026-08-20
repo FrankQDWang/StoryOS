@@ -64,8 +64,8 @@ pub use takeover::{
 };
 
 pub use snapshot::{
-    CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore, activity_stream_resume,
-    get_snapshot,
+    AppliedAuthorEditActivity, CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore,
+    activity_stream_resume, get_snapshot,
 };
 
 pub const PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION: &str =

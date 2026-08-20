@@ -84,6 +84,8 @@ echo "Running HTTP Project Scope tests"
 node --test apps/web/test/project-http.integration.test.mjs
 echo "Running HTTP ApplyAuthorEdit process-cut tests"
 node --test apps/web/test/apply-author-edit-process-cut.integration.test.mjs
+echo "Running HTTP Activity Stream duplicate-resume tests"
+node --test apps/web/test/activity-stream-duplicate-http.integration.test.mjs
 echo "Running HTTP Snapshot and Activity Stream tests"
 node --test apps/web/test/snapshot-replay-http.integration.test.mjs
 echo "Running HTTP takeOverProjectWriter tests"
