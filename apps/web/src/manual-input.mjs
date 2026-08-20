@@ -81,6 +81,7 @@ export function attachManualInput({
   cryptoImpl = globalThis.crypto,
   persistIntent = persistReplaceSelection,
   submitGroup = submitOnePendingAuthorEdit,
+  afterAppliedSettlement,
   onProjection = () => {},
   onFailure = () => {},
   setTimeoutImpl = globalThis.setTimeout,
@@ -139,6 +140,9 @@ export function attachManualInput({
     pendingIntentCount = projection.unsettled_intent_count;
     onProjection(projection);
     undoGroupId = undefined;
+    if (projection.save_state === "saved" && afterAppliedSettlement) {
+      await afterAppliedSettlement(workspace);
+    }
     if (projection.save_state === "needs_attention") {
       throw new Error("Author Edit requires attention");
     }
@@ -300,6 +304,7 @@ export function attachManualInput({
   editor.addEventListener("compositionstart", onCompositionStart);
   editor.addEventListener("compositionend", onCompositionEnd);
   editor.addEventListener("input", onInput);
+  if (pendingIntentCount > 0) scheduleIdle();
 
   return {
     flush() {

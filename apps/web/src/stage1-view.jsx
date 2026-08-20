@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import { collectEligibleJournalPayload } from "./journal-payload-collection.mjs";
 import { attachManualInput } from "./manual-input.mjs";
 
 function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
@@ -22,6 +23,7 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
       baseUrl,
       fetchImpl,
       cryptoImpl,
+      afterAppliedSettlement: collectEligibleJournalPayload,
       onProjection(projection) {
         state.editor.pending = projection;
         setSaveState(projection.save_state);

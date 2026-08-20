@@ -42,6 +42,15 @@ test("make web builds the Vite production graph before Web tests", async () => {
   assert.ok(viteIndex < testIndex, "vite build must fail closed before Web tests");
 });
 
+test("the project-scope path runs the S1-JRN-001 Vite production journey", () => {
+  const script = readFileSync(join(repositoryRoot, "scripts/verify-project-scope.sh"), "utf8");
+  assert.match(
+    script,
+    /node --test apps\/web\/test\/s1-jrn-001-browser\.integration\.test\.mjs/,
+    "verify-project-scope.sh must invoke the composed S1-JRN-001 journey",
+  );
+});
+
 test("the Vite production build emits hashed Protected Web Client assets", async () => {
   const { code, stderr } = await run("pnpm", ["--dir", "apps/web", "run", "build"]);
   assert.equal(code, 0, stderr);

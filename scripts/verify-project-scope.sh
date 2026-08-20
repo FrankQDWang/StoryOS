@@ -92,3 +92,5 @@ echo "Running HTTP takeOverProjectWriter tests"
 node --test apps/web/test/takeover-http.integration.test.mjs
 echo "Running HTTP fenced-writer late-result tests"
 node --test apps/web/test/takeover-late-result-http.integration.test.mjs
+echo "Running the S1-JRN-001 Vite production journey"
+node --test apps/web/test/s1-jrn-001-browser.integration.test.mjs
