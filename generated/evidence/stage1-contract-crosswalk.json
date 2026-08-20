@@ -2,7 +2,7 @@
   "schema_id": "storyos.evidence.stage1-contract-crosswalk.v3",
   "claim_ceiling": "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
   "declarations": {
-    "authority": "Issue #100 accepted Stage 1 specification with delivery owned by 12 child tickets, including #119 and #121",
+    "authority": "Issue #100 accepted Stage 1 specification with delivery owned by 13 child tickets, including #119, #121, and #209",
     "execution_contract": {
       "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
       "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
@@ -11,10 +11,10 @@
       "issue_body_sha256": "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-18-v18",
-      "baseline_commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
-      "baseline_tree": "b36933e1d9c7d6e7bb19879a728d3a35483937bc",
-      "ticket_set_sha256": "sha256:0536e9e8f54f647e81129b91ed30cbbdb4d6b9b28168c60dceb453079cd3f20d",
+      "revision": "stage1-ticketed-delivery-2026-08-20-v19",
+      "baseline_commit": "ebb53fa819623554a4cc5ac3aebcbb1be2db7a3b",
+      "baseline_tree": "5ddf62e17fee0f1aef27021a8163866ce574c183",
+      "ticket_set_sha256": "sha256:d544671090b25285bcbc76b14a708758bbee515805bde4dbfb7d8645ade1a65b",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -603,13 +603,38 @@
         },
         {
           "sequence": 12,
+          "responsibility_id": "S1-TICKET-09A",
+          "issue": "https://github.com/FrankQDWang/StoryOS/issues/209",
+          "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
+          "title": "Build the Protected Web Client with pnpm, Vite, Node, and React",
+          "issue_body_sha256": "18316235c10aa76ac35ee976bc05b48a3762c76b3033efccbcfc4c943c89708f",
+          "blocked_by": [
+            "https://github.com/FrankQDWang/StoryOS/issues/111"
+          ],
+          "evidence_role": "planned-runtime-evidence",
+          "responsibility": "lock the Protected Web Client pnpm/Vite/React toolchain and Stage 1 view host",
+          "contract_coverage": {
+            "requirements": [],
+            "operations": [],
+            "gates": [],
+            "evidence_classes": [],
+            "fixtures": [],
+            "fault_points": [],
+            "schedules": [],
+            "oracles": [],
+            "bundles": [],
+            "aggregate": null
+          }
+        },
+        {
+          "sequence": 13,
           "responsibility_id": "S1-TICKET-10",
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Complete the Stage 1 Mandatory Evidence and Handoff",
           "issue_body_sha256": "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
           "blocked_by": [
-            "https://github.com/FrankQDWang/StoryOS/issues/111"
+            "https://github.com/FrankQDWang/StoryOS/issues/209"
           ],
           "evidence_role": "acceptance-handoff",
           "responsibility": "assemble the mandatory Stage 1 evidence and handoff",
