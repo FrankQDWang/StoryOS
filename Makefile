@@ -25,6 +25,7 @@ web:
 	node --test apps/web/test/activity-reorder-browser.integration.test.mjs
 	node --test apps/web/test/activity-resync-browser.integration.test.mjs
 	node --test apps/web/test/journal-gc-browser.integration.test.mjs
+	node --test apps/web/test/journal-gc-fenced-browser.integration.test.mjs
 	node --test apps/web/test/reload-recovery-browser.integration.test.mjs
 	cargo build --quiet -p storyos-server
 	node --test apps/web/test/protocol-http.integration.test.mjs
