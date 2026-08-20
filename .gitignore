@@ -13,3 +13,5 @@ __pycache__/
 
 # Repository-owned build and verification outputs
 /target/
+node_modules/
+apps/web/dist
