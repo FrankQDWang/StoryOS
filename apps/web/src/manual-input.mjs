@@ -304,13 +304,6 @@ export function attachManualInput({
   editor.addEventListener("compositionstart", onCompositionStart);
   editor.addEventListener("compositionend", onCompositionEnd);
   editor.addEventListener("input", onInput);
-  const onPageHide = (event) => {
-    if (event.persisted === true) return;
-    clearIdle();
-    stopped = true;
-    workspace.database.close();
-  };
-  globalThis.addEventListener("pagehide", onPageHide);
   if (pendingIntentCount > 0) scheduleIdle();
 
   return {
@@ -325,7 +318,6 @@ export function attachManualInput({
     close() {
       stopped = true;
       clearIdle();
-      globalThis.removeEventListener("pagehide", onPageHide);
       editor.removeEventListener("paste", onPaste);
       editor.removeEventListener("cut", onCut);
       editor.removeEventListener("beforeinput", onBeforeInput);

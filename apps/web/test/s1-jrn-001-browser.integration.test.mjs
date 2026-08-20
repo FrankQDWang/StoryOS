@@ -202,6 +202,7 @@ async function connectPage(browserWebSocketUrl) {
   await command("Runtime.enable");
   await command("Network.enable");
   await command("Page.enable");
+  await command("IndexedDB.enable");
   return { socket, command };
 }
 
@@ -227,6 +228,30 @@ async function waitFor(command, expression, timeoutMs = 20_000) {
   let recovery = null;
   try { recovery = await evaluate(command, RECOVERY); } catch (error) { recovery = String(error?.message ?? error); }
   throw new Error(`Browser condition timed out: ${expression}\n${JSON.stringify({ surface, journal, recovery })}`);
+}
+
+function remoteObjectHasAuthorEditUnit(entry) {
+  const encoded = JSON.stringify(entry ?? {});
+  return encoded.includes('"author_edit_unit"');
+}
+
+async function waitForBackendUnsettledIntent(command, origin) {
+  const databaseName = `storyos-local-edit-journal:${USER_A}:${PROJECT_A}`;
+  const deadline = Date.now() + 20_000;
+  let last = null;
+  while (Date.now() < deadline) {
+    last = await command("IndexedDB.requestData", {
+      securityOrigin: origin,
+      databaseName,
+      objectStoreName: "intents",
+      indexName: "",
+      skipCount: 0,
+      pageSize: 50,
+    });
+    if ((last.objectStoreDataEntries ?? []).some(remoteObjectHasAuthorEditUnit)) return;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`IndexedDB backend has no unsettled intent before reload\n${JSON.stringify(last)}`);
 }
 
 const SURFACE = `({
@@ -380,26 +405,7 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
     const interrupt = await evaluate(page.command, SURFACE);
     const unsettledJournal = await evaluate(page.command, JOURNAL);
     await waitFor(page.command, `(${JOURNAL}).then((journal) => journal.intents.some((intent) => intent.retainedUnit))`);
-    await evaluate(page.command, "window.dispatchEvent(new Event('pagehide'))");
-    await evaluate(page.command, `new Promise((resolve, reject) => {
-      const request = indexedDB.open(
-        "storyos-local-edit-journal:${USER_A}:${PROJECT_A}", ${JOURNAL_DATABASE_VERSION});
-      request.onerror = () => reject(request.error);
-      request.onsuccess = () => {
-        const db = request.result;
-        const tx = db.transaction(["intents"], "readwrite", { durability: "strict" });
-        const intents = tx.objectStore("intents").getAll();
-        tx.oncomplete = () => {
-          db.close();
-          if (!intents.result.some((record) => record.author_edit_unit !== undefined)) {
-            reject(new Error("unsettled journal intent missing after journal close"));
-            return;
-          }
-          resolve(true);
-        };
-        tx.onabort = () => reject(tx.error ?? new Error("journal close flush aborted"));
-      };
-    })`);
+    await waitForBackendUnsettledIntent(page.command, pageOrigin);
     await page.command("Page.reload", { ignoreCache: false });
     await waitFor(page.command, "document.querySelector('#app')?.dataset.bootState === 'project-ready'");
     await waitFor(page.command, `document.querySelector('textarea')?.value === ${JSON.stringify(AFTER_UNSETTLED)}`);
