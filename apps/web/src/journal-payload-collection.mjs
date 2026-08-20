@@ -23,10 +23,20 @@ function fencesKey(partitionId) {
 
 function partitionAllowsCollection(workspace, group) {
   const partition = workspace.partition;
-  return partition.disposition === "current_writer_open"
-    && group.writer_generation === partition.writer_generation
-    && workspace.session.writer?.kind === "current_writer"
-    && workspace.session.writer.writer_generation === partition.writer_generation;
+  if (group.writer_generation !== partition.writer_generation) return false;
+  if (partition.disposition === "current_writer_open") {
+    return workspace.session.writer?.kind === "current_writer"
+      && workspace.session.writer.writer_generation === partition.writer_generation;
+  }
+  const writer = workspace.session.writer;
+  const resulting = writer?.observed_writer_generation;
+  return partition.disposition === "read_only_observer"
+    && writer?.kind === "read_only"
+    && writer.reason === "superseded_by_takeover"
+    && typeof resulting === "string"
+    && /^(?:0|[1-9][0-9]{0,19})$/.test(resulting)
+    && BigInt(resulting) <= 18446744073709551615n
+    && BigInt(resulting) > BigInt(partition.writer_generation);
 }
 
 function appliedSuccessor(group, durableActiveBase, workspace) {
@@ -120,6 +130,9 @@ export async function collectEligibleJournalPayload(workspace) {
       project_scope: workspace.partition.project_scope,
       writer_generation: workspace.partition.writer_generation,
       partition_disposition: workspace.partition.disposition,
+      ...(workspace.partition.disposition === "read_only_observer"
+        ? { resulting_writer_generation: workspace.session.writer.observed_writer_generation }
+        : {}),
       collected_groups: [{
         journal_submission_group_id: group.journal_submission_group_id,
         covered_sequence_range: group.covered_sequence_range,
