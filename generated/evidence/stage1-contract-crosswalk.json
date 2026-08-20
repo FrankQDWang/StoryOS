@@ -11,10 +11,10 @@
       "issue_body_sha256": "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-20-v19",
-      "baseline_commit": "ebb53fa819623554a4cc5ac3aebcbb1be2db7a3b",
-      "baseline_tree": "5ddf62e17fee0f1aef27021a8163866ce574c183",
-      "ticket_set_sha256": "sha256:d544671090b25285bcbc76b14a708758bbee515805bde4dbfb7d8645ade1a65b",
+      "revision": "stage1-ticketed-delivery-2026-08-20-v20",
+      "baseline_commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
+      "baseline_tree": "6d1f5830978379140c51ee7840c488a216c1ba4d",
+      "ticket_set_sha256": "sha256:00418ed41c376df780e27ac6356c309f819fda684cc337f98e189bcbb09de545",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -632,7 +632,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Complete the Stage 1 Mandatory Evidence and Handoff",
-          "issue_body_sha256": "1b708c255900282ae043c879c11b16a99c5e6fe271c541fee004ac38dad68373",
+          "issue_body_sha256": "498355b2d620814580d9eecde8f71932145e77477f201339df9bd022d3baabc2",
           "blocked_by": [
             "https://github.com/FrankQDWang/StoryOS/issues/209"
           ],
