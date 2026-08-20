@@ -1,9 +1,18 @@
 use axum::extract::Query;
 use axum::http::HeaderValue;
 use serde::Deserialize;
-use storyos_application::{SnapshotLookup, SnapshotReadError};
+use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
+use storyos_application::{
+    AppliedAuthorEditActivity, CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore,
+};
 
+use super::project_command_challenge::{hex_bytes, secret_digest};
 use super::*;
+
+const ACTIVITY_CURSOR_HMAC_PROFILE: &str = "storyos.activity-stream.cursor.hmac-sha256.v1";
+const ACTIVITY_PROFILE: &str = "storyos.project-activity.v1";
+const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
 
 #[derive(Deserialize)]
 pub(super) struct ActivityStreamQuery {
@@ -52,18 +61,41 @@ pub(super) async fn activity_stream(
     if query.protocol_release != contracts::PUBLIC_PROTOCOL_RELEASE {
         return Err(invalid_request());
     }
-    let (_, lookup, store) =
+    let (scope, lookup, store) =
         authorized_snapshot_lookup(&state, &headers, &project_id, &query.snapshot_id).await?;
-    storyos_application::activity_stream_resume(&store, &lookup)
+    let secret = state
+        .config
+        .project_command_challenge_secret
+        .as_deref()
+        .filter(|secret| secret.len() >= 32)
+        .ok_or_else(challenge_store_unavailable)?;
+    let snapshot = storyos_application::activity_stream_resume(&store, &lookup)
         .await
         .map_err(snapshot_read_error)?;
+    let after_position = match headers
+        .get("last-event-id")
+        .map(|value| value.to_str().map_err(|_| resource_unavailable()))
+        .transpose()?
+    {
+        Some(last_event_id) => decode_activity_cursor(secret, last_event_id, &scope, &snapshot)?,
+        None => snapshot.project_activity_position,
+    };
+    let events = store
+        .list_applied_author_edit_activity(&lookup, after_position)
+        .await
+        .map_err(snapshot_read_error)?;
+    let mut body = String::new();
+    for event in events {
+        let frame = format_activity_frame(secret, &scope, &snapshot, &event)?;
+        body.push_str(&frame);
+    }
     let mut response_headers = HeaderMap::new();
     response_headers.insert(
         header::CONTENT_TYPE,
         HeaderValue::from_static("text/event-stream"),
     );
     response_headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-    Ok((StatusCode::OK, response_headers, String::new()).into_response())
+    Ok((StatusCode::OK, response_headers, body).into_response())
 }
 
 pub(super) async fn snapshot_method_not_allowed() -> ApiError {
@@ -109,4 +141,163 @@ fn snapshot_read_error(error: SnapshotReadError) -> ApiError {
         ),
         SnapshotReadError::Unavailable(_) => resource_unavailable(),
     }
+}
+
+fn format_activity_frame(
+    secret: &[u8],
+    scope: &ApplicationScope,
+    snapshot: &CanonicalSnapshot,
+    event: &AppliedAuthorEditActivity,
+) -> Result<String, ApiError> {
+    let payload = BTreeMap::from([
+        (
+            "author_action_sequence",
+            event.author_action_sequence.as_str(),
+        ),
+        (
+            "authoritative_commit_id",
+            event.authoritative_commit_id.as_str(),
+        ),
+        (
+            "authoritative_revision_id",
+            event.authoritative_revision_id.as_str(),
+        ),
+        ("chapter_id", event.chapter_id.as_str()),
+    ]);
+    let payload_bytes = serde_json::to_vec(&payload).map_err(|_| resource_unavailable())?;
+    let payload_digest = hex_bytes(&Sha256::digest(payload_bytes));
+    let data = serde_json::json!({
+        "envelope_version": 1,
+        "activity_profile": ACTIVITY_PROFILE,
+        "event_id": event.event_id,
+        "event_schema": "storyos.event.authoritative-author-edit-applied.v1",
+        "event_kind": "authoritative_author_edit_applied",
+        "project_scope": {
+            "owner_user_id": scope.owner_user_id.as_ref(),
+            "project_id": scope.project_id.as_ref(),
+        },
+        "requester_user_id": scope.owner_user_id.as_ref(),
+        "actor": {
+            "kind": "author",
+            "id": scope.owner_user_id.as_ref(),
+        },
+        "project_sequence": event.project_sequence.to_string(),
+        "stream_sequence": event.stream_sequence.to_string(),
+        "agent_run_id": serde_json::Value::Null,
+        "run_step_id": serde_json::Value::Null,
+        "run_sequence": serde_json::Value::Null,
+        "aggregate_ref": {
+            "kind": "chapter",
+            "id": event.chapter_id,
+        },
+        "correlation_id": event.correlation_id,
+        "causation": {
+            "kind": "command",
+            "id": event.command_id,
+        },
+        "command_id": event.command_id,
+        "receipt_ref": {
+            "kind": "domain_receipt",
+            "id": event.receipt_id,
+        },
+        "occurred_at": event.occurred_at,
+        "recorded_at": event.occurred_at,
+        "payload": payload,
+        "payload_digest": {
+            "algorithm": "sha256",
+            "profile": "storyos.event-payload.jcs.v1",
+            "value_hex_lowercase": payload_digest,
+        },
+        "application_wire_record_ref": event.event_id,
+        "limit_profile_revision": contracts::LIMIT_PROFILE_REVISION,
+    });
+    let data_bytes = serde_json::to_string(&data).map_err(|_| resource_unavailable())?;
+    let cursor = encode_activity_cursor(secret, scope, snapshot, event.project_sequence);
+    Ok(format!(
+        "id: {cursor}\nevent: storyos.project-activity\ndata: {data_bytes}\n\n"
+    ))
+}
+
+fn encode_activity_cursor(
+    secret: &[u8],
+    scope: &ApplicationScope,
+    snapshot: &CanonicalSnapshot,
+    sequence_position: u64,
+) -> String {
+    let replay_generation = snapshot.replay_generation.to_string();
+    let sequence = sequence_position.to_string();
+    let mac = secret_digest(
+        secret,
+        ACTIVITY_CURSOR_HMAC_PROFILE,
+        &activity_cursor_parts(
+            scope,
+            &replay_generation,
+            &sequence,
+            &snapshot.redaction_profile,
+        ),
+    );
+    format!("v1.{replay_generation}.{sequence}.{mac}")
+}
+
+fn decode_activity_cursor(
+    secret: &[u8],
+    last_event_id: &str,
+    scope: &ApplicationScope,
+    snapshot: &CanonicalSnapshot,
+) -> Result<u64, ApiError> {
+    let mut parts = last_event_id.split('.');
+    let version = parts.next();
+    let replay_generation = parts.next();
+    let sequence = parts.next();
+    let mac = parts.next();
+    if parts.next().is_some() || version != Some("v1") {
+        return Err(resource_unavailable());
+    }
+    let (Some(replay_generation), Some(sequence), Some(mac)) = (replay_generation, sequence, mac)
+    else {
+        return Err(resource_unavailable());
+    };
+    let expected = secret_digest(
+        secret,
+        ACTIVITY_CURSOR_HMAC_PROFILE,
+        &activity_cursor_parts(
+            scope,
+            replay_generation,
+            sequence,
+            &snapshot.redaction_profile,
+        ),
+    );
+    if expected != mac {
+        return Err(resource_unavailable());
+    }
+    let replay_generation = replay_generation
+        .parse::<u64>()
+        .map_err(|_| resource_unavailable())?;
+    let sequence = sequence
+        .parse::<u64>()
+        .map_err(|_| resource_unavailable())?;
+    if replay_generation != snapshot.replay_generation || sequence < snapshot.floor_position {
+        return Err(snapshot_read_error(SnapshotReadError::CursorTooOld));
+    }
+    Ok(sequence)
+}
+
+fn activity_cursor_parts(
+    scope: &ApplicationScope,
+    replay_generation: &str,
+    sequence_position: &str,
+    redaction_profile: &str,
+) -> [Vec<u8>; 9] {
+    let filter_digest = hex_bytes(&Sha256::digest(b"{}"));
+    [
+        scope.owner_user_id.as_ref().as_bytes().to_vec(),
+        scope.project_id.as_ref().as_bytes().to_vec(),
+        scope.owner_user_id.as_ref().as_bytes().to_vec(),
+        replay_generation.as_bytes().to_vec(),
+        sequence_position.as_bytes().to_vec(),
+        ACTIVITY_PROFILE.as_bytes().to_vec(),
+        redaction_profile.as_bytes().to_vec(),
+        COMPATIBILITY_PROFILE.as_bytes().to_vec(),
+        filter_digest.as_bytes().to_vec(),
+    ]
 }

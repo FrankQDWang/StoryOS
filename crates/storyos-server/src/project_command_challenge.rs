@@ -176,7 +176,7 @@ pub(super) fn plain_digest(value: &[u8]) -> String {
     format!("sha256:{}", hex_bytes(&Sha256::digest(value)))
 }
 
-fn hex_bytes(bytes: &[u8]) -> String {
+pub(super) fn hex_bytes(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut encoded = String::with_capacity(bytes.len() * 2);
     for byte in bytes {
