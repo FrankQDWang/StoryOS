@@ -12,7 +12,7 @@ const EXPECTED_CRATES: &[&str] = &[
 ];
 const EXCLUDED_TREES: &[&str] = &["prototypes/**", ".reference/**"];
 const JOURNEY_TEST: &str = "apps/web/test/s1-jrn-001-browser.integration.test.mjs";
-const JOURNEY_MARKER: &str = "Vite production page";
+const JOURNEY_MARKERS: &[&str] = &["Vite production page", "storyos-server", "PostgreSQL"];
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub(super) struct ProvenanceEvidence {
@@ -100,11 +100,7 @@ pub(super) fn verify_provenance_evidence(
     evidence: &ProvenanceEvidence,
 ) -> Result<(), String> {
     let members = cargo_workspace_members(repo_root)?;
-    if let Some(path) = members.iter().find(|path| {
-        path.contains(".reference/")
-            || path.contains("prototypes/")
-            || path.contains(".reference\\")
-    }) {
+    if let Some(path) = members.iter().find(|path| forbidden_workspace_member(path)) {
         return Err(format!("Stage 1 workspace contains forbidden tree {path}"));
     }
     if members != EXPECTED_CRATES {
@@ -120,17 +116,16 @@ pub(super) fn verify_provenance_evidence(
     let journey = repo_root.join(JOURNEY_TEST);
     let journey_source = fs::read_to_string(&journey)
         .map_err(|error| format!("{} is missing: {error}", journey.display()))?;
-    if !journey_source.contains(JOURNEY_MARKER) {
+    if let Some(marker) = JOURNEY_MARKERS
+        .iter()
+        .find(|marker| !journey_source.contains(**marker))
+    {
         return Err(format!(
-            "{JOURNEY_TEST} is not the Vite production-page journey"
+            "{JOURNEY_TEST} is missing attributable {marker} production evidence"
         ));
     }
-    if evidence.journey_evidence.test != JOURNEY_TEST
-        || evidence.journey_evidence.page != "vite-production"
-        || evidence.journey_evidence.server != "storyos-server"
-        || evidence.journey_evidence.store != "postgresql"
-    {
-        return Err("S1-JRN-001 provenance claim drifted".into());
+    if evidence.journey_evidence.test != JOURNEY_TEST {
+        return Err("S1-JRN-001 provenance path drifted".into());
     }
     if !evidence.s1_req_006.forbidden.contains(&".reference/**")
         || !evidence.s1_evd_006.forbidden.contains(&".reference/**")
@@ -140,7 +135,15 @@ pub(super) fn verify_provenance_evidence(
     Ok(())
 }
 
+fn forbidden_workspace_member(path: &str) -> bool {
+    path.replace('\\', "/")
+        .split('/')
+        .any(|segment| segment == ".reference" || segment == "prototypes")
+}
+
 fn cargo_workspace_members(repo_root: &Path) -> Result<Vec<String>, String> {
+    // The workspace members list is a closed quoted array. This crate does not
+    // take a TOML parser into the production dependency graph to read it.
     let path = repo_root.join("Cargo.toml");
     let text = fs::read_to_string(&path).map_err(|error| format!("{}: {error}", path.display()))?;
     let start = text

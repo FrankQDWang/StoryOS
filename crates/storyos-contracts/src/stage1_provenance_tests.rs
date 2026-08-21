@@ -50,3 +50,30 @@ fn missing_production_journey_is_rejected() {
         "{error}"
     );
 }
+
+#[test]
+fn windows_prototype_workspace_member_is_rejected() {
+    let dir = temp_workspace("  \"crates/storyos-adapter-postgres\",\n  \"prototypes\\\\lab\",\n");
+    let evidence = provenance_evidence(repository_root()).expect("complete evidence");
+    let error = verify_provenance_evidence(&dir, &evidence)
+        .expect_err("Windows prototypes path should fail closed");
+    assert!(error.contains("forbidden tree"), "{error}");
+}
+
+#[test]
+fn journey_missing_postgresql_marker_is_rejected() {
+    let dir = temp_workspace(
+        "  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-server\",\n",
+    );
+    let journey = dir.join("apps/web/test/s1-jrn-001-browser.integration.test.mjs");
+    fs::create_dir_all(journey.parent().expect("journey parent")).expect("journey dir");
+    fs::write(
+        &journey,
+        "test(\"S1-JRN-001 runs on the Vite production page and storyos-server\", () => {});\n",
+    )
+    .expect("journey file");
+    let evidence = provenance_evidence(repository_root()).expect("complete evidence");
+    let error = verify_provenance_evidence(&dir, &evidence)
+        .expect_err("journey without PostgreSQL should fail closed");
+    assert!(error.contains("PostgreSQL"), "{error}");
+}
