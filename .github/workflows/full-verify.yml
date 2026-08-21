@@ -23,6 +23,15 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
+      - name: Fetch contract verification history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --no-recurse-submodules --depth=1 origin \
+            bab4c0ac5ca3da20b01ea1d61783aaba414f493f:refs/storyos/verification/execution-baseline \
+            615408dabba489805f36aee83719cd0e8eb18dc3:refs/storyos/verification/delivery-baseline \
+            3468bdaaaa97ef05fd7c6e3f61836d20f1f76496:refs/storyos/verification/foundation-merge
+
       - uses: dtolnay/rust-toolchain@1.96.0
         with:
           components: clippy, rustfmt
