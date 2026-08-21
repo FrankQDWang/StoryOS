@@ -281,3 +281,59 @@ fn expected_provenance_evidence() -> Value {
         }
     })
 }
+
+#[test]
+fn generated_crosswalk_proves_complete_residual_risk_handoff() {
+    let bytes = generate_crosswalk(repository_root()).expect("crosswalk generation should succeed");
+    let value: Value = serde_json::from_slice(&bytes).expect("generated crosswalk is JSON");
+    assert_eq!(
+        value["verifications"]["handoff_evidence"],
+        expected_handoff_evidence()
+    );
+}
+
+fn expected_handoff_evidence() -> Value {
+    json!({
+        "hnd_003": {
+            "id": "HND-003",
+            "evaluated_stage": "Stage 1",
+            "mandatory_map": "SMAP-STAGE-1",
+            "disposition": "implementation-evidence-completeness; no EV-SR; no PASS-STAGE"
+        },
+        "hnd_004": {
+            "id": "HND-004",
+            "status": "not-emitted"
+        },
+        "hnd_005": {
+            "id": "HND-005",
+            "status": "not-emitted"
+        },
+        "parent_issue": {
+            "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
+            "title": "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice",
+            "state": "open",
+            "closeout": "deferred-to-later-parent"
+        },
+        "next_issue": "later parent closeout only; no Stage 2 issue",
+        "residual_risks": {
+            "later_stages": "unrun",
+            "external_model_provider": "unintegrated",
+            "prototype_only": "unpromoted",
+            "reference_tree": "not-a-production-dependency",
+            "stage_release": "not-claimed",
+            "parent_closeout": "not-performed",
+            "later_cloud": "not-claimed"
+        },
+        "out_of_scope": {
+            "later_stage_maps": ["SMAP-STAGE-2", "SMAP-STAGE-3", "SMAP-STAGE-4"],
+            "later_journeys": ["S2-JRN-001", "S3-JRN-001", "S4-JRN-001"],
+            "external_model_provider": [
+                "FX-FAKE-MODEL", "FX-REAL-MODEL-ADVISORY", "B-FAKE", "B-REAL-ADVISORY"
+            ],
+            "prototype_only": ["prototypes/**"],
+            "reference_tree": [".reference/**"]
+        },
+        "emitted": [],
+        "forbidden_emissions": ["EV-SR", "PASS-STAGE", "PASS-CLOUD"]
+    })
+}
