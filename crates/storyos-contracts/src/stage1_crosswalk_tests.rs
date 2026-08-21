@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, ROUTE_CATALOG_PATH, generate_crosswalk,
@@ -93,4 +93,133 @@ fn wrong_historical_foundation_crosswalk_digest_is_rejected() {
         Err(CrosswalkError::Invalid(message))
             if message.contains("PR #102 foundation crosswalk drifted")
     ));
+}
+
+#[test]
+fn generated_crosswalk_proves_the_complete_stage1_mandatory_bundle() {
+    let bytes = generate_crosswalk(repository_root()).expect("crosswalk generation should succeed");
+    let value: Value = serde_json::from_slice(&bytes).expect("generated crosswalk is JSON");
+    assert_eq!(
+        value["verifications"]["mandatory_evidence"],
+        expected_mandatory_evidence()
+    );
+}
+
+fn expected_mandatory_evidence() -> Value {
+    json!({
+        "smap_stage_1": {
+            "id": "SMAP-STAGE-1",
+            "kind": "mandatory-implementation-evidence",
+            "gates": [
+                "DVG-01", "DVG-02", "DVG-03", "DVG-07", "DVG-08", "DVG-09", "DVG-11", "DVG-13"
+            ],
+            "evidence_classes": [
+                "EC-01", "EC-02", "EC-03", "EC-04", "EC-05", "EC-07",
+                "EV-CP", "EV-IT", "EV-INT", "EV-SE"
+            ],
+            "fixtures": [
+                "FX-CONTRACT-R1", "FX-CORE-PROPOSAL", "FX-EDITOR-IME", "FX-HANDOFF",
+                "FX-JOURNAL-GROUP", "FX-RECOVERY-EDITOR", "FX-SCOPE-2U2P"
+            ],
+            "fault_points": [
+                "CFP-ADMISSION-BEFORE-CORE",
+                "CFP-ADMISSION-EXPIRY",
+                "CFP-CONTRACT-DRIFT",
+                "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+                "CFP-CORE-BEFORE-COMMIT",
+                "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+                "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+                "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+                "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+                "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
+                "CFP-FENCE-AFTER-TAKEOVER",
+                "CFP-LATE-RESULT",
+                "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+                "CFP-REPLAY-BELOW-FLOOR",
+                "CFP-SCOPE-BEFORE-QUERY"
+            ],
+            "schedules": [
+                "SCH-CRASH", "SCH-DRIFT", "SCH-FENCE", "SCH-NORMAL",
+                "SCH-REORDER", "SCH-REPLAY", "SCH-SCOPE"
+            ],
+            "oracles": [
+                "ORC-ATOMIC-AUTHORITY",
+                "ORC-CONTRACT",
+                "ORC-CROSSWALK-COMPLETENESS",
+                "ORC-EDITOR-JOURNAL",
+                "ORC-NEGATIVE-CLOSURE",
+                "ORC-OUTCOME-UNKNOWN",
+                "ORC-RECOVERY-ATOMICITY",
+                "ORC-REPLAY-TRUTH",
+                "ORC-SCOPE"
+            ],
+            "aggregate": "B-S1-MANDATORY-SET"
+        },
+        "dvg_13": {
+            "id": "DVG-13",
+            "owners": ["OWN-DVG", "OWN-REL"],
+            "fixtures": ["FX-CONTRACT-R1", "FX-HANDOFF"],
+            "fault_points": [
+                "CFP-ADMISSION-BEFORE-CORE",
+                "CFP-ADMISSION-EXPIRY",
+                "CFP-CONTRACT-DRIFT",
+                "CFP-CORE-AFTER-COMMIT-BEFORE-ACK",
+                "CFP-CORE-BEFORE-COMMIT",
+                "CFP-EDITOR-AFTER-ADMISSION-BEFORE-CORE",
+                "CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP",
+                "CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK",
+                "CFP-EDITOR-BEFORE-GROUP-ADMISSION",
+                "CFP-EDITOR-BEFORE-JOURNAL-DURABILITY",
+                "CFP-FENCE-AFTER-TAKEOVER",
+                "CFP-LATE-RESULT",
+                "CFP-REPLAY-AFTER-GENERATION-SNAPSHOT",
+                "CFP-REPLAY-BELOW-FLOOR",
+                "CFP-SCOPE-BEFORE-QUERY"
+            ],
+            "schedules": ["SCH-ABSENT", "SCH-DRIFT", "SCH-NORMAL"],
+            "oracles": ["ORC-CROSSWALK-COMPLETENESS"],
+            "bundles": ["B-CONTRACT", "B-HANDOFF"],
+            "walks": ["WALK-01"],
+            "disposition": "no PASS-STAGE; no EV-SR; BLOCK-ALL"
+        },
+        "b_s1_mandatory_set": {
+            "id": "B-S1-MANDATORY-SET",
+            "members": [
+                "B-CONTRACT", "B-SCOPE", "B-EDITOR", "B-CORE",
+                "B-RECOVERY", "B-REPLAY", "B-HANDOFF"
+            ],
+            "excluded": [
+                "B-RESTORE", "B-CONTEXT", "B-FAKE", "B-REAL-ADVISORY",
+                "B-ABSENT", "B-EVAL", "B-MEASURE"
+            ]
+        },
+        "fx_handoff": {
+            "id": "FX-HANDOFF",
+            "delivery_baseline": {
+                "commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
+                "tree": "6d1f5830978379140c51ee7840c488a216c1ba4d"
+            },
+            "execution_baseline": {
+                "commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
+                "tree": "b36933e1d9c7d6e7bb19879a728d3a35483937bc"
+            },
+            "contract_revisions": {
+                "parent": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
+                "delivery": "stage1-ticketed-delivery-2026-08-20-v20",
+                "issue": "issue-112-stage1-mandatory-evidence-handoff-2026-08-20-v1"
+            },
+            "release_ids": ["storyos.public.release.1"],
+            "gate_bundles": [
+                "B-CONTRACT", "B-SCOPE", "B-EDITOR", "B-CORE",
+                "B-RECOVERY", "B-REPLAY", "B-HANDOFF"
+            ],
+            "stage_disposition": "implementation-evidence; no PASS-STAGE; no EV-SR",
+            "parent_issue": {
+                "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
+                "title": "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice",
+                "state": "open"
+            },
+            "later_cloud_boundary": "PASS-CLOUD remains out of scope; later controlled-cloud evidence cannot backfill this local Stage 1 gap"
+        }
+    })
 }

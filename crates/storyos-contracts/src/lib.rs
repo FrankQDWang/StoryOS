@@ -12,6 +12,7 @@ mod release1_snapshot;
 mod release1_snapshot_artifacts;
 mod release1_takeover;
 mod release1_takeover_artifacts;
+mod stage1_bundle;
 mod stage1_crosswalk;
 mod stage1_delivery;
 mod stage1_selection;
