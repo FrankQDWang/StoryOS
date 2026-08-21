@@ -13,6 +13,7 @@ use crate::stage1_delivery::{
     DELIVERY_BASELINE_COMMIT, DeliveryContract, DeliveryCoverage, FOUNDATION_CROSSWALK_SHA256,
     FOUNDATION_MERGE_COMMIT, FOUNDATION_MERGE_TREE, delivery_contract, delivery_coverage,
 };
+use crate::stage1_provenance::{ProvenanceEvidence, provenance_evidence};
 use crate::stage1_selection::{
     BASELINE_COMMIT, BASELINE_TREE, CONTRACT_REVISION, ISSUE_BODY_SHA256, OPERATION_IDS,
     PERSISTENCE_CATALOG_PATH, ProofSelection, ROUTE_CATALOG_PATH, RequirementBinding, SOURCE_PATHS,
@@ -85,6 +86,7 @@ struct Verifications {
     baseline: BaselineBinding,
     delivery_coverage: DeliveryCoverage,
     mandatory_evidence: MandatoryEvidence,
+    provenance_evidence: ProvenanceEvidence,
     sources: Vec<SourceBinding>,
     catalogs: Vec<CatalogBinding>,
     operations: Vec<OperationBinding>,
@@ -172,6 +174,7 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
         delivery_coverage(&delivery_contract, &requirements, OPERATION_IDS, &proof)
             .map_err(CrosswalkError::Invalid)?;
     let mandatory_evidence = mandatory_evidence().map_err(CrosswalkError::Invalid)?;
+    let provenance_evidence = provenance_evidence(repo_root).map_err(CrosswalkError::Invalid)?;
     let mut bytes = serde_json::to_vec_pretty(&Crosswalk {
         schema_id: "storyos.evidence.stage1-contract-crosswalk.v3",
         claim_ceiling: "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
@@ -195,6 +198,7 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
             },
             delivery_coverage,
             mandatory_evidence,
+            provenance_evidence,
             sources: source_bindings(repo_root)?,
             catalogs: vec![
                 catalog_binding(repo_root, ROUTE_CATALOG_PATH, &route_catalog)?,

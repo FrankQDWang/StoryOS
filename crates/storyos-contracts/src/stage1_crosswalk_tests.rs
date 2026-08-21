@@ -223,3 +223,61 @@ fn expected_mandatory_evidence() -> Value {
         }
     })
 }
+
+#[test]
+fn generated_crosswalk_proves_complete_production_shaped_provenance() {
+    let bytes = generate_crosswalk(repository_root()).expect("crosswalk generation should succeed");
+    let value: Value = serde_json::from_slice(&bytes).expect("generated crosswalk is JSON");
+    assert_eq!(
+        value["verifications"]["provenance_evidence"],
+        expected_provenance_evidence()
+    );
+}
+
+fn expected_provenance_evidence() -> Value {
+    json!({
+        "s1_req_006": {
+            "id": "S1-REQ-006",
+            "owners": [
+                "OWN-GOV", "OWN-WEB", "OWN-PROTO", "OWN-CORE", "OWN-PG", "OWN-ADM", "OWN-RET"
+            ],
+            "claim": "production-shaped",
+            "forbidden": [
+                "prototype",
+                "in-memory-authority",
+                "local-file-authority",
+                "test-adapter",
+                ".reference/**"
+            ]
+        },
+        "s1_evd_006": {
+            "id": "S1-EVD-006",
+            "owners": ["OWN-GOV"],
+            "claim": "no-contamination",
+            "forbidden": [
+                "prototype",
+                "in-memory",
+                "test-adapter",
+                "local-authority",
+                ".reference/**"
+            ]
+        },
+        "workspace": {
+            "crates": [
+                "crates/storyos-adapter-postgres",
+                "crates/storyos-application",
+                "crates/storyos-contracts",
+                "crates/storyos-core",
+                "crates/storyos-server"
+            ],
+            "excluded_trees": ["prototypes/**", ".reference/**"]
+        },
+        "journey_evidence": {
+            "requirement": "S1-JRN-001",
+            "test": "apps/web/test/s1-jrn-001-browser.integration.test.mjs",
+            "page": "vite-production",
+            "server": "storyos-server",
+            "store": "postgresql"
+        }
+    })
+}
