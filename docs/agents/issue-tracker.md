@@ -20,7 +20,7 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 
 - Publish StoryOS tickets as GitHub issues in `FrankQDWang/StoryOS`.
 - Fetch a ticket by reading its current body, labels, assignees, native dependencies, exact `main` baseline, and tracked contracts named by the body.
-- The current body plus its exact tracked-contract baseline is the execution contract. A resolution comment records evidence only: exact commit, pull request, verification, and closure.
+- The current body plus its exact tracked-contract baseline is the execution contract. Put per-layer exact-tree verification in the PR and final `main` verification in the single Resolution.
 
 ## Ticket sizing and ordering overrides
 

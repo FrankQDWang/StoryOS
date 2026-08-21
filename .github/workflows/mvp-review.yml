@@ -1,9 +1,6 @@
-name: Nightly MVP guardrail review
+name: Manual MVP guardrail review
 
 on:
-  schedule:
-    # 22:00 Asia/Singapore / 23:00 Asia/Tokyo.
-    - cron: "0 14 * * *"
   workflow_dispatch:
 
 permissions:
@@ -11,7 +8,7 @@ permissions:
   issues: write
 
 concurrency:
-  group: storyos-nightly-mvp-review
+  group: storyos-manual-mvp-review
   cancel-in-progress: false
 
 jobs:
@@ -27,33 +24,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Decide whether a review is needed
-        id: changes
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            echo "run=true" >> "${GITHUB_OUTPUT}"
-            echo "reason=manual dispatch" >> "${GITHUB_OUTPUT}"
-            exit 0
-          fi
-
-          recent_commit_count="$(git rev-list --count --since='26 hours ago' HEAD)"
-          if [[ "${recent_commit_count}" -gt 0 ]]; then
-            echo "run=true" >> "${GITHUB_OUTPUT}"
-            echo "reason=${recent_commit_count} recent commit(s)" >> "${GITHUB_OUTPUT}"
-          else
-            echo "run=false" >> "${GITHUB_OUTPUT}"
-            echo "reason=no commit in the last 26 hours" >> "${GITHUB_OUTPUT}"
-          fi
-
-      - name: Explain a skipped review
-        if: steps.changes.outputs.run != 'true'
-        run: echo "Skip the review because there is no new main-branch work."
-
       - name: Require the OpenAI API key
-        if: steps.changes.outputs.run == 'true'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         shell: bash
@@ -65,7 +36,6 @@ jobs:
           fi
 
       - name: Prepare bounded review context
-        if: steps.changes.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -86,7 +56,7 @@ jobs:
             echo
             echo "- Current baseline: main@${baseline}"
             echo "- Recent-change base: ${review_base}"
-            echo "- Trigger: ${{ steps.changes.outputs.reason }}"
+            echo "- Trigger: manual dispatch"
             echo
             echo "## Recent commits"
             git log --no-merges --oneline -n 40 "${review_base}..HEAD" || true
@@ -108,7 +78,6 @@ jobs:
             > .review/open-issues.json
 
       - name: Run the bounded Codex review
-        if: steps.changes.outputs.run == 'true'
         uses: openai/codex-action@v1
         with:
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
@@ -120,7 +89,6 @@ jobs:
           safety-strategy: drop-sudo
 
       - name: Publish one rolling review issue
-        if: steps.changes.outputs.run == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -213,5 +181,5 @@ jobs:
           elif [[ "${status}" == "clean" && "${issue_state}" == "OPEN" ]]; then
             gh issue close "${issue_number}" \
               --repo "${GITHUB_REPOSITORY}" \
-              --comment "No actionable finding passed the nightly gates at main@${baseline}."
+              --comment "No actionable finding passed the manual gates at main@${baseline}."
           fi

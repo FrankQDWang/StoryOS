@@ -27,6 +27,12 @@
 - Merge the stack bottom-up with ordinary merge commits. Do not squash-merge or rebase-merge a stack layer unless the locked Issue explicitly overrides this rule. After each merge, refresh `main`, then recheck the next PR's base, exact remaining diff, commit ancestry, review validity, and fresh required checks; a pre-retarget green check is not fresh evidence.
 - Close the Issue only after every stack layer is merged, the final composed state on current `main` passes the complete non-mutating verification, and the single tracker-compliant Resolution records all merged PRs, the final commit/tree, and retained evidence. Only then create or claim the next serial implementation Issue.
 
+### Verification evidence
+
+- The required GitHub `verify` check is a pull-request synthetic-merge sentinel. It does not replace complete local verification.
+- Before merging each PR layer, run `make verify` on a tree that matches the required `verify` synthetic-merge tree. Record the head, tree, command, PASS result, and clean worktree in one PR comment.
+- A new commit invalidates that evidence. A retarget always requires a fresh `verify`; rerun local verification when the candidate tree changes. After the stack merges, synchronize `main`, rerun `make verify`, and record the final commit, tree, and evidence in the Resolution.
+
 ## Reference source policy
 
 - `.reference/` is local-only, Git-ignored reference material. Do not add any entry under it to Git, and do not edit an individual reference except when a task explicitly refreshes that reference.

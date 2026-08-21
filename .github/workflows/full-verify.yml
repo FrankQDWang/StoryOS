@@ -1,0 +1,40 @@
+name: Full repository verification
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+concurrency:
+  group: storyos-full-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  full-verify:
+    name: full-verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@1.96.0
+        with:
+          components: clippy, rustfmt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Run repository verification
+        run: make verify
+        env:
+          GH_TOKEN: ${{ github.token }}
