@@ -25,13 +25,15 @@ fn emitted_stage_release_is_rejected() {
 }
 
 #[test]
-fn closed_parent_is_rejected() {
+fn open_parent_is_rejected() {
     let (mut mandatory, provenance) = complete_inputs();
     let mut evidence = handoff_evidence(&mandatory, &provenance).expect("complete evidence");
-    evidence.parent_issue.state = "closed";
-    mandatory.fx_handoff.parent_issue.state = "closed";
+    evidence.parent_issue.state = "open";
+    evidence.parent_issue.closeout = "deferred-to-later-parent";
+    mandatory.fx_handoff.parent_issue.state = "open";
+    evidence.residual_risks.parent_closeout = "not-performed";
     let error = verify_handoff_evidence(&evidence, &mandatory, &provenance)
-        .expect_err("closed parent #100 should fail closed");
+        .expect_err("open parent #100 should fail closed");
     assert!(error.contains("parent #100"), "{error}");
 }
 

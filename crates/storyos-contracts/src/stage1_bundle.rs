@@ -204,7 +204,7 @@ pub(super) fn mandatory_evidence() -> Result<MandatoryEvidence, String> {
             parent_issue: ParentIssue {
                 issue: PARENT_ISSUE,
                 title: PARENT_TITLE,
-                state: "open",
+                state: "closed",
             },
             later_cloud_boundary: "PASS-CLOUD remains out of scope; later controlled-cloud evidence cannot backfill this local Stage 1 gap",
         },
@@ -265,9 +265,9 @@ pub(super) fn verify_mandatory_evidence(evidence: &MandatoryEvidence) -> Result<
         return Err("FX-HANDOFF execution baseline drifted".into());
     }
     if evidence.fx_handoff.parent_issue.issue != PARENT_ISSUE
-        || evidence.fx_handoff.parent_issue.state != "open"
+        || evidence.fx_handoff.parent_issue.state != "closed"
     {
-        return Err("FX-HANDOFF must name the still-open parent #100".into());
+        return Err("FX-HANDOFF must name the closed parent #100".into());
     }
     if !evidence
         .fx_handoff
