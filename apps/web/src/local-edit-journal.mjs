@@ -473,6 +473,8 @@ export async function persistReplaceSelection(
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "payload_chains", "intents", "submission_groups"],
     "readwrite",
+    // Keep the latest persist through renderer reload. Chrome can drop a non-strict write.
+    { durability: "strict" },
   );
   const metadata = transaction.objectStore("metadata");
   const intents = transaction.objectStore("intents");

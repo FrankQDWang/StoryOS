@@ -92,3 +92,14 @@ echo "Running HTTP takeOverProjectWriter tests"
 node --test apps/web/test/takeover-http.integration.test.mjs
 echo "Running HTTP fenced-writer late-result tests"
 node --test apps/web/test/takeover-late-result-http.integration.test.mjs
+echo "Restoring the controlled Project fixture for S1-JRN-001"
+docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+  "DO \$\$ DECLARE tbl text; BEGIN
+     FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'storyos' LOOP
+       EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
+     END LOOP;
+   END \$\$;" >/dev/null
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+echo "Running the S1-JRN-001 Vite production journey"
+node --test apps/web/test/s1-jrn-001-browser.integration.test.mjs

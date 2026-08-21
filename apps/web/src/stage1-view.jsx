@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
+import { collectEligibleJournalPayload } from "./journal-payload-collection.mjs";
 import { attachManualInput } from "./manual-input.mjs";
 
 function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
@@ -8,6 +9,9 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
   const initialBody = state.editor.kind === "editor-ready"
     ? state.editor.pending.body
     : state.chapter.chapter.current_revision.body;
+  const [pending, setPending] = useState(
+    state.editor.kind === "editor-ready" ? state.editor.pending : null,
+  );
   const [saveState, setSaveState] = useState(
     state.editor.kind === "editor-ready" ? state.editor.pending.save_state : "needs_attention",
   );
@@ -22,8 +26,10 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
       baseUrl,
       fetchImpl,
       cryptoImpl,
+      afterAppliedSettlement: collectEligibleJournalPayload,
       onProjection(projection) {
         state.editor.pending = projection;
+        setPending(projection);
         setSaveState(projection.save_state);
       },
       onFailure() {
@@ -39,7 +45,13 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
       <h1>{state.project.project.title}</h1>
       <h2>{state.chapter.chapter.title}</h2>
       <textarea ref={editorRef} defaultValue={initialBody} readOnly={readOnly} />
-      <small data-save-state={saveState}>{saveState}</small>
+      <small
+        data-save-state={saveState}
+        data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
+        data-authoritative-revision-id={pending?.authoritative_revision_id ?? ""}
+      >
+        {saveState}
+      </small>
       <small>{`权威修订 ${state.chapter.chapter.current_revision.revision_id}`}</small>
     </section>
   );
