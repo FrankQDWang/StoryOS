@@ -1,35 +1,32 @@
-name: Verify main
+name: Verify pull request
 
 on:
   pull_request:
-  push:
-    branches: [main]
+    types: [opened, reopened, synchronize, edited]
 
 permissions:
   contents: read
   issues: read
 
+concurrency:
+  group: storyos-pr-verify-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   verify:
+    name: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.sha }}
+          fetch-depth: 2
+          persist-credentials: false
 
-      - uses: dtolnay/rust-toolchain@1.96.0
-        with:
-          components: clippy, rustfmt
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
-      - name: Enable pnpm
-        run: corepack enable
-
-      - name: Run repository verification
-        run: make verify
+      - name: Verify the pull request candidate
+        run: make verify-pr
         env:
           GH_TOKEN: ${{ github.token }}
+          STORYOS_PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          STORYOS_PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
