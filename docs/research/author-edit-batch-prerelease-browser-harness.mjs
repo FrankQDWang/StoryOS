@@ -277,7 +277,8 @@ try {
   writeFileSync(html, page);
   const run = await captureBrowserDom({
     chrome,
-    args: ["--headless=new", "--disable-gpu", "--no-sandbox",
+    args: ["--headless=new", "--disable-gpu", "--disable-breakpad", "--disable-crash-reporter",
+    "--disable-dev-shm-usage", "--no-first-run", "--no-sandbox",
     `--user-data-dir=${join(directory, "profile")}`, "--timeout=5000", "--dump-dom",
     pathToFileURL(html).href],
     outputIsComplete: output => output.includes("</pre>"),
