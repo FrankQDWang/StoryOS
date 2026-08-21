@@ -16,6 +16,8 @@ const EXTERNAL_MODEL_PROVIDER: &[&str] = &[
 const MODEL_PROVIDER_FIXTURES: &[&str] = &["FX-FAKE-MODEL", "FX-REAL-MODEL-ADVISORY"];
 const MODEL_PROVIDER_BUNDLES: &[&str] = &["B-FAKE", "B-REAL-ADVISORY"];
 const FORBIDDEN_EMISSIONS: &[&str] = &["EV-SR", "PASS-STAGE", "PASS-CLOUD"];
+const PARENT_CLOSEOUT: &str = "performed";
+const NEXT_ISSUE: &str = "none; no Stage 2 issue created";
 
 #[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
 pub(super) struct HandoffEvidence {
@@ -94,17 +96,17 @@ pub(super) fn handoff_evidence(
         parent_issue: ParentIssue {
             issue: PARENT_ISSUE,
             title: PARENT_TITLE,
-            state: "open",
-            closeout: "deferred-to-later-parent",
+            state: "closed",
+            closeout: PARENT_CLOSEOUT,
         },
-        next_issue: "later parent closeout only; no Stage 2 issue",
+        next_issue: NEXT_ISSUE,
         residual_risks: ResidualRisks {
             later_stages: "unrun",
             external_model_provider: "unintegrated",
             prototype_only: "unpromoted",
             reference_tree: "not-a-production-dependency",
             stage_release: "not-claimed",
-            parent_closeout: "not-performed",
+            parent_closeout: PARENT_CLOSEOUT,
             later_cloud: "not-claimed",
         },
         out_of_scope: OutOfScope {
@@ -139,11 +141,13 @@ pub(super) fn verify_handoff_evidence(
         return Err("handoff later journeys drifted".into());
     }
     if evidence.parent_issue.issue != mandatory.fx_handoff.parent_issue.issue
-        || evidence.parent_issue.state != "open"
-        || mandatory.fx_handoff.parent_issue.state != "open"
-        || evidence.parent_issue.closeout != "deferred-to-later-parent"
+        || evidence.parent_issue.state != "closed"
+        || mandatory.fx_handoff.parent_issue.state != "closed"
+        || evidence.parent_issue.closeout != PARENT_CLOSEOUT
+        || evidence.residual_risks.parent_closeout != PARENT_CLOSEOUT
+        || evidence.next_issue != NEXT_ISSUE
     {
-        return Err("handoff must keep parent #100 open".into());
+        return Err("handoff must record performed parent #100 closeout".into());
     }
     if !evidence.emitted.is_empty() {
         return Err(format!(

@@ -45,6 +45,14 @@ fn excluded_stage2_bundle_is_rejected() {
 }
 
 #[test]
+fn open_fx_handoff_parent_is_rejected() {
+    let mut evidence = complete_evidence();
+    evidence.fx_handoff.parent_issue.state = "open";
+    let error = verify_mandatory_evidence(&evidence).expect_err("open parent should fail closed");
+    assert_eq!(error, "FX-HANDOFF must name the closed parent #100");
+}
+
+#[test]
 fn stale_fx_handoff_delivery_baseline_is_rejected() {
     let mut evidence = complete_evidence();
     evidence.fx_handoff.delivery_baseline.tree = "wrong-tree";

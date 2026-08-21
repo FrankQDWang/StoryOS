@@ -217,7 +217,7 @@ fn expected_mandatory_evidence() -> Value {
             "parent_issue": {
                 "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
                 "title": "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice",
-                "state": "open"
+                "state": "closed"
             },
             "later_cloud_boundary": "PASS-CLOUD remains out of scope; later controlled-cloud evidence cannot backfill this local Stage 1 gap"
         }
@@ -311,17 +311,17 @@ fn expected_handoff_evidence() -> Value {
         "parent_issue": {
             "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
             "title": "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice",
-            "state": "open",
-            "closeout": "deferred-to-later-parent"
+            "state": "closed",
+            "closeout": "performed"
         },
-        "next_issue": "later parent closeout only; no Stage 2 issue",
+        "next_issue": "none; no Stage 2 issue created",
         "residual_risks": {
             "later_stages": "unrun",
             "external_model_provider": "unintegrated",
             "prototype_only": "unpromoted",
             "reference_tree": "not-a-production-dependency",
             "stage_release": "not-claimed",
-            "parent_closeout": "not-performed",
+            "parent_closeout": "performed",
             "later_cloud": "not-claimed"
         },
         "out_of_scope": {
