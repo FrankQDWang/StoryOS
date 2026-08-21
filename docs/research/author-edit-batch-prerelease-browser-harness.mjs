@@ -284,6 +284,11 @@ try {
     outputIsComplete: output => output.includes("</pre>"),
     executionTimeoutMs: 15000,
     shutdownTimeoutMs: 1000,
+    // GitHub Actions can set an unusable DBUS_SESSION_BUS_ADDRESS; Chrome then stalls before dump-dom.
+    env: Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => key !== "DBUS_SESSION_BUS_ADDRESS"
+        && key !== "DBUS_STARTER_ADDRESS"),
+    ),
   });
   const encoded = run.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
   assert.ok(encoded && encoded !== "running",

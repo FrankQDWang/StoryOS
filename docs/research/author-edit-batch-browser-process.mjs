@@ -7,9 +7,10 @@ export function captureBrowserDom({
   executionTimeoutMs,
   shutdownTimeoutMs,
   spawnProcess = spawn,
+  env,
 }) {
   return new Promise((resolve, reject) => {
-    const child = spawnProcess(chrome, args);
+    const child = spawnProcess(chrome, args, env === undefined ? undefined : { env });
     let stdout = "";
     let stderr = "";
     let settled = false;
