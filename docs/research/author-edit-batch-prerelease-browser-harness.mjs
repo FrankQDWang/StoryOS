@@ -277,12 +277,18 @@ try {
   writeFileSync(html, page);
   const run = await captureBrowserDom({
     chrome,
-    args: ["--headless=new", "--disable-gpu", "--no-sandbox",
+    args: ["--headless=new", "--disable-gpu", "--disable-breakpad", "--disable-crash-reporter",
+    "--disable-dev-shm-usage", "--no-first-run", "--no-sandbox",
     `--user-data-dir=${join(directory, "profile")}`, "--timeout=5000", "--dump-dom",
     pathToFileURL(html).href],
     outputIsComplete: output => output.includes("</pre>"),
     executionTimeoutMs: 15000,
     shutdownTimeoutMs: 1000,
+    // GitHub Actions can set an unusable DBUS_SESSION_BUS_ADDRESS; Chrome then stalls before dump-dom.
+    env: Object.fromEntries(
+      Object.entries(process.env).filter(([key]) => key !== "DBUS_SESSION_BUS_ADDRESS"
+        && key !== "DBUS_STARTER_ADDRESS"),
+    ),
   });
   const encoded = run.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
   assert.ok(encoded && encoded !== "running",
