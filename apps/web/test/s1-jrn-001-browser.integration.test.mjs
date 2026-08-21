@@ -221,12 +221,24 @@ async function waitFor(command, expression, timeoutMs = 20_000) {
     if (await evaluate(command, expression)) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  const surface = await evaluate(command, SURFACE);
-  let journal = null;
-  try { journal = await evaluate(command, JOURNAL); } catch (error) { journal = String(error?.message ?? error); }
-  let recovery = null;
-  try { recovery = await evaluate(command, RECOVERY); } catch (error) { recovery = String(error?.message ?? error); }
-  throw new Error(`Browser condition timed out: ${expression}\n${JSON.stringify({ surface, journal, recovery })}`);
+  const snapshot = await dumpJourney(command, "timeout");
+  throw new Error(`Browser condition timed out: ${expression}\n${JSON.stringify(snapshot)}`);
+}
+
+function collectedGroups(count) {
+  return `(${JOURNAL}).then((journal) => journal.groups.filter((group) => group.collected).length === ${count} && journal.intents.length === ${count} && journal.intents.every((intent) => !intent.retainedUnit))`;
+}
+
+async function dumpJourney(command, label) {
+  const snapshot = {
+    label,
+    userAgent: await evaluate(command, "navigator.userAgent").catch((error) => String(error?.message ?? error)),
+    surface: await evaluate(command, SURFACE).catch((error) => String(error?.message ?? error)),
+    journal: await evaluate(command, JOURNAL).catch((error) => String(error?.message ?? error)),
+    recovery: await evaluate(command, RECOVERY).catch((error) => String(error?.message ?? error)),
+  };
+  console.error(`S1-JRN-001 ${label} ${JSON.stringify(snapshot)}`);
+  return snapshot;
 }
 
 const SURFACE = `({
@@ -354,25 +366,27 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
     await page.command("Input.insertText", { text: " Hello" });
     await waitFor(page.command, "document.querySelector('[data-save-state]')?.dataset.saveState === 'saving'");
     const input = await evaluate(page.command, SURFACE);
-    await waitFor(page.command, "document.querySelector('[data-save-state]')?.dataset.saveState === 'saved' && document.querySelector('textarea')?.readOnly === false");
+    await waitFor(page.command, collectedGroups(1));
     const afterType = await evaluate(page.command, SURFACE);
     await focusEnd(page.command);
     await page.command("Input.insertText", { text: "中文" });
     await waitFor(page.command, `document.querySelector('textarea')?.value === ${JSON.stringify(AFTER_IME)}`);
-    await waitFor(page.command, "document.querySelector('[data-save-state]')?.dataset.saveState === 'saved' && document.querySelector('textarea')?.readOnly === false");
+    await waitFor(page.command, collectedGroups(2));
     const afterIme = await evaluate(page.command, SURFACE);
+    const pasteModifier = process.platform === "darwin" ? 4 : 2;
     await page.command("Runtime.evaluate", { expression: "navigator.clipboard.writeText(' EN')", awaitPromise: true });
     await focusEnd(page.command);
     await page.command("Input.dispatchKeyEvent", {
-      type: "keyDown", key: "v", code: "KeyV", modifiers: 4, commands: ["Paste"],
+      type: "keyDown", key: "v", code: "KeyV", modifiers: pasteModifier, commands: ["Paste"],
     });
     await page.command("Input.dispatchKeyEvent", {
-      type: "keyUp", key: "v", code: "KeyV", modifiers: 4,
+      type: "keyUp", key: "v", code: "KeyV", modifiers: pasteModifier,
     });
     await waitFor(page.command, `document.querySelector('textarea')?.value === ${JSON.stringify(AFTER_PASTE)}`);
-    await waitFor(page.command, "document.querySelector('[data-save-state]')?.dataset.saveState === 'saved' && document.querySelector('textarea')?.readOnly === false");
+    await waitFor(page.command, collectedGroups(3));
     const settle = await evaluate(page.command, SURFACE);
     const settledJournal = await evaluate(page.command, JOURNAL);
+    await dumpJourney(page.command, "settle");
     await focusEnd(page.command);
     await page.command("Input.insertText", { text: "!" });
     await waitFor(page.command, `document.querySelector('textarea')?.value === ${JSON.stringify(AFTER_UNSETTLED)}`);
@@ -380,8 +394,10 @@ test("S1-JRN-001 runs on the Vite production page, Server HTTP, Core, and Postgr
     const interrupt = await evaluate(page.command, SURFACE);
     const unsettledJournal = await evaluate(page.command, JOURNAL);
     await waitFor(page.command, `(${JOURNAL}).then((journal) => journal.intents.some((intent) => intent.retainedUnit))`);
+    await dumpJourney(page.command, "interrupt");
     await page.command("Page.reload", { ignoreCache: false });
     await waitFor(page.command, "document.querySelector('#app')?.dataset.bootState === 'project-ready'");
+    await dumpJourney(page.command, "recovered-boot");
     await waitFor(page.command, `document.querySelector('textarea')?.value === ${JSON.stringify(AFTER_UNSETTLED)}`);
     const recovered = await evaluate(page.command, SURFACE);
     await waitFor(page.command, "document.querySelector('[data-save-state]')?.dataset.saveState === 'saved' && document.querySelector('textarea')?.readOnly === false");
