@@ -281,7 +281,7 @@ try {
     `--user-data-dir=${join(directory, "profile")}`, "--timeout=5000", "--dump-dom",
     pathToFileURL(html).href],
     outputIsComplete: output => output.includes("</pre>"),
-    executionTimeoutMs: 45000,
+    executionTimeoutMs: 15000,
     shutdownTimeoutMs: 1000,
   });
   const encoded = run.stdout.match(/<pre id="result">([^<]+)<\/pre>/)?.[1];
