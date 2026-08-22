@@ -100,8 +100,25 @@ export function requestResult<Result>(request: IDBRequest<Result>): Promise<Resu
   });
 }
 
-export async function deleteJournal(name: string): Promise<void> {
-  await requestResult(indexedDB.deleteDatabase(name));
+export function trackDatabase(
+  database: IDBDatabase,
+  openDatabases: Set<IDBDatabase>,
+): void {
+  openDatabases.add(database);
+}
+
+export function closeTrackedDatabases(openDatabases: Set<IDBDatabase>): void {
+  for (const database of openDatabases) database.close();
+  openDatabases.clear();
+}
+
+export function deleteJournal(name: string): Promise<void> {
+  const request = indexedDB.deleteDatabase(name);
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error ?? new Error("IndexedDB deletion failed"));
+    request.onblocked = () => reject(new Error(`IndexedDB deletion is blocked: ${name}`));
+  });
 }
 
 export function requireEditorReady(state: EditorState): asserts state is EditorReadyState {

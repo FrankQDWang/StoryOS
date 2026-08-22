@@ -22,11 +22,13 @@ import {
   PROJECT,
   REVISION,
   SESSION,
+  closeTrackedDatabases,
   createAppliedActivityEvent,
   createBrowserScenario,
   deleteJournal,
   jsonResponse,
   requireEditorReady,
+  trackDatabase,
 } from "./scenario.ts";
 
 const CANONICAL_SNAPSHOT = "018f0000-0000-7001-8000-000000000390";
@@ -80,6 +82,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
     }
     throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);
   };
+  const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
   try {
@@ -93,6 +96,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
       cryptoImpl: crypto,
     });
     requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
     const pending = await persistReplaceSelection(workspace, {
       from: 4,
       to: 4,
@@ -171,6 +175,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
     expect(counts).toEqual({ activity: 0, snapshots: 1 });
     workspace.database.close();
   } finally {
+    closeTrackedDatabases(openDatabases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }

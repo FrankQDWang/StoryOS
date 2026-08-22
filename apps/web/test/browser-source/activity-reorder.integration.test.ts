@@ -13,11 +13,13 @@ import {
   PROJECT,
   REVISION,
   SESSION,
+  closeTrackedDatabases,
   createAppliedActivityEvent,
   createBrowserScenario,
   deleteJournal,
   jsonResponse,
   requireEditorReady,
+  trackDatabase,
 } from "./scenario.ts";
 
 const EVENT_A = "018f0000-0000-7001-8000-000000000371";
@@ -48,6 +50,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
     event: "storyos.project-activity",
     data,
   });
+  const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
   try {
@@ -61,6 +64,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
       cryptoImpl: crypto,
     });
     requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
     const eventA = await createAppliedActivityEvent({
       eventId: EVENT_A,
       commandId: "018f0000-0000-7001-8000-000000000373",
@@ -125,6 +129,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
       cryptoImpl: crypto,
     });
     requireEditorReady(inOrder);
+    trackDatabase(inOrder.database, openDatabases);
     await ingestProjectActivityFrames(inOrder, [
       frame("cursor-a", eventA),
       frame("cursor-b", eventB),
@@ -132,6 +137,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
     expect(await readProjectActivityIngest(inOrder)).toEqual(contiguous);
     inOrder.database.close();
   } finally {
+    closeTrackedDatabases(openDatabases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }

@@ -28,19 +28,22 @@ export async function startStoryOSServer(options: {
   readonly bind?: string;
   readonly repositoryRoot: string;
   readonly serverBinary: string;
-  readonly sessions: Readonly<Record<string, string>>;
+  readonly sessions?: Readonly<Record<string, string>>;
 }): Promise<StoryOSServer> {
   const { bind = "127.0.0.1:0", repositoryRoot, serverBinary, sessions } = options;
+  const env = { ...process.env };
+  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
+    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
+  }
+  if (sessions !== undefined) {
+    env.STORYOS_BOOTSTRAP_SESSIONS = JSON.stringify(sessions);
+    env.STORYOS_CHALLENGE_SECRET =
+      "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
+  }
   return new Promise((resolve, reject) => {
     const server = spawn(serverBinary, ["--bind", bind], {
       cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
-        STORYOS_BOOTSTRAP_SESSIONS: JSON.stringify(sessions),
-        STORYOS_CHALLENGE_SECRET:
-          "test-only-challenge-secret-that-is-at-least-thirty-two-bytes",
-      },
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";

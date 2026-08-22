@@ -30,6 +30,7 @@ import {
   PROJECT,
   REVISION,
   SESSION,
+  closeTrackedDatabases,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -38,6 +39,7 @@ import {
   requireDigestValue,
   requireEditorReady,
   requireRequestBody,
+  trackDatabase,
 } from "./scenario.ts";
 
 type OutcomeMode =
@@ -116,6 +118,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     schema_id: "storyos.query.editor-session.response.v1",
   };
   const counts = { authorEdits: 0, methods: [] as string[], outcomes: 0 };
+  const openDatabases = new Set<IDBDatabase>();
   const fetchImpl: typeof fetch = async (input, init) => {
     const parsed = new URL(input instanceof Request ? input.url : input);
     expect(parsed.href).not.toContain(NONCE);
@@ -226,6 +229,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       cryptoImpl: crypto,
     });
     requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
     expect(workspace.database.version).toBe(3);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
@@ -483,6 +487,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     });
     await closeScenario(workspace);
   } finally {
+    closeTrackedDatabases(openDatabases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }

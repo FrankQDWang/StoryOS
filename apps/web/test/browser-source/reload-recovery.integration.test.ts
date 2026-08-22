@@ -27,6 +27,7 @@ import {
   PROJECT,
   REVISION,
   SESSION,
+  closeTrackedDatabases,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -37,6 +38,7 @@ import {
   requireEditorReady,
   requireRecord,
   requireRequestBody,
+  trackDatabase,
 } from "./scenario.ts";
 
 type OutcomeMode = "challenge" | "committed" | "rejected" | "unavailable";
@@ -86,6 +88,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     schema_id: "storyos.query.editor-session.response.v1",
   };
   const counts = { authorEdits: 0, outcomes: 0, paths: [] as string[] };
+  const openDatabases = new Set<IDBDatabase>();
   const fetchImpl: typeof fetch = async (input, init) => {
     const parsed = new URL(input instanceof Request ? input.url : input);
     expect(parsed.href).not.toContain(NONCE);
@@ -172,6 +175,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       cryptoImpl: crypto,
     });
     requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
     expect(workspace.database.version).toBe(3);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
@@ -280,6 +284,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       staleRequest.transaction?.objectStore("metadata").put({ key: "schema", version: 2 });
     };
     const stale = await requestResult(staleRequest);
+    trackDatabase(stale, openDatabases);
     stale.close();
     const refused = await openEditorWorkspace({
       baseUrl: location.origin,
@@ -290,6 +295,9 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       indexedDBImpl: indexedDB,
       cryptoImpl: crypto,
     });
+    if (refused.kind === "editor-ready") {
+      trackDatabase(refused.database, openDatabases);
+    }
     expect(refused).toMatchObject({
       kind: "editor-read-only-recovery",
       code: "local_journal_unavailable",
@@ -427,6 +435,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     unresolved = await loseAcknowledgement();
     unresolved.workspace.database.close();
     const opened = await requestResult(indexedDB.open(scenario.journalName));
+    trackDatabase(opened, openDatabases);
     const clear = opened.transaction("transport_capsules", "readwrite");
     clear.objectStore("transport_capsules").clear();
     await transactionResult(clear);
@@ -463,6 +472,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       .toEqual({ authorEdits: 1, outcomes: 2 });
     await closeScenario(reopened);
   } finally {
+    closeTrackedDatabases(openDatabases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }

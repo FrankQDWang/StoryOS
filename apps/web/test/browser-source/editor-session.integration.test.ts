@@ -19,9 +19,12 @@ import {
 import type {
   EditorReadyState,
   JournalIntentRecord,
+  JournalPayloadChain,
   JournalSubmissionGroup,
+  SubmissionSettlement,
 } from "../../src/editor-types.ts";
 import {
+  digestJournalValue,
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
@@ -70,6 +73,15 @@ function recordAt(records: JournalIntentRecord[], index: number): JournalIntentR
   const record = records[index];
   if (!record) throw new Error(`Journal intent ${index} is unavailable`);
   return record;
+}
+
+function requireAuthorEditUnit(
+  record: JournalIntentRecord,
+): NonNullable<JournalIntentRecord["author_edit_unit"]> {
+  if (record.author_edit_unit === undefined) {
+    throw new Error(`Journal intent ${record.local_intent_sequence} has no Author Edit Unit`);
+  }
+  return record.author_edit_unit;
 }
 
 it("keeps the bounded IndexedDB Journal valid through batching and settlement", async () => {
@@ -521,6 +533,12 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000049",
       createdAt: "2026-08-15T08:00:00.500Z",
     });
+    expect(workspace.pending).toEqual({
+      body: "Base!?+",
+      save_state: "saving",
+      unsettled_intent_count: 1,
+      authoritative_revision_id: FIRST_REVISION,
+    });
     expect(await submitOnePendingAuthorEdit({
       workspace,
       baseUrl: location.origin,
@@ -537,74 +555,266 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       workspace,
       await readJournalSnapshot(workspace),
     );
-    expect(finalJournal.records).toHaveLength(3);
-    expect(finalJournal.records.map((record) => ({
-      sequence: record.local_intent_sequence,
-      origin: record.input_origin,
-      base: record.base_snapshot_id,
-      unit: record.author_edit_unit,
-      undo: record.undo_group_binding.undo_group_id,
-      createdAt: record.created_at,
-    }))).toEqual([{
-      sequence: 1,
-      origin: "typing",
-      base: scenario.session.base_snapshot.snapshot_id,
-      unit: {
-        normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
-        selection_snapshot: {
-          coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-          from: 4,
-          to: 4,
-        },
+    const expectedRecord = (
+      record: JournalIntentRecord,
+      options: {
+        readonly base: GetEditorSessionResponse["base_snapshot"];
+        readonly createdAt: string;
+        readonly origin: JournalIntentRecord["input_origin"];
+        readonly sequence: number;
+        readonly undoGroupId: string;
+        readonly unit: NonNullable<JournalIntentRecord["author_edit_unit"]>;
       },
-      undo: "018f0000-0000-7001-8000-000000000040",
-      createdAt: "2026-08-15T08:00:00.000Z",
-    }, {
-      sequence: 2,
-      origin: "typing",
-      base: scenario.session.base_snapshot.snapshot_id,
-      unit: {
-        normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
-        selection_snapshot: {
-          coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-          from: 5,
-          to: 5,
-        },
+    ): JournalIntentRecord => ({
+      completed_intent_record_id: record.completed_intent_record_id,
+      local_intent_sequence: options.sequence,
+      journal_partition_id: workspace.partition.journal_partition_id,
+      project_scope: scenario.project.project_scope,
+      editor_session_id: SESSION,
+      writer_generation: "1",
+      limit_profile_revision: "storyos.foundation.absolute.v1",
+      batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+      input_origin: options.origin,
+      chapter_object_id: CHAPTER,
+      base_snapshot_id: options.base.snapshot_id,
+      base_activity_position: options.base.project_activity_position,
+      target_refs: options.base.target_refs,
+      expected_authoritative_heads: [options.base.authoritative_head_revision_id],
+      expected_proposal_heads: [],
+      proposal_anchors: [],
+      observed_ownership_partition: "authoritative",
+      author_edit_unit: options.unit,
+      retry_source: { kind: "fresh_editor_intent" },
+      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      undo_group_binding: {
+        kind: "direct_author_input",
+        undo_group_id: options.undoGroupId,
       },
-      undo: "018f0000-0000-7001-8000-000000000040",
-      createdAt: "2026-08-15T08:00:00.250Z",
-    }, {
-      sequence: 3,
-      origin: "paste",
-      base: freshSession.base_snapshot.snapshot_id,
-      unit: {
-        normalized_primitives: [{ kind: "replace_selection", from: 6, to: 6, text: "+" }],
-        selection_snapshot: {
-          coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-          from: 6,
-          to: 6,
-        },
+      payload_chain_ref: record.payload_chain_ref,
+      payload_digest: record.payload_digest,
+      projection_dependency: {
+        snapshot_id: options.base.snapshot_id,
+        prior_sequence: options.sequence - 1,
       },
-      undo: "018f0000-0000-7001-8000-000000000049",
-      createdAt: "2026-08-15T08:00:00.500Z",
-    }]);
-    expect(finalJournal.payloadChains).toHaveLength(2);
-    expect(finalJournal.payloadChains.flatMap((chain) => chain.ordered_patch_refs)
-      .map((patch) => patch.local_intent_sequence)).toEqual([1, 2, 3]);
-    expect(finalJournal.groups).toHaveLength(2);
-    expect(finalJournal.groups.map((group) => group.settlement)).toMatchObject([{
+      created_at: options.createdAt,
+    });
+    const expectedRecords = [
+      expectedRecord(recordAt(finalJournal.records, 0), {
+        sequence: 1,
+        origin: "typing",
+        base: scenario.session.base_snapshot,
+        unit: {
+          normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
+          selection_snapshot: {
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+            from: 4,
+            to: 4,
+          },
+        },
+        undoGroupId: "018f0000-0000-7001-8000-000000000040",
+        createdAt: "2026-08-15T08:00:00.000Z",
+      }),
+      expectedRecord(recordAt(finalJournal.records, 1), {
+        sequence: 2,
+        origin: "typing",
+        base: scenario.session.base_snapshot,
+        unit: {
+          normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
+          selection_snapshot: {
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+            from: 5,
+            to: 5,
+          },
+        },
+        undoGroupId: "018f0000-0000-7001-8000-000000000040",
+        createdAt: "2026-08-15T08:00:00.250Z",
+      }),
+      expectedRecord(recordAt(finalJournal.records, 2), {
+        sequence: 3,
+        origin: "paste",
+        base: freshSession.base_snapshot,
+        unit: {
+          normalized_primitives: [{ kind: "replace_selection", from: 6, to: 6, text: "+" }],
+          selection_snapshot: {
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+            from: 6,
+            to: 6,
+          },
+        },
+        undoGroupId: "018f0000-0000-7001-8000-000000000049",
+        createdAt: "2026-08-15T08:00:00.500Z",
+      }),
+    ];
+    expect(finalJournal.records).toEqual(expectedRecords);
+
+    const expectedPayloadChains: JournalPayloadChain[] = [];
+    for (const chain of finalJournal.payloadChains) {
+      const records = expectedRecords.filter(
+        (record) => record.payload_chain_ref === chain.payload_chain_id,
+      );
+      const firstRecord = recordAt(records, 0);
+      const base = firstRecord.base_snapshot_id === scenario.session.base_snapshot.snapshot_id
+        ? scenario.session.base_snapshot
+        : freshSession.base_snapshot;
+      expectedPayloadChains.push({
+        payload_chain_id: chain.payload_chain_id,
+        journal_partition_id: workspace.partition.journal_partition_id,
+        checkpoint_ref: {
+          chapter_object_id: CHAPTER,
+          materialized_payload: base.materialized_revision.body,
+          materialized_payload_digest: base.materialized_payload_digest,
+          source_snapshot_id: base.snapshot_id,
+          source_heads: [base.authoritative_head_revision_id],
+        },
+        ordered_patch_refs: await Promise.all(records.map(async (record, index) => {
+          const patch = chain.ordered_patch_refs[index];
+          if (!patch) throw new Error(`Journal payload patch ${index} is unavailable`);
+          return {
+            patch_id: patch.patch_id,
+            completed_intent_record_id: record.completed_intent_record_id,
+            local_intent_sequence: record.local_intent_sequence,
+            normalized_primitives: requireAuthorEditUnit(record).normalized_primitives,
+            resulting_payload_digest: await digestJournalValue(
+              finalJournal.bodyBySequence.get(record.local_intent_sequence),
+              crypto,
+            ),
+          };
+        })),
+      });
+    }
+    expect(finalJournal.payloadChains).toEqual(expectedPayloadChains);
+
+    const expectedAppliedSettlement = (
+      group: JournalSubmissionGroup,
+      options: {
+        readonly admissionId: string;
+        readonly commandId: string;
+        readonly commitId: string;
+        readonly installedBase: GetEditorSessionResponse["base_snapshot"];
+        readonly position: string;
+        readonly priorHead: string;
+        readonly receiptId: string;
+        readonly revision: GetEditorSessionResponse["base_snapshot"]["materialized_revision"];
+      },
+    ): SubmissionSettlement => ({
       kind: "applied_receipt_settled",
-      command_id: "018f0000-0000-7001-8000-000000000031",
-      authoritative_revision: { revision_id: FIRST_REVISION, body: "Base!?" },
-      project_activity_position: "1",
-      installed_base_snapshot: freshSession.base_snapshot,
-    }, {
-      kind: "applied_receipt_settled",
-      command_id: "018f0000-0000-7001-8000-000000000041",
-      authoritative_revision: { revision_id: SECOND_REVISION, body: "Base!?+" },
-      project_activity_position: "2",
-      installed_base_snapshot: secondFreshSession.base_snapshot,
-    }]);
+      command_id: options.commandId,
+      author_command_admission_id: options.admissionId,
+      receipt: {
+        receipt_id: options.receiptId,
+        project_scope: scenario.project.project_scope,
+        command_kind: "applyAuthorEdit",
+        command_digest: group.frozen_request_digest,
+        idempotency_key: group.idempotency_key,
+        producer_cause: "author_command_admission",
+        author_command_admission_id: options.admissionId,
+        expected_heads: [options.priorHead],
+        prior_heads: [options.priorHead],
+        resulting_heads: [options.revision.revision_id],
+        authoritative_revision_ids: [options.revision.revision_id],
+        proposal_revision_ids: [],
+        authoritative_commit_ids: [options.commitId],
+        author_action_sequence: options.position,
+        draft_artifact_refs: [],
+        artifact_lifecycle_event_refs: [],
+        condition_refs: [],
+        result: "authoritative_applied",
+        created_at: "2026-08-15T08:00:00.000Z",
+      },
+      authoritative_revision: options.revision,
+      authoritative_commit_id: options.commitId,
+      author_action_sequence: options.position,
+      project_activity_position: options.position,
+      installed_base_snapshot: options.installedBase,
+    });
+    const expectedGroup = (
+      group: JournalSubmissionGroup,
+      records: JournalIntentRecord[],
+      settlement: SubmissionSettlement,
+    ): JournalSubmissionGroup => {
+      const first = recordAt(records, 0);
+      const last = recordAt(records, records.length - 1);
+      const expectedHead = first.expected_authoritative_heads[0];
+      if (expectedHead === undefined) throw new Error("the expected Authoritative Head is missing");
+      return {
+        journal_submission_group_id: group.journal_submission_group_id,
+        journal_partition_id: workspace.partition.journal_partition_id,
+        project_scope: scenario.project.project_scope,
+        editor_session_id: SESSION,
+        writer_generation: "1",
+        batch_policy_revision: "storyos.author-edit-batch.release-1.preview.v1",
+        ordered_coverage: records.map((record) => ({
+          local_intent_sequence: record.local_intent_sequence,
+          intent_record_ref: record.completed_intent_record_id,
+          payload_digest: record.payload_digest,
+        })),
+        covered_sequence_range: {
+          first: first.local_intent_sequence,
+          last: last.local_intent_sequence,
+        },
+        action_class: "direct_editor_action",
+        api_major: 1,
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/manuscript/author-edits",
+        command_schema: "storyos.command.apply-author-edit.request.v1",
+        command_kind: "applyAuthorEdit",
+        digest_profile: "storyos.command.applyAuthorEdit.jcs.v1",
+        idempotency_key: group.idempotency_key,
+        frozen_request_body: {
+          command_schema: "storyos.command.apply-author-edit.request.v1",
+          client_contract_revision: "storyos.web-client.release-1.v3",
+          security_policy_revision: "storyos.web-security-policy.release-1.v1",
+          correlation_id: group.frozen_request_body.correlation_id,
+          editor_session_id: SESSION,
+          writer_generation: "1",
+          chapter_id: CHAPTER,
+          expected_authoritative_revision_id: expectedHead,
+          expected_proposal_head_revision_ids: [],
+          target_refs: first.target_refs,
+          observed_ownership_partition: "authoritative",
+          editor_contract_revision: "storyos.editor-contract.release-1.v2",
+          undo_group_id: first.undo_group_binding.undo_group_id,
+          completed_intent_record_id: first.completed_intent_record_id,
+          local_intent_sequence: String(first.local_intent_sequence),
+          author_edit_units: records.map(requireAuthorEditUnit),
+        },
+        frozen_request_digest: group.frozen_request_digest,
+        frozen_payload_coverage_digest: group.frozen_payload_coverage_digest,
+        settlement,
+        frozen_at: group.frozen_at,
+      };
+    };
+    const firstGroup = groupAt(finalJournal.groups, 0);
+    const secondGroup = groupAt(finalJournal.groups, 1);
+    const expectedGroups = [
+      expectedGroup(firstGroup, expectedRecords.slice(0, 2), expectedAppliedSettlement(
+        firstGroup,
+        {
+          commandId: "018f0000-0000-7001-8000-000000000031",
+          admissionId: "018f0000-0000-7001-8000-000000000032",
+          receiptId: "018f0000-0000-7001-8000-000000000033",
+          priorHead: REVISION,
+          revision: freshSession.base_snapshot.materialized_revision,
+          commitId: "018f0000-0000-7001-8000-000000000035",
+          position: "1",
+          installedBase: freshSession.base_snapshot,
+        },
+      )),
+      expectedGroup(secondGroup, expectedRecords.slice(2), expectedAppliedSettlement(
+        secondGroup,
+        {
+          commandId: "018f0000-0000-7001-8000-000000000041",
+          admissionId: "018f0000-0000-7001-8000-000000000042",
+          receiptId: "018f0000-0000-7001-8000-000000000043",
+          priorHead: FIRST_REVISION,
+          revision: secondFreshSession.base_snapshot.materialized_revision,
+          commitId: "018f0000-0000-7001-8000-000000000045",
+          position: "2",
+          installedBase: secondFreshSession.base_snapshot,
+        },
+      )),
+    ];
+    expect(finalJournal.groups).toEqual(expectedGroups);
     expect(finalJournal.watermark).toEqual({
       key: `durable_high_watermark:${workspace.partition.journal_partition_id}`,
       value: 3,
@@ -682,6 +892,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       resultingBody: "Base!?",
     })).rejects.toThrow(/read only/);
     workspace.partition.disposition = "current_writer_open";
+    expect(await intentCount(workspace.database)).toBe(3);
 
     workspace.pending = await persistReplaceSelection(workspace, {
       from: 7,
@@ -759,19 +970,15 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       result: "no_effect",
       text: "",
       suffix: "",
-      reason: "content_unchanged",
     }, {
       result: "conflicted",
       text: "C",
       suffix: "C",
-      reason: "stale_authoritative_head",
     }, {
       result: "refused",
       text: "R",
       suffix: "R",
-      reason: "invalid_selection",
     }] satisfies ReadonlyArray<{
-      reason: string;
       result: ZeroAuthorityResult;
       suffix: string;
       text: string;
@@ -790,6 +997,13 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         undoGroupId: `018f0000-0000-7001-8000-00000000008${index + 2}`,
         createdAt: `2026-08-15T10:00:00.00${index}Z`,
       });
+      expect(workspace.pending).toEqual({
+        body: localBody,
+        save_state: "saving",
+        unsettled_intent_count: 1,
+        authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id,
+      });
+      const challengeCountBeforeZero = challengeRequests.length;
       nextZeroAuthorityResult = zeroCase.result;
       expect(await submitOnePendingAuthorEdit({
         workspace,
@@ -803,23 +1017,60 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id,
       });
       expect(workspace.session).toEqual(baseBeforeZero);
+      expect(challengeRequests).toHaveLength(challengeCountBeforeZero + 1);
       const zeroJournal = await validateJournalSnapshot(
         workspace,
         await readJournalSnapshot(workspace),
       );
-      expect({
-        records: zeroJournal.records.length,
-        chains: zeroJournal.payloadChains.length,
-        groups: zeroJournal.groups.length,
-      }).toEqual({ records: 1, chains: 1, groups: 1 });
+      expect(zeroJournal.records).toHaveLength(1);
+      expect(zeroJournal.payloadChains).toHaveLength(1);
+      expect(zeroJournal.groups).toHaveLength(1);
       expect(zeroJournal.activeBase).toEqual(baseBeforeZero.base_snapshot);
       expect([...zeroJournal.bodyBySequence.entries()]).toEqual([[1, localBody]]);
       expect([...zeroJournal.covered]).toEqual([1]);
       const zeroGroup = groupAt(zeroJournal.groups, 0);
-      expect(zeroGroup.settlement).toMatchObject({
+      const [commandId, admissionId, receiptId] = zeroIds[zeroCase.result];
+      const currentHead = zeroCase.result === "conflicted"
+        ? "018f0000-0000-7001-8000-000000000064"
+        : baseBeforeZero.base_snapshot.authoritative_head_revision_id;
+      let expectedEffect: Exclude<ApplyAuthorEditEffect, { kind: "authoritative_applied" }>;
+      if (zeroCase.result === "conflicted") {
+        expectedEffect = {
+          kind: "conflicted",
+          reason: "stale_authoritative_head",
+          current_authoritative_revision_id: currentHead,
+        };
+      } else if (zeroCase.result === "no_effect") {
+        expectedEffect = { kind: "no_effect", reason: "content_unchanged" };
+      } else {
+        expectedEffect = { kind: "refused", reason: "invalid_selection" };
+      }
+      expect(zeroGroup.settlement).toEqual({
         kind: "zero_authority_receipt_settled",
-        receipt: { result: zeroCase.result },
-        effect: { kind: zeroCase.result, reason: zeroCase.reason },
+        command_id: commandId,
+        author_command_admission_id: admissionId,
+        receipt: {
+          receipt_id: receiptId,
+          project_scope: scenario.project.project_scope,
+          command_kind: "applyAuthorEdit",
+          command_digest: zeroGroup.frozen_request_digest,
+          idempotency_key: zeroGroup.idempotency_key,
+          producer_cause: "author_command_admission",
+          author_command_admission_id: admissionId,
+          expected_heads: [baseBeforeZero.base_snapshot.authoritative_head_revision_id],
+          prior_heads: [currentHead],
+          resulting_heads: [currentHead],
+          authoritative_revision_ids: [],
+          proposal_revision_ids: [],
+          authoritative_commit_ids: [],
+          author_action_sequence: null,
+          draft_artifact_refs: [],
+          artifact_lifecycle_event_refs: [],
+          condition_refs: [],
+          result: zeroCase.result,
+          created_at: "2026-08-15T08:00:00.000Z",
+        },
+        effect: expectedEffect,
       });
       if (index < zeroCases.length - 1) await deleteWorkspace(workspace);
     }
@@ -851,6 +1102,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       indexedDBImpl: indexedDB,
       cryptoImpl: crypto,
     });
+    if (recovery.kind === "editor-ready") openDatabase = recovery.database;
     expect(recovery).toMatchObject({
       kind: "editor-read-only-recovery",
       code: "local_journal_unavailable",

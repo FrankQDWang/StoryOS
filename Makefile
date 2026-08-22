@@ -1,4 +1,4 @@
-.PHONY: contracts generate-contracts project-scope verify verify-local verify-pr verify-tracker web
+.PHONY: contracts generate-contracts project-scope verify verify-local verify-pr verify-tracker web web-typecheck
 
 contracts:
 	cargo fmt --all -- --check
@@ -11,15 +11,18 @@ contracts:
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	cargo run --quiet -p storyos-contracts -- check
 	$(MAKE) web
-web:
+web-typecheck:
 	pnpm install --frozen-lockfile
 	pnpm --dir apps/web run typecheck
+
+web: web-typecheck
 	pnpm --dir apps/web exec vite build
 	cargo build --quiet -p storyos-server
 	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source --project browser-exact-dist
 	node --test apps/web/test/production-page-browser.integration.test.mjs
-	$(MAKE) project-scope
-project-scope:
+	scripts/verify-project-scope.sh
+
+project-scope: web-typecheck
 	scripts/verify-project-scope.sh
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate

@@ -19,6 +19,7 @@ import {
   PROJECT,
   REVISION,
   SESSION,
+  closeTrackedDatabases,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -27,6 +28,7 @@ import {
   requireDigestValue,
   requireEditorReady,
   requireRequestBody,
+  trackDatabase,
 } from "./scenario.ts";
 
 const NEXT_REVISION = "018f0000-0000-7001-8000-000000000034";
@@ -92,6 +94,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
     }
     throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);
   };
+  const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
   try {
@@ -105,6 +108,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
       cryptoImpl: crypto,
     });
     requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
     await persistReplaceSelection(workspace, {
       from: 4,
       to: 4,
@@ -208,6 +212,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
     expect(lastEdit).toBeDefined();
     workspace.database.close();
   } finally {
+    closeTrackedDatabases(openDatabases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }

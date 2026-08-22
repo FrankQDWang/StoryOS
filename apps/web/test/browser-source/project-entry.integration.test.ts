@@ -6,9 +6,11 @@ import {
   OWNER,
   PROJECT,
   SESSION,
+  closeTrackedDatabases,
   createBrowserScenario,
   deleteJournal,
   jsonResponse,
+  trackDatabase,
 } from "./scenario.ts";
 
 it("opens the URL-selected Project and fails closed before invalid entry requests", async () => {
@@ -38,6 +40,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     }
     throw new Error(`unexpected request: ${path}`);
   };
+  const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
   try {
@@ -51,6 +54,9 @@ it("opens the URL-selected Project and fails closed before invalid entry request
       indexedDBImpl: indexedDB,
       cryptoImpl: crypto,
     });
+    if (state.kind === "project-ready" && state.editor.kind === "editor-ready") {
+      trackDatabase(state.editor.database, openDatabases);
+    }
     expect(state.kind).toBe("project-ready");
     const root = document.querySelector("#app");
     if (!(root instanceof HTMLElement)) throw new Error("the Web root is unavailable");
@@ -109,6 +115,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
       expect(blockedRoot.textContent).not.toContain("stale Project page");
     }
   } finally {
+    closeTrackedDatabases(openDatabases);
     delete document.documentElement.dataset.storyosProject;
     document.body.replaceChildren();
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);

@@ -18,6 +18,7 @@ import {
   OWNER,
   PROJECT,
   SESSION,
+  closeTrackedDatabases,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -27,6 +28,7 @@ import {
   requireDigestValue,
   requireEditorReady,
   requireRequestBody,
+  trackDatabase,
 } from "./scenario.ts";
 
 const NEXT_REVISION = "018f0000-0000-7001-8000-000000000034";
@@ -113,6 +115,7 @@ it("fences the old Journal partition before a late applied result settles", asyn
     }
     throw new Error(`unexpected request: ${path}`);
   };
+  const openDatabases = new Set<IDBDatabase>();
 
   await deleteJournal(scenario.journalName);
   try {
@@ -126,6 +129,7 @@ it("fences the old Journal partition before a late applied result settles", asyn
       cryptoImpl: crypto,
     });
     requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
     const openPartition = { ...workspace.partition };
     expect(openPartition).toMatchObject({
       writer_generation: "1",
@@ -197,6 +201,7 @@ it("fences the old Journal partition before a late applied result settles", asyn
     expect(counts.authorEdits).toBe(1);
     workspace.database.close();
   } finally {
+    closeTrackedDatabases(openDatabases);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
     await deleteJournal(scenario.journalName);
   }
