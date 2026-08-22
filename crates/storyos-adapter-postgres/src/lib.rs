@@ -12,6 +12,10 @@ mod author_edit_outcome_tests;
 #[path = "takeover_persistence_tests.rs"]
 mod takeover_persistence_tests;
 
+#[cfg(test)]
+#[path = "takeover_admission_tests.rs"]
+mod takeover_admission_tests;
+
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
