@@ -48,7 +48,7 @@ test("the Vite production build emits hashed Protected Web Client assets", async
   const html = readFileSync(join(distDir, "index.html"), "utf8");
   const assets = readdirSync(join(distDir, "assets"));
   assert.match(html, /id="app"/);
-  assert.doesNotMatch(html, /src="\.\/src\/main\.mjs"/);
+  assert.doesNotMatch(html, /src="\.\/src\/main\.ts"/);
   assert.ok(
     assets.some((name) => /-[A-Za-z0-9_-]+\.js$/.test(name)),
     `production assets must be content-hashed, found ${assets.join(", ")}`,

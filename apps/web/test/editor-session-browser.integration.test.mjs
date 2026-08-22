@@ -4,9 +4,11 @@ import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+
+import { loadLegacyBrowserModule } from "./support/legacy-source-transport.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const chromeCandidates = [
@@ -22,9 +24,9 @@ const harness = `<!doctype html>
 <html><body data-result="running"><script type="module">
 import { freezeOneIntentSubmission, openEditorWorkspace, persistReplaceSelection,
   rebuildPendingProjection, submitOnePendingAuthorEdit }
-  from "/apps/web/src/editor-session.mjs";
+  from "/apps/web/src/editor-session.ts";
 import { digestJournalValue, readJournalSnapshot, validateJournalSnapshot }
-  from "/apps/web/src/local-edit-journal.mjs";
+  from "/apps/web/src/local-edit-journal.ts";
 
 const assert = {
   equal(actual, expected) {
@@ -869,9 +871,6 @@ run().catch((error) => {
 });
 </script></body></html>`;
 
-function contentType(pathname) {
-  return extname(pathname) === ".mjs" ? "text/javascript; charset=utf-8" : "text/plain";
-}
 
 function devToolsAddress(browser) {
   return new Promise((resolve, reject) => {
@@ -999,20 +998,19 @@ test("a real browser journal settles bounded groups and installs the complete ne
       return;
     }
     const pathname = new URL(request.url, "http://storyos.test").pathname;
-    const allowed = pathname === "/apps/web/src/editor-session.mjs"
-      || pathname === "/apps/web/src/author-edit-submission.mjs"
-      || pathname === "/apps/web/src/author-edit-outcome-reconciliation.mjs"
-      || pathname === "/apps/web/src/local-edit-journal.mjs"
-      || pathname === "/apps/web/src/protected-transport-capsule.mjs"
+    const allowed = pathname === "/apps/web/src/editor-session.ts"
+      || pathname === "/apps/web/src/author-edit-submission.ts"
+      || pathname === "/apps/web/src/author-edit-outcome-reconciliation.ts"
+      || pathname === "/apps/web/src/local-edit-journal.ts"
+      || pathname === "/apps/web/src/protected-transport-capsule.ts"
       || pathname === "/generated/typescript/storyos-public-release-1/client.mjs";
     if (!allowed) {
       response.writeHead(404).end();
       return;
     }
-    const bytes = await import("node:fs/promises").then(({ readFile }) =>
-      readFile(join(repositoryRoot, pathname)));
-    response.writeHead(200, { "content-type": contentType(pathname) });
-    response.end(bytes);
+    const module = await loadLegacyBrowserModule(repositoryRoot, pathname);
+    response.writeHead(200, { "content-type": module.contentType });
+    response.end(module.body);
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");

@@ -1,12 +1,41 @@
-import { submitOnePendingAuthorEdit } from "./author-edit-submission.mjs";
+import { submitOnePendingAuthorEdit } from "./author-edit-submission.ts";
 import {
   AUTHOR_EDIT_BATCH_IDLE_MS,
   AUTHOR_EDIT_MAX_UNITS,
   createJournalUuid,
   persistReplaceSelection,
-} from "./local-edit-journal.mjs";
+} from "./local-edit-journal.ts";
+import type {
+  EditorReadyState,
+  EditorWorkspace,
+  InputOrigin,
+  PendingEditProjection,
+  ReplaceSelectionEdit,
+} from "./editor-types.ts";
 
-function isUtf16Boundary(body, offset) {
+interface BeforeInputObservation {
+  body: string;
+  from: number;
+  to: number;
+  inputType: string;
+  forcedOrigin: InputOrigin | undefined;
+  createdAt: string;
+  redundantCompositionCommit: boolean | undefined;
+}
+
+interface CompositionObservation {
+  baseBody: string;
+  from: number;
+  to: number;
+}
+
+interface ManualInputController {
+  flush(): Promise<void>;
+  whenIdle(): Promise<void>;
+  close(): void;
+}
+
+function isUtf16Boundary(body: string, offset: number): boolean {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > body.length) return false;
   if (offset === 0 || offset === body.length) return true;
   const prior = body.charCodeAt(offset - 1);
@@ -14,7 +43,12 @@ function isUtf16Boundary(body, offset) {
   return !(prior >= 0xd800 && prior <= 0xdbff && next >= 0xdc00 && next <= 0xdfff);
 }
 
-function exactSelectionEdit(before, after, from, to) {
+function exactSelectionEdit(
+  before: string,
+  after: string,
+  from: number,
+  to: number,
+): ReplaceSelectionEdit {
   const suffixLength = before.length - to;
   if (!isUtf16Boundary(before, from)
     || !isUtf16Boundary(before, to)
@@ -32,7 +66,11 @@ function exactSelectionEdit(before, after, from, to) {
   return { from, to, text, resultingBody: after };
 }
 
-function editFromBeforeInput(observation, after, selectionStart) {
+function editFromBeforeInput(
+  observation: BeforeInputObservation,
+  after: string,
+  selectionStart: number,
+): ReplaceSelectionEdit {
   let { from, to } = observation;
   if (from === to && observation.inputType?.startsWith("delete")) {
     if (observation.inputType.endsWith("Backward")) from = selectionStart;
@@ -45,18 +83,23 @@ function editFromBeforeInput(observation, after, selectionStart) {
   return exactSelectionEdit(observation.body, after, from, to);
 }
 
-function inputOrigin(event, edit, clipboardOrigin) {
+function inputOrigin(
+  event: InputEvent | CompositionEvent,
+  edit: ReplaceSelectionEdit,
+  clipboardOrigin: InputOrigin | undefined,
+): InputOrigin {
+  const eventInputType = (event as InputEvent).inputType;
   if (clipboardOrigin) return clipboardOrigin;
-  if (event.inputType === "insertFromPaste") return "paste";
-  if (event.inputType === "deleteByCut") return "cut";
-  if (event.inputType?.startsWith("delete")) return "deletion";
-  if (event.inputType === "insertReplacementText" || edit.to > edit.from) {
+  if (eventInputType === "insertFromPaste") return "paste";
+  if (eventInputType === "deleteByCut") return "cut";
+  if (eventInputType?.startsWith("delete")) return "deletion";
+  if (eventInputType === "insertReplacementText" || edit.to > edit.from) {
     return "selection_replacement";
   }
   return "typing";
 }
 
-const SUPPORTED_INPUT_TYPES = new Set([
+const SUPPORTED_INPUT_TYPES = new Set<string>([
   "insertText",
   "insertReplacementText",
   "insertFromPaste",
@@ -88,32 +131,56 @@ export function attachManualInput({
   clearTimeoutImpl = globalThis.clearTimeout,
   nowImpl = Date.now,
   isTrustedEvent = (event) => event.isTrusted,
-}) {
+}: {
+  editor: HTMLTextAreaElement;
+  workspace: EditorReadyState;
+  baseUrl: string;
+  fetchImpl?: typeof fetch;
+  cryptoImpl?: Crypto;
+  persistIntent?: (
+    workspace: EditorWorkspace,
+    edit: ReplaceSelectionEdit,
+    cryptoImpl?: Crypto,
+  ) => Promise<PendingEditProjection>;
+  submitGroup?: (options: {
+    workspace: EditorWorkspace;
+    baseUrl: string;
+    fetchImpl?: typeof fetch;
+    cryptoImpl?: Crypto;
+  }) => Promise<PendingEditProjection>;
+  afterAppliedSettlement?: (workspace: EditorWorkspace) => Promise<unknown> | unknown;
+  onProjection?: (projection: PendingEditProjection) => void;
+  onFailure?: (error: unknown) => void;
+  setTimeoutImpl?: typeof globalThis.setTimeout;
+  clearTimeoutImpl?: typeof globalThis.clearTimeout;
+  nowImpl?: () => number;
+  isTrustedEvent?: (event: Event) => boolean;
+}): ManualInputController {
   if (!editor || typeof editor.addEventListener !== "function") {
     throw new TypeError("Manual input requires one browser editor element");
   }
   let observedBody = editor.value;
   let pendingIntentCount = workspace.pending?.unsettled_intent_count ?? 0;
-  let undoGroupId;
-  let lastCompletedAt;
-  let idleTimer;
-  let composition;
+  let undoGroupId: string | undefined;
+  let lastCompletedAt: number | undefined;
+  let idleTimer: number | undefined;
+  let composition: CompositionObservation | undefined;
   let compositionFinishing = false;
-  let postCompositionCommit;
-  let beforeInput;
-  let clipboardOrigin;
+  let postCompositionCommit: { body: string; data: string } | undefined;
+  let beforeInput: BeforeInputObservation | undefined;
+  let clipboardOrigin: InputOrigin | undefined;
   let stopped = false;
   let failed = false;
   let queuedOperations = 0;
-  let queue = Promise.resolve();
+  let queue: Promise<void> = Promise.resolve();
 
-  const fail = (error) => {
+  const fail = (error: unknown): void => {
     if (!failed) onFailure(error);
     failed = true;
     editor.readOnly = true;
   };
 
-  const enqueue = (operation) => {
+  const enqueue = (operation: () => Promise<void>): Promise<void> => {
     queuedOperations += 1;
     if (queuedOperations > AUTHOR_EDIT_MAX_UNITS) {
       queuedOperations -= 1;
@@ -127,12 +194,12 @@ export function attachManualInput({
     return queue;
   };
 
-  const clearIdle = () => {
+  const clearIdle = (): void => {
     if (idleTimer !== undefined) clearTimeoutImpl(idleTimer);
     idleTimer = undefined;
   };
 
-  const submitPending = async () => {
+  const submitPending = async (): Promise<void> => {
     clearIdle();
     if (pendingIntentCount === 0 || composition) return;
     const projection = await submitGroup({ workspace, baseUrl, fetchImpl, cryptoImpl });
@@ -148,7 +215,7 @@ export function attachManualInput({
     }
   };
 
-  const scheduleIdle = () => {
+  const scheduleIdle = (): void => {
     clearIdle();
     idleTimer = setTimeoutImpl(() => {
       idleTimer = undefined;
@@ -156,7 +223,11 @@ export function attachManualInput({
     }, AUTHOR_EDIT_BATCH_IDLE_MS);
   };
 
-  const persist = async (edit, origin, createdAt) => {
+  const persist = async (
+    edit: ReplaceSelectionEdit,
+    origin: InputOrigin,
+    createdAt: string,
+  ): Promise<void> => {
     const hardBoundary = origin === "composition_confirmation"
       || origin === "paste" || origin === "cut";
     const completedAt = Date.parse(createdAt);
@@ -175,21 +246,26 @@ export function attachManualInput({
     else scheduleIdle();
   };
 
-  const capture = (edit, originEvent, forcedOrigin, createdAt) => {
+  const capture = (
+    edit: ReplaceSelectionEdit,
+    originEvent: InputEvent | CompositionEvent,
+    forcedOrigin: InputOrigin | undefined,
+    createdAt: string,
+  ): void => {
     const origin = forcedOrigin ?? inputOrigin(originEvent, edit, clipboardOrigin);
     clipboardOrigin = undefined;
     enqueue(() => persist(edit, origin, createdAt));
   };
 
-  const markClipboardOrigin = (origin) => {
+  const markClipboardOrigin = (origin: "paste" | "cut"): void => {
     clipboardOrigin = origin;
     queueMicrotask(() => {
       if (clipboardOrigin === origin) clipboardOrigin = undefined;
     });
   };
-  const onPaste = () => { markClipboardOrigin("paste"); };
-  const onCut = () => { markClipboardOrigin("cut"); };
-  const onBeforeInput = (event) => {
+  const onPaste = (): void => { markClipboardOrigin("paste"); };
+  const onCut = (): void => { markClipboardOrigin("cut"); };
+  const onBeforeInput = (event: InputEvent): void => {
     if (stopped || failed) return;
     if (!isTrustedEvent(event)) {
       fail(new Error("Manual input lost its trusted beforeinput boundary"));
@@ -216,7 +292,7 @@ export function attachManualInput({
     };
     clipboardOrigin = undefined;
   };
-  const onCompositionStart = (event) => {
+  const onCompositionStart = (event: CompositionEvent): void => {
     if (stopped || failed || composition) return;
     if (!isTrustedEvent(event) || editor.value !== observedBody) {
       fail(new Error("Manual composition lost its trusted start boundary"));
@@ -232,7 +308,7 @@ export function attachManualInput({
     postCompositionCommit = undefined;
     beforeInput = undefined;
   };
-  const onCompositionEnd = (event) => {
+  const onCompositionEnd = (event: CompositionEvent): void => {
     if (!composition || stopped || failed) return;
     if (!isTrustedEvent(event)) {
       fail(new Error("Manual composition lost its trusted confirmation boundary"));
@@ -270,7 +346,7 @@ export function attachManualInput({
       }
     });
   };
-  const onInput = (event) => {
+  const onInput = (event: InputEvent): void => {
     if (stopped || failed) return;
     const nextBody = editor.value;
     if (!isTrustedEvent(event)) {

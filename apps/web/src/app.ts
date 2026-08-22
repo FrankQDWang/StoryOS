@@ -1,10 +1,35 @@
-import { openControlledProject } from "./boot.mjs";
-import { attachManualInput } from "./manual-input.mjs";
+import { openControlledProject } from "./boot.ts";
+import type {
+  ControlledProjectState,
+  EditorReadyState,
+  ProjectBlockedState,
+} from "./editor-types.ts";
+import { attachManualInput } from "./manual-input.ts";
 
 const PROJECT_PATH = /^\/projects\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
 
-function render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl }) {
-  const element = (tag, text) => {
+export interface LoadedStoryOSWebState {
+  documentImpl: Document;
+  root: HTMLElement;
+  state: ControlledProjectState;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+}
+
+function render(
+  documentImpl: Document,
+  root: HTMLElement,
+  state: ControlledProjectState,
+  { baseUrl, fetchImpl, cryptoImpl }: Pick<
+    LoadedStoryOSWebState,
+    "baseUrl" | "fetchImpl" | "cryptoImpl"
+  >,
+): void {
+  const element = <K extends keyof HTMLElementTagNameMap>(
+    tag: K,
+    text: string,
+  ): HTMLElementTagNameMap[K] => {
     const node = documentImpl.createElement(tag);
     node.textContent = text;
     return node;
@@ -27,7 +52,7 @@ function render(documentImpl, root, state, { baseUrl, fetchImpl, cryptoImpl }) {
       attachManualInput({
         editor, workspace: state.editor, baseUrl, fetchImpl, cryptoImpl,
         onProjection(projection) {
-          state.editor.pending = projection;
+          (state.editor as EditorReadyState).pending = projection;
           saveState.textContent = projection.save_state;
           saveState.dataset.saveState = projection.save_state;
         },
@@ -64,23 +89,32 @@ export async function loadStoryOSWebState({
   fetchImpl = globalThis.fetch,
   indexedDBImpl = globalThis.indexedDB,
   cryptoImpl = globalThis.crypto,
-} = {}) {
-  const root = documentImpl.querySelector("#app");
+}: {
+  documentImpl?: Document;
+  locationImpl?: Pick<Location, "origin" | "pathname">;
+  fetchImpl?: typeof fetch;
+  indexedDBImpl?: IDBFactory;
+  cryptoImpl?: Crypto;
+} = {}): Promise<LoadedStoryOSWebState> {
+  const root = documentImpl.querySelector<HTMLElement>("#app");
   if (!root) throw new TypeError("StoryOS Web cannot start because the required #app root is missing.");
   const baseUrl = documentImpl.documentElement.dataset.storyosServer ?? locationImpl.origin;
   const projectId = locationImpl.pathname.match(PROJECT_PATH)?.[1];
-  const state = projectId
+  const invalidUrlState: ProjectBlockedState = {
+    kind: "project-blocked",
+    code: "project_url_invalid",
+    heading: "StoryOS 无法打开项目",
+    message: "项目地址缺少有效的受控项目身份。",
+  };
+  const state: ControlledProjectState = projectId
     ? await openControlledProject({ baseUrl, projectId, fetchImpl, indexedDBImpl, cryptoImpl })
-    : {
-        kind: "project-blocked",
-        code: "project_url_invalid",
-        heading: "StoryOS 无法打开项目",
-        message: "项目地址缺少有效的受控项目身份。",
-      };
+    : invalidUrlState;
   return { documentImpl, root, state, baseUrl, fetchImpl, cryptoImpl };
 }
 
-export async function runStoryOSWeb(options = {}) {
+export async function runStoryOSWeb(
+  options: Parameters<typeof loadStoryOSWebState>[0] = {},
+): Promise<ControlledProjectState> {
   const loaded = await loadStoryOSWebState(options);
   render(loaded.documentImpl, loaded.root, loaded.state, loaded);
   return loaded.state;

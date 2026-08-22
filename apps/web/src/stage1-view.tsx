@@ -1,18 +1,37 @@
 import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
-import { collectEligibleJournalPayload } from "./journal-payload-collection.mjs";
-import { attachManualInput } from "./manual-input.mjs";
+import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
+import type {
+  ControlledProjectState,
+  EditorReadyState,
+  PendingEditProjection,
+  ProjectReadyState,
+} from "./editor-types.ts";
+import { attachManualInput } from "./manual-input.ts";
 
-function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
-  const editorRef = useRef(null);
+interface Stage1ViewProps {
+  state: ControlledProjectState;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+}
+
+interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
+  state: ProjectReadyState;
+}
+
+function ProjectReadyView({
+  state, baseUrl, fetchImpl, cryptoImpl,
+}: ProjectReadyViewProps) {
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const initialBody = state.editor.kind === "editor-ready"
     ? state.editor.pending.body
     : state.chapter.chapter.current_revision.body;
-  const [pending, setPending] = useState(
+  const [pending, setPending] = useState<PendingEditProjection | null>(
     state.editor.kind === "editor-ready" ? state.editor.pending : null,
   );
-  const [saveState, setSaveState] = useState(
+  const [saveState, setSaveState] = useState<PendingEditProjection["save_state"]>(
     state.editor.kind === "editor-ready" ? state.editor.pending.save_state : "needs_attention",
   );
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
@@ -28,7 +47,7 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
       cryptoImpl,
       afterAppliedSettlement: collectEligibleJournalPayload,
       onProjection(projection) {
-        state.editor.pending = projection;
+        (state.editor as EditorReadyState).pending = projection;
         setPending(projection);
         setSaveState(projection.save_state);
       },
@@ -37,7 +56,7 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
         setSaveState("needs_attention");
       },
     });
-    // Attach once on mount, matching the DOM renderer in app.mjs.
+    // Attach once on mount, matching the DOM renderer in app.ts.
   }, []);
 
   return (
@@ -57,7 +76,7 @@ function ProjectReadyView({ state, baseUrl, fetchImpl, cryptoImpl }) {
   );
 }
 
-function Stage1View({ state, baseUrl, fetchImpl, cryptoImpl }) {
+function Stage1View({ state, baseUrl, fetchImpl, cryptoImpl }: Stage1ViewProps) {
   if (state.kind === "project-ready") {
     return (
       <ProjectReadyView
@@ -77,7 +96,7 @@ function Stage1View({ state, baseUrl, fetchImpl, cryptoImpl }) {
   );
 }
 
-export function mountStage1View(root, props) {
+export function mountStage1View(root: HTMLElement, props: Stage1ViewProps): void {
   root.dataset.bootState = props.state.kind;
   createRoot(root).render(<Stage1View {...props} />);
 }

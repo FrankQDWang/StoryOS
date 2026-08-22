@@ -5,7 +5,7 @@ import test from "node:test";
 import {
   openControlledProject,
   PROJECT_OPEN_DIAGNOSTIC_CAUSE,
-} from "../src/boot.mjs";
+} from "../src/boot.ts";
 
 const fixture = (name) => JSON.parse(readFileSync(
   new URL(`../../../generated/golden-wire/storyos-public-release-1/${name}`, import.meta.url), "utf8",

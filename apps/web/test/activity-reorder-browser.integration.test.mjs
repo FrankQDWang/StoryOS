@@ -4,9 +4,11 @@ import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+
+import { loadLegacyBrowserModule } from "./support/legacy-source-transport.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const chromeExecutable = [
@@ -19,17 +21,16 @@ const chromeExecutable = [
 
 const harness = `<!doctype html>
 <html><body data-result="running"><script type="module">
-import { openEditorWorkspace } from "/apps/web/src/editor-session.mjs";
-import { rebuildPendingProjection } from "/apps/web/src/local-edit-journal.mjs";
+import { openEditorWorkspace } from "/apps/web/src/editor-session.ts";
+import { rebuildPendingProjection } from "/apps/web/src/local-edit-journal.ts";
 import { ingestProjectActivityFrames, readProjectActivityIngest }
-  from "/apps/web/src/project-activity-ingest.mjs";
+  from "/apps/web/src/project-activity-ingest.ts";
 
 const fail = (message) => { throw new Error(message); };
 const deepEqual = (actual, expected, label) => {
   if (JSON.stringify(actual) !== JSON.stringify(expected)) fail(label + ": expected "
     + JSON.stringify(expected) + " but received " + JSON.stringify(actual));
 };
-
 const OWNER = "018f0000-0000-7001-8000-000000000001";
 const PROJECT = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER = "018f0000-0000-7001-8000-000000000003";
@@ -234,9 +235,6 @@ try {
 }
 </script></body></html>`;
 
-function contentType(pathname) {
-  return extname(pathname) === ".mjs" ? "text/javascript; charset=utf-8" : "text/plain";
-}
 
 test("duplicate and reordered Activity frames converge to one durable ingest", {
   skip: chromeExecutable ? false : "Chrome or Chromium is unavailable",
@@ -245,12 +243,12 @@ test("duplicate and reordered Activity frames converge to one durable ingest", {
   let resolveReport;
   const reported = new Promise((resolve) => { resolveReport = resolve; });
   const allowed = new Set([
-    "/apps/web/src/editor-session.mjs",
-    "/apps/web/src/author-edit-submission.mjs",
-    "/apps/web/src/author-edit-outcome-reconciliation.mjs",
-    "/apps/web/src/local-edit-journal.mjs",
-    "/apps/web/src/protected-transport-capsule.mjs",
-    "/apps/web/src/project-activity-ingest.mjs",
+    "/apps/web/src/editor-session.ts",
+    "/apps/web/src/author-edit-submission.ts",
+    "/apps/web/src/author-edit-outcome-reconciliation.ts",
+    "/apps/web/src/local-edit-journal.ts",
+    "/apps/web/src/protected-transport-capsule.ts",
+    "/apps/web/src/project-activity-ingest.ts",
     "/generated/typescript/storyos-public-release-1/client.mjs",
   ]);
   const server = createServer(async (request, response) => {
@@ -270,10 +268,9 @@ test("duplicate and reordered Activity frames converge to one durable ingest", {
       response.writeHead(404).end();
       return;
     }
-    const bytes = await import("node:fs/promises").then(({ readFile }) =>
-      readFile(join(repositoryRoot, pathname)));
-    response.writeHead(200, { "content-type": contentType(pathname) });
-    response.end(bytes);
+    const module = await loadLegacyBrowserModule(repositoryRoot, pathname);
+    response.writeHead(200, { "content-type": module.contentType });
+    response.end(module.body);
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
