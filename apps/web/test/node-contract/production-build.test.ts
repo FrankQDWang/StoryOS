@@ -4,12 +4,12 @@ import { once } from "node:events";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import { test } from "vitest";
 
-const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const distDir = join(repositoryRoot, "apps/web/dist");
 
-async function run(command, args) {
+async function run(command: string, args: readonly string[]) {
   const child = spawn(command, args, {
     cwd: repositoryRoot,
     stdio: ["ignore", "pipe", "pipe"],
@@ -36,15 +36,13 @@ test("make web builds the Vite production graph before Web tests", async () => {
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
   const viteIndex = commands.findIndex((line) => /vite build/.test(line));
-  const testIndex = commands.findIndex((line) => line.includes("node --test"));
+  const testIndex = commands.findIndex((line) => line.includes("vitest run"));
   assert.ok(viteIndex >= 0, `make web must invoke vite build\n${stdout}`);
-  assert.ok(testIndex >= 0, `make web must keep node:test\n${stdout}`);
+  assert.ok(testIndex >= 0, `make web must run Vitest\n${stdout}`);
   assert.ok(viteIndex < testIndex, "vite build must fail closed before Web tests");
 });
 
 test("the Vite production build emits hashed Protected Web Client assets", async () => {
-  const { code, stderr } = await run("pnpm", ["--dir", "apps/web", "run", "build"]);
-  assert.equal(code, 0, stderr);
   const html = readFileSync(join(distDir, "index.html"), "utf8");
   const assets = readdirSync(join(distDir, "assets"));
   assert.match(html, /id="app"/);

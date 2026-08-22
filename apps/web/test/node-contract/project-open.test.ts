@@ -1,24 +1,39 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import test from "node:test";
+import { test } from "vitest";
 
 import {
   openControlledProject,
   PROJECT_OPEN_DIAGNOSTIC_CAUSE,
-} from "../src/boot.ts";
+} from "../../src/boot.ts";
+import type {
+  GetChapterResponse,
+  GetProjectResponse,
+  Release1ProtocolProfile,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 
-const fixture = (name) => JSON.parse(readFileSync(
-  new URL(`../../../generated/golden-wire/storyos-public-release-1/${name}`, import.meta.url), "utf8",
+const fixture = <Value>(name: string): Value => JSON.parse(readFileSync(
+  new URL(`../../../../generated/golden-wire/storyos-public-release-1/${name}`, import.meta.url), "utf8",
 ));
 
+function record(value: unknown): Record<PropertyKey, unknown> | undefined {
+  return typeof value === "object" && value !== null
+    ? value as Record<PropertyKey, unknown>
+    : undefined;
+}
+
+function requestUrl(input: string | URL | Request): string | URL {
+  return input instanceof Request ? input.url : input;
+}
+
 test("the protected Web client opens the authoritative current Chapter", async () => {
-  const profile = fixture("get-protocol-profile.json");
-  const project = fixture("get-project.json");
-  const chapter = fixture("get-chapter.json");
-  const requests = [];
-  const responses = [profile, project, chapter];
-  const fetchImpl = async (url, options) => {
-    requests.push({ path: new URL(url).pathname, options });
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const chapter = fixture<GetChapterResponse>("get-chapter.json");
+  const requests: Array<{ path: string; options: RequestInit | undefined }> = [];
+  const responses: unknown[] = [profile, project, chapter];
+  const fetchImpl: typeof fetch = async (url, options) => {
+    requests.push({ path: new URL(requestUrl(url)).pathname, options });
     return new Response(JSON.stringify(responses.shift()), {
       status: 200, headers: { "content-type": "application/json" },
     });
@@ -39,15 +54,19 @@ test("the protected Web client opens the authoritative current Chapter", async (
     `/api/v1/projects/${project.project.project_id}`,
     `/api/v1/projects/${project.project.project_id}/chapters/${project.project.current_chapter_id}`,
   ]);
-  assert.equal(requests[1].options.credentials, "same-origin");
-  assert.equal(requests[2].options.credentials, "same-origin");
-  assert.equal(requests[1].options.headers["x-storyos-client-session"], undefined);
+  const projectRequest = requests.at(1);
+  const chapterRequest = requests.at(2);
+  assert.ok(projectRequest);
+  assert.ok(chapterRequest);
+  assert.equal(projectRequest.options?.credentials, "same-origin");
+  assert.equal(chapterRequest.options?.credentials, "same-origin");
+  assert.equal(new Headers(projectRequest.options?.headers).get("x-storyos-client-session"), null);
 });
 
 test("an unavailable Project fails closed without displaying response data", async () => {
-  const profile = fixture("get-protocol-profile.json");
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const sourceError = new Error("foreign title must remain internal");
-  const fetchImpl = async (url) => new URL(url).pathname === "/api/v1/protocol"
+  const fetchImpl: typeof fetch = async (url) => new URL(requestUrl(url)).pathname === "/api/v1/protocol"
     ? new Response(JSON.stringify(profile), { status: 200 })
     : Promise.reject(sourceError);
 
@@ -62,14 +81,14 @@ test("an unavailable Project fails closed without displaying response data", asy
     heading: "StoryOS 无法打开项目",
     message: "无法读取这个受控项目或其当前章节。",
   });
-  assert.equal(state[PROJECT_OPEN_DIAGNOSTIC_CAUSE].cause, sourceError);
+  assert.equal(record(Reflect.get(state, PROJECT_OPEN_DIAGNOSTIC_CAUSE))?.cause, sourceError);
   assert.doesNotMatch(JSON.stringify(state), /foreign title/);
 });
 
 test("missing, empty, invalid, or mismatched owner identities fail closed", async () => {
-  const profile = fixture("get-protocol-profile.json");
-  const projectFixture = fixture("get-project.json");
-  const chapterFixture = fixture("get-chapter.json");
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const projectFixture = fixture<GetProjectResponse>("get-project.json");
+  const chapterFixture = fixture<GetChapterResponse>("get-chapter.json");
   const cases = [
     { name: "missing", projectOwner: undefined, chapterOwner: undefined },
     { name: "empty", projectOwner: "", chapterOwner: "" },
@@ -84,9 +103,9 @@ test("missing, empty, invalid, or mismatched owner identities fail closed", asyn
   for (const { name, projectOwner, chapterOwner } of cases) {
     const project = structuredClone(projectFixture);
     const chapter = structuredClone(chapterFixture);
-    if (projectOwner === undefined) delete project.project_scope.owner_user_id;
+    if (projectOwner === undefined) Reflect.deleteProperty(project.project_scope, "owner_user_id");
     else project.project_scope.owner_user_id = projectOwner;
-    if (chapterOwner === undefined) delete chapter.project_scope.owner_user_id;
+    if (chapterOwner === undefined) Reflect.deleteProperty(chapter.project_scope, "owner_user_id");
     else chapter.project_scope.owner_user_id = chapterOwner;
     const responses = [profile, project, chapter];
     const fetchImpl = async () => new Response(JSON.stringify(responses.shift()), { status: 200 });

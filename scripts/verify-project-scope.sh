@@ -81,17 +81,23 @@ cargo test -p storyos-adapter-postgres --lib -- --ignored --nocapture
 echo "Building the StoryOS Server"
 cargo build --quiet -p storyos-server
 echo "Running HTTP Project Scope tests"
-node --test apps/web/test/project-http.integration.test.mjs
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/project-http.integration.test.ts
 echo "Running HTTP ApplyAuthorEdit process-cut tests"
-node --test apps/web/test/apply-author-edit-process-cut.integration.test.mjs
+pnpm --dir apps/web exec vitest run --project node-process-cut \
+  test/node-process-cut/apply-author-edit-process-cut.integration.test.ts
 echo "Running HTTP Activity Stream duplicate-resume tests"
-node --test apps/web/test/activity-stream-duplicate-http.integration.test.mjs
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/activity-stream-duplicate-http.integration.test.ts
 echo "Running HTTP Snapshot and Activity Stream tests"
-node --test apps/web/test/snapshot-replay-http.integration.test.mjs
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/snapshot-replay-http.integration.test.ts
 echo "Running HTTP takeOverProjectWriter tests"
-node --test apps/web/test/takeover-http.integration.test.mjs
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/takeover-http.integration.test.ts
 echo "Running HTTP fenced-writer late-result tests"
-node --test apps/web/test/takeover-late-result-http.integration.test.mjs
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/takeover-late-result-http.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
   "DO \$\$ DECLARE tbl text; BEGIN
