@@ -7,7 +7,6 @@ use storyos_application::{
 use uuid::Uuid;
 
 use super::*;
-use crate::author_edit::parse_u64;
 
 impl TakeOverProjectWriterStore for PostgresProjectReader {
     async fn take_over_project_writer(
@@ -143,7 +142,7 @@ async fn persist_takeover_settlement(
         .await
         .map_err(takeover_database_error)?
         .ok_or(TakeOverProjectWriterError::BindingConflict)?;
-    let prior_generation = parse_u64(writer.get(0)).map_err(takeover_author_edit_error)?;
+    let prior_generation = parse_takeover_u64(writer.get(0))?;
     let prior_session: String = writer.get(1);
     if prior_generation != command.observed_writer_generation
         || prior_session == command.editor_session_id.as_ref()
@@ -202,7 +201,7 @@ async fn persist_takeover_settlement(
         )
         .await
         .map_err(takeover_database_error)?;
-    let activity_position = parse_u64(
+    let activity_position = parse_takeover_u64(
         client
             .query_one(
                 "UPDATE storyos.scope_counters
@@ -217,8 +216,7 @@ async fn persist_takeover_settlement(
             .await
             .map_err(takeover_database_error)?
             .get(0),
-    )
-    .map_err(takeover_author_edit_error)?;
+    )?;
     let snapshot_id = Uuid::now_v7().to_string();
     crate::snapshot::persist_canonical_snapshot(
         client,
@@ -442,26 +440,23 @@ async fn read_takeover_settlement(
                     &payload,
                     "prior_editor_session_id",
                 )?,
-                prior_writer_generation: parse_u64(required_payload_string(
+                prior_writer_generation: parse_takeover_u64(required_payload_string(
                     &payload,
                     "prior_writer_generation",
-                )?)
-                .map_err(takeover_author_edit_error)?,
+                )?)?,
                 resulting_editor_session_id: required_payload_string(
                     &payload,
                     "resulting_editor_session_id",
                 )?,
-                resulting_writer_generation: parse_u64(required_payload_string(
+                resulting_writer_generation: parse_takeover_u64(required_payload_string(
                     &payload,
                     "resulting_writer_generation",
-                )?)
-                .map_err(takeover_author_edit_error)?,
+                )?)?,
                 resulting_snapshot_id: required_payload_string(&payload, "resulting_snapshot_id")?,
-                resulting_snapshot_activity_position: parse_u64(required_payload_string(
+                resulting_snapshot_activity_position: parse_takeover_u64(required_payload_string(
                     &payload,
                     "resulting_snapshot_activity_position",
-                )?)
-                .map_err(takeover_author_edit_error)?,
+                )?)?,
             },
         })
     }
@@ -494,6 +489,12 @@ fn required_payload_string(
         .ok_or(TakeOverProjectWriterError::BindingConflict)
 }
 
+fn parse_takeover_u64(value: String) -> Result<u64, TakeOverProjectWriterError> {
+    value
+        .parse::<u64>()
+        .map_err(|source| TakeOverProjectWriterError::Unavailable(Box::new(source)))
+}
+
 fn takeover_challenge_error(error: ProjectCommandChallengeError) -> TakeOverProjectWriterError {
     match error {
         ProjectCommandChallengeError::BindingConflict => {
@@ -511,20 +512,4 @@ fn takeover_challenge_error(error: ProjectCommandChallengeError) -> TakeOverProj
 
 fn takeover_database_error(error: tokio_postgres::Error) -> TakeOverProjectWriterError {
     TakeOverProjectWriterError::Unavailable(Box::new(error))
-}
-
-fn takeover_author_edit_error(
-    error: storyos_application::AuthorEditError,
-) -> TakeOverProjectWriterError {
-    match error {
-        storyos_application::AuthorEditError::Unavailable(source) => {
-            TakeOverProjectWriterError::Unavailable(source)
-        }
-        storyos_application::AuthorEditError::BindingConflict
-        | storyos_application::AuthorEditError::InvalidChallenge
-        | storyos_application::AuthorEditError::StaleWriter
-        | storyos_application::AuthorEditError::AdmissionExpired => {
-            TakeOverProjectWriterError::BindingConflict
-        }
-    }
 }
