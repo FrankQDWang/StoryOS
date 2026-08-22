@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
-import { extname, join } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
+
+import { loadLegacyBrowserModule } from "./support/legacy-source-transport.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const chromeExecutable = [
@@ -21,11 +22,11 @@ const chromeExecutable = [
 const harness = `<!doctype html><html><body data-result="loading">
 <textarea id="editor">Base</textarea><textarea id="synthetic">Base</textarea>
 <textarea id="silent">Base</textarea><script type="module">
-import { attachManualInput } from "/apps/web/src/manual-input.mjs";
+import { attachManualInput } from "/apps/web/src/manual-input.ts";
 import { openEditorWorkspace, persistReplaceSelection, submitOnePendingAuthorEdit }
-  from "/apps/web/src/editor-session.mjs";
+  from "/apps/web/src/editor-session.ts";
 import { readJournalSnapshot, validateJournalSnapshot }
-  from "/apps/web/src/local-edit-journal.mjs";
+  from "/apps/web/src/local-edit-journal.ts";
 const editor = document.querySelector("#editor");
 const trace = { native: [], persisted: [], submissions: [], projections: [], failures: [],
   challenges: [], authorEdits: [] };
@@ -300,22 +301,21 @@ test("trusted browser input and controlled Chrome IME reach bounded Journal sett
     }
     const pathname = new URL(request.url, "http://storyos.test").pathname;
     const allowed = new Set([
-      "/apps/web/src/manual-input.mjs",
-      "/apps/web/src/editor-session.mjs",
-      "/apps/web/src/local-edit-journal.mjs",
-      "/apps/web/src/author-edit-submission.mjs",
-      "/apps/web/src/author-edit-outcome-reconciliation.mjs",
-      "/apps/web/src/protected-transport-capsule.mjs",
+      "/apps/web/src/manual-input.ts",
+      "/apps/web/src/editor-session.ts",
+      "/apps/web/src/local-edit-journal.ts",
+      "/apps/web/src/author-edit-submission.ts",
+      "/apps/web/src/author-edit-outcome-reconciliation.ts",
+      "/apps/web/src/protected-transport-capsule.ts",
       "/generated/typescript/storyos-public-release-1/client.mjs",
     ]);
     if (!allowed.has(pathname)) {
       response.writeHead(404).end();
       return;
     }
-    response.writeHead(200, {
-      "content-type": extname(pathname) === ".mjs" ? "text/javascript; charset=utf-8" : "text/plain",
-    });
-    response.end(await readFile(join(repositoryRoot, pathname)));
+    const module = await loadLegacyBrowserModule(repositoryRoot, pathname);
+    response.writeHead(200, { "content-type": module.contentType });
+    response.end(module.body);
   });
   server.listen(0, "127.0.0.1");
   await once(server, "listening");

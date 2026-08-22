@@ -4,12 +4,28 @@ import {
   digestApplyAuthorEdit,
   getEditorSession,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  ApplyAuthorEditRequest,
+  ApplyAuthorEditResponse,
+  DigestValue,
+  EditorWriterProjection,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import {
   commitOutcomeQueryWithGroup,
   commitStrongerGroup,
   markOutcomeQueryUnresolved,
   reconcileLostAcknowledgement,
-} from "./author-edit-outcome-reconciliation.mjs";
+} from "./author-edit-outcome-reconciliation.ts";
+import type { DurableOutcomeQuery }
+  from "./author-edit-outcome-reconciliation.ts";
+import type {
+  EditorWorkspace,
+  InputOrigin,
+  JournalCoverage,
+  JournalIntentRecord,
+  JournalSubmissionGroup,
+  PendingEditProjection,
+} from "./editor-types.ts";
 import {
   AUTHOR_EDIT_BATCH_POLICY_REVISION,
   AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES,
@@ -20,19 +36,19 @@ import {
   rebuildPendingProjection,
   readJournalSnapshot,
   validateJournalSnapshot,
-} from "./local-edit-journal.mjs";
+} from "./local-edit-journal.ts";
 import {
   commitProtectedTransportSend,
   readAvailableCommandProof,
-} from "./protected-transport-capsule.mjs";
+} from "./protected-transport-capsule.ts";
 
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const boundedU64 = (value) => typeof value === "string" && U64.test(value)
+const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
-const positiveU64 = (value) => boundedU64(value) && BigInt(value) > 0n;
+const positiveU64 = (value: unknown): value is string => boundedU64(value) && BigInt(value) > 0n;
 
-async function canonicalBodyDigest(body, cryptoImpl) {
+async function canonicalBodyDigest(body: string, cryptoImpl: Crypto): Promise<string> {
   const digest = new Uint8Array(await cryptoImpl.subtle.digest(
     "SHA-256", new TextEncoder().encode(body),
   ));
@@ -40,8 +56,10 @@ async function canonicalBodyDigest(body, cryptoImpl) {
 }
 
 function writerProjectionAllowsLateDurableSettlement(
-  canonicalWriter, sessionWriter, partitionGeneration,
-) {
+  canonicalWriter: EditorWriterProjection,
+  sessionWriter: EditorWriterProjection,
+  partitionGeneration: string,
+): boolean {
   if (JSON.stringify(canonicalWriter) === JSON.stringify(sessionWriter)) return true;
   // A fenced tab may observe generation N+1 while its journal partition stays
   // bound to generation N. Do not treat that writer delta as Snapshot mismatch.
@@ -54,29 +72,41 @@ function writerProjectionAllowsLateDurableSettlement(
     && BigInt(canonicalWriter.observed_writer_generation) > BigInt(sessionWriter.writer_generation);
 }
 
-const requestResult = (request) => new Promise((resolve, reject) => {
+const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
 });
-const transactionResult = (transaction) => new Promise((resolve, reject) => {
-  transaction.oncomplete = resolve;
-  transaction.onabort = () => reject(transaction.error ?? new Error("IndexedDB transaction aborted"));
-  transaction.onerror = () => reject(transaction.error ?? new Error("IndexedDB transaction failed"));
-});
+const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
+  (resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(
+      transaction.error ?? new Error("IndexedDB transaction aborted"),
+    );
+    transaction.onerror = () => reject(
+      transaction.error ?? new Error("IndexedDB transaction failed"),
+    );
+  },
+);
 
-function uuidV7(cryptoImpl = globalThis.crypto, now = Date.now()) {
+function uuidV7(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()): string {
   const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
   for (let offset = 5; offset >= 0; offset -= 1) {
     bytes[offset] = now & 0xff;
     now = Math.floor(now / 256);
   }
-  bytes[6] = (bytes[6] & 0x0f) | 0x70;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-async function digestSubmissionCoverage(coverage, cryptoImpl) {
+async function digestSubmissionCoverage(
+  coverage: {
+    ordered_coverage: JournalCoverage[];
+    covered_sequence_range: { first: number; last: number };
+  },
+  cryptoImpl: Crypto,
+): Promise<DigestValue> {
   const bytes = new TextEncoder().encode(JSON.stringify(coverage));
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
   return {
@@ -87,11 +117,18 @@ async function digestSubmissionCoverage(coverage, cryptoImpl) {
   };
 }
 
-const HARD_FLUSH_ORIGINS = new Set(["composition_confirmation", "paste", "cut"]);
+const HARD_FLUSH_ORIGINS = new Set<InputOrigin>([
+  "composition_confirmation", "paste", "cut",
+]);
 
-async function validateFrozenGroup(group, workspace, records, cryptoImpl) {
+async function validateFrozenGroup(
+  group: JournalSubmissionGroup,
+  workspace: EditorWorkspace,
+  records: JournalIntentRecord[],
+  cryptoImpl: Crypto,
+): Promise<void> {
   const request = group.frozen_request_body;
-  const firstRecord = records[0];
+  const firstRecord = records[0]!;
   const [requestDigest, coverageDigest] = await Promise.all([
     digestApplyAuthorEdit(group.frozen_request_body, cryptoImpl),
     digestSubmissionCoverage({ ordered_coverage: group.ordered_coverage,
@@ -116,7 +153,7 @@ async function validateFrozenGroup(group, workspace, records, cryptoImpl) {
     || records.length > AUTHOR_EDIT_MAX_UNITS
     || group.ordered_coverage?.length !== records.length
     || group.covered_sequence_range?.first !== firstRecord.local_intent_sequence
-    || group.covered_sequence_range?.last !== records.at(-1).local_intent_sequence
+    || group.covered_sequence_range?.last !== records.at(-1)!.local_intent_sequence
     || request?.command_schema !== group.command_schema
     || request?.editor_session_id !== workspace.partition.editor_session_id
     || request?.writer_generation !== workspace.partition.writer_generation
@@ -132,7 +169,7 @@ async function validateFrozenGroup(group, workspace, records, cryptoImpl) {
     || JSON.stringify(request?.author_edit_units)
       !== JSON.stringify(records.map((record) => record.author_edit_unit))
     || records.reduce((count, record) =>
-      count + record.author_edit_unit.normalized_primitives.length, 0)
+      count + record.author_edit_unit!.normalized_primitives.length, 0)
       > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES
     || new TextEncoder().encode(JSON.stringify(request)).byteLength
       > AUTHOR_EDIT_MAX_WIRE_BODY_BYTES
@@ -143,18 +180,21 @@ async function validateFrozenGroup(group, workspace, records, cryptoImpl) {
   for (const [index, record] of records.entries()) {
     const coverage = group.ordered_coverage[index];
     if (record.local_intent_sequence !== firstRecord.local_intent_sequence + index
-      || coverage.local_intent_sequence !== record.local_intent_sequence
-      || coverage.intent_record_ref !== record.completed_intent_record_id
-      || JSON.stringify(coverage.payload_digest) !== JSON.stringify(record.payload_digest)
+      || coverage!.local_intent_sequence !== record.local_intent_sequence
+      || coverage!.intent_record_ref !== record.completed_intent_record_id
+      || JSON.stringify(coverage!.payload_digest) !== JSON.stringify(record.payload_digest)
       || (index > 0 && !mayAppendJournalSubmissionRecord(
-        firstRecord, records[index - 1], record,
+        firstRecord, records[index - 1]!, record,
       ))) {
       throw new Error("Journal Submission Group is corrupt");
     }
   }
 }
 
-export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalThis.crypto) {
+export async function freezeOneIntentSubmission(
+  workspace: EditorWorkspace,
+  cryptoImpl: Crypto = globalThis.crypto,
+): Promise<JournalSubmissionGroup> {
   if (workspace.partition.disposition !== "current_writer_open") {
     throw new Error("Editor Session is read only");
   }
@@ -166,7 +206,9 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     const existingRecords = existing.ordered_coverage.map((coverage) =>
       snapshot.records.find((record) =>
         record.local_intent_sequence === coverage.local_intent_sequence));
-    await validateFrozenGroup(existing, workspace, existingRecords, cryptoImpl);
+    await validateFrozenGroup(
+      existing, workspace, existingRecords as JournalIntentRecord[], cryptoImpl,
+    );
     return existing;
   }
   const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
@@ -183,19 +225,20 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
   if (candidates.length === 0) {
     throw new Error("One pending Author Edit is required");
   }
-  if (candidates[0].local_intent_sequence !== firstUncovered?.local_intent_sequence) {
+  const firstCandidate = candidates[0]!;
+  if (firstCandidate.local_intent_sequence !== firstUncovered?.local_intent_sequence) {
     throw new Error("Local Edit Journal is corrupt");
   }
-  const records = [candidates[0]];
-  if (!HARD_FLUSH_ORIGINS.has(candidates[0].input_origin)) {
+  const records: JournalIntentRecord[] = [firstCandidate];
+  if (!HARD_FLUSH_ORIGINS.has(firstCandidate.input_origin)) {
     for (const candidate of candidates.slice(1)) {
       if (records.length === AUTHOR_EDIT_MAX_UNITS
-        || !mayAppendJournalSubmissionRecord(records[0], records.at(-1), candidate)) break;
+        || !mayAppendJournalSubmissionRecord(records[0]!, records.at(-1)!, candidate)) break;
       records.push(candidate);
     }
   }
-  const firstRecord = records[0];
-  const request = {
+  const firstRecord = records[0]!;
+  const request: ApplyAuthorEditRequest = {
     command_schema: "storyos.command.apply-author-edit.request.v1",
     client_contract_revision: workspace.partition.client_contract_revision,
     security_policy_revision: workspace.partition.security_policy_revision,
@@ -203,7 +246,7 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     editor_session_id: workspace.partition.editor_session_id,
     writer_generation: workspace.partition.writer_generation,
     chapter_id: firstRecord.chapter_object_id,
-    expected_authoritative_revision_id: firstRecord.expected_authoritative_heads[0],
+    expected_authoritative_revision_id: firstRecord.expected_authoritative_heads[0]!,
     expected_proposal_head_revision_ids: firstRecord.expected_proposal_heads,
     target_refs: firstRecord.target_refs,
     observed_ownership_partition: firstRecord.observed_ownership_partition,
@@ -211,22 +254,22 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
     undo_group_id: firstRecord.undo_group_binding.undo_group_id,
     completed_intent_record_id: firstRecord.completed_intent_record_id,
     local_intent_sequence: String(firstRecord.local_intent_sequence),
-    author_edit_units: records.map((record) => record.author_edit_unit),
+    author_edit_units: records.map((record) => record.author_edit_unit!),
   };
-  const orderedCoverage = records.map((record) => ({
+  const orderedCoverage: JournalCoverage[] = records.map((record) => ({
     local_intent_sequence: record.local_intent_sequence,
     intent_record_ref: record.completed_intent_record_id,
     payload_digest: record.payload_digest,
   }));
   const coveredSequenceRange = {
-    first: firstRecord.local_intent_sequence, last: records.at(-1).local_intent_sequence,
+    first: firstRecord.local_intent_sequence, last: records.at(-1)!.local_intent_sequence,
   };
   const [frozenRequestDigest, frozenPayloadCoverageDigest] = await Promise.all([
     digestApplyAuthorEdit(request, cryptoImpl),
     digestSubmissionCoverage({ ordered_coverage: orderedCoverage,
       covered_sequence_range: coveredSequenceRange }, cryptoImpl),
   ]);
-  const group = {
+  const group: JournalSubmissionGroup = {
     journal_submission_group_id: uuidV7(cryptoImpl),
     journal_partition_id: workspace.partition.journal_partition_id,
     project_scope: workspace.partition.project_scope,
@@ -266,7 +309,7 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
       requestResult(durableGroups.index("partition")
         .getAll(workspace.partition.journal_partition_id, 2401)),
     ]);
-  if (schema?.version !== JOURNAL_DATABASE_VERSION
+  if ((schema as { version?: unknown } | undefined)?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
     || JSON.stringify(durablePayloadChains) !== JSON.stringify(snapshot.payloadChains)
@@ -281,24 +324,33 @@ export async function freezeOneIntentSubmission(workspace, cryptoImpl = globalTh
 
 async function settleAuthorEditResponse({
   workspace, group, response, baseUrl, fetchImpl, cryptoImpl, durableQuery,
-}) {
+}: {
+  workspace: EditorWorkspace;
+  group: JournalSubmissionGroup;
+  response: unknown;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+  durableQuery?: DurableOutcomeQuery;
+}): Promise<void> {
   const pending = await rebuildPendingProjection(workspace);
-  const effect = response.effect;
-  const receipt = response.receipt;
-  if (response.schema_id !== "storyos.command.apply-author-edit.response.v2"
-    || response.correlation_id !== group.frozen_request_body.correlation_id
-    || !UUID.test(response.command_id ?? "")
-    || !UUID.test(response.author_command_admission_id ?? "")
-    || JSON.stringify(response.project_scope) !== JSON.stringify(group.project_scope)
-    || response.completed_intent_record_id !== group.ordered_coverage[0].intent_record_ref
-    || response.local_intent_sequence !== String(group.covered_sequence_range.first)
+  const settledResponse = response as ApplyAuthorEditResponse;
+  const effect = settledResponse.effect;
+  const receipt = settledResponse.receipt;
+  if (settledResponse.schema_id !== "storyos.command.apply-author-edit.response.v2"
+    || settledResponse.correlation_id !== group.frozen_request_body.correlation_id
+    || !UUID.test(settledResponse.command_id ?? "")
+    || !UUID.test(settledResponse.author_command_admission_id ?? "")
+    || JSON.stringify(settledResponse.project_scope) !== JSON.stringify(group.project_scope)
+    || settledResponse.completed_intent_record_id !== group.ordered_coverage[0]!.intent_record_ref
+    || settledResponse.local_intent_sequence !== String(group.covered_sequence_range.first)
     || !UUID.test(receipt?.receipt_id ?? "")
     || JSON.stringify(receipt?.project_scope) !== JSON.stringify(group.project_scope)
     || receipt?.command_kind !== "applyAuthorEdit"
     || JSON.stringify(receipt?.command_digest) !== JSON.stringify(group.frozen_request_digest)
     || receipt?.idempotency_key !== group.idempotency_key
     || receipt?.producer_cause !== "author_command_admission"
-    || receipt?.author_command_admission_id !== response.author_command_admission_id
+    || receipt?.author_command_admission_id !== settledResponse.author_command_admission_id
     || JSON.stringify(receipt?.expected_heads)
       !== JSON.stringify([group.frozen_request_body.expected_authoritative_revision_id])
     || JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([])
@@ -334,12 +386,12 @@ async function settleAuthorEditResponse({
     }
     const rest = { ...group };
     delete rest.reconciliation;
-    const next = {
+    const next: JournalSubmissionGroup = {
       ...rest,
       settlement: {
         kind: "zero_authority_receipt_settled",
-        command_id: response.command_id,
-        author_command_admission_id: response.author_command_admission_id,
+        command_id: settledResponse.command_id,
+        author_command_admission_id: settledResponse.author_command_admission_id,
         receipt,
         effect,
       },
@@ -409,12 +461,12 @@ async function settleAuthorEditResponse({
   }
   const rest = { ...group };
   delete rest.reconciliation;
-  const next = {
+  const next: JournalSubmissionGroup = {
     ...rest,
     settlement: {
       kind: "applied_receipt_settled",
-      command_id: response.command_id,
-      author_command_admission_id: response.author_command_admission_id,
+      command_id: settledResponse.command_id,
+      author_command_admission_id: settledResponse.author_command_admission_id,
       receipt,
       authoritative_revision: effect.authoritative_revision,
       authoritative_commit_id: effect.authoritative_commit_id,
@@ -438,8 +490,13 @@ async function settleAuthorEditResponse({
 
 export async function submitOnePendingAuthorEdit({
   workspace, baseUrl, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
-}) {
-  const run = async () => {
+}: {
+  workspace: EditorWorkspace;
+  baseUrl: string;
+  fetchImpl?: typeof fetch;
+  cryptoImpl?: Crypto;
+}): Promise<PendingEditProjection> {
+  const run = async (): Promise<PendingEditProjection> => {
     const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
     const alreadyUnresolved = group.reconciliation?.kind === "outcome_query_unresolved";
     const proof = alreadyUnresolved ? null : await readAvailableCommandProof(workspace, group);
@@ -466,7 +523,7 @@ export async function submitOnePendingAuthorEdit({
       fetchImpl,
     });
     await commitProtectedTransportSend(workspace, group, challenge);
-    let response;
+    let response: unknown;
     try {
       response = await applyAuthorEdit({
         baseUrl,

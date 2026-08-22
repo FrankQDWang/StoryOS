@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { bootProtectedWebClient } from "../src/boot.mjs";
+import { bootProtectedWebClient } from "../src/boot.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "debug", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");

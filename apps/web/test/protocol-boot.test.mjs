@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { validateProtocolProfile } from "../src/boot.mjs";
+import { validateProtocolProfile } from "../src/boot.ts";
 
 const fixture = (name) => JSON.parse(readFileSync(
   new URL(`../../../generated/golden-wire/storyos-public-release-1/${name}`, import.meta.url), "utf8",

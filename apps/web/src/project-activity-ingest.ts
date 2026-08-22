@@ -1,34 +1,46 @@
 import { getSnapshot }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.mjs";
+import type {
+  GetSnapshotResponse,
+  ProjectScope,
+  SnapshotDescriptor,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  EditorWorkspace,
+  ProjectActivityEvent,
+  ProjectActivityIngest,
+} from "./editor-types.ts";
+import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
-const boundedU64 = (value) => typeof value === "string" && U64.test(value)
+const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
-const isoInstant = (value) => typeof value === "string"
+const isoInstant = (value: unknown): value is string => typeof value === "string"
   && !Number.isNaN(Date.parse(value))
   && new Date(Date.parse(value)).toISOString() === value;
 
-const requestResult = (request) => new Promise((resolve, reject) => {
+const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
 });
-const transactionResult = (transaction) => new Promise((resolve, reject) => {
-  transaction.oncomplete = resolve;
-  transaction.onabort = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction aborted"),
-  );
-  transaction.onerror = () => reject(
-    transaction.error ?? new Error("IndexedDB transaction failed"),
-  );
-});
+const transactionResult = (transaction: IDBTransaction): Promise<void> => new Promise(
+  (resolve, reject) => {
+    transaction.oncomplete = () => resolve();
+    transaction.onabort = () => reject(
+      transaction.error ?? new Error("IndexedDB transaction aborted"),
+    );
+    transaction.onerror = () => reject(
+      transaction.error ?? new Error("IndexedDB transaction failed"),
+    );
+  },
+);
 
-function ingestKey(scope) {
+function ingestKey(scope: ProjectScope): string {
   return `project_activity_ingest:${scope.owner_user_id}:${scope.project_id}`;
 }
 
-function emptyIngest(workspace) {
+function emptyIngest(workspace: EditorWorkspace): ProjectActivityIngest {
   return {
     replay_generation: "1",
     processed_through_stream_sequence: workspace.session.base_snapshot.project_activity_position,
@@ -37,7 +49,12 @@ function emptyIngest(workspace) {
   };
 }
 
-function validatedEvent(frame, workspace) {
+function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): ProjectActivityEvent {
+  const frame = frameValue as {
+    id?: unknown;
+    event?: unknown;
+    data?: ProjectActivityEvent;
+  };
   if (typeof frame?.id !== "string" || frame.id.length === 0
     || frame.event !== "storyos.project-activity") {
     throw new Error("Project Activity frame is invalid");
@@ -83,7 +100,11 @@ function validatedEvent(frame, workspace) {
   return event;
 }
 
-function applyFrames(state, frames, workspace) {
+function applyFrames(
+  state: ProjectActivityIngest,
+  frames: readonly unknown[],
+  workspace: EditorWorkspace,
+): ProjectActivityIngest {
   const next = {
     replay_generation: state.replay_generation,
     processed_through_stream_sequence: state.processed_through_stream_sequence,
@@ -120,7 +141,7 @@ function applyFrames(state, frames, workspace) {
   while (next.held[0]
     && BigInt(next.held[0].stream_sequence)
       === BigInt(next.processed_through_stream_sequence) + 1n) {
-    const event = next.held.shift();
+    const event = next.held.shift()!;
     next.events.push(event);
     next.processed_through_stream_sequence = event.stream_sequence;
   }
@@ -132,12 +153,17 @@ function applyFrames(state, frames, workspace) {
   return next;
 }
 
-function validatedCanonicalSnapshot(response, workspace, snapshotId) {
+function validatedCanonicalSnapshot(
+  response: unknown,
+  workspace: EditorWorkspace,
+  snapshotId: string,
+): SnapshotDescriptor {
+  const candidate = response as GetSnapshotResponse;
   const scope = workspace.partition.project_scope;
-  const snapshot = response?.snapshot;
-  if (response?.schema_id !== "storyos.query.snapshot.response.v1"
-    || !UUID.test(response.correlation_id ?? "")
-    || JSON.stringify(response.project_scope) !== JSON.stringify(scope)
+  const snapshot = candidate?.snapshot;
+  if (candidate?.schema_id !== "storyos.query.snapshot.response.v1"
+    || !UUID.test(candidate.correlation_id ?? "")
+    || JSON.stringify(candidate.project_scope) !== JSON.stringify(scope)
     || snapshot?.snapshot_id !== snapshotId
     || JSON.stringify(snapshot.project_scope) !== JSON.stringify(scope)
     || snapshot.snapshot_kind !== "canonical"
@@ -163,10 +189,13 @@ function validatedCanonicalSnapshot(response, workspace, snapshotId) {
     replay_generation: snapshot.replay_generation,
     created_at: snapshot.created_at,
     expires_at: snapshot.expires_at ?? null,
-  };
+  } as SnapshotDescriptor;
 }
 
-function ingestAfterSnapshot(current, snapshot) {
+function ingestAfterSnapshot(
+  current: ProjectActivityIngest,
+  snapshot: SnapshotDescriptor,
+): ProjectActivityIngest {
   const nextGeneration = BigInt(snapshot.replay_generation);
   const currentGeneration = BigInt(current.replay_generation);
   if (nextGeneration < currentGeneration
@@ -183,22 +212,30 @@ function ingestAfterSnapshot(current, snapshot) {
   };
 }
 
-export async function readProjectActivityIngest(workspace) {
+export async function readProjectActivityIngest(
+  workspace: EditorWorkspace,
+): Promise<ProjectActivityIngest> {
   const transaction = workspace.database.transaction(["metadata"], "readonly");
   const stored = await requestResult(
     transaction.objectStore("metadata").get(ingestKey(workspace.partition.project_scope)),
   );
-  return stored?.value ?? emptyIngest(workspace);
+  const record = stored as { value?: ProjectActivityIngest } | undefined;
+  return record?.value ?? emptyIngest(workspace);
 }
 
-export async function resyncProjectActivityFromSnapshot(workspace, {
+export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspace, {
   baseUrl, snapshotId, fetchImpl = globalThis.fetch,
-}) {
+}: {
+  baseUrl: string;
+  snapshotId: string;
+  fetchImpl?: typeof fetch;
+}): Promise<{ snapshot: SnapshotDescriptor; ingest: ProjectActivityIngest }> {
   const scope = workspace.partition.project_scope;
+  const response: unknown = await getSnapshot({
+    baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
+  });
   const snapshot = validatedCanonicalSnapshot(
-    await getSnapshot({
-      baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
-    }),
+    response,
     workspace,
     snapshotId,
   );
@@ -211,7 +248,7 @@ export async function resyncProjectActivityFromSnapshot(workspace, {
     "readwrite",
   );
   const metadata = transaction.objectStore("metadata");
-  const [schema, partition, stored] = await Promise.all([
+  const [schemaValue, partition, storedValue] = await Promise.all([
     requestResult(metadata.get("schema")),
     requestResult(transaction.objectStore("partitions").get(partitionId)),
     requestResult(metadata.get(key)),
@@ -221,6 +258,8 @@ export async function resyncProjectActivityFromSnapshot(workspace, {
     requestResult(transaction.objectStore("submission_groups").index("partition")
       .getAll(partitionId)),
   ]);
+  const schema = schemaValue as { version?: unknown } | undefined;
+  const stored = storedValue as { value?: ProjectActivityIngest } | undefined;
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)) {
     throw new Error("Local Edit Journal schema is incompatible");
@@ -231,7 +270,10 @@ export async function resyncProjectActivityFromSnapshot(workspace, {
   return { snapshot, ingest: next };
 }
 
-export async function ingestProjectActivityFrames(workspace, frames) {
+export async function ingestProjectActivityFrames(
+  workspace: EditorWorkspace,
+  frames: readonly unknown[],
+): Promise<ProjectActivityIngest> {
   const key = ingestKey(workspace.partition.project_scope);
   const partitionId = workspace.partition.journal_partition_id;
   const transaction = workspace.database.transaction(
@@ -239,11 +281,13 @@ export async function ingestProjectActivityFrames(workspace, frames) {
     "readwrite",
   );
   const metadata = transaction.objectStore("metadata");
-  const [schema, partition, stored] = await Promise.all([
+  const [schemaValue, partition, storedValue] = await Promise.all([
     requestResult(metadata.get("schema")),
     requestResult(transaction.objectStore("partitions").get(partitionId)),
     requestResult(metadata.get(key)),
   ]);
+  const schema = schemaValue as { version?: unknown } | undefined;
+  const stored = storedValue as { value?: ProjectActivityIngest } | undefined;
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)) {
     throw new Error("Local Edit Journal schema is incompatible");

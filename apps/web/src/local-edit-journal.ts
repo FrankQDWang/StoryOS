@@ -1,5 +1,22 @@
 import { digestApplyAuthorEdit }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  AuthorEditPrimitive,
+  AuthorEditUnit,
+  DigestValue,
+  EditorBaseSnapshot,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  EditorWorkspace,
+  InputOrigin,
+  JournalIntentRecord,
+  JournalPayloadChain,
+  JournalSnapshot,
+  JournalSubmissionGroup,
+  PendingEditProjection,
+  ReplaceSelectionEdit,
+  ValidatedJournalSnapshot,
+} from "./editor-types.ts";
 
 export const JOURNAL_DATABASE_VERSION = 3;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
@@ -24,7 +41,7 @@ export const AUTHOR_EDIT_MAX_WIRE_BODY_BYTES = 1024 * 1024;
 
 const MAX_RETAINED_JOURNAL_ITEMS = 2400;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const INPUT_ORIGINS = new Set([
+const INPUT_ORIGINS = new Set<InputOrigin>([
   "typing",
   "deletion",
   "selection_replacement",
@@ -32,13 +49,17 @@ const INPUT_ORIGINS = new Set([
   "cut",
   "composition_confirmation",
 ]);
-const HARD_BOUNDARY_INPUT_ORIGINS = new Set([
+const HARD_BOUNDARY_INPUT_ORIGINS = new Set<InputOrigin>([
   "paste",
   "cut",
   "composition_confirmation",
 ]);
 
-export function mayAppendJournalSubmissionRecord(first, prior, next) {
+export function mayAppendJournalSubmissionRecord(
+  first: JournalIntentRecord,
+  prior: JournalIntentRecord,
+  next: JournalIntentRecord,
+) {
   const elapsed = Date.parse(next.created_at) - Date.parse(prior.created_at);
   return !HARD_BOUNDARY_INPUT_ORIGINS.has(first.input_origin)
     && !HARD_BOUNDARY_INPUT_ORIGINS.has(next.input_origin)
@@ -65,12 +86,12 @@ export function mayAppendJournalSubmissionRecord(first, prior, next) {
     && JSON.stringify(first.retry_source) === JSON.stringify(next.retry_source);
 }
 
-const requestResult = (request) => new Promise((resolve, reject) => {
+const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
 });
-const transactionResult = (transaction) => new Promise((resolve, reject) => {
-  transaction.oncomplete = resolve;
+const transactionResult = (transaction: IDBTransaction) => new Promise<void>((resolve, reject) => {
+  transaction.oncomplete = () => resolve();
   transaction.onabort = () => reject(
     transaction.error ?? new Error("IndexedDB transaction aborted"),
   );
@@ -79,19 +100,19 @@ const transactionResult = (transaction) => new Promise((resolve, reject) => {
   );
 });
 
-export function createJournalUuid(cryptoImpl = globalThis.crypto, now = Date.now()) {
+export function createJournalUuid(cryptoImpl: Crypto = globalThis.crypto, now = Date.now()) {
   const bytes = cryptoImpl.getRandomValues(new Uint8Array(16));
   for (let offset = 5; offset >= 0; offset -= 1) {
     bytes[offset] = now & 0xff;
     now = Math.floor(now / 256);
   }
-  bytes[6] = (bytes[6] & 0x0f) | 0x70;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  bytes[6] = (bytes[6]! & 0x0f) | 0x70;
+  bytes[8] = (bytes[8]! & 0x3f) | 0x80;
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export async function digestJournalValue(value, cryptoImpl) {
+export async function digestJournalValue(value: unknown, cryptoImpl: Crypto): Promise<DigestValue> {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
   return {
@@ -102,7 +123,10 @@ export async function digestJournalValue(value, cryptoImpl) {
   };
 }
 
-async function digestSubmissionCoverage(coverage, cryptoImpl) {
+async function digestSubmissionCoverage(
+  coverage: unknown,
+  cryptoImpl: Crypto,
+): Promise<DigestValue> {
   const bytes = new TextEncoder().encode(JSON.stringify(coverage));
   const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
   return {
@@ -113,7 +137,8 @@ async function digestSubmissionCoverage(coverage, cryptoImpl) {
   };
 }
 
-function replaceSelection(body, primitive) {
+function replaceSelection(body: string, value: unknown) {
+  const primitive = value as AuthorEditPrimitive | undefined;
   if (primitive?.kind !== "replace_selection"
     || !Number.isSafeInteger(primitive.from)
     || !Number.isSafeInteger(primitive.to)
@@ -126,17 +151,18 @@ function replaceSelection(body, primitive) {
   return `${body.slice(0, primitive.from)}${primitive.text}${body.slice(primitive.to)}`;
 }
 
-function isAppliedSettlement(group) {
-  return group?.settlement?.kind === "applied_receipt_settled"
-    || group?.settlement?.kind === "receipt_settled";
+function isAppliedSettlement(group: JournalSubmissionGroup) {
+  const settlement: Record<string, unknown> = group.settlement;
+  const kind = settlement.kind;
+  return kind === "applied_receipt_settled" || kind === "receipt_settled";
 }
 
-function isZeroAuthoritySettlement(group) {
+function isZeroAuthoritySettlement(group: JournalSubmissionGroup) {
   return group?.settlement?.kind === "zero_authority_receipt_settled"
     || group?.settlement?.kind === "outcome_query_rejected_no_admission";
 }
 
-function closedReconciliation(group) {
+function closedReconciliation(group: JournalSubmissionGroup) {
   const reconciliation = group?.reconciliation;
   if (reconciliation === undefined) return true;
   const strongest = reconciliation.strongest;
@@ -158,13 +184,14 @@ function closedReconciliation(group) {
     && Object.keys(strongest).length === 4;
 }
 
-export async function readJournalSnapshot(workspace) {
+export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<JournalSnapshot> {
   const transaction = workspace.database.transaction(
     ["metadata", "payload_chains", "intents", "submission_groups"],
     "readonly",
   );
   const partitionId = workspace.partition.journal_partition_id;
-  const [schema, watermark, activeBase, records, payloadChains, groups, storedFences] =
+  const [schemaValue, watermarkValue, activeBaseValue, recordsValue, payloadChainsValue,
+    groupsValue, storedFencesValue] =
     await Promise.all([
       requestResult(transaction.objectStore("metadata").get("schema")),
       requestResult(transaction.objectStore("metadata")
@@ -178,6 +205,15 @@ export async function readJournalSnapshot(workspace) {
         .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
       requestResult(transaction.objectStore("metadata").get(`collection_fences:${partitionId}`)),
     ]);
+  const schema = schemaValue as { version?: unknown } | undefined;
+  const watermark = watermarkValue as JournalSnapshot["watermark"];
+  const activeBaseRecord = activeBaseValue as { value?: EditorBaseSnapshot } | undefined;
+  const activeBase = activeBaseRecord?.value;
+  const records = recordsValue as JournalIntentRecord[];
+  const payloadChains = payloadChainsValue as JournalPayloadChain[];
+  const groups = groupsValue as JournalSubmissionGroup[];
+  const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
+  const fences = storedFences?.value ?? [];
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || records.length > MAX_RETAINED_JOURNAL_ITEMS
     || payloadChains.length > MAX_RETAINED_JOURNAL_ITEMS
@@ -188,19 +224,22 @@ export async function readJournalSnapshot(workspace) {
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
   return {
-    watermark, activeBase: activeBase?.value, records, payloadChains, groups,
-    fences: storedFences?.value ?? [],
+    watermark, activeBase, records, payloadChains, groups, fences,
   };
 }
 
-async function validatePayloadChains(workspace, records, payloadChains) {
-  const recordsByChain = new Map();
+async function validatePayloadChains(
+  workspace: EditorWorkspace,
+  records: JournalIntentRecord[],
+  payloadChains: JournalPayloadChain[],
+) {
+  const recordsByChain = new Map<string, JournalIntentRecord[]>();
   for (const record of records) {
     const chainRecords = recordsByChain.get(record.payload_chain_ref) ?? [];
     chainRecords.push(record);
     recordsByChain.set(record.payload_chain_ref, chainRecords);
   }
-  const bodyBySequence = new Map();
+  const bodyBySequence = new Map<number, string>();
   for (const chain of payloadChains) {
     const chainRecords = recordsByChain.get(chain.payload_chain_id) ?? [];
     const patches = chain.ordered_patch_refs ?? [];
@@ -230,7 +269,8 @@ async function validatePayloadChains(workspace, records, payloadChains) {
     for (const [index, record] of chainRecords.entries()) {
       const patchRef = patches[index];
       const [primitive] = patchRef?.normalized_primitives ?? [];
-      const expectedDigest = await digestJournalValue(record.author_edit_unit, workspace.cryptoImpl);
+      const authorEditUnit = record.author_edit_unit!;
+      const expectedDigest = await digestJournalValue(authorEditUnit, workspace.cryptoImpl);
       if (record.base_snapshot_id !== chain.checkpoint_ref.source_snapshot_id
         || record.chapter_object_id !== chain.checkpoint_ref.chapter_object_id
         || JSON.stringify(record.expected_authoritative_heads)
@@ -238,9 +278,9 @@ async function validatePayloadChains(workspace, records, payloadChains) {
         || patchRef?.completed_intent_record_id !== record.completed_intent_record_id
         || patchRef?.local_intent_sequence !== record.local_intent_sequence
         || JSON.stringify(patchRef?.normalized_primitives)
-          !== JSON.stringify(record.author_edit_unit.normalized_primitives)
+          !== JSON.stringify(authorEditUnit.normalized_primitives)
         || JSON.stringify(record.payload_digest) !== JSON.stringify(expectedDigest)
-        || record.author_edit_unit.normalized_primitives.length !== 1) {
+        || authorEditUnit.normalized_primitives.length !== 1) {
         throw new Error("Local Edit Journal is corrupt");
       }
       body = replaceSelection(body, primitive);
@@ -257,9 +297,13 @@ async function validatePayloadChains(workspace, records, payloadChains) {
   return bodyBySequence;
 }
 
-async function validateCoverage(workspace, records, groups) {
+async function validateCoverage(
+  workspace: EditorWorkspace,
+  records: JournalIntentRecord[],
+  groups: JournalSubmissionGroup[],
+) {
   const recordsBySequence = new Map(records.map((record) => [record.local_intent_sequence, record]));
-  const covered = new Set();
+  const covered = new Set<number>();
   let nextCoveredSequence = 1;
   for (const group of groups) {
     const first = group.covered_sequence_range?.first;
@@ -320,7 +364,7 @@ async function validateCoverage(workspace, records, groups) {
       || (collected
         ? JSON.stringify(request?.author_edit_units) !== JSON.stringify([])
           || coveredRecords.some((record) => record?.author_edit_unit !== undefined)
-          || !UUID.test(group.payload_collection.collection_fence_id ?? "")
+          || !UUID.test(group.payload_collection!.collection_fence_id ?? "")
         : JSON.stringify(request?.author_edit_units)
           !== JSON.stringify(coveredRecords.map((record) => record?.author_edit_unit))
             || JSON.stringify(group.frozen_request_digest) !== JSON.stringify(requestDigest))
@@ -337,7 +381,7 @@ async function validateCoverage(workspace, records, groups) {
         || item.intent_record_ref !== record?.completed_intent_record_id
         || JSON.stringify(item.payload_digest) !== JSON.stringify(record?.payload_digest)
         || (index > 0 && !mayAppendJournalSubmissionRecord(
-          firstRecord, coveredRecords[index - 1], record,
+          firstRecord!, coveredRecords[index - 1]!, record!,
         ))) {
         throw new Error("Journal Submission Group is corrupt");
       }
@@ -348,7 +392,10 @@ async function validateCoverage(workspace, records, groups) {
   return covered;
 }
 
-export async function validateJournalSnapshot(workspace, snapshot) {
+export async function validateJournalSnapshot(
+  workspace: EditorWorkspace,
+  snapshot: JournalSnapshot,
+): Promise<ValidatedJournalSnapshot> {
   const { records, payloadChains, groups, watermark, activeBase } = snapshot;
   let priorSequence = 0;
   for (const record of records) {
@@ -375,7 +422,7 @@ export async function validateJournalSnapshot(workspace, snapshot) {
     priorSequence = record.local_intent_sequence;
   }
   if ((records.length === 0 && watermark !== undefined)
-    || (records.length > 0 && watermark?.value !== records.at(-1).local_intent_sequence)) {
+    || (records.length > 0 && watermark?.value !== records.at(-1)!.local_intent_sequence)) {
     throw new Error("Local Edit Journal is corrupt");
   }
   if (activeBase !== undefined
@@ -389,16 +436,18 @@ export async function validateJournalSnapshot(workspace, snapshot) {
     record.base_snapshot_id !== workspace.session.base_snapshot.snapshot_id)
     || pendingRecords.some((record, index) => index > 0
       && !mayAppendJournalSubmissionRecord(
-        pendingRecords[0], pendingRecords[index - 1], record,
+        pendingRecords[0]!, pendingRecords[index - 1]!, record,
       ))) {
     throw new Error("Local Edit Journal is corrupt");
   }
   return { ...snapshot, bodyBySequence, covered };
 }
 
-export async function rebuildPendingProjection(workspace) {
+export async function rebuildPendingProjection(
+  workspace: EditorWorkspace,
+): Promise<PendingEditProjection> {
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
-  const appliedSequences = new Set();
+  const appliedSequences = new Set<number>();
   let hasAppliedSettlement = false;
   let hasZeroAuthoritySettlement = false;
   for (const group of snapshot.groups) {
@@ -412,9 +461,9 @@ export async function rebuildPendingProjection(workspace) {
   const base = workspace.session.base_snapshot;
   const activeRecords = snapshot.records.filter((record) =>
     record.base_snapshot_id === base.snapshot_id && !appliedSequences.has(record.local_intent_sequence));
-  const body = activeRecords.length === 0
+  const body = (activeRecords.length === 0
     ? base.materialized_revision.body
-    : snapshot.bodyBySequence.get(activeRecords.at(-1).local_intent_sequence);
+    : snapshot.bodyBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
   return {
     body,
     save_state: hasZeroAuthoritySettlement
@@ -428,9 +477,9 @@ export async function rebuildPendingProjection(workspace) {
 }
 
 export async function persistReplaceSelection(
-  workspace,
-  edit,
-  cryptoImpl = globalThis.crypto,
+  workspace: EditorWorkspace,
+  edit: ReplaceSelectionEdit,
+  cryptoImpl: Crypto = globalThis.crypto,
 ) {
   if (workspace.partition.disposition !== "current_writer_open") {
     throw new Error("Editor Session is read only");
@@ -458,7 +507,7 @@ export async function persistReplaceSelection(
   const base = workspace.session.base_snapshot;
   const completedIntentRecordId = createJournalUuid(cryptoImpl);
   const patchId = createJournalUuid(cryptoImpl);
-  const authorEditUnit = {
+  const authorEditUnit: AuthorEditUnit = {
     normalized_primitives: [{
       kind: "replace_selection", from: edit.from, to: edit.to, text: edit.text,
     }],
@@ -479,7 +528,8 @@ export async function persistReplaceSelection(
   const metadata = transaction.objectStore("metadata");
   const intents = transaction.objectStore("intents");
   const partitionId = workspace.partition.journal_partition_id;
-  const [schema, partition, current, activeBase, durableRecords, chains, groups] =
+  const [schemaValue, partition, currentValue, activeBaseValue, durableRecordsValue,
+    chainsValue, groupsValue] =
     await Promise.all([
       requestResult(metadata.get("schema")),
       requestResult(transaction.objectStore("partitions").get(partitionId)),
@@ -492,6 +542,11 @@ export async function persistReplaceSelection(
       requestResult(transaction.objectStore("submission_groups").index("partition")
         .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
     ]);
+  const schema = schemaValue as { version?: unknown } | undefined;
+  const activeBase = activeBaseValue as { value?: unknown } | undefined;
+  const durableRecords = durableRecordsValue as JournalIntentRecord[];
+  const chains = chainsValue as JournalPayloadChain[];
+  const groups = groupsValue as JournalSubmissionGroup[];
   const hasUnsettledGroup = groups.some((group) => group.settlement?.kind === "unsettled");
   const coveredSequences = new Set(groups.flatMap((group) =>
     (group.ordered_coverage ?? []).map((coverage) => coverage.local_intent_sequence)));
@@ -510,7 +565,8 @@ export async function persistReplaceSelection(
     transaction.abort();
     throw new Error("Local Edit Journal requires prior group settlement");
   }
-  const sequence = (current?.value ?? 0) + 1;
+  const current = currentValue as { value?: number } | undefined;
+  const sequence = ((current?.value ?? 0) as number) + 1;
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(base)
@@ -522,16 +578,15 @@ export async function persistReplaceSelection(
     transaction.abort();
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
-  let payloadChain = chains.find((chain) =>
+  const existingPayloadChain = chains.find((chain) =>
     chain.checkpoint_ref?.source_snapshot_id === base.snapshot_id);
   if (chains.filter((chain) => chain.checkpoint_ref?.source_snapshot_id === base.snapshot_id).length > 1
-    || (payloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {
+    || (existingPayloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {
     transaction.abort();
     throw new Error("Local Edit Journal limit failed");
   }
-  const isNewChain = !payloadChain;
-  if (isNewChain) {
-    payloadChain = {
+  const isNewChain = existingPayloadChain === undefined;
+  const payloadChain: JournalPayloadChain = existingPayloadChain ?? {
       payload_chain_id: createJournalUuid(cryptoImpl),
       journal_partition_id: partitionId,
       checkpoint_ref: {
@@ -543,7 +598,6 @@ export async function persistReplaceSelection(
       },
       ordered_patch_refs: [],
     };
-  }
   payloadChain.ordered_patch_refs.push({
     patch_id: patchId,
     completed_intent_record_id: completedIntentRecordId,
@@ -551,7 +605,7 @@ export async function persistReplaceSelection(
     normalized_primitives: authorEditUnit.normalized_primitives,
     resulting_payload_digest: resultingPayloadDigest,
   });
-  const record = {
+  const record: JournalIntentRecord = {
     completed_intent_record_id: completedIntentRecordId,
     local_intent_sequence: sequence,
     journal_partition_id: partitionId,

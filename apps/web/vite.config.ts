@@ -1,7 +1,7 @@
 import react from "@vitejs/plugin-react";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig } from "vite";
+import { defineConfig, type UserConfig } from "vite";
 
 const webRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(webRoot, "../..");
@@ -17,12 +17,12 @@ export default defineConfig({
   esbuild: {
     target: "es2022",
   },
-  server: {
+  server: ({
     fs: {
       allow: [repositoryRoot],
     },
     proxy: process.env.STORYOS_DEV_SERVER
       ? { "/api": process.env.STORYOS_DEV_SERVER }
       : undefined,
-  },
+  } as NonNullable<UserConfig["server"]>),
 });

@@ -12,7 +12,7 @@ import test from "node:test";
 import { promisify } from "node:util";
 
 import { activityStream } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { JOURNAL_DATABASE_VERSION } from "../src/local-edit-journal.mjs";
+import { JOURNAL_DATABASE_VERSION } from "../src/local-edit-journal.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const distDir = join(repositoryRoot, "apps/web/dist");

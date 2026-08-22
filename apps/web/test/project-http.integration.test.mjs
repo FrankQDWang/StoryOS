@@ -11,7 +11,7 @@ import {
   applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
   digestCreateEditorSession, getApplyAuthorEditOutcome, getChapter, getEditorSession, getProject,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { runStoryOSWeb } from "../src/app.mjs";
+import { runStoryOSWeb } from "../src/app.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "debug", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
