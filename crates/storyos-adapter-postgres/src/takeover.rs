@@ -190,24 +190,16 @@ async fn persist_takeover_settlement(
         return Err(TakeOverProjectWriterError::BindingConflict);
     }
 
-    client
-        .execute(
-            "INSERT INTO storyos.scope_counters (owner_user_id, project_id)
-             VALUES ($1::text::uuid, $2::text::uuid) ON CONFLICT DO NOTHING",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
-        .map_err(takeover_database_error)?;
     let activity_position = parse_takeover_u64(
         client
             .query_one(
-                "UPDATE storyos.scope_counters
-                    SET project_activity_position = project_activity_position + 1
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-              RETURNING project_activity_position::text",
+                "INSERT INTO storyos.scope_counters AS counters
+                   (owner_user_id, project_id, project_activity_position)
+                 VALUES ($1::text::uuid, $2::text::uuid, 1)
+                 ON CONFLICT (owner_user_id, project_id)
+                 DO UPDATE SET
+                   project_activity_position = counters.project_activity_position + 1
+                 RETURNING counters.project_activity_position::text",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),

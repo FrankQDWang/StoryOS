@@ -1,9 +1,10 @@
 use storyos_application::{
-    EditorClientBinding, EditorSessionId, IssueProjectCommandChallenge, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, create_editor_session,
-    issue_project_command_challenge,
+    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, IssueProjectCommandChallenge,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    TakeOverProjectWriterCommand, TakeOverProjectWriterEffect, UserId, create_editor_session,
+    issue_project_command_challenge, take_over_project_writer,
 };
-use tokio_postgres::NoTls;
+use tokio_postgres::{Client, NoTls};
 
 use super::*;
 use crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK;
@@ -20,11 +21,24 @@ const TAKEOVER_ADMISSION: &str = "018f0000-0000-7001-8000-000000000912";
 const TAKEOVER_RECEIPT: &str = "018f0000-0000-7001-8000-000000000913";
 const TAKEOVER_EVENT: &str = "018f0000-0000-7001-8000-000000000914";
 const TAKEOVER_SNAPSHOT: &str = "018f0000-0000-7001-8000-000000000915";
+const COUNTER_PROJECT: &str = "018f0000-0000-7001-8000-000000000920";
+const COUNTER_CHAPTER: &str = "018f0000-0000-7001-8000-000000000921";
+const COUNTER_PAYLOAD: &str = "018f0000-0000-7001-8000-000000000922";
+const COUNTER_REVISION: &str = "018f0000-0000-7001-8000-000000000923";
+const COUNTER_WRITER_SESSION: &str = "018f0000-0000-7001-8000-000000000924";
+const COUNTER_OBSERVER_ONE: &str = "018f0000-0000-7001-8000-000000000925";
+const COUNTER_OBSERVER_TWO: &str = "018f0000-0000-7001-8000-000000000926";
+const EMPTY_OBJECT_TAKEOVER_DIGEST: &str = "sha256:storyos.command.takeOverProjectWriter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
 
-fn takeover_binding() -> ProjectCommandChallengeBinding {
+fn takeover_binding(
+    project_id: &str,
+    binding_ref: &str,
+    idempotency_key: &str,
+    canonical_command_digest: &str,
+) -> ProjectCommandChallengeBinding {
     ProjectCommandChallengeBinding {
-        project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT)),
-        client_session_binding_digest: "binding:takeover".to_owned(),
+        project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(project_id)),
+        client_session_binding_digest: binding_ref.to_owned(),
         client_session_generation: 1,
         client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
         security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
@@ -36,16 +50,19 @@ fn takeover_binding() -> ProjectCommandChallengeBinding {
             "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers".to_owned(),
         command_schema: "storyos.command.take-over-project-writer.request.v1".to_owned(),
         command_kind: "takeOverProjectWriter".to_owned(),
-        canonical_command_digest: "sha256:storyos.command.takeOverProjectWriter.jcs.v1:aa"
-            .to_owned(),
-        idempotency_key: TAKEOVER_KEY.to_owned(),
+        canonical_command_digest: canonical_command_digest.to_owned(),
+        idempotency_key: idempotency_key.to_owned(),
     }
 }
 
-fn session_binding(key: &str) -> ProjectCommandChallengeBinding {
+fn session_binding(
+    project_id: &str,
+    binding_ref: &str,
+    key: &str,
+) -> ProjectCommandChallengeBinding {
     ProjectCommandChallengeBinding {
-        project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT)),
-        client_session_binding_digest: "binding:takeover".to_owned(),
+        project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(project_id)),
+        client_session_binding_digest: binding_ref.to_owned(),
         client_session_generation: 1,
         client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
         security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
@@ -63,11 +80,13 @@ fn session_binding(key: &str) -> ProjectCommandChallengeBinding {
 
 async fn open_session(
     store: &PostgresProjectReader,
+    project_id: &str,
+    binding_ref: &str,
     session_id: &str,
     snapshot_id: &str,
     key: &str,
 ) {
-    let binding = session_binding(key);
+    let binding = session_binding(project_id, binding_ref, key);
     let nonce_digest = format!("sha256:session-{key}");
     issue_project_command_challenge(
         store,
@@ -82,11 +101,11 @@ async fn open_session(
     create_editor_session(
         store,
         &OpenEditorSession {
-            project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT)),
+            project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(project_id)),
             editor_session_id: EditorSessionId::new(session_id),
             snapshot_id: snapshot_id.to_owned(),
             client_binding: EditorClientBinding {
-                binding_ref: "binding:takeover".to_owned(),
+                binding_ref: binding_ref.to_owned(),
                 session_generation: 1,
                 client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
                 security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
@@ -97,6 +116,80 @@ async fn open_session(
     )
     .await
     .unwrap();
+}
+
+struct CounterTakeoverCase<'a> {
+    binding_ref: &'a str,
+    editor_session_id: &'a str,
+    observed_writer_generation: u64,
+    idempotency_key: &'a str,
+    nonce_digest: &'a str,
+    correlation_id: &'a str,
+    command_id: &'a str,
+    admission_id: &'a str,
+    receipt_id: &'a str,
+}
+
+async fn execute_counter_takeover(
+    store: &PostgresProjectReader,
+    case: &CounterTakeoverCase<'_>,
+) -> storyos_application::TakeOverProjectWriterSettlement {
+    let binding = takeover_binding(
+        COUNTER_PROJECT,
+        case.binding_ref,
+        case.idempotency_key,
+        EMPTY_OBJECT_TAKEOVER_DIGEST,
+    );
+    issue_project_command_challenge(
+        store,
+        &IssueProjectCommandChallenge {
+            binding: binding.clone(),
+            nonce: format!("nonce:{}", case.idempotency_key),
+            nonce_digest: case.nonce_digest.to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    take_over_project_writer(
+        store,
+        &TakeOverProjectWriterCommand {
+            project_scope: ProjectScope::new(UserId::new(USER), ProjectId::new(COUNTER_PROJECT)),
+            client_binding: EditorClientBinding {
+                binding_ref: case.binding_ref.to_owned(),
+                session_generation: 1,
+                client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
+                security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+            },
+            challenge_binding: binding,
+            nonce_digest: case.nonce_digest.to_owned(),
+            canonical_command_bytes: br#"{}"#.to_vec(),
+            correlation_id: case.correlation_id.to_owned(),
+            ids: AuthorCommandAdmissionIds {
+                command_id: case.command_id.to_owned(),
+                author_command_admission_id: case.admission_id.to_owned(),
+                receipt_id: case.receipt_id.to_owned(),
+            },
+            editor_session_id: EditorSessionId::new(case.editor_session_id),
+            observed_writer_generation: case.observed_writer_generation,
+            editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        },
+    )
+    .await
+    .unwrap()
+}
+
+async fn read_scope_counters(client: &Client) -> Option<(String, String, String)> {
+    client
+        .query_opt(
+            "SELECT author_action_sequence::text, authoritative_commit_sequence::text,
+                    project_activity_position::text
+               FROM storyos.scope_counters
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &COUNTER_PROJECT],
+        )
+        .await
+        .unwrap()
+        .map(|row| (row.get(0), row.get(1), row.get(2)))
 }
 
 #[tokio::test]
@@ -150,6 +243,8 @@ async fn observer_takeover_settles_no_effect_activity_without_manuscript_authori
     let store = PostgresProjectReader::new(&runtime_url);
     open_session(
         &store,
+        PROJECT,
+        "binding:takeover",
         WRITER_SESSION,
         WRITER_SNAPSHOT,
         "018f0000-0000-7001-8000-000000000917",
@@ -157,13 +252,20 @@ async fn observer_takeover_settles_no_effect_activity_without_manuscript_authori
     .await;
     open_session(
         &store,
+        PROJECT,
+        "binding:takeover",
         OBSERVER_SESSION,
         OBSERVER_SNAPSHOT,
         "018f0000-0000-7001-8000-000000000918",
     )
     .await;
 
-    let binding = takeover_binding();
+    let binding = takeover_binding(
+        PROJECT,
+        "binding:takeover",
+        TAKEOVER_KEY,
+        "sha256:storyos.command.takeOverProjectWriter.jcs.v1:aa",
+    );
     issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
@@ -425,5 +527,156 @@ async fn observer_takeover_settles_no_effect_activity_without_manuscript_authori
             )
             .await
             .is_err()
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn takeover_activity_counter_handles_missing_and_existing_rows() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move { connection.await.unwrap() });
+    admin
+        .batch_execute(&format!(
+            "BEGIN;
+             SET CONSTRAINTS ALL DEFERRED;
+             INSERT INTO storyos.projects(owner_user_id, project_id, title, current_chapter_id)
+             VALUES ('{USER}', '{COUNTER_PROJECT}', 'Project Counter', '{COUNTER_CHAPTER}');
+             INSERT INTO storyos.manuscript_objects
+               (owner_user_id, project_id, manuscript_object_id, object_kind, title)
+             VALUES ('{USER}', '{COUNTER_PROJECT}', '{COUNTER_CHAPTER}', 'chapter',
+                     'Chapter Counter');
+             INSERT INTO storyos.authoritative_payloads
+               (owner_user_id, project_id, payload_id, canonical_bytes)
+             VALUES ('{USER}', '{COUNTER_PROJECT}', '{COUNTER_PAYLOAD}',
+                     convert_to('Counter body', 'UTF8'));
+             INSERT INTO storyos.authoritative_revisions
+               (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
+             VALUES ('{USER}', '{COUNTER_PROJECT}', '{COUNTER_CHAPTER}', '{COUNTER_REVISION}',
+                     '{COUNTER_PAYLOAD}');
+             INSERT INTO storyos.authoritative_heads
+               (owner_user_id, project_id, manuscript_object_id, current_revision_id)
+             VALUES ('{USER}', '{COUNTER_PROJECT}', '{COUNTER_CHAPTER}', '{COUNTER_REVISION}');
+             COMMIT;"
+        ))
+        .await
+        .unwrap();
+
+    let store = PostgresProjectReader::new(&runtime_url);
+    let binding_ref = "binding:counter-takeover";
+    open_session(
+        &store,
+        COUNTER_PROJECT,
+        binding_ref,
+        COUNTER_WRITER_SESSION,
+        "018f0000-0000-7001-8000-000000000927",
+        "018f0000-0000-7001-8000-000000000930",
+    )
+    .await;
+    open_session(
+        &store,
+        COUNTER_PROJECT,
+        binding_ref,
+        COUNTER_OBSERVER_ONE,
+        "018f0000-0000-7001-8000-000000000928",
+        "018f0000-0000-7001-8000-000000000931",
+    )
+    .await;
+    assert_eq!(read_scope_counters(&admin).await, None);
+
+    let first = execute_counter_takeover(
+        &store,
+        &CounterTakeoverCase {
+            binding_ref,
+            editor_session_id: COUNTER_OBSERVER_ONE,
+            observed_writer_generation: 1,
+            idempotency_key: "018f0000-0000-7001-8000-000000000933",
+            nonce_digest: "sha256:counter-takeover-1",
+            correlation_id: "018f0000-0000-7001-8000-000000000934",
+            command_id: "018f0000-0000-7001-8000-000000000935",
+            admission_id: "018f0000-0000-7001-8000-000000000936",
+            receipt_id: "018f0000-0000-7001-8000-000000000937",
+        },
+    )
+    .await;
+    let first_snapshot_id = match &first.effect {
+        TakeOverProjectWriterEffect::TakeoverApplied {
+            resulting_snapshot_id,
+            ..
+        } => resulting_snapshot_id.clone(),
+    };
+    assert_eq!(
+        first.effect,
+        TakeOverProjectWriterEffect::TakeoverApplied {
+            prior_editor_session_id: COUNTER_WRITER_SESSION.to_owned(),
+            prior_writer_generation: 1,
+            resulting_editor_session_id: COUNTER_OBSERVER_ONE.to_owned(),
+            resulting_writer_generation: 2,
+            resulting_snapshot_id: first_snapshot_id,
+            resulting_snapshot_activity_position: 1,
+        }
+    );
+    assert_eq!(
+        read_scope_counters(&admin).await,
+        Some(("0".to_owned(), "0".to_owned(), "1".to_owned()))
+    );
+
+    admin
+        .execute(
+            "UPDATE storyos.scope_counters
+                SET author_action_sequence = 7, authoritative_commit_sequence = 11
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &COUNTER_PROJECT],
+        )
+        .await
+        .unwrap();
+    open_session(
+        &store,
+        COUNTER_PROJECT,
+        binding_ref,
+        COUNTER_OBSERVER_TWO,
+        "018f0000-0000-7001-8000-000000000929",
+        "018f0000-0000-7001-8000-000000000932",
+    )
+    .await;
+    let second = execute_counter_takeover(
+        &store,
+        &CounterTakeoverCase {
+            binding_ref,
+            editor_session_id: COUNTER_OBSERVER_TWO,
+            observed_writer_generation: 2,
+            idempotency_key: "018f0000-0000-7001-8000-000000000938",
+            nonce_digest: "sha256:counter-takeover-2",
+            correlation_id: "018f0000-0000-7001-8000-000000000939",
+            command_id: "018f0000-0000-7001-8000-000000000940",
+            admission_id: "018f0000-0000-7001-8000-000000000941",
+            receipt_id: "018f0000-0000-7001-8000-000000000942",
+        },
+    )
+    .await;
+    let second_snapshot_id = match &second.effect {
+        TakeOverProjectWriterEffect::TakeoverApplied {
+            resulting_snapshot_id,
+            ..
+        } => resulting_snapshot_id.clone(),
+    };
+    assert_eq!(
+        second.effect,
+        TakeOverProjectWriterEffect::TakeoverApplied {
+            prior_editor_session_id: COUNTER_OBSERVER_ONE.to_owned(),
+            prior_writer_generation: 2,
+            resulting_editor_session_id: COUNTER_OBSERVER_TWO.to_owned(),
+            resulting_writer_generation: 3,
+            resulting_snapshot_id: second_snapshot_id,
+            resulting_snapshot_activity_position: 2,
+        }
+    );
+    assert_eq!(
+        read_scope_counters(&admin).await,
+        Some(("7".to_owned(), "11".to_owned(), "2".to_owned()))
     );
 }
