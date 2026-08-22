@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": [
+    "vitest.config.ts",
+    "test/node-contract/**/*.ts",
+    "test/support/api-proxy.ts",
+    "test/support/browser-command-contract.ts",
+    "test/support/browser-commands.ts",
+    "test/support/exact-dist-plugin.ts"
+  ]
+}

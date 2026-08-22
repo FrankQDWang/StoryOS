@@ -12,11 +12,12 @@ contracts:
 	node docs/research/author-edit-batch-prerelease-browser-harness.mjs
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	cargo run --quiet -p storyos-contracts -- check
-	pnpm --package=typescript@5.9.3 dlx tsc --noEmit --skipLibCheck false --lib es2022,dom --module nodenext --moduleResolution nodenext generated/typescript/storyos-public-release-1/client.d.mts
 	$(MAKE) web
 web:
 	pnpm install --frozen-lockfile
+	pnpm --dir apps/web run typecheck
 	pnpm --dir apps/web exec vite build
+	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source --project browser-exact-dist
 	node --test apps/web/test/production-build.test.mjs
 	node --test apps/web/test/production-page-browser.integration.test.mjs
 	node --test apps/web/test/protocol-boot.test.mjs

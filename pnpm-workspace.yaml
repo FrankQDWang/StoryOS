@@ -1,5 +1,8 @@
 packages:
   - apps/web
 
+overrides:
+  rollup: 4.56.0
+
 allowBuilds:
   esbuild: true
