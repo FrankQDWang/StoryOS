@@ -8,5 +8,6 @@
     "title": "第一章"
   },
   "correlation_id": "018f0000-0000-7001-8000-000000000006",
+  "project_activity_position": "0",
   "schema_id": "storyos.query.chapter.response.v1"
 }
