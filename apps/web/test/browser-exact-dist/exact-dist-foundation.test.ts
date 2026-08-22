@@ -15,13 +15,19 @@ function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
 }
 
 afterEach(() => {
+  window.sessionStorage.removeItem("storyos-foundation");
   document.body.replaceChildren();
 });
 
 it("serves untransformed dist bytes in a reloadable same-origin child frame", async () => {
+  const rootResponse = await fetch("/");
+  const rootBytes = new Uint8Array(await rootResponse.arrayBuffer());
+  expect(String(rootBytes.byteLength)).toBe(rootResponse.headers.get("content-length"));
+
   const indexResponse = await fetch(PROJECT_ROUTE);
   expect(indexResponse.status).toBe(200);
   const indexBytes = new Uint8Array(await indexResponse.arrayBuffer());
+  expect(indexBytes).toEqual(rootBytes);
   expect(String(indexBytes.byteLength)).toBe(indexResponse.headers.get("content-length"));
   const indexHtml = new TextDecoder().decode(indexBytes);
   expect(indexHtml).not.toContain("/@vite/client");

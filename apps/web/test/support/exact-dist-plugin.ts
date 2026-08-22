@@ -35,7 +35,7 @@ export function exactDistPlugin(distRoot: string): Plugin {
         }
         const pathname = new URL(request.url ?? "/", "http://storyos.invalid").pathname;
         let filePath: string | undefined;
-        if (PROJECT_ROUTE.test(pathname)) {
+        if (pathname === "/" || PROJECT_ROUTE.test(pathname)) {
           filePath = join(distRoot, "index.html");
         } else {
           const asset = ASSET_ROUTE.exec(pathname)?.[1];
