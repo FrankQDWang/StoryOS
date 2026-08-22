@@ -442,9 +442,10 @@ export async function submitOnePendingAuthorEdit({
 }) {
   const run = async () => {
     const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
-    const proof = await readAvailableCommandProof(workspace, group);
-    if (group.reconciliation?.kind === "outcome_query_unresolved" || proof) {
-      const current = group.reconciliation?.kind === "outcome_query_unresolved"
+    const alreadyUnresolved = group.reconciliation?.kind === "outcome_query_unresolved";
+    const proof = alreadyUnresolved ? null : await readAvailableCommandProof(workspace, group);
+    if (alreadyUnresolved || proof) {
+      const current = alreadyUnresolved
         ? group
         : await markOutcomeQueryUnresolved(workspace, group);
       await reconcileLostAcknowledgement({
