@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["react", "react-dom"]
+  },
+  "files": [
+    "../../generated/typescript/storyos-public-release-1/client.d.mts",
+    "../../generated/typescript/storyos-public-release-1/release-profile.d.mts"
+  ],
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

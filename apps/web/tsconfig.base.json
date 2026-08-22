@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowJs": false,
+    "exactOptionalPropertyTypes": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "noUncheckedIndexedAccess": true,
+    "rootDir": "../..",
+    "skipLibCheck": false,
+    "strict": true,
+    "target": "ES2022",
+    "verbatimModuleSyntax": true
+  }
+}

@@ -3,15 +3,29 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build",
-    "dev": "vite"
+    "build": "pnpm run typecheck && vite build",
+    "dev": "vite",
+    "test:foundation": "pnpm run typecheck && vitest run --project node-contract --project browser-source --project browser-exact-dist",
+    "typecheck": "pnpm run typecheck:production && pnpm run typecheck:node && pnpm run typecheck:browser",
+    "typecheck:browser": "tsc --project tsconfig.browser.json",
+    "typecheck:node": "tsc --project tsconfig.node.json",
+    "typecheck:production": "tsc --project tsconfig.json",
+    "verify:foundation": "pnpm run typecheck && vite build && vitest run --project node-contract --project browser-source --project browser-exact-dist"
   },
   "dependencies": {
     "react": "19.2.7",
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@types/node": "24.13.3",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
     "@vitejs/plugin-react": "5.2.0",
-    "vite": "6.4.3"
+    "@vitest/browser-playwright": "4.1.11",
+    "playwright": "1.62.1",
+    "rollup": "4.56.0",
+    "typescript": "7.0.2",
+    "vite": "6.4.3",
+    "vitest": "4.1.11"
   }
 }
