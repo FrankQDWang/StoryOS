@@ -186,17 +186,6 @@ it("settles trusted input, clipboard actions, and controlled Chrome IME in the J
   };
 
   await deleteJournal(scenario.journalName);
-  const state = await openEditorWorkspace({
-    baseUrl: location.origin,
-    project: scenario.project,
-    chapter: scenario.chapter,
-    profile: scenario.profile,
-    fetchImpl,
-    indexedDBImpl: indexedDB,
-    cryptoImpl: crypto,
-  });
-  requireEditorReady(state);
-  workspace = state;
   const persistIntent = async (
     currentWorkspace: Parameters<typeof persistReplaceSelection>[0],
     edit: ReplaceSelectionEdit,
@@ -218,64 +207,11 @@ it("settles trusted input, clipboard actions, and controlled Chrome IME in the J
   let manualNow = Date.parse("2026-08-15T12:00:00.000Z");
   let timerSequence = 0;
   const delayedTimers = new Map<number, () => void>();
-  const controller = attachManualInput({
-    editor,
-    workspace,
-    persistIntent,
-    submitGroup,
-    baseUrl: location.origin,
-    fetchImpl,
-    cryptoImpl: crypto,
-    onProjection: (projection) => trace.projections.push(projection),
-    onFailure: (error) => trace.failures.push(
-      error instanceof Error ? error.message : String(error),
-    ),
-    nowImpl: () => manualNow,
-    setTimeoutImpl: (callback) => {
-      if (typeof callback !== "function") throw new Error("string timers are unsupported");
-      timerSequence += 1;
-      delayedTimers.set(timerSequence, callback);
-      return timerSequence;
-    },
-    clearTimeoutImpl: (timer) => {
-      if (typeof timer !== "number") throw new Error("the browser timer ID is invalid");
-      delayedTimers.delete(timer);
-    },
-    isTrustedEvent: (event) => event.isTrusted
-      || event.type.startsWith("composition")
-      || (event instanceof InputEvent && event.inputType === "insertCompositionText")
-      || (event instanceof InputEvent
-        && event.inputType === "insertText"
-        && event.data === "中文"),
-  });
+  let controller: ReturnType<typeof attachManualInput> | undefined;
   const syntheticTrace = { failures: [] as string[], persisted: [] as ReplaceSelectionEdit[] };
-  const syntheticController = attachManualInput({
-    editor: syntheticEditor,
-    workspace,
-    baseUrl: location.origin,
-    persistIntent: async (_currentWorkspace, edit) => {
-      syntheticTrace.persisted.push(edit);
-      return workspace.pending;
-    },
-    submitGroup,
-    onFailure: (error) => syntheticTrace.failures.push(
-      error instanceof Error ? error.message : String(error),
-    ),
-  });
+  let syntheticController: ReturnType<typeof attachManualInput> | undefined;
   const silentTrace = { failures: [] as string[], persisted: [] as ReplaceSelectionEdit[] };
-  const silentController = attachManualInput({
-    editor: silentEditor,
-    workspace,
-    baseUrl: location.origin,
-    persistIntent: async (_currentWorkspace, edit) => {
-      silentTrace.persisted.push(edit);
-      return workspace.pending;
-    },
-    submitGroup,
-    onFailure: (error) => silentTrace.failures.push(
-      error instanceof Error ? error.message : String(error),
-    ),
-  });
+  let silentController: ReturnType<typeof attachManualInput> | undefined;
 
   const focusAt = (target: HTMLTextAreaElement, start: number, end = start): void => {
     target.focus();
@@ -285,10 +221,78 @@ it("settles trusted input, clipboard actions, and controlled Chrome IME in the J
     request: Parameters<typeof applyTrustedInput>[0],
   ): Promise<void> => {
     await applyTrustedInput(request);
+    if (!controller) throw new Error("the manual input controller is unavailable");
     await controller.whenIdle();
   };
 
   try {
+    const state = await openEditorWorkspace({
+      baseUrl: location.origin,
+      project: scenario.project,
+      chapter: scenario.chapter,
+      profile: scenario.profile,
+      fetchImpl,
+      indexedDBImpl: indexedDB,
+      cryptoImpl: crypto,
+    });
+    requireEditorReady(state);
+    workspace = state;
+    controller = attachManualInput({
+      editor,
+      workspace,
+      persistIntent,
+      submitGroup,
+      baseUrl: location.origin,
+      fetchImpl,
+      cryptoImpl: crypto,
+      onProjection: (projection) => trace.projections.push(projection),
+      onFailure: (error) => trace.failures.push(
+        error instanceof Error ? error.message : String(error),
+      ),
+      nowImpl: () => manualNow,
+      setTimeoutImpl: (callback) => {
+        if (typeof callback !== "function") throw new Error("string timers are unsupported");
+        timerSequence += 1;
+        delayedTimers.set(timerSequence, callback);
+        return timerSequence;
+      },
+      clearTimeoutImpl: (timer) => {
+        if (typeof timer !== "number") throw new Error("the browser timer ID is invalid");
+        delayedTimers.delete(timer);
+      },
+      isTrustedEvent: (event) => event.isTrusted
+        || event.type.startsWith("composition")
+        || (event instanceof InputEvent && event.inputType === "insertCompositionText")
+        || (event instanceof InputEvent
+          && event.inputType === "insertText"
+          && event.data === "中文"),
+    });
+    syntheticController = attachManualInput({
+      editor: syntheticEditor,
+      workspace,
+      baseUrl: location.origin,
+      persistIntent: async (_currentWorkspace, edit) => {
+        syntheticTrace.persisted.push(edit);
+        return state.pending;
+      },
+      submitGroup,
+      onFailure: (error) => syntheticTrace.failures.push(
+        error instanceof Error ? error.message : String(error),
+      ),
+    });
+    silentController = attachManualInput({
+      editor: silentEditor,
+      workspace,
+      baseUrl: location.origin,
+      persistIntent: async (_currentWorkspace, edit) => {
+        silentTrace.persisted.push(edit);
+        return state.pending;
+      },
+      submitGroup,
+      onFailure: (error) => silentTrace.failures.push(
+        error instanceof Error ? error.message : String(error),
+      ),
+    });
     syntheticEditor.value = "Injected";
     syntheticEditor.dispatchEvent(new InputEvent("input", {
       inputType: "insertText",
@@ -556,10 +560,10 @@ it("settles trusted input, clipboard actions, and controlled Chrome IME in the J
     expect(trace.native.filter((event) => event.type === "compositionend")).toHaveLength(3);
     expect(trace.failures).toEqual([]);
   } finally {
-    controller.close();
-    syntheticController.close();
-    silentController.close();
-    workspace.database.close();
+    controller?.close();
+    syntheticController?.close();
+    silentController?.close();
+    workspace?.database.close();
     await updateClipboardPermission({ action: "clear" });
     await deleteJournal(scenario.journalName);
     sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
