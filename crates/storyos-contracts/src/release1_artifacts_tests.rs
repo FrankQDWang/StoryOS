@@ -6,7 +6,7 @@ use super::{
 use crate::digest::sha256_prefixed;
 use crate::{
     ApplyAuthorEditEffect, AuthorEditConflictReason, AuthorEditRefusalReason,
-    AuthoritativeChapterRevision, NoEffectReason,
+    AuthoritativeChapterRevision, GetChapterResponse, NoEffectReason,
 };
 
 #[test]
@@ -465,6 +465,25 @@ fn fixture_digest_uses_the_declared_self_normalization() {
     let mut normalized = profile;
     normalized.release_identity.fixture_corpus_digest = FIXTURE_DIGEST_PLACEHOLDER.to_owned();
     assert_eq!(sha256_prefixed(fixture_corpus_bytes(&normalized)), expected);
+}
+
+#[test]
+fn chapter_fixtures_conform_to_the_typed_response_contract() {
+    let generated = super::generated_files()
+        .into_iter()
+        .collect::<std::collections::BTreeMap<_, _>>();
+    for path in [
+        super::CHAPTER_FIXTURE_PATHS[0],
+        super::CHAPTER_FIXTURE_PATHS[2],
+    ] {
+        let _: GetChapterResponse = serde_json::from_slice(&generated[path])
+            .expect("positive and boundary Chapter fixtures must satisfy GetChapterResponse");
+    }
+    assert!(
+        serde_json::from_slice::<GetChapterResponse>(&generated[super::CHAPTER_FIXTURE_PATHS[1]],)
+            .is_err(),
+        "the invalid Chapter fixture must not satisfy GetChapterResponse",
+    );
 }
 
 #[test]
