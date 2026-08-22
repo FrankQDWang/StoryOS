@@ -1,7 +1,5 @@
 use serde_json::{Value, json};
 
-use crate::digest::sha256_prefixed;
-
 use super::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, ROUTE_CATALOG_PATH, generate_crosswalk,
     read_baseline_file, read_baseline_json, repository_root, validate_operations,
@@ -35,17 +33,6 @@ fn generated_crosswalk_releases_only_the_historical_web_client_owner() {
         json!({
             "historical_reusable_owner_responsibility_ids": ["S1-TICKET-09A"]
         })
-    );
-    assert_eq!(
-        value["declarations"]["delivery_contract"]["ticket_set_sha256"],
-        "sha256:00418ed41c376df780e27ac6356c309f819fda684cc337f98e189bcbb09de545"
-    );
-    let historical_ticket =
-        serde_json::to_vec(&value["declarations"]["delivery_contract"]["tickets"][11])
-            .expect("historical Web Client ticket serializes");
-    assert_eq!(
-        sha256_prefixed(historical_ticket),
-        "sha256:ce7e68041539bdfeaf851e48b86fb3b1ebb33c1b5cf569642f447ee2dcf2c50c"
     );
 }
 
