@@ -35,6 +35,8 @@ interface ManualInputController {
   close(): void;
 }
 
+type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
+
 function isUtf16Boundary(body: string, offset: number): boolean {
   if (!Number.isSafeInteger(offset) || offset < 0 || offset > body.length) return false;
   if (offset === 0 || offset === body.length) return true;
@@ -127,8 +129,8 @@ export function attachManualInput({
   afterAppliedSettlement,
   onProjection = () => {},
   onFailure = () => {},
-  setTimeoutImpl = globalThis.setTimeout,
-  clearTimeoutImpl = globalThis.clearTimeout,
+  setTimeoutImpl = (callback, timeout) => globalThis.setTimeout(callback, timeout),
+  clearTimeoutImpl = (timer) => globalThis.clearTimeout(timer),
   nowImpl = Date.now,
   isTrustedEvent = (event) => event.isTrusted,
 }: {
@@ -151,8 +153,8 @@ export function attachManualInput({
   afterAppliedSettlement?: (workspace: EditorWorkspace) => Promise<unknown> | unknown;
   onProjection?: (projection: PendingEditProjection) => void;
   onFailure?: (error: unknown) => void;
-  setTimeoutImpl?: typeof globalThis.setTimeout;
-  clearTimeoutImpl?: typeof globalThis.clearTimeout;
+  setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
+  clearTimeoutImpl?: (timer: TimerHandle) => void;
   nowImpl?: () => number;
   isTrustedEvent?: (event: Event) => boolean;
 }): ManualInputController {
@@ -163,7 +165,7 @@ export function attachManualInput({
   let pendingIntentCount = workspace.pending?.unsettled_intent_count ?? 0;
   let undoGroupId: string | undefined;
   let lastCompletedAt: number | undefined;
-  let idleTimer: number | undefined;
+  let idleTimer: TimerHandle | undefined;
   let composition: CompositionObservation | undefined;
   let compositionFinishing = false;
   let postCompositionCommit: { body: string; data: string } | undefined;

@@ -5,12 +5,12 @@
   "scripts": {
     "build": "pnpm run typecheck && vite build",
     "dev": "vite",
-    "test:foundation": "pnpm run typecheck && vitest run --project node-contract --project browser-source --project browser-exact-dist",
+    "test:foundation": "pnpm run typecheck && vite build && vitest run --project node-contract --project browser-source --project browser-exact-dist",
     "typecheck": "pnpm run typecheck:production && pnpm run typecheck:node && pnpm run typecheck:browser",
     "typecheck:browser": "tsc --project tsconfig.browser.json",
     "typecheck:node": "tsc --project tsconfig.node.json",
     "typecheck:production": "tsc --project tsconfig.json",
-    "verify:foundation": "pnpm run typecheck && vite build && vitest run --project node-contract --project browser-source --project browser-exact-dist"
+    "verify:foundation": "pnpm run test:foundation"
   },
   "dependencies": {
     "react": "19.2.7",

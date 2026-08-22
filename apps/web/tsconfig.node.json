@@ -8,10 +8,12 @@
     "vite.config.ts",
     "vitest.config.ts",
     "test/node-contract/**/*.ts",
+    "test/node-postgresql/**/*.ts",
+    "test/node-process-cut/**/*.ts",
     "test/support/api-proxy.ts",
     "test/support/browser-command-contract.ts",
     "test/support/browser-commands.ts",
     "test/support/exact-dist-plugin.ts",
-    "test/support/legacy-source-transport.ts"
+    "test/support/node-integration.ts"
   ]
 }

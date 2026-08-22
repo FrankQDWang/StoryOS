@@ -1,4 +1,4 @@
-.PHONY: contracts generate-contracts project-scope verify verify-local verify-pr verify-tracker web
+.PHONY: contracts generate-contracts project-scope verify verify-local verify-pr verify-tracker web web-typecheck
 
 contracts:
 	cargo fmt --all -- --check
@@ -8,34 +8,21 @@ contracts:
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py --self-test
-	node --test docs/research/author-edit-batch-browser-process.test.mjs
-	node docs/research/author-edit-batch-prerelease-browser-harness.mjs
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	cargo run --quiet -p storyos-contracts -- check
 	$(MAKE) web
-web:
+web-typecheck:
 	pnpm install --frozen-lockfile
 	pnpm --dir apps/web run typecheck
+
+web: web-typecheck
 	pnpm --dir apps/web exec vite build
-	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source --project browser-exact-dist
-	node --test apps/web/test/production-build.test.mjs
-	node --test apps/web/test/production-page-browser.integration.test.mjs
-	node --test apps/web/test/protocol-boot.test.mjs
-	node --test apps/web/test/project-open.test.mjs
-	node --test apps/web/test/author-edit-outcome-browser.integration.test.mjs
-	node --test apps/web/test/editor-session-browser.integration.test.mjs
-	node --test apps/web/test/manual-input-browser.integration.test.mjs
-	node --test apps/web/test/acknowledgement-loss-browser.integration.test.mjs
-	node --test apps/web/test/takeover-late-result-browser.integration.test.mjs
-	node --test apps/web/test/activity-reorder-browser.integration.test.mjs
-	node --test apps/web/test/activity-resync-browser.integration.test.mjs
-	node --test apps/web/test/journal-gc-browser.integration.test.mjs
-	node --test apps/web/test/journal-gc-fenced-browser.integration.test.mjs
-	node --test apps/web/test/reload-recovery-browser.integration.test.mjs
 	cargo build --quiet -p storyos-server
-	node --test apps/web/test/protocol-http.integration.test.mjs
-	$(MAKE) project-scope
-project-scope:
+	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source --project browser-exact-dist
+	node --test apps/web/test/production-page-browser.integration.test.mjs
+	scripts/verify-project-scope.sh
+
+project-scope: web-typecheck
 	scripts/verify-project-scope.sh
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate

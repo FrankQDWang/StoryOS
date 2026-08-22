@@ -1,17 +1,29 @@
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
-import { once } from "node:events";
+import { execFile } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import { test } from "vitest";
 import { promisify } from "node:util";
 
 import {
   applyAuthorEdit, createProjectCommandChallenge, digestApplyAuthorEdit,
   getApplyAuthorEditOutcome, getEditorSession,
-} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  ApplyAuthorEditRequest,
+  GetEditorSessionResponse,
+  StoryOSQueryOptions,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  queryStoryOSPostgres as queryPostgres,
+  sessionFetch as browserFetch,
+  startStoryOSServer,
+  stopStoryOSServer as stopRealServer,
+  withChallengeRetry,
+} from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "debug", process.platform === "win32"
   ? "storyos-server.exe" : "storyos-server");
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -21,22 +33,14 @@ const SESSION_HANDLE = "session-a";
 const SESSIONS = { [SESSION_HANDLE]: USER };
 const execFileAsync = promisify(execFile);
 
-function browserFetch(baseUrl, sessionHandle) {
-  return (url, options = {}) => fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      origin: baseUrl,
-      ...(sessionHandle ? { cookie: `storyos_session=${sessionHandle}` } : {}),
-    },
-  });
-}
-
-function trackingFetch(baseUrl, actions) {
+function trackingFetch(baseUrl: string, actions: string[]): typeof fetch {
   const inner = browserFetch(baseUrl, SESSION_HANDLE);
-  return async (url, options = {}) => {
-    actions.push(`${options.method ?? "GET"} ${new URL(url).pathname}`);
-    if (String(url).includes(options.headers?.["x-storyos-anti-forgery"] ?? "\u0000")) {
+  return async (url, options) => {
+    actions.push(`${options?.method ?? "GET"} ${new URL(
+      url instanceof Request ? url.url : url,
+    ).pathname}`);
+    const nonce = new Headers(options?.headers).get("x-storyos-anti-forgery") ?? "\u0000";
+    if (String(url).includes(nonce)) {
       throw new Error("nonce entered the URL");
     }
     return inner(url, options);
@@ -44,53 +48,18 @@ function trackingFetch(baseUrl, actions) {
 }
 
 async function startRealServer(bind = "127.0.0.1:0") {
-  return new Promise((resolve, reject) => {
-    const server = spawn(serverBinary, ["--bind", bind], {
-      cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
-        STORYOS_BOOTSTRAP_SESSIONS: JSON.stringify(SESSIONS),
-        STORYOS_CHALLENGE_SECRET: "test-only-challenge-secret-that-is-at-least-thirty-two-bytes",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "", stderr = "";
-    const fail = (error) => { clearTimeout(timeout); server.kill("SIGTERM"); reject(error); };
-    const timeout = setTimeout(
-      () => fail(new Error(`StoryOS Server did not become ready: ${stderr}`)), 5_000,
-    );
-    server.once("error", fail);
-    server.once("exit", (code) => fail(new Error(`StoryOS Server exited with ${code}: ${stderr}`)));
-    server.stderr.on("data", (chunk) => { stderr += chunk; });
-    server.stdout.on("data", (chunk) => {
-      stdout += chunk;
-      const match = stdout.match(/^STORYOS_SERVER_URL=(http:\/\/[^\s]+)$/m);
-      if (match) { clearTimeout(timeout); resolve({ baseUrl: match[1], server }); }
-    });
+  return startStoryOSServer({
+    bind,
+    repositoryRoot,
+    serverBinary,
+    sessions: SESSIONS,
   });
 }
 
-async function stopRealServer(server) {
-  if (server.exitCode !== null) return;
-  const exited = once(server, "exit");
-  server.kill("SIGTERM");
-  await exited;
-}
-
-async function restartServer(server, baseUrl) {
+async function restartServer(server: ChildProcess, baseUrl: string) {
   const url = new URL(baseUrl);
   await stopRealServer(server);
   return startRealServer(`${url.hostname}:${url.port}`);
-}
-
-async function queryPostgres(query) {
-  const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
-  assert.ok(container, "run through scripts/verify-project-scope.sh");
-  const { stdout } = await execFileAsync("docker", [
-    "exec", container, "psql", "-XAt", "-U", "postgres", "-c", query,
-  ]);
-  return stdout.trim();
 }
 
 async function projectAuthoritySnapshot() {
@@ -110,20 +79,7 @@ async function projectAuthoritySnapshot() {
   return JSON.parse(await queryPostgres(query));
 }
 
-async function withChallengeRetry(action) {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      return await action();
-    } catch (error) {
-      if (error.status !== 429 || attempt === 3) throw error;
-      await new Promise((resolve) =>
-        setTimeout(resolve, ((error.retryAfterSeconds ?? 1) + 1) * 1000));
-    }
-  }
-  throw new Error("command challenge retry exhausted");
-}
-
-async function openCurrentWriter(baseUrl) {
+async function openCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
   const editorSessionId = await queryPostgres(`SELECT current_editor_session_id::text
     FROM storyos.project_writer_generations
     WHERE owner_user_id = '${USER}'::uuid AND project_id = '${PROJECT}'::uuid`);
@@ -133,10 +89,16 @@ async function openCurrentWriter(baseUrl) {
     fetchImpl: browserFetch(baseUrl, SESSION_HANDLE),
   });
   assert.equal(session.writer.kind, "current_writer");
+  if (session.writer.kind !== "current_writer") {
+    throw new Error("the fixture did not expose the current writer");
+  }
   return session;
 }
 
-function authorEditRequest(session) {
+function authorEditRequest(session: GetEditorSessionResponse): ApplyAuthorEditRequest {
+  if (session.writer.kind !== "current_writer") {
+    throw new Error("the Author Edit requires the current writer");
+  }
   const body = session.base_snapshot.materialized_revision.body;
   const from = body.length;
   return {
@@ -164,7 +126,11 @@ function authorEditRequest(session) {
   };
 }
 
-async function issueAuthorEditChallenge(baseUrl, request, idempotencyKey) {
+async function issueAuthorEditChallenge(
+  baseUrl: string,
+  request: ApplyAuthorEditRequest,
+  idempotencyKey: string,
+) {
   return withChallengeRetry(async () => createProjectCommandChallenge({
     baseUrl, projectId: PROJECT, fetchImpl: browserFetch(baseUrl, SESSION_HANDLE),
     request: {
@@ -177,14 +143,19 @@ async function issueAuthorEditChallenge(baseUrl, request, idempotencyKey) {
   }));
 }
 
-function outcomeOptions(baseUrl, idempotencyKey, nonce, fetchImpl) {
+function outcomeOptions(
+  baseUrl: string,
+  idempotencyKey: string,
+  nonce: string,
+  fetchImpl: typeof fetch = browserFetch(baseUrl, SESSION_HANDLE),
+): StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string } {
   return {
     baseUrl, projectId: PROJECT, idempotencyKey, antiForgery: nonce,
-    fetchImpl: fetchImpl ?? browserFetch(baseUrl, SESSION_HANDLE),
+    fetchImpl,
   };
 }
 
-function assertFirstActionIsOutcomeGet(actions, idempotencyKey) {
+function assertFirstActionIsOutcomeGet(actions: string[], idempotencyKey: string): void {
   assert.match(actions[0] ?? "", new RegExp(
     `^GET /api/v1/projects/${PROJECT}/manuscript/author-edit-outcomes/${idempotencyKey}$`,
   ));
@@ -192,11 +163,14 @@ function assertFirstActionIsOutcomeGet(actions, idempotencyKey) {
 }
 
 async function pausePostgres() {
-  await execFileAsync("docker", ["pause", process.env.STORYOS_TEST_POSTGRES_CONTAINER]);
+  const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
+  assert.ok(container);
+  await execFileAsync("docker", ["pause", container]);
 }
 
 async function unpausePostgres() {
   const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
+  assert.ok(container);
   await execFileAsync("docker", ["unpause", container]);
   await execFileAsync("docker", ["exec", container, "pg_isready", "-U", "postgres"]);
 }
@@ -215,7 +189,7 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
       const idempotencyKey = "018f0000-0000-7001-8000-000000002103";
       const challenge = await issueAuthorEditChallenge(baseUrl, request, idempotencyKey);
       const authorityBefore = await projectAuthoritySnapshot();
-      let actions = [];
+      let actions: string[] = [];
       ({ baseUrl, server } = await restartServer(server, baseUrl));
       const unknownAfterRestart = await getApplyAuthorEditOutcome(
         outcomeOptions(baseUrl, idempotencyKey, challenge.nonce, trackingFetch(baseUrl, actions)),
@@ -250,7 +224,12 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
       const committedBeforeCut = await getApplyAuthorEditOutcome(
         outcomeOptions(baseUrl, idempotencyKey, challenge.nonce),
       );
-      assert.equal(committedBeforeCut.outcome.outcome_kind, "committed");
+      if (committedBeforeCut.outcome.outcome_kind !== "committed") {
+        throw new Error("the committed Author Edit outcome was unavailable");
+      }
+      if (committedBeforeCut.outcome.response.effect.kind !== "authoritative_applied") {
+        throw new Error("the committed Author Edit was not authoritative");
+      }
       assert.equal(
         committedBeforeCut.outcome.response.effect.authoritative_revision.body,
         `${session.base_snapshot.materialized_revision.body}!`,
@@ -278,7 +257,7 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
           fetchImpl: (url, options) => fetch(url, {
             ...options,
             headers: {
-              ...options.headers,
+              ...options?.headers,
               origin: baseUrl,
               cookie: `storyos_session=${SESSION_HANDLE}`,
             },

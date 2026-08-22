@@ -1,17 +1,23 @@
 import assert from "node:assert/strict";
-import { execFile, spawn } from "node:child_process";
-import { once } from "node:events";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
-import { promisify } from "node:util";
+import { test } from "vitest";
 
 import {
   activityStream, createEditorSession, createProjectCommandChallenge, digestCreateEditorSession,
   getEditorSession, getSnapshot,
-} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { GetEditorSessionResponse } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  queryStoryOSPostgres as queryPostgres,
+  requireStoryOSProtocolError,
+  sessionFetch as browserFetch,
+  startStoryOSServer,
+  stopStoryOSServer as stopRealServer,
+  withChallengeRetry,
+} from "../support/node-integration.ts";
 
-const repositoryRoot = fileURLToPath(new URL("../../..", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "debug", process.platform === "win32"
   ? "storyos-server.exe" : "storyos-server");
 const USER_A = "018f0000-0000-7001-8000-000000000001";
@@ -20,81 +26,27 @@ const USER_B = "018f0000-0000-7001-8000-000000000101";
 const UNKNOWN_SNAPSHOT = "018f0000-0000-7001-8000-000000000250";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
-const execFileAsync = promisify(execFile);
-
-function browserFetch(baseUrl, sessionHandle) {
-  return (url, options = {}) => fetch(url, {
-    ...options,
-    headers: {
-      ...options.headers,
-      origin: baseUrl,
-      ...(sessionHandle ? { cookie: `storyos_session=${sessionHandle}` } : {}),
-    },
-  });
-}
-
 async function startRealServer() {
-  return new Promise((resolve, reject) => {
-    const server = spawn(serverBinary, ["--bind", "127.0.0.1:0"], {
-      cwd: repositoryRoot,
-      env: {
-        ...process.env,
-        STORYOS_DATABASE_URL: process.env.STORYOS_TEST_DATABASE_URL,
-        STORYOS_BOOTSTRAP_SESSIONS: JSON.stringify({ "session-a": USER_A, "session-b": USER_B }),
-        STORYOS_CHALLENGE_SECRET: "test-only-challenge-secret-that-is-at-least-thirty-two-bytes",
-      },
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    let stdout = "", stderr = "";
-    const fail = (error) => { clearTimeout(timeout); server.kill("SIGTERM"); reject(error); };
-    const timeout = setTimeout(
-      () => fail(new Error(`StoryOS Server did not become ready: ${stderr}`)), 5_000,
-    );
-    server.once("error", fail);
-    server.once("exit", (code) => fail(new Error(`StoryOS Server exited with ${code}: ${stderr}`)));
-    server.stderr.on("data", (chunk) => { stderr += chunk; });
-    server.stdout.on("data", (chunk) => {
-      stdout += chunk;
-      const match = stdout.match(/^STORYOS_SERVER_URL=(http:\/\/[^\s]+)$/m);
-      if (match) { clearTimeout(timeout); resolve({ baseUrl: match[1], server }); }
-    });
+  return startStoryOSServer({
+    repositoryRoot,
+    serverBinary,
+    sessions: { "session-a": USER_A, "session-b": USER_B },
   });
 }
-
-async function stopRealServer(server) {
-  if (server.exitCode !== null) return;
-  const exited = once(server, "exit");
-  server.kill("SIGTERM");
-  await exited;
+function problemCode(error: unknown): unknown {
+  const responseBody = requireStoryOSProtocolError(error).responseBody;
+  assert.ok(responseBody);
+  return Reflect.get(JSON.parse(responseBody), "code");
 }
 
-async function queryPostgres(query) {
-  const container = process.env.STORYOS_TEST_POSTGRES_CONTAINER;
-  assert.ok(container, "run through scripts/verify-project-scope.sh");
-  const { stdout } = await execFileAsync("docker", [
-    "exec", container, "psql", "-XAt", "-U", "postgres", "-c", query,
-  ]);
-  return stdout.trim();
+function hasProblem(error: unknown, status: number, code: string): boolean {
+  const protocolError = requireStoryOSProtocolError(error);
+  return protocolError.status === status
+    && problemCode(protocolError) === code
+    && !/Project A|Authoritative A/.test(protocolError.responseBody ?? "");
 }
 
-async function withChallengeRetry(action) {
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    try {
-      return await action();
-    } catch (error) {
-      if (error.status !== 429 || attempt === 3) throw error;
-      await new Promise((resolve) =>
-        setTimeout(resolve, ((error.retryAfterSeconds ?? 1) + 1) * 1000));
-    }
-  }
-  throw new Error("command challenge retry exhausted");
-}
-
-function problemCode(error) {
-  return JSON.parse(error.responseBody).code;
-}
-
-async function ensureCurrentWriter(baseUrl) {
+async function ensureCurrentWriter(baseUrl: string): Promise<GetEditorSessionResponse> {
   const existing = await queryPostgres(`SELECT current_editor_session_id::text
     FROM storyos.project_writer_generations
     WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid`);
@@ -103,7 +55,9 @@ async function ensureCurrentWriter(baseUrl) {
       baseUrl, projectId: PROJECT_A, editorSessionId: existing,
       fetchImpl: browserFetch(baseUrl, "session-a"),
     });
-    assert.equal(session.writer.kind, "current_writer");
+    if (session.writer.kind !== "current_writer") {
+      throw new Error("the fixture did not expose the current writer");
+    }
     return session;
   }
   const request = {
@@ -128,7 +82,9 @@ async function ensureCurrentWriter(baseUrl) {
     idempotencyKey: "018f0000-0000-7001-8000-000000000202",
     antiForgery: challenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
   });
-  assert.equal(session.writer.kind, "current_writer");
+  if (session.writer.kind !== "current_writer") {
+    throw new Error("the fixture did not create the current writer");
+  }
   return session;
 }
 
@@ -195,8 +151,7 @@ test("getSnapshot and activityStream use the Editor Session Snapshot identity at
     await assert.rejects(activityStream({
       baseUrl, projectId: PROJECT_A, snapshotId, protocolRelease: "storyos.public.release.1",
       fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => error.status === 409 && problemCode(error) === "activity_cursor_too_old"
-      && !/Project A|Authoritative A/.test(error.responseBody));
+    }), (error) => hasProblem(error, 409, "activity_cursor_too_old"));
     await queryPostgres(`
       UPDATE storyos.replay_floors
          SET floor_position = 0
@@ -218,8 +173,7 @@ test("getSnapshot and activityStream use the Editor Session Snapshot identity at
     await assert.rejects(activityStream({
       baseUrl, projectId: PROJECT_A, snapshotId, protocolRelease: "storyos.public.release.1",
       fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => error.status === 409 && problemCode(error) === "activity_cursor_too_old"
-      && !/Project A|Authoritative A/.test(error.responseBody));
+    }), (error) => hasProblem(error, 409, "activity_cursor_too_old"));
     const afterFloor = await getSnapshot({
       baseUrl, projectId: PROJECT_A, snapshotId,
       fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -230,13 +184,11 @@ test("getSnapshot and activityStream use the Editor Session Snapshot identity at
     await assert.rejects(getSnapshot({
       baseUrl, projectId: PROJECT_A, snapshotId: UNKNOWN_SNAPSHOT,
       fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => error.status === 404 && problemCode(error) === "resource_unavailable"
-      && !/Project A|Authoritative A/.test(error.responseBody));
+    }), (error) => hasProblem(error, 404, "resource_unavailable"));
     await assert.rejects(getSnapshot({
       baseUrl, projectId: PROJECT_A, snapshotId,
       fetchImpl: browserFetch(baseUrl, "session-b"),
-    }), (error) => error.status === 404 && problemCode(error) === "resource_unavailable"
-      && !/Project A|Authoritative A/.test(error.responseBody));
+    }), (error) => hasProblem(error, 404, "resource_unavailable"));
 
     const disallowed = await fetch(new URL(`/api/v1/projects/${PROJECT_A}/snapshots/${snapshotId}`, baseUrl), {
       method: "POST",
@@ -254,8 +206,7 @@ test("getSnapshot and activityStream use the Editor Session Snapshot identity at
     await assert.rejects(getSnapshot({
       baseUrl, projectId: PROJECT_A, snapshotId,
       fetchImpl: browserFetch(baseUrl, "session-a"),
-    }), (error) => error.status === 409 && problemCode(error) === "snapshot_expired"
-      && !/Project A|Authoritative A/.test(error.responseBody));
+    }), (error) => hasProblem(error, 409, "snapshot_expired"));
   } finally {
     await stopRealServer(server);
   }

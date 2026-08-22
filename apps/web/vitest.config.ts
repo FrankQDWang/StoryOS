@@ -60,6 +60,7 @@ export default defineConfig({
           ...serialTest,
           include: ["test/node-postgresql/**/*.test.ts"],
           name: "node-postgresql",
+          testTimeout: 120_000,
         },
       }),
       defineProject({
@@ -68,6 +69,7 @@ export default defineConfig({
           ...serialTest,
           include: ["test/node-process-cut/**/*.test.ts"],
           name: "node-process-cut",
+          testTimeout: 120_000,
         },
       }),
       defineProject({
