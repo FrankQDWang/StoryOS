@@ -1,8 +1,8 @@
 {
-  "schema_id": "storyos.evidence.stage1-contract-crosswalk.v3",
+  "schema_id": "storyos.evidence.stage1-contract-crosswalk.v4",
   "claim_ceiling": "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
   "declarations": {
-    "authority": "Issue #100 accepted Stage 1 specification with delivery owned by 13 child tickets, including #119, #121, and #209",
+    "authority": "Issue #100 accepted the historical Stage 1 delivery through 13 child tickets, including #119, #121, and #209",
     "execution_contract": {
       "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
       "revision": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
@@ -662,6 +662,11 @@
             "aggregate": "B-S1-MANDATORY-SET"
           }
         }
+      ]
+    },
+    "tracker_verification": {
+      "historical_reusable_owner_responsibility_ids": [
+        "S1-TICKET-09A"
       ]
     },
     "requirements": [
