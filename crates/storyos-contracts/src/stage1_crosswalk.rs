@@ -24,6 +24,8 @@ use crate::stage1_selection::{
 /// Checked-in deterministic output owned by this module.
 pub const GENERATED_CROSSWALK_PATH: &str = "generated/evidence/stage1-contract-crosswalk.json";
 
+const HISTORICAL_REUSABLE_OWNER_RESPONSIBILITY_IDS: &[&str] = &["S1-TICKET-09A"];
+
 /// Resolve the repository that owns this build-time contract tool.
 pub fn repository_root() -> &'static Path {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -78,8 +80,14 @@ struct Declarations {
     authority: &'static str,
     execution_contract: ExecutionContract,
     delivery_contract: DeliveryContract,
+    tracker_verification: TrackerVerification,
     requirements: Vec<RequirementBinding>,
     proof_selection: ProofSelection,
+}
+
+#[derive(Debug, Serialize)]
+struct TrackerVerification {
+    historical_reusable_owner_responsibility_ids: &'static [&'static str],
 }
 
 #[derive(Debug, Serialize)]
@@ -180,10 +188,10 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
     let handoff_evidence = handoff_evidence(&mandatory_evidence, &provenance_evidence)
         .map_err(CrosswalkError::Invalid)?;
     let mut bytes = serde_json::to_vec_pretty(&Crosswalk {
-        schema_id: "storyos.evidence.stage1-contract-crosswalk.v3",
+        schema_id: "storyos.evidence.stage1-contract-crosswalk.v4",
         claim_ceiling: "ticketed-contract-foundation-only; no S1 runtime requirement or stage acceptance",
         declarations: Declarations {
-            authority: "Issue #100 accepted Stage 1 specification with delivery owned by 13 child tickets, including #119, #121, and #209",
+            authority: "Issue #100 accepted the historical Stage 1 delivery through 13 child tickets, including #119, #121, and #209",
             execution_contract: ExecutionContract {
                 issue: "https://github.com/FrankQDWang/StoryOS/issues/100",
                 revision: CONTRACT_REVISION,
@@ -192,6 +200,10 @@ pub fn generate_crosswalk(repo_root: &Path) -> Result<Vec<u8>, CrosswalkError> {
                 issue_body_sha256: ISSUE_BODY_SHA256,
             },
             delivery_contract,
+            tracker_verification: TrackerVerification {
+                historical_reusable_owner_responsibility_ids:
+                    HISTORICAL_REUSABLE_OWNER_RESPONSIBILITY_IDS,
+            },
             requirements,
             proof_selection: proof,
         },

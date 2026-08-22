@@ -59,6 +59,63 @@ def issue_errors(expected: dict, actual: dict, blockers: list[dict]) -> list[str
     return errors
 
 
+def historical_reusable_owner_issues(tickets: list[dict], policy: dict) -> set[str]:
+    if not isinstance(policy, dict):
+        raise ValueError("Stage 1 tracker verification policy is not an object")
+    responsibility_ids = policy.get("historical_reusable_owner_responsibility_ids")
+    if (
+        not isinstance(responsibility_ids, list)
+        or not responsibility_ids
+        or not all(isinstance(item, str) and item for item in responsibility_ids)
+        or len(responsibility_ids) != len(set(responsibility_ids))
+    ):
+        raise ValueError("historical reusable-owner responsibility IDs are invalid")
+    definitions = {
+        ticket.get("responsibility_id"): ticket
+        for ticket in tickets
+        if isinstance(ticket, dict)
+    }
+    if len(definitions) != len(tickets):
+        raise ValueError("Stage 1 ticket responsibility IDs are invalid")
+    missing = set(responsibility_ids) - definitions.keys()
+    if missing:
+        raise ValueError(f"historical reusable-owner responsibility IDs are unknown: {sorted(missing)}")
+    issues = {definitions[item].get("issue") for item in responsibility_ids}
+    if len(issues) != len(responsibility_ids) or not all(
+        canonical_issue_url(issue) for issue in issues
+    ):
+        raise ValueError("historical reusable-owner Issue bindings are invalid")
+    return issues
+
+
+def child_binding_errors(
+    tickets: list[dict], historical_issues: set[str], live_children: list[str]
+) -> list[str]:
+    expected_live = {
+        ticket.get("issue")
+        for ticket in tickets
+        if ticket.get("issue") not in historical_issues
+    }
+    if (
+        not all(canonical_issue_url(item) for item in live_children)
+        or len(live_children) != len(set(live_children))
+        or set(live_children) - historical_issues != expected_live
+    ):
+        return ["Stage 1 parent native sub-issues drifted"]
+    return []
+
+
+def tickets_requiring_live_verification(
+    tickets: list[dict], historical_issues: set[str], live_children: list[str]
+) -> list[dict]:
+    live_child_set = set(live_children)
+    return [
+        ticket
+        for ticket in tickets
+        if ticket["issue"] not in historical_issues or ticket["issue"] in live_child_set
+    ]
+
+
 def self_test() -> None:
     issue = "https://github.com/FrankQDWang/StoryOS/issues/103"
     issue_56 = "https://github.com/FrankQDWang/StoryOS/issues/56"
@@ -79,23 +136,62 @@ def self_test() -> None:
     foreign = "https://github.com/another-owner/another-repository/issues/56"
     assert issue_errors({**expected, "blocked_by": [foreign]}, actual, [{"html_url": foreign}])
 
+    reusable_issue = "https://github.com/FrankQDWang/StoryOS/issues/209"
+    tickets = [
+        {"responsibility_id": "LIVE", "issue": issue},
+        {"responsibility_id": "HISTORICAL", "issue": reusable_issue},
+    ]
+    policy = {"historical_reusable_owner_responsibility_ids": ["HISTORICAL"]}
+    historical_issues = historical_reusable_owner_issues(tickets, policy)
+    assert historical_issues == {reusable_issue}
+    assert child_binding_errors(tickets, historical_issues, [issue]) == []
+    assert child_binding_errors(tickets, historical_issues, [issue, reusable_issue]) == []
+    assert child_binding_errors(tickets, historical_issues, [reusable_issue])
+    assert child_binding_errors(tickets, historical_issues, [issue, issue_108])
+    assert tickets_requiring_live_verification(tickets, historical_issues, [issue]) == [tickets[0]]
+    assert tickets_requiring_live_verification(
+        tickets, historical_issues, [issue, reusable_issue]
+    ) == tickets
+    for invalid_policy in (
+        {},
+        {"historical_reusable_owner_responsibility_ids": None},
+        {"historical_reusable_owner_responsibility_ids": ["UNKNOWN"]},
+        {"historical_reusable_owner_responsibility_ids": ["HISTORICAL", "HISTORICAL"]},
+    ):
+        try:
+            historical_reusable_owner_issues(tickets, invalid_policy)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("invalid historical reusable-owner policy must fail closed")
+
 
 def main() -> None:
-    contract = json.loads(CROSSWALK.read_text(encoding="utf-8"))["declarations"]["delivery_contract"]
+    declarations = json.loads(CROSSWALK.read_text(encoding="utf-8"))["declarations"]
+    contract = declarations["delivery_contract"]
+    tickets = contract["tickets"]
+    try:
+        historical_issues = historical_reusable_owner_issues(
+            tickets, declarations["tracker_verification"]
+        )
+    except (KeyError, ValueError) as error:
+        raise SystemExit(f"Stage 1 tracker binding verification failed:\n- {error}") from error
     parent = contract["parent_specification"]
     parent_number = int(parent["issue"].rsplit("/", 1)[1])
     parent_actual = api(f"issues/{parent_number}")
     errors = issue_errors(parent, parent_actual, api(f"issues/{parent_number}/dependencies/blocked_by"))
-    live_children = sorted(item["html_url"] for item in api(f"issues/{parent_number}/sub_issues"))
-    expected_children = sorted(ticket["issue"] for ticket in contract["tickets"])
-    if live_children != expected_children:
-        errors.append(f"{parent['issue']} native sub-issues drifted")
-    for ticket in contract["tickets"]:
+    live_children = [item["html_url"] for item in api(f"issues/{parent_number}/sub_issues")]
+    errors.extend(child_binding_errors(tickets, historical_issues, live_children))
+    for ticket in tickets_requiring_live_verification(tickets, historical_issues, live_children):
         number = int(ticket["issue"].rsplit("/", 1)[1])
         errors.extend(issue_errors(ticket, api(f"issues/{number}"), api(f"issues/{number}/dependencies/blocked_by")))
     if errors:
         raise SystemExit("Stage 1 tracker binding verification failed:\n- " + "\n- ".join(errors))
-    print(f"verified parent #{parent_number} and {len(contract['tickets'])} live Stage 1 ticket bindings")
+    live_count = len(tickets) - len(historical_issues)
+    print(
+        f"verified parent #{parent_number}, {live_count} live Stage 1 ticket bindings, "
+        f"and {len(historical_issues)} historical reusable-owner binding"
+    )
 
 
 if __name__ == "__main__":

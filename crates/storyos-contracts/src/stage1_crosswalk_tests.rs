@@ -20,6 +20,23 @@ fn checked_in_crosswalk_matches_fresh_generation() {
 }
 
 #[test]
+fn generated_crosswalk_releases_only_the_historical_web_client_owner() {
+    let bytes = generate_crosswalk(repository_root()).expect("crosswalk generation should succeed");
+    let value: Value = serde_json::from_slice(&bytes).expect("generated crosswalk is JSON");
+
+    assert_eq!(
+        value["schema_id"],
+        "storyos.evidence.stage1-contract-crosswalk.v4"
+    );
+    assert_eq!(
+        value["declarations"]["tracker_verification"],
+        json!({
+            "historical_reusable_owner_responsibility_ids": ["S1-TICKET-09A"]
+        })
+    );
+}
+
+#[test]
 fn missing_stage1_operation_is_rejected() {
     let mut catalog = route_catalog();
     catalog["operations"]
