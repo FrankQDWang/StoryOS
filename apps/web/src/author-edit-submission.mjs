@@ -346,7 +346,7 @@ async function settleAuthorEditResponse({
     };
     if (durableQuery) await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next });
     else await commitStrongerGroup(workspace, next);
-    return rebuildPendingProjection(workspace);
+    return;
   }
   if (receipt.result !== "authoritative_applied"
     || effect.authoritative_revision?.body !== pending.body
@@ -434,7 +434,6 @@ async function settleAuthorEditResponse({
     throw error;
   }
   workspace.session = canonical;
-  return rebuildPendingProjection(workspace);
 }
 
 export async function submitOnePendingAuthorEdit({
@@ -485,9 +484,10 @@ export async function submitOnePendingAuthorEdit({
       });
       return rebuildPendingProjection(workspace);
     }
-    return settleAuthorEditResponse({
+    await settleAuthorEditResponse({
       workspace, group, response, baseUrl, fetchImpl, cryptoImpl,
     });
+    return rebuildPendingProjection(workspace);
   };
   const queued = (workspace.submitQueue ?? Promise.resolve()).then(run, run);
   workspace.submitQueue = queued.catch(() => {});
