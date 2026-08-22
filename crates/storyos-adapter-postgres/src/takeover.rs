@@ -54,9 +54,18 @@ async fn persist_takeover_settlement(
 ) -> Result<TakeOverProjectWriterSettlement, TakeOverProjectWriterError> {
     let observed_generation = command.observed_writer_generation.to_string();
     let client_session_generation = command.client_binding.session_generation.to_string();
-    let inserted = client
-        .execute(
-            "INSERT INTO storyos.author_command_admissions
+    let writer = client
+        .query_opt(
+            "WITH current_writer AS MATERIALIZED (
+               SELECT writer.writer_generation, writer.current_editor_session_id
+                 FROM storyos.project_writer_generations AS writer
+                WHERE writer.owner_user_id = $1::text::uuid
+                  AND writer.project_id = $2::text::uuid
+                ORDER BY writer.writer_generation DESC
+                LIMIT 1
+             ),
+             admission AS (
+             INSERT INTO storyos.author_command_admissions
                (owner_user_id, project_id, author_command_admission_id, command_id,
                 editor_session_id, writer_generation, client_session_binding_ref,
                 client_session_generation, client_contract_revision, security_policy_revision,
@@ -67,7 +76,7 @@ async fn persist_takeover_settlement(
                 target_refs, observed_ownership_partition, editor_contract_revision,
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                    session.editor_session_id, $6::text::numeric,
+                    session.editor_session_id, current_writer.writer_generation,
                     session.client_session_binding_ref, $7::text::numeric,
                     session.client_contract_revision, session.security_policy_revision,
                     'explicit_editor_command', $8, $9, $10, 'takeOverProjectWriter',
@@ -75,14 +84,7 @@ async fn persist_takeover_settlement(
                     $13::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $14,
                     NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
                FROM storyos.editor_sessions AS session
-               JOIN LATERAL (
-                 SELECT writer.writer_generation, writer.current_editor_session_id
-                   FROM storyos.project_writer_generations AS writer
-                  WHERE writer.owner_user_id = session.owner_user_id
-                    AND writer.project_id = session.project_id
-                  ORDER BY writer.writer_generation DESC
-                  LIMIT 1
-               ) AS current_writer
+               JOIN current_writer
                  ON current_writer.writer_generation = $6::text::numeric
                 AND current_writer.current_editor_session_id <> session.editor_session_id
                JOIN storyos.project_command_challenges AS challenge
@@ -97,7 +99,14 @@ async fn persist_takeover_settlement(
                 AND session.client_session_generation = $7::text::numeric
                 AND session.client_contract_revision = $17
                 AND session.security_policy_revision = $18
-                AND challenge.consumed_at IS NOT NULL",
+                AND challenge.consumed_at IS NOT NULL
+             RETURNING writer_generation
+             )
+             SELECT current_writer.writer_generation::text,
+                    current_writer.current_editor_session_id::text
+               FROM current_writer
+               JOIN admission
+                 ON admission.writer_generation = current_writer.writer_generation",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -120,35 +129,10 @@ async fn persist_takeover_settlement(
             ],
         )
         .await
-        .map_err(takeover_database_error)?;
-    if inserted != 1 {
-        return Err(TakeOverProjectWriterError::BindingConflict);
-    }
-
-    // Runtime may INSERT a new generation but cannot UPDATE historical writer rows.
-    let writer = client
-        .query_opt(
-            "SELECT writer.writer_generation::text, writer.current_editor_session_id::text
-               FROM storyos.project_writer_generations AS writer
-              WHERE writer.owner_user_id = $1::text::uuid
-                AND writer.project_id = $2::text::uuid
-              ORDER BY writer.writer_generation DESC
-              LIMIT 1",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
-        .await
         .map_err(takeover_database_error)?
         .ok_or(TakeOverProjectWriterError::BindingConflict)?;
     let prior_generation = parse_takeover_u64(writer.get(0))?;
     let prior_session: String = writer.get(1);
-    if prior_generation != command.observed_writer_generation
-        || prior_session == command.editor_session_id.as_ref()
-    {
-        return Err(TakeOverProjectWriterError::BindingConflict);
-    }
     let resulting_generation = prior_generation
         .checked_add(1)
         .ok_or(TakeOverProjectWriterError::BindingConflict)?;
