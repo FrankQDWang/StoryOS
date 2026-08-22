@@ -93,23 +93,25 @@ function applyFrames(state, frames, workspace) {
   if (!boundedU64(next.replay_generation)) {
     throw new Error("Project Activity replay generation mismatch");
   }
+  const known = [...next.events, ...next.held];
   for (const frame of frames) {
     const event = validatedEvent(frame, workspace);
-    const knownById = [...next.events, ...next.held]
-      .find((candidate) => candidate.event_id === event.event_id);
+    const knownById = known.find((candidate) => candidate.event_id === event.event_id);
     if (knownById) {
       if (JSON.stringify(knownById) !== JSON.stringify(event)) {
         throw new Error("Project Activity Event conflict");
       }
       continue;
     }
-    const knownBySequence = [...next.events, ...next.held]
-      .find((candidate) => candidate.stream_sequence === event.stream_sequence);
+    const knownBySequence = known.find(
+      (candidate) => candidate.stream_sequence === event.stream_sequence,
+    );
     if (knownBySequence
       || BigInt(event.stream_sequence) <= BigInt(next.processed_through_stream_sequence)) {
       throw new Error("Project Activity Event conflict");
     }
     next.held.push(event);
+    known.push(event);
   }
   next.held.sort((left, right) => {
     const delta = BigInt(left.stream_sequence) - BigInt(right.stream_sequence);
