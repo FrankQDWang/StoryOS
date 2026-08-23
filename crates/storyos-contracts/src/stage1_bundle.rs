@@ -6,7 +6,7 @@ use crate::stage1_delivery::{
 };
 use crate::stage1_selection::{BASELINE_COMMIT, BASELINE_TREE, CONTRACT_REVISION};
 
-const ISSUE_112_REVISION: &str = "issue-112-stage1-mandatory-evidence-handoff-2026-08-20-v1";
+const ISSUE_112_REVISION: &str = "issue-112-provenance-workspace-isolation-2026-08-23-v4";
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const PARENT_TITLE: &str = "Implement the Stage 1 Production-Shaped Manual-Editor Risk Slice";
 const MANDATORY_SET_MEMBERS: &[&str] = &[

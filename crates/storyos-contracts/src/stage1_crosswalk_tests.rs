@@ -222,8 +222,8 @@ fn expected_mandatory_evidence() -> Value {
             },
             "contract_revisions": {
                 "parent": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
-                "delivery": "stage1-ticketed-delivery-2026-08-20-v20",
-                "issue": "issue-112-stage1-mandatory-evidence-handoff-2026-08-20-v1"
+                "delivery": "stage1-ticketed-delivery-2026-08-23-v21",
+                "issue": "issue-112-provenance-workspace-isolation-2026-08-23-v4"
             },
             "release_ids": ["storyos.public.release.1"],
             "gate_bundles": [
