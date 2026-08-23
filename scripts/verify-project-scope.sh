@@ -3,9 +3,120 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
+
+verify_web_migration_guards() {
+  legacy_web_files=$(find apps/web \
+    \( -path apps/web/dist -o -path apps/web/node_modules \) -prune -o \
+    -type f \( -name '*.js' -o -name '*.jsx' -o -name '*.mjs' -o -name '*.cjs' \) -print)
+  if [ -n "$legacy_web_files" ]; then
+    echo "Hand-written Web JavaScript remains:" >&2
+    printf '%s\n' "$legacy_web_files" >&2
+    exit 1
+  fi
+
+  raw_harness_matches=$(rg -n \
+    'DevTools listening|webSocketDebuggerUrl|Runtime\.evaluate|remote-debugging-(port|pipe)|new WebSocket\(' \
+    apps/web --glob '!dist/**' --glob '!node_modules/**' || true)
+  if [ -n "$raw_harness_matches" ]; then
+    echo "An active raw browser harness signature remains:" >&2
+    printf '%s\n' "$raw_harness_matches" >&2
+    exit 1
+  fi
+
+  broad_cdp_matches=$(rg -n \
+    'newCDPSession|CDPSession|session\.send\(' \
+    apps/web --glob '!dist/**' --glob '!node_modules/**' \
+      --glob '!**/test/support/browser-commands.ts' || true)
+  if [ -n "$broad_cdp_matches" ]; then
+    echo "A CDP primitive escaped the typed Browser Command boundary:" >&2
+    printf '%s\n' "$broad_cdp_matches" >&2
+    exit 1
+  fi
+
+  unsupported_cdp_matches=$(rg -n 'session\.send\(' \
+    apps/web/test/support/browser-commands.ts \
+      | rg -v 'Input\.imeSetComposition' || true)
+  if [ -n "$unsupported_cdp_matches" ]; then
+    echo "The IME Browser Command uses an unsupported CDP method:" >&2
+    printf '%s\n' "$unsupported_cdp_matches" >&2
+    exit 1
+  fi
+
+  active_legacy_entry_matches=$(rg -n \
+    'production-page-browser\.integration\.test\.mjs|s1-jrn-001-browser\.integration\.test\.mjs|author-edit-batch-browser-process\.test\.mjs|author-edit-batch-prerelease-browser-harness\.mjs' \
+    Makefile package.json apps/web/package.json scripts .github || true)
+  if [ -n "$active_legacy_entry_matches" ]; then
+    echo "An active legacy browser harness entry remains:" >&2
+    printf '%s\n' "$active_legacy_entry_matches" >&2
+    exit 1
+  fi
+
+  browser_skip_matches=$(rg -n \
+    '\.(skip|skipIf|runIf|todo)\b|\bskip\s*:|Chrome or Chromium is unavailable|CHROME_BIN|chromium-browser|/usr/bin/chromium' \
+    apps/web/test/browser-source apps/web/test/browser-exact-dist \
+      apps/web/test/support/browser-command-client.ts \
+      apps/web/test/support/browser-command-contract.ts \
+      apps/web/test/support/browser-commands.ts apps/web/vitest.config.ts \
+      --glob '*.ts' --glob '*.tsx' \
+      --glob '*.js' --glob '*.jsx' --glob '*.mjs' --glob '*.cjs' || true)
+  if [ -n "$browser_skip_matches" ]; then
+    echo "A browser skip or fallback remains:" >&2
+    printf '%s\n' "$browser_skip_matches" >&2
+    exit 1
+  fi
+
+  type_escape_matches=$(rg -n \
+    '\bany\b|@ts-(ignore|nocheck)|declare module|\bas unknown as\b|\bas [A-Za-z0-9_.$<>\[\] |]+ as\b' \
+    apps/web --glob '*.ts' --glob '*.tsx' --glob '!dist/**' --glob '!node_modules/**' || true)
+  if [ -n "$type_escape_matches" ]; then
+    echo "A prohibited TypeScript escape remains:" >&2
+    printf '%s\n' "$type_escape_matches" >&2
+    exit 1
+  fi
+}
+
+record_google_chrome_version() {
+  if [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+    chrome_executable="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+  elif command -v google-chrome-stable >/dev/null 2>&1; then
+    chrome_executable=$(command -v google-chrome-stable)
+  elif command -v google-chrome >/dev/null 2>&1; then
+    chrome_executable=$(command -v google-chrome)
+  else
+    echo "Google Chrome Stable is required" >&2
+    exit 1
+  fi
+  chrome_version=$("$chrome_executable" --version)
+  case "$chrome_version" in
+    "Google Chrome "*) ;;
+    *)
+      echo "The browser is not Google Chrome Stable: $chrome_version" >&2
+      exit 1
+      ;;
+  esac
+  printf 'Google Chrome Stable: %s\n' "$chrome_version"
+}
+
+verify_web_migration_guards
+record_google_chrome_version
+if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
+  pnpm --dir apps/web run typecheck
+fi
+
 container="storyos-issue105-$$"
+s1_server_pid=""
+s1_server_log=""
 export CARGO_NET_OFFLINE=true
-cleanup() { docker rm -f "$container" >/dev/null 2>&1 || true; }
+cleanup() {
+  if [ -n "$s1_server_pid" ]; then
+    kill "$s1_server_pid" >/dev/null 2>&1 || true
+    wait "$s1_server_pid" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$s1_server_log" ]; then
+    rm -f "$s1_server_log"
+  fi
+  docker rm -f "$container" >/dev/null 2>&1 || true
+}
 trap cleanup EXIT INT TERM
 cleanup
 
@@ -108,4 +219,33 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 echo "Running the S1-JRN-001 Vite production journey"
-node --test apps/web/test/s1-jrn-001-browser.integration.test.mjs
+s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
+stage1_user_id="018f0000-0000-7001-8000-000000000001"
+STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
+STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
+STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
+  "$repository_root/target/debug/storyos-server" --bind 127.0.0.1:0 \
+  >"$s1_server_log" 2>&1 &
+s1_server_pid=$!
+attempt=0
+while ! grep -q '^STORYOS_SERVER_URL=http://' "$s1_server_log"; do
+  if ! kill -0 "$s1_server_pid" >/dev/null 2>&1; then
+    cat "$s1_server_log" >&2
+    echo "The StoryOS Server exited before the exact-dist journey" >&2
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 100 ]; then
+    cat "$s1_server_log" >&2
+    echo "The StoryOS Server did not become ready for the exact-dist journey" >&2
+    exit 1
+  fi
+  sleep 0.05
+done
+STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$s1_server_log" | head -n 1)
+export STORYOS_DEV_SERVER
+export STORYOS_STAGE1_AUTHORITY_ORACLE=1
+pnpm --dir apps/web exec vitest run --project browser-exact-dist
+kill "$s1_server_pid" >/dev/null 2>&1 || true
+wait "$s1_server_pid" >/dev/null 2>&1 || true
+s1_server_pid=""

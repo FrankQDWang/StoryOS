@@ -291,7 +291,7 @@ fn expected_provenance_evidence() -> Value {
         },
         "journey_evidence": {
             "requirement": "S1-JRN-001",
-            "test": "apps/web/test/s1-jrn-001-browser.integration.test.mjs",
+            "test": "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts",
             "page": "vite-production",
             "server": "storyos-server",
             "store": "postgresql"

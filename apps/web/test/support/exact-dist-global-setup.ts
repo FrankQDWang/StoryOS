@@ -1,0 +1,53 @@
+import assert from "node:assert/strict";
+
+import { queryStoryOSPostgres } from "./node-integration";
+
+const USER_A = "018f0000-0000-7001-8000-000000000001";
+const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
+const CHAPTER = "018f0000-0000-7001-8000-000000000003";
+
+export default function exactDistGlobalSetup(): (() => Promise<void>) | undefined {
+  if (process.env.STORYOS_STAGE1_AUTHORITY_ORACLE !== "1") return undefined;
+  return async () => {
+    const authorityJson = await queryStoryOSPostgres(`
+      SELECT json_build_object(
+        'receipt_count', (SELECT count(*) FROM storyos.domain_receipts AS receipt
+          WHERE receipt.owner_user_id = '${USER_A}'::uuid
+            AND receipt.project_id = '${PROJECT_A}'::uuid),
+        'activity_count', (SELECT count(*) FROM storyos.project_activity_events AS activity
+          WHERE activity.owner_user_id = '${USER_A}'::uuid
+            AND activity.project_id = '${PROJECT_A}'::uuid),
+        'author_action_count', (SELECT count(*) FROM storyos.author_action_entries AS action
+          WHERE action.owner_user_id = '${USER_A}'::uuid
+            AND action.project_id = '${PROJECT_A}'::uuid),
+        'project_activity_position', (SELECT max(activity.project_activity_position)::text
+          FROM storyos.project_activity_events AS activity
+          WHERE activity.owner_user_id = '${USER_A}'::uuid
+            AND activity.project_id = '${PROJECT_A}'::uuid),
+        'manuscript_body', (SELECT convert_from(payload.canonical_bytes, 'UTF8')
+          FROM storyos.authoritative_heads AS head
+          JOIN storyos.authoritative_revisions AS revision
+            ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                revision.revision_id) =
+               (head.owner_user_id, head.project_id, head.manuscript_object_id,
+                head.current_revision_id)
+          JOIN storyos.authoritative_payloads AS payload
+            ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+               (revision.owner_user_id, revision.project_id, revision.payload_id)
+          WHERE head.owner_user_id = '${USER_A}'::uuid
+            AND head.project_id = '${PROJECT_A}'::uuid
+            AND head.manuscript_object_id = '${CHAPTER}'::uuid),
+        'cross_scope_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
+          WHERE owner_user_id <> '${USER_A}'::uuid OR project_id <> '${PROJECT_A}'::uuid)
+      )::text`);
+    const authority: unknown = JSON.parse(authorityJson);
+    assert.deepEqual(authority, {
+      receipt_count: 4,
+      activity_count: 4,
+      author_action_count: 4,
+      project_activity_position: "4",
+      manuscript_body: "Authoritative A Hello中文 EN!",
+      cross_scope_receipt_count: 0,
+    });
+  };
+}

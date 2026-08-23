@@ -11,7 +11,7 @@ const EXPECTED_CRATES: &[&str] = &[
     "crates/storyos-server",
 ];
 const EXCLUDED_TREES: &[&str] = &["prototypes/**", ".reference/**"];
-const JOURNEY_TEST: &str = "apps/web/test/s1-jrn-001-browser.integration.test.mjs";
+const JOURNEY_TEST: &str = "apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts";
 const JOURNEY_MARKERS: &[&str] = &["Vite production page", "storyos-server", "PostgreSQL"];
 
 #[derive(Debug, Serialize, PartialEq, Eq)]

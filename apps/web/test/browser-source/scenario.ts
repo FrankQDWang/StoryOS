@@ -117,7 +117,8 @@ export function deleteJournal(name: string): Promise<void> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve();
     request.onerror = () => reject(request.error ?? new Error("IndexedDB deletion failed"));
-    request.onblocked = () => reject(new Error(`IndexedDB deletion is blocked: ${name}`));
+    // A close-pending connection can finish an active transaction before this request succeeds.
+    // The blocked event is an intermediate state, not a failed deletion.
   });
 }
 

@@ -41,7 +41,28 @@ jobs:
           node-version: 24
 
       - name: Enable pnpm
-        run: corepack enable
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@11.21.0 --activate
+          test "$(pnpm --version)" = "11.21.0"
+
+      - name: Require Google Chrome Stable
+        shell: bash
+        run: |
+          set -euo pipefail
+          chrome_path="$(command -v google-chrome-stable || command -v google-chrome || true)"
+          test -n "$chrome_path"
+          chrome_version="$($chrome_path --version)"
+          case "$chrome_version" in
+            "Google Chrome "*) ;;
+            *)
+              printf 'The browser is not Google Chrome Stable: %s\n' "$chrome_version" >&2
+              exit 1
+              ;;
+          esac
+          printf 'Google Chrome Stable: %s\n' "$chrome_version"
 
       - name: Run repository verification
         run: make verify
