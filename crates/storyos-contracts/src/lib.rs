@@ -8,6 +8,8 @@ mod release1_author_edit;
 mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
+mod release1_create_project;
+mod release1_create_project_artifacts;
 mod release1_snapshot;
 mod release1_snapshot_artifacts;
 mod release1_takeover;
@@ -50,6 +52,12 @@ pub use release1_author_edit_outcome::{
     GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
     GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
+};
+pub use release1_create_project::{
+    CREATE_PROJECT_CHALLENGE_METHOD, CREATE_PROJECT_CHALLENGE_PATH,
+    CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID, CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
+    CREATE_PROJECT_DIGEST_PROFILE, CREATE_PROJECT_REQUEST_SCHEMA_ID, CreateProjectChallengeRequest,
+    CreateProjectChallengeResponse, CreateProjectInput,
 };
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,

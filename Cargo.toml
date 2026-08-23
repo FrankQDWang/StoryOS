@@ -13,6 +13,7 @@ rust-version = "1.96"
 [workspace.dependencies]
 axum = "=0.8.9"
 hmac = "=0.13.0"
+jsonschema = { version = "=0.50.1", default-features = false }
 mime = "=0.3.17"
 schemars = "=1.2.2"
 serde = { version = "=1.0.229", features = ["derive"] }
