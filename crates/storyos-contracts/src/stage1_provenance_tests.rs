@@ -1,25 +1,46 @@
 use std::fs;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::repository_root;
 
 use super::{provenance_evidence, verify_provenance_evidence};
 
+static TEMP_WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
 fn temp_workspace(members: &str) -> std::path::PathBuf {
+    let now_nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    temp_workspace_at(members, now_nanos)
+}
+
+fn temp_workspace_at(members: &str, now_nanos: u128) -> std::path::PathBuf {
+    let workspace_sequence = TEMP_WORKSPACE_SEQUENCE.fetch_add(/*val*/ 1, Ordering::Relaxed);
     let dir = std::env::temp_dir().join(format!(
-        "storyos-provenance-{}-{}",
+        "storyos-provenance-{}-{now_nanos}-{workspace_sequence}",
         std::process::id(),
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .expect("clock")
-            .as_nanos()
     ));
-    fs::create_dir_all(&dir).expect("temp workspace");
+    fs::create_dir(&dir).expect("temp workspace");
     fs::write(
         dir.join("Cargo.toml"),
         format!("[workspace]\nmembers = [\n{members}\n]\n"),
     )
     .expect("temp Cargo.toml");
     dir
+}
+
+#[test]
+fn equal_clock_values_get_distinct_temp_workspaces() {
+    let now_nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+
+    let first = temp_workspace_at("", now_nanos);
+    let second = temp_workspace_at("", now_nanos);
+
+    assert_ne!(first, second);
 }
 
 #[test]

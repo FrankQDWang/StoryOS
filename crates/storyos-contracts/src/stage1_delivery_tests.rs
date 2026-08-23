@@ -122,7 +122,7 @@ fn protected_web_client_toolchain_ticket_matches_the_current_delivery_lock() {
             "issue": "https://github.com/FrankQDWang/StoryOS/issues/112",
             "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
             "title": "Complete the Stage 1 Mandatory Evidence and Handoff",
-            "issue_body_sha256": "498355b2d620814580d9eecde8f71932145e77477f201339df9bd022d3baabc2",
+            "issue_body_sha256": "e0d15d2cb1bc8e1d1760e20dff8c4c9c9781fe7eab90e8c7b98aab7a7d47517c",
             "blocked_by": ["https://github.com/FrankQDWang/StoryOS/issues/209"],
             "evidence_role": "acceptance-handoff",
             "responsibility": "assemble the mandatory Stage 1 evidence and handoff",
@@ -152,7 +152,7 @@ fn stage1_handoff_delivery_lock_matches_the_composed_main() {
             "baseline_tree": contract["baseline_tree"],
         }),
         json!({
-            "revision": "stage1-ticketed-delivery-2026-08-20-v20",
+            "revision": "stage1-ticketed-delivery-2026-08-23-v21",
             "baseline_commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
             "baseline_tree": "6d1f5830978379140c51ee7840c488a216c1ba4d",
         })
