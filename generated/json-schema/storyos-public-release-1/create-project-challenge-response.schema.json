@@ -1,0 +1,65 @@
+{
+  "$defs": {
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "const": "storyos.command.createProject.jcs.v1",
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.challenge.create-project-anti-forgery-challenge.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "canonical_command_digest": {
+      "$ref": "#/$defs/DigestValue"
+    },
+    "expires_at": {
+      "format": "date-time",
+      "type": "string"
+    },
+    "limit_profile_revision": {
+      "const": "storyos.foundation.absolute.v1",
+      "type": "string"
+    },
+    "nonce": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "prospective_project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "prospective_project_id",
+    "canonical_command_digest",
+    "nonce",
+    "expires_at",
+    "limit_profile_revision"
+  ],
+  "title": "StoryOS Create Project Challenge Response",
+  "type": "object"
+}

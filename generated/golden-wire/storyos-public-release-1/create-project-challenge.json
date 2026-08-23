@@ -1,0 +1,11 @@
+{
+  "canonical_command_digest": {
+    "algorithm": "sha256",
+    "profile": "storyos.command.createProject.jcs.v1",
+    "value_hex_lowercase": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  "expires_at": "2026-08-23T08:05:00.000Z",
+  "limit_profile_revision": "storyos.foundation.absolute.v1",
+  "nonce": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "prospective_project_id": "018f0000-0000-7001-8000-000000000201"
+}

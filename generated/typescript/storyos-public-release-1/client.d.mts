@@ -37,6 +37,12 @@ export type CreateEditorSessionResponse = { schema_id: string, correlation_id: s
 
 export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, };
 
+export type CreateProjectInput = { title: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type CreateProjectChallengeRequest = { command_schema: string, create_project_input: CreateProjectInput, idempotency_key: string, };
+
+export type CreateProjectChallengeResponse = { prospective_project_id: string, canonical_command_digest: DigestValue, nonce: string, expires_at: string, limit_profile_revision: string, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -112,6 +118,7 @@ export declare function createProjectCommandChallenge(options: StoryOSQueryOptio
 export declare function digestCreateEditorSession(request: CreateEditorSessionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
+export declare function createProjectChallenge(options: StoryOSQueryOptions & { request: CreateProjectChallengeRequest }): Promise<CreateProjectChallengeResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

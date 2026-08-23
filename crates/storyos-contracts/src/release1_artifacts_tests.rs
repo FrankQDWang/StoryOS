@@ -436,6 +436,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         CHAPTER_RESPONSE_SCHEMA_PATH,
         CHALLENGE_REQUEST_SCHEMA_PATH,
         CHALLENGE_RESPONSE_SCHEMA_PATH,
+        crate::release1_create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH,
+        crate::release1_create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
@@ -510,7 +512,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v5"
+        "storyos.typescript-client.release-1.v6"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -624,7 +626,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v5\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v6\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])
