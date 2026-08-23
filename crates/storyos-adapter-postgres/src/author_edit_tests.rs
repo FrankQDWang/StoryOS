@@ -126,7 +126,7 @@ pub(super) fn author_command(
     command
 }
 
-fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
+pub(super) fn bind_canonical_payload(command: &mut ApplyAuthorEditCommand) {
     let author_edit_units = command
         .author_edit_units
         .iter()

@@ -18,27 +18,20 @@ pub(super) async fn persist_author_edit_settlement(
 ) -> Result<AuthorEditSettlement, AuthorEditError> {
     let prepared = match core_result {
         ApplyAuthorEditResult::AuthoritativeApplied { body } => {
-            client
-                .execute(
-                    "INSERT INTO storyos.scope_counters (owner_user_id, project_id)
-                     VALUES ($1::text::uuid, $2::text::uuid) ON CONFLICT DO NOTHING",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                    ],
-                )
-                .await
-                .map_err(author_edit_database_error)?;
             let counter_row = client
                 .query_one(
-                    "UPDATE storyos.scope_counters
-                        SET author_action_sequence = author_action_sequence + 1,
-                            authoritative_commit_sequence = authoritative_commit_sequence + 1,
-                            project_activity_position = project_activity_position + 1
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                  RETURNING author_action_sequence::text,
-                            authoritative_commit_sequence::text,
-                            project_activity_position::text",
+                    "INSERT INTO storyos.scope_counters AS counters
+                       (owner_user_id, project_id, author_action_sequence,
+                        authoritative_commit_sequence, project_activity_position)
+                     VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
+                     ON CONFLICT (owner_user_id, project_id)
+                     DO UPDATE SET
+                       author_action_sequence = counters.author_action_sequence + 1,
+                       authoritative_commit_sequence = counters.authoritative_commit_sequence + 1,
+                       project_activity_position = counters.project_activity_position + 1
+                     RETURNING counters.author_action_sequence::text,
+                               counters.authoritative_commit_sequence::text,
+                               counters.project_activity_position::text",
                     &[
                         &command.project_scope.owner_user_id.as_ref(),
                         &command.project_scope.project_id.as_ref(),
