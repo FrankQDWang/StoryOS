@@ -389,3 +389,7 @@ pub(crate) mod tests;
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
 mod outcome_unknown_tests;
+
+#[cfg(test)]
+#[path = "author_edit_counter_tests.rs"]
+mod counter_tests;
