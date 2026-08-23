@@ -443,10 +443,10 @@ export async function validateJournalSnapshot(
   return { ...snapshot, bodyBySequence, covered };
 }
 
-export async function rebuildPendingProjection(
+function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
-): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  snapshot: ValidatedJournalSnapshot,
+): PendingEditProjection {
   const appliedSequences = new Set<number>();
   let hasAppliedSettlement = false;
   let hasZeroAuthoritySettlement = false;
@@ -476,18 +476,26 @@ export async function rebuildPendingProjection(
   };
 }
 
+export async function rebuildPendingProjection(
+  workspace: EditorWorkspace,
+): Promise<PendingEditProjection> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  return pendingProjectionFromSnapshot(workspace, snapshot);
+}
+
 export async function persistReplaceSelection(
   workspace: EditorWorkspace,
   edit: ReplaceSelectionEdit,
   cryptoImpl: Crypto = globalThis.crypto,
-) {
+): Promise<PendingEditProjection> {
   if (workspace.partition.disposition !== "current_writer_open") {
     throw new Error("Editor Session is read only");
   }
   const createdAt = edit.createdAt ?? new Date().toISOString();
   const inputOrigin = edit.inputOrigin ?? "typing";
   const undoGroupId = edit.undoGroupId ?? createJournalUuid(cryptoImpl);
-  const projection = await rebuildPendingProjection(workspace);
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const expectedBody = replaceSelection(projection.body, {
     kind: "replace_selection", from: edit.from, to: edit.to, text: edit.text,
   });
@@ -528,12 +536,13 @@ export async function persistReplaceSelection(
   const metadata = transaction.objectStore("metadata");
   const intents = transaction.objectStore("intents");
   const partitionId = workspace.partition.journal_partition_id;
-  const [schemaValue, partition, currentValue, activeBaseValue, durableRecordsValue,
-    chainsValue, groupsValue] =
+  const [schemaValue, partition, currentValue, watermarkValue, activeBaseValue,
+    durableRecordsValue, chainsValue, groupsValue, storedFencesValue] =
     await Promise.all([
       requestResult(metadata.get("schema")),
       requestResult(transaction.objectStore("partitions").get(partitionId)),
       requestResult(metadata.get("local_intent_sequence")),
+      requestResult(metadata.get(`durable_high_watermark:${partitionId}`)),
       requestResult(metadata.get(`active_base:${partitionId}`)),
       requestResult(intents.index("partition")
         .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
@@ -541,12 +550,31 @@ export async function persistReplaceSelection(
         .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
       requestResult(transaction.objectStore("submission_groups").index("partition")
         .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
+      requestResult(metadata.get(`collection_fences:${partitionId}`)),
     ]);
   const schema = schemaValue as { version?: unknown } | undefined;
   const activeBase = activeBaseValue as { value?: unknown } | undefined;
+  const durableWatermark = watermarkValue as JournalSnapshot["watermark"];
   const durableRecords = durableRecordsValue as JournalIntentRecord[];
   const chains = chainsValue as JournalPayloadChain[];
   const groups = groupsValue as JournalSubmissionGroup[];
+  const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
+  const fences = storedFences?.value ?? [];
+  durableRecords.sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
+  groups.sort((left, right) => left.covered_sequence_range.first
+    - right.covered_sequence_range.first);
+  const current = currentValue as { value?: number } | undefined;
+  const currentSequence = current?.value ?? 0;
+  if (currentSequence !== (snapshot.watermark?.value ?? 0)
+    || JSON.stringify(durableWatermark) !== JSON.stringify(snapshot.watermark)
+    || JSON.stringify(activeBase?.value) !== JSON.stringify(snapshot.activeBase)
+    || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
+    || JSON.stringify(chains) !== JSON.stringify(snapshot.payloadChains)
+    || JSON.stringify(groups) !== JSON.stringify(snapshot.groups)
+    || JSON.stringify(fences) !== JSON.stringify(snapshot.fences)) {
+    transaction.abort();
+    throw new Error("Local Edit Journal changed before append");
+  }
   const hasUnsettledGroup = groups.some((group) => group.settlement?.kind === "unsettled");
   const coveredSequences = new Set(groups.flatMap((group) =>
     (group.ordered_coverage ?? []).map((coverage) => coverage.local_intent_sequence)));
@@ -565,8 +593,7 @@ export async function persistReplaceSelection(
     transaction.abort();
     throw new Error("Local Edit Journal requires prior group settlement");
   }
-  const current = currentValue as { value?: number } | undefined;
-  const sequence = ((current?.value ?? 0) as number) + 1;
+  const sequence = currentSequence + 1;
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(base)
@@ -638,5 +665,10 @@ export async function persistReplaceSelection(
   else transaction.objectStore("payload_chains").put(payloadChain);
   intents.add(record);
   await transactionResult(transaction);
-  return rebuildPendingProjection(workspace);
+  return {
+    body: expectedBody,
+    save_state: "saving",
+    unsettled_intent_count: projection.unsettled_intent_count + 1,
+    authoritative_revision_id: projection.authoritative_revision_id,
+  };
 }
