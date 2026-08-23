@@ -56,7 +56,6 @@ function ProjectReadyView({
         setSaveState("needs_attention");
       },
     });
-    // Attach once on mount, matching the DOM renderer in app.ts.
   }, []);
 
   return (
