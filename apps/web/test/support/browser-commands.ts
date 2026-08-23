@@ -12,11 +12,13 @@ import {
 const CLIENT_SESSION_COOKIE = "storyos_session";
 
 async function focusedApplicationFrame(context: BrowserCommandContext) {
-  const frame = await context.frame();
-  if (frame === context.page.mainFrame() || await frame.locator(":focus").count() === 0) {
-    throw new Error("the privileged input target must be inside the application frame");
+  const testFrame = await context.frame();
+  if (testFrame !== context.page.mainFrame()) {
+    for (const frame of [testFrame, ...testFrame.childFrames()]) {
+      if (await frame.locator(":focus").count() > 0) return frame;
+    }
   }
-  return frame;
+  throw new Error("the privileged input target must be inside the application frame");
 }
 
 export const storyOSBrowserCommands = {

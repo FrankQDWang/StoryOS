@@ -46,7 +46,7 @@ fn missing_production_journey_is_rejected() {
     let error = verify_provenance_evidence(&dir, &evidence)
         .expect_err("missing S1-JRN-001 journey should fail closed");
     assert!(
-        error.contains("s1-jrn-001-browser.integration.test.mjs"),
+        error.contains("browser-exact-dist/s1-jrn-001.integration.test.ts"),
         "{error}"
     );
 }
@@ -65,7 +65,7 @@ fn journey_missing_postgresql_marker_is_rejected() {
     let dir = temp_workspace(
         "  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-server\",\n",
     );
-    let journey = dir.join("apps/web/test/s1-jrn-001-browser.integration.test.mjs");
+    let journey = dir.join("apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts");
     fs::create_dir_all(journey.parent().expect("journey parent")).expect("journey dir");
     fs::write(
         &journey,

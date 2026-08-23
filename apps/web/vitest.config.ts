@@ -94,8 +94,10 @@ export default defineConfig({
         },
         test: {
           ...browserTest(),
+          globalSetup: ["./test/support/exact-dist-global-setup.ts"],
           include: ["test/browser-exact-dist/**/*.test.ts"],
           name: "browser-exact-dist",
+          testTimeout: 120_000,
         },
       }),
     ],

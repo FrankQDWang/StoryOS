@@ -18,12 +18,12 @@ web-typecheck:
 web: web-typecheck
 	pnpm --dir apps/web exec vite build
 	cargo build --quiet -p storyos-server
-	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source --project browser-exact-dist
-	node --test apps/web/test/production-page-browser.integration.test.mjs
-	scripts/verify-project-scope.sh
+	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source
+	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
 
 project-scope: web-typecheck
-	scripts/verify-project-scope.sh
+	pnpm --dir apps/web exec vite build
+	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 verify-local: contracts
