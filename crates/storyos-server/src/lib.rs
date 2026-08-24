@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 mod author_edit;
 mod author_edit_outcome;
+mod create_project_challenge;
 mod editor_session;
 mod project_command_challenge;
 mod request_origin;
@@ -29,6 +30,7 @@ use author_edit::apply_author_edit;
 use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
 };
+use create_project_challenge::create_project_challenge;
 use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
@@ -159,6 +161,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::GET_CHAPTER_PATH,
             routing::on(chapter_method, get_chapter),
+        )
+        .route(
+            contracts::CREATE_PROJECT_CHALLENGE_PATH,
+            routing::on(
+                method_filter(contracts::CREATE_PROJECT_CHALLENGE_METHOD),
+                create_project_challenge,
+            ),
         )
         .route(
             contracts::CREATE_PROJECT_COMMAND_CHALLENGE_PATH,

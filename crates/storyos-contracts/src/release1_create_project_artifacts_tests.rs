@@ -318,7 +318,7 @@ fn prospective_create_project_challenge_wire_is_generated_from_one_closed_contra
         .lines()
         .find(|line| line.starts_with("  x-storyos-implemented-slice:"))
         .expect("OpenAPI names the runtime-implemented slice");
-    assert!(!implemented_slice.contains(operation.operation_id));
+    assert!(implemented_slice.contains(operation.operation_id));
     assert!(!openapi.contains("/api/v1/projects:\n    post:\n      operationId: createProject"));
 
     let schema_catalog: serde_json::Value = serde_json::from_slice(
@@ -329,7 +329,7 @@ fn prospective_create_project_challenge_wire_is_generated_from_one_closed_contra
         .as_array()
         .expect("implemented operations must be an array");
     assert!(
-        !implemented_operations
+        implemented_operations
             .iter()
             .any(|implemented| implemented == operation.operation_id)
     );
