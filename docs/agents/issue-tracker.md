@@ -26,7 +26,7 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 These repository constraints preserve Matt ticket publication and add StoryOS review-size and serial-execution limits:
 
 - Size each ticket so its expected diff follows the current review-size and generated-artifact rules in `AGENTS.md`. Split a larger ticket before publication.
-- The published ticket graph may contain any blocking edges that reflect real dependencies. Execution is serial: claim and work exactly one unblocked ticket at a time, including when several tickets are unblocked.
+- Before publication, validate that the approved ticket graph is acyclic and that every blocking edge reflects a real dependency. Execution is serial: claim and work exactly one unblocked ticket at a time, including when several tickets are unblocked.
 
 ## Current map operations
 

@@ -113,6 +113,7 @@ use_field_init_shorthand = true
 - Write comments that explain non-obvious rationale, invariants, safety constraints, or external quirks. Do not restate the code.
 - Document a public API by its observable contract. Do not document incidental implementation details.
 - Treat changes to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as contract changes and review their breaking and migration impact explicitly.
+- Editable sources own deterministic generated artifacts. Change and stage a generated artifact with the editable source that produces it, regenerate it with the StoryOS-owned command, classify its diff separately from hand-written lines, and review the generated diff for drift.
 - Unless the change is mechanical the total number of changed lines should not exceed 800 lines.
 - For complex logic changes the size should be under 500 lines.
 - Base the staging suggestion on the actual diff, dependencies, and affected call sites.
