@@ -3,6 +3,7 @@
     "getProtocolProfile",
     "getProject",
     "getChapter",
+    "createProjectChallenge",
     "createProjectCommandChallenge",
     "createEditorSession",
     "getEditorSession",

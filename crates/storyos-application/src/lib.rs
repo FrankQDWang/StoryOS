@@ -27,6 +27,7 @@ use std::future::Future;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
+mod create_project_challenge;
 mod editor_session;
 mod snapshot;
 mod takeover;
@@ -50,6 +51,11 @@ pub use author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError, ApplyAuthorEditOutcomeReader,
     ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit,
     ReadApplyAuthorEditOutcome, get_apply_author_edit_outcome,
+};
+
+pub use create_project_challenge::{
+    CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
+    IssueCreateProjectChallenge, issue_create_project_challenge,
 };
 
 pub use editor_session::{

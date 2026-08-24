@@ -1033,6 +1033,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         GET_PROTOCOL_PROFILE.operation_id,
         GET_PROJECT.operation_id,
         GET_CHAPTER.operation_id,
+        CREATE_PROJECT_CHALLENGE.operation_id,
         CREATE_PROJECT_COMMAND_CHALLENGE.operation_id,
         CREATE_EDITOR_SESSION.operation_id,
         GET_EDITOR_SESSION.operation_id,

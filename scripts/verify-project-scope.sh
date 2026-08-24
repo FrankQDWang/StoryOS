@@ -145,7 +145,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
   -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql \
   -f /tmp/storyos-release1-bootstrap/0006_snapshot_replay.sql \
-  -f /tmp/storyos-release1-bootstrap/0007_takeover_admission_activity.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0007_takeover_admission_activity.sql \
+  -f /tmp/storyos-release1-bootstrap/0008_create_project_challenge.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -165,7 +166,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
   -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql \
   -f /tmp/storyos-release1-bootstrap/0006_snapshot_replay.sql \
-  -f /tmp/storyos-release1-bootstrap/0007_takeover_admission_activity.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0007_takeover_admission_activity.sql \
+  -f /tmp/storyos-release1-bootstrap/0008_create_project_challenge.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
@@ -203,6 +205,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP Snapshot and Activity Stream tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/snapshot-replay-http.integration.test.ts
+echo "Running HTTP createProjectChallenge tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/create-project-challenge-http.integration.test.ts
 echo "Running HTTP takeOverProjectWriter tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/takeover-http.integration.test.ts
