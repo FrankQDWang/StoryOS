@@ -345,5 +345,6 @@ export interface ProjectReadyState {
 
 export type ControlledProjectState =
   | ProtocolBlockedState
+  | ProtectedReadyState
   | ProjectBlockedState
   | ProjectReadyState;

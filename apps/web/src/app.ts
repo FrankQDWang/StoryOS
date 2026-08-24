@@ -1,4 +1,4 @@
-import { openControlledProject } from "./boot.ts";
+import { bootProtectedWebClient, openControlledProject } from "./boot.ts";
 import type {
   ControlledProjectState,
   ProjectBlockedState,
@@ -39,6 +39,8 @@ export async function loadStoryOSWebState({
   };
   const state: ControlledProjectState = projectId
     ? await openControlledProject({ baseUrl, projectId, fetchImpl, indexedDBImpl, cryptoImpl })
-    : invalidUrlState;
+    : locationImpl.pathname === "/"
+      ? await bootProtectedWebClient({ baseUrl, fetchImpl })
+      : invalidUrlState;
   return { root, state, baseUrl, fetchImpl, cryptoImpl };
 }
