@@ -20,16 +20,17 @@ GitHub shares one number space across issues and pull requests. If an ambiguous 
 
 - Publish StoryOS tickets as GitHub issues in `FrankQDWang/StoryOS`.
 - Fetch a ticket by reading its current body, labels, assignees, native dependencies, exact `main` baseline, and tracked contracts named by the body.
-- The current body plus its exact tracked-contract baseline is the execution contract. Put per-layer exact-tree verification in the PR and final `main` verification in the single Resolution.
 
-## Ticket sizing and ordering overrides
+## Ticket sizing and execution
 
-These repository rules override the general skill text when a skill reads this file:
+These repository constraints preserve Matt ticket publication and add StoryOS review-size and serial-execution limits:
 
-- Size each ticket so its expected diff stays inside the review limits in `AGENTS.md`: at most 800 changed lines, or at most 500 for complex logic changes. Split a larger ticket before you publish it.
-- The frontier is a serial chain. Work exactly one issue at a time, in dependency order. Closed blockers do not give permission to take tickets in parallel.
+- Size each ticket so its expected diff follows the current review-size and generated-artifact rules in `AGENTS.md`. Split a larger ticket before publication.
+- The published ticket graph may contain any blocking edges that reflect real dependencies. Execution is serial: claim and work exactly one unblocked ticket at a time, including when several tickets are unblocked.
 
 ## Current map operations
+
+These operations apply to Wayfinder decision tickets. Implementation tickets published by `/to-tickets` follow Matt feature delivery below.
 
 - **Current map:** [Map the StoryOS Editor-First Product and Production Delivery Contract](https://github.com/FrankQDWang/StoryOS/issues/1) is the repository's permanent design-map entry point and the sole issue labelled `wayfinder:map`.
 - **Map body:** maintain Destination, Current product contract, Current design index, Current evidence, Current planning frontier, Issue-native execution contract, and Completion gate as a living current-state view. Edit these sections in place as the product contract advances.
@@ -45,12 +46,16 @@ These repository rules override the general skill text when a skill reads this f
 - **Review:** route every newly sharp design problem to its existing owner first. When no owner exists, create one focused direct sub-issue, insert it at its exact serial position, and refresh downstream issue bodies and dependencies.
 - **Charting:** create the required issues first and wire sub-issue and blocking relations in a second pass, producing one frontier issue.
 
-## Issue-native implementation
+## Matt feature delivery
 
-- **Single current issue:** after planning closes, the current map contains exactly one open implementation issue. Its body is the complete contract for that implementation slice.
-- **Required body:** include Contract revision, exact `Baseline: main@<commit>`, stable Requirement IDs, exact Authoritative inputs, Goal, Scope, owning modules, data flow, acceptance criteria, author journey, red tests, deterministic fault points, migration and generated artifacts, final verification, PR gate, and merge gate.
-- **Execution input:** execute from the locked current implementation issue, its exact Baseline commit, the applicable `AGENTS.md` files at that commit, and the tracked files explicitly named by the issue.
-- **Contract revision:** a contract change produces a refreshed issue body, a new Baseline, a new Contract revision, and a new claim lock before implementation resumes.
-- **Completion:** merge the implementation PR into `main`, record the exact merge commit and verification evidence in the resolution comment, refresh the current map, and close the issue.
-- **Continuation:** create the next implementation issue from the resulting `main` only after its predecessor completes. The new issue becomes the map's sole open implementation issue.
-- **Audit:** closed issues preserve one current contract plus exact commits, PRs, and verification evidence for completed work. Repository history retains earlier text without making it an execution input.
+- **Route:** when Wayfinder has resolved enough decisions to describe one build specification, run `/to-spec`, then `/to-tickets`, then one fresh `/implement` context per ticket. Wayfinder decision tickets produce decisions. Implementation tickets produce deliverables.
+- **Specification:** `/to-spec` publishes the overall specification Issue as the parent. The parent owns the complete scope and acceptance contract. Its child tickets own implementation.
+- **Ticket publication:** `/to-tickets` presents the proposed tracer-bullet breakdown and blocking edges to the user before publication. Publish the approved tickets as native children of the specification Issue, add native blocking edges, and apply `ready-for-agent`.
+- **Tracer bullet:** each implementation ticket delivers one narrow, complete, independently verifiable path through the layers it needs. It must fit one fresh context and the repository review-size limits. Use an explicit expand-contract sequence only for a wide refactor that cannot keep all required tests passing as a vertical slice.
+- **Serial frontier:** publish the approved dependency graph. Claim and execute exactly one unblocked ticket at a time. Close the current ticket before claiming the next frontier ticket.
+- **Required ticket body:** include Parent, What to build, observable acceptance criteria, and native blockers. Name stable Requirement IDs, authoritative inputs, and interfaces when the specification delegates them to that ticket. Include only decision-rich code from a prototype when prose cannot state the decision precisely.
+- **Claim:** before edits, read the current ticket, parent specification, exact `main`, applicable `AGENTS.md` files, and every tracked contract named by either Issue. Assign the ticket, then add one claim comment with the Contract revision when one exists, exact `main` Baseline, and SHA-256 of the UTF-8/LF-normalized ticket body. The assignment and comment together claim the ticket.
+- **Execution contract:** the claimed ticket body, parent specification body, exact Baseline, applicable `AGENTS.md` files at that Baseline, and tracked contracts named by either Issue form the execution contract. A contract change requires an updated ticket body, current Baseline, updated Contract revision when one exists, and a new claim comment before implementation resumes.
+- **Completion:** merge the ticket PR into `main`, synchronize `main`, run complete verification, record the exact merge commit, tree, command, and result in the ticket Resolution, refresh the current map, and close the ticket.
+- **Parent completion:** after all required child tickets close, evaluate every parent user story against current `main`. Add one parent Resolution that records PASS or FAIL and linked evidence for each user story, lists the child Issues and PRs, final commit and tree, complete verification command and result, and retained out-of-scope items. Close the specification Issue when every user story passes.
+- **Audit:** closed tickets preserve their current contract plus exact commits, PRs, and verification evidence. Repository history retains earlier text without making it an execution input.

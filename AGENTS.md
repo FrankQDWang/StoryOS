@@ -9,29 +9,23 @@
 - Preserve unrelated user changes. Do not rewrite, discard, or clean them up as part of another task.
 - Write all repository artifacts in ASD-STE100 Simplified Technical English: code, comments, documentation, commit messages, GitHub Issues, and pull requests. Talk to the user in Simplified Chinese. Always read `CONTEXT.md` files, and use their ubiquitous language.
 
-## GitHub Issue and stacked-PR execution
+## GitHub Issue and pull-request execution
 
 ### Single-main development policy
 
 - Develop only on the checked-out local `main` branch. Do not create Git worktrees or local feature branches.
 - Commit on local `main`, but never push implementation commits directly to `origin/main`. Push the required commit range from local `main` to a temporary remote feature branch, open a pull request, merge only after its required checks and reviews pass, then delete that remote branch.
 
-- StoryOS works directly from GitHub Issues. The locked current Issue body, its Claim lock, exact baseline, applicable `AGENTS.md` files, and the tracked contracts explicitly linked by the Issue form the execution contract.
-- Keep one implementation Issue and one concentrated task context. When the implementation is larger than the review-size limits in Tests and change review, decompose it into one coherent GitHub-native stacked-PR chain within that same Issue rather than creating finer Issues solely to reduce PR size.
-- A PR stack is an implementation and review decomposition only. It does not create new scope, a second specification, parallel execution ownership, or permission to claim later-layer behavior early.
-- Git branches, commits, PR bases, reviews, checks, and merge state in GitHub are the authoritative representation of the stack.
-- Create the first temporary remote stack branch from the Issue's locked `main` baseline. Create every later temporary remote branch from the immediately preceding stack branch, and target each PR at that predecessor until it merges.
-- Every layer must name its stack position and predecessor, link the full Issue title, and use `Part of #<issue>` rather than an auto-closing keyword. Do not let an intermediate PR close the owning Issue.
-- Apply the hand-written, non-mechanical line limits in Tests and change review to each PR layer. Classify deterministic generated artifacts separately, keep their editable source in the owning earlier layer, and review generated drift explicitly.
-- Require independent read-only review and the layer-appropriate targeted checks for every PR. A lower layer must not claim upper-layer acceptance, and an upper layer must not hide a lower-layer contract, security, migration, or recovery defect.
-- Merge the stack bottom-up with ordinary merge commits. Do not squash-merge or rebase-merge a stack layer unless the locked Issue explicitly overrides this rule. After each merge, refresh `main`, then recheck the next PR's base, exact remaining diff, commit ancestry, review validity, and fresh required checks; a pre-retarget green check is not fresh evidence.
-- Close the Issue only after every stack layer is merged, the final composed state on current `main` passes the complete non-mutating verification, and the single tracker-compliant Resolution records all merged PRs, the final commit/tree, and retained evidence. Only then create or claim the next serial implementation Issue.
+- Follow `docs/agents/issue-tracker.md` as the single source for StoryOS Matt feature delivery, GitHub Issue publication, ticket contracts, native sub-issue and blocking-edge operations, serial execution, claims, and resolutions.
+- Create each temporary remote feature branch from the ticket's current `main` baseline. Each PR must link the full ticket title and use `Part of #<issue>` so the tracker-compliant Resolution can close the ticket after merged-main verification.
+- Require independent read-only Standards and Spec review plus the ticket-appropriate targeted checks for every PR. One ticket cannot claim acceptance owned by another ticket or hide a contract, security, migration, or recovery defect.
+- Merge each PR with an ordinary merge commit unless the ticket explicitly requires another method.
 
 ### Verification evidence
 
 - The required GitHub `verify` check is a pull-request synthetic-merge sentinel. It does not replace complete local verification.
-- Before merging each PR layer, run `make verify` on a tree that matches the required `verify` synthetic-merge tree. Record the head, tree, command, PASS result, and clean worktree in one PR comment.
-- A new commit invalidates that evidence. A retarget always requires a fresh `verify`; rerun local verification when the candidate tree changes. After the stack merges, synchronize `main`, rerun `make verify`, and record the final commit, tree, and evidence in the Resolution.
+- Before merging each PR, run `make verify` on a tree that matches the required `verify` synthetic-merge tree. Record the head, tree, command, PASS result, and clean worktree in one PR comment.
+- A new commit or changed base invalidates that evidence. Obtain a fresh synthetic-merge tree and rerun local verification when the candidate tree changes. After the ticket merges, synchronize `main`, rerun `make verify`, and record the final commit, tree, and evidence in the ticket Resolution.
 
 ## Reference source policy
 
