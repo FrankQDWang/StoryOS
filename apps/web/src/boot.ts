@@ -136,7 +136,9 @@ export async function openControlledProject(options: {
       || scope?.project_id !== projectId
       || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
     const project = projectValue as GetProjectResponse;
-    if (project.project.open.kind === "empty") throw new Error("Project has no current Chapter");
+    if (project.project.open.kind === "empty") {
+      return { kind: "empty-project-ready", profile: boot.profile, project };
+    }
     const chapterId = project.project.open.current_chapter_id;
     const chapterValue: unknown = await getChapter({ ...queryOptions, projectId, chapterId });
     const chapterView = chapterValue as {

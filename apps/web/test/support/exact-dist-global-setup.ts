@@ -37,8 +37,12 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           WHERE head.owner_user_id = '${USER_A}'::uuid
             AND head.project_id = '${PROJECT_A}'::uuid
             AND head.manuscript_object_id = '${CHAPTER}'::uuid),
-        'cross_scope_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
-          WHERE owner_user_id <> '${USER_A}'::uuid OR project_id <> '${PROJECT_A}'::uuid)
+        'foreign_user_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
+          WHERE owner_user_id <> '${USER_A}'::uuid),
+        'non_fixture_non_create_project_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
+          WHERE owner_user_id = '${USER_A}'::uuid
+            AND project_id <> '${PROJECT_A}'::uuid
+            AND command_kind <> 'createProject')
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {
@@ -47,7 +51,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       author_action_count: 4,
       project_activity_position: "4",
       manuscript_body: "Authoritative A Hello中文 EN!",
-      cross_scope_receipt_count: 0,
+      foreign_user_receipt_count: 0,
+      non_fixture_non_create_project_receipt_count: 0,
     });
   };
 }
