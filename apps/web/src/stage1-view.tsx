@@ -4,7 +4,9 @@ import { createRoot } from "react-dom/client";
 import {
   createProject,
   createProjectChallenge,
+  listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject } from "./boot.ts";
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
@@ -144,6 +146,66 @@ async function createEmptyProject(
   }
 }
 
+function ProtectedReadyView({
+  baseUrl, fetchImpl, cryptoImpl, setCurrent,
+}: Omit<Stage1ViewProps, "state"> & { setCurrent: (state: ControlledProjectState) => void }) {
+  const [library, setLibrary] = useState<ProjectListItem[] | null>(null);
+  useEffect(() => {
+    void listProjects({ baseUrl, fetchImpl })
+      .then((response) => {
+        setLibrary(response.projects);
+      })
+      .catch(() => {
+        setLibrary([]);
+      });
+  }, [baseUrl, fetchImpl]);
+  return (
+    <section>
+      <h1>StoryOS</h1>
+      <p>本地写作已就绪。</p>
+      {library !== null && library.length > 0 ? (
+        <ul>
+          {library.map((item) => (
+            <li key={item.project_scope.project_id}>
+              <button
+                type="button"
+                data-project-id={item.project_scope.project_id}
+                data-open={item.open.kind}
+                data-lifecycle={item.lifecycle.kind}
+                data-revision={item.revision}
+                onClick={() => {
+                  void openControlledProject({
+                    baseUrl,
+                    projectId: item.project_scope.project_id,
+                    fetchImpl,
+                    cryptoImpl,
+                  }).then(setCurrent);
+                }}
+              >
+                {item.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const title = String(new FormData(event.currentTarget).get("title") ?? "").trim();
+          if (!title) return;
+          void createEmptyProject(title, { baseUrl, fetchImpl, cryptoImpl }).then(setCurrent);
+        }}
+      >
+        <label>
+          项目标题
+          <input name="title" required maxLength={1024} />
+        </label>
+        <button type="submit">创建项目</button>
+      </form>
+    </section>
+  );
+}
+
 function Stage1View({
   state, baseUrl, fetchImpl, cryptoImpl, setBootState,
 }: Stage1ViewProps & { setBootState: (kind: string) => void }) {
@@ -169,24 +231,12 @@ function Stage1View({
   }
   if (current.kind === "protected-ready") {
     return (
-      <section>
-        <h1>StoryOS</h1>
-        <p>本地写作已就绪。</p>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            const title = String(new FormData(event.currentTarget).get("title") ?? "").trim();
-            if (!title) return;
-            void createEmptyProject(title, { baseUrl, fetchImpl, cryptoImpl }).then(setCurrent);
-          }}
-        >
-          <label>
-            项目标题
-            <input name="title" required maxLength={1024} />
-          </label>
-          <button type="submit">创建项目</button>
-        </form>
-      </section>
+      <ProtectedReadyView
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+        setCurrent={setCurrent}
+      />
     );
   }
   return (
