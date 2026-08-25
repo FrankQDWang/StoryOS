@@ -30,6 +30,7 @@ mod author_edit_outcome;
 mod create_project;
 mod create_project_challenge;
 mod editor_session;
+mod list_projects;
 mod snapshot;
 mod takeover;
 
@@ -62,6 +63,7 @@ pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
+pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
 
 pub use editor_session::{
     EditorClientBinding, EditorReadOnlyReason, EditorSession, EditorSessionError, EditorSessionId,
