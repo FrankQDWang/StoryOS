@@ -33,6 +33,7 @@ pub(super) async fn list_projects(
                 title: item.title,
                 lifecycle: match item.lifecycle {
                     ProjectLifecycle::Active => contracts::ProjectLifecycleState::Active,
+                    ProjectLifecycle::Archived => contracts::ProjectLifecycleState::Archived,
                 },
                 revision: item.revision.to_string(),
                 open: match item.current_chapter_id {

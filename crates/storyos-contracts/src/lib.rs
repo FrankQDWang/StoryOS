@@ -1,8 +1,12 @@
 //! StoryOS-owned source for public contract shapes and deterministic generated artifacts.
 
+#![recursion_limit = "256"]
+
 mod digest;
 mod project_command_targets;
 mod release1;
+mod release1_archive_project;
+mod release1_archive_project_artifacts;
 mod release1_artifacts;
 mod release1_author_edit;
 mod release1_author_edit_artifacts;
@@ -40,6 +44,12 @@ pub use release1::{
     GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetEditorSessionResponse, GetProjectResponse,
     LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
     Release1CompatibilityIdentity, Release1ProtocolProfile, StoryOSProblem, project_command_kind,
+};
+pub use release1_archive_project::{
+    ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,
+    ARCHIVE_PROJECT_REQUEST_SCHEMA_ID, ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID,
+    ArchiveProjectConflictReason, ArchiveProjectEffect, ArchiveProjectInput,
+    ArchiveProjectNoEffectReason, ArchiveProjectRequest, ArchiveProjectResponse,
 };
 pub use release1_artifacts::{
     check_release1_artifacts, release1_protocol_profile, write_release1_artifacts,

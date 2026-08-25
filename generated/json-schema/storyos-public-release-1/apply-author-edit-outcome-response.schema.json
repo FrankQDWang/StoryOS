@@ -426,7 +426,8 @@
         "applyAuthorEdit",
         "takeOverProjectWriter",
         "createProject",
-        "updateProject"
+        "updateProject",
+        "archiveProject"
       ],
       "type": "string"
     },
