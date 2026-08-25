@@ -10,6 +10,8 @@ mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
 mod release1_create_project;
 mod release1_create_project_artifacts;
+mod release1_list_projects;
+mod release1_list_projects_artifacts;
 mod release1_snapshot;
 mod release1_snapshot_artifacts;
 mod release1_takeover;
@@ -60,6 +62,10 @@ pub use release1_create_project::{
     CREATE_PROJECT_REQUEST_SCHEMA_ID, CREATE_PROJECT_RESPONSE_SCHEMA_ID,
     CreateProjectChallengeRequest, CreateProjectChallengeResponse, CreateProjectInput,
     CreateProjectRequest, CreateProjectResponse,
+};
+pub use release1_list_projects::{
+    LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,
+    LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
 };
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,

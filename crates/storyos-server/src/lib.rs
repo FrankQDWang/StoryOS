@@ -22,6 +22,7 @@ mod author_edit_outcome;
 mod create_project;
 mod create_project_challenge;
 mod editor_session;
+mod list_projects;
 mod project_command_challenge;
 mod request_origin;
 mod snapshot;
@@ -34,6 +35,7 @@ use author_edit_outcome::{
 use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use editor_session::{create_editor_session, get_editor_session};
+use list_projects::list_projects;
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
@@ -174,6 +176,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::CREATE_PROJECT_PATH,
             routing::on(
+                method_filter(contracts::LIST_PROJECTS_METHOD),
+                list_projects,
+            )
+            .on(
                 method_filter(contracts::CREATE_PROJECT_METHOD),
                 create_project,
             ),

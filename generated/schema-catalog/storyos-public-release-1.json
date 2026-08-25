@@ -5,6 +5,7 @@
     "getChapter",
     "createProjectChallenge",
     "createProject",
+    "listProjects",
     "createProjectCommandChallenge",
     "createEditorSession",
     "getEditorSession",
@@ -76,6 +77,16 @@
       "path": "generated/json-schema/storyos-public-release-1/create-project-response.schema.json",
       "schema_id": "storyos.command.create-project.response.v1",
       "sha256": "sha256:6a59baffb408806d3130bb73295b44647ce2c15c8e090b95ccafab8fcd756f19"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/project-list-request.schema.json",
+      "schema_id": "storyos.query.project-list.request.v1",
+      "sha256": "sha256:4b297c9da4a98bbb95c510b965536010eb2e450e35f20cdbeaf8ecc397d327fc"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/project-list-response.schema.json",
+      "schema_id": "storyos.query.project-list.response.v1",
+      "sha256": "sha256:bb5887ecdb8a4f3b68ad7f8813d0d9013a83e74746fa0b46f6483fc065505baa"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",

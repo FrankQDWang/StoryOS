@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:3dcc46a3f66cd0110953878dbb11e7e5bc21193274d5becbce595671242f46ad",
+  "corpus_digest": "sha256:9ad92413efc260b5ed2a7ea39de873414e739ad79ac931e3f0aa960620c01a81",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -21,6 +21,9 @@
       "generated/golden-wire/storyos-public-release-1/create-project.json",
       "generated/golden-wire/storyos-public-release-1/create-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-project.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/list-projects.json",
+      "generated/golden-wire/storyos-public-release-1/list-projects.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -152,6 +155,24 @@
       "fixture_id": "storyos.golden.createProject.boundary.v1",
       "operation_id": "createProject",
       "path": "generated/golden-wire/storyos-public-release-1/create-project.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.listProjects.positive.v1",
+      "operation_id": "listProjects",
+      "path": "generated/golden-wire/storyos-public-release-1/list-projects.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.listProjects.invalid.v1",
+      "operation_id": "listProjects",
+      "path": "generated/golden-wire/storyos-public-release-1/list-projects.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.listProjects.boundary.v1",
+      "operation_id": "listProjects",
+      "path": "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json"
     },
     {
       "classification": "positive",

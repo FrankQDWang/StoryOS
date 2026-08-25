@@ -49,6 +49,12 @@ export type CreateProjectRequest = { command_schema: string, prospective_project
 
 export type CreateProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, };
 
+export type ProjectLifecycleState = { "kind": "active" };
+
+export type ProjectListItem = { project_scope: ProjectScope, title: string, lifecycle: ProjectLifecycleState, revision: string, open: ProjectOpenState, };
+
+export type ListProjectsResponse = { schema_id: string, correlation_id: string, owner_user_id: string, projects: Array<ProjectListItem>, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -126,6 +132,7 @@ export declare function createEditorSession(options: StoryOSQueryOptions & { pro
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
 export declare function createProjectChallenge(options: StoryOSQueryOptions & { request: CreateProjectChallengeRequest }): Promise<CreateProjectChallengeResponse>;
 export declare function createProject(options: StoryOSQueryOptions & { request: CreateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateProjectResponse>;
+export declare function listProjects(options: StoryOSQueryOptions): Promise<ListProjectsResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;
