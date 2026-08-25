@@ -137,14 +137,19 @@ fn command_openapi() -> String {
     let responses = response_block(CREATE_PROJECT.responses, response_schema, &[200]);
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Create one empty Project\n",
+            "  {}:\n{}",
+            "    post:\n      operationId: {}\n      summary: Create one empty Project\n",
             "      parameters:\n        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: X-StoryOS-Anti-Forgery\n          in: header\n          required: true\n          schema:\n            type: string\n            pattern: '^[0-9a-f]{{64}}$'\n",
             "      requestBody:\n        required: true\n        content:\n          application/json:\n            schema:\n              $ref: '../{}'\n",
             "      responses:\n{}",
         ),
-        CREATE_PROJECT.path, CREATE_PROJECT.operation_id, request_schema, responses,
+        CREATE_PROJECT.path,
+        crate::release1_list_projects_artifacts::method_openapi(),
+        CREATE_PROJECT.operation_id,
+        request_schema,
+        responses,
     )
 }
 
