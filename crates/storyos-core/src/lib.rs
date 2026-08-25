@@ -2,7 +2,7 @@
 
 mod create_project;
 
-pub use create_project::{CreateProjectResult, create_project};
+pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyAuthorEdit {
