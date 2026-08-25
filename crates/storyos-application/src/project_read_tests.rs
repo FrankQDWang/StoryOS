@@ -13,7 +13,7 @@ impl ProjectReader for FixtureReader {
         Ok(Some(Project {
             project_id: ProjectId::new("project-a"),
             title: "Project A".to_owned(),
-            current_chapter_id: ChapterId::new("chapter-current"),
+            current_chapter_id: Some(ChapterId::new("chapter-current")),
         }))
     }
 

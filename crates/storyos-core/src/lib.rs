@@ -1,4 +1,8 @@
-//! Pure StoryOS Core classification for the bounded Stage 1 Author Edit.
+//! Pure StoryOS Core classification for bounded author commands.
+
+mod create_project;
+
+pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyAuthorEdit {
@@ -174,3 +178,7 @@ fn utf16_offset_to_byte(value: &str, wanted: u32) -> Option<usize> {
 #[cfg(test)]
 #[path = "apply_author_edit_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "create_project_tests.rs"]
+mod create_project_tests;

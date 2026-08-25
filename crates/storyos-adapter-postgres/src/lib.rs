@@ -526,7 +526,7 @@ impl ProjectReader for PostgresProjectReader {
             .map(|row| Project {
                 project_id: ProjectId::new(row.get::<_, String>(0)),
                 title: row.get(1),
-                current_chapter_id: ChapterId::new(row.get::<_, String>(2)),
+                current_chapter_id: row.get::<_, Option<String>>(2).map(ChapterId::new),
             });
         transaction.commit().await.map_err(read_error)?;
         Ok(project)

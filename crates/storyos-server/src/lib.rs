@@ -243,7 +243,12 @@ async fn get_project(
         project: contracts::ControlledProject {
             project_id: project.project_id.as_ref().to_owned(),
             title: project.title,
-            current_chapter_id: project.current_chapter_id.as_ref().to_owned(),
+            current_chapter_id: project
+                .current_chapter_id
+                .as_ref()
+                .ok_or_else(resource_unavailable)?
+                .as_ref()
+                .to_owned(),
         },
     }))
 }
