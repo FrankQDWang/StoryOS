@@ -1,7 +1,7 @@
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
-    Chapter, ChapterId, Project, ProjectId, ProjectReader, ProjectScope, RevisionId, UserId,
-    open_current_chapter, open_project,
+    Chapter, ChapterId, Project, ProjectId, ProjectLifecycle, ProjectListItem, ProjectReader,
+    ProjectScope, RevisionId, UserId, list_owned_projects, open_current_chapter, open_project,
 };
 use tokio_postgres::NoTls;
 
@@ -267,4 +267,156 @@ async fn editor_session_tables_force_scope_and_composite_references() {
         ]
         .map(|name| (name.to_owned(), true, true))
     );
+}
+
+const EMPTY_A: &str = "018f0000-0000-7001-8000-000000000012";
+
+async fn project_titles(transaction: &tokio_postgres::Transaction<'_>) -> Vec<String> {
+    transaction
+        .query("SELECT title FROM storyos.projects ORDER BY title", &[])
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|row| row.get::<_, String>(0))
+        .collect()
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn user_level_list_is_isolated_from_exact_project_scope_reads() {
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let reader = PostgresProjectReader::new(&runtime_url);
+    let owner_a = UserId::new(USER_A);
+    let owner_b = UserId::new(USER_B);
+    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        admin_connection.await.unwrap();
+    });
+    admin
+        .execute(
+            "INSERT INTO storyos.projects (owner_user_id, project_id, title, current_chapter_id)
+             VALUES ($1::text::uuid, $2::text::uuid, 'Empty Novel', NULL)",
+            &[&USER_A, &EMPTY_A],
+        )
+        .await
+        .unwrap();
+
+    let listed_a = list_owned_projects(&reader, &owner_a).await.unwrap();
+    assert_eq!(
+        listed_a,
+        vec![
+            ProjectListItem {
+                project_scope: ProjectScope::new(owner_a.clone(), ProjectId::new(PROJECT_A)),
+                title: "Project A".to_owned(),
+                lifecycle: ProjectLifecycle::Active,
+                revision: 1,
+                current_chapter_id: Some(ChapterId::new(CHAPTER_A)),
+            },
+            ProjectListItem {
+                project_scope: ProjectScope::new(owner_a.clone(), ProjectId::new(EMPTY_A)),
+                title: "Empty Novel".to_owned(),
+                lifecycle: ProjectLifecycle::Active,
+                revision: 1,
+                current_chapter_id: None,
+            },
+        ]
+    );
+    assert_eq!(
+        list_owned_projects(&reader, &owner_b).await.unwrap(),
+        vec![ProjectListItem {
+            project_scope: ProjectScope::new(owner_b.clone(), ProjectId::new(PROJECT_B)),
+            title: "Project B secret".to_owned(),
+            lifecycle: ProjectLifecycle::Active,
+            revision: 1,
+            current_chapter_id: Some(ChapterId::new("018f0000-0000-7001-8000-000000000103")),
+        }]
+    );
+    assert_eq!(
+        reader
+            .read_project(&ProjectScope::new(
+                owner_a.clone(),
+                ProjectId::new(PROJECT_B),
+            ))
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        open_project(
+            &reader,
+            &ProjectScope::new(owner_a.clone(), ProjectId::new(EMPTY_A)),
+        )
+        .await
+        .unwrap(),
+        Some(Project {
+            project_id: ProjectId::new(EMPTY_A),
+            title: "Empty Novel".to_owned(),
+            current_chapter_id: None,
+        })
+    );
+
+    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        connection.await.unwrap();
+    });
+
+    let user_list = runtime.transaction().await.unwrap();
+    user_list
+        .execute(
+            "SELECT set_config('storyos.scope_mode', 'user', true),
+                    set_config('storyos.user_id', $1, true)",
+            &[&USER_A],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        project_titles(&user_list).await,
+        vec!["Empty Novel".to_owned(), "Project A".to_owned()]
+    );
+    let hidden_objects = user_list
+        .query_one("SELECT count(*) FROM storyos.manuscript_objects", &[])
+        .await
+        .unwrap()
+        .get::<_, i64>(0);
+    assert_eq!(hidden_objects, 0);
+    user_list.commit().await.unwrap();
+
+    let retained = runtime.transaction().await.unwrap();
+    assert_eq!(project_titles(&retained).await, Vec::<String>::new());
+    retained.rollback().await.unwrap();
+
+    let missing = runtime.transaction().await.unwrap();
+    assert_eq!(project_titles(&missing).await, Vec::<String>::new());
+    missing.rollback().await.unwrap();
+
+    let partial = runtime.transaction().await.unwrap();
+    partial
+        .execute("SELECT set_config('storyos.user_id', $1, true)", &[&USER_A])
+        .await
+        .unwrap();
+    assert_eq!(project_titles(&partial).await, Vec::<String>::new());
+    partial.rollback().await.unwrap();
+
+    let malformed = runtime.transaction().await.unwrap();
+    malformed
+        .execute(
+            "SELECT set_config('storyos.scope_mode', 'user', true),
+                    set_config('storyos.user_id', 'not-a-uuid', true)",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(project_titles(&malformed).await, Vec::<String>::new());
+    malformed.rollback().await.unwrap();
+
+    admin
+        .execute(
+            "DELETE FROM storyos.projects WHERE project_id = $1::text::uuid",
+            &[&EMPTY_A],
+        )
+        .await
+        .unwrap();
 }
