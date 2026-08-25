@@ -28,6 +28,11 @@ mod create_project_tests;
 #[path = "update_project_tests.rs"]
 mod update_project_tests;
 
+#[cfg(test)]
+#[path = "archive_project_tests.rs"]
+mod archive_project_tests;
+
+mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;

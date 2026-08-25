@@ -1,50 +1,51 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
-    UpdateProjectSettlementEffect, UpdateProjectStore,
+    ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
+    ArchiveProjectSettlementEffect, ArchiveProjectStore, AuthorCommandAdmissionIds,
+    ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
-    ProjectPresence, UpdateProject as CoreUpdateProject, UpdateProjectResult, update_project,
+    ArchiveProject as CoreArchiveProject, ArchiveProjectResult, ProjectLifecycle, ProjectPresence,
+    archive_project,
 };
 use uuid::Uuid;
 
 use super::*;
 
-impl UpdateProjectStore for PostgresProjectReader {
-    async fn update_project(
+impl ArchiveProjectStore for PostgresProjectReader {
+    async fn archive_project(
         &self,
-        command: &UpdateProjectCommand,
-    ) -> Result<UpdateProjectSettlement, UpdateProjectError> {
+        command: &ArchiveProjectCommand,
+    ) -> Result<ArchiveProjectSettlement, ArchiveProjectError> {
         let mut transaction = self
             .begin_serializable_project_command_transaction(&command.project_scope)
             .await
-            .map_err(update_project_challenge_error)?;
+            .map_err(archive_project_challenge_error)?;
         let challenge_use = transaction
             .consume(&command.challenge_binding, &command.nonce_digest)
             .await
-            .map_err(update_project_challenge_error)?;
+            .map_err(archive_project_challenge_error)?;
         match challenge_use {
             ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
                 transaction
                     .rollback()
                     .await
-                    .map_err(update_project_challenge_error)?;
-                read_update_project_settlement(self, command, &result_reference).await
+                    .map_err(archive_project_challenge_error)?;
+                read_archive_project_settlement(self, command, &result_reference).await
             }
             ProjectCommandChallengeUse::ExactRetryInProgress => {
                 transaction
                     .rollback()
                     .await
-                    .map_err(update_project_challenge_error)?;
-                Err(UpdateProjectError::BindingConflict)
+                    .map_err(archive_project_challenge_error)?;
+                Err(ArchiveProjectError::BindingConflict)
             }
             ProjectCommandChallengeUse::FirstUse => {
-                match persist_update_project(&transaction.client, command).await {
+                match persist_archive_project(&transaction.client, command).await {
                     Ok(settlement) => {
                         transaction
                             .commit()
                             .await
-                            .map_err(update_project_challenge_error)?;
+                            .map_err(archive_project_challenge_error)?;
                         Ok(settlement)
                     }
                     Err(error) => {
@@ -57,13 +58,13 @@ impl UpdateProjectStore for PostgresProjectReader {
     }
 }
 
-async fn persist_update_project(
+async fn persist_archive_project(
     client: &tokio_postgres::Client,
-    command: &UpdateProjectCommand,
-) -> Result<UpdateProjectSettlement, UpdateProjectError> {
+    command: &ArchiveProjectCommand,
+) -> Result<ArchiveProjectSettlement, ArchiveProjectError> {
     let row = client
         .query_opt(
-            "SELECT title, revision::text, lifecycle_state FROM storyos.projects
+            "SELECT lifecycle_state, revision::text FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -72,54 +73,57 @@ async fn persist_update_project(
             ],
         )
         .await
-        .map_err(update_project_database_error)?;
+        .map_err(archive_project_database_error)?;
     let Some(row) = row else {
-        return Err(UpdateProjectError::MissingProject);
+        return Err(ArchiveProjectError::MissingProject);
     };
-    let current_title = row.get::<_, String>(0);
+    let current_lifecycle = match row.get::<_, String>(0).as_str() {
+        "active" => ProjectLifecycle::Active,
+        "archived" => ProjectLifecycle::Archived,
+        other => {
+            return Err(ArchiveProjectError::Unavailable(Box::new(
+                std::io::Error::other(format!("unsupported Project lifecycle {other}")),
+            )));
+        }
+    };
     let current_revision = row
         .get::<_, String>(1)
         .parse::<u64>()
-        .map_err(update_project_parse_error)?;
-    if row.get::<_, String>(2) != "active" {
-        return Err(UpdateProjectError::BindingConflict);
-    }
-    let classified = update_project(&CoreUpdateProject {
+        .map_err(archive_project_parse_error)?;
+    let classified = archive_project(&CoreArchiveProject {
         presence: ProjectPresence::Present,
         expected_revision: command.expected_revision,
         current_revision,
-        title: command.title.clone(),
-        current_title: current_title.clone(),
+        current_lifecycle,
     });
     let effect = match classified {
-        UpdateProjectResult::Applied { title, revision } => {
-            UpdateProjectSettlementEffect::Applied { title, revision }
+        ArchiveProjectResult::Applied { revision } => {
+            ArchiveProjectSettlementEffect::Applied { revision }
         }
-        UpdateProjectResult::NoEffect { reason } => {
-            UpdateProjectSettlementEffect::NoEffect { reason }
+        ArchiveProjectResult::NoEffect { reason } => {
+            ArchiveProjectSettlementEffect::NoEffect { reason }
         }
-        UpdateProjectResult::Conflicted { reason } => {
-            UpdateProjectSettlementEffect::Conflicted { reason }
+        ArchiveProjectResult::Conflicted { reason } => {
+            ArchiveProjectSettlementEffect::Conflicted { reason }
         }
-        UpdateProjectResult::Refused {
-            reason: storyos_core::UpdateProjectRefusal::MissingProject,
-        } => return Err(UpdateProjectError::MissingProject),
-        UpdateProjectResult::Refused {
-            reason: storyos_core::UpdateProjectRefusal::InvalidTitle,
-        } => return Err(UpdateProjectError::BindingConflict),
+        ArchiveProjectResult::Refused {
+            reason: storyos_core::ArchiveProjectRefusal::MissingProject,
+        } => return Err(ArchiveProjectError::MissingProject),
     };
-    insert_update_project_admission(client, command).await?;
+    insert_archive_project_admission(client, command).await?;
     let (result_kind, result_payload) = match &effect {
-        UpdateProjectSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        UpdateProjectSettlementEffect::NoEffect { .. } => {
-            ("no_effect", r#"{"reason":"title_unchanged"}"#.to_owned())
+        ArchiveProjectSettlementEffect::Applied { .. } => {
+            ("authoritative_applied", "{}".to_owned())
         }
-        UpdateProjectSettlementEffect::Conflicted { .. } => (
+        ArchiveProjectSettlementEffect::NoEffect { .. } => {
+            ("no_effect", r#"{"reason":"already_archived"}"#.to_owned())
+        }
+        ArchiveProjectSettlementEffect::Conflicted { .. } => (
             "conflicted",
             r#"{"reason":"stale_project_revision"}"#.to_owned(),
         ),
-        UpdateProjectSettlementEffect::Refused { .. } => {
-            return Err(UpdateProjectError::BindingConflict);
+        ArchiveProjectSettlementEffect::Refused { .. } => {
+            return Err(ArchiveProjectError::BindingConflict);
         }
     };
     let receipt_created_at = client
@@ -131,7 +135,7 @@ async fn persist_update_project(
                 proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
                 artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'updateProject', $6, $7::text::uuid,
+                     $5::text::uuid, 'archiveProject', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
                      '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
                      '{}'::text[], $8, $9::text::jsonb)
@@ -150,7 +154,7 @@ async fn persist_update_project(
             ],
         )
         .await
-        .map_err(update_project_database_error)?
+        .map_err(archive_project_database_error)?
         .get::<_, String>(0);
     client
         .execute(
@@ -166,28 +170,27 @@ async fn persist_update_project(
             ],
         )
         .await
-        .map_err(update_project_database_error)?;
+        .map_err(archive_project_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let UpdateProjectSettlementEffect::Applied { title, revision } = &effect {
+    if let ArchiveProjectSettlementEffect::Applied { revision } = &effect {
         let updated = client
             .execute(
                 "UPDATE storyos.projects
-                    SET title = $3, revision = $4::text::bigint
+                    SET lifecycle_state = 'archived', revision = $3::text::bigint
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND revision = $5::text::bigint",
+                    AND revision = $4::text::bigint AND lifecycle_state = 'active'",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
-                    title,
                     &revision.to_string(),
                     &command.expected_revision.to_string(),
                 ],
             )
             .await
-            .map_err(update_project_database_error)?;
+            .map_err(archive_project_database_error)?;
         if updated != 1 {
-            return Err(UpdateProjectError::Unavailable(Box::new(
+            return Err(ArchiveProjectError::Unavailable(Box::new(
                 std::io::Error::other("Project revision changed under FOR UPDATE"),
             )));
         }
@@ -206,14 +209,14 @@ async fn persist_update_project(
                 ],
             )
             .await
-            .map_err(update_project_database_error)?
+            .map_err(archive_project_database_error)?
             .get::<_, String>(0)
             .parse::<u64>()
-            .map_err(update_project_parse_error)?;
+            .map_err(archive_project_parse_error)?;
         project_activity_event_id = Uuid::now_v7().to_string();
         let payload = serde_json::json!({
-            "kind": "project_updated",
-            "title": title,
+            "kind": "project_archival_changed",
+            "lifecycle": "archived",
             "revision": revision.to_string(),
         })
         .to_string();
@@ -223,7 +226,8 @@ async fn persist_update_project(
                    (owner_user_id, project_id, project_activity_position, project_activity_event_id,
                     event_kind, receipt_id, receipt_result_kind, payload)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                         'project_updated', $5::text::uuid, 'authoritative_applied', $6::text::jsonb)",
+                         'project_archival_changed', $5::text::uuid, 'authoritative_applied',
+                         $6::text::jsonb)",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
@@ -234,14 +238,31 @@ async fn persist_update_project(
                 ],
             )
             .await
-            .map_err(update_project_database_error)?;
+            .map_err(archive_project_database_error)?;
+        client
+            .execute(
+                "INSERT INTO storyos.project_archival_decisions
+                   (owner_user_id, project_id, archival_decision_id, receipt_id,
+                    prior_lifecycle_state, resulting_lifecycle_state, project_revision)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                         'active', 'archived', $5::text::bigint)",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &Uuid::now_v7().to_string(),
+                    &command.ids.receipt_id,
+                    &revision.to_string(),
+                ],
+            )
+            .await
+            .map_err(archive_project_database_error)?;
     }
     client
         .execute(
             "UPDATE storyos.command_idempotency
                 SET outcome_kind = 'settled', result_reference = $3
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'updateProject' AND idempotency_key = $4::text::uuid",
+                AND command_kind = 'archiveProject' AND idempotency_key = $4::text::uuid",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -250,8 +271,8 @@ async fn persist_update_project(
             ],
         )
         .await
-        .map_err(update_project_database_error)?;
-    Ok(UpdateProjectSettlement {
+        .map_err(archive_project_database_error)?;
+    Ok(ArchiveProjectSettlement {
         ids: command.ids.clone(),
         effect,
         receipt_created_at,
@@ -260,10 +281,10 @@ async fn persist_update_project(
     })
 }
 
-async fn insert_update_project_admission(
+async fn insert_archive_project_admission(
     client: &tokio_postgres::Client,
-    command: &UpdateProjectCommand,
-) -> Result<(), UpdateProjectError> {
+    command: &ArchiveProjectCommand,
+) -> Result<(), ArchiveProjectError> {
     let client_session_generation = command.client_binding.session_generation.to_string();
     let inserted = client
         .execute(
@@ -279,14 +300,14 @@ async fn insert_update_project_admission(
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                     NULL, NULL, $5, $6::text::numeric, $7, $8,
-                    'explicit_project_command', $9, $10, $11, 'updateProject',
+                    'explicit_project_command', $9, $10, $11, 'archiveProject',
                     $12, $13::text::uuid, challenge.consumed_at, challenge.expires_at,
                     $14::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $7,
                     NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
                FROM storyos.project_command_challenges AS challenge
               WHERE challenge.owner_user_id = $1::text::uuid
                 AND challenge.project_id = $2::text::uuid
-                AND challenge.command_kind = 'updateProject'
+                AND challenge.command_kind = 'archiveProject'
                 AND challenge.idempotency_key = $13::text::uuid",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
@@ -307,30 +328,30 @@ async fn insert_update_project_admission(
             ],
         )
         .await
-        .map_err(update_project_database_error)?;
+        .map_err(archive_project_database_error)?;
     if inserted != 1 {
-        return Err(UpdateProjectError::InvalidChallenge);
+        return Err(ArchiveProjectError::InvalidChallenge);
     }
     Ok(())
 }
 
-async fn read_update_project_settlement(
+async fn read_archive_project_settlement(
     store: &PostgresProjectReader,
-    command: &UpdateProjectCommand,
+    command: &ArchiveProjectCommand,
     receipt_id: &str,
-) -> Result<UpdateProjectSettlement, UpdateProjectError> {
+) -> Result<ArchiveProjectSettlement, ArchiveProjectError> {
     let client = store
         .connect_challenge()
         .await
-        .map_err(update_project_challenge_error)?;
+        .map_err(archive_project_challenge_error)?;
     client
         .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
         .await
-        .map_err(update_project_database_error)?;
+        .map_err(archive_project_database_error)?;
     let result = async {
         set_challenge_scope_on_client(&client, &command.project_scope)
             .await
-            .map_err(update_project_challenge_error)?;
+            .map_err(archive_project_challenge_error)?;
         let row = client
             .query_opt(
                 "SELECT receipt.command_id::text,
@@ -340,7 +361,6 @@ async fn read_update_project_settlement(
                                 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
                         receipt.result_kind,
                         receipt.result_payload->>'reason',
-                        payload.payload->>'title',
                         payload.payload->>'revision',
                         payload.project_activity_position::text,
                         payload.project_activity_event_id::text
@@ -362,7 +382,7 @@ async fn read_update_project_settlement(
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
-                    AND receipt.command_kind = 'updateProject'
+                    AND receipt.command_kind = 'archiveProject'
                     AND receipt.command_digest = $4
                     AND receipt.idempotency_key = $5::text::uuid
                     AND settlement.settlement_kind = 'receipt_settled'
@@ -376,32 +396,30 @@ async fn read_update_project_settlement(
                 ],
             )
             .await
-            .map_err(update_project_database_error)?
-            .ok_or(UpdateProjectError::BindingConflict)?;
+            .map_err(archive_project_database_error)?
+            .ok_or(ArchiveProjectError::BindingConflict)?;
         let result_kind = row.get::<_, String>(4);
         let reason = row.get::<_, Option<String>>(5);
-        let applied_title = row.get::<_, Option<String>>(6);
-        let applied_revision = row.get::<_, Option<String>>(7);
+        let applied_revision = row.get::<_, Option<String>>(6);
         let effect = match (result_kind.as_str(), reason.as_deref()) {
             ("authoritative_applied", None) => {
-                let title = applied_title.ok_or(UpdateProjectError::BindingConflict)?;
                 let revision = applied_revision
-                    .ok_or(UpdateProjectError::BindingConflict)?
+                    .ok_or(ArchiveProjectError::BindingConflict)?
                     .parse::<u64>()
-                    .map_err(update_project_parse_error)?;
-                UpdateProjectSettlementEffect::Applied { title, revision }
+                    .map_err(archive_project_parse_error)?;
+                ArchiveProjectSettlementEffect::Applied { revision }
             }
-            ("no_effect", Some("title_unchanged")) => UpdateProjectSettlementEffect::NoEffect {
-                reason: storyos_core::UpdateProjectNoEffect::TitleUnchanged,
+            ("no_effect", Some("already_archived")) => ArchiveProjectSettlementEffect::NoEffect {
+                reason: storyos_core::ArchiveProjectNoEffect::AlreadyArchived,
             },
             ("conflicted", Some("stale_project_revision")) => {
-                UpdateProjectSettlementEffect::Conflicted {
-                    reason: storyos_core::UpdateProjectConflict::StaleProjectRevision,
+                ArchiveProjectSettlementEffect::Conflicted {
+                    reason: storyos_core::ArchiveProjectConflict::StaleProjectRevision,
                 }
             }
-            _ => return Err(UpdateProjectError::BindingConflict),
+            _ => return Err(ArchiveProjectError::BindingConflict),
         };
-        Ok(UpdateProjectSettlement {
+        Ok(ArchiveProjectSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
                 author_command_admission_id: row.get(1),
@@ -410,11 +428,11 @@ async fn read_update_project_settlement(
             receipt_created_at: row.get(3),
             effect,
             project_activity_position: row
-                .get::<_, Option<String>>(8)
+                .get::<_, Option<String>>(7)
                 .unwrap_or_else(|| "0".to_owned())
                 .parse::<u64>()
-                .map_err(update_project_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
+                .map_err(archive_project_parse_error)?,
+            project_activity_event_id: row.get::<_, Option<String>>(8).unwrap_or_default(),
         })
     }
     .await;
@@ -422,7 +440,7 @@ async fn read_update_project_settlement(
         Ok(_) => client
             .batch_execute("COMMIT")
             .await
-            .map_err(update_project_database_error)?,
+            .map_err(archive_project_database_error)?,
         Err(_) => {
             let _rollback = client.batch_execute("ROLLBACK").await;
         }
@@ -430,23 +448,23 @@ async fn read_update_project_settlement(
     result
 }
 
-fn update_project_challenge_error(error: ProjectCommandChallengeError) -> UpdateProjectError {
+fn archive_project_challenge_error(error: ProjectCommandChallengeError) -> ArchiveProjectError {
     match error {
-        ProjectCommandChallengeError::BindingConflict => UpdateProjectError::BindingConflict,
-        ProjectCommandChallengeError::InvalidOrExpired => UpdateProjectError::InvalidChallenge,
+        ProjectCommandChallengeError::BindingConflict => ArchiveProjectError::BindingConflict,
+        ProjectCommandChallengeError::InvalidOrExpired => ArchiveProjectError::InvalidChallenge,
         ProjectCommandChallengeError::RateLimited { .. }
         | ProjectCommandChallengeError::Unavailable(_) => {
-            UpdateProjectError::Unavailable(Box::new(error))
+            ArchiveProjectError::Unavailable(Box::new(error))
         }
     }
 }
 
-fn update_project_database_error(error: tokio_postgres::Error) -> UpdateProjectError {
-    UpdateProjectError::Unavailable(Box::new(error))
+fn archive_project_database_error(error: tokio_postgres::Error) -> ArchiveProjectError {
+    ArchiveProjectError::Unavailable(Box::new(error))
 }
 
-fn update_project_parse_error(
+fn archive_project_parse_error(
     error: impl std::error::Error + Send + Sync + 'static,
-) -> UpdateProjectError {
-    UpdateProjectError::Unavailable(Box::new(error))
+) -> ArchiveProjectError {
+    ArchiveProjectError::Unavailable(Box::new(error))
 }

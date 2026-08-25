@@ -47,7 +47,7 @@ impl EditorSessionStore for PostgresProjectReader {
                     )
                     .await
                     .map_err(session_database_error)?;
-                transaction.client.execute(
+                let snapshots = transaction.client.execute(
                     "INSERT INTO storyos.editor_session_base_snapshots
                        (owner_user_id, project_id, snapshot_id, editor_session_id,
                         chapter_object_id, authoritative_revision_id)
@@ -57,10 +57,18 @@ impl EditorSessionStore for PostgresProjectReader {
                      JOIN storyos.authoritative_heads AS head
                        ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
                           (project.owner_user_id, project.project_id, project.current_chapter_id)
-                     WHERE project.owner_user_id = $1::text::uuid AND project.project_id = $2::text::uuid",
+                     WHERE project.owner_user_id = $1::text::uuid AND project.project_id = $2::text::uuid
+                       AND project.lifecycle_state = 'active'",
                     &[&request.project_scope.owner_user_id.as_ref(), &request.project_scope.project_id.as_ref(),
                       &request.snapshot_id, &request.editor_session_id.as_ref()],
                 ).await.map_err(session_database_error)?;
+                if snapshots != 1 {
+                    transaction
+                        .rollback()
+                        .await
+                        .map_err(session_challenge_error)?;
+                    return Err(EditorSessionError::BindingConflict);
+                }
                 crate::snapshot::persist_canonical_snapshot(
                     &transaction.client,
                     &request.project_scope,
