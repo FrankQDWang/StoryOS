@@ -164,7 +164,8 @@ async fn persist_create_project(
     } else {
         storyos_core::ProjectPresence::Absent
     };
-    if storyos_core::create_project(presence) == storyos_core::CreateProjectResult::ExistingProject {
+    if storyos_core::create_project(presence) == storyos_core::CreateProjectResult::ExistingProject
+    {
         return Err(CreateProjectError::ExistingProject);
     }
     let client_session_generation = command.client_binding.session_generation.to_string();
