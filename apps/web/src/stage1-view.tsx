@@ -4,10 +4,9 @@ import { createRoot } from "react-dom/client";
 import {
   createProject,
   createProjectChallenge,
-  getProject,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { GetProjectResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { openControlledProject } from "./boot.ts";
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import type {
   ControlledProjectState,
@@ -99,40 +98,50 @@ function ProjectReadyView({
 async function createEmptyProject(
   title: string,
   props: Omit<Stage1ViewProps, "state">,
-): Promise<GetProjectResponse> {
-  const idempotencyKey = uuidV7(props.cryptoImpl);
-  const createProjectInput = {
-    title,
-    client_contract_revision:
-      RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-    security_policy_revision: SECURITY_POLICY_REVISION,
-    correlation_id: uuidV7(props.cryptoImpl),
-  };
-  const challenge = await createProjectChallenge({
-    baseUrl: props.baseUrl,
-    fetchImpl: props.fetchImpl,
-    request: {
-      command_schema: "storyos.command.create-project.request.v1",
-      create_project_input: createProjectInput,
-      idempotency_key: idempotencyKey,
-    },
-  });
-  const created = await createProject({
-    baseUrl: props.baseUrl,
-    fetchImpl: props.fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request: {
-      command_schema: "storyos.command.create-project.request.v1",
-      prospective_project_id: challenge.prospective_project_id,
-      create_project_input: createProjectInput,
-    },
-  });
-  return getProject({
-    baseUrl: props.baseUrl,
-    fetchImpl: props.fetchImpl,
-    projectId: created.project_scope.project_id,
-  });
+): Promise<ControlledProjectState> {
+  try {
+    const idempotencyKey = uuidV7(props.cryptoImpl);
+    const createProjectInput = {
+      title,
+      client_contract_revision:
+        RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: SECURITY_POLICY_REVISION,
+      correlation_id: uuidV7(props.cryptoImpl),
+    };
+    const challenge = await createProjectChallenge({
+      baseUrl: props.baseUrl,
+      fetchImpl: props.fetchImpl,
+      request: {
+        command_schema: "storyos.command.create-project.request.v1",
+        create_project_input: createProjectInput,
+        idempotency_key: idempotencyKey,
+      },
+    });
+    const created = await createProject({
+      baseUrl: props.baseUrl,
+      fetchImpl: props.fetchImpl,
+      idempotencyKey,
+      antiForgery: challenge.nonce,
+      request: {
+        command_schema: "storyos.command.create-project.request.v1",
+        prospective_project_id: challenge.prospective_project_id,
+        create_project_input: createProjectInput,
+      },
+    });
+    return await openControlledProject({
+      baseUrl: props.baseUrl,
+      projectId: created.project_scope.project_id,
+      fetchImpl: props.fetchImpl,
+      cryptoImpl: props.cryptoImpl,
+    });
+  } catch {
+    return {
+      kind: "project-blocked",
+      code: "project_unavailable",
+      heading: "StoryOS 无法打开项目",
+      message: "无法读取这个受控项目或其当前章节。",
+    };
+  }
 }
 
 function Stage1View({
@@ -168,9 +177,7 @@ function Stage1View({
             event.preventDefault();
             const title = String(new FormData(event.currentTarget).get("title") ?? "").trim();
             if (!title) return;
-            void createEmptyProject(title, { baseUrl, fetchImpl, cryptoImpl }).then((project) => {
-              setCurrent({ kind: "empty-project-ready", profile: current.profile, project });
-            });
+            void createEmptyProject(title, { baseUrl, fetchImpl, cryptoImpl }).then(setCurrent);
           }}
         >
           <label>

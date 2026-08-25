@@ -86,11 +86,11 @@ test("an empty Project opens without a Chapter identity or starter document", as
     projectId: project.project.project_id,
     fetchImpl,
   });
-  assert.equal(state.kind, "empty-project-ready");
-  if (state.kind === "empty-project-ready") {
-    assert.equal(state.project.project.open.kind, "empty");
-    assert.equal(state.project.project.title, "Empty Novel");
-  }
+  assert.deepEqual(state, {
+    kind: "empty-project-ready",
+    profile,
+    project,
+  });
   assert.deepEqual(requests, [
     "/api/v1/protocol",
     `/api/v1/projects/${project.project.project_id}`,
