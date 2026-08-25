@@ -21,6 +21,20 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     const path = new URL(input instanceof Request ? input.url : input).pathname;
     requests.push({ init, path });
     if (path === "/api/v1/protocol") return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+    if (path === "/api/v1/projects") {
+      return jsonResponse({
+        schema_id: "storyos.query.project-list.response.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000013",
+        owner_user_id: OWNER,
+        projects: [{
+          project_scope: { owner_user_id: OWNER, project_id: PROJECT },
+          title: "Project A",
+          lifecycle: { kind: "active" },
+          revision: "1",
+          open: { kind: "current_chapter", current_chapter_id: scenario.chapter.chapter.chapter_id },
+        }],
+      });
+    }
     if (path === `/api/v1/projects/${PROJECT}`) return jsonResponse(scenario.project);
     if (path === `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`) {
       return jsonResponse(scenario.chapter);
@@ -69,12 +83,13 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     expect(root.textContent).toContain("Chapter A");
     expect(root.textContent).toContain("Base");
     expect(root.textContent).toContain(scenario.chapter.chapter.current_revision.revision_id);
-    expect(requests.slice(0, 3).map(({ path }) => path)).toEqual([
+    expect(requests.slice(0, 4).map(({ path }) => path)).toEqual([
       "/api/v1/protocol",
       `/api/v1/projects/${PROJECT}`,
+      "/api/v1/projects",
       `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`,
     ]);
-    expect(requests.slice(0, 3).every(({ init }) => init?.credentials === "same-origin"))
+    expect(requests.slice(0, 4).every(({ init }) => init?.credentials === "same-origin"))
       .toBe(true);
     if (state.kind === "project-ready" && state.editor.kind === "editor-ready") {
       state.editor.database.close();
