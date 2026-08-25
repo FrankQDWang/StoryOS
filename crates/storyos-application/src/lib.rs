@@ -27,6 +27,7 @@ use std::future::Future;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
+mod create_project;
 mod create_project_challenge;
 mod editor_session;
 mod snapshot;
@@ -53,6 +54,10 @@ pub use author_edit_outcome::{
     ReadApplyAuthorEditOutcome, get_apply_author_edit_outcome,
 };
 
+pub use create_project::{
+    CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
+    create_project,
+};
 pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
@@ -264,7 +269,7 @@ impl ProjectScope {
 pub struct Project {
     pub project_id: ProjectId,
     pub title: String,
-    pub current_chapter_id: ChapterId,
+    pub current_chapter_id: Option<ChapterId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -330,7 +335,7 @@ pub async fn open_current_chapter(
     let Some(project) = reader.read_project(scope).await? else {
         return Ok(None);
     };
-    if &project.current_chapter_id != chapter_id {
+    if project.current_chapter_id.as_ref() != Some(chapter_id) {
         return Ok(None);
     }
     reader.read_chapter(scope, chapter_id).await

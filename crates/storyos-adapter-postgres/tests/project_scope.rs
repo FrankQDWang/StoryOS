@@ -40,7 +40,7 @@ async fn two_users_and_projects_are_isolated_at_application_and_rls_boundaries()
         Some(Project {
             project_id: ProjectId::new(PROJECT_A),
             title: "Project A".to_owned(),
-            current_chapter_id: ChapterId::new(CHAPTER_A),
+            current_chapter_id: Some(ChapterId::new(CHAPTER_A)),
         })
     );
     assert_eq!(

@@ -175,6 +175,16 @@ keep the ApplyAuthorEdit revision foreign key on those mixed-null columns.
 authoritative revision at insert. Bootstrap `RESET ROLE` lets the superuser
 validate new `MATCH FULL` keys on FORCE RLS tables when GUC values are unset.
 
+### 0.4 Empty Project create and nullable current Chapter
+
+`createProject` is `explicit_project_command`. One transaction inserts the
+Project with `current_chapter_id` SQL NULL, one Author Command Admission, one
+DomainReceipt, and one `project_created` Activity payload. It creates no
+Volume, Chapter, or manuscript payload. The current-chapter foreign key uses
+`MATCH SIMPLE` and stays DEFERRABLE. The User-level
+`create_project_challenges` row is the Admission proof. After insert, every
+project-bearing read and write uses exact Project Scope.
+
 ## 1. Scope and authority
 
 This specification defines the Foundation physical persistence contract for all
