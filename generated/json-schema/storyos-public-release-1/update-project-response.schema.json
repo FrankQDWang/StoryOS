@@ -56,18 +56,9 @@
           "type": "array"
         },
         "author_action_sequence": {
-          "anyOf": [
-            {
-              "pattern": "^(0|[1-9][0-9]{0,19})$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": "string"
         },
         "author_command_admission_id": {
-          "format": "uuid",
           "type": "string"
         },
         "authoritative_commit_ids": {
@@ -95,7 +86,6 @@
           "type": "array"
         },
         "created_at": {
-          "format": "date-time",
           "type": "string"
         },
         "draft_artifact_refs": {
@@ -111,7 +101,6 @@
           "type": "array"
         },
         "idempotency_key": {
-          "format": "uuid",
           "type": "string"
         },
         "prior_heads": {
@@ -133,7 +122,6 @@
           "type": "array"
         },
         "receipt_id": {
-          "format": "uuid",
           "type": "string"
         },
         "result": {
@@ -242,9 +230,84 @@
         "project_id"
       ],
       "type": "object"
+    },
+    "UpdateProjectConflictReason": {
+      "enum": [
+        "stale_project_revision"
+      ],
+      "type": "string"
+    },
+    "UpdateProjectEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "authoritative_applied",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "title",
+            "revision",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/UpdateProjectNoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/UpdateProjectConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "UpdateProjectNoEffectReason": {
+      "enum": [
+        "title_unchanged"
+      ],
+      "type": "string"
     }
   },
-  "$id": "storyos.command.create-project.response.v1",
+  "$id": "storyos.command.update-project.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -260,6 +323,9 @@
       "format": "uuid",
       "type": "string"
     },
+    "effect": {
+      "$ref": "#/$defs/UpdateProjectEffect"
+    },
     "project": {
       "$ref": "#/$defs/ControlledProject"
     },
@@ -270,7 +336,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.create-project.response.v1",
+      "const": "storyos.command.update-project.response.v1",
       "type": "string"
     }
   },
@@ -281,8 +347,9 @@
     "command_id",
     "author_command_admission_id",
     "receipt",
-    "project"
+    "project",
+    "effect"
   ],
-  "title": "StoryOS Create Project Response",
+  "title": "StoryOS Update Project Response",
   "type": "object"
 }

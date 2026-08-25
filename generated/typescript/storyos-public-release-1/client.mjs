@@ -33,10 +33,10 @@ async function queryText({ baseUrl, path, queryHeaders = {}, fetchImpl = globalT
   return responseBody;
 }
 
-async function commandJson({ baseUrl, path, body, commandHeaders = {}, fetchImpl = globalThis.fetch, signal }) {
+async function commandJson({ baseUrl, path, body, method = "POST", commandHeaders = {}, fetchImpl = globalThis.fetch, signal }) {
   if (typeof baseUrl !== "string" || baseUrl.length === 0) throw new TypeError("StoryOS command requires a non-empty baseUrl");
   if (typeof fetchImpl !== "function") throw new TypeError("StoryOS command requires a fetch implementation");
-  const response = await fetchImpl(new URL(path, baseUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json", ...commandHeaders }, credentials: "same-origin", body: JSON.stringify(body), signal });
+  const response = await fetchImpl(new URL(path, baseUrl), { method, headers: { accept: "application/json", "content-type": "application/json", ...commandHeaders }, credentials: "same-origin", body: JSON.stringify(body), signal });
   const responseBody = await response.text();
   if (!response.ok) {
     const retryAfter = response.headers.get("retry-after");
@@ -107,6 +107,21 @@ export async function createProject({ request, idempotencyKey, antiForgery, ...o
 
 export async function listProjects(options = {}) {
   return queryJson({ ...options, path: "/api/v1/projects" });
+}
+
+export async function digestUpdateProject(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestUpdateProject requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.updateProject.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function updateProject({ projectId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("updateProject requires projectId");
+  if (!request || typeof request !== "object") throw new TypeError("updateProject requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("updateProject requires security bindings");
+  return commandJson({ ...options, method: "PATCH", path: `/api/v1/projects/${encodeURIComponent(projectId)}`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
 export async function digestApplyAuthorEdit(request, cryptoImpl = globalThis.crypto) {

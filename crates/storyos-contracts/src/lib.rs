@@ -16,6 +16,8 @@ mod release1_snapshot;
 mod release1_snapshot_artifacts;
 mod release1_takeover;
 mod release1_takeover_artifacts;
+mod release1_update_project;
+mod release1_update_project_artifacts;
 mod stage1_bundle;
 mod stage1_crosswalk;
 mod stage1_delivery;
@@ -78,6 +80,12 @@ pub use release1_takeover::{
     TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID, TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
     TakeOverProjectWriterRequest, TakeOverProjectWriterResponse, TakeOverProjectWriterResult,
     TakeoverCompareFailedReason,
+};
+pub use release1_update_project::{
+    UPDATE_PROJECT_DIGEST_PROFILE, UPDATE_PROJECT_METHOD, UPDATE_PROJECT_PATH,
+    UPDATE_PROJECT_REQUEST_SCHEMA_ID, UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
+    UpdateProjectConflictReason, UpdateProjectEffect, UpdateProjectInput,
+    UpdateProjectNoEffectReason, UpdateProjectRequest, UpdateProjectResponse,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
