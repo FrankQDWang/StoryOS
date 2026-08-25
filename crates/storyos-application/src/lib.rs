@@ -33,6 +33,7 @@ mod editor_session;
 mod list_projects;
 mod snapshot;
 mod takeover;
+mod update_project;
 
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
@@ -64,6 +65,10 @@ pub use create_project_challenge::{
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
+pub use update_project::{
+    UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
+    UpdateProjectSettlementEffect, UpdateProjectStore, update_project,
+};
 
 pub use editor_session::{
     EditorClientBinding, EditorReadOnlyReason, EditorSession, EditorSessionError, EditorSessionId,

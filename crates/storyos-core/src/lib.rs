@@ -1,8 +1,13 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
 mod create_project;
+mod update_project;
 
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
+pub use update_project::{
+    UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
+    UpdateProjectResult, update_project,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyAuthorEdit {
@@ -182,3 +187,7 @@ mod tests;
 #[cfg(test)]
 #[path = "create_project_tests.rs"]
 mod create_project_tests;
+
+#[cfg(test)]
+#[path = "update_project_tests.rs"]
+mod update_project_tests;
