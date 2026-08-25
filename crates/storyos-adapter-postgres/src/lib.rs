@@ -32,6 +32,7 @@ mod author_edit_settlement;
 mod create_project;
 mod create_project_challenge;
 mod editor_session;
+mod list_projects;
 mod snapshot;
 mod takeover;
 
@@ -500,7 +501,7 @@ impl PostgresProjectReader {
         }
     }
 
-    async fn connect(&self) -> Result<tokio_postgres::Client, ProjectReadError> {
+    pub(crate) async fn connect(&self) -> Result<tokio_postgres::Client, ProjectReadError> {
         let (client, connection) = tokio_postgres::connect(&self.database_url, NoTls)
             .await
             .map_err(read_error)?;
@@ -608,6 +609,6 @@ async fn set_scope(
         .map_err(read_error)
 }
 
-fn read_error(source: tokio_postgres::Error) -> ProjectReadError {
+pub(crate) fn read_error(source: tokio_postgres::Error) -> ProjectReadError {
     ProjectReadError::unavailable(source)
 }
