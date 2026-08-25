@@ -87,7 +87,16 @@ it("opens the URL-selected Project and fails closed before invalid entry request
       documentImpl: document,
       locationImpl: { origin: location.origin, pathname: "/" },
       fetchImpl: async (input) => {
-        protocolRequests.push(new URL(input instanceof Request ? input.url : input).pathname);
+        const path = new URL(input instanceof Request ? input.url : input).pathname;
+        protocolRequests.push(path);
+        if (path === "/api/v1/projects") {
+          return jsonResponse({
+            schema_id: "storyos.query.project-list.response.v1",
+            correlation_id: "018f0000-0000-7001-8000-000000000013",
+            owner_user_id: OWNER,
+            projects: [],
+          });
+        }
         return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
       },
     });
@@ -98,7 +107,10 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     expect(rootLoaded.root.textContent).toContain("本地写作已就绪");
     expect(rootLoaded.root.textContent).not.toContain("模型");
     expect(rootLoaded.root.textContent).not.toContain("Agent");
-    expect(protocolRequests).toEqual(["/api/v1/protocol"]);
+    await expect.poll(() => protocolRequests.slice()).toEqual([
+      "/api/v1/protocol",
+      "/api/v1/projects",
+    ]);
     expect(rootLoaded.root.querySelector("[role=alert]")).toBeNull();
 
     document.body.replaceChildren();
