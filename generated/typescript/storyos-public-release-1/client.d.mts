@@ -5,7 +5,9 @@ export type Release1ProtocolProfile = { schema_id: string, api_major: number, pu
 
 export type ProjectScope = { owner_user_id: string, project_id: string, };
 
-export type ControlledProject = { project_id: string, title: string, current_chapter_id: string, };
+export type ProjectOpenState = { "kind": "empty" } | { "kind": "current_chapter", current_chapter_id: string, };
+
+export type ControlledProject = { project_id: string, title: string, open: ProjectOpenState, };
 
 export type AuthoritativeChapterRevision = { revision_id: string, body: string, };
 
@@ -43,6 +45,10 @@ export type CreateProjectChallengeRequest = { command_schema: string, create_pro
 
 export type CreateProjectChallengeResponse = { prospective_project_id: string, canonical_command_digest: DigestValue, nonce: string, expires_at: string, limit_profile_revision: string, };
 
+export type CreateProjectRequest = { command_schema: string, prospective_project_id: string, create_project_input: CreateProjectInput, };
+
+export type CreateProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -51,7 +57,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -119,6 +125,7 @@ export declare function digestCreateEditorSession(request: CreateEditorSessionRe
 export declare function createEditorSession(options: StoryOSQueryOptions & { projectId: string; request: CreateEditorSessionRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateEditorSessionResponse>;
 export declare function getEditorSession(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string }): Promise<GetEditorSessionResponse>;
 export declare function createProjectChallenge(options: StoryOSQueryOptions & { request: CreateProjectChallengeRequest }): Promise<CreateProjectChallengeResponse>;
+export declare function createProject(options: StoryOSQueryOptions & { request: CreateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateProjectResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

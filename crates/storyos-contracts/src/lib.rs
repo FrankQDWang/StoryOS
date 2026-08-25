@@ -34,8 +34,8 @@ pub use release1::{
     EditorWriterProjection, GET_CHAPTER_METHOD, GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD,
     GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD,
     GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetEditorSessionResponse, GetProjectResponse,
-    LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE, ProjectScope, Release1CompatibilityIdentity,
-    Release1ProtocolProfile, StoryOSProblem, project_command_kind,
+    LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
+    Release1CompatibilityIdentity, Release1ProtocolProfile, StoryOSProblem, project_command_kind,
 };
 pub use release1_artifacts::{
     check_release1_artifacts, release1_protocol_profile, write_release1_artifacts,
@@ -56,8 +56,10 @@ pub use release1_author_edit_outcome::{
 pub use release1_create_project::{
     CREATE_PROJECT_CHALLENGE_METHOD, CREATE_PROJECT_CHALLENGE_PATH,
     CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID, CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
-    CREATE_PROJECT_DIGEST_PROFILE, CREATE_PROJECT_REQUEST_SCHEMA_ID, CreateProjectChallengeRequest,
-    CreateProjectChallengeResponse, CreateProjectInput,
+    CREATE_PROJECT_DIGEST_PROFILE, CREATE_PROJECT_METHOD, CREATE_PROJECT_PATH,
+    CREATE_PROJECT_REQUEST_SCHEMA_ID, CREATE_PROJECT_RESPONSE_SCHEMA_ID,
+    CreateProjectChallengeRequest, CreateProjectChallengeResponse, CreateProjectInput,
+    CreateProjectRequest, CreateProjectResponse,
 };
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,

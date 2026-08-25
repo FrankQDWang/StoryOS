@@ -105,7 +105,7 @@ pub(super) async fn create_project_challenge(
     }))
 }
 
-fn create_project_command_digest(
+pub(super) fn create_project_command_digest(
     project_id: &str,
     input: &contracts::CreateProjectInput,
 ) -> String {
@@ -126,7 +126,9 @@ fn create_project_command_digest(
     )
 }
 
-fn create_input_digest(input: &contracts::CreateProjectInput) -> Result<String, ApiError> {
+pub(super) fn create_input_digest(
+    input: &contracts::CreateProjectInput,
+) -> Result<String, ApiError> {
     let canonical =
         canonical_json(serde_json::to_value(input).map_err(|_| invalid_request_shape())?);
     Ok(plain_digest(

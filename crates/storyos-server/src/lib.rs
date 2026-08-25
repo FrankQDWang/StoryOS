@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 mod author_edit;
 mod author_edit_outcome;
+mod create_project;
 mod create_project_challenge;
 mod editor_session;
 mod project_command_challenge;
@@ -30,6 +31,7 @@ use author_edit::apply_author_edit;
 use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
 };
+use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use editor_session::{create_editor_session, get_editor_session};
 use project_command_challenge::create_project_command_challenge;
@@ -170,6 +172,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             ),
         )
         .route(
+            contracts::CREATE_PROJECT_PATH,
+            routing::on(
+                method_filter(contracts::CREATE_PROJECT_METHOD),
+                create_project,
+            ),
+        )
+        .route(
             contracts::CREATE_PROJECT_COMMAND_CHALLENGE_PATH,
             routing::on(challenge_method, create_project_command_challenge),
         )
@@ -243,12 +252,12 @@ async fn get_project(
         project: contracts::ControlledProject {
             project_id: project.project_id.as_ref().to_owned(),
             title: project.title,
-            current_chapter_id: project
-                .current_chapter_id
-                .as_ref()
-                .ok_or_else(resource_unavailable)?
-                .as_ref()
-                .to_owned(),
+            open: match project.current_chapter_id {
+                Some(chapter_id) => contracts::ProjectOpenState::CurrentChapter {
+                    current_chapter_id: chapter_id.as_ref().to_owned(),
+                },
+                None => contracts::ProjectOpenState::Empty,
+            },
         },
     }))
 }

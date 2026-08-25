@@ -1,0 +1,54 @@
+{
+  "$defs": {
+    "CreateProjectInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "type": "string",
+          "x-storyos-max-utf8-bytes": 1024
+        }
+      },
+      "required": [
+        "title",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.create-project.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.create-project.request.v1",
+      "type": "string"
+    },
+    "create_project_input": {
+      "$ref": "#/$defs/CreateProjectInput"
+    },
+    "prospective_project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command_schema",
+    "prospective_project_id",
+    "create_project_input"
+  ],
+  "title": "StoryOS Create Project Request",
+  "type": "object"
+}

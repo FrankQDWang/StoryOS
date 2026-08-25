@@ -133,7 +133,7 @@ test("two authenticated Users open only their own Project and current Chapter ov
       baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
     });
     assert.equal(projectA.project_scope.owner_user_id, USER_A);
-    assert.equal(projectA.project.current_chapter_id, CHAPTER_A);
+    assert.deepEqual(projectA.project.open, { kind: "current_chapter", current_chapter_id: CHAPTER_A });
     const chapterA = await getChapter({
       baseUrl, projectId: PROJECT_A, chapterId: CHAPTER_A,
       fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -146,7 +146,9 @@ test("two authenticated Users open only their own Project and current Chapter ov
     });
     assert.equal(projectB.project_scope.owner_user_id, USER_B);
     const chapterB = await getChapter({
-      baseUrl, projectId: PROJECT_B, chapterId: projectB.project.current_chapter_id,
+      baseUrl, projectId: PROJECT_B, chapterId: projectB.project.open.kind === "current_chapter"
+        ? projectB.project.open.current_chapter_id
+        : "missing",
       fetchImpl: browserFetch(baseUrl, "session-b"),
     });
     assert.equal(chapterB.chapter.current_revision.body, "Authoritative B secret");
