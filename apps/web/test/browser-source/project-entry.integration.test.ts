@@ -81,6 +81,27 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     }
 
     document.body.replaceChildren();
+    document.body.innerHTML = '<main id="app"></main>';
+    const protocolRequests: string[] = [];
+    const rootLoaded = await loadStoryOSWebState({
+      documentImpl: document,
+      locationImpl: { origin: location.origin, pathname: "/" },
+      fetchImpl: async (input) => {
+        protocolRequests.push(new URL(input instanceof Request ? input.url : input).pathname);
+        return jsonResponse(RELEASE_1_PROTOCOL_PROFILE);
+      },
+    });
+    mountStage1View(rootLoaded.root, rootLoaded);
+    expect(rootLoaded.state.kind).toBe("protected-ready");
+    await expect.poll(() => rootLoaded.root.firstElementChild?.tagName).toBe("SECTION");
+    expect(rootLoaded.root.dataset.bootState).toBe("protected-ready");
+    expect(rootLoaded.root.textContent).toContain("本地写作已就绪");
+    expect(rootLoaded.root.textContent).not.toContain("模型");
+    expect(rootLoaded.root.textContent).not.toContain("Agent");
+    expect(protocolRequests).toEqual(["/api/v1/protocol"]);
+    expect(rootLoaded.root.querySelector("[role=alert]")).toBeNull();
+
+    document.body.replaceChildren();
     let requestCount = 0;
     await expect(loadStoryOSWebState({
       documentImpl: document,
@@ -92,7 +113,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     })).rejects.toThrow(/required #app root is missing/);
     expect(requestCount).toBe(0);
 
-    for (const pathname of ["/", "/projects/not-a-uuid", `/projects/${PROJECT}/extra`]) {
+    for (const pathname of ["/projects/not-a-uuid", `/projects/${PROJECT}/extra`]) {
       document.body.innerHTML = '<main id="app">stale Project page</main>';
       requestCount = 0;
       const blockedLoaded = await loadStoryOSWebState({

@@ -86,6 +86,14 @@ function Stage1View({ state, baseUrl, fetchImpl, cryptoImpl }: Stage1ViewProps) 
       />
     );
   }
+  if (state.kind === "protected-ready") {
+    return (
+      <section>
+        <h1>StoryOS</h1>
+        <p>本地写作已就绪。</p>
+      </section>
+    );
+  }
   return (
     <section role="alert">
       <h1>{state.heading}</h1>

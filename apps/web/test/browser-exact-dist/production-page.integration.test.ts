@@ -12,19 +12,19 @@ function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
   });
 }
 
-async function waitForBlockedSurface(frame: HTMLIFrameElement): Promise<Element> {
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
+async function waitForProtectedReady(frame: HTMLIFrameElement): Promise<Element> {
+  await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
-    if (root?.getAttribute("data-boot-state") === "project-blocked"
-      && root.querySelector("h1") !== null) {
-      return root;
-    }
-    await new Promise<void>((resolve) => {
-      window.setTimeout(resolve, 25);
-    });
+    return root?.getAttribute("data-boot-state") === "protected-ready"
+      && root.querySelector("h1") !== null
+      ? root
+      : null;
+  }).not.toBeNull();
+  const root = frame.contentDocument?.querySelector("#app");
+  if (root === null || root === undefined) {
+    throw new Error("the Vite production page did not reach the protected-ready state");
   }
-  throw new Error("the Vite production page did not boot the Stage 1 surface");
+  return root;
 }
 
 afterEach(() => {
@@ -45,7 +45,7 @@ it("loads the exact Vite production page in Google Chrome and shows the Stage 1 
   document.body.append(frame);
   await loaded;
 
-  const root = await waitForBlockedSurface(frame);
+  const root = await waitForProtectedReady(frame);
   expect({
     alert: root.querySelector('[role="alert"]') !== null,
     bootState: root.getAttribute("data-boot-state"),
@@ -54,11 +54,14 @@ it("loads the exact Vite production page in Google Chrome and shows the Stage 1 
     textarea: root.querySelector("textarea") !== null,
     userAgent: frame.contentWindow?.navigator.userAgent.includes("Chrome/") ?? false,
   }).toEqual({
-    alert: true,
-    bootState: "project-blocked",
-    heading: "StoryOS 无法打开项目",
-    message: "项目地址缺少有效的受控项目身份。",
+    alert: false,
+    bootState: "protected-ready",
+    heading: "StoryOS",
+    message: "本地写作已就绪。",
     textarea: false,
     userAgent: true,
   });
+  expect(root.textContent).not.toContain("模型");
+  expect(root.textContent).not.toContain("Agent");
+  expect(root.textContent).not.toContain("Provider");
 });
