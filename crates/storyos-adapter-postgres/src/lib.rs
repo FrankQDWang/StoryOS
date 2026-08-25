@@ -24,6 +24,10 @@ mod create_project_challenge_tests;
 #[path = "create_project_tests.rs"]
 mod create_project_tests;
 
+#[cfg(test)]
+#[path = "update_project_tests.rs"]
+mod update_project_tests;
+
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
@@ -35,6 +39,7 @@ mod editor_session;
 mod list_projects;
 mod snapshot;
 mod takeover;
+mod update_project;
 
 use storyos_application::{
     Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,
