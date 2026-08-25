@@ -425,7 +425,8 @@
       "enum": [
         "applyAuthorEdit",
         "takeOverProjectWriter",
-        "createProject"
+        "createProject",
+        "updateProject"
       ],
       "type": "string"
     },

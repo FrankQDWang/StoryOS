@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter
 paths:
   /api/v1/protocol:
     get:
@@ -54,6 +54,80 @@ paths:
           description: Method not allowed
         '429':
           description: Rate limited
+        '503':
+          description: Service unavailable
+    patch:
+      operationId: updateProject
+      summary: Rename one exact Project
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/update-project-request.schema.json'
+      responses:
+        '200':
+          description: Project renamed
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/update-project-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or Project revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Update Project refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
         '503':
           description: Service unavailable
   /api/v1/projects/{project_id}/chapters/{chapter_id}:

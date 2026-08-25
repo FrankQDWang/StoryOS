@@ -27,6 +27,7 @@ mod project_command_challenge;
 mod request_origin;
 mod snapshot;
 mod takeover;
+mod update_project;
 
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
@@ -40,6 +41,7 @@ use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use takeover::take_over_project_writer;
+use update_project::update_project;
 
 /// The reviewed browser security policy accepted by this Server release.
 pub const RELEASE_1_SECURITY_POLICY_REVISION: &str = "storyos.web-security-policy.release-1.v1";
@@ -160,7 +162,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         )
         .route(
             contracts::GET_PROJECT_PATH,
-            routing::on(project_method, get_project),
+            routing::on(project_method, get_project).on(
+                method_filter(contracts::UPDATE_PROJECT_METHOD),
+                update_project,
+            ),
         )
         .route(
             contracts::GET_CHAPTER_PATH,

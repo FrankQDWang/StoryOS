@@ -220,6 +220,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP listProjects tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/list-projects-http.integration.test.ts
+echo "Running HTTP updateProject tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/update-project-http.integration.test.ts
 echo "Running HTTP takeOverProjectWriter tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/takeover-http.integration.test.ts

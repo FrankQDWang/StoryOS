@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:9ad92413efc260b5ed2a7ea39de873414e739ad79ac931e3f0aa960620c01a81",
+  "corpus_digest": "sha256:182782aa3ddeb72a345d4161e0bc2808a8f03998006f7ef76239c16f48e67d8f",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -24,6 +24,9 @@
       "generated/golden-wire/storyos-public-release-1/list-projects.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.invalid.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/update-project.json",
+      "generated/golden-wire/storyos-public-release-1/update-project.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/update-project.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -173,6 +176,24 @@
       "fixture_id": "storyos.golden.listProjects.boundary.v1",
       "operation_id": "listProjects",
       "path": "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.updateProject.positive.v1",
+      "operation_id": "updateProject",
+      "path": "generated/golden-wire/storyos-public-release-1/update-project.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.updateProject.invalid.v1",
+      "operation_id": "updateProject",
+      "path": "generated/golden-wire/storyos-public-release-1/update-project.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.updateProject.boundary.v1",
+      "operation_id": "updateProject",
+      "path": "generated/golden-wire/storyos-public-release-1/update-project.boundary.json"
     },
     {
       "classification": "positive",

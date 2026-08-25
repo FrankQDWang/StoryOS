@@ -157,7 +157,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter"
     ));
 
     let client = String::from_utf8(
@@ -278,7 +278,12 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
     );
     assert_eq!(
         response["$defs"]["DomainReceiptCommandKind"]["enum"],
-        serde_json::json!(["applyAuthorEdit", "takeOverProjectWriter", "createProject"])
+        serde_json::json!([
+            "applyAuthorEdit",
+            "takeOverProjectWriter",
+            "createProject",
+            "updateProject"
+        ])
     );
 
     let editor_session: serde_json::Value =
@@ -442,6 +447,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_create_project_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_create_project_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_list_projects_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_update_project_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_update_project_artifacts::RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
