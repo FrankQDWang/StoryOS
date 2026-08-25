@@ -42,7 +42,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
         'non_fixture_non_create_project_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
           WHERE owner_user_id = '${USER_A}'::uuid
             AND project_id <> '${PROJECT_A}'::uuid
-            AND command_kind <> 'createProject')
+            AND command_kind <> 'createProject'
+            AND command_kind <> 'updateProject')
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {

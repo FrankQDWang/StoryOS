@@ -6,7 +6,7 @@ import {
   createProjectChallenge,
   listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { GetProjectResponse, ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject } from "./boot.ts";
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
@@ -17,6 +17,7 @@ import type {
   ProjectReadyState,
 } from "./editor-types.ts";
 import { attachManualInput } from "./manual-input.ts";
+import { renameOwnedProject } from "./rename-project.ts";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -57,6 +58,8 @@ function ProjectReadyView({
     state.editor.kind === "editor-ready" ? state.editor.pending.save_state : "needs_attention",
   );
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
+  const [title, setTitle] = useState(state.project.project.title);
+  const [revision, setRevision] = useState<string>();
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -79,10 +82,29 @@ function ProjectReadyView({
       },
     });
   }, []);
+  useEffect(() => {
+    void listProjects({ baseUrl, fetchImpl }).then((response) => {
+      const item = response.projects.find((entry) =>
+        entry.project_scope.project_id === state.project.project.project_id);
+      if (item === undefined) return;
+      setRevision(item.revision);
+    }).catch(() => {});
+  }, [baseUrl, fetchImpl, state.project.project.project_id]);
 
   return (
     <section>
-      <h1>{state.project.project.title}</h1>
+      <h1>{title}</h1>
+      <RenameProjectForm
+        projectId={state.project.project.project_id}
+        revision={revision}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+        onRenamed={(nextTitle, nextRevision) => {
+          setTitle(nextTitle);
+          setRevision(nextRevision);
+        }}
+      />
       <h2>{state.chapter.chapter.title}</h2>
       <textarea ref={editorRef} defaultValue={initialBody} readOnly={readOnly} />
       <small
@@ -93,6 +115,91 @@ function ProjectReadyView({
         {saveState}
       </small>
       <small>{`权威修订 ${state.chapter.chapter.current_revision.revision_id}`}</small>
+    </section>
+  );
+}
+
+function RenameProjectForm({
+  projectId,
+  revision,
+  baseUrl,
+  fetchImpl,
+  cryptoImpl,
+  onRenamed,
+}: {
+  projectId: string;
+  revision: string | undefined;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+  onRenamed: (title: string, revision: string) => void;
+}) {
+  return (
+    <form
+      data-rename={projectId}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (revision === undefined) return;
+        const title = String(new FormData(event.currentTarget).get("rename-title") ?? "").trim();
+        if (!title) return;
+        void renameOwnedProject({
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+          projectId,
+          title,
+          expectedProjectRevision: revision,
+        }).then((updated) => {
+          if (updated.effect.kind !== "authoritative_applied") return;
+          onRenamed(updated.project.title, updated.effect.revision);
+        }).catch(() => {});
+      }}
+    >
+      <label>
+        项目标题
+        <input name="rename-title" required maxLength={1024} disabled={revision === undefined} />
+      </label>
+      <button type="submit" disabled={revision === undefined}>重命名</button>
+    </form>
+  );
+}
+
+function EmptyProjectReadyView({
+  project,
+  baseUrl,
+  fetchImpl,
+  cryptoImpl,
+}: {
+  project: GetProjectResponse;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+}) {
+  const [title, setTitle] = useState(project.project.title);
+  const [revision, setRevision] = useState<string>();
+  useEffect(() => {
+    void listProjects({ baseUrl, fetchImpl }).then((response) => {
+      const item = response.projects.find((entry) =>
+        entry.project_scope.project_id === project.project.project_id);
+      if (item === undefined) return;
+      setRevision(item.revision);
+    }).catch(() => {});
+  }, [baseUrl, fetchImpl, project.project.project_id]);
+  return (
+    <section>
+      <h1>{title}</h1>
+      <p>空工作区</p>
+      <RenameProjectForm
+        projectId={project.project.project_id}
+        revision={revision}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+        onRenamed={(nextTitle, nextRevision) => {
+          setTitle(nextTitle);
+          setRevision(nextRevision);
+        }}
+      />
     </section>
   );
 }
@@ -184,6 +291,20 @@ function ProtectedReadyView({
               >
                 {item.title}
               </button>
+              <RenameProjectForm
+                projectId={item.project_scope.project_id}
+                revision={item.revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onRenamed={() => {
+                  void listProjects({ baseUrl, fetchImpl })
+                    .then((response) => {
+                      setLibrary(response.projects);
+                    })
+                    .catch(() => {});
+                }}
+              />
             </li>
           ))}
         </ul>
@@ -223,10 +344,12 @@ function Stage1View({
   }
   if (current.kind === "empty-project-ready") {
     return (
-      <section>
-        <h1>{current.project.project.title}</h1>
-        <p>空工作区</p>
-      </section>
+      <EmptyProjectReadyView
+        project={current.project}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+      />
     );
   }
   if (current.kind === "protected-ready") {
