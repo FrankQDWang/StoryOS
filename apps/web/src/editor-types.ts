@@ -335,6 +335,12 @@ export interface ProjectBlockedState {
   details?: StateDifference[];
 }
 
+export interface EmptyProjectReadyState {
+  kind: "empty-project-ready";
+  profile: Release1ProtocolProfile;
+  project: GetProjectResponse;
+}
+
 export interface ProjectReadyState {
   kind: "project-ready";
   profile: Release1ProtocolProfile;
@@ -347,4 +353,5 @@ export type ControlledProjectState =
   | ProtocolBlockedState
   | ProtectedReadyState
   | ProjectBlockedState
+  | EmptyProjectReadyState
   | ProjectReadyState;
