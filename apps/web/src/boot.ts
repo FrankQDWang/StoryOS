@@ -2,6 +2,7 @@ import {
   getChapter,
   getProject,
   getProtocolProfile,
+  listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type {
@@ -136,6 +137,17 @@ export async function openControlledProject(options: {
       || scope?.project_id !== projectId
       || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
     const project = projectValue as GetProjectResponse;
+    const listed = await listProjects(queryOptions);
+    const listedItem = listed.projects.find((entry) =>
+      entry.project_scope.project_id === projectId);
+    if (listedItem?.lifecycle.kind !== "active") {
+      return {
+        kind: "project-blocked",
+        code: "project_unavailable",
+        heading: "StoryOS 无法打开项目",
+        message: "无法读取这个受控项目或其当前章节。",
+      };
+    }
     if (project.project.open.kind === "empty") {
       return { kind: "empty-project-ready", profile: boot.profile, project };
     }

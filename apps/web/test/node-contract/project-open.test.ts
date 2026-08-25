@@ -9,6 +9,7 @@ import {
 import type {
   GetChapterResponse,
   GetProjectResponse,
+  ListProjectsResponse,
   Release1ProtocolProfile,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 
@@ -29,9 +30,10 @@ function requestUrl(input: string | URL | Request): string | URL {
 test("the protected Web client opens the authoritative current Chapter", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
   const chapter = fixture<GetChapterResponse>("get-chapter.json");
   const requests: Array<{ path: string; options: RequestInit | undefined }> = [];
-  const responses: unknown[] = [profile, project, chapter];
+  const responses: unknown[] = [profile, project, listed, chapter];
   const fetchImpl: typeof fetch = async (url, options) => {
     requests.push({ path: new URL(requestUrl(url)).pathname, options });
     return new Response(JSON.stringify(responses.shift()), {
@@ -52,15 +54,19 @@ test("the protected Web client opens the authoritative current Chapter", async (
   assert.deepEqual(requests.map(({ path }) => path), [
     "/api/v1/protocol",
     `/api/v1/projects/${project.project.project_id}`,
+    "/api/v1/projects",
     `/api/v1/projects/${project.project.project_id}/chapters/${
       project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "missing"
     }`,
   ]);
   const projectRequest = requests.at(1);
-  const chapterRequest = requests.at(2);
+  const listRequest = requests.at(2);
+  const chapterRequest = requests.at(3);
   assert.ok(projectRequest);
+  assert.ok(listRequest);
   assert.ok(chapterRequest);
   assert.equal(projectRequest.options?.credentials, "same-origin");
+  assert.equal(listRequest.options?.credentials, "same-origin");
   assert.equal(chapterRequest.options?.credentials, "same-origin");
   assert.equal(new Headers(projectRequest.options?.headers).get("x-storyos-client-session"), null);
 });
@@ -68,15 +74,17 @@ test("the protected Web client opens the authoritative current Chapter", async (
 test("an empty Project opens without a Chapter identity or starter document", async () => {
   const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
   const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
   project.project = {
     project_id: project.project.project_id,
     title: "Empty Novel",
     open: { kind: "empty" },
   };
   const requests: string[] = [];
+  const responses: unknown[] = [profile, project, listed];
   const fetchImpl: typeof fetch = async (url) => {
     requests.push(new URL(requestUrl(url)).pathname);
-    return new Response(JSON.stringify(requests.length === 1 ? profile : project), {
+    return new Response(JSON.stringify(responses.shift()), {
       status: 200, headers: { "content-type": "application/json" },
     });
   };
@@ -94,6 +102,75 @@ test("an empty Project opens without a Chapter identity or starter document", as
   assert.deepEqual(requests, [
     "/api/v1/protocol",
     `/api/v1/projects/${project.project.project_id}`,
+    "/api/v1/projects",
+  ]);
+});
+
+test("an archived Project fails closed without opening a workspace", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  const archivedItem = listed.projects.find((entry) =>
+    entry.project_scope.project_id === project.project.project_id);
+  assert.ok(archivedItem);
+  archivedItem.lifecycle = { kind: "archived" };
+  const requests: string[] = [];
+  const responses: unknown[] = [profile, project, listed];
+  const fetchImpl: typeof fetch = async (url) => {
+    requests.push(new URL(requestUrl(url)).pathname);
+    return new Response(JSON.stringify(responses.shift()), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+
+  const state = await openControlledProject({
+    baseUrl: "http://storyos.test",
+    projectId: project.project.project_id,
+    fetchImpl,
+  });
+  assert.deepEqual(state, {
+    kind: "project-blocked",
+    code: "project_unavailable",
+    heading: "StoryOS 无法打开项目",
+    message: "无法读取这个受控项目或其当前章节。",
+  });
+  assert.deepEqual(requests, [
+    "/api/v1/protocol",
+    `/api/v1/projects/${project.project.project_id}`,
+    "/api/v1/projects",
+  ]);
+});
+
+test("a Project missing from the library fails closed without opening a workspace", async () => {
+  const profile = fixture<Release1ProtocolProfile>("get-protocol-profile.json");
+  const project = fixture<GetProjectResponse>("get-project.json");
+  const listed = fixture<ListProjectsResponse>("list-projects.json");
+  listed.projects = listed.projects.filter((entry) =>
+    entry.project_scope.project_id !== project.project.project_id);
+  const requests: string[] = [];
+  const responses: unknown[] = [profile, project, listed];
+  const fetchImpl: typeof fetch = async (url) => {
+    requests.push(new URL(requestUrl(url)).pathname);
+    return new Response(JSON.stringify(responses.shift()), {
+      status: 200, headers: { "content-type": "application/json" },
+    });
+  };
+
+  const state = await openControlledProject({
+    baseUrl: "http://storyos.test",
+    projectId: project.project.project_id,
+    fetchImpl,
+  });
+  assert.deepEqual(state, {
+    kind: "project-blocked",
+    code: "project_unavailable",
+    heading: "StoryOS 无法打开项目",
+    message: "无法读取这个受控项目或其当前章节。",
+  });
+  assert.deepEqual(requests, [
+    "/api/v1/protocol",
+    `/api/v1/projects/${project.project.project_id}`,
+    "/api/v1/projects",
   ]);
 });
 
@@ -141,7 +218,8 @@ test("missing, empty, invalid, or mismatched owner identities fail closed", asyn
     else project.project_scope.owner_user_id = projectOwner;
     if (chapterOwner === undefined) Reflect.deleteProperty(chapter.project_scope, "owner_user_id");
     else chapter.project_scope.owner_user_id = chapterOwner;
-    const responses = [profile, project, chapter];
+    const listed = fixture<ListProjectsResponse>("list-projects.json");
+    const responses = [profile, project, listed, chapter];
     const fetchImpl = async () => new Response(JSON.stringify(responses.shift()), { status: 200 });
 
     assert.deepEqual(await openControlledProject({
