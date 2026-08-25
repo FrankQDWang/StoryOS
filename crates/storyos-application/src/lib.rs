@@ -24,6 +24,7 @@
 
 use std::future::Future;
 
+mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
@@ -56,6 +57,10 @@ pub use author_edit_outcome::{
     ReadApplyAuthorEditOutcome, get_apply_author_edit_outcome,
 };
 
+pub use archive_project::{
+    ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
+    ArchiveProjectSettlementEffect, ArchiveProjectStore, archive_project,
+};
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
     create_project,

@@ -1,8 +1,13 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
+mod archive_project;
 mod create_project;
 mod update_project;
 
+pub use archive_project::{
+    ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
+    ArchiveProjectResult, ProjectLifecycle, archive_project,
+};
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use update_project::{
     UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
@@ -191,3 +196,7 @@ mod create_project_tests;
 #[cfg(test)]
 #[path = "update_project_tests.rs"]
 mod update_project_tests;
+
+#[cfg(test)]
+#[path = "archive_project_tests.rs"]
+mod archive_project_tests;
