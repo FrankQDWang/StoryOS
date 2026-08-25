@@ -139,21 +139,23 @@ async fn persist_takeover_settlement(
     let resulting_generation_text = resulting_generation.to_string();
 
     let head = client
-        .query_one(
+        .query_opt(
             "SELECT head.current_revision_id::text
                FROM storyos.projects AS project
                JOIN storyos.authoritative_heads AS head
                  ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
                     (project.owner_user_id, project.project_id, project.current_chapter_id)
               WHERE project.owner_user_id = $1::text::uuid
-                AND project.project_id = $2::text::uuid",
+                AND project.project_id = $2::text::uuid
+                AND project.lifecycle_state = 'active'",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
             ],
         )
         .await
-        .map_err(takeover_database_error)?;
+        .map_err(takeover_database_error)?
+        .ok_or(TakeOverProjectWriterError::BindingConflict)?;
     let current_head: String = head.get(0);
 
     let generation_inserts = client

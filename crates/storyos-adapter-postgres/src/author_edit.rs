@@ -260,7 +260,13 @@ impl PostgresProjectReader {
                         AND session.client_session_generation = $7::text::numeric
                         AND session.client_contract_revision = $23
                         AND session.security_policy_revision = $24
-                        AND challenge.consumed_at IS NOT NULL",
+                        AND challenge.consumed_at IS NOT NULL
+                        AND EXISTS (
+                          SELECT 1 FROM storyos.projects AS project
+                           WHERE project.owner_user_id = session.owner_user_id
+                             AND project.project_id = session.project_id
+                             AND project.lifecycle_state = 'active'
+                        )",
                         &[
                             &command.project_scope.owner_user_id.as_ref(),
                             &command.project_scope.project_id.as_ref(),
