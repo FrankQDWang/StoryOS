@@ -101,6 +101,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "updateProject")]
     #[ts(rename = "updateProject")]
     UpdateProject,
+    #[serde(rename = "archiveProject")]
+    #[ts(rename = "archiveProject")]
+    ArchiveProject,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

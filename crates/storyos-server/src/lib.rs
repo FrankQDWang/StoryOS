@@ -17,6 +17,7 @@ use storyos_application::{
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
 mod create_project;
@@ -29,6 +30,7 @@ mod snapshot;
 mod takeover;
 mod update_project;
 
+use archive_project::archive_project;
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
@@ -187,6 +189,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             .on(
                 method_filter(contracts::CREATE_PROJECT_METHOD),
                 create_project,
+            ),
+        )
+        .route(
+            contracts::ARCHIVE_PROJECT_PATH,
+            routing::on(
+                method_filter(contracts::ARCHIVE_PROJECT_METHOD),
+                archive_project,
             ),
         )
         .route(

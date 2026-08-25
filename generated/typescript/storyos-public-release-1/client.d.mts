@@ -49,7 +49,7 @@ export type CreateProjectRequest = { command_schema: string, prospective_project
 
 export type CreateProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, };
 
-export type ProjectLifecycleState = { "kind": "active" };
+export type ProjectLifecycleState = { "kind": "active" } | { "kind": "archived" };
 
 export type ProjectListItem = { project_scope: ProjectScope, title: string, lifecycle: ProjectLifecycleState, revision: string, open: ProjectOpenState, };
 
@@ -67,6 +67,18 @@ export type UpdateProjectEffect = { "kind": "authoritative_applied", title: stri
 
 export type UpdateProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateProjectEffect, };
 
+export type ArchiveProjectInput = { expected_project_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type ArchiveProjectRequest = { command_schema: string, archive_project_input: ArchiveProjectInput, };
+
+export type ArchiveProjectNoEffectReason = "already_archived";
+
+export type ArchiveProjectConflictReason = "stale_project_revision";
+
+export type ArchiveProjectEffect = { "kind": "authoritative_applied", revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: ArchiveProjectNoEffectReason, } | { "kind": "conflicted", reason: ArchiveProjectConflictReason, };
+
+export type ArchiveProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: ArchiveProjectEffect, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -75,7 +87,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -147,6 +159,8 @@ export declare function createProject(options: StoryOSQueryOptions & { request: 
 export declare function listProjects(options: StoryOSQueryOptions): Promise<ListProjectsResponse>;
 export declare function digestUpdateProject(request: UpdateProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProject(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectResponse>;
+export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

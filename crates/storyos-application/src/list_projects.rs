@@ -5,6 +5,7 @@ use crate::{ChapterId, ProjectReadError, ProjectScope, UserId};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProjectLifecycle {
     Active,
+    Archived,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

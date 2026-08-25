@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:182782aa3ddeb72a345d4161e0bc2808a8f03998006f7ef76239c16f48e67d8f",
+  "corpus_digest": "sha256:77e9532de8a0764c8486b10c87c58f73f20897bb60dbc8130ccba003191533ed",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -27,6 +27,9 @@
       "generated/golden-wire/storyos-public-release-1/update-project.json",
       "generated/golden-wire/storyos-public-release-1/update-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-project.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/archive-project.json",
+      "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -194,6 +197,24 @@
       "fixture_id": "storyos.golden.updateProject.boundary.v1",
       "operation_id": "updateProject",
       "path": "generated/golden-wire/storyos-public-release-1/update-project.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.archiveProject.positive.v1",
+      "operation_id": "archiveProject",
+      "path": "generated/golden-wire/storyos-public-release-1/archive-project.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.archiveProject.invalid.v1",
+      "operation_id": "archiveProject",
+      "path": "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.archiveProject.boundary.v1",
+      "operation_id": "archiveProject",
+      "path": "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json"
     },
     {
       "classification": "positive",

@@ -36,6 +36,7 @@ impl ProjectLibrary for PostgresProjectReader {
         for row in rows {
             let lifecycle = match row.get::<_, String>(3).as_str() {
                 "active" => ProjectLifecycle::Active,
+                "archived" => ProjectLifecycle::Archived,
                 other => {
                     return Err(ProjectReadError::unavailable(std::io::Error::other(
                         format!("unsupported Project lifecycle {other}"),

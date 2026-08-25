@@ -1,5 +1,76 @@
 {
   "$defs": {
+    "ArchiveProjectConflictReason": {
+      "enum": [
+        "stale_project_revision"
+      ],
+      "type": "string"
+    },
+    "ArchiveProjectEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "authoritative_applied",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "revision",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/ArchiveProjectNoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/ArchiveProjectConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ArchiveProjectNoEffectReason": {
+      "enum": [
+        "already_archived"
+      ],
+      "type": "string"
+    },
     "ControlledProject": {
       "additionalProperties": false,
       "properties": {
@@ -231,84 +302,9 @@
         "project_id"
       ],
       "type": "object"
-    },
-    "UpdateProjectConflictReason": {
-      "enum": [
-        "stale_project_revision"
-      ],
-      "type": "string"
-    },
-    "UpdateProjectEffect": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "authoritative_applied",
-              "type": "string"
-            },
-            "project_activity_position": {
-              "type": "string"
-            },
-            "revision": {
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "title",
-            "revision",
-            "project_activity_position"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "no_effect",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateProjectNoEffectReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateProjectConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "UpdateProjectNoEffectReason": {
-      "enum": [
-        "title_unchanged"
-      ],
-      "type": "string"
     }
   },
-  "$id": "storyos.command.update-project.response.v1",
+  "$id": "storyos.command.archive-project.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -325,7 +321,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateProjectEffect"
+      "$ref": "#/$defs/ArchiveProjectEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -337,7 +333,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-project.response.v1",
+      "const": "storyos.command.archive-project.response.v1",
       "type": "string"
     }
   },
@@ -351,6 +347,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Update Project Response",
+  "title": "StoryOS Archive Project Response",
   "type": "object"
 }
