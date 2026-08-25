@@ -20,11 +20,16 @@ mod takeover_admission_tests;
 #[path = "create_project_challenge_tests.rs"]
 mod create_project_challenge_tests;
 
+#[cfg(test)]
+#[path = "create_project_tests.rs"]
+mod create_project_tests;
+
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
 mod author_edit_replay;
 mod author_edit_settlement;
+mod create_project;
 mod create_project_challenge;
 mod editor_session;
 mod snapshot;
