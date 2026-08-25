@@ -16,7 +16,7 @@ pub(super) const CONTRACT_REVISION: &str =
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
 pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v3";
 pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v3";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v6";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v7";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -393,7 +393,14 @@ pub use crate::project_command_targets::project_command_kind;
 pub struct ControlledProject {
     pub project_id: String,
     pub title: String,
-    pub current_chapter_id: String,
+    pub open: ProjectOpenState,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProjectOpenState {
+    Empty,
+    CurrentChapter { current_chapter_id: String },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -1,0 +1,45 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000212",
+  "command_id": "018f0000-0000-7001-8000-000000000211",
+  "correlation_id": "018f0000-0000-7001-8000-000000000210",
+  "project": {
+    "open": {
+      "kind": "empty"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000201",
+    "title": "Empty Novel"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "artifact_lifecycle_event_refs": [],
+    "author_action_sequence": null,
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000212",
+    "authoritative_commit_ids": [],
+    "authoritative_revision_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.createProject.jcs.v1",
+      "value_hex_lowercase": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "command_kind": "createProject",
+    "condition_refs": [],
+    "created_at": "1970-01-01T00:00:00.000Z",
+    "draft_artifact_refs": [],
+    "expected_heads": [],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000214",
+    "prior_heads": [],
+    "producer_cause": "author_command_admission",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_revision_ids": [],
+    "receipt_id": "018f0000-0000-7001-8000-000000000213",
+    "result": "authoritative_applied",
+    "resulting_heads": []
+  },
+  "schema_id": "storyos.command.create-project.response.v1"
+}

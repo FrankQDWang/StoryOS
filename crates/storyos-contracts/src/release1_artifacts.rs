@@ -22,16 +22,16 @@ use crate::release1::{
     GetEditorSessionResponse, GetProjectResponse, LIMIT_PROFILE_REVISION, PROBLEM_PROFILE,
     PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID, PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
     PROJECT_REQUEST_SCHEMA_ID, PROJECT_RESPONSE_SCHEMA_ID, PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
-    PROTOCOL_PROFILE_SCHEMA_ID, PUBLIC_PROTOCOL_RELEASE, ProjectScope, RELEASE_IDENTITY_SCHEMA_ID,
-    REQUIRED_CAPABILITIES, Release1CompatibilityIdentity, Release1ProtocolProfile,
-    SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION, WORKER_CONTRACT_REVISION,
-    protocol_profile,
+    PROTOCOL_PROFILE_SCHEMA_ID, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
+    RELEASE_IDENTITY_SCHEMA_ID, REQUIRED_CAPABILITIES, Release1CompatibilityIdentity,
+    Release1ProtocolProfile, SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION,
+    WORKER_CONTRACT_REVISION, protocol_profile,
 };
 use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_author_edit_outcome::GET_APPLY_AUTHOR_EDIT_OUTCOME;
 use crate::release1_author_edit_outcome_artifacts as author_edit_outcome_artifacts;
-use crate::release1_create_project::CREATE_PROJECT_CHALLENGE;
+use crate::release1_create_project::{CREATE_PROJECT, CREATE_PROJECT_CHALLENGE};
 use crate::release1_create_project_artifacts as create_project_artifacts;
 use crate::release1_snapshot::{ACTIVITY_STREAM, GET_SNAPSHOT};
 use crate::release1_snapshot_artifacts as snapshot_artifacts;
@@ -108,7 +108,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:9804868bfbed79199040780242dda1f2428874308b2a7806b2b55fba4e055af0";
+    "sha256:28b366861426e5642deabfa5700aed8417ee5d2f8361efa227e4eb0e5bd3f15a";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -143,6 +143,8 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
         create_project_artifacts::challenge_request_schema_bytes();
     let create_project_challenge_response_schema =
         create_project_artifacts::challenge_response_schema_bytes();
+    let create_project_request_schema = create_project_artifacts::command_request_schema_bytes();
+    let create_project_response_schema = create_project_artifacts::command_response_schema_bytes();
     let editor_create_request_schema = json_bytes(&typed_schema::<CreateEditorSessionRequest>(
         CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
         "StoryOS Create Editor Session Request",
@@ -220,6 +222,16 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
             crate::CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
             create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
             &create_project_challenge_response_schema,
+        ),
+        (
+            crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
+            create_project_artifacts::REQUEST_SCHEMA_PATH,
+            &create_project_request_schema,
+        ),
+        (
+            crate::CREATE_PROJECT_RESPONSE_SCHEMA_ID,
+            create_project_artifacts::RESPONSE_SCHEMA_PATH,
+            &create_project_response_schema,
         ),
         (
             CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
@@ -377,6 +389,8 @@ fn generated_files() -> Vec<GeneratedFile> {
         create_project_artifacts::challenge_request_schema_bytes();
     let create_project_challenge_response_schema =
         create_project_artifacts::challenge_response_schema_bytes();
+    let create_project_request_schema = create_project_artifacts::command_request_schema_bytes();
+    let create_project_response_schema = create_project_artifacts::command_response_schema_bytes();
     let editor_create_request_schema = json_bytes(&typed_schema::<CreateEditorSessionRequest>(
         CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
         "StoryOS Create Editor Session Request",
@@ -454,6 +468,16 @@ fn generated_files() -> Vec<GeneratedFile> {
             crate::CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
             create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
             &create_project_challenge_response_schema,
+        ),
+        (
+            crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
+            create_project_artifacts::REQUEST_SCHEMA_PATH,
+            &create_project_request_schema,
+        ),
+        (
+            crate::CREATE_PROJECT_RESPONSE_SCHEMA_ID,
+            create_project_artifacts::RESPONSE_SCHEMA_PATH,
+            &create_project_response_schema,
         ),
         (
             CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
@@ -549,6 +573,14 @@ fn generated_files() -> Vec<GeneratedFile> {
             create_project_challenge_response_schema,
         ),
         (
+            create_project_artifacts::REQUEST_SCHEMA_PATH,
+            create_project_request_schema,
+        ),
+        (
+            create_project_artifacts::RESPONSE_SCHEMA_PATH,
+            create_project_response_schema,
+        ),
+        (
             EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
             editor_create_request_schema,
         ),
@@ -642,6 +674,18 @@ fn generated_files() -> Vec<GeneratedFile> {
         (
             create_project_artifacts::CHALLENGE_FIXTURE_PATHS[2],
             create_project_artifacts::challenge_boundary_fixture_bytes(),
+        ),
+        (
+            create_project_artifacts::FIXTURE_PATHS[0],
+            create_project_artifacts::fixture_bytes(),
+        ),
+        (
+            create_project_artifacts::FIXTURE_PATHS[1],
+            create_project_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            create_project_artifacts::FIXTURE_PATHS[2],
+            create_project_artifacts::boundary_fixture_bytes(),
         ),
         (
             CREATE_EDITOR_SESSION_FIXTURE_PATHS[0],
@@ -772,6 +816,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             operation_graph(&GET_PROJECT, &["server_derived_project_scope", "project_visibility"]),
             operation_graph(&GET_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "canonical_snapshot"]),
             challenge_operation_graph(&CREATE_PROJECT_CHALLENGE, &["server_derived_user", "prospective_project_scope", "strict_origin", "protected_client_session_binding", "closed_create_project_schema", "body_idempotency_key"]),
+            command_operation_graph(&CREATE_PROJECT, &["server_derived_user", "prospective_project_scope", "strict_origin", "protected_client_session_binding", "challenge_nonce_record", "expected_absent_project"]),
             challenge_operation_graph(&CREATE_PROJECT_COMMAND_CHALLENGE, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "route_method_schema_digest_match", "closed_command_schema"]),
             command_operation_graph(&CREATE_EDITOR_SESSION, &["server_derived_project_scope", "strict_origin", "protected_client_session_binding", "project_command_challenge"]),
             operation_graph(&GET_EDITOR_SESSION, &["server_derived_project_scope", "session_scope_join", "protected_client_session_binding"]),
@@ -1034,6 +1079,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         GET_PROJECT.operation_id,
         GET_CHAPTER.operation_id,
         CREATE_PROJECT_CHALLENGE.operation_id,
+        CREATE_PROJECT.operation_id,
         CREATE_PROJECT_COMMAND_CHALLENGE.operation_id,
         CREATE_EDITOR_SESSION.operation_id,
         GET_EDITOR_SESSION.operation_id,
@@ -1147,6 +1193,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let profile = Release1ProtocolProfile::decl(&config);
     let project_scope = ProjectScope::decl(&config);
     let controlled_project = ControlledProject::decl(&config);
+    let project_open = ProjectOpenState::decl(&config);
     let chapter_revision = AuthoritativeChapterRevision::decl(&config);
     let current_chapter = CurrentChapter::decl(&config);
     let project = GetProjectResponse::decl(&config);
@@ -1163,7 +1210,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
     let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         create_project_artifacts::typescript_type_declarations(),
         author_edit_artifacts::typescript_type_declarations(),
         author_edit_outcome_artifacts::typescript_type_declarations(),
@@ -1217,6 +1264,7 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 CHAPTER_FIXTURE_PATHS[0], CHAPTER_FIXTURE_PATHS[1], CHAPTER_FIXTURE_PATHS[2],
                 CHALLENGE_FIXTURE_PATHS[0], CHALLENGE_FIXTURE_PATHS[1], CHALLENGE_FIXTURE_PATHS[2],
                 create_project_artifacts::CHALLENGE_FIXTURE_PATHS[0], create_project_artifacts::CHALLENGE_FIXTURE_PATHS[1], create_project_artifacts::CHALLENGE_FIXTURE_PATHS[2],
+                create_project_artifacts::FIXTURE_PATHS[0], create_project_artifacts::FIXTURE_PATHS[1], create_project_artifacts::FIXTURE_PATHS[2],
                 CREATE_EDITOR_SESSION_FIXTURE_PATHS[0], CREATE_EDITOR_SESSION_FIXTURE_PATHS[1], CREATE_EDITOR_SESSION_FIXTURE_PATHS[2],
                 GET_EDITOR_SESSION_FIXTURE_PATHS[0], GET_EDITOR_SESSION_FIXTURE_PATHS[1], GET_EDITOR_SESSION_FIXTURE_PATHS[2],
                 author_edit_artifacts::FIXTURE_PATHS[0], author_edit_artifacts::FIXTURE_PATHS[1], author_edit_artifacts::FIXTURE_PATHS[2],
@@ -1245,6 +1293,9 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": CREATE_PROJECT_CHALLENGE.fixtures[0], "classification": "positive", "operation_id": CREATE_PROJECT_CHALLENGE.operation_id, "path": create_project_artifacts::CHALLENGE_FIXTURE_PATHS[0]},
             {"fixture_id": CREATE_PROJECT_CHALLENGE.fixtures[1], "classification": "invalid", "operation_id": CREATE_PROJECT_CHALLENGE.operation_id, "path": create_project_artifacts::CHALLENGE_FIXTURE_PATHS[1]},
             {"fixture_id": CREATE_PROJECT_CHALLENGE.fixtures[2], "classification": "boundary", "operation_id": CREATE_PROJECT_CHALLENGE.operation_id, "path": create_project_artifacts::CHALLENGE_FIXTURE_PATHS[2]},
+            {"fixture_id": CREATE_PROJECT.fixtures[0], "classification": "positive", "operation_id": CREATE_PROJECT.operation_id, "path": create_project_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": CREATE_PROJECT.fixtures[1], "classification": "invalid", "operation_id": CREATE_PROJECT.operation_id, "path": create_project_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": CREATE_PROJECT.fixtures[2], "classification": "boundary", "operation_id": CREATE_PROJECT.operation_id, "path": create_project_artifacts::FIXTURE_PATHS[2]},
             {"fixture_id": CREATE_EDITOR_SESSION.fixtures[0], "classification": "positive", "operation_id": CREATE_EDITOR_SESSION.operation_id, "path": CREATE_EDITOR_SESSION_FIXTURE_PATHS[0]},
             {"fixture_id": CREATE_EDITOR_SESSION.fixtures[1], "classification": "invalid", "operation_id": CREATE_EDITOR_SESSION.operation_id, "path": CREATE_EDITOR_SESSION_FIXTURE_PATHS[1]},
             {"fixture_id": CREATE_EDITOR_SESSION.fixtures[2], "classification": "boundary", "operation_id": CREATE_EDITOR_SESSION.operation_id, "path": CREATE_EDITOR_SESSION_FIXTURE_PATHS[2]},
@@ -1307,6 +1358,9 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         create_project_artifacts::challenge_fixture_bytes(),
         create_project_artifacts::challenge_invalid_fixture_bytes(),
         create_project_artifacts::challenge_boundary_fixture_bytes(),
+        create_project_artifacts::fixture_bytes(),
+        create_project_artifacts::invalid_fixture_bytes(),
+        create_project_artifacts::boundary_fixture_bytes(),
         create_editor_session_fixture_bytes(),
         invalid_create_editor_session_fixture_bytes(),
         boundary_create_editor_session_fixture_bytes(),
@@ -1337,7 +1391,7 @@ fn project_fixture() -> Value {
         "schema_id": PROJECT_RESPONSE_SCHEMA_ID,
         "correlation_id": "018f0000-0000-7001-8000-000000000005",
         "project_scope": {"owner_user_id": "018f0000-0000-7001-8000-000000000001", "project_id": "018f0000-0000-7001-8000-000000000002"},
-        "project": {"project_id": "018f0000-0000-7001-8000-000000000002", "title": "受控项目", "current_chapter_id": "018f0000-0000-7001-8000-000000000003"}
+        "project": {"project_id": "018f0000-0000-7001-8000-000000000002", "title": "受控项目", "open": {"kind": "current_chapter", "current_chapter_id": "018f0000-0000-7001-8000-000000000003"}}
     })
 }
 

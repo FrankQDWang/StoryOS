@@ -319,7 +319,7 @@ fn prospective_create_project_challenge_wire_is_generated_from_one_closed_contra
         .find(|line| line.starts_with("  x-storyos-implemented-slice:"))
         .expect("OpenAPI names the runtime-implemented slice");
     assert!(implemented_slice.contains(operation.operation_id));
-    assert!(!openapi.contains("/api/v1/projects:\n    post:\n      operationId: createProject"));
+    assert!(openapi.contains("/api/v1/projects:\n    post:\n      operationId: createProject"));
 
     let schema_catalog: serde_json::Value = serde_json::from_slice(
         &generated["generated/schema-catalog/storyos-public-release-1.json"],
@@ -355,7 +355,7 @@ fn prospective_create_project_challenge_wire_is_generated_from_one_closed_contra
         .as_str()
         .expect("TypeScript operation must be a string");
     assert!(client.contains(&format!("export async function {typescript_operation}(")));
-    assert!(!client.contains("export async function createProject("));
+    assert!(client.contains("export async function createProject("));
     assert!(!client.contains("export async function digestCreateProject"));
 
     let fixture_catalog: serde_json::Value =

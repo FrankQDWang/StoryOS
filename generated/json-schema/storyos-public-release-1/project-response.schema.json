@@ -3,8 +3,8 @@
     "ControlledProject": {
       "additionalProperties": false,
       "properties": {
-        "current_chapter_id": {
-          "type": "string"
+        "open": {
+          "$ref": "#/$defs/ProjectOpenState"
         },
         "project_id": {
           "type": "string"
@@ -16,9 +16,43 @@
       "required": [
         "project_id",
         "title",
-        "current_chapter_id"
+        "open"
       ],
       "type": "object"
+    },
+    "ProjectOpenState": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProjectScope": {
       "additionalProperties": false,

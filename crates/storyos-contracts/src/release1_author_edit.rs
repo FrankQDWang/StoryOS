@@ -95,6 +95,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "takeOverProjectWriter")]
     #[ts(rename = "takeOverProjectWriter")]
     TakeOverProjectWriter,
+    #[serde(rename = "createProject")]
+    #[ts(rename = "createProject")]
+    CreateProject,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

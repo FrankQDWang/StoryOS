@@ -52,7 +52,9 @@ test("the protected Web client opens the authoritative current Chapter", async (
   assert.deepEqual(requests.map(({ path }) => path), [
     "/api/v1/protocol",
     `/api/v1/projects/${project.project.project_id}`,
-    `/api/v1/projects/${project.project.project_id}/chapters/${project.project.current_chapter_id}`,
+    `/api/v1/projects/${project.project.project_id}/chapters/${
+      project.project.open.kind === "current_chapter" ? project.project.open.current_chapter_id : "missing"
+    }`,
   ]);
   const projectRequest = requests.at(1);
   const chapterRequest = requests.at(2);

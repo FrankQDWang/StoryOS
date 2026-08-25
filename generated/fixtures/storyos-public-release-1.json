@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:ee4cf834f25d5ffa0ccd0646c62179e4f32e4f168b79d7892e6ebd4e64cb1a56",
+  "corpus_digest": "sha256:3dcc46a3f66cd0110953878dbb11e7e5bc21193274d5becbce595671242f46ad",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -18,6 +18,9 @@
       "generated/golden-wire/storyos-public-release-1/create-project-challenge.json",
       "generated/golden-wire/storyos-public-release-1/create-project-challenge.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-project-challenge.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/create-project.json",
+      "generated/golden-wire/storyos-public-release-1/create-project.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-project.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -131,6 +134,24 @@
       "fixture_id": "storyos.golden.createProjectChallenge.boundary.v1",
       "operation_id": "createProjectChallenge",
       "path": "generated/golden-wire/storyos-public-release-1/create-project-challenge.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.createProject.positive.v1",
+      "operation_id": "createProject",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.createProject.invalid.v1",
+      "operation_id": "createProject",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.createProject.boundary.v1",
+      "operation_id": "createProject",
+      "path": "generated/golden-wire/storyos-public-release-1/create-project.boundary.json"
     },
     {
       "classification": "positive",
