@@ -128,7 +128,7 @@ export async function openControlledProject(options: {
     const projectValue: unknown = await getProject({ ...queryOptions, projectId });
     const projectView = projectValue as {
       project_scope?: { owner_user_id?: unknown; project_id?: unknown };
-      project?: { project_id?: unknown; current_chapter_id?: unknown };
+      project?: { project_id?: unknown; open?: { kind?: unknown; current_chapter_id?: unknown } };
     };
     const scope = projectView?.project_scope;
     const ownerUserId = scope?.owner_user_id;
@@ -136,7 +136,8 @@ export async function openControlledProject(options: {
       || scope?.project_id !== projectId
       || projectView?.project?.project_id !== projectId) throw new Error("Project Scope mismatch");
     const project = projectValue as GetProjectResponse;
-    const chapterId = projectView.project?.current_chapter_id as string;
+    if (project.project.open.kind === "empty") throw new Error("Project has no current Chapter");
+    const chapterId = project.project.open.current_chapter_id;
     const chapterValue: unknown = await getChapter({ ...queryOptions, projectId, chapterId });
     const chapterView = chapterValue as {
       project_scope?: { owner_user_id?: unknown; project_id?: unknown };

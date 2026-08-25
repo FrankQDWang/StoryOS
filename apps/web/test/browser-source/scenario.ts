@@ -33,7 +33,7 @@ export function createBrowserScenario(): BrowserScenario {
     schema_id: "storyos.query.project.response.v1",
     correlation_id: "018f0000-0000-7001-8000-000000000010",
     project_scope: { owner_user_id: OWNER, project_id: PROJECT },
-    project: { project_id: PROJECT, title: "Project A", current_chapter_id: CHAPTER },
+    project: { project_id: PROJECT, title: "Project A", open: { kind: "current_chapter", current_chapter_id: CHAPTER } },
   };
   const chapter: GetChapterResponse = {
     schema_id: "storyos.query.chapter.response.v1",
