@@ -82,4 +82,7 @@ it("the current User library lists owned Projects and opens an empty Project fro
   expect(root.querySelector("h1")?.textContent).toBe("Library Empty");
   expect(root.querySelector("textarea")).toBeNull();
   expect(root.textContent).toContain("空工作区");
+  const tree = root.querySelector('nav[aria-label="稿件目录"]');
+  expect(tree).not.toBeNull();
+  expect(tree?.querySelectorAll("li")).toHaveLength(0);
 });

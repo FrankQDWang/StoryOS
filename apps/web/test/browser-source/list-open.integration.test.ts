@@ -36,6 +36,17 @@ it("opens a listed empty Project from getProject, not from the list payload", as
         project: { project_id: EMPTY_PROJECT, title: "Authoritative Empty", open: { kind: "empty" } },
       });
     }
+    if (path === `/api/v1/projects/${EMPTY_PROJECT}/manuscript/tree`) {
+      return jsonResponse({
+        project_scope: { owner_user_id: OWNER, project_id: EMPTY_PROJECT },
+        tree_revision: "1",
+        snapshot: {
+          snapshot_id: "018f0000-0000-7001-8000-000000000032",
+          project_scope: { owner_user_id: OWNER, project_id: EMPTY_PROJECT },
+        },
+        volumes: [],
+      });
+    }
     throw new Error(`unexpected request: ${path}`);
   };
 
@@ -57,8 +68,11 @@ it("opens a listed empty Project from getProject, not from the list payload", as
     await expect.poll(() => loaded.root.dataset.bootState).toBe("empty-project-ready");
     expect(loaded.root.querySelector("h1")?.textContent).toBe("Authoritative Empty");
     expect(loaded.root.textContent).not.toContain("List Lie");
+    expect(loaded.root.querySelector('nav[aria-label="稿件目录"]')?.querySelectorAll("li"))
+      .toHaveLength(0);
     expect(requests.filter((path) => path === `/api/v1/projects/${EMPTY_PROJECT}`).length)
       .toBe(1);
+    expect(requests).toContain(`/api/v1/projects/${EMPTY_PROJECT}/manuscript/tree`);
   } finally {
     document.body.replaceChildren();
   }
