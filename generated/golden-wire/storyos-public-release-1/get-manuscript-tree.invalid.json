@@ -1,0 +1,10 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000014",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "schema_id": "storyos.query.manuscript-tree.response.v1",
+  "tree_revision": "1",
+  "volumes": []
+}

@@ -24,6 +24,7 @@ mod create_project;
 mod create_project_challenge;
 mod editor_session;
 mod list_projects;
+mod manuscript_tree;
 mod project_command_challenge;
 mod request_origin;
 mod snapshot;
@@ -39,6 +40,7 @@ use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use editor_session::{create_editor_session, get_editor_session};
 use list_projects::list_projects;
+use manuscript_tree::get_manuscript_tree;
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
@@ -156,6 +158,7 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let get_author_edit_outcome_method =
         method_filter(contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD);
     let get_snapshot_method = method_filter(contracts::GET_SNAPSHOT_METHOD);
+    let get_manuscript_tree_method = method_filter(contracts::GET_MANUSCRIPT_TREE_METHOD);
     let activity_stream_method = method_filter(contracts::ACTIVITY_STREAM_METHOD);
     Router::new()
         .route(
@@ -229,6 +232,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::GET_SNAPSHOT_PATH,
             routing::on(get_snapshot_method, get_snapshot).fallback(snapshot_method_not_allowed),
+        )
+        .route(
+            contracts::GET_MANUSCRIPT_TREE_PATH,
+            routing::on(get_manuscript_tree_method, get_manuscript_tree),
         )
         .route(
             contracts::ACTIVITY_STREAM_PATH,
