@@ -32,6 +32,7 @@ mod create_project;
 mod create_project_challenge;
 mod editor_session;
 mod list_projects;
+mod manuscript_tree;
 mod snapshot;
 mod takeover;
 mod update_project;
@@ -70,6 +71,10 @@ pub use create_project_challenge::{
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
+pub use manuscript_tree::{
+    CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
+    VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
 pub use update_project::{
     UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
     UpdateProjectSettlementEffect, UpdateProjectStore, update_project,

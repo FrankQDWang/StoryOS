@@ -150,7 +150,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0009_create_empty_project.sql \
   -f /tmp/storyos-release1-bootstrap/0010_list_owned_projects.sql \
   -f /tmp/storyos-release1-bootstrap/0011_update_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0012_archive_project.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0012_archive_project.sql \
+  -f /tmp/storyos-release1-bootstrap/0013_manuscript_tree.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -175,7 +176,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0009_create_empty_project.sql \
   -f /tmp/storyos-release1-bootstrap/0010_list_owned_projects.sql \
   -f /tmp/storyos-release1-bootstrap/0011_update_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0012_archive_project.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0012_archive_project.sql \
+  -f /tmp/storyos-release1-bootstrap/0013_manuscript_tree.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
