@@ -1,5 +1,5 @@
 use storyos_application::{
-    CanonicalTreeFacts, ManuscriptTreeReader, ProjectReadError, ProjectScope,
+    CanonicalTreeFacts, ManuscriptTreeReader, ProjectReadError, ProjectScope, VolumeFact, VolumeId,
 };
 
 use super::{PostgresProjectReader, read_error, set_scope};
@@ -28,10 +28,36 @@ impl ManuscriptTreeReader for PostgresProjectReader {
             return Ok(None);
         };
         let snapshot = crate::snapshot::load_latest_canonical_snapshot(&transaction, scope).await?;
-        transaction.commit().await.map_err(read_error)?;
         let Some(snapshot) = snapshot else {
+            transaction.commit().await.map_err(read_error)?;
             return Ok(None);
         };
+        let volume_rows = transaction
+            .query(
+                "SELECT manuscript_object_id::text, title, tree_order::text
+                   FROM storyos.manuscript_objects
+                  WHERE owner_user_id = $1::text::uuid
+                    AND project_id = $2::text::uuid
+                    AND object_kind = 'volume'
+                  ORDER BY tree_order",
+                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+            )
+            .await
+            .map_err(read_error)?;
+        transaction.commit().await.map_err(read_error)?;
+        let mut volumes = Vec::with_capacity(volume_rows.len());
+        for volume in volume_rows {
+            volumes.push(VolumeFact {
+                project_scope: scope.clone(),
+                volume_id: VolumeId::new(volume.get::<_, String>(0)),
+                title: volume.get(1),
+                order: volume
+                    .get::<_, String>(2)
+                    .parse()
+                    .map_err(ProjectReadError::unavailable)?,
+                chapters: Vec::new(),
+            });
+        }
         Ok(Some(CanonicalTreeFacts {
             project_scope: scope.clone(),
             snapshot,
@@ -39,7 +65,7 @@ impl ManuscriptTreeReader for PostgresProjectReader {
                 .get::<_, String>(0)
                 .parse()
                 .map_err(ProjectReadError::unavailable)?,
-            volumes: Vec::new(),
+            volumes,
         }))
     }
 }

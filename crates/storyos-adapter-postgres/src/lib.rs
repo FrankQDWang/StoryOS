@@ -32,6 +32,10 @@ mod update_project_tests;
 #[path = "archive_project_tests.rs"]
 mod archive_project_tests;
 
+#[cfg(test)]
+#[path = "create_volume_tests.rs"]
+mod create_volume_tests;
+
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
@@ -40,6 +44,7 @@ mod author_edit_replay;
 mod author_edit_settlement;
 mod create_project;
 mod create_project_challenge;
+mod create_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_tree;
