@@ -1,6 +1,6 @@
 use storyos_application::{
-    AppliedAuthorEditActivity, CanonicalSnapshot, ProjectScope, SnapshotLookup, SnapshotReadError,
-    SnapshotStore,
+    AppliedAuthorEditActivity, CanonicalSnapshot, ProjectReadError, ProjectScope, SnapshotLookup,
+    SnapshotReadError, SnapshotStore,
 };
 
 use super::*;
@@ -51,6 +51,66 @@ pub(super) async fn persist_canonical_snapshot(
         )
         .await?;
     Ok(())
+}
+
+pub(super) async fn load_latest_canonical_snapshot(
+    transaction: &tokio_postgres::Transaction<'_>,
+    scope: &ProjectScope,
+) -> Result<Option<CanonicalSnapshot>, ProjectReadError> {
+    let row = transaction
+        .query_opt(
+            "SELECT snapshot.snapshot_id::text,
+                    snapshot.project_activity_position::text,
+                    snapshot.replay_generation::text,
+                    snapshot.redaction_profile,
+                    snapshot.schema_profile,
+                    to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+                    CASE WHEN snapshot.expires_at IS NULL THEN NULL
+                         ELSE to_char(snapshot.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                    END,
+                    current_floor.floor_position::text
+               FROM storyos.project_snapshots AS snapshot
+               JOIN LATERAL (
+                 SELECT replay_generation FROM storyos.replay_generations
+                  WHERE owner_user_id = snapshot.owner_user_id AND project_id = snapshot.project_id
+                  ORDER BY replay_generation DESC LIMIT 1
+               ) AS current_generation ON true
+               JOIN storyos.replay_floors AS current_floor
+                 ON (current_floor.owner_user_id, current_floor.project_id,
+                     current_floor.replay_generation) =
+                    (snapshot.owner_user_id, snapshot.project_id, current_generation.replay_generation)
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND snapshot.snapshot_kind = 'canonical'
+                AND (snapshot.expires_at IS NULL OR snapshot.expires_at > clock_timestamp())
+              ORDER BY snapshot.project_activity_position DESC, snapshot.created_at DESC
+              LIMIT 1",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?;
+    row.map(|row| {
+        Ok(CanonicalSnapshot {
+            snapshot_id: row.get(0),
+            project_activity_position: row
+                .get::<_, String>(1)
+                .parse()
+                .map_err(ProjectReadError::unavailable)?,
+            replay_generation: row
+                .get::<_, String>(2)
+                .parse()
+                .map_err(ProjectReadError::unavailable)?,
+            floor_position: row
+                .get::<_, String>(7)
+                .parse()
+                .map_err(ProjectReadError::unavailable)?,
+            redaction_profile: row.get(3),
+            schema_profile: row.get(4),
+            created_at: row.get(5),
+            expires_at: row.get(6),
+        })
+    })
+    .transpose()
 }
 
 impl SnapshotStore for PostgresProjectReader {

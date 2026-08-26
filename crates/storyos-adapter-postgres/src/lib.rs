@@ -42,6 +42,7 @@ mod create_project;
 mod create_project_challenge;
 mod editor_session;
 mod list_projects;
+mod manuscript_tree;
 mod snapshot;
 mod takeover;
 mod update_project;
