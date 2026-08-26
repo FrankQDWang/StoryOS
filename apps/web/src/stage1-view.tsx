@@ -6,7 +6,7 @@ import {
   createProjectChallenge,
   listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { GetProjectResponse, ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { GetManuscriptTreeResponse, GetProjectResponse, ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject } from "./boot.ts";
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
@@ -224,12 +224,14 @@ function ArchiveProjectForm({
 
 function EmptyProjectReadyView({
   project,
+  tree,
   baseUrl,
   fetchImpl,
   cryptoImpl,
   onArchived,
 }: {
   project: GetProjectResponse;
+  tree: GetManuscriptTreeResponse;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -249,6 +251,20 @@ function EmptyProjectReadyView({
     <section>
       <h1>{title}</h1>
       <p>空工作区</p>
+      <nav aria-label="稿件目录">
+        <ul>
+          {tree.volumes.map((volume) => (
+            <li key={volume.volume_id}>
+              {volume.title}
+              <ul>
+                {volume.chapters.map((chapter) => (
+                  <li key={chapter.chapter_id}>{chapter.title}</li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ul>
+      </nav>
       <RenameProjectForm
         projectId={project.project.project_id}
         revision={revision}
@@ -435,6 +451,7 @@ function Stage1View({
     return (
       <EmptyProjectReadyView
         project={current.project}
+        tree={current.tree}
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}

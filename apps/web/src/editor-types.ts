@@ -10,6 +10,7 @@ import type {
   GetEditorSessionResponse,
   GetChapterResponse,
   GetProjectResponse,
+  GetManuscriptTreeResponse,
   ProjectScope,
   Release1ProtocolProfile,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -339,6 +340,7 @@ export interface EmptyProjectReadyState {
   kind: "empty-project-ready";
   profile: Release1ProtocolProfile;
   project: GetProjectResponse;
+  tree: GetManuscriptTreeResponse;
 }
 
 export interface ProjectReadyState {

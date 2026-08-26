@@ -1,5 +1,6 @@
 import {
   getChapter,
+  getManuscriptTree,
   getProject,
   getProtocolProfile,
   listProjects,
@@ -7,6 +8,7 @@ import {
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type {
   GetChapterResponse,
+  GetManuscriptTreeResponse,
   GetProjectResponse,
   Release1ProtocolProfile,
   StoryOSQueryOptions,
@@ -149,7 +151,25 @@ export async function openControlledProject(options: {
       };
     }
     if (project.project.open.kind === "empty") {
-      return { kind: "empty-project-ready", profile: boot.profile, project };
+      const treeValue: unknown = await getManuscriptTree({ ...queryOptions, projectId });
+      const treeView = treeValue as {
+        project_scope?: { owner_user_id?: unknown; project_id?: unknown };
+        snapshot?: { snapshot_id?: unknown; project_scope?: { owner_user_id?: unknown; project_id?: unknown } };
+        tree_revision?: unknown;
+        volumes?: unknown;
+      };
+      const treeOwnerUserId = treeView?.project_scope?.owner_user_id;
+      if (!validUuid(treeOwnerUserId)
+        || treeOwnerUserId !== ownerUserId
+        || treeView?.project_scope?.project_id !== projectId
+        || !validUuid(treeView?.snapshot?.snapshot_id)
+        || treeView?.snapshot?.project_scope?.owner_user_id !== treeOwnerUserId
+        || treeView?.snapshot?.project_scope?.project_id !== projectId
+        || typeof treeView?.tree_revision !== "string"
+        || treeView.tree_revision.length === 0
+        || !Array.isArray(treeView?.volumes)) throw new Error("Manuscript tree Scope mismatch");
+      const tree = treeValue as GetManuscriptTreeResponse;
+      return { kind: "empty-project-ready", profile: boot.profile, project, tree };
     }
     const chapterId = project.project.open.current_chapter_id;
     const chapterValue: unknown = await getChapter({ ...queryOptions, projectId, chapterId });
