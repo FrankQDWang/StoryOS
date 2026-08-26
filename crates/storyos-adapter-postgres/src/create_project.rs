@@ -319,6 +319,14 @@ async fn persist_create_project(
         )
         .await
         .map_err(create_project_database_error)?;
+    crate::snapshot::persist_canonical_snapshot(
+        client,
+        &command.project_scope,
+        &Uuid::now_v7().to_string(),
+        activity_position,
+    )
+    .await
+    .map_err(create_project_database_error)?;
     client
         .execute(
             "UPDATE storyos.command_idempotency
