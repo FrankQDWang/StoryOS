@@ -44,7 +44,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND project_id <> '${PROJECT_A}'::uuid
             AND command_kind <> 'createProject'
             AND command_kind <> 'updateProject'
-            AND command_kind <> 'archiveProject')
+            AND command_kind <> 'archiveProject'
+            AND command_kind <> 'createVolume')
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {

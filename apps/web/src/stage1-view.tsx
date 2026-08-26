@@ -17,6 +17,7 @@ import type {
   ProjectReadyState,
 } from "./editor-types.ts";
 import { archiveOwnedProject } from "./archive-project.ts";
+import { createOwnedVolume } from "./create-volume.ts";
 import { attachManualInput } from "./manual-input.ts";
 import { renameOwnedProject } from "./rename-project.ts";
 
@@ -222,6 +223,50 @@ function ArchiveProjectForm({
   );
 }
 
+function CreateVolumeForm({
+  projectId,
+  treeRevision,
+  baseUrl,
+  fetchImpl,
+  cryptoImpl,
+  onCreated,
+}: {
+  projectId: string;
+  treeRevision: string;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+  onCreated: () => void;
+}) {
+  return (
+    <form
+      data-create-volume={projectId}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const title = String(new FormData(event.currentTarget).get("volume-title") ?? "").trim();
+        if (!title) return;
+        void createOwnedVolume({
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+          projectId,
+          title,
+          expectedTreeRevision: treeRevision,
+        }).then((created) => {
+          if (created.effect.kind !== "authoritative_applied") return;
+          onCreated();
+        }).catch(() => {});
+      }}
+    >
+      <label>
+        卷标题
+        <input name="volume-title" required maxLength={1024} />
+      </label>
+      <button type="submit">创建卷</button>
+    </form>
+  );
+}
+
 function EmptyProjectReadyView({
   project,
   tree,
@@ -229,6 +274,7 @@ function EmptyProjectReadyView({
   fetchImpl,
   cryptoImpl,
   onArchived,
+  onVolumeCreated,
 }: {
   project: GetProjectResponse;
   tree: GetManuscriptTreeResponse;
@@ -236,6 +282,7 @@ function EmptyProjectReadyView({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   onArchived: () => void;
+  onVolumeCreated: () => void;
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState<string>();
@@ -265,6 +312,14 @@ function EmptyProjectReadyView({
           ))}
         </ul>
       </nav>
+      <CreateVolumeForm
+        projectId={project.project.project_id}
+        treeRevision={tree.tree_revision}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+        onCreated={onVolumeCreated}
+      />
       <RenameProjectForm
         projectId={project.project.project_id}
         revision={revision}
@@ -457,6 +512,14 @@ function Stage1View({
         cryptoImpl={cryptoImpl}
         onArchived={() => {
           setCurrent({ kind: "protected-ready", profile: current.profile });
+        }}
+        onVolumeCreated={() => {
+          void openControlledProject({
+            baseUrl,
+            projectId: current.project.project.project_id,
+            fetchImpl,
+            cryptoImpl,
+          }).then(setCurrent);
         }}
       />
     );
