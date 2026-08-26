@@ -42,7 +42,7 @@ pub struct CanonicalManuscriptTree {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ChapterFact {
-    pub object_scope: ProjectScope,
+    pub project_scope: ProjectScope,
     pub chapter_id: ChapterId,
     pub title: String,
     pub order: u64,
@@ -50,7 +50,7 @@ pub struct ChapterFact {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VolumeFact {
-    pub object_scope: ProjectScope,
+    pub project_scope: ProjectScope,
     pub volume_id: VolumeId,
     pub title: String,
     pub order: u64,
@@ -59,6 +59,7 @@ pub struct VolumeFact {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CanonicalTreeFacts {
+    pub project_scope: ProjectScope,
     pub snapshot: CanonicalSnapshot,
     pub tree_revision: u64,
     pub volumes: Vec<VolumeFact>,
@@ -79,13 +80,15 @@ pub async fn get_manuscript_tree(
     let Some(facts) = reader.read_canonical_tree_facts(scope).await? else {
         return Ok(None);
     };
-    if facts.volumes.iter().any(|volume| {
-        &volume.object_scope != scope
-            || volume
-                .chapters
-                .iter()
-                .any(|chapter| &chapter.object_scope != scope)
-    }) {
+    if &facts.project_scope != scope
+        || facts.volumes.iter().any(|volume| {
+            &volume.project_scope != scope
+                || volume
+                    .chapters
+                    .iter()
+                    .any(|chapter| &chapter.project_scope != scope)
+        })
+    {
         return Ok(None);
     }
     Ok(Some(CanonicalManuscriptTree {
