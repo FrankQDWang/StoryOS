@@ -2,6 +2,7 @@
 
 mod archive_project;
 mod create_project;
+mod create_volume;
 mod update_project;
 
 pub use archive_project::{
@@ -9,6 +10,9 @@ pub use archive_project::{
     ArchiveProjectResult, ProjectLifecycle, archive_project,
 };
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
+pub use create_volume::{
+    CreateVolume, CreateVolumeConflict, CreateVolumeRefusal, CreateVolumeResult, create_volume,
+};
 pub use update_project::{
     UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
     UpdateProjectResult, update_project,
@@ -200,3 +204,7 @@ mod update_project_tests;
 #[cfg(test)]
 #[path = "archive_project_tests.rs"]
 mod archive_project_tests;
+
+#[cfg(test)]
+#[path = "create_volume_tests.rs"]
+mod create_volume_tests;
