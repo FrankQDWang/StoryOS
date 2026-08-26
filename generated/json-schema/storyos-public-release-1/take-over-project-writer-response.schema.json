@@ -151,7 +151,8 @@
         "takeOverProjectWriter",
         "createProject",
         "updateProject",
-        "archiveProject"
+        "archiveProject",
+        "createVolume"
       ],
       "type": "string"
     },

@@ -139,6 +139,21 @@ export async function archiveProject({ projectId, request, idempotencyKey, antiF
   return commandJson({ ...options, method: "PUT", path: `/api/v1/projects/${encodeURIComponent(projectId)}/archival`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function digestCreateVolume(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestCreateVolume requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.createVolume.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function createVolume({ projectId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("createVolume requires projectId");
+  if (!request || typeof request !== "object") throw new TypeError("createVolume requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("createVolume requires security bindings");
+  return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/volumes`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestApplyAuthorEdit(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestApplyAuthorEdit requires request");
   const canonical = canonicalJson(request);
