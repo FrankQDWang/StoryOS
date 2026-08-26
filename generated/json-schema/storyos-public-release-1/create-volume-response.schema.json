@@ -1,34 +1,62 @@
 {
   "$defs": {
-    "ApplyAuthorEditEffect": {
+    "ControlledProject": {
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/ProjectOpenState"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "open"
+      ],
+      "type": "object"
+    },
+    "CreateVolumeConflictReason": {
+      "enum": [
+        "stale_tree_revision"
+      ],
+      "type": "string"
+    },
+    "CreateVolumeEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
-            "author_action_sequence": {
-              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
-              "type": "string"
-            },
-            "authoritative_commit_id": {
-              "type": "string"
-            },
-            "authoritative_revision": {
-              "$ref": "#/$defs/AuthoritativeChapterRevision"
-            },
             "kind": {
               "const": "authoritative_applied",
               "type": "string"
             },
+            "order": {
+              "type": "string"
+            },
             "project_activity_position": {
-              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "tree_revision": {
+              "type": "string"
+            },
+            "volume_id": {
               "type": "string"
             }
           },
           "required": [
             "kind",
-            "authoritative_revision",
-            "authoritative_commit_id",
-            "author_action_sequence",
+            "volume_id",
+            "title",
+            "tree_revision",
+            "order",
             "project_activity_position"
           ],
           "type": "object"
@@ -37,37 +65,16 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "const": "no_effect",
+              "const": "conflicted",
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/NoEffectReason"
+              "$ref": "#/$defs/CreateVolumeConflictReason"
             }
           },
           "required": [
             "kind",
             "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "current_authoritative_revision_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/AuthorEditConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason",
-            "current_authoritative_revision_id"
           ],
           "type": "object"
         },
@@ -79,7 +86,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/AuthorEditRefusalReason"
+              "$ref": "#/$defs/CreateVolumeRefusalReason"
             }
           },
           "required": [
@@ -90,37 +97,12 @@
         }
       ]
     },
-    "AuthorEditConflictReason": {
+    "CreateVolumeRefusalReason": {
       "enum": [
-        "stale_authoritative_head",
-        "proposal_head_present",
-        "ownership_changed"
+        "archived_project",
+        "invalid_title"
       ],
       "type": "string"
-    },
-    "AuthorEditRefusalReason": {
-      "enum": [
-        "unsupported_intent_shape",
-        "invalid_selection",
-        "target_mismatch"
-      ],
-      "type": "string"
-    },
-    "AuthoritativeChapterRevision": {
-      "additionalProperties": false,
-      "properties": {
-        "body": {
-          "type": "string"
-        },
-        "revision_id": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "revision_id",
-        "body"
-      ],
-      "type": "object"
     },
     "DigestAlgorithm": {
       "enum": [
@@ -158,15 +140,7 @@
           "type": "array"
         },
         "author_action_sequence": {
-          "anyOf": [
-            {
-              "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": "string"
         },
         "author_command_admission_id": {
           "type": "string"
@@ -293,11 +267,39 @@
       ],
       "type": "string"
     },
-    "NoEffectReason": {
-      "enum": [
-        "content_unchanged"
-      ],
-      "type": "string"
+    "ProjectOpenState": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProjectScope": {
       "additionalProperties": false,
@@ -316,28 +318,27 @@
       "type": "object"
     }
   },
-  "$id": "storyos.command.apply-author-edit.response.v2",
+  "$id": "storyos.command.create-volume.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
     "author_command_admission_id": {
+      "format": "uuid",
       "type": "string"
     },
     "command_id": {
-      "type": "string"
-    },
-    "completed_intent_record_id": {
+      "format": "uuid",
       "type": "string"
     },
     "correlation_id": {
+      "format": "uuid",
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/ApplyAuthorEditEffect"
+      "$ref": "#/$defs/CreateVolumeEffect"
     },
-    "local_intent_sequence": {
-      "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
-      "type": "string"
+    "project": {
+      "$ref": "#/$defs/ControlledProject"
     },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
@@ -346,6 +347,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
+      "const": "storyos.command.create-volume.response.v1",
       "type": "string"
     }
   },
@@ -356,10 +358,9 @@
     "command_id",
     "author_command_admission_id",
     "receipt",
-    "effect",
-    "completed_intent_record_id",
-    "local_intent_sequence"
+    "project",
+    "effect"
   ],
-  "title": "StoryOS Apply Author Edit Response",
+  "title": "StoryOS Create Volume Response",
   "type": "object"
 }

@@ -79,6 +79,18 @@ export type ArchiveProjectEffect = { "kind": "authoritative_applied", revision: 
 
 export type ArchiveProjectResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: ArchiveProjectEffect, };
 
+export type CreateVolumeInput = { title: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type CreateVolumeRequest = { command_schema: string, create_volume_input: CreateVolumeInput, };
+
+export type CreateVolumeConflictReason = "stale_tree_revision";
+
+export type CreateVolumeRefusalReason = "archived_project" | "invalid_title";
+
+export type CreateVolumeEffect = { "kind": "authoritative_applied", volume_id: string, title: string, tree_revision: string, order: string, project_activity_position: string, } | { "kind": "conflicted", reason: CreateVolumeConflictReason, } | { "kind": "refused", reason: CreateVolumeRefusalReason, };
+
+export type CreateVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CreateVolumeEffect, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -87,7 +99,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -167,6 +179,8 @@ export declare function digestUpdateProject(request: UpdateProjectRequest, crypt
 export declare function updateProject(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
+export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function createVolume(options: StoryOSQueryOptions & { projectId: string; request: CreateVolumeRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateVolumeResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

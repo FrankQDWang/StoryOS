@@ -14,6 +14,8 @@ mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
 mod release1_create_project;
 mod release1_create_project_artifacts;
+mod release1_create_volume;
+mod release1_create_volume_artifacts;
 mod release1_list_projects;
 mod release1_list_projects_artifacts;
 mod release1_manuscript_tree;
@@ -76,6 +78,12 @@ pub use release1_create_project::{
     CREATE_PROJECT_REQUEST_SCHEMA_ID, CREATE_PROJECT_RESPONSE_SCHEMA_ID,
     CreateProjectChallengeRequest, CreateProjectChallengeResponse, CreateProjectInput,
     CreateProjectRequest, CreateProjectResponse,
+};
+pub use release1_create_volume::{
+    CREATE_VOLUME_DIGEST_PROFILE, CREATE_VOLUME_METHOD, CREATE_VOLUME_PATH,
+    CREATE_VOLUME_REQUEST_SCHEMA_ID, CREATE_VOLUME_RESPONSE_SCHEMA_ID, CreateVolumeConflictReason,
+    CreateVolumeEffect, CreateVolumeInput, CreateVolumeRefusalReason, CreateVolumeRequest,
+    CreateVolumeResponse,
 };
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,
