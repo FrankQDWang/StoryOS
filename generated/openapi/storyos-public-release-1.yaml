@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,activityStream,takeOverProjectWriter
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter
 paths:
   /api/v1/protocol:
     get:
@@ -800,6 +800,46 @@ paths:
           description: Method not allowed
         '409':
           description: Protocol or cursor conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/manuscript/tree:
+    get:
+      operationId: getManuscriptTree
+      summary: Read the ordered canonical manuscript tree
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Ordered canonical manuscript tree
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/manuscript-tree-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
         '413':
           description: Request too large
         '415':

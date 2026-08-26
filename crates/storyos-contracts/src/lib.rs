@@ -16,6 +16,8 @@ mod release1_create_project;
 mod release1_create_project_artifacts;
 mod release1_list_projects;
 mod release1_list_projects_artifacts;
+mod release1_manuscript_tree;
+mod release1_manuscript_tree_artifacts;
 mod release1_snapshot;
 mod release1_snapshot_artifacts;
 mod release1_takeover;
@@ -78,6 +80,11 @@ pub use release1_create_project::{
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,
     LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
+};
+pub use release1_manuscript_tree::{
+    GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
+    GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
+    ManuscriptVolumeNode,
 };
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,

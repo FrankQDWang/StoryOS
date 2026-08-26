@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:77e9532de8a0764c8486b10c87c58f73f20897bb60dbc8130ccba003191533ed",
+  "corpus_digest": "sha256:508b1c2afb4af714c1974cad1f0eb7bb7894bca5d9e094ab0d1fd9a206eb6f6f",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -24,6 +24,9 @@
       "generated/golden-wire/storyos-public-release-1/list-projects.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.invalid.json",
       "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json",
+      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json",
       "generated/golden-wire/storyos-public-release-1/update-project.json",
       "generated/golden-wire/storyos-public-release-1/update-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-project.boundary.json",
@@ -179,6 +182,24 @@
       "fixture_id": "storyos.golden.listProjects.boundary.v1",
       "operation_id": "listProjects",
       "path": "generated/golden-wire/storyos-public-release-1/list-projects.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getManuscriptTree.positive.v1",
+      "operation_id": "getManuscriptTree",
+      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getManuscriptTree.invalid.v1",
+      "operation_id": "getManuscriptTree",
+      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getManuscriptTree.boundary.v1",
+      "operation_id": "getManuscriptTree",
+      "path": "generated/golden-wire/storyos-public-release-1/get-manuscript-tree.boundary.json"
     },
     {
       "classification": "positive",

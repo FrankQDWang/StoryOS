@@ -127,6 +127,12 @@ export type GetSnapshotResponse = { schema_id: string, correlation_id: string, p
 
 export type ActivityStreamRequest = { project_id: string, snapshot_id: string, protocol_release: string, };
 
+export type ManuscriptChapterNode = { chapter_id: string, title: string, order: string, };
+
+export type ManuscriptVolumeNode = { volume_id: string, title: string, order: string, chapters: Array<ManuscriptChapterNode>, };
+
+export type GetManuscriptTreeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, tree_revision: string, snapshot: SnapshotDescriptor, volumes: Array<ManuscriptVolumeNode>, };
+
 export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
 
 export type TakeoverCompareFailedReason = "writer_generation_advanced_after_admission" | "requester_became_current_after_admission";
@@ -166,5 +172,6 @@ export declare function applyAuthorEdit(options: StoryOSQueryOptions & { project
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;
 export declare function getSnapshot(options: StoryOSQueryOptions & { projectId: string; snapshotId: string }): Promise<GetSnapshotResponse>;
 export declare function activityStream(options: StoryOSQueryOptions & { projectId: string; snapshotId: string; protocolRelease: string; lastEventId?: string }): Promise<string>;
+export declare function getManuscriptTree(options: StoryOSQueryOptions & { projectId: string }): Promise<GetManuscriptTreeResponse>;
 export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;
