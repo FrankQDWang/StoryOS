@@ -30,6 +30,7 @@ mod author_edit;
 mod author_edit_outcome;
 mod create_project;
 mod create_project_challenge;
+mod create_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_tree;
@@ -69,6 +70,10 @@ pub use create_project::{
 pub use create_project_challenge::{
     CreateProjectChallenge, CreateProjectChallengeBinding, CreateProjectChallengeStore,
     IssueCreateProjectChallenge, issue_create_project_challenge,
+};
+pub use create_volume::{
+    CreateVolumeCommand, CreateVolumeError, CreateVolumeSettlement, CreateVolumeSettlementEffect,
+    CreateVolumeStore, create_volume,
 };
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
 pub use manuscript_tree::{
