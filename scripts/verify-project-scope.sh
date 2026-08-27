@@ -237,6 +237,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP createVolume tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/create-volume-http.integration.test.ts
+echo "Running HTTP createChapter tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/create-chapter-http.integration.test.ts
 echo "Running HTTP getManuscriptTree tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/manuscript-tree-http.integration.test.ts

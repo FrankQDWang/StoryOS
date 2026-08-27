@@ -20,6 +20,7 @@ use uuid::Uuid;
 mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
+mod create_chapter;
 mod create_project;
 mod create_project_challenge;
 mod create_volume;
@@ -37,6 +38,7 @@ use author_edit::apply_author_edit;
 use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
 };
+use create_chapter::create_chapter;
 use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use create_volume::create_volume;
@@ -208,6 +210,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             routing::on(
                 method_filter(contracts::CREATE_VOLUME_METHOD),
                 create_volume,
+            ),
+        )
+        .route(
+            contracts::CREATE_CHAPTER_PATH,
+            routing::on(
+                method_filter(contracts::CREATE_CHAPTER_METHOD),
+                create_chapter,
             ),
         )
         .route(
