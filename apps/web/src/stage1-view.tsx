@@ -140,6 +140,7 @@ function ProjectReadyView({
           baseUrl={baseUrl}
           fetchImpl={fetchImpl}
           cryptoImpl={cryptoImpl}
+          createEnabled={!archived}
           onChapterCreated={() => {
             void getManuscriptTree({
               baseUrl,
@@ -302,6 +303,7 @@ function ManuscriptTree({
   baseUrl,
   fetchImpl,
   cryptoImpl,
+  createEnabled,
   onChapterCreated,
 }: {
   projectId: string;
@@ -309,6 +311,7 @@ function ManuscriptTree({
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  createEnabled: boolean;
   onChapterCreated: () => void;
 }) {
   return (
@@ -322,15 +325,17 @@ function ManuscriptTree({
                 <li key={chapter.chapter_id}>{chapter.title}</li>
               ))}
             </ul>
-            <CreateChapterForm
-              projectId={projectId}
-              volumeId={volume.volume_id}
-              treeRevision={tree.tree_revision}
-              baseUrl={baseUrl}
-              fetchImpl={fetchImpl}
-              cryptoImpl={cryptoImpl}
-              onCreated={onChapterCreated}
-            />
+            {createEnabled ? (
+              <CreateChapterForm
+                projectId={projectId}
+                volumeId={volume.volume_id}
+                treeRevision={tree.tree_revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onCreated={onChapterCreated}
+              />
+            ) : null}
           </li>
         ))}
       </ul>
@@ -421,6 +426,7 @@ function EmptyProjectReadyView({
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
         cryptoImpl={cryptoImpl}
+        createEnabled
         onChapterCreated={onChapterCreated}
       />
       <CreateVolumeForm
