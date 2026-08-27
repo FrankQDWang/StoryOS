@@ -12,6 +12,8 @@ mod release1_author_edit;
 mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
+mod release1_create_chapter;
+mod release1_create_chapter_artifacts;
 mod release1_create_project;
 mod release1_create_project_artifacts;
 mod release1_create_volume;
@@ -70,6 +72,12 @@ pub use release1_author_edit_outcome::{
     GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
     GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
+};
+pub use release1_create_chapter::{
+    CREATE_CHAPTER_DIGEST_PROFILE, CREATE_CHAPTER_METHOD, CREATE_CHAPTER_PATH,
+    CREATE_CHAPTER_REQUEST_SCHEMA_ID, CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
+    CreateChapterConflictReason, CreateChapterEffect, CreateChapterInput,
+    CreateChapterRefusalReason, CreateChapterRequest, CreateChapterResponse,
 };
 pub use release1_create_project::{
     CREATE_PROJECT_CHALLENGE_METHOD, CREATE_PROJECT_CHALLENGE_PATH,

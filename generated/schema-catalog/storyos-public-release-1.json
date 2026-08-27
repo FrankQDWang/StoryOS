@@ -9,6 +9,7 @@
     "updateProject",
     "archiveProject",
     "createVolume",
+    "createChapter",
     "createProjectCommandChallenge",
     "createEditorSession",
     "getEditorSession",
@@ -80,7 +81,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-project-response.schema.json",
       "schema_id": "storyos.command.create-project.response.v1",
-      "sha256": "sha256:2af26cce143bdd36ec31e1e6ac2acd44fd66075de00cf0a5c7c95178b7239c8e"
+      "sha256": "sha256:0fd7f3ddaa270bd3bf4b9a19f4f78e5a0f7c84adf56b43a93da18ab1e7db1c46"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/project-list-request.schema.json",
@@ -110,7 +111,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/update-project-response.schema.json",
       "schema_id": "storyos.command.update-project.response.v1",
-      "sha256": "sha256:65acdee0fa7726d06d5ed518bfa4597d6d3f2c3a6c0b4d39c3ae95d71516b6d6"
+      "sha256": "sha256:0e82f7f3eeffbd1198ec7123e20f36dbe616bce9521c2e9e25f6be8f544da2f5"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-request.schema.json",
@@ -120,7 +121,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-response.schema.json",
       "schema_id": "storyos.command.archive-project.response.v1",
-      "sha256": "sha256:1adf14af2d21763f48c27b7711f4cb06a54f7b266978eb2c12ec2a033bd5d36b"
+      "sha256": "sha256:8151135e69c7246e2a8ce6878f9c52bdb57f6e93cdfb4695596f9d43d05b7742"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/create-volume-request.schema.json",
@@ -130,7 +131,17 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-volume-response.schema.json",
       "schema_id": "storyos.command.create-volume.response.v1",
-      "sha256": "sha256:42c152648e9aacaee2f20790c0fb166f03fb74f1f5920eb44fec645a5d0b8ef9"
+      "sha256": "sha256:f2ed235707b2a587067e737598febadeeaf2d978fa65bab1544512c9e83d04d9"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/create-chapter-request.schema.json",
+      "schema_id": "storyos.command.create-chapter.request.v1",
+      "sha256": "sha256:868dc85ac488ea68e4df224cfe9f1d6ba84960c614efc65622b054db3014bc90"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/create-chapter-response.schema.json",
+      "schema_id": "storyos.command.create-chapter.response.v1",
+      "sha256": "sha256:a3df026e6fe341591959215a1f30df21ee8be063c72fb02d69a01fe3c35cb402"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",
@@ -160,7 +171,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json",
       "schema_id": "storyos.command.apply-author-edit.response.v2",
-      "sha256": "sha256:1e118e89ccc997c1242f086244cffb45ad59bab82467c7fb8ca5ec4c55764527"
+      "sha256": "sha256:bba5fba63f0c0ed7d422a7177d22eddb46762706fbf56e12497b6af1027bf01a"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json",
@@ -170,7 +181,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json",
       "schema_id": "storyos.query.apply-author-edit-outcome.response.v1",
-      "sha256": "sha256:0c6523b388dded8227af4a945d701e1a5aeb899aef3ccdfe63b2b43418f4ae53"
+      "sha256": "sha256:437f53a3410ae6f0c6be3fbfd3cae799d5e14fcf078f1228ee9f751226ac8e7b"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/snapshot-request.schema.json",
@@ -200,7 +211,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json",
       "schema_id": "storyos.command.take-over-project-writer.response.v1",
-      "sha256": "sha256:8f05e19b698b55c425c52987420687be0cf98bf792676b2ada911e5c8fd2d7c5"
+      "sha256": "sha256:969b5df0b64f9ba0a8c22e91d9b7d70cd1b29a9f913c0c2a141781f8a96faf9f"
     }
   ]
 }

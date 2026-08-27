@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,createChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter
 paths:
   /api/v1/protocol:
     get:
@@ -357,6 +357,93 @@ paths:
           description: Unsupported content type
         '422':
           description: Create Volume refused
+        '428':
+          description: Precondition required
+        '429':
+          description: Rate limited
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 1
+                maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/volumes/{volume_id}/chapters:
+    post:
+      operationId: createChapter
+      summary: Create one named Chapter
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: volume_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: Origin
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uri
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-StoryOS-Anti-Forgery
+          in: header
+          required: true
+          schema:
+            type: string
+            pattern: '^[0-9a-f]{64}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/create-chapter-request.schema.json'
+      responses:
+        '200':
+          description: Chapter created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-chapter-response.schema.json'
+        '201':
+          description: Chapter created
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/create-chapter-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Idempotency or tree revision conflict
+        '412':
+          description: Session binding refused
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Create Chapter refused
         '428':
           description: Precondition required
         '429':

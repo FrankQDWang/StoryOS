@@ -274,7 +274,8 @@
         "createProject",
         "updateProject",
         "archiveProject",
-        "createVolume"
+        "createVolume",
+        "createChapter"
       ],
       "type": "string"
     },

@@ -91,6 +91,18 @@ export type CreateVolumeEffect = { "kind": "authoritative_applied", volume_id: s
 
 export type CreateVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CreateVolumeEffect, };
 
+export type CreateChapterInput = { title: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type CreateChapterRequest = { command_schema: string, create_chapter_input: CreateChapterInput, };
+
+export type CreateChapterConflictReason = "stale_tree_revision";
+
+export type CreateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_volume_join";
+
+export type CreateChapterEffect = { "kind": "authoritative_applied", volume_id: string, chapter_id: string, title: string, tree_revision: string, order: string, current_chapter_id: string, project_activity_position: string, } | { "kind": "conflicted", reason: CreateChapterConflictReason, } | { "kind": "refused", reason: CreateChapterRefusalReason, };
+
+export type CreateChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CreateChapterEffect, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -99,7 +111,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -181,6 +193,8 @@ export declare function digestArchiveProject(request: ArchiveProjectRequest, cry
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createVolume(options: StoryOSQueryOptions & { projectId: string; request: CreateVolumeRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateVolumeResponse>;
+export declare function digestCreateChapter(request: CreateChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function createChapter(options: StoryOSQueryOptions & { projectId: string; volumeId: string; request: CreateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateChapterResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

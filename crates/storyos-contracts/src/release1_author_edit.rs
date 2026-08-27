@@ -107,6 +107,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "createVolume")]
     #[ts(rename = "createVolume")]
     CreateVolume,
+    #[serde(rename = "createChapter")]
+    #[ts(rename = "createChapter")]
+    CreateChapter,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
