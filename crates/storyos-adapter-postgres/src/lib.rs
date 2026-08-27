@@ -44,6 +44,10 @@ mod create_chapter_tests;
 #[path = "update_volume_tests.rs"]
 mod update_volume_tests;
 
+#[cfg(test)]
+#[path = "update_chapter_tests.rs"]
+mod update_chapter_tests;
+
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
@@ -60,6 +64,7 @@ mod list_projects;
 mod manuscript_tree;
 mod snapshot;
 mod takeover;
+mod update_chapter;
 mod update_project;
 mod update_volume;
 
