@@ -40,6 +40,10 @@ mod create_volume_tests;
 #[path = "create_chapter_tests.rs"]
 mod create_chapter_tests;
 
+#[cfg(test)]
+#[path = "update_volume_tests.rs"]
+mod update_volume_tests;
+
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
@@ -57,6 +61,7 @@ mod manuscript_tree;
 mod snapshot;
 mod takeover;
 mod update_project;
+mod update_volume;
 
 use storyos_application::{
     Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,
