@@ -38,6 +38,7 @@ mod list_projects;
 mod manuscript_tree;
 mod snapshot;
 mod takeover;
+mod update_chapter;
 mod update_project;
 mod update_volume;
 
@@ -87,6 +88,10 @@ pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use update_chapter::{
+    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
+    UpdateChapterSettlementEffect, UpdateChapterStore, update_chapter,
 };
 pub use update_project::{
     UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,

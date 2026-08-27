@@ -4,6 +4,7 @@ mod archive_project;
 mod create_chapter;
 mod create_project;
 mod create_volume;
+mod update_chapter;
 mod update_project;
 mod update_volume;
 
@@ -18,6 +19,10 @@ pub use create_chapter::{
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{
     CreateVolume, CreateVolumeConflict, CreateVolumeRefusal, CreateVolumeResult, create_volume,
+};
+pub use update_chapter::{
+    ChapterJoin, UpdateChapter, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
+    UpdateChapterResult, update_chapter,
 };
 pub use update_project::{
     UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
