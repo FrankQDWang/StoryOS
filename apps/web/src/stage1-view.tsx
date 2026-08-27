@@ -7,9 +7,20 @@ import {
   getManuscriptTree,
   listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { GetManuscriptTreeResponse, GetProjectResponse, ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  GetChapterResponse,
+  GetManuscriptTreeResponse,
+  GetProjectResponse,
+  ProjectListItem,
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { openControlledProject } from "./boot.ts";
+import {
+  chapterSwitchRecoveryMessage,
+  completeJournalOrRefuse,
+  openSelectedChapter,
+  selectedChapterSurface,
+} from "./chapter-navigation.ts";
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import type {
   ControlledProjectState,
@@ -17,10 +28,11 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
+import { rebuildPendingProjection } from "./editor-session.ts";
 import { archiveOwnedProject } from "./archive-project.ts";
 import { createOwnedChapter } from "./create-chapter.ts";
 import { createOwnedVolume } from "./create-volume.ts";
-import { attachManualInput } from "./manual-input.ts";
+import { attachManualInput, type ManualInputController } from "./manual-input.ts";
 import { renameOwnedProject } from "./rename-project.ts";
 
 interface Stage1ViewProps {
@@ -53,6 +65,12 @@ function ProjectReadyView({
   state, baseUrl, fetchImpl, cryptoImpl, onArchived,
 }: ProjectReadyViewProps) {
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<ManualInputController | null>(null);
+  const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
+  const switchGenerationRef = useRef(0);
+  const currentChapterId = state.project.project.open.kind === "current_chapter"
+    ? state.project.project.open.current_chapter_id
+    : state.chapter.chapter.chapter_id;
   const initialBody = state.editor.kind === "editor-ready"
     ? state.editor.pending.body
     : state.chapter.chapter.current_revision.body;
@@ -67,11 +85,13 @@ function ProjectReadyView({
   const [revision, setRevision] = useState<string>();
   const [lifecycle, setLifecycle] = useState<"active" | "archived">();
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
+  const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
+  const [switchRecovery, setSwitchRecovery] = useState<string>();
 
   useEffect(() => {
     const editor = editorRef.current;
     if (state.editor.kind !== "editor-ready" || !editor) return;
-    attachManualInput({
+    inputRef.current = attachManualInput({
       editor,
       workspace: state.editor,
       baseUrl,
@@ -80,6 +100,7 @@ function ProjectReadyView({
       afterAppliedSettlement: collectEligibleJournalPayload,
       onProjection(projection) {
         (state.editor as EditorReadyState).pending = projection;
+        if (selectedChapterIdRef.current !== currentChapterId) return;
         setPending(projection);
         setSaveState(projection.save_state);
       },
@@ -105,6 +126,56 @@ function ProjectReadyView({
       fetchImpl,
     }).then(setTree).catch(() => {});
   }, [baseUrl, fetchImpl, state.project.project.project_id]);
+
+  const selectChapter = (chapterId: string) => {
+    if (chapterId === selectedChapterIdRef.current) return;
+    const generation = switchGenerationRef.current + 1;
+    switchGenerationRef.current = generation;
+    void (async () => {
+      const gate = await completeJournalOrRefuse({
+        incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
+        whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
+      });
+      if (generation !== switchGenerationRef.current) return;
+      if (gate.kind === "refused") {
+        setSwitchRecovery(chapterSwitchRecoveryMessage(gate.reason));
+        return;
+      }
+      const opened = await openSelectedChapter({
+        baseUrl,
+        projectId: state.project.project.project_id,
+        chapterId,
+        expectedScope: state.project.project_scope,
+        fetchImpl,
+      });
+      if (generation !== switchGenerationRef.current) return;
+      if (opened.kind !== "opened") {
+        setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
+        return;
+      }
+      setSwitchRecovery(undefined);
+      let currentPending = state.editor.kind === "editor-ready" ? state.editor.pending : null;
+      if (opened.chapter.chapter.chapter_id === currentChapterId
+        && state.editor.kind === "editor-ready") {
+        currentPending = await rebuildPendingProjection(state.editor);
+        state.editor.pending = currentPending;
+      }
+      if (generation !== switchGenerationRef.current) return;
+      const surface = selectedChapterSurface({
+        selectedChapterId: opened.chapter.chapter.chapter_id,
+        currentChapterId,
+        currentPending,
+        opened: opened.chapter,
+      });
+      selectedChapterIdRef.current = opened.chapter.chapter.chapter_id;
+      setSelectedChapter(opened.chapter);
+      setPending(surface.pending);
+      setSaveState(surface.save_state);
+      setReadOnly(!surface.editable);
+      const editor = editorRef.current;
+      if (editor) editor.value = surface.body;
+    })();
+  };
 
   const archived = lifecycle === "archived";
   return (
@@ -141,6 +212,8 @@ function ProjectReadyView({
           fetchImpl={fetchImpl}
           cryptoImpl={cryptoImpl}
           createEnabled={!archived}
+          selectedChapterId={selectedChapter.chapter.chapter_id}
+          onSelectChapter={selectChapter}
           onChapterCreated={() => {
             void getManuscriptTree({
               baseUrl,
@@ -150,7 +223,8 @@ function ProjectReadyView({
           }}
         />
       )}
-      <h2>{state.chapter.chapter.title}</h2>
+      {switchRecovery === undefined ? null : <p role="alert">{switchRecovery}</p>}
+      <h2>{selectedChapter.chapter.title}</h2>
       <textarea ref={editorRef} defaultValue={initialBody} readOnly={readOnly || archived} />
       <small
         data-save-state={saveState}
@@ -159,7 +233,7 @@ function ProjectReadyView({
       >
         {saveState}
       </small>
-      <small>{`权威修订 ${state.chapter.chapter.current_revision.revision_id}`}</small>
+      <small>{`权威修订 ${selectedChapter.chapter.current_revision.revision_id}`}</small>
     </section>
   );
 }
@@ -304,6 +378,8 @@ function ManuscriptTree({
   fetchImpl,
   cryptoImpl,
   createEnabled,
+  selectedChapterId,
+  onSelectChapter,
   onChapterCreated,
 }: {
   projectId: string;
@@ -312,6 +388,8 @@ function ManuscriptTree({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   createEnabled: boolean;
+  selectedChapterId?: string;
+  onSelectChapter?: (chapterId: string) => void;
   onChapterCreated: () => void;
 }) {
   return (
@@ -322,7 +400,18 @@ function ManuscriptTree({
             {volume.title}
             <ul>
               {volume.chapters.map((chapter) => (
-                <li key={chapter.chapter_id}>{chapter.title}</li>
+                <li key={chapter.chapter_id}>
+                  {onSelectChapter === undefined ? chapter.title : (
+                    <button
+                      type="button"
+                      data-chapter-id={chapter.chapter_id}
+                      aria-current={chapter.chapter_id === selectedChapterId}
+                      onClick={() => { onSelectChapter(chapter.chapter_id); }}
+                    >
+                      {chapter.title}
+                    </button>
+                  )}
+                </li>
               ))}
             </ul>
             {createEnabled ? (

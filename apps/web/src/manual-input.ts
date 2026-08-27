@@ -29,9 +29,10 @@ interface CompositionObservation {
   to: number;
 }
 
-interface ManualInputController {
+export interface ManualInputController {
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
+  hasIncompleteSemanticIntent(): boolean;
   close(): void;
 }
 
@@ -392,6 +393,9 @@ export function attachManualInput({
     async whenIdle() {
       await Promise.resolve();
       await queue;
+    },
+    hasIncompleteSemanticIntent() {
+      return composition !== undefined || compositionFinishing;
     },
     close() {
       stopped = true;

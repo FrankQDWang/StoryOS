@@ -86,9 +86,9 @@ export function createBrowserScenario(): BrowserScenario {
   };
 }
 
-export function jsonResponse(body: unknown): Response {
+export function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { "content-type": "application/json" },
   });
 }

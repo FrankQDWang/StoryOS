@@ -122,7 +122,7 @@ it("the author creates three named Chapters and keeps the first current Chapter"
   const root = frame.contentDocument?.querySelector("#app");
   const chapterItems = [...(root?.querySelectorAll('nav[aria-label="稿件目录"] > ul > li > ul > li') ?? [])];
   expect(chapterItems).toHaveLength(3);
-  expect(chapterItems.every((item) => item.querySelector("button, a") === null)).toBe(true);
+  expect(root?.querySelector("h2")?.textContent).toBe("Chapter A");
   expect(root?.querySelector("textarea")?.value).toBe("");
   expect(root?.textContent).not.toContain("模型");
   expect(root?.textContent).not.toContain("Agent");

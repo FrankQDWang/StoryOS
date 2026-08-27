@@ -460,7 +460,9 @@ function pendingProjectionFromSnapshot(
   }
   const base = workspace.session.base_snapshot;
   const activeRecords = snapshot.records.filter((record) =>
-    record.base_snapshot_id === base.snapshot_id && !appliedSequences.has(record.local_intent_sequence));
+    record.chapter_object_id === base.chapter_id
+    && record.base_snapshot_id === base.snapshot_id
+    && !appliedSequences.has(record.local_intent_sequence));
   const body = (activeRecords.length === 0
     ? base.materialized_revision.body
     : snapshot.bodyBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
