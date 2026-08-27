@@ -24,6 +24,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -293,17 +294,62 @@ test("createChapter creates three named Chapters, keeps the first current, and f
     assert.equal(tree.volumes[0]?.chapters[1]?.title, "Chapter B");
     assert.equal(tree.volumes[0]?.chapters[2]?.title, "Chapter C");
 
+    const chapterBId = chapterB.created.effect.kind === "authoritative_applied"
+      ? chapterB.created.effect.chapter_id
+      : "";
+    const chapterCId = chapterC.created.effect.kind === "authoritative_applied"
+      ? chapterC.created.effect.chapter_id
+      : "";
+    const openedB = await getChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: chapterBId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(openedB.chapter.chapter_id, chapterBId);
+    assert.equal(openedB.chapter.title, "Chapter B");
+    assert.equal(openedB.chapter.current_revision.body, "");
+    const openedC = await getChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: chapterCId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(openedC.chapter.chapter_id, chapterCId);
+    assert.equal(openedC.chapter.title, "Chapter C");
     await assert.rejects(
       getChapter({
         baseUrl,
         projectId: first.projectId,
-        chapterId: chapterB.created.effect.kind === "authoritative_applied"
-          ? chapterB.created.effect.chapter_id
-          : "",
+        chapterId: chapterBId,
+        fetchImpl: browserFetch(baseUrl, "session-b"),
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
+      },
+    );
+    await queryPostgres(`
+      UPDATE storyos.project_snapshots
+         SET expires_at = clock_timestamp() - interval '1 second'
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${first.projectId}'::uuid`);
+    await assert.rejects(
+      getChapter({
+        baseUrl,
+        projectId: first.projectId,
+        chapterId: chapterBId,
         fetchImpl: first.fetchImpl,
       }),
-      (error) => requireStoryOSProtocolError(error).status === 404,
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 409
+          && JSON.parse(protocol.responseBody ?? "{}").code === "snapshot_expired";
+      },
     );
+    await queryPostgres(`
+      UPDATE storyos.project_snapshots
+         SET expires_at = NULL
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${first.projectId}'::uuid`);
 
     const stale = await postChapter(
       baseUrl,

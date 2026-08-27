@@ -11,8 +11,7 @@ use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing};
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
-    ChapterId, ProjectCommandChallengeError, ProjectId, ProjectScope as ApplicationScope, UserId,
-    open_current_chapter, open_project,
+    ProjectCommandChallengeError, ProjectId, ProjectScope as ApplicationScope, UserId, open_project,
 };
 use storyos_contracts as contracts;
 use uuid::Uuid;
@@ -20,6 +19,7 @@ use uuid::Uuid;
 mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
+mod chapter;
 mod create_chapter;
 mod create_project;
 mod create_project_challenge;
@@ -38,6 +38,7 @@ use author_edit::apply_author_edit;
 use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
 };
+use chapter::get_chapter;
 use create_chapter::create_chapter;
 use create_project::create_project;
 use create_project_challenge::create_project_challenge;
@@ -302,42 +303,6 @@ async fn get_project(
                     current_chapter_id: chapter_id.as_ref().to_owned(),
                 },
                 None => contracts::ProjectOpenState::Empty,
-            },
-        },
-    }))
-}
-
-async fn get_chapter(
-    State(state): State<Arc<ServerState>>,
-    Path((project_id, chapter_id)): Path<(String, String)>,
-    headers: HeaderMap,
-) -> Result<Json<contracts::GetChapterResponse>, ApiError> {
-    let scope = authenticate_scope(
-        &state,
-        &headers,
-        &project_id,
-        RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
-    )?;
-    valid_uuid(&chapter_id)?;
-    let chapter_id = ChapterId::new(chapter_id);
-    let reader = project_reader(&state)?;
-    let Some(chapter) = open_current_chapter(&reader, &scope, &chapter_id)
-        .await
-        .map_err(service_unavailable)?
-    else {
-        return Err(resource_unavailable());
-    };
-    Ok(Json(contracts::GetChapterResponse {
-        schema_id: "storyos.query.chapter.response.v1".to_owned(),
-        correlation_id: Uuid::now_v7().to_string(),
-        project_scope: contract_scope(&scope),
-        project_activity_position: chapter.project_activity_position.to_string(),
-        chapter: contracts::CurrentChapter {
-            chapter_id: chapter.chapter_id.as_ref().to_owned(),
-            title: chapter.title,
-            current_revision: contracts::AuthoritativeChapterRevision {
-                revision_id: chapter.revision_id.as_ref().to_owned(),
-                body: chapter.body,
             },
         },
     }))
