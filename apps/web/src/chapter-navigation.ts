@@ -126,13 +126,16 @@ export function selectedChapterSurface(options: {
       authoritative_revision_id: options.currentPending.authoritative_revision_id,
     };
   }
+  const saveState = options.selectedChapterId === options.currentChapterId
+    ? "needs_attention"
+    : "clean";
   return {
     title: opened.chapter.title,
     body: opened.chapter.current_revision.body,
-    save_state: options.currentPending ? "clean" : "needs_attention",
+    save_state: saveState,
     pending: {
       body: opened.chapter.current_revision.body,
-      save_state: options.currentPending ? "clean" : "needs_attention",
+      save_state: saveState,
       unsettled_intent_count: 0,
       authoritative_revision_id: opened.chapter.current_revision.revision_id,
     },

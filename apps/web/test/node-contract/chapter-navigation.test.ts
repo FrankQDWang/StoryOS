@@ -177,4 +177,22 @@ test("selectedChapterSurface keeps pending bytes on the current Chapter", () => 
     editable: false,
     authoritative_revision_id: REVISION_B,
   });
+  assert.deepEqual(selectedChapterSurface({
+    selectedChapterId: source.chapter.chapter_id,
+    currentChapterId: source.chapter.chapter_id,
+    currentPending: null,
+    opened: source,
+  }), {
+    title: source.chapter.title,
+    body: source.chapter.current_revision.body,
+    save_state: "needs_attention",
+    pending: {
+      body: source.chapter.current_revision.body,
+      save_state: "needs_attention",
+      unsettled_intent_count: 0,
+      authoritative_revision_id: source.chapter.current_revision.revision_id,
+    },
+    editable: false,
+    authoritative_revision_id: source.chapter.current_revision.revision_id,
+  });
 });
