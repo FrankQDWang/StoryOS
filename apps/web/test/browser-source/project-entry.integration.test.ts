@@ -39,6 +39,26 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     if (path === `/api/v1/projects/${PROJECT}/chapters/${scenario.chapter.chapter.chapter_id}`) {
       return jsonResponse(scenario.chapter);
     }
+    if (path === `/api/v1/projects/${PROJECT}/manuscript/tree`) {
+      return jsonResponse({
+        project_scope: { owner_user_id: OWNER, project_id: PROJECT },
+        tree_revision: "3",
+        snapshot: {
+          snapshot_id: "018f0000-0000-7001-8000-000000000032",
+          project_scope: { owner_user_id: OWNER, project_id: PROJECT },
+        },
+        volumes: [{
+          volume_id: "018f0000-0000-7001-8000-000000000815",
+          title: "Volume A",
+          order: "1",
+          chapters: [{
+            chapter_id: scenario.chapter.chapter.chapter_id,
+            title: "Chapter A",
+            order: "1",
+          }],
+        }],
+      });
+    }
     if (path.endsWith("/anti-forgery-challenges")) {
       return jsonResponse({
         nonce: "a".repeat(64),
