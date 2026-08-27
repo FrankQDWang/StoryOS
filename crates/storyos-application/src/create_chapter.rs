@@ -33,6 +33,7 @@ pub enum CreateChapterSettlementEffect {
         tree_revision: u64,
         chapter_id: String,
         current: storyos_core::CreateChapterCurrent,
+        order: u64,
     },
     Conflicted {
         reason: storyos_core::CreateChapterConflict,
