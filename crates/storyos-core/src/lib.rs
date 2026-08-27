@@ -5,6 +5,7 @@ mod create_chapter;
 mod create_project;
 mod create_volume;
 mod update_project;
+mod update_volume;
 
 pub use archive_project::{
     ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
@@ -21,6 +22,10 @@ pub use create_volume::{
 pub use update_project::{
     UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
     UpdateProjectResult, update_project,
+};
+pub use update_volume::{
+    UpdateVolume, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,
+    UpdateVolumeResult, update_volume,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -217,3 +222,7 @@ mod create_volume_tests;
 #[cfg(test)]
 #[path = "create_chapter_tests.rs"]
 mod create_chapter_tests;
+
+#[cfg(test)]
+#[path = "update_volume_tests.rs"]
+mod update_volume_tests;
