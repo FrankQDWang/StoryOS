@@ -91,6 +91,20 @@ export type CreateVolumeEffect = { "kind": "authoritative_applied", volume_id: s
 
 export type CreateVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CreateVolumeEffect, };
 
+export type UpdateVolumeInput = { title: string, order: string, expected_volume_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type UpdateVolumeRequest = { command_schema: string, update_volume_input: UpdateVolumeInput, };
+
+export type UpdateVolumeNoEffectReason = "unchanged";
+
+export type UpdateVolumeConflictReason = "stale_volume_revision";
+
+export type UpdateVolumeRefusalReason = "archived_project" | "invalid_title" | "invalid_order" | "invalid_volume_join";
+
+export type UpdateVolumeEffect = { "kind": "authoritative_applied", volume_id: string, title: string, tree_revision: string, order: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateVolumeNoEffectReason, } | { "kind": "conflicted", reason: UpdateVolumeConflictReason, } | { "kind": "refused", reason: UpdateVolumeRefusalReason, };
+
+export type UpdateVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateVolumeEffect, };
+
 export type CreateChapterInput = { title: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type CreateChapterRequest = { command_schema: string, create_chapter_input: CreateChapterInput, };
@@ -111,7 +125,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -193,6 +207,8 @@ export declare function digestArchiveProject(request: ArchiveProjectRequest, cry
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createVolume(options: StoryOSQueryOptions & { projectId: string; request: CreateVolumeRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateVolumeResponse>;
+export declare function digestUpdateVolume(request: UpdateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function updateVolume(options: StoryOSQueryOptions & { projectId: string; volumeId: string; request: UpdateVolumeRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateVolumeResponse>;
 export declare function digestCreateChapter(request: CreateChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createChapter(options: StoryOSQueryOptions & { projectId: string; volumeId: string; request: CreateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateChapterResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

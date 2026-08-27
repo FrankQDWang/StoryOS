@@ -154,6 +154,22 @@ export async function createVolume({ projectId, request, idempotencyKey, antiFor
   return commandJson({ ...options, method: "POST", path: `/api/v1/projects/${encodeURIComponent(projectId)}/volumes`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function digestUpdateVolume(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestUpdateVolume requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.updateVolume.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function updateVolume({ projectId, volumeId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("updateVolume requires projectId");
+  if (typeof volumeId !== "string" || volumeId.length === 0) throw new TypeError("updateVolume requires volumeId");
+  if (!request || typeof request !== "object") throw new TypeError("updateVolume requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("updateVolume requires security bindings");
+  return commandJson({ ...options, method: "PATCH", path: `/api/v1/projects/${encodeURIComponent(projectId)}/volumes/${encodeURIComponent(volumeId)}`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestCreateChapter(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestCreateChapter requires request");
   const canonical = canonicalJson(request);

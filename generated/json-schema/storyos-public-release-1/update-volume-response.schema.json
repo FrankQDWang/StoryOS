@@ -235,13 +235,13 @@
       ],
       "type": "object"
     },
-    "UpdateProjectConflictReason": {
+    "UpdateVolumeConflictReason": {
       "enum": [
-        "stale_project_revision"
+        "stale_volume_revision"
       ],
       "type": "string"
     },
-    "UpdateProjectEffect": {
+    "UpdateVolumeEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
@@ -250,20 +250,28 @@
               "const": "authoritative_applied",
               "type": "string"
             },
+            "order": {
+              "type": "string"
+            },
             "project_activity_position": {
               "type": "string"
             },
-            "revision": {
+            "title": {
               "type": "string"
             },
-            "title": {
+            "tree_revision": {
+              "type": "string"
+            },
+            "volume_id": {
               "type": "string"
             }
           },
           "required": [
             "kind",
+            "volume_id",
             "title",
-            "revision",
+            "tree_revision",
+            "order",
             "project_activity_position"
           ],
           "type": "object"
@@ -276,7 +284,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateProjectNoEffectReason"
+              "$ref": "#/$defs/UpdateVolumeNoEffectReason"
             }
           },
           "required": [
@@ -293,7 +301,24 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateProjectConflictReason"
+              "$ref": "#/$defs/UpdateVolumeConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/UpdateVolumeRefusalReason"
             }
           },
           "required": [
@@ -304,14 +329,23 @@
         }
       ]
     },
-    "UpdateProjectNoEffectReason": {
+    "UpdateVolumeNoEffectReason": {
       "enum": [
-        "title_unchanged"
+        "unchanged"
+      ],
+      "type": "string"
+    },
+    "UpdateVolumeRefusalReason": {
+      "enum": [
+        "archived_project",
+        "invalid_title",
+        "invalid_order",
+        "invalid_volume_join"
       ],
       "type": "string"
     }
   },
-  "$id": "storyos.command.update-project.response.v1",
+  "$id": "storyos.command.update-volume.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -328,7 +362,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateProjectEffect"
+      "$ref": "#/$defs/UpdateVolumeEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -340,7 +374,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-project.response.v1",
+      "const": "storyos.command.update-volume.response.v1",
       "type": "string"
     }
   },
@@ -354,6 +388,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Update Project Response",
+  "title": "StoryOS Update Volume Response",
   "type": "object"
 }

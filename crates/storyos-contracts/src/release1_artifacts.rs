@@ -49,6 +49,8 @@ use crate::release1_takeover::TAKE_OVER_PROJECT_WRITER;
 use crate::release1_takeover_artifacts as takeover_artifacts;
 use crate::release1_update_project::UPDATE_PROJECT;
 use crate::release1_update_project_artifacts as update_project_artifacts;
+use crate::release1_update_volume::UPDATE_VOLUME;
+use crate::release1_update_volume_artifacts as update_volume_artifacts;
 
 const FIXTURE_DIGEST_PLACEHOLDER: &str = "sha256:self-normalized";
 const OPENAPI_PATH: &str = "generated/openapi/storyos-public-release-1.yaml";
@@ -120,7 +122,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:5e88ad82372c89a263f692dea5e11044c0774eb2532eff5d5b44300620db6929";
+    "sha256:1fddab92ea8412037abf6a1e681c0f6c69c2601336899ddcdd1974b1a33f0d7d";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -194,6 +196,8 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     let archive_project_response_schema = archive_project_artifacts::response_schema_bytes();
     let create_volume_request_schema = create_volume_artifacts::request_schema_bytes();
     let create_volume_response_schema = create_volume_artifacts::response_schema_bytes();
+    let update_volume_request_schema = update_volume_artifacts::request_schema_bytes();
+    let update_volume_response_schema = update_volume_artifacts::response_schema_bytes();
     let create_chapter_request_schema = create_chapter_artifacts::request_schema_bytes();
     let create_chapter_response_schema = create_chapter_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
@@ -306,6 +310,16 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
             crate::CREATE_VOLUME_RESPONSE_SCHEMA_ID,
             create_volume_artifacts::RESPONSE_SCHEMA_PATH,
             &create_volume_response_schema,
+        ),
+        (
+            crate::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
+            update_volume_artifacts::REQUEST_SCHEMA_PATH,
+            &update_volume_request_schema,
+        ),
+        (
+            crate::UPDATE_VOLUME_RESPONSE_SCHEMA_ID,
+            update_volume_artifacts::RESPONSE_SCHEMA_PATH,
+            &update_volume_response_schema,
         ),
         (
             crate::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
@@ -512,6 +526,8 @@ fn generated_files() -> Vec<GeneratedFile> {
     let archive_project_response_schema = archive_project_artifacts::response_schema_bytes();
     let create_volume_request_schema = create_volume_artifacts::request_schema_bytes();
     let create_volume_response_schema = create_volume_artifacts::response_schema_bytes();
+    let update_volume_request_schema = update_volume_artifacts::request_schema_bytes();
+    let update_volume_response_schema = update_volume_artifacts::response_schema_bytes();
     let create_chapter_request_schema = create_chapter_artifacts::request_schema_bytes();
     let create_chapter_response_schema = create_chapter_artifacts::response_schema_bytes();
     let schema_catalog = schema_catalog_bytes(&[
@@ -624,6 +640,16 @@ fn generated_files() -> Vec<GeneratedFile> {
             crate::CREATE_VOLUME_RESPONSE_SCHEMA_ID,
             create_volume_artifacts::RESPONSE_SCHEMA_PATH,
             &create_volume_response_schema,
+        ),
+        (
+            crate::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
+            update_volume_artifacts::REQUEST_SCHEMA_PATH,
+            &update_volume_request_schema,
+        ),
+        (
+            crate::UPDATE_VOLUME_RESPONSE_SCHEMA_ID,
+            update_volume_artifacts::RESPONSE_SCHEMA_PATH,
+            &update_volume_response_schema,
         ),
         (
             crate::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
@@ -775,6 +801,14 @@ fn generated_files() -> Vec<GeneratedFile> {
         (
             create_volume_artifacts::RESPONSE_SCHEMA_PATH,
             create_volume_response_schema,
+        ),
+        (
+            update_volume_artifacts::REQUEST_SCHEMA_PATH,
+            update_volume_request_schema,
+        ),
+        (
+            update_volume_artifacts::RESPONSE_SCHEMA_PATH,
+            update_volume_response_schema,
         ),
         (
             create_chapter_artifacts::REQUEST_SCHEMA_PATH,
@@ -952,6 +986,18 @@ fn generated_files() -> Vec<GeneratedFile> {
             create_volume_artifacts::boundary_fixture_bytes(),
         ),
         (
+            update_volume_artifacts::FIXTURE_PATHS[0],
+            update_volume_artifacts::fixture_bytes(),
+        ),
+        (
+            update_volume_artifacts::FIXTURE_PATHS[1],
+            update_volume_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            update_volume_artifacts::FIXTURE_PATHS[2],
+            update_volume_artifacts::boundary_fixture_bytes(),
+        ),
+        (
             create_chapter_artifacts::FIXTURE_PATHS[0],
             create_chapter_artifacts::fixture_bytes(),
         ),
@@ -1093,6 +1139,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&UPDATE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_active"]),
             command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
             command_operation_graph(&CREATE_VOLUME, &["server_derived_project_scope", "project_active", "expected_tree_revision"]),
+            command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_volume_revision"]),
             command_operation_graph(&CREATE_CHAPTER, &["server_derived_project_scope", "volume_scope_join", "project_active", "expected_tree_revision"]),
             operation_graph(&GET_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "canonical_snapshot"]),
             challenge_operation_graph(&CREATE_PROJECT_CHALLENGE, &["server_derived_user", "prospective_project_scope", "strict_origin", "protected_client_session_binding", "closed_create_project_schema", "body_idempotency_key"]),
@@ -1199,6 +1246,7 @@ fn openapi_bytes() -> Vec<u8> {
     }
     paths.push_str(&archive_project_artifacts::openapi());
     paths.push_str(&create_volume_artifacts::openapi());
+    paths.push_str(&update_volume_artifacts::openapi());
     paths.push_str(&create_chapter_artifacts::openapi());
     paths.push_str(&create_project_artifacts::openapi());
     paths.push_str(&challenge_openapi());
@@ -1376,6 +1424,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         UPDATE_PROJECT.operation_id,
         ARCHIVE_PROJECT.operation_id,
         CREATE_VOLUME.operation_id,
+        UPDATE_VOLUME.operation_id,
         CREATE_CHAPTER.operation_id,
         CREATE_PROJECT_COMMAND_CHALLENGE.operation_id,
         CREATE_EDITOR_SESSION.operation_id,
@@ -1398,6 +1447,7 @@ fn typescript_client_bytes() -> Vec<u8> {
     let update_project_client = update_project_artifacts::typescript_client_source();
     let archive_project_client = archive_project_artifacts::typescript_client_source();
     let create_volume_client = create_volume_artifacts::typescript_client_source();
+    let update_volume_client = update_volume_artifacts::typescript_client_source();
     let create_chapter_client = create_chapter_artifacts::typescript_client_source();
     let author_edit_client = author_edit_artifacts::typescript_client_source();
     let author_edit_outcome_client = author_edit_outcome_artifacts::typescript_client_source();
@@ -1458,7 +1508,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1487,6 +1537,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         update_project_client,
         archive_project_client,
         create_volume_client,
+        update_volume_client,
         create_chapter_client,
         author_edit_client,
         author_edit_outcome_client,
@@ -1519,12 +1570,13 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
     let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         create_project_artifacts::typescript_type_declarations(),
         list_projects_artifacts::typescript_type_declarations(),
         update_project_artifacts::typescript_type_declarations(),
         archive_project_artifacts::typescript_type_declarations(),
         create_volume_artifacts::typescript_type_declarations(),
+        update_volume_artifacts::typescript_type_declarations(),
         create_chapter_artifacts::typescript_type_declarations(),
         author_edit_artifacts::typescript_type_declarations(),
         author_edit_outcome_artifacts::typescript_type_declarations(),
@@ -1552,6 +1604,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(update_project_artifacts::typescript_declarations());
     declaration.push_str(archive_project_artifacts::typescript_declarations());
     declaration.push_str(create_volume_artifacts::typescript_declarations());
+    declaration.push_str(update_volume_artifacts::typescript_declarations());
     declaration.push_str(create_chapter_artifacts::typescript_declarations());
     declaration.push_str(author_edit_artifacts::typescript_declarations());
     declaration.push_str(author_edit_outcome_artifacts::typescript_declarations());
@@ -1591,6 +1644,7 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 update_project_artifacts::FIXTURE_PATHS[0], update_project_artifacts::FIXTURE_PATHS[1], update_project_artifacts::FIXTURE_PATHS[2],
                 archive_project_artifacts::FIXTURE_PATHS[0], archive_project_artifacts::FIXTURE_PATHS[1], archive_project_artifacts::FIXTURE_PATHS[2],
                 create_volume_artifacts::FIXTURE_PATHS[0], create_volume_artifacts::FIXTURE_PATHS[1], create_volume_artifacts::FIXTURE_PATHS[2],
+                update_volume_artifacts::FIXTURE_PATHS[0], update_volume_artifacts::FIXTURE_PATHS[1], update_volume_artifacts::FIXTURE_PATHS[2],
                 create_chapter_artifacts::FIXTURE_PATHS[0], create_chapter_artifacts::FIXTURE_PATHS[1], create_chapter_artifacts::FIXTURE_PATHS[2],
                 CREATE_EDITOR_SESSION_FIXTURE_PATHS[0], CREATE_EDITOR_SESSION_FIXTURE_PATHS[1], CREATE_EDITOR_SESSION_FIXTURE_PATHS[2],
                 GET_EDITOR_SESSION_FIXTURE_PATHS[0], GET_EDITOR_SESSION_FIXTURE_PATHS[1], GET_EDITOR_SESSION_FIXTURE_PATHS[2],
@@ -1638,6 +1692,9 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": CREATE_VOLUME.fixtures[0], "classification": "positive", "operation_id": CREATE_VOLUME.operation_id, "path": create_volume_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": CREATE_VOLUME.fixtures[1], "classification": "invalid", "operation_id": CREATE_VOLUME.operation_id, "path": create_volume_artifacts::FIXTURE_PATHS[1]},
             {"fixture_id": CREATE_VOLUME.fixtures[2], "classification": "boundary", "operation_id": CREATE_VOLUME.operation_id, "path": create_volume_artifacts::FIXTURE_PATHS[2]},
+            {"fixture_id": UPDATE_VOLUME.fixtures[0], "classification": "positive", "operation_id": UPDATE_VOLUME.operation_id, "path": update_volume_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": UPDATE_VOLUME.fixtures[1], "classification": "invalid", "operation_id": UPDATE_VOLUME.operation_id, "path": update_volume_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": UPDATE_VOLUME.fixtures[2], "classification": "boundary", "operation_id": UPDATE_VOLUME.operation_id, "path": update_volume_artifacts::FIXTURE_PATHS[2]},
             {"fixture_id": CREATE_CHAPTER.fixtures[0], "classification": "positive", "operation_id": CREATE_CHAPTER.operation_id, "path": create_chapter_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": CREATE_CHAPTER.fixtures[1], "classification": "invalid", "operation_id": CREATE_CHAPTER.operation_id, "path": create_chapter_artifacts::FIXTURE_PATHS[1]},
             {"fixture_id": CREATE_CHAPTER.fixtures[2], "classification": "boundary", "operation_id": CREATE_CHAPTER.operation_id, "path": create_chapter_artifacts::FIXTURE_PATHS[2]},
@@ -1715,6 +1772,9 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         create_volume_artifacts::fixture_bytes(),
         create_volume_artifacts::invalid_fixture_bytes(),
         create_volume_artifacts::boundary_fixture_bytes(),
+        update_volume_artifacts::fixture_bytes(),
+        update_volume_artifacts::invalid_fixture_bytes(),
+        update_volume_artifacts::boundary_fixture_bytes(),
         create_chapter_artifacts::fixture_bytes(),
         create_chapter_artifacts::invalid_fixture_bytes(),
         create_chapter_artifacts::boundary_fixture_bytes(),
@@ -1901,6 +1961,10 @@ mod archive_project_tests;
 #[cfg(test)]
 #[path = "release1_create_volume_artifacts_tests.rs"]
 mod create_volume_tests;
+
+#[cfg(test)]
+#[path = "release1_update_volume_artifacts_tests.rs"]
+mod update_volume_tests;
 
 #[cfg(test)]
 #[path = "release1_create_chapter_artifacts_tests.rs"]
