@@ -236,17 +236,20 @@
       ],
       "type": "object"
     },
-    "UpdateVolumeConflictReason": {
+    "UpdateChapterConflictReason": {
       "enum": [
-        "stale_volume_revision"
+        "stale_chapter_revision"
       ],
       "type": "string"
     },
-    "UpdateVolumeEffect": {
+    "UpdateChapterEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
+            "chapter_id": {
+              "type": "string"
+            },
             "kind": {
               "const": "authoritative_applied",
               "type": "string"
@@ -262,14 +265,11 @@
             },
             "tree_revision": {
               "type": "string"
-            },
-            "volume_id": {
-              "type": "string"
             }
           },
           "required": [
             "kind",
-            "volume_id",
+            "chapter_id",
             "title",
             "tree_revision",
             "order",
@@ -285,7 +285,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateVolumeNoEffectReason"
+              "$ref": "#/$defs/UpdateChapterNoEffectReason"
             }
           },
           "required": [
@@ -302,7 +302,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateVolumeConflictReason"
+              "$ref": "#/$defs/UpdateChapterConflictReason"
             }
           },
           "required": [
@@ -319,7 +319,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateVolumeRefusalReason"
+              "$ref": "#/$defs/UpdateChapterRefusalReason"
             }
           },
           "required": [
@@ -330,23 +330,23 @@
         }
       ]
     },
-    "UpdateVolumeNoEffectReason": {
+    "UpdateChapterNoEffectReason": {
       "enum": [
         "unchanged"
       ],
       "type": "string"
     },
-    "UpdateVolumeRefusalReason": {
+    "UpdateChapterRefusalReason": {
       "enum": [
         "archived_project",
         "invalid_title",
         "invalid_order",
-        "invalid_volume_join"
+        "invalid_chapter_join"
       ],
       "type": "string"
     }
   },
-  "$id": "storyos.command.update-volume.response.v1",
+  "$id": "storyos.command.update-chapter.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -363,7 +363,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateVolumeEffect"
+      "$ref": "#/$defs/UpdateChapterEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -375,7 +375,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-volume.response.v1",
+      "const": "storyos.command.update-chapter.response.v1",
       "type": "string"
     }
   },
@@ -389,6 +389,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Update Volume Response",
+  "title": "StoryOS Update Chapter Response",
   "type": "object"
 }

@@ -31,6 +31,7 @@ mod project_command_challenge;
 mod request_origin;
 mod snapshot;
 mod takeover;
+mod update_chapter;
 mod update_project;
 mod update_volume;
 
@@ -51,6 +52,7 @@ use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use takeover::take_over_project_writer;
+use update_chapter::update_chapter;
 use update_project::update_project;
 use update_volume::update_volume;
 
@@ -181,7 +183,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         )
         .route(
             contracts::GET_CHAPTER_PATH,
-            routing::on(chapter_method, get_chapter),
+            routing::on(chapter_method, get_chapter).on(
+                method_filter(contracts::UPDATE_CHAPTER_METHOD),
+                update_chapter,
+            ),
         )
         .route(
             contracts::CREATE_PROJECT_CHALLENGE_PATH,
