@@ -1,0 +1,115 @@
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use ts_rs::TS;
+
+use crate::release1::{ControlledProject, QueryOperation};
+use crate::release1_author_edit::DomainReceipt;
+
+pub const UPDATE_VOLUME_REQUEST_SCHEMA_ID: &str = "storyos.command.update-volume.request.v1";
+pub const UPDATE_VOLUME_RESPONSE_SCHEMA_ID: &str = "storyos.command.update-volume.response.v1";
+pub const UPDATE_VOLUME_DIGEST_PROFILE: &str = "storyos.command.updateVolume.jcs.v1";
+
+pub(super) const UPDATE_VOLUME: QueryOperation = QueryOperation {
+    operation_id: "updateVolume",
+    method: "PATCH",
+    path: "/api/v1/projects/{project_id}/volumes/{volume_id}",
+    request_schema: UPDATE_VOLUME_REQUEST_SCHEMA_ID,
+    response_schema: UPDATE_VOLUME_RESPONSE_SCHEMA_ID,
+    responses: &[
+        (200, "Volume renamed or reordered"),
+        (400, "Invalid request"),
+        (401, "Authentication required"),
+        (403, "Request origin refused"),
+        (404, "Resource unavailable"),
+        (405, "Method not allowed"),
+        (409, "Idempotency or Volume revision conflict"),
+        (412, "Session binding refused"),
+        (413, "Request too large"),
+        (415, "Unsupported content type"),
+        (422, "Update Volume refused"),
+        (428, "Precondition required"),
+        (429, "Rate limited"),
+        (503, "Service unavailable"),
+    ],
+    fixtures: &[
+        "storyos.golden.updateVolume.positive.v1",
+        "storyos.golden.updateVolume.invalid.v1",
+        "storyos.golden.updateVolume.boundary.v1",
+    ],
+};
+
+pub const UPDATE_VOLUME_PATH: &str = UPDATE_VOLUME.path;
+pub const UPDATE_VOLUME_METHOD: &str = UPDATE_VOLUME.method;
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateVolumeInput {
+    pub title: String,
+    pub order: String,
+    pub expected_volume_revision: String,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub correlation_id: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateVolumeRequest {
+    pub command_schema: String,
+    pub update_volume_input: UpdateVolumeInput,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateVolumeNoEffectReason {
+    Unchanged,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateVolumeConflictReason {
+    StaleVolumeRevision,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateVolumeRefusalReason {
+    ArchivedProject,
+    InvalidTitle,
+    InvalidOrder,
+    InvalidVolumeJoin,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum UpdateVolumeEffect {
+    AuthoritativeApplied {
+        volume_id: String,
+        title: String,
+        tree_revision: String,
+        order: String,
+        project_activity_position: String,
+    },
+    NoEffect {
+        reason: UpdateVolumeNoEffectReason,
+    },
+    Conflicted {
+        reason: UpdateVolumeConflictReason,
+    },
+    Refused {
+        reason: UpdateVolumeRefusalReason,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateVolumeResponse {
+    pub schema_id: String,
+    pub correlation_id: String,
+    pub project_scope: crate::release1::ProjectScope,
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub receipt: DomainReceipt,
+    pub project: ControlledProject,
+    pub effect: UpdateVolumeEffect,
+}

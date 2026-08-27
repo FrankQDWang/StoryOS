@@ -28,6 +28,8 @@ mod release1_takeover;
 mod release1_takeover_artifacts;
 mod release1_update_project;
 mod release1_update_project_artifacts;
+mod release1_update_volume;
+mod release1_update_volume_artifacts;
 mod stage1_bundle;
 mod stage1_crosswalk;
 mod stage1_delivery;
@@ -119,6 +121,12 @@ pub use release1_update_project::{
     UPDATE_PROJECT_REQUEST_SCHEMA_ID, UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
     UpdateProjectConflictReason, UpdateProjectEffect, UpdateProjectInput,
     UpdateProjectNoEffectReason, UpdateProjectRequest, UpdateProjectResponse,
+};
+pub use release1_update_volume::{
+    UPDATE_VOLUME_DIGEST_PROFILE, UPDATE_VOLUME_METHOD, UPDATE_VOLUME_PATH,
+    UPDATE_VOLUME_REQUEST_SCHEMA_ID, UPDATE_VOLUME_RESPONSE_SCHEMA_ID, UpdateVolumeConflictReason,
+    UpdateVolumeEffect, UpdateVolumeInput, UpdateVolumeNoEffectReason, UpdateVolumeRefusalReason,
+    UpdateVolumeRequest, UpdateVolumeResponse,
 };
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
