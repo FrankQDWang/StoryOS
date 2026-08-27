@@ -1,7 +1,8 @@
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::{
-    Chapter, ChapterId, Project, ProjectId, ProjectLifecycle, ProjectListItem, ProjectReader,
-    ProjectScope, RevisionId, UserId, list_owned_projects, open_current_chapter, open_project,
+    Chapter, ChapterId, OpenChapter, Project, ProjectId, ProjectLifecycle, ProjectListItem,
+    ProjectReader, ProjectScope, RevisionId, UserId, list_owned_projects, open_chapter,
+    open_current_chapter, open_project,
 };
 use tokio_postgres::NoTls;
 
@@ -12,6 +13,7 @@ const REVISION_A: &str = "018f0000-0000-7001-8000-000000000005";
 const STALE_CHAPTER_A: &str = "018f0000-0000-7001-8000-000000000006";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
+const CHAPTER_B: &str = "018f0000-0000-7001-8000-000000000103";
 
 #[tokio::test]
 async fn database_error_keeps_its_cause_without_exposing_it_in_display() {
@@ -86,6 +88,30 @@ async fn two_users_and_projects_are_isolated_at_application_and_rls_boundaries()
             .await
             .unwrap(),
         None
+    );
+    let OpenChapter::Found(stale) =
+        open_chapter(&reader, &scope_a, &ChapterId::new(STALE_CHAPTER_A))
+            .await
+            .unwrap()
+    else {
+        panic!("an in-scope non-current Chapter must open from its Snapshot and Head");
+    };
+    assert_eq!(stale.chapter.chapter_id, ChapterId::new(STALE_CHAPTER_A));
+    assert_eq!(stale.chapter.title, "Stale Chapter A");
+    assert_eq!(stale.chapter.body, "Stale A");
+    let OpenChapter::Found(chapter_b) = open_chapter(&reader, &scope_b, &ChapterId::new(CHAPTER_B))
+        .await
+        .unwrap()
+    else {
+        panic!("the owner of Project B must open the in-scope Chapter Head");
+    };
+    assert_eq!(chapter_b.chapter.chapter_id, ChapterId::new(CHAPTER_B));
+    assert_eq!(chapter_b.chapter.body, "Authoritative B secret");
+    assert_eq!(
+        open_chapter(&reader, &scope_a, &ChapterId::new(CHAPTER_B))
+            .await
+            .unwrap(),
+        OpenChapter::Missing
     );
 
     let (mut client, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();

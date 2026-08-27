@@ -36,8 +36,10 @@ const USER_A = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER_A = "018f0000-0000-7001-8000-000000000003";
 const STALE_CHAPTER_A = "018f0000-0000-7001-8000-000000000006";
+const UNKNOWN_CHAPTER = "018f0000-0000-7001-8000-00000000ffff";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B = "018f0000-0000-7001-8000-000000000102";
+const CHAPTER_B = "018f0000-0000-7001-8000-000000000103";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const execFileAsync = promisify(execFile);
 
@@ -145,12 +147,12 @@ test("two authenticated Users open only their own Project and current Chapter ov
       baseUrl, projectId: PROJECT_B, fetchImpl: browserFetch(baseUrl, "session-b"),
     });
     assert.equal(projectB.project_scope.owner_user_id, USER_B);
+    assert.deepEqual(projectB.project.open, { kind: "current_chapter", current_chapter_id: CHAPTER_B });
     const chapterB = await getChapter({
-      baseUrl, projectId: PROJECT_B, chapterId: projectB.project.open.kind === "current_chapter"
-        ? projectB.project.open.current_chapter_id
-        : "missing",
+      baseUrl, projectId: PROJECT_B, chapterId: CHAPTER_B,
       fetchImpl: browserFetch(baseUrl, "session-b"),
     });
+    assert.equal(chapterB.chapter.chapter_id, CHAPTER_B);
     assert.equal(chapterB.chapter.current_revision.body, "Authoritative B secret");
 
     await assert.rejects(
@@ -1068,7 +1070,7 @@ test("invalid bootstrap User identity prevents the Server from becoming ready", 
   );
 });
 
-test("missing authentication, cross-Project scope, and stale Chapter identity use non-oracular errors", async () => {
+test("missing authentication, cross-Project scope, and unknown Chapter identity use non-oracular errors", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
     await assert.rejects(
@@ -1081,14 +1083,23 @@ test("missing authentication, cross-Project scope, and stale Chapter identity us
       }),
       (error) => sanitizedProtocolFailure(error, 404, /Project B|secret/),
     );
+    const stale = await getChapter({
+      baseUrl,
+      projectId: PROJECT_A,
+      chapterId: STALE_CHAPTER_A,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    assert.equal(stale.chapter.chapter_id, STALE_CHAPTER_A);
+    assert.equal(stale.chapter.title, "Stale Chapter A");
+    assert.equal(stale.chapter.current_revision.body, "Stale A");
     await assert.rejects(
       getChapter({
         baseUrl,
         projectId: PROJECT_A,
-        chapterId: STALE_CHAPTER_A,
+        chapterId: UNKNOWN_CHAPTER,
         fetchImpl: browserFetch(baseUrl, "session-a"),
       }),
-      (error) => sanitizedProtocolFailure(error, 404, /Stale|body/),
+      (error) => sanitizedProtocolFailure(error, 404, /Stale|body|ffff/),
     );
     const refusedOrigin = await fetch(new URL(`/api/v1/projects/${PROJECT_A}`, baseUrl), {
       headers: { origin: "https://foreign.example", cookie: "storyos_session=session-a" },
