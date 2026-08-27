@@ -236,7 +236,7 @@ export async function completeOutcomeQueryUnavailable(
     transaction.abort();
     throw new Error("Author Edit acknowledgement does not converge");
   }
-  attempts.put({
+  const completedAttempt: OutcomeQueryAttempt = {
     ...stored,
     outcome: {
       kind: "query_unavailable",
@@ -245,6 +245,7 @@ export async function completeOutcomeQueryUnavailable(
       local_response_payload_ref: null,
       exact_response_payload_digest: null,
     },
-  });
+  };
+  attempts.put(completedAttempt);
   await transactionResult(transaction);
 }

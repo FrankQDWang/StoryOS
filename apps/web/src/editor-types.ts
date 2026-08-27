@@ -255,7 +255,16 @@ export interface OutcomeQueryAttempt extends Record<string, unknown> {
     idempotency_key: string;
   };
   started_at: string;
-  outcome: { kind: "in_flight" };
+  outcome:
+    | { kind: "in_flight" }
+    | {
+        kind: "query_unavailable";
+        observed_at: string;
+        evidence: "delivery_unknown" | "safe_problem" | "invalid_envelope";
+        local_response_payload_ref: string | null;
+        exact_response_payload_digest: DigestValue | null;
+      }
+    | { kind: "response_observed"; outcome_query_observation_id: string };
 }
 
 export interface ProjectActivityEvent {
