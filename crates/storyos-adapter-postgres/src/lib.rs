@@ -46,6 +46,7 @@ mod author_edit;
 mod author_edit_outcome;
 mod author_edit_replay;
 mod author_edit_settlement;
+mod chapter_query;
 mod create_chapter;
 mod create_project;
 mod create_project_challenge;

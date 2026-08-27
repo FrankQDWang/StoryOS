@@ -3,10 +3,10 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
     CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, EditorClientBinding, IssueCreateProjectChallenge,
-    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId,
-    VolumeId, VolumeNode, create_chapter, create_project, create_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_current_chapter,
-    open_project,
+    IssueProjectCommandChallenge, OpenChapter, ProjectCommandChallengeBinding, ProjectId,
+    ProjectScope, UserId, VolumeId, VolumeNode, create_chapter, create_project, create_volume,
+    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, open_current_chapter, open_project,
 };
 use tokio_postgres::NoTls;
 
@@ -425,6 +425,40 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             .unwrap(),
         None
     );
+    let later = open_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
+        .await
+        .unwrap();
+    let OpenChapter::Found(later_facts) = later else {
+        panic!("a later in-scope Chapter must open from its Snapshot and Head");
+    };
+    assert_eq!(later_facts.project_scope, scope);
+    assert_eq!(
+        later_facts.chapter.chapter_id,
+        ChapterId::new(chapter_b.clone())
+    );
+    assert_eq!(later_facts.chapter.title, "Chapter B");
+    assert_eq!(later_facts.chapter.body, "");
+    assert!(!later_facts.snapshot.snapshot_id.is_empty());
+    assert_eq!(
+        open_chapter(
+            &store,
+            &ProjectScope::new(UserId::new(USER_B), scope.project_id.clone()),
+            &ChapterId::new(chapter_b.clone()),
+        )
+        .await
+        .unwrap(),
+        OpenChapter::Missing
+    );
+    assert_eq!(
+        open_chapter(
+            &store,
+            &scope,
+            &ChapterId::new("018f0000-0000-7001-8000-00000000ffff"),
+        )
+        .await
+        .unwrap(),
+        OpenChapter::Missing
+    );
     assert_eq!(
         get_manuscript_tree(
             &store,
@@ -574,4 +608,20 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         .unwrap()
         .get::<_, i64>(0);
     assert_eq!(chapters_after_refuse, 3);
+
+    admin
+        .execute(
+            "UPDATE storyos.project_snapshots
+                SET expires_at = clock_timestamp() - interval '1 second'
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER_A, &scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        open_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
+            .await
+            .unwrap(),
+        OpenChapter::SnapshotExpired
+    );
 }
