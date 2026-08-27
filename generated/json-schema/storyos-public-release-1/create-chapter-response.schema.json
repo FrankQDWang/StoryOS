@@ -20,6 +20,99 @@
       ],
       "type": "object"
     },
+    "CreateChapterConflictReason": {
+      "enum": [
+        "stale_tree_revision"
+      ],
+      "type": "string"
+    },
+    "CreateChapterEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "chapter_id": {
+              "type": "string"
+            },
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "authoritative_applied",
+              "type": "string"
+            },
+            "order": {
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "tree_revision": {
+              "type": "string"
+            },
+            "volume_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "volume_id",
+            "chapter_id",
+            "title",
+            "tree_revision",
+            "order",
+            "current_chapter_id",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/CreateChapterConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/CreateChapterRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CreateChapterRefusalReason": {
+      "enum": [
+        "archived_project",
+        "invalid_title",
+        "invalid_volume_join"
+      ],
+      "type": "string"
+    },
     "DigestAlgorithm": {
       "enum": [
         "sha256"
@@ -233,84 +326,9 @@
         "project_id"
       ],
       "type": "object"
-    },
-    "UpdateProjectConflictReason": {
-      "enum": [
-        "stale_project_revision"
-      ],
-      "type": "string"
-    },
-    "UpdateProjectEffect": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "authoritative_applied",
-              "type": "string"
-            },
-            "project_activity_position": {
-              "type": "string"
-            },
-            "revision": {
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "title",
-            "revision",
-            "project_activity_position"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "no_effect",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateProjectNoEffectReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateProjectConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "UpdateProjectNoEffectReason": {
-      "enum": [
-        "title_unchanged"
-      ],
-      "type": "string"
     }
   },
-  "$id": "storyos.command.update-project.response.v1",
+  "$id": "storyos.command.create-chapter.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -327,7 +345,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateProjectEffect"
+      "$ref": "#/$defs/CreateChapterEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -339,7 +357,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-project.response.v1",
+      "const": "storyos.command.create-chapter.response.v1",
       "type": "string"
     }
   },
@@ -353,6 +371,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Update Project Response",
+  "title": "StoryOS Create Chapter Response",
   "type": "object"
 }

@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:552d5163df6883508674c7c623e62207c02453dd712bf6c2a99cd56792dc334b",
+  "corpus_digest": "sha256:798069bb33362ff7c82436431e088b0c76bfa5eb05fb4dada50559af7d93241e",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -36,6 +36,9 @@
       "generated/golden-wire/storyos-public-release-1/create-volume.json",
       "generated/golden-wire/storyos-public-release-1/create-volume.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-volume.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/create-chapter.json",
+      "generated/golden-wire/storyos-public-release-1/create-chapter.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/create-chapter.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -257,6 +260,24 @@
       "fixture_id": "storyos.golden.createVolume.boundary.v1",
       "operation_id": "createVolume",
       "path": "generated/golden-wire/storyos-public-release-1/create-volume.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.createChapter.positive.v1",
+      "operation_id": "createChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/create-chapter.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.createChapter.invalid.v1",
+      "operation_id": "createChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/create-chapter.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.createChapter.boundary.v1",
+      "operation_id": "createChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/create-chapter.boundary.json"
     },
     {
       "classification": "positive",

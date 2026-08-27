@@ -1,0 +1,56 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000912",
+  "command_id": "018f0000-0000-7001-8000-000000000911",
+  "correlation_id": "018f0000-0000-7001-8000-000000000910",
+  "effect": {
+    "chapter_id": "018f0000-0000-7001-8000-000000000916",
+    "current_chapter_id": "018f0000-0000-7001-8000-000000000916",
+    "kind": "authoritative_applied",
+    "order": "1",
+    "project_activity_position": "3",
+    "title": "Chapter A",
+    "tree_revision": "3",
+    "volume_id": "018f0000-0000-7001-8000-000000000815"
+  },
+  "project": {
+    "open": {
+      "current_chapter_id": "018f0000-0000-7001-8000-000000000916",
+      "kind": "current_chapter"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000201",
+    "title": "Empty Novel"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "artifact_lifecycle_event_refs": [],
+    "author_action_sequence": null,
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000912",
+    "authoritative_commit_ids": [],
+    "authoritative_revision_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.createChapter.jcs.v1",
+      "value_hex_lowercase": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "command_kind": "createChapter",
+    "condition_refs": [],
+    "created_at": "1970-01-01T00:00:00.000Z",
+    "draft_artifact_refs": [],
+    "expected_heads": [],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000914",
+    "prior_heads": [],
+    "producer_cause": "author_command_admission",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_revision_ids": [],
+    "receipt_id": "018f0000-0000-7001-8000-000000000913",
+    "result": "authoritative_applied",
+    "resulting_heads": []
+  },
+  "schema_id": "storyos.command.create-chapter.response.v1"
+}
