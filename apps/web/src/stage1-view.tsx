@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import {
   createProject,
   createProjectChallenge,
+  getManuscriptTree,
   listProjects,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { GetManuscriptTreeResponse, GetProjectResponse, ProjectListItem } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -17,6 +18,7 @@ import type {
   ProjectReadyState,
 } from "./editor-types.ts";
 import { archiveOwnedProject } from "./archive-project.ts";
+import { createOwnedChapter } from "./create-chapter.ts";
 import { createOwnedVolume } from "./create-volume.ts";
 import { attachManualInput } from "./manual-input.ts";
 import { renameOwnedProject } from "./rename-project.ts";
@@ -64,6 +66,7 @@ function ProjectReadyView({
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState<string>();
   const [lifecycle, setLifecycle] = useState<"active" | "archived">();
+  const [tree, setTree] = useState<GetManuscriptTreeResponse>();
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -95,6 +98,13 @@ function ProjectReadyView({
       setLifecycle(item.lifecycle.kind);
     }).catch(() => {});
   }, [baseUrl, fetchImpl, state.project.project.project_id]);
+  useEffect(() => {
+    void getManuscriptTree({
+      baseUrl,
+      projectId: state.project.project.project_id,
+      fetchImpl,
+    }).then(setTree).catch(() => {});
+  }, [baseUrl, fetchImpl, state.project.project.project_id]);
 
   const archived = lifecycle === "archived";
   return (
@@ -122,6 +132,23 @@ function ProjectReadyView({
             onArchived={onArchived}
           />
         </>
+      )}
+      {tree === undefined ? null : (
+        <ManuscriptTree
+          projectId={state.project.project.project_id}
+          tree={tree}
+          baseUrl={baseUrl}
+          fetchImpl={fetchImpl}
+          cryptoImpl={cryptoImpl}
+          createEnabled={!archived}
+          onChapterCreated={() => {
+            void getManuscriptTree({
+              baseUrl,
+              projectId: state.project.project.project_id,
+              fetchImpl,
+            }).then(setTree).catch(() => {});
+          }}
+        />
       )}
       <h2>{state.chapter.chapter.title}</h2>
       <textarea ref={editorRef} defaultValue={initialBody} readOnly={readOnly || archived} />
@@ -223,6 +250,99 @@ function ArchiveProjectForm({
   );
 }
 
+function CreateChapterForm({
+  projectId,
+  volumeId,
+  treeRevision,
+  baseUrl,
+  fetchImpl,
+  cryptoImpl,
+  onCreated,
+}: {
+  projectId: string;
+  volumeId: string;
+  treeRevision: string;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+  onCreated: () => void;
+}) {
+  return (
+    <form
+      data-create-chapter={volumeId}
+      onSubmit={(event) => {
+        event.preventDefault();
+        const title = String(new FormData(event.currentTarget).get("chapter-title") ?? "").trim();
+        if (!title) return;
+        void createOwnedChapter({
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+          projectId,
+          volumeId,
+          title,
+          expectedTreeRevision: treeRevision,
+        }).then((created) => {
+          if (created.effect.kind !== "authoritative_applied") return;
+          onCreated();
+        }).catch(() => {});
+      }}
+    >
+      <label>
+        章标题
+        <input name="chapter-title" required maxLength={1024} />
+      </label>
+      <button type="submit">创建章</button>
+    </form>
+  );
+}
+
+function ManuscriptTree({
+  projectId,
+  tree,
+  baseUrl,
+  fetchImpl,
+  cryptoImpl,
+  createEnabled,
+  onChapterCreated,
+}: {
+  projectId: string;
+  tree: GetManuscriptTreeResponse;
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  cryptoImpl: Crypto;
+  createEnabled: boolean;
+  onChapterCreated: () => void;
+}) {
+  return (
+    <nav aria-label="稿件目录">
+      <ul>
+        {tree.volumes.map((volume) => (
+          <li key={volume.volume_id}>
+            {volume.title}
+            <ul>
+              {volume.chapters.map((chapter) => (
+                <li key={chapter.chapter_id}>{chapter.title}</li>
+              ))}
+            </ul>
+            {createEnabled ? (
+              <CreateChapterForm
+                projectId={projectId}
+                volumeId={volume.volume_id}
+                treeRevision={tree.tree_revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onCreated={onChapterCreated}
+              />
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 function CreateVolumeForm({
   projectId,
   treeRevision,
@@ -275,6 +395,7 @@ function EmptyProjectReadyView({
   cryptoImpl,
   onArchived,
   onVolumeCreated,
+  onChapterCreated,
 }: {
   project: GetProjectResponse;
   tree: GetManuscriptTreeResponse;
@@ -283,6 +404,7 @@ function EmptyProjectReadyView({
   cryptoImpl: Crypto;
   onArchived: () => void;
   onVolumeCreated: () => void;
+  onChapterCreated: () => void;
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState<string>();
@@ -298,20 +420,15 @@ function EmptyProjectReadyView({
     <section>
       <h1>{title}</h1>
       <p>空工作区</p>
-      <nav aria-label="稿件目录">
-        <ul>
-          {tree.volumes.map((volume) => (
-            <li key={volume.volume_id}>
-              {volume.title}
-              <ul>
-                {volume.chapters.map((chapter) => (
-                  <li key={chapter.chapter_id}>{chapter.title}</li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      </nav>
+      <ManuscriptTree
+        projectId={project.project.project_id}
+        tree={tree}
+        baseUrl={baseUrl}
+        fetchImpl={fetchImpl}
+        cryptoImpl={cryptoImpl}
+        createEnabled
+        onChapterCreated={onChapterCreated}
+      />
       <CreateVolumeForm
         projectId={project.project.project_id}
         treeRevision={tree.tree_revision}
@@ -514,6 +631,14 @@ function Stage1View({
           setCurrent({ kind: "protected-ready", profile: current.profile });
         }}
         onVolumeCreated={() => {
+          void openControlledProject({
+            baseUrl,
+            projectId: current.project.project.project_id,
+            fetchImpl,
+            cryptoImpl,
+          }).then(setCurrent);
+        }}
+        onChapterCreated={() => {
           void openControlledProject({
             baseUrl,
             projectId: current.project.project.project_id,
