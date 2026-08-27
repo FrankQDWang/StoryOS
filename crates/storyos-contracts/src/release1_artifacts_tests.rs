@@ -157,7 +157,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,createChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,createChapter,updateChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter"
     ));
 
     let client = String::from_utf8(
@@ -287,7 +287,8 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
             "archiveProject",
             "createVolume",
             "createChapter",
-            "updateVolume"
+            "updateVolume",
+            "updateChapter"
         ])
     );
 
@@ -462,6 +463,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_update_volume_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_update_volume_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_update_chapter_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,

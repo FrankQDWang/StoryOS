@@ -154,7 +154,8 @@
         "archiveProject",
         "createVolume",
         "createChapter",
-        "updateVolume"
+        "updateVolume",
+        "updateChapter"
       ],
       "type": "string"
     },

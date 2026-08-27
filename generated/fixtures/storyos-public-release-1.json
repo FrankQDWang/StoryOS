@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:2012ca8129d823986adced5ecfacd846f1541454a44c133ca6237ae395ff9fa7",
+  "corpus_digest": "sha256:4da8732bb0f0db1c608d40a08cdbb6ced4e47f25338a0de5c189a7eddd135ca5",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -42,6 +42,9 @@
       "generated/golden-wire/storyos-public-release-1/create-chapter.json",
       "generated/golden-wire/storyos-public-release-1/create-chapter.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-chapter.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/update-chapter.json",
+      "generated/golden-wire/storyos-public-release-1/update-chapter.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/update-chapter.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -299,6 +302,24 @@
       "fixture_id": "storyos.golden.createChapter.boundary.v1",
       "operation_id": "createChapter",
       "path": "generated/golden-wire/storyos-public-release-1/create-chapter.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.updateChapter.positive.v1",
+      "operation_id": "updateChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/update-chapter.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.updateChapter.invalid.v1",
+      "operation_id": "updateChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/update-chapter.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.updateChapter.boundary.v1",
+      "operation_id": "updateChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/update-chapter.boundary.json"
     },
     {
       "classification": "positive",
