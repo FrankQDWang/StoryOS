@@ -1,6 +1,7 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
 mod archive_project;
+mod create_chapter;
 mod create_project;
 mod create_volume;
 mod update_project;
@@ -8,6 +9,10 @@ mod update_project;
 pub use archive_project::{
     ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
     ArchiveProjectResult, ProjectLifecycle, archive_project,
+};
+pub use create_chapter::{
+    CreateChapter, CreateChapterConflict, CreateChapterCurrent, CreateChapterOpen,
+    CreateChapterRefusal, CreateChapterResult, VolumeJoin, create_chapter,
 };
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{
@@ -208,3 +213,7 @@ mod archive_project_tests;
 #[cfg(test)]
 #[path = "create_volume_tests.rs"]
 mod create_volume_tests;
+
+#[cfg(test)]
+#[path = "create_chapter_tests.rs"]
+mod create_chapter_tests;
