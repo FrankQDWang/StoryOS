@@ -28,6 +28,7 @@ mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
+mod create_chapter;
 mod create_project;
 mod create_project_challenge;
 mod create_volume;
@@ -62,6 +63,10 @@ pub use author_edit_outcome::{
 pub use archive_project::{
     ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
     ArchiveProjectSettlementEffect, ArchiveProjectStore, archive_project,
+};
+pub use create_chapter::{
+    CreateChapterCommand, CreateChapterError, CreateChapterSettlement,
+    CreateChapterSettlementEffect, CreateChapterStore, create_chapter,
 };
 pub use create_project::{
     CreateProjectCommand, CreateProjectError, CreateProjectSettlement, CreateProjectStore,
