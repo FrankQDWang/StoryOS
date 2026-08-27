@@ -48,6 +48,8 @@ type OutcomeMode = "challenge" | "committed" | "rejected" | "unavailable";
 const NEXT_REVISION = "018f0000-0000-7001-8000-000000000034";
 const EXPIRES = "2026-08-13T08:05:00.000Z";
 const NONCE = "a".repeat(64);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function transactionResult(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -304,9 +306,9 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
       .toEqual({ authorEdits: 1, outcomes: 1 });
     const expectedUnavailable: OutcomeQueryAttempt = {
-      outcome_query_attempt_id: expect.any(String),
+      outcome_query_attempt_id: expect.stringMatching(UUID),
       journal_submission_group_id: unresolved.groupId,
-      exact_transport_retry_capsule_id: expect.any(String),
+      exact_transport_retry_capsule_id: expect.stringMatching(UUID),
       request_identity: {
         method: "GET",
         route_template:
@@ -314,10 +316,10 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
         request_schema: "storyos.query.apply-author-edit-outcome.request.v1",
         idempotency_key: requireString(lastIdempotencyKey, "original idempotency key"),
       },
-      started_at: expect.any(String),
+      started_at: expect.stringMatching(TIMESTAMP),
       outcome: {
         kind: "query_unavailable",
-        observed_at: expect.any(String),
+        observed_at: expect.stringMatching(TIMESTAMP),
         evidence: "delivery_unknown",
         local_response_payload_ref: null,
         exact_response_payload_digest: null,
