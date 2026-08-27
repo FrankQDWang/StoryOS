@@ -36,6 +36,10 @@ mod archive_project_tests;
 #[path = "create_volume_tests.rs"]
 mod create_volume_tests;
 
+#[cfg(test)]
+#[path = "create_chapter_tests.rs"]
+mod create_chapter_tests;
+
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
