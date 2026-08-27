@@ -34,6 +34,7 @@ import { createOwnedChapter } from "./create-chapter.ts";
 import { createOwnedVolume } from "./create-volume.ts";
 import { attachManualInput, type ManualInputController } from "./manual-input.ts";
 import { renameOwnedProject } from "./rename-project.ts";
+import { VolumeTreeActions } from "./volume-tree-actions.tsx";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -221,6 +222,13 @@ function ProjectReadyView({
               fetchImpl,
             }).then(setTree).catch(() => {});
           }}
+          onVolumeUpdated={() => {
+            void getManuscriptTree({
+              baseUrl,
+              projectId: state.project.project.project_id,
+              fetchImpl,
+            }).then(setTree).catch(() => {});
+          }}
         />
       )}
       {switchRecovery === undefined ? null : <p role="alert">{switchRecovery}</p>}
@@ -381,6 +389,7 @@ function ManuscriptTree({
   selectedChapterId,
   onSelectChapter,
   onChapterCreated,
+  onVolumeUpdated,
 }: {
   projectId: string;
   tree: GetManuscriptTreeResponse;
@@ -391,13 +400,29 @@ function ManuscriptTree({
   selectedChapterId?: string;
   onSelectChapter?: (chapterId: string) => void;
   onChapterCreated: () => void;
+  onVolumeUpdated: () => void;
 }) {
+  const volumeCount = tree.volumes.length;
   return (
     <nav aria-label="稿件目录">
       <ul>
         {tree.volumes.map((volume) => (
-          <li key={volume.volume_id}>
-            {volume.title}
+          <li key={volume.volume_id} data-volume-id={volume.volume_id} data-volume-order={volume.order}>
+            <span data-volume-title>{volume.title}</span>
+            {createEnabled ? (
+              <VolumeTreeActions
+                projectId={projectId}
+                volumeId={volume.volume_id}
+                title={volume.title}
+                order={volume.order}
+                volumeCount={volumeCount}
+                expectedVolumeRevision={tree.tree_revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onUpdated={onVolumeUpdated}
+              />
+            ) : null}
             <ul>
               {volume.chapters.map((chapter) => (
                 <li key={chapter.chapter_id}>
@@ -517,6 +542,7 @@ function EmptyProjectReadyView({
         cryptoImpl={cryptoImpl}
         createEnabled
         onChapterCreated={onChapterCreated}
+        onVolumeUpdated={onVolumeCreated}
       />
       <CreateVolumeForm
         projectId={project.project.project_id}
