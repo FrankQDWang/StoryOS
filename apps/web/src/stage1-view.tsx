@@ -34,6 +34,7 @@ import { createOwnedChapter } from "./create-chapter.ts";
 import { createOwnedVolume } from "./create-volume.ts";
 import { attachManualInput, type ManualInputController } from "./manual-input.ts";
 import { renameOwnedProject } from "./rename-project.ts";
+import { ChapterTreeActions } from "./chapter-tree-actions.tsx";
 import { VolumeTreeActions } from "./volume-tree-actions.tsx";
 
 interface Stage1ViewProps {
@@ -425,18 +426,22 @@ function ManuscriptTree({
             ) : null}
             <ul>
               {volume.chapters.map((chapter) => (
-                <li key={chapter.chapter_id}>
-                  {onSelectChapter === undefined ? chapter.title : (
-                    <button
-                      type="button"
-                      data-chapter-id={chapter.chapter_id}
-                      aria-current={chapter.chapter_id === selectedChapterId}
-                      onClick={() => { onSelectChapter(chapter.chapter_id); }}
-                    >
-                      {chapter.title}
-                    </button>
-                  )}
-                </li>
+                <ChapterTreeActions
+                  key={chapter.chapter_id}
+                  projectId={projectId}
+                  chapterId={chapter.chapter_id}
+                  title={chapter.title}
+                  order={chapter.order}
+                  chapterCount={volume.chapters.length}
+                  expectedChapterRevision={tree.tree_revision}
+                  selectedChapterId={selectedChapterId}
+                  onSelectChapter={onSelectChapter}
+                  createEnabled={createEnabled}
+                  baseUrl={baseUrl}
+                  fetchImpl={fetchImpl}
+                  cryptoImpl={cryptoImpl}
+                  onUpdated={onVolumeUpdated}
+                />
               ))}
             </ul>
             {createEnabled ? (

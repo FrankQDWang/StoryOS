@@ -32,10 +32,8 @@ afterEach(async () => {
 });
 
 function chapterTitles(root: Element | null | undefined): string[] {
-  const volumeItem = root?.querySelector('nav[aria-label="稿件目录"] > ul > li');
-  return [...(volumeItem?.querySelectorAll(":scope > ul > li") ?? [])].map((item) =>
-    item.textContent?.trim() ?? "",
-  );
+  return [...(root?.querySelectorAll('nav[aria-label="稿件目录"] [data-chapter-title]') ?? [])]
+    .map((node) => node.textContent?.trim() ?? "");
 }
 
 it("the author creates three named Chapters and keeps the first current Chapter", async () => {
