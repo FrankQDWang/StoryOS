@@ -39,6 +39,7 @@ mod manuscript_tree;
 mod snapshot;
 mod takeover;
 mod update_project;
+mod update_volume;
 
 #[cfg(test)]
 #[path = "author_command_outcome_unknown_tests.rs"]
@@ -90,6 +91,10 @@ pub use manuscript_tree::{
 pub use update_project::{
     UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
     UpdateProjectSettlementEffect, UpdateProjectStore, update_project,
+};
+pub use update_volume::{
+    UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement, UpdateVolumeSettlementEffect,
+    UpdateVolumeStore, update_volume,
 };
 
 pub use editor_session::{
