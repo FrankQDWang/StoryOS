@@ -166,15 +166,19 @@ fn update_issue(
     }
 }
 
+struct UpdateFixture<'a> {
+    volume_id: &'a str,
+    title: &'a str,
+    order: u64,
+    expected_volume_revision: u64,
+    bytes: &'a [u8],
+}
+
 fn update_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
-    volume_id: &str,
-    title: &str,
-    order: u64,
-    expected_volume_revision: u64,
-    bytes: &[u8],
+    fixture: UpdateFixture<'_>,
 ) -> UpdateVolumeCommand {
     UpdateVolumeCommand {
         project_scope: binding.project_scope.clone(),
@@ -186,17 +190,27 @@ fn update_command(
         },
         challenge_binding: binding,
         nonce_digest: nonce_digest.to_owned(),
-        canonical_command_bytes: bytes.to_vec(),
+        canonical_command_bytes: fixture.bytes.to_vec(),
         correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
-        volume_id: VolumeId::new(volume_id),
-        title: title.to_owned(),
-        order,
-        expected_volume_revision,
+        volume_id: VolumeId::new(fixture.volume_id),
+        title: fixture.title.to_owned(),
+        order: fixture.order,
+        expected_volume_revision: fixture.expected_volume_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
             author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
             receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
         },
+    }
+}
+
+fn applied_fixture(volume_id: &str) -> UpdateFixture<'_> {
+    UpdateFixture {
+        volume_id,
+        title: "Volume B",
+        order: 2,
+        expected_volume_revision: 3,
+        bytes: UPDATE_BYTES,
     }
 }
 
@@ -288,11 +302,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
             first_issue.binding.clone(),
             &first_issue.nonce_digest,
             "0b17",
-            &first_volume_id,
-            "Volume B",
-            2,
-            3,
-            UPDATE_BYTES,
+            applied_fixture(&first_volume_id),
         ),
     )
     .await
@@ -311,11 +321,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
             first_issue.binding.clone(),
             &first_issue.nonce_digest,
             "0b99",
-            &first_volume_id,
-            "Volume B",
-            2,
-            3,
-            UPDATE_BYTES,
+            applied_fixture(&first_volume_id),
         ),
     )
     .await
@@ -364,11 +370,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
             stale_issue.binding.clone(),
             &stale_issue.nonce_digest,
             "0b19",
-            &first_volume_id,
-            "Volume B",
-            2,
-            3,
-            UPDATE_BYTES,
+            applied_fixture(&first_volume_id),
         ),
     )
     .await
@@ -390,11 +392,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
             missing_issue.binding.clone(),
             &missing_issue.nonce_digest,
             "0b1b",
-            MISSING_VOLUME,
-            "Volume B",
-            2,
-            3,
-            UPDATE_BYTES,
+            applied_fixture(MISSING_VOLUME),
         ),
     )
     .await
@@ -416,11 +414,13 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
             invalid_issue.binding.clone(),
             &invalid_issue.nonce_digest,
             "0b1d",
-            &first_volume_id,
-            "Volume B",
-            3,
-            3,
-            INVALID_ORDER_BYTES,
+            UpdateFixture {
+                volume_id: &first_volume_id,
+                title: "Volume B",
+                order: 3,
+                expected_volume_revision: 3,
+                bytes: INVALID_ORDER_BYTES,
+            },
         ),
     )
     .await
@@ -479,11 +479,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
             archived_issue.binding.clone(),
             archived_issue.nonce_digest.as_str(),
             "0b1f",
-            &first_volume_id,
-            "Volume B",
-            2,
-            3,
-            UPDATE_BYTES,
+            applied_fixture(&first_volume_id),
         ),
     )
     .await
