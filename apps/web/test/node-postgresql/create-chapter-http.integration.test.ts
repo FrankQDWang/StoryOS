@@ -6,19 +6,24 @@ import { test } from "vitest";
 import {
   archiveProject,
   createChapter,
+  createEditorSession,
   createProject,
   createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
   digestArchiveProject,
   digestCreateChapter,
+  digestCreateEditorSession,
   digestCreateVolume,
   getChapter,
+  getEditorSession,
   getManuscriptTree,
+  getSnapshot,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
   CreateChapterRequest,
+  CreateEditorSessionRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -179,6 +184,105 @@ async function postChapter(
   });
   return { challenge, created };
 }
+
+test("Editor Sessions capture nonzero Activity and preserve legacy Snapshot evidence", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const { projectId, fetchImpl } = await createEmpty(baseUrl, "session-a",
+      "018f0000-0000-7001-8000-000000001001", "Session Snapshot",
+      "018f0000-0000-7001-8000-000000001000");
+    const volume = await postVolume(baseUrl, fetchImpl, projectId,
+      "018f0000-0000-7001-8000-000000001002",
+      volumeRequest("Volume", "1", "018f0000-0000-7001-8000-000000001003"));
+    if (volume.created.effect.kind !== "authoritative_applied") throw new Error("Volume must apply");
+    const chapter = await postChapter(baseUrl, fetchImpl, projectId, volume.created.effect.volume_id,
+      "018f0000-0000-7001-8000-000000001004",
+      chapterRequest("Chapter", "2", "018f0000-0000-7001-8000-000000001005"));
+    if (chapter.created.effect.kind !== "authoritative_applied") throw new Error("Chapter must apply");
+    const opened = await getChapter({ baseUrl, projectId, fetchImpl,
+      chapterId: chapter.created.effect.chapter_id });
+    assert.equal(opened.project_activity_position, "3");
+    const request: CreateEditorSessionRequest = {
+      command_schema: "storyos.command.create-editor-session.request.v1",
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: "018f0000-0000-7001-8000-000000001006",
+    };
+    const digest = await digestCreateEditorSession(request);
+    async function openSession(idempotencyKey: string) {
+      const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+        baseUrl, projectId, fetchImpl,
+        request: { method: "POST", route_template: "/api/v1/projects/{project_id}/editor-sessions",
+          command_schema: request.command_schema, canonical_command_digest: digest,
+          idempotency_key: idempotencyKey },
+      }));
+      const input = { baseUrl, projectId, fetchImpl, request, idempotencyKey,
+        antiForgery: challenge.nonce };
+      return { input, session: await createEditorSession(input) };
+    }
+    const first = await openSession("018f0000-0000-7001-8000-000000001007");
+    const base = first.session.base_snapshot;
+    assert.match(base.snapshot_id, UUID_V7);
+    assert.deepEqual(base, {
+      snapshot_id: base.snapshot_id,
+      chapter_id: opened.chapter.chapter_id,
+      project_activity_position: "3",
+      authoritative_head_revision_id: opened.chapter.current_revision.revision_id,
+      proposal_head_revision_ids: [],
+      target_refs: [`manuscript:${opened.chapter.chapter_id}`],
+      observed_ownership_partition: "authoritative",
+      materialized_revision: opened.chapter.current_revision,
+      materialized_payload_digest: { algorithm: "sha256", profile: "storyos.canonical-payload.sha256.v1",
+        value_hex_lowercase: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" },
+      created_at: base.created_at,
+    });
+    assert.deepEqual(first.session.writer, { kind: "current_writer", writer_generation: "1" });
+    assert.deepEqual(await createEditorSession(first.input), first.session);
+    const canonicalInput = { baseUrl, projectId, fetchImpl, snapshotId: base.snapshot_id };
+    assert.equal((await getSnapshot(canonicalInput)).snapshot.project_activity_position, "3");
+
+    // Reproduce the old writer's stamp after the public commands have proven position 3.
+    await queryPostgres(`UPDATE storyos.editor_session_base_snapshots SET project_activity_position = 0
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+        AND snapshot_id = '${base.snapshot_id}'::uuid;
+      UPDATE storyos.project_snapshots SET project_activity_position = 0
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+        AND snapshot_id = '${base.snapshot_id}'::uuid`);
+    const legacyInput = { baseUrl, projectId, fetchImpl,
+      editorSessionId: first.session.editor_session.editor_session_id };
+    const legacy = await getEditorSession(legacyInput);
+    const legacySnapshot = await getSnapshot(canonicalInput);
+    assert.equal(legacy.base_snapshot.project_activity_position, "0");
+    const retainedQuery = `SELECT json_build_object(
+      'base', (SELECT to_jsonb(s) FROM storyos.editor_session_base_snapshots s
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND snapshot_id = '${base.snapshot_id}'::uuid),
+      'snapshot', (SELECT to_jsonb(s) FROM storyos.project_snapshots s
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND snapshot_id = '${base.snapshot_id}'::uuid),
+      'counters', (SELECT to_jsonb(c) FROM storyos.scope_counters c
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid))::text`;
+    const retained = JSON.parse(await queryPostgres(retainedQuery));
+    const next = await openSession("018f0000-0000-7001-8000-000000001008");
+    assert.deepEqual(next.session.writer,
+      { kind: "read_only", observed_writer_generation: "1", reason: "secondary_session" });
+    assert.deepEqual(next.session.base_snapshot, { ...base,
+      snapshot_id: next.session.base_snapshot.snapshot_id,
+      created_at: next.session.base_snapshot.created_at });
+    assert.equal((await getSnapshot({ ...canonicalInput,
+      snapshotId: next.session.base_snapshot.snapshot_id })).snapshot.project_activity_position, "3");
+    assert.deepEqual(await createEditorSession(next.input), next.session);
+    assert.deepEqual(await createEditorSession(first.input),
+      { ...first.session, base_snapshot: legacy.base_snapshot });
+    assert.deepEqual((await getEditorSession(legacyInput)).base_snapshot, legacy.base_snapshot);
+    assert.deepEqual((await getSnapshot(canonicalInput)).snapshot, legacySnapshot.snapshot);
+    assert.deepEqual(JSON.parse(await queryPostgres(retainedQuery)), retained);
+    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.editor_sessions
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid`), "2");
+  } finally {
+    await stopRealServer(server);
+  }
+});
 
 test("createChapter creates three named Chapters, keeps the first current, and fails closed", async () => {
   const { baseUrl, server } = await startRealServer();

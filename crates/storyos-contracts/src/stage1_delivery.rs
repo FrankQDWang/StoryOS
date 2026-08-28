@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-23-v21";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "615408dabba489805f36aee83719cd0e8eb18dc3";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "6d1f5830978379140c51ee7840c488a216c1ba4d";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-28-v22";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "3523494b0b4d934032576b822895b8f3ebc7ef87";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "5e155a851b1debf555e1d5f20fde09956b609c5d";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:b0e73358501a7bf485d352c8d04b490dbe45d3888ae57dfe691f73a9b7fc6be1";
+    "sha256:7a77e7e75d3538f0e2d183f5172ffbc446715a780bc66f0fdae94d2193a07842";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -360,7 +360,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-04",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/106",
         title: "Create an Editor Session and Persist One Pending Intent",
-        issue_body_sha256: "db44ffa60cf52d0e59c54e11c6496ac4c48ea3d1ef4c038dc40e00a3e2b1a9f9",
+        issue_body_sha256: "89f8cfc03910ba80994cece605d7657084ee088495bcc1e3963190a54d52abbd",
         blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/121"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "persist one pending editor intent",

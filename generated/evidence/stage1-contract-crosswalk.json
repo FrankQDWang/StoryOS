@@ -11,10 +11,10 @@
       "issue_body_sha256": "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-23-v21",
-      "baseline_commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
-      "baseline_tree": "6d1f5830978379140c51ee7840c488a216c1ba4d",
-      "ticket_set_sha256": "sha256:b0e73358501a7bf485d352c8d04b490dbe45d3888ae57dfe691f73a9b7fc6be1",
+      "revision": "stage1-ticketed-delivery-2026-08-28-v22",
+      "baseline_commit": "3523494b0b4d934032576b822895b8f3ebc7ef87",
+      "baseline_tree": "5e155a851b1debf555e1d5f20fde09956b609c5d",
+      "ticket_set_sha256": "sha256:7a77e7e75d3538f0e2d183f5172ffbc446715a780bc66f0fdae94d2193a07842",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -272,7 +272,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/106",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Create an Editor Session and Persist One Pending Intent",
-          "issue_body_sha256": "db44ffa60cf52d0e59c54e11c6496ac4c48ea3d1ef4c038dc40e00a3e2b1a9f9",
+          "issue_body_sha256": "89f8cfc03910ba80994cece605d7657084ee088495bcc1e3963190a54d52abbd",
           "blocked_by": [
             "https://github.com/FrankQDWang/StoryOS/issues/121"
           ],
@@ -1146,8 +1146,8 @@
       "fx_handoff": {
         "id": "FX-HANDOFF",
         "delivery_baseline": {
-          "commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
-          "tree": "6d1f5830978379140c51ee7840c488a216c1ba4d"
+          "commit": "3523494b0b4d934032576b822895b8f3ebc7ef87",
+          "tree": "5e155a851b1debf555e1d5f20fde09956b609c5d"
         },
         "execution_baseline": {
           "commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
@@ -1155,7 +1155,7 @@
         },
         "contract_revisions": {
           "parent": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
-          "delivery": "stage1-ticketed-delivery-2026-08-23-v21",
+          "delivery": "stage1-ticketed-delivery-2026-08-28-v22",
           "issue": "issue-112-provenance-workspace-isolation-2026-08-23-v4"
         },
         "release_ids": [
