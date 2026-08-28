@@ -249,6 +249,7 @@ function canonicalJson(value: unknown): unknown {
 }
 
 export interface AppliedActivityEventOptions {
+  readonly authorActionSequence?: string;
   readonly commandId: string;
   readonly commitId: string;
   readonly correlationId: string;
@@ -266,7 +267,7 @@ export async function createAppliedActivityEvent(
     chapter_id: CHAPTER,
     authoritative_revision_id: options.revisionId,
     authoritative_commit_id: options.commitId,
-    author_action_sequence: options.sequence,
+    author_action_sequence: options.authorActionSequence ?? options.sequence,
   };
   const digest = new Uint8Array(await crypto.subtle.digest(
     "SHA-256",

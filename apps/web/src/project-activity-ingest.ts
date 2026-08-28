@@ -89,7 +89,7 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     || payload?.chapter_id !== workspace.session.base_snapshot.chapter_id
     || !UUID.test(payload?.authoritative_revision_id ?? "")
     || !UUID.test(payload?.authoritative_commit_id ?? "")
-    || payload?.author_action_sequence !== event.stream_sequence
+    || !boundedU64(payload?.author_action_sequence) || payload.author_action_sequence === "0"
     || event.payload_digest?.algorithm !== "sha256"
     || event.payload_digest?.profile !== "storyos.event-payload.jcs.v1"
     || !/^[0-9a-f]{64}$/.test(event.payload_digest?.value_hex_lowercase ?? "")
@@ -153,7 +153,7 @@ function applyFrames(
   return next;
 }
 
-function validatedCanonicalSnapshot(
+export function validatedCanonicalSnapshot(
   response: unknown,
   workspace: EditorWorkspace,
   snapshotId: string,
@@ -164,6 +164,7 @@ function validatedCanonicalSnapshot(
   if (candidate?.schema_id !== "storyos.query.snapshot.response.v1"
     || !UUID.test(candidate.correlation_id ?? "")
     || JSON.stringify(candidate.project_scope) !== JSON.stringify(scope)
+    || !UUID.test(snapshotId)
     || snapshot?.snapshot_id !== snapshotId
     || JSON.stringify(snapshot.project_scope) !== JSON.stringify(scope)
     || snapshot.snapshot_kind !== "canonical"
@@ -223,6 +224,23 @@ export async function readProjectActivityIngest(
   return record?.value ?? emptyIngest(workspace);
 }
 
+/** Stage canonical ingest state in the caller's journal installation transaction. */
+export async function stageProjectActivitySnapshot(
+  workspace: EditorWorkspace,
+  transaction: IDBTransaction,
+  snapshot: SnapshotDescriptor,
+): Promise<ProjectActivityIngest> {
+  const key = ingestKey(workspace.partition.project_scope);
+  const metadata = transaction.objectStore("metadata");
+  const stored = await requestResult(metadata.get(key)) as { value?: ProjectActivityIngest } | undefined;
+  if (snapshot.expires_at !== null && Date.parse(snapshot.expires_at) <= Date.now()) {
+    throw new Error("Canonical Snapshot has expired");
+  }
+  const next = ingestAfterSnapshot(stored?.value ?? emptyIngest(workspace), snapshot);
+  metadata.put({ key, value: next });
+  return next;
+}
+
 export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspace, {
   baseUrl, snapshotId, fetchImpl = globalThis.fetch,
 }: {
@@ -239,7 +257,6 @@ export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspa
     workspace,
     snapshotId,
   );
-  const key = ingestKey(scope);
   const partitionId = workspace.partition.journal_partition_id;
   // Read retained journal rows in this transaction so the ingest rewrite cannot
   // land beside a concurrent payload write. This layer does not mutate those rows.
@@ -248,10 +265,9 @@ export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspa
     "readwrite",
   );
   const metadata = transaction.objectStore("metadata");
-  const [schemaValue, partition, storedValue] = await Promise.all([
+  const [schemaValue, partition] = await Promise.all([
     requestResult(metadata.get("schema")),
     requestResult(transaction.objectStore("partitions").get(partitionId)),
-    requestResult(metadata.get(key)),
     requestResult(transaction.objectStore("intents").index("partition").getAll(partitionId)),
     requestResult(transaction.objectStore("payload_chains").index("partition")
       .getAll(partitionId)),
@@ -259,13 +275,11 @@ export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspa
       .getAll(partitionId)),
   ]);
   const schema = schemaValue as { version?: unknown } | undefined;
-  const stored = storedValue as { value?: ProjectActivityIngest } | undefined;
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)) {
     throw new Error("Local Edit Journal schema is incompatible");
   }
-  const next = ingestAfterSnapshot(stored?.value ?? emptyIngest(workspace), snapshot);
-  metadata.put({ key, value: next });
+  const next = await stageProjectActivitySnapshot(workspace, transaction, snapshot);
   await transactionResult(transaction);
   return { snapshot, ingest: next };
 }

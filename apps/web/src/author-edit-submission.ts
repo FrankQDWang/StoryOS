@@ -180,7 +180,7 @@ async function validateFrozenGroup(
   }
   for (const [index, record] of records.entries()) {
     const coverage = group.ordered_coverage[index];
-    if (record.local_intent_sequence !== firstRecord.local_intent_sequence + index
+    if ((index > 0 && record.projection_dependency.prior_sequence !== records[index - 1]!.local_intent_sequence)
       || coverage!.local_intent_sequence !== record.local_intent_sequence
       || coverage!.intent_record_ref !== record.completed_intent_record_id
       || JSON.stringify(coverage!.payload_digest) !== JSON.stringify(record.payload_digest)
