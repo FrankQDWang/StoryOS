@@ -198,7 +198,6 @@ export async function freezeOneIntentSubmission(
   if (workspace.partition.disposition !== "current_writer_open") {
     throw new Error("Editor Session is read only");
   }
-  await rebuildPendingProjection(workspace);
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const existing = snapshot.groups.find((group) => group.settlement?.kind === "unsettled");
   if (existing) {
