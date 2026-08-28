@@ -140,7 +140,7 @@ async fn persist_takeover_settlement(
 
     let head = client
         .query_opt(
-            "SELECT head.current_revision_id::text
+            "SELECT head.current_revision_id::text, project.current_chapter_id::text
                FROM storyos.projects AS project
                JOIN storyos.authoritative_heads AS head
                  ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
@@ -157,6 +157,7 @@ async fn persist_takeover_settlement(
         .map_err(takeover_database_error)?
         .ok_or(TakeOverProjectWriterError::BindingConflict)?;
     let current_head: String = head.get(0);
+    let current_chapter: String = head.get(1);
 
     let generation_inserts = client
         .execute(
@@ -195,6 +196,40 @@ async fn persist_takeover_settlement(
             .map_err(takeover_database_error)?
             .get(0),
     )?;
+    let activity_position_text = activity_position.to_string();
+    let base_snapshot_id = Uuid::now_v7().to_string();
+    let base_updates = client
+        .execute(
+            "UPDATE storyos.editor_session_base_snapshots AS snapshot
+                SET snapshot_id = $4::text::uuid,
+                    chapter_object_id = $5::text::uuid,
+                    authoritative_revision_id = $6::text::uuid,
+                    project_activity_position = $7::text::numeric,
+                    created_at = clock_timestamp()
+               FROM storyos.project_writer_generations AS writer
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND snapshot.editor_session_id = $3::text::uuid
+                AND (writer.owner_user_id, writer.project_id,
+                     writer.current_editor_session_id, writer.writer_generation) =
+                    (snapshot.owner_user_id, snapshot.project_id,
+                     snapshot.editor_session_id, $8::text::numeric)",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.editor_session_id.as_ref(),
+                &base_snapshot_id,
+                &current_chapter,
+                &current_head,
+                &activity_position_text,
+                &resulting_generation_text,
+            ],
+        )
+        .await
+        .map_err(takeover_database_error)?;
+    if base_updates != 1 {
+        return Err(TakeOverProjectWriterError::BindingConflict);
+    }
     let snapshot_id = Uuid::now_v7().to_string();
     crate::snapshot::persist_canonical_snapshot(
         client,
@@ -257,7 +292,6 @@ async fn persist_takeover_settlement(
     }
 
     let activity_event_id = Uuid::now_v7().to_string();
-    let activity_position_text = activity_position.to_string();
     let payload = serde_json::json!({
         "kind": "takeover_applied",
         "prior_editor_session_id": prior_session,

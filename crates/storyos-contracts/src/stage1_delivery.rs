@@ -7,11 +7,11 @@ use crate::stage1_selection::{
     CONTRACT_REVISION, ISSUE_BODY_SHA256, ProofSelection, RequirementBinding,
 };
 
-pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-28-v23";
-pub(super) const DELIVERY_BASELINE_COMMIT: &str = "6d812db143a03cea7b7e76254450693c86887a67";
-pub(super) const DELIVERY_BASELINE_TREE: &str = "0735f004a407cbdc6706c4e48c17762598d300a7";
+pub(super) const DELIVERY_CONTRACT_REVISION: &str = "stage1-ticketed-delivery-2026-08-28-v24";
+pub(super) const DELIVERY_BASELINE_COMMIT: &str = "8cf569e5e6962a022be510675382b2b7665a26f1";
+pub(super) const DELIVERY_BASELINE_TREE: &str = "bccb09d5a0549c582b4151f6a897bdc565e21b67";
 const DELIVERY_TICKET_SET_SHA256: &str =
-    "sha256:867feddd63ea19919a2d5571c76f0ce062d0cf5f5b37e5d717419d67b5b699fc";
+    "sha256:3250af0e73e5c540680556cc228a03858b3dd13a311c230b76d2c8e6c739b246";
 
 const PARENT_ISSUE: &str = "https://github.com/FrankQDWang/StoryOS/issues/100";
 const FOUNDATION_PULL_REQUEST: &str = "https://github.com/FrankQDWang/StoryOS/pull/102";
@@ -415,7 +415,7 @@ const TICKET_DEFINITIONS: [TicketDefinition; STAGE_1_DELIVERY_TICKET_COUNT] = [
         responsibility_id: "S1-TICKET-09",
         issue: "https://github.com/FrankQDWang/StoryOS/issues/111",
         title: "Fence Stale Writers and Resync across Replay Generations",
-        issue_body_sha256: "697ca781c1b761f114e237b9743c4ddd683af91db15533b6f7f21f4cfc3f9bc0",
+        issue_body_sha256: "3e68b0495eb9bbc8fa3e04131fb6246a442f1c689fdd54b9e516295c6fd530e5",
         blocked_by: &["https://github.com/FrankQDWang/StoryOS/issues/110"],
         evidence_role: EvidenceRole::PlannedRuntimeEvidence,
         responsibility: "fence stale writers and resync replay generations",

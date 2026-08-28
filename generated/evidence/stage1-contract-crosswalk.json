@@ -11,10 +11,10 @@
       "issue_body_sha256": "5910f72dadd69b1b9292c623290770fdcbaaac039d980a02812d901b75ac96c6"
     },
     "delivery_contract": {
-      "revision": "stage1-ticketed-delivery-2026-08-28-v23",
-      "baseline_commit": "6d812db143a03cea7b7e76254450693c86887a67",
-      "baseline_tree": "0735f004a407cbdc6706c4e48c17762598d300a7",
-      "ticket_set_sha256": "sha256:867feddd63ea19919a2d5571c76f0ce062d0cf5f5b37e5d717419d67b5b699fc",
+      "revision": "stage1-ticketed-delivery-2026-08-28-v24",
+      "baseline_commit": "8cf569e5e6962a022be510675382b2b7665a26f1",
+      "baseline_tree": "bccb09d5a0549c582b4151f6a897bdc565e21b67",
+      "ticket_set_sha256": "sha256:3250af0e73e5c540680556cc228a03858b3dd13a311c230b76d2c8e6c739b246",
       "parent_specification": {
         "issue": "https://github.com/FrankQDWang/StoryOS/issues/100",
         "parent": "https://github.com/FrankQDWang/StoryOS/issues/1",
@@ -556,7 +556,7 @@
           "issue": "https://github.com/FrankQDWang/StoryOS/issues/111",
           "parent": "https://github.com/FrankQDWang/StoryOS/issues/100",
           "title": "Fence Stale Writers and Resync across Replay Generations",
-          "issue_body_sha256": "697ca781c1b761f114e237b9743c4ddd683af91db15533b6f7f21f4cfc3f9bc0",
+          "issue_body_sha256": "3e68b0495eb9bbc8fa3e04131fb6246a442f1c689fdd54b9e516295c6fd530e5",
           "blocked_by": [
             "https://github.com/FrankQDWang/StoryOS/issues/110"
           ],
@@ -1146,8 +1146,8 @@
       "fx_handoff": {
         "id": "FX-HANDOFF",
         "delivery_baseline": {
-          "commit": "6d812db143a03cea7b7e76254450693c86887a67",
-          "tree": "0735f004a407cbdc6706c4e48c17762598d300a7"
+          "commit": "8cf569e5e6962a022be510675382b2b7665a26f1",
+          "tree": "bccb09d5a0549c582b4151f6a897bdc565e21b67"
         },
         "execution_baseline": {
           "commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
@@ -1155,7 +1155,7 @@
         },
         "contract_revisions": {
           "parent": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
-          "delivery": "stage1-ticketed-delivery-2026-08-28-v23",
+          "delivery": "stage1-ticketed-delivery-2026-08-28-v24",
           "issue": "issue-112-provenance-workspace-isolation-2026-08-23-v4"
         },
         "release_ids": [

@@ -374,6 +374,46 @@ async fn durable_state(admin: &Client, fixture: &TakeoverFixture) -> DurableTake
     }
 }
 
+async fn base_rows(admin: &Client, fixture: &TakeoverFixture) -> serde_json::Value {
+    let row = admin
+        .query_one(
+            "SELECT jsonb_object_agg(editor_session_id::text, to_jsonb(snapshot))::text
+               FROM storyos.editor_session_base_snapshots AS snapshot
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &fixture.project_id.as_str()],
+        )
+        .await
+        .unwrap();
+    serde_json::from_str(row.get(0)).unwrap()
+}
+
+fn assert_winner_base_handoff(
+    before: &serde_json::Value,
+    after: &serde_json::Value,
+    settlement: &TakeOverProjectWriterSettlement,
+) {
+    let TakeOverProjectWriterEffect::TakeoverApplied {
+        resulting_editor_session_id,
+        resulting_snapshot_id,
+        resulting_snapshot_activity_position,
+        ..
+    } = &settlement.effect;
+    let base = &after[resulting_editor_session_id];
+    let id = base["snapshot_id"].as_str().unwrap();
+    uuid::Uuid::parse_str(id).unwrap();
+    assert_ne!(
+        base["snapshot_id"],
+        before[resulting_editor_session_id]["snapshot_id"]
+    );
+    assert_ne!(id, resulting_snapshot_id);
+    let mut expected = before.clone();
+    expected[resulting_editor_session_id]["snapshot_id"] = base["snapshot_id"].clone();
+    expected[resulting_editor_session_id]["created_at"] = base["created_at"].clone();
+    expected[resulting_editor_session_id]["project_activity_position"] =
+        serde_json::json!(resulting_snapshot_activity_position);
+    assert_eq!(after, &expected);
+}
+
 fn expected_initial_state(
     fixture: &TakeoverFixture,
     pending_keys: Vec<String>,
@@ -518,6 +558,7 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
     seed_project(&admin, &fixture).await;
     let store = PostgresProjectReader::new(&runtime_url);
     open_fixture_sessions(&store, &fixture, 1000).await;
+    let initial_bases = base_rows(&admin, &fixture).await;
 
     let same_session =
         prepare_takeover(&store, &fixture, &fixture.writer_session_id, 1, 1010).await;
@@ -525,6 +566,7 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
         take_over_project_writer(&store, &same_session).await,
         Err(TakeOverProjectWriterError::BindingConflict)
     ));
+    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
     assert_eq!(
         durable_state(&admin, &fixture).await,
         expected_initial_state(
@@ -539,6 +581,7 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
         take_over_project_writer(&store, &stale_generation).await,
         Err(TakeOverProjectWriterError::BindingConflict)
     ));
+    assert_eq!(base_rows(&admin, &fixture).await, initial_bases);
     assert_eq!(
         durable_state(&admin, &fixture).await,
         expected_initial_state(
@@ -554,6 +597,13 @@ async fn admission_returns_the_prior_writer_and_rejections_leave_no_evidence() {
         prepare_takeover(&store, &fixture, &fixture.observer_one_session_id, 1, 1030).await;
     let settlement = take_over_project_writer(&store, &successful).await.unwrap();
     assert_complete_settlement(&settlement, &successful, &fixture);
+    let settled_bases = base_rows(&admin, &fixture).await;
+    assert_winner_base_handoff(&initial_bases, &settled_bases, &settlement);
+    assert_eq!(
+        take_over_project_writer(&store, &successful).await.unwrap(),
+        settlement
+    );
+    assert_eq!(base_rows(&admin, &fixture).await, settled_bases);
     assert_eq!(
         durable_state(&admin, &fixture).await,
         DurableTakeoverState {
@@ -591,6 +641,7 @@ async fn two_observers_race_with_one_complete_settlement_and_one_full_rollback()
     seed_project(&admin, &fixture).await;
     let setup_store = PostgresProjectReader::new(&runtime_url);
     open_fixture_sessions(&setup_store, &fixture, 1250).await;
+    let initial_bases = base_rows(&admin, &fixture).await;
 
     let application_names = vec![
         "storyos_takeover_observer_a".to_owned(),
@@ -686,6 +737,11 @@ async fn two_observers_race_with_one_complete_settlement_and_one_full_rollback()
             ),
         };
     assert_complete_settlement(&settlement, &winner_command, &fixture);
+    assert_winner_base_handoff(
+        &initial_bases,
+        &base_rows(&admin, &fixture).await,
+        &settlement,
+    );
     assert_eq!(
         durable_state(&admin, &fixture).await,
         DurableTakeoverState {
