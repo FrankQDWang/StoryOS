@@ -152,9 +152,9 @@ fn stage1_handoff_delivery_lock_matches_the_composed_main() {
             "baseline_tree": contract["baseline_tree"],
         }),
         json!({
-            "revision": "stage1-ticketed-delivery-2026-08-23-v21",
-            "baseline_commit": "615408dabba489805f36aee83719cd0e8eb18dc3",
-            "baseline_tree": "6d1f5830978379140c51ee7840c488a216c1ba4d",
+            "revision": "stage1-ticketed-delivery-2026-08-28-v22",
+            "baseline_commit": "3523494b0b4d934032576b822895b8f3ebc7ef87",
+            "baseline_tree": "5e155a851b1debf555e1d5f20fde09956b609c5d",
         })
     );
 }

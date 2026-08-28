@@ -52,6 +52,53 @@ type ZeroAuthorityResult = Exclude<DomainReceiptResult, "authoritative_applied">
 const FIRST_REVISION = "018f0000-0000-7001-8000-000000000034";
 const SECOND_REVISION = "018f0000-0000-7001-8000-000000000044";
 
+it("preserves the complete Journal when a retained Session Snapshot does not match the Chapter", async () => {
+  const scenario = createBrowserScenario();
+  const activeSessionKey = `active_session:${OWNER}:${PROJECT}`;
+  const requests: string[] = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(String(input)).pathname;
+    requests.push(`${init?.method ?? "GET"} ${path}`);
+    if (path === `/api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`
+      && (init?.method ?? "GET") === "GET") {
+      return jsonResponse({ ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" });
+    }
+    throw new Error(`unexpected request: ${path}`);
+  };
+  let database: IDBDatabase | undefined;
+  await deleteJournal(scenario.journalName);
+  sessionStorage.setItem(activeSessionKey, SESSION);
+  try {
+    const input = { baseUrl: location.origin, project: scenario.project,
+      chapter: scenario.chapter, profile: scenario.profile, fetchImpl };
+    const workspace = await openEditorWorkspace(input);
+    requireEditorReady(workspace);
+    const journal = workspace.database;
+    database = journal;
+    expect(workspace.session.base_snapshot.project_activity_position).toBe("0");
+    await persistReplaceSelection(workspace,
+      { from: 4, to: 4, text: " retained", resultingBody: "Base retained" });
+    const stores = Array.from(journal.objectStoreNames);
+    async function readCompleteJournal() {
+      const transaction = journal.transaction(stores, "readonly");
+      return Promise.all(stores.map((name) => requestResult(transaction.objectStore(name).getAll())));
+    }
+    const before = await readCompleteJournal();
+    requests.length = 0;
+    const reopened = await openEditorWorkspace({ ...input,
+      chapter: { ...scenario.chapter, project_activity_position: "3" } });
+    if (reopened.kind === "editor-ready") reopened.database.close();
+    expect(reopened).toMatchObject({ kind: "editor-read-only-recovery", code: "local_journal_unavailable" });
+    expect(await readCompleteJournal()).toEqual(before);
+    expect(sessionStorage.getItem(activeSessionKey)).toBe(SESSION);
+    expect(requests).toEqual([`GET /api/v1/projects/${PROJECT}/editor-sessions/${SESSION}`]);
+  } finally {
+    database?.close();
+    sessionStorage.removeItem(activeSessionKey);
+    await deleteJournal(scenario.journalName);
+  }
+});
+
 function transactionResult(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
     transaction.oncomplete = () => resolve();
