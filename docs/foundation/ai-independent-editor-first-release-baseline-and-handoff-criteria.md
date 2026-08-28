@@ -1,10 +1,10 @@
 # AI-Independent Editor-First Release Baseline and Handoff Criteria
 
 - Status: current
-- Contract revision: `product-delivery-realignment-2026-08-28-v1`
+- Contract revision: `product-delivery-mvp-boundary-2026-08-29-v1`
 - Canonical issue: [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
-- Exact planning baseline: `main@34a4d64501bfe3024e8206e27679aec5c42375b2`
-- Exact planning tree: `2756e6bb7e5e4c77b9411a73452d63feda335cd4`
+- Exact planning baseline: `main@00c6cadba54733c4fb38472b8b6b1a423103499b`
+- Exact planning tree: `0123d0074e8d9d159a83ff7c48818d64a4720106`
 - Product goal: [GOAL.md](../../GOAL.md)
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Issue execution rules: [Issue-Tracker Execution Contract](../agents/issue-tracker.md)
@@ -19,7 +19,8 @@ The same release owner defines the later production stages and retained-source
 coverage in [StoryOS Product Delivery Continuation](storyos-product-delivery-continuation.md).
 Read that contract when selecting a stage after Stage 4, checking complete
 product scope, or changing a stage exclusion. Stage 4 is an intermediate
-milestone. A stage-local exclusion does not remove a retained product promise.
+milestone. A stage-local exclusion does not remove a retained MVP promise.
+A source recorded as deferred outside MVP creates no current delivery obligation.
 
 ## 1. Release promise and product boundary
 
@@ -123,10 +124,10 @@ The stage names below are contract identifiers, not separate workflow runtimes:
    mediated actions, replay, and safe fallback inside the Agent transcript.
 9. **Complete Run control and orchestration.** Deliver bounded long work,
    Subruns, controlled proactive execution, and explicit model-policy behavior.
-10. **Standalone advisory Eval.** Deliver the separate, optional evidence and
-    evaluation surface without changing author authority or ordinary writing.
 
-The continuation contract defines `S5-*` through `S10-*`. Stage order is the
+The continuation contract defines `S5-*` through `S9-*`. Stage 9 completes
+the current local MVP route. [Eval](eval-evidence-foundation.md) is outside
+MVP and has no current design, implementation, or release gate. Stage order is the
 serial delivery policy, not proof that every earlier feature is a
 technical dependency. Implementation blockers name actual inputs, interfaces,
 or acceptance gates. Existing Stage 1 evidence remains bound to its historical

@@ -1,10 +1,10 @@
 # StoryOS Product Delivery Continuation
 
 - Status: current release contract; product implementation is not claimed.
-- Contract revision: `product-delivery-realignment-2026-08-28-v1`.
+- Contract revision: `product-delivery-mvp-boundary-2026-08-29-v1`.
 - Release owner: [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 - Entry contract: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md).
-- Planning baseline: `main@34a4d64501bfe3024e8206e27679aec5c42375b2`, tree `2756e6bb7e5e4c77b9411a73452d63feda335cd4`.
+- Planning baseline: `main@00c6cadba54733c4fb38472b8b6b1a423103499b`, tree `0123d0074e8d9d159a83ff7c48818d64a4720106`.
 
 This file defines the production destination for retained capabilities after
 the first four stages. It also records the source-to-delivery coverage needed
@@ -21,7 +21,7 @@ later stages do not postpone those requirements. Stage 4 proves one real
 model path. It is not completion of research, Tools, Skills, Memory, MCP Apps,
 or the full retained StoryOS product.
 
-The serial release order is Stage 5 through Stage 10 below. Each stage starts
+The serial release order is Stage 5 through Stage 9 below. Each stage starts
 from the preceding released main. This order is a release gate, not a claim
 that all preceding features are code dependencies. Child tickets name only
 the actual contract, interface, data, or acceptance inputs they need.
@@ -156,25 +156,12 @@ explicit model-policy decision; verify the editor remains independently usable.
 | S9-EVD-002 | Subrun scope, reservation, mailbox, join, seal, late-result, cancellation, and durable recovery evidence. |
 | S9-EVD-003 | Authorized proactive triggers, misfire/deduplication, multidimensional guardrails, explicit model routing, and editor-regression evidence. |
 
-## 7. Stage 10: Standalone advisory Eval
+## 7. Deferred scope outside MVP
 
-| ID | Production obligation | Semantic owner |
-| --- | --- | --- |
-| S10-REQ-001 | Provide the separate, optional, Project-scoped author Eval page. Opening it has no external effect and does not create a case, change a preference, or affect ordinary writing. | Eval owner |
-| S10-REQ-002 | Let the author explicitly choose eligible cases and inspect exact retained Run, Proposal, Tool, source, and author-decision evidence. Show redaction, unavailable content, and scope gaps without reconstructing forbidden payload. | Eval and retention owners |
-| S10-REQ-003 | An explicit evaluation operation binds an applicable, explicitly chosen Eval Definition and exact eligible inputs. Results, comparisons, and feedback remain advisory. An absent definition or unauthorized destination is unavailable, not an invented writing score. | Eval and Context owners |
-| S10-REQ-004 | Keep Eval evidence separate from release proof, model routing, Agent Memory, Author Preferences, and creative authority. No assessment silently trains, tunes, routes, or writes project truth. | Eval, Artifact, and Context owners |
-
-**Author journey S10-JRN-001.** Open the dedicated page; select a completed
-case; inspect its evidence and availability gaps; explicitly choose an
-applicable definition and authorized evaluation operation; inspect the
-advisory result; reject a missing-definition or cross-Scope attempt; return
-to writing with no automatic change to project truth or preferences.
-
-| ID | Mandatory evidence |
-| --- | --- |
-| S10-EVD-001 | Explicit case selection, exact evidence/definition binding, lifecycle gaps, advisory outcomes, and no-effect-on-open evidence. |
-| S10-EVD-002 | Destination authorization, scope and authority negatives, separation from release proof and automatic tuning, and editor-regression evidence. |
+[Eval](eval-evidence-foundation.md) is a future observation surface outside
+MVP. It has no current stage, Requirement, author journey, evidence bundle,
+implementation ticket, or release dependency. Its page, APIs, and behavior are
+not being designed or implemented. Stage 9 completes this local MVP route.
 
 ## 8. Canonical semantic owners
 
@@ -193,7 +180,7 @@ to writing with no automatic change to project truth or preferences.
 | Context | [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54): [Context contract](context-assembly-retrieval-and-outbound-disclosure-semantics.md), [CONTEXT](../../CONTEXT.md), and ADR 0005. |
 | Model Gateway | [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50): [CONTEXT](../../CONTEXT.md), protocol, and Context Assembly. |
 | MCP App | [Specify Transcript and MCP App Lifecycle Semantics](https://github.com/FrankQDWang/StoryOS/issues/53): [ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md), [CONTEXT](../../CONTEXT.md), and Artifact model. |
-| Eval | [Define Foundation Evidence for the Standalone Eval Surface](https://github.com/FrankQDWang/StoryOS/issues/61): [Eval evidence](eval-evidence-foundation.md). |
+| Deferred Eval scope | [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61): [future scope only](eval-evidence-foundation.md); no MVP delivery obligation. |
 | Persistence and retention | [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) and [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64): their [storage](postgresql-project-storage-isolation-and-migration-contract.md) and [retention](run-event-mailbox-snapshot-retention-and-archival-semantics.md) contracts, with ADR 0004 and ADRs 0008–0011. |
 | Trust, protocol, and architecture | [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57), [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), and [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59): their [threat](storyos-service-client-external-trust-boundaries-threat-model.md), [protocol](versioned-command-query-artifact-event-protocol.md), and [governance](modular-monolith-and-repository-governance-boundaries.md) contracts. |
 
@@ -204,6 +191,8 @@ child. A source can constrain more than one stage. The named production
 requirements consume the exact current semantic owner; an old short Issue
 description does not override a later accepted ADR or canonical definition.
 Rows marked evidence remain evidence, not independently delivered features.
+Rows marked deferred remain outside MVP and need no MVP Requirement anchor.
+Recording a source does not approve its former design or add delivery scope.
 Requirement anchors identify the minimum release path for each source; they
 do not narrow its full applicable semantic contract. Each anchored stage must
 pass all of its journey and evidence obligations. Cross-stage invariants are
@@ -240,7 +229,7 @@ proof owner maps these obligations to exact executable evidence.
 | [Treat Third-Party MCP Servers as Untrusted](https://github.com/FrankQDWang/StoryOS/issues/27) | Tool/MCP and trust; S5 onward. | `S5-REQ-002` |
 | [Render Dynamic Domain UI as Transcript MCP Apps](https://github.com/FrankQDWang/StoryOS/issues/28) | MCP App placement and domain views; S8. | `S8-REQ-001` |
 | [Keep Domain Data in StoryOS, Not MCP Apps](https://github.com/FrankQDWang/StoryOS/issues/29) | Artifact/MCP App authority; S8. | `REL-002`; `S8-REQ-001` |
-| [Move Evaluation to a Dedicated Page](https://github.com/FrankQDWang/StoryOS/issues/30) | Eval; S10. | `S10-REQ-001` |
+| [Move Evaluation to a Dedicated Page](https://github.com/FrankQDWang/StoryOS/issues/30) | Deferred outside MVP; the Eval boundary owner retains only the future observation concept. | None; outside MVP. |
 | [Keep Proposal Review and Editing Inside the Editor](https://github.com/FrankQDWang/StoryOS/issues/31) | Core/Proposal and workspace; S3 onward. | `S3-REQ-004` |
 | [Use an Editable In-Context Proposal](https://github.com/FrankQDWang/StoryOS/issues/32) | Core/Proposal; S3 onward. | `S3-REQ-004` |
 | [Derive Optional Comparison from Exact Proposal Revisions](https://github.com/FrankQDWang/StoryOS/issues/33) | Core-derived comparison semantics; S3. No default diff UI is added. | `S3-REQ-008` |
@@ -271,7 +260,7 @@ proof owner maps these obligations to exact executable evidence.
 | [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | Canonical protocol owner; all stages. | `REL-003`; `S2-REQ-005`; `S3-REQ-003` |
 | [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59) | Architecture/governance invariant; all stages. | `REL-003`; `REL-006` |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | Proof owner; consume every current release requirement and stage. | `REL-005`; `REL-007`; `HND-006` |
-| [Define Foundation Evidence for the Standalone Eval Surface](https://github.com/FrankQDWang/StoryOS/issues/61) | Canonical Eval owner; S10. | `S10-REQ-001`; `S10-REQ-002`; `S10-REQ-003`; `S10-REQ-004` |
+| [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61) | Deferred outside MVP; the Eval boundary owner retains only the future observation concept. | None; outside MVP. |
 | [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | Release owner for this complete route and its coverage. | `REL-004`; `REL-007` |
 | [Specify Subrun Control-Plane, Mailbox, and Observability Semantics](https://github.com/FrankQDWang/StoryOS/issues/63) | Canonical Subrun owner; S9. | `S9-REQ-002`; `S9-REQ-003` |
 | [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Canonical retention owner; S1/S2 and each added execution/data family. | `S2-REQ-005`; `S2-REQ-007`; `S7-REQ-005`; `S8-REQ-003`; `S9-REQ-003` |
@@ -309,8 +298,6 @@ release, proof, specification, and native graph agree on current main.
 
 No further product-direction decision blocks this release correction. Concrete
 external services, accounts, spending, and destination authorization remain
-explicit prerequisites of the affected real-integration ticket. The Eval
-owner resolves concrete definitions, rubrics, metrics, and judge destinations
-before those evaluation tickets become executable. A missing choice is an
-owned decision with a blocking edge, not permission to invent a default or
-silently remove the retained capability.
+explicit prerequisites of the affected real-integration ticket. No Eval
+definition, evaluator, rubric, or API decision blocks MVP planning or delivery.
+The user's implementation-ticket publication and execution pause remains active.
