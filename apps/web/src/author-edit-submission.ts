@@ -3,6 +3,7 @@ import {
   createProjectCommandChallenge,
   digestApplyAuthorEdit,
   getEditorSession,
+  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
@@ -489,11 +490,13 @@ async function settleAuthorEditResponse({
 
 export async function submitOnePendingAuthorEdit({
   workspace, baseUrl, fetchImpl = globalThis.fetch, cryptoImpl = globalThis.crypto,
+  onWriterFenced = () => {},
 }: {
   workspace: EditorWorkspace;
   baseUrl: string;
   fetchImpl?: typeof fetch;
   cryptoImpl?: Crypto;
+  onWriterFenced?: () => void;
 }): Promise<PendingEditProjection> {
   const run = async (): Promise<PendingEditProjection> => {
     const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
@@ -532,13 +535,34 @@ export async function submitOnePendingAuthorEdit({
         antiForgery: challenge.nonce,
         fetchImpl,
       });
-    } catch {
-      const unresolved = await markOutcomeQueryUnresolved(workspace, group);
-      await reconcileLostAcknowledgement({
-        workspace, group: unresolved, baseUrl, fetchImpl, cryptoImpl,
-        settleFromCommandResponse: settleAuthorEditResponse,
-      });
-      return rebuildPendingProjection(workspace);
+    } catch (error) {
+      let staleWriter = false;
+      if (error instanceof StoryOSProtocolError
+        && error.code === "command_http_error" && error.status === 412) {
+        try {
+          const problem: unknown = JSON.parse(error.responseBody ?? "");
+          staleWriter = typeof problem === "object" && problem !== null
+            && Reflect.get(problem, "schema_id") === "storyos.problem.v1"
+            && Reflect.get(problem, "code") === "editor_writer_stale"
+            && typeof Reflect.get(problem, "message") === "string";
+        } catch {
+          // An invalid Problem cannot establish a writer fence.
+        }
+      }
+      if (staleWriter) {
+        workspace.partition = { ...workspace.partition, disposition: "read_only_observer" };
+        onWriterFenced();
+      }
+      // Persist the fence with unresolved evidence. Staleness does not settle an older command.
+      const current = await markOutcomeQueryUnresolved(workspace, group);
+      if (current.settlement.kind === "unsettled") {
+        await reconcileLostAcknowledgement({
+          workspace, group: current, baseUrl, fetchImpl, cryptoImpl,
+          settleFromCommandResponse: settleAuthorEditResponse,
+        });
+      }
+      const pending = await rebuildPendingProjection(workspace);
+      return staleWriter ? { ...pending, save_state: "needs_attention" } : pending;
     }
     await settleAuthorEditResponse({
       workspace, group, response, baseUrl, fetchImpl, cryptoImpl,
