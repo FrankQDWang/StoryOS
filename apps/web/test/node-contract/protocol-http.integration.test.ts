@@ -146,7 +146,7 @@ test("the production process serves exact pages and resources with restrictive H
       assert.equal(response.status, 404, path);
       assert.equal(await response.text(), "", path);
     }
-    const protectedApi = await fetch(`${baseUrl}/api/v1${projectPath}`);
+    const protectedApi = await fetch(`${baseUrl}/api/v1${projectPath}`, { headers: { origin: baseUrl } });
     assert.equal(protectedApi.status, 401);
     assert.match(protectedApi.headers.get("content-type") ?? "", /application\/json/);
   } finally {
