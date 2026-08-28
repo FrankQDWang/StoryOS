@@ -1,4 +1,4 @@
-.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-pr verify-tracker web web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-pr verify-tracker web web-foundation web-typecheck
 
 contracts:
 	cargo fmt --all -- --check
@@ -18,14 +18,13 @@ web-typecheck:
 release-package: web-typecheck
 	python3 scripts/package-release.py
 
-web: web-typecheck
-	pnpm --dir apps/web exec vite build
-	cargo build --quiet -p storyos-server
+web-foundation: release-package
 	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source
+
+web: web-foundation
 	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
 
-project-scope: web-typecheck
-	pnpm --dir apps/web exec vite build
+project-scope: release-package
 	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate

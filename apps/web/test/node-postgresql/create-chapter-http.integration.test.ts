@@ -33,7 +33,7 @@ import {
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "debug", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
+const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
 const USER_A = "018f0000-0000-7001-8000-000000000001";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const MISSING_VOLUME = "018f0000-0000-7001-8000-00000000ffff";

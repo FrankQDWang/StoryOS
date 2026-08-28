@@ -100,7 +100,7 @@ record_google_chrome_version() {
 verify_web_migration_guards
 record_google_chrome_version
 if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
-  pnpm --dir apps/web run typecheck
+  make release-package
 fi
 
 container="storyos-issue105-$$"
@@ -209,8 +209,6 @@ echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --lib -- --ignored --nocapture
-echo "Building the StoryOS Server"
-cargo build --quiet -p storyos-server
 echo "Running HTTP Project Scope tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/project-http.integration.test.ts
@@ -274,7 +272,8 @@ stage1_user_id="018f0000-0000-7001-8000-000000000001"
 STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
 STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
 STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
-  "$repository_root/target/debug/storyos-server" --bind 127.0.0.1:0 \
+  "$repository_root/target/release-package/storyos-server" --bind 127.0.0.1:0 \
+  --web-root "$repository_root/target/release-package/web" \
   >"$s1_server_log" 2>&1 &
 s1_server_pid=$!
 attempt=0

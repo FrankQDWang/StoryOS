@@ -28,16 +28,16 @@ async function run(command: string, args: readonly string[]) {
   return { code, stdout, stderr };
 }
 
-test("make web builds the Vite production graph before Web tests", async () => {
+test("make web packages the production graph before Web tests", async () => {
   const { code, stdout, stderr } = await run("make", ["-n", "web"]);
   assert.equal(code, 0, stderr);
   const commands = stdout
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
-  const viteIndex = commands.findIndex((line) => /vite build/.test(line));
+  const viteIndex = commands.findIndex((line) => line.includes("python3 scripts/package-release.py"));
   const testIndex = commands.findIndex((line) => line.includes("vitest run"));
-  assert.ok(viteIndex >= 0, `make web must invoke vite build\n${stdout}`);
+  assert.ok(viteIndex >= 0, `make web must build the paired release package\n${stdout}`);
   assert.ok(testIndex >= 0, `make web must run Vitest\n${stdout}`);
   assert.ok(viteIndex < testIndex, "vite build must fail closed before Web tests");
 });

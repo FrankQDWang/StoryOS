@@ -35,9 +35,11 @@ mod update_chapter;
 mod update_project;
 mod update_volume;
 mod web_assets;
+mod web_host;
 
 pub use storyos_contracts::RELEASE_1_SECURITY_POLICY_REVISION;
 pub use web_assets::WebAssetSet;
+pub use web_host::router_with_web;
 
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
@@ -155,7 +157,7 @@ pub fn router() -> Router {
     router_with_config(ServerConfig::default())
 }
 
-/// Build the one StoryOS Server router used by production and boundary tests.
+/// Build the API router used by the production Web host and boundary tests.
 pub fn router_with_config(config: ServerConfig) -> Router {
     let protocol_method = method_filter(contracts::GET_PROTOCOL_PROFILE_METHOD);
     let project_method = method_filter(contracts::GET_PROJECT_METHOD);

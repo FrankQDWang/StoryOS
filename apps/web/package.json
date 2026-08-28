@@ -5,7 +5,7 @@
   "scripts": {
     "build": "pnpm run typecheck && vite build",
     "dev": "vite",
-    "test:foundation": "pnpm run typecheck && vite build && vitest run --project node-contract --project browser-source",
+    "test:foundation": "make -C ../.. web-foundation",
     "typecheck": "pnpm run typecheck:production && pnpm run typecheck:node && pnpm run typecheck:browser",
     "typecheck:browser": "tsc --project tsconfig.browser.json",
     "typecheck:node": "tsc --project tsconfig.node.json",
