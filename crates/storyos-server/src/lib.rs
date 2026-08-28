@@ -34,6 +34,10 @@ mod takeover;
 mod update_chapter;
 mod update_project;
 mod update_volume;
+mod web_assets;
+
+pub use storyos_contracts::RELEASE_1_SECURITY_POLICY_REVISION;
+pub use web_assets::WebAssetSet;
 
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
@@ -55,9 +59,6 @@ use takeover::take_over_project_writer;
 use update_chapter::update_chapter;
 use update_project::update_project;
 use update_volume::update_volume;
-
-/// The reviewed browser security policy accepted by this Server release.
-pub const RELEASE_1_SECURITY_POLICY_REVISION: &str = "storyos.web-security-policy.release-1.v1";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClientSessionBinding {

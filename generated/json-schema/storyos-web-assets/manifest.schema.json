@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "WebResource": {
+      "additionalProperties": false,
+      "description": "One immutable resource in the controlled Web build.",
+      "properties": {
+        "byte_length": {
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "byte_length",
+        "mime_type",
+        "sha256"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.web-assets.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The exact packaged Web resources, separate from public protocol compatibility.",
+  "properties": {
+    "client_contract_revision": {
+      "type": "string"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/WebResource"
+      },
+      "type": "array"
+    },
+    "schema_id": {
+      "type": "string"
+    },
+    "security_policy_revision": {
+      "type": "string"
+    },
+    "source_commit": {
+      "type": "string"
+    },
+    "source_tree": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "source_commit",
+    "source_tree",
+    "client_contract_revision",
+    "security_policy_revision",
+    "resources"
+  ],
+  "title": "StoryOS Web Asset Manifest",
+  "type": "object"
+}

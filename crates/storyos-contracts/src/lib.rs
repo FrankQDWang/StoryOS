@@ -38,6 +38,12 @@ mod stage1_delivery;
 mod stage1_handoff;
 mod stage1_provenance;
 mod stage1_selection;
+mod web_assets;
+
+pub use web_assets::{
+    RELEASE_1_SECURITY_POLICY_REVISION, WEB_ASSET_MANIFEST, WEB_ASSET_SCHEMA, WebAssetManifest,
+    WebResource, web_asset_digest, web_resource_paths, write_web_asset_manifest,
+};
 
 pub use release1::{
     APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
