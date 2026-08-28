@@ -24,7 +24,7 @@ the author-owned deletion boundary.
 ## Consequences
 
 - A compacted historical Run remains inspectable, but an inspector, export,
-  replay, or Eval view must expose the known raw-payload gap rather than claim
+  replay, or future observation view must expose the known raw-payload gap rather than claim
   byte-for-byte completeness.
 - Exact eligibility classes, retention windows, Snapshot materialization,
   archival storage, export/restore behavior, and purge execution are specified
