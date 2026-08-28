@@ -1,21 +1,28 @@
 # Product Delivery Proof Selection
 
 - Owner: [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
-- Contract revision: `product-delivery-proof-mvp-boundary-2026-08-29-v1`.
+- Contract revision: `product-delivery-proof-mvp-boundary-2026-08-29-v2`.
 - Status: current proof contract; product evidence remains unrun until implementation.
 - Parent: [Deterministic Verification and Failure-Recovery Gates](deterministic-verification-and-failure-recovery-gates.md).
 
 ## 1. Accepted inputs and minimum work
 
-The accepted release revision is `product-delivery-mvp-boundary-2026-08-29-v1`,
-merged through [Keep the MVP route within confirmed scope](https://github.com/FrankQDWang/StoryOS/pull/370)
-at `7de68e2790b009814a354cb267687b132b4060f1`, tree
+The accepted release revision remains `product-delivery-mvp-boundary-2026-08-29-v1`.
+[Keep the MVP route within confirmed scope](https://github.com/FrankQDWang/StoryOS/pull/370)
+accepted it at `7de68e2790b009814a354cb267687b132b4060f1`, tree
 `d14ae2136276b258694787789e6fe099c9008179`.
+
+This binding includes the single `S3–S9` source-range correction in
+[Remove inherited Eval proof gates from MVP](https://github.com/FrankQDWang/StoryOS/pull/371).
+The exact source snapshot is `d1a016f871c553af1d8b1f601bde8b8d2931d11f`, tree
+`86ed192bf1e73ce2226e0ccf3a97fe181e2099ad`. The original release owner reviewed the
+copy edit: it changes no release criterion, Requirement, journey, source
+membership, or guardrail. It is not a new release acceptance.
 
 | Accepted source | UTF-8/LF SHA-256 |
 | --- | --- |
 | [Editor-first release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) | `550d22270aed7fd2749a9e7d0c7f92fbb737d76e67d5955d46624b364b4ad211` |
-| [Product continuation](storyos-product-delivery-continuation.md) | `579abee033155a23931f947cb9a18e272ae32be671817e28cb46cfa73a908204` |
+| [Product continuation](storyos-product-delivery-continuation.md) | `2380ed5413541e9c16398d5843337252cb1851a9a72b0ec22721441d20f757b5` |
 
 The continuation source owns the exact 71-source disposition inventory:
 original Issues 2 through 65, 67 through 70, and 75 through 77. Its additional
@@ -30,8 +37,10 @@ Use the smallest implementation that satisfies a named accepted requirement.
 Reuse existing Core, Gateway, Context, Worker, Journal, PostgreSQL, and test
 boundaries. Add tests at the changed behavior; do not build future capability
 infrastructure or a general proof/graph platform as a planning prerequisite.
-This correction is documentation only. Existing repository checks and the
-independent source/graph review below are the verification mechanism.
+This correction changes the two proof documents and one source-range
+reference in the release continuation. Release criteria remain unchanged.
+Existing repository checks and the independent source/graph review below
+are the verification mechanism.
 
 A child ticket selects its own observable cases and applicable durable cuts.
 It does not need the whole stage to pass before that child can close. The

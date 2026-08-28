@@ -2,9 +2,9 @@
 
 - Status: current product delivery verification contract for [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
 - Canonical issue: [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60)
-- Contract revision: `product-delivery-proof-mvp-boundary-2026-08-29-v1`
-- Exact release baseline consumed: `main@7de68e2790b009814a354cb267687b132b4060f1`
-- Exact baseline tree consumed: `d14ae2136276b258694787789e6fe099c9008179`
+- Contract revision: `product-delivery-proof-mvp-boundary-2026-08-29-v2`
+- Exact release-source snapshot consumed: `d1a016f871c553af1d8b1f601bde8b8d2931d11f`
+- Exact source tree consumed: `86ed192bf1e73ce2226e0ccf3a97fe181e2099ad`
 - Predecessor release-contract revision: `product-delivery-mvp-boundary-2026-08-29-v1`
 - Release baseline owner: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md)
 - Deterministic-method ADR: [ADR 0012](../adr/0012-adopt-deterministic-contract-verification.md)
