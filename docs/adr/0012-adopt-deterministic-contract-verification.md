@@ -28,5 +28,5 @@ Gates](../foundation/deterministic-verification-and-failure-recovery-gates.md).
 - Every new durable or externally irreversible semantic boundary requires a
   named fault point, oracle classification, and fail-closed evidence bundle.
 - Contract walks remain synthetic conformance paths; they do not select the
-  editor-first release stage or weaken the standalone author-facing Eval
-  boundary.
+  editor-first release stage. The [future Eval observation surface](../foundation/eval-evidence-foundation.md)
+  is outside MVP and adds no current verification gate.

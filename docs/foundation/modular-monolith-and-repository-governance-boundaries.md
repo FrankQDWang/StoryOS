@@ -119,17 +119,19 @@ own every mechanism convenient to its current caller.
 | **Tool, Skill, and MCP** | ToolSpec, SkillPackage, Registration, Capability/Approval semantics, Tool Gateway policy, MCP trust, and App-action ingress | A second Agent runtime, direct authority mutation, ambient project context, or raw client authority |
 | **Model Gateway** | Provider-neutral registration, routing, route decisions, Invocation/Attempt semantics, capability mapping, recovery, and fallback policy | Provider-selected authority, secret storage, ambient context, or a permanent Bailian dependency |
 | **Transcript and App Host** | Message projections, App View Artifacts, resource/instance lifecycle, sandbox mediation, static fallbacks, and App action routing | App-owned canonical state, iframe/DOM persistence, direct Tool invocation, or editor Proposal handling |
-| **Eval evidence** | Typed evidence projections and evaluation-facing interpretation contracts that remain advisory | A main-writing workflow, hidden scoring authority, or a replacement for durable Run/Artifact evidence |
 | **Application composition** | Use-case coordination, trusted request-context propagation, transaction intent, and port assembly | New domain authority, a shared dumping ground, or adapter-specific policy rewrite |
 | **Adapters** | Concrete PostgreSQL, Provider, Tool/MCP, secret-resolver, research-fetch, telemetry, filesystem, and browser mechanics for owner-defined ports | Business/domain policy, new authority paths, a public API, or independently selected Project Scope |
 | **Server** | Versioned HTTP/SSE transport, trusted requester/session admission, public DTO mapping, and invocation of application use cases | Direct-SQL domain mutation or background external work without durable admission |
 | **Worker** | Fenced claims of durable work, bounded asynchronous execution, external dispatch after admission, and settlement through application/Core | A private canonical store, direct client transport, unfenced settlement, or SDK-hidden retry truth |
-| **Web Client** | Editor, conversational Agent, Transcript, App rendering, Eval page, generated-client consumption, trusted author-action capture, Editor Session, IndexedDB Local Edit Journal, and Pending Edit Projection | Core authority, Server-created Author Command Admission, final scope or settlement decisions, durable Run truth, generated-contract editing, or prototype/reference dependencies |
+| **Web Client** | Editor, conversational Agent, Transcript, App rendering, generated-client consumption, trusted author-action capture, Editor Session, IndexedDB Local Edit Journal, and Pending Edit Projection | Core authority, Server-created Author Command Admission, final scope or settlement decisions, durable Run truth, generated-contract editing, or prototype/reference dependencies |
 
-`Core`, `Agent Kernel`, `Context`, `Tool/MCP`, `Model Gateway`, `Transcript`,
-and `Eval evidence` are architectural owners, not a demand for one crate per
-noun immediately. The workspace maps each zone to a focused crate family only
+`Core`, `Agent Kernel`, `Context`, `Tool/MCP`, `Model Gateway`, and
+`Transcript` are architectural owners, not a demand for one crate per noun
+immediately. The workspace maps each zone to a focused crate family only
 when that creates a real dependency boundary.
+
+The [future Eval surface](eval-evidence-foundation.md) is outside the MVP.
+It has no current ownership zone, crate, API, or dependency design.
 
 ## 4. Rust workspace and package topology
 
@@ -147,7 +149,6 @@ moving files must not conceal a cross-zone merge.
 │   ├── storyos-tooling/               # Tool, Skill, MCP semantics and ports
 │   ├── storyos-model-gateway/         # routing and model/embedding semantics
 │   ├── storyos-transcript/            # Message and App Host semantics
-│   ├── storyos-eval/                  # typed Eval evidence contracts
 │   ├── storyos-application/           # use-case composition and transaction intent
 │   ├── storyos-adapter-*/             # PostgreSQL and external implementations
 │   ├── storyos-server/                # public HTTP/SSE process entrypoint
@@ -210,7 +211,6 @@ flowchart BT
     App --> Tooling["Tool / Skill / MCP"]
     App --> Gateway["Model Gateway"]
     App --> Transcript["Transcript / App Host"]
-    App --> Eval["Eval evidence"]
     Adapters["PostgreSQL and external adapters"] --> Core
     Adapters --> Kernel
     Adapters --> Context

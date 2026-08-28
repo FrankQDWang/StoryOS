@@ -13,7 +13,7 @@
 
 ## 1. Purpose
 
-This specification defines the durable domain language shared by the StoryOS editor, Agent Kernel, Tools, Skills, MCP integrations, transcript, and future Eval surface. It establishes:
+This specification defines the durable domain language shared by the StoryOS editor, Agent Kernel, Tools, Skills, MCP integrations, transcript, and any future observation surface. It establishes:
 
 - the boundary between author-owned truth and Agent-produced material;
 - the Core Artifact families and the restricted extension surface;
@@ -600,7 +600,7 @@ Commit, Author Action, Draft Artifact, Artifact lifecycle event, or Proposal
 condition reference. The state-machine allocation matrix is authoritative;
 allocation presence never replaces its exhaustive result.
 
-Receipts are displayable in the Run Timeline and future Eval surface, but they cannot be revised, derived, accepted, archived, or tombstoned as content.
+Receipts are displayable in the Run Timeline and any future observation surface, but they cannot be revised, derived, accepted, archived, or tombstoned as content.
 
 ## 9. Authoritative revision model
 

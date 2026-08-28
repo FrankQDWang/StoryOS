@@ -10,7 +10,7 @@
 - Public route/Event source of truth: [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
 - Context and disclosure boundary: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
-- Eval evidence boundary: [Foundation Evidence for the Standalone Eval Surface](eval-evidence-foundation.md)
+- Deferred scope note: [Eval Observation Boundary](eval-evidence-foundation.md); no MVP design or implementation dependency.
 - Measurement input: [Representative Writing-Path Performance and Storage-Growth Envelope](https://github.com/FrankQDWang/StoryOS/issues/76)
 - Measurement report: [Representative Writing-Path Performance and Storage-Growth Envelope](../research/representative-writing-path-performance-and-storage-growth-envelope.md)
 - Measurement provenance: [Issue 76 evidence bundle](../research/evidence/issue-76/README.md)
@@ -23,8 +23,8 @@
 This specification defines the project-local lifecycle that bounds Run and
 Subrun operational storage without rewriting historical facts. It composes the
 accepted Event, Activity Stream, Snapshot, Attempt, outbox, Mailbox, Seal,
-Artifact, Context Assembly Manifest, Outbound Disclosure Manifest, PostgreSQL,
-and Eval contracts. It does not authorize a schema, Rust, client, deployment,
+Artifact, Context Assembly Manifest, Outbound Disclosure Manifest, and
+PostgreSQL contracts. It does not authorize a schema, Rust, client, deployment,
 or storage implementation.
 
 Every decision remains bound to one exact Project Scope. No archive, cache,
@@ -98,7 +98,7 @@ history with all of the following facts:
 
 The resulting gap is a present availability fact, not a rewrite of what the
 Run selected, prepared, dispatched, received, or concluded. Queries, exports,
-replay, recovery, and Eval must expose that gap and never report byte-for-byte
+replay, and recovery must expose that gap and never report byte-for-byte
 replay, complete export, or full evidence availability when the raw payload is
 no longer retained.
 
@@ -578,9 +578,9 @@ applicable current state without inventing completeness:
 Inspection never dispatches a Provider, Tool, MCP, embedding, telemetry, or
 support request merely to reconstruct history. It is a current authorized Query
 over StoryOS-held evidence; an unavailable payload is not fetched from a cache,
-external destination, old client, or provider session. Eval consumes the same
-availability facts and cannot convert a limitation into a complete evidence
-claim.
+external destination, old client, or provider session. A future observation
+surface remains subject to these same availability limits; this creates no
+MVP requirement for that surface.
 
 ## 12. Project Export and Restore
 
