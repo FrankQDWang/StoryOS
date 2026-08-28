@@ -28,6 +28,7 @@ import {
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
+import { withDigest } from "./local-edit-journal-append-fixture.ts";
 import {
   CHAPTER,
   OWNER,
@@ -959,7 +960,15 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       createdAt: "2026-08-15T09:00:00.240Z",
     })).rejects.toThrow(/limit failed/);
     const challengeCountBeforeLimitFreeze = challengeRequests.length;
+    // Count Journal validation separately from the frozen request and coverage hashes.
+    let journalDigestCalls = 0;
+    workspace.cryptoImpl = withDigest(crypto, (algorithm, data) => {
+      journalDigestCalls += 1;
+      return crypto.subtle.digest(algorithm, data);
+    });
     const limitGroup = await freezeOneIntentSubmission(workspace, crypto);
+    workspace.cryptoImpl = crypto;
+    expect(journalDigestCalls).toBe(480);
     expect(limitGroup.covered_sequence_range).toEqual({ first: 1, last: 240 });
     expect(limitGroup.ordered_coverage).toHaveLength(240);
     expect(limitGroup.frozen_request_body.author_edit_units).toHaveLength(240);

@@ -32,7 +32,7 @@ export const SECOND_APPEND_EDIT: ReplaceSelectionEdit = {
   createdAt: "2026-08-15T08:00:00.001Z",
 };
 
-function withDigest(
+export function withDigest(
   cryptoImpl: Crypto,
   digest: SubtleCrypto["digest"],
 ): Crypto {
