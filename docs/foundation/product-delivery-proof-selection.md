@@ -1,0 +1,252 @@
+# Product Delivery Proof Selection
+
+- Owner: [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60).
+- Contract revision: `product-delivery-proof-realignment-2026-08-28-v2`.
+- Status: current proof contract; product evidence remains unrun until implementation.
+- Parent: [Deterministic Verification and Failure-Recovery Gates](deterministic-verification-and-failure-recovery-gates.md).
+
+## 1. Accepted inputs and minimum work
+
+The accepted release revision is `product-delivery-realignment-2026-08-28-v1`,
+merged through [Restore the complete StoryOS delivery route](https://github.com/FrankQDWang/StoryOS/pull/359)
+at `3c2e4009b9af69d851c126daf6b4fc429a0393ca`, tree
+`9317f27407f5abe199423a2ada5001c90d7a0399`.
+
+| Accepted source | UTF-8/LF SHA-256 |
+| --- | --- |
+| [Editor-first release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) | `2920561220cbd70834ec9b60c14eb03c2e595b6a656fa4dd9355ce81f625117a` |
+| [Product continuation](storyos-product-delivery-continuation.md) | `4d58b729acb74c663af447531f444b20ea96f1f2f21ce298c196bc14999ff8e2` |
+
+The continuation source owns the exact 71-source disposition inventory:
+original Issues 2 through 65, 67 through 70, and 75 through 77. Its additional
+completed governance sources remain implementation evidence. The combined
+release sources define 119 table IDs and ten journeys. These counts describe
+the accepted source set; they do not replace an exact-ID and semantic review.
+A source change needs its original owner's review and a new accepted binding.
+
+Use the smallest implementation that satisfies a named accepted requirement.
+Reuse existing Core, Gateway, Context, Worker, Journal, PostgreSQL, and test
+boundaries. Add tests at the changed behavior; do not build future capability
+infrastructure or a general proof/graph platform as a planning prerequisite.
+This correction is documentation only. Existing repository checks and the
+independent source/graph review below are the verification mechanism.
+
+A child ticket selects its own observable cases and applicable durable cuts.
+It does not need the whole stage to pass before that child can close. The
+stage's final evidence owner combines all required cases and runs the full
+author journey. Planning coverage, implemented behavior, and stage release
+remain separate results.
+
+## 2. Positive fixtures and independent expectations
+
+These are proof inputs, not production APIs or a second implementation.
+Reuse the parent's schedules, fault points, and safe bundle shapes. Each
+fixture records exact Scope, source versions, configuration, expected facts,
+and introduced durable records. Tests compare those facts at the public
+boundary and in authoritative storage.
+
+| Fixture | Required positive cases | Oracle | Independent expectation |
+| --- | --- | --- | --- |
+| `FX-PRODUCTION-EDITOR` | Production Tiptap/ProseMirror and fixed workspace; at least two writable Chapters; stable Block coordinates; old prose and unsettled Journal; hydrate/edit/settle/reload. | `ORC-PRODUCTION-EDITOR` | The accepted package/adoption and browser workspace match; admitted Chapter changes install the correct base under one Project writer; old input remains recoverable; programmatic projection creates no author intent; canonical and visible prose agree after settlement/reload. |
+| `FX-PROPOSAL-INTERACTION` | Inline/Block scope; stable Operations; multiple non-overlapping Proposals; input pause; editable candidate; exact-version optional comparison with coherent replacement spans; Undo Accept/reopen/fresh-Acceptance redo. | `ORC-PROPOSAL-INTERACTION` | Each interaction matches the Core state machine; adjacent fragmented matches normalize without changing Operation identity; input pause preserves author work; only an explicit current Acceptance changes authority; compensation reopens the exact Proposal and redo uses fresh Acceptance. |
+| `FX-PRODUCT-5` | Registration, exact MCP contract and Project use, Capability/Approval, bounded Tool dispatch, result re-entry, Research Claims with supporting/conflicting/limiting sources and gaps, Proposal-only creative changes, cancellation and unknown outcomes. | `ORC-PRODUCT-5` | Approved operations create exactly the admitted effect and provenance; incompatible drift, missing Approval, foreign Scope, secret output, direct creative writes, and blind retry fail. |
+| `FX-PRODUCT-6` | Instruction-only and Tool/script Skills, installation scopes, selection and name conflict, immutable package snapshots, progressive resources, precedence/composition, optional extensions, outcome obligations, creation/update/revocation. | `ORC-PRODUCT-6` | The selected exact package and declared outcomes remain inspectable; loading and composition grant no authority; an active Run never switches snapshots after an update or revocation. |
+| `FX-PRODUCT-7` | One Project Agent across threads; fiction assertions and scopes; explicit and inferred preferences; optional Project Instruction binding; Memory candidate/admission/suppression; context inspection/include/pin/exclude; retrieval, embedding, compaction/cache/Provider continuity. | `ORC-PRODUCT-7` | Only eligible exact sources enter context; author truth, inference, Working Context, and Memory stay distinct; old Run bindings stay fixed; rebuild, cache, and continuity cannot revive suppressed or unavailable data. |
+| `FX-PRODUCT-8` | Character, relationship, timeline, and research views; immutable resources/View revisions; disposable sandbox Instances; negotiation/limits/revocation; Prepared Receipt and terminal fallback; admitted persisted actions and same-Instance responses. | `ORC-PRODUCT-8` | Opening/replaying a view never repeats a ToolCall; semantic actions have fresh applicable Admission; the sandbox cannot grant authority, call Tools directly, or send a response to another Instance. |
+| `FX-PRODUCT-9` | Durable Plan/Step/wait/steering/cancellation; bounded Subruns with narrowed inputs and budget reservations; Mailbox/follow-up/interrupt/join/backpressure/Seal; parent-child recovery; proactive grants/misfires; guardrails and explicit model policy. | `ORC-PRODUCT-9` | Reservation, child creation, effects, and settlement follow the owner transaction; duplicates/late results never reopen work; proactive work needs its recorded grant; configured routing does not imply a second Provider. |
+| `FX-PRODUCT-10` | Scoped no-effect view; explicit Case/Corpus and compatible baseline selection; exact eligible evidence and gaps; chosen Eval Definition; separately admitted Assessment, uncertain result, advisory comparison and feedback. | `ORC-PRODUCT-10` | Page load has zero execution effect; only explicit authorized Assessment may dispatch; missing definition/destination is unavailable; result/feedback never writes fiction, preferences, routing, Memory, or release status. |
+
+The new fixtures use the existing semantic cuts for Scope, Core commit,
+Proposal decision/compensation, manifest commit, dispatch/unknown, Fence,
+Mailbox Seal, lifecycle invalidation, and restore visibility. Apply each cut
+to the exact introduced record or operation named by the ticket. If an
+implementation introduces a durable boundary that none of those cuts
+describes, its original semantic owner must name that boundary before the
+ticket can claim its proof; this does not authorize a new general scheduler.
+
+Keep no-effect-on-open `ORC-EVAL-READONLY` separate from the positive
+`ORC-PRODUCT-10` Assessment branch. A real Tool/MCP integration has
+`EV-INT` for StoryOS integration facts and, where useful, `EV-RDA` for
+external observations. A fake or successful catalog parse cannot replace it.
+
+Each added record family enters the existing migration, Archive, replay,
+retention, deletion, and physical-restore fixtures at its delivery stage.
+The complete Stage 2 AI-disabled journey remains a regression. Its old
+restore report cannot certify new records. The accepted daily base backup,
+continuous WAL, separate failure domain, RPO at most 15 minutes, and RTO at
+most two hours remain hard requirements; no HA cluster or automatic failover
+is added.
+
+## 3. Additional first-four-stage coverage
+
+Each row below completes the parent's crosswalk. Its passing disposition is
+`PASS-POS` for the named positive facts and the owner-defined negative/hold
+disposition for those test cases. Every row uses `BLOCK-ALL`.
+
+| ID | Proven fact and owner | Gates | Evidence | Fixture, fault, schedule, oracle | Bundle | Block |
+| --- | --- | --- | --- | --- | --- | --- |
+| `REL-007` | Exact source, stage, acceptance owner, and evidence coverage; `OWN-REL`, `OWN-DVG`, `OWN-GOV`. | `DVG-01`, `DVG-13` | `EC-01`; `EV-CP/SE` | `FX-CONTRACT-R1`, `FX-HANDOFF`; `CFP-CONTRACT-DRIFT`; `SCH-DRIFT`; `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS` | `B-CONTRACT`, `B-HANDOFF` | `BLOCK-ALL`; missing or duplicate acceptance responsibility, source omission, unapproved graph, or prototype substitution blocks planning handoff. |
+| `S2-REQ-009` | Production editor, workspace, stable Blocks, coordinates, and old-data preservation; `OWN-WEB`, `OWN-CORE`, `OWN-PG`, `OWN-PROTO`, `OWN-GOV`. | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-07`, `DVG-09`, `DVG-10`, `DVG-11` | `EC-01/02/03/04/05`; `EV-CP/IT/INT/PRD/SE` | `FX-PRODUCTION-EDITOR`, `FX-JOURNAL-GROUP`, `FX-RESTORE-LIFECYCLE`; `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-RESTORE-BEFORE-VISIBILITY`; `SCH-NORMAL/CRASH/RESTORE/SCOPE`; `ORC-PRODUCTION-EDITOR`, `ORC-RESTORE-LIFECYCLE` | `B-CONTRACT`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-RESTORE` | `BLOCK-ALL`; prototype/textarea-only evidence or lost old prose/Journal blocks. |
+| `S2-EVD-009` | Exact adoption/package, production browser visual, Block/coordinate, and prior-data evidence; `OWN-WEB`, `OWN-CORE`, `OWN-PG`, `OWN-GOV`. | `DVG-01`, `DVG-03`, `DVG-07`, `DVG-10`, `DVG-13` | `EC-01/02/03/04`; `EV-CP/IT/INT/PRD/SE` | `FX-PRODUCTION-EDITOR`, `FX-HANDOFF`; `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`; `SCH-DRIFT/NORMAL/CRASH`; `ORC-PRODUCTION-EDITOR`, `ORC-CROSSWALK-COMPLETENESS` | `B-CONTRACT`, `B-EDITOR`, `B-RECOVERY`, `B-RESTORE`, `B-HANDOFF` | `BLOCK-ALL`. |
+| `S3-REQ-008` | Complete Proposal interactions and normalized comparison spans; `OWN-CORE`, `OWN-WEB`, `OWN-ADM`, `OWN-AGENT`. | `DVG-03`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-11` | `EC-02/03/04/07`; `EV-CP/IT/INT/SE` | `FX-PROPOSAL-INTERACTION`, `FX-CORE-PROPOSAL`, `FX-FAKE-MODEL`; `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-UNDO-BEFORE-SETTLEMENT`; `SCH-NORMAL/CRASH/FENCE/REPLAY`; `ORC-PROPOSAL-INTERACTION`, `ORC-ATOMIC-AUTHORITY`, `ORC-RUN-FINALIZATION` | `B-CORE`, `B-EDITOR`, `B-FAKE`, `B-RECOVERY`, `B-REPLAY` | `BLOCK-ALL`; an atomic Acceptance test alone does not prove the interaction set. |
+| `S3-EVD-008` | Attributable proof for every interaction, exact comparison, compensation, reopen, and fresh redo; `OWN-CORE`, `OWN-WEB`, `OWN-DVG`. | `DVG-03`, `DVG-07`, `DVG-09`, `DVG-13` | `EC-01/02/03/04/07`; `EV-CP/IT/INT/SE` | `FX-PROPOSAL-INTERACTION`, `FX-HANDOFF`; `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-UNDO-BEFORE-SETTLEMENT`; `SCH-NORMAL/CRASH/REPLAY`; `ORC-PROPOSAL-INTERACTION`, `ORC-CROSSWALK-COMPLETENESS` | `B-CORE`, `B-EDITOR`, `B-RECOVERY`, `B-HANDOFF` | `BLOCK-ALL`. |
+
+## 4. Continuation stage maps
+
+Each map contains the complete Stage 2 AI-disabled regression, the positive
+Stage 3 Proposal and Stage 4 model boundaries, and every positive capability
+profile delivered through the selected stage. Run the regression with those
+capabilities disabled; run their positive cases separately. Do not inherit
+the Stage 3/4 absent-capability conditions as positive implementation proof.
+
+The following exclusion sets apply only to `FX-ABSENT-EXECUTION` and
+`B-ABSENT` in the selected continuation map. All stages still test prohibited
+authority, Scope, permission, and disclosure paths.
+
+| Selected stage | Capabilities still absent |
+| --- | --- |
+| Stage 5 | Skill, Memory, embedding, MCP App, Subrun, and Eval execution. |
+| Stage 6 | Memory, embedding, MCP App, Subrun, and Eval execution. |
+| Stage 7 | MCP App, Subrun, and Eval execution. |
+| Stage 8 | Subrun and Eval execution. |
+| Stage 9 | Eval execution. |
+| Stage 10 | No remaining feature family in this accepted route; unauthorized operations remain refused. |
+
+The maps use the parent's finite token grammar. All named positive fixtures
+and oracles are defined in section 2. `EV-SR` is never a mandatory input.
+
+| Selector | Stage | Gate set | Evidence classes/layers | Fixtures | Contract Fault Points | Schedules | Oracles | Mandatory bundle set |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `SMAP-STAGE-5` | Stage 5 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-12`, `DVG-13` | `EC-01/02/03/04/05/06/07/08`; `EV-CP/IT/INT/PRD/RDA/SE` | `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE`, `FX-CONTRACT-R1`, `FX-CORE-PROPOSAL`, `FX-EDITOR-IME`, `FX-EVAL-READONLY`, `FX-FAKE-MODEL`, `FX-HANDOFF`, `FX-JOURNAL-GROUP`, `FX-LONG-SESSION`, `FX-REAL-MODEL-ADVISORY`, `FX-RECOVERY-EDITOR`, `FX-REPLAY-RETENTION`, `FX-RESTORE-LIFECYCLE`, `FX-SCOPE-2U2P`, `FX-PRODUCTION-EDITOR`, `FX-PROPOSAL-INTERACTION`, `FX-PRODUCT-5` | `CFP-ADMISSION-BEFORE-CORE`, `CFP-ADMISSION-EXPIRY`, `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-CORE-BEFORE-COMMIT`, `CFP-DELETE-AFTER-SETTLEMENT`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP`, `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK`, `CFP-EDITOR-BEFORE-GROUP-ADMISSION`, `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-STAGING`, `CFP-SCOPE-BEFORE-QUERY` | `SCH-ABSENT/CRASH/DRIFT/FENCE/LIFECYCLE/LONG/NORMAL/REORDER/REPLAY/RESTORE/SCOPE/UNKNOWN` | `ORC-ATOMIC-AUTHORITY`, `ORC-CONTEXT-DISCLOSURE`, `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS`, `ORC-DISPATCH-DISCLOSURE`, `ORC-EDITOR-JOURNAL`, `ORC-EVAL-READONLY`, `ORC-NEGATIVE-CLOSURE`, `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`, `ORC-REPLAY-TRUTH`, `ORC-RESTORE-LIFECYCLE`, `ORC-RUN-FINALIZATION`, `ORC-SCOPE`, `ORC-PRODUCTION-EDITOR`, `ORC-PROPOSAL-INTERACTION`, `ORC-PRODUCT-5` | `B-S5-MANDATORY-SET` |
+| `SMAP-STAGE-6` | Stage 6 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-12`, `DVG-13` | `EC-01/02/03/04/05/06/07/08`; `EV-CP/IT/INT/PRD/RDA/SE` | `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE`, `FX-CONTRACT-R1`, `FX-CORE-PROPOSAL`, `FX-EDITOR-IME`, `FX-EVAL-READONLY`, `FX-FAKE-MODEL`, `FX-HANDOFF`, `FX-JOURNAL-GROUP`, `FX-LONG-SESSION`, `FX-REAL-MODEL-ADVISORY`, `FX-RECOVERY-EDITOR`, `FX-REPLAY-RETENTION`, `FX-RESTORE-LIFECYCLE`, `FX-SCOPE-2U2P`, `FX-PRODUCTION-EDITOR`, `FX-PROPOSAL-INTERACTION`, `FX-PRODUCT-5`, `FX-PRODUCT-6` | `CFP-ADMISSION-BEFORE-CORE`, `CFP-ADMISSION-EXPIRY`, `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-CORE-BEFORE-COMMIT`, `CFP-DELETE-AFTER-SETTLEMENT`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP`, `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK`, `CFP-EDITOR-BEFORE-GROUP-ADMISSION`, `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-STAGING`, `CFP-SCOPE-BEFORE-QUERY` | `SCH-ABSENT/CRASH/DRIFT/FENCE/LIFECYCLE/LONG/NORMAL/REORDER/REPLAY/RESTORE/SCOPE/UNKNOWN` | `ORC-ATOMIC-AUTHORITY`, `ORC-CONTEXT-DISCLOSURE`, `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS`, `ORC-DISPATCH-DISCLOSURE`, `ORC-EDITOR-JOURNAL`, `ORC-EVAL-READONLY`, `ORC-NEGATIVE-CLOSURE`, `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`, `ORC-REPLAY-TRUTH`, `ORC-RESTORE-LIFECYCLE`, `ORC-RUN-FINALIZATION`, `ORC-SCOPE`, `ORC-PRODUCTION-EDITOR`, `ORC-PROPOSAL-INTERACTION`, `ORC-PRODUCT-5`, `ORC-PRODUCT-6` | `B-S6-MANDATORY-SET` |
+| `SMAP-STAGE-7` | Stage 7 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-12`, `DVG-13` | `EC-01/02/03/04/05/06/07/08`; `EV-CP/IT/INT/PRD/RDA/SE` | `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE`, `FX-CONTRACT-R1`, `FX-CORE-PROPOSAL`, `FX-EDITOR-IME`, `FX-EVAL-READONLY`, `FX-FAKE-MODEL`, `FX-HANDOFF`, `FX-JOURNAL-GROUP`, `FX-LONG-SESSION`, `FX-REAL-MODEL-ADVISORY`, `FX-RECOVERY-EDITOR`, `FX-REPLAY-RETENTION`, `FX-RESTORE-LIFECYCLE`, `FX-SCOPE-2U2P`, `FX-PRODUCTION-EDITOR`, `FX-PROPOSAL-INTERACTION`, `FX-PRODUCT-5`, `FX-PRODUCT-6`, `FX-PRODUCT-7` | `CFP-ADMISSION-BEFORE-CORE`, `CFP-ADMISSION-EXPIRY`, `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-CORE-BEFORE-COMMIT`, `CFP-DELETE-AFTER-SETTLEMENT`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP`, `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK`, `CFP-EDITOR-BEFORE-GROUP-ADMISSION`, `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-STAGING`, `CFP-SCOPE-BEFORE-QUERY` | `SCH-ABSENT/CRASH/DRIFT/FENCE/LIFECYCLE/LONG/NORMAL/REORDER/REPLAY/RESTORE/SCOPE/UNKNOWN` | `ORC-ATOMIC-AUTHORITY`, `ORC-CONTEXT-DISCLOSURE`, `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS`, `ORC-DISPATCH-DISCLOSURE`, `ORC-EDITOR-JOURNAL`, `ORC-EVAL-READONLY`, `ORC-NEGATIVE-CLOSURE`, `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`, `ORC-REPLAY-TRUTH`, `ORC-RESTORE-LIFECYCLE`, `ORC-RUN-FINALIZATION`, `ORC-SCOPE`, `ORC-PRODUCTION-EDITOR`, `ORC-PROPOSAL-INTERACTION`, `ORC-PRODUCT-5`, `ORC-PRODUCT-6`, `ORC-PRODUCT-7` | `B-S7-MANDATORY-SET` |
+| `SMAP-STAGE-8` | Stage 8 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-12`, `DVG-13` | `EC-01/02/03/04/05/06/07/08`; `EV-CP/IT/INT/PRD/RDA/SE` | `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE`, `FX-CONTRACT-R1`, `FX-CORE-PROPOSAL`, `FX-EDITOR-IME`, `FX-EVAL-READONLY`, `FX-FAKE-MODEL`, `FX-HANDOFF`, `FX-JOURNAL-GROUP`, `FX-LONG-SESSION`, `FX-REAL-MODEL-ADVISORY`, `FX-RECOVERY-EDITOR`, `FX-REPLAY-RETENTION`, `FX-RESTORE-LIFECYCLE`, `FX-SCOPE-2U2P`, `FX-PRODUCTION-EDITOR`, `FX-PROPOSAL-INTERACTION`, `FX-PRODUCT-5`, `FX-PRODUCT-6`, `FX-PRODUCT-7`, `FX-PRODUCT-8` | `CFP-ADMISSION-BEFORE-CORE`, `CFP-ADMISSION-EXPIRY`, `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-CORE-BEFORE-COMMIT`, `CFP-DELETE-AFTER-SETTLEMENT`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP`, `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK`, `CFP-EDITOR-BEFORE-GROUP-ADMISSION`, `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-STAGING`, `CFP-SCOPE-BEFORE-QUERY` | `SCH-ABSENT/CRASH/DRIFT/FENCE/LIFECYCLE/LONG/NORMAL/REORDER/REPLAY/RESTORE/SCOPE/UNKNOWN` | `ORC-ATOMIC-AUTHORITY`, `ORC-CONTEXT-DISCLOSURE`, `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS`, `ORC-DISPATCH-DISCLOSURE`, `ORC-EDITOR-JOURNAL`, `ORC-EVAL-READONLY`, `ORC-NEGATIVE-CLOSURE`, `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`, `ORC-REPLAY-TRUTH`, `ORC-RESTORE-LIFECYCLE`, `ORC-RUN-FINALIZATION`, `ORC-SCOPE`, `ORC-PRODUCTION-EDITOR`, `ORC-PROPOSAL-INTERACTION`, `ORC-PRODUCT-5`, `ORC-PRODUCT-6`, `ORC-PRODUCT-7`, `ORC-PRODUCT-8` | `B-S8-MANDATORY-SET` |
+| `SMAP-STAGE-9` | Stage 9 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-12`, `DVG-13` | `EC-01/02/03/04/05/06/07/08`; `EV-CP/IT/INT/PRD/RDA/SE` | `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE`, `FX-CONTRACT-R1`, `FX-CORE-PROPOSAL`, `FX-EDITOR-IME`, `FX-EVAL-READONLY`, `FX-FAKE-MODEL`, `FX-HANDOFF`, `FX-JOURNAL-GROUP`, `FX-LONG-SESSION`, `FX-REAL-MODEL-ADVISORY`, `FX-RECOVERY-EDITOR`, `FX-REPLAY-RETENTION`, `FX-RESTORE-LIFECYCLE`, `FX-SCOPE-2U2P`, `FX-PRODUCTION-EDITOR`, `FX-PROPOSAL-INTERACTION`, `FX-PRODUCT-5`, `FX-PRODUCT-6`, `FX-PRODUCT-7`, `FX-PRODUCT-8`, `FX-PRODUCT-9` | `CFP-ADMISSION-BEFORE-CORE`, `CFP-ADMISSION-EXPIRY`, `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-CORE-BEFORE-COMMIT`, `CFP-DELETE-AFTER-SETTLEMENT`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP`, `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK`, `CFP-EDITOR-BEFORE-GROUP-ADMISSION`, `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-STAGING`, `CFP-SCOPE-BEFORE-QUERY` | `SCH-ABSENT/CRASH/DRIFT/FENCE/LIFECYCLE/LONG/NORMAL/REORDER/REPLAY/RESTORE/SCOPE/UNKNOWN` | `ORC-ATOMIC-AUTHORITY`, `ORC-CONTEXT-DISCLOSURE`, `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS`, `ORC-DISPATCH-DISCLOSURE`, `ORC-EDITOR-JOURNAL`, `ORC-EVAL-READONLY`, `ORC-NEGATIVE-CLOSURE`, `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`, `ORC-REPLAY-TRUTH`, `ORC-RESTORE-LIFECYCLE`, `ORC-RUN-FINALIZATION`, `ORC-SCOPE`, `ORC-PRODUCTION-EDITOR`, `ORC-PROPOSAL-INTERACTION`, `ORC-PRODUCT-5`, `ORC-PRODUCT-6`, `ORC-PRODUCT-7`, `ORC-PRODUCT-8`, `ORC-PRODUCT-9` | `B-S9-MANDATORY-SET` |
+| `SMAP-STAGE-10` | Stage 10 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-08`, `DVG-09`, `DVG-10`, `DVG-11`, `DVG-12`, `DVG-13` | `EC-01/02/03/04/05/06/07/08`; `EV-CP/IT/INT/PRD/RDA/SE` | `FX-ABSENT-EXECUTION`, `FX-CONTEXT-DISCLOSURE`, `FX-CONTRACT-R1`, `FX-CORE-PROPOSAL`, `FX-EDITOR-IME`, `FX-EVAL-READONLY`, `FX-FAKE-MODEL`, `FX-HANDOFF`, `FX-JOURNAL-GROUP`, `FX-LONG-SESSION`, `FX-REAL-MODEL-ADVISORY`, `FX-RECOVERY-EDITOR`, `FX-REPLAY-RETENTION`, `FX-RESTORE-LIFECYCLE`, `FX-SCOPE-2U2P`, `FX-PRODUCTION-EDITOR`, `FX-PROPOSAL-INTERACTION`, `FX-PRODUCT-5`, `FX-PRODUCT-6`, `FX-PRODUCT-7`, `FX-PRODUCT-8`, `FX-PRODUCT-9`, `FX-PRODUCT-10` | `CFP-ADMISSION-BEFORE-CORE`, `CFP-ADMISSION-EXPIRY`, `CFP-CONTRACT-DRIFT`, `CFP-CORE-AFTER-COMMIT-BEFORE-ACK`, `CFP-CORE-BEFORE-COMMIT`, `CFP-DELETE-AFTER-SETTLEMENT`, `CFP-DELETE-BEFORE-SETTLEMENT`, `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO`, `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION`, `CFP-DISPATCH-BEFORE-CLAIM`, `CFP-EDITOR-AFTER-JOURNAL-BEFORE-GROUP`, `CFP-EDITOR-AFTER-SETTLEMENT-BEFORE-ACK`, `CFP-EDITOR-BEFORE-GROUP-ADMISSION`, `CFP-EDITOR-BEFORE-JOURNAL-DURABILITY`, `CFP-FENCE-AFTER-TAKEOVER`, `CFP-LATE-RESULT`, `CFP-LIFECYCLE-AFTER-INVALIDATION-BEFORE-CLEANUP`, `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS`, `CFP-MANIFEST-BEFORE-COMMIT`, `CFP-PROPOSAL-AFTER-ACCEPTANCE-BEFORE-RECEIPT`, `CFP-PROPOSAL-BEFORE-DECISION`, `CFP-RECONCILIATION-BEFORE-SETTLEMENT`, `CFP-REPLAY-AFTER-GENERATION-SNAPSHOT`, `CFP-REPLAY-BEFORE-COMPACTION`, `CFP-REPLAY-BELOW-FLOOR`, `CFP-RESTORE-AFTER-VISIBILITY`, `CFP-RESTORE-BEFORE-VISIBILITY`, `CFP-RESTORE-STAGING`, `CFP-SCOPE-BEFORE-QUERY` | `SCH-ABSENT/CRASH/DRIFT/FENCE/LIFECYCLE/LONG/NORMAL/REORDER/REPLAY/RESTORE/SCOPE/UNKNOWN` | `ORC-ATOMIC-AUTHORITY`, `ORC-CONTEXT-DISCLOSURE`, `ORC-CONTRACT`, `ORC-CROSSWALK-COMPLETENESS`, `ORC-DISPATCH-DISCLOSURE`, `ORC-EDITOR-JOURNAL`, `ORC-EVAL-READONLY`, `ORC-NEGATIVE-CLOSURE`, `ORC-OUTCOME-UNKNOWN`, `ORC-RECOVERY-ATOMICITY`, `ORC-REPLAY-TRUTH`, `ORC-RESTORE-LIFECYCLE`, `ORC-RUN-FINALIZATION`, `ORC-SCOPE`, `ORC-PRODUCTION-EDITOR`, `ORC-PROPOSAL-INTERACTION`, `ORC-PRODUCT-5`, `ORC-PRODUCT-6`, `ORC-PRODUCT-7`, `ORC-PRODUCT-8`, `ORC-PRODUCT-9`, `ORC-PRODUCT-10` | `B-S10-MANDATORY-SET` |
+
+| Bundle aggregate | Exact members |
+| --- | --- |
+| `B-S5-MANDATORY-SET` | `B-CONTRACT`, `B-SCOPE`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`, `B-CONTEXT`, `B-FAKE`, `B-ABSENT`, `B-EVAL`, `B-MEASURE`, `B-HANDOFF`, `B-REAL-ADVISORY`. |
+| `B-S6-MANDATORY-SET` | `B-CONTRACT`, `B-SCOPE`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`, `B-CONTEXT`, `B-FAKE`, `B-ABSENT`, `B-EVAL`, `B-MEASURE`, `B-HANDOFF`, `B-REAL-ADVISORY`. |
+| `B-S7-MANDATORY-SET` | `B-CONTRACT`, `B-SCOPE`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`, `B-CONTEXT`, `B-FAKE`, `B-ABSENT`, `B-EVAL`, `B-MEASURE`, `B-HANDOFF`, `B-REAL-ADVISORY`. |
+| `B-S8-MANDATORY-SET` | `B-CONTRACT`, `B-SCOPE`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`, `B-CONTEXT`, `B-FAKE`, `B-ABSENT`, `B-EVAL`, `B-MEASURE`, `B-HANDOFF`, `B-REAL-ADVISORY`. |
+| `B-S9-MANDATORY-SET` | `B-CONTRACT`, `B-SCOPE`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`, `B-CONTEXT`, `B-FAKE`, `B-ABSENT`, `B-EVAL`, `B-MEASURE`, `B-HANDOFF`, `B-REAL-ADVISORY`. |
+| `B-S10-MANDATORY-SET` | `B-CONTRACT`, `B-SCOPE`, `B-EDITOR`, `B-CORE`, `B-RECOVERY`, `B-REPLAY`, `B-RESTORE`, `B-CONTEXT`, `B-FAKE`, `B-ABSENT`, `B-EVAL`, `B-MEASURE`, `B-HANDOFF`, `B-REAL-ADVISORY`. |
+
+Bundle shapes are reused; case identity and current-stage expectations are
+not interchangeable. `B-CONTEXT` records admitted Tool/Skill/Memory/App
+inputs, `B-REPLAY` records their retained versions and lifecycle, and
+`B-EVAL` records explicit Assessment separately from no-effect viewing.
+Each bundle includes the exact positive-case facts defined in section 2.
+
+## 5. Continuation requirement, evidence, and journey crosswalk
+
+The selector resolves the exact gates, evidence, fixtures, fault points,
+schedules, oracles, and bundles from section 4. The row's named facts and its
+full accepted source obligation must pass; the short text does not narrow the
+source. `PASS-POS` is required for positive facts. Expected refusal, unknown,
+and hold cases use the parent's exact dispositions and cannot replace them.
+Every row uses `BLOCK-ALL` for missing, failed, stale, or unreplayable evidence.
+
+| ID | Required facts and canonical owners | Proof selector | Block |
+| --- | --- | --- | --- |
+| `S5-REQ-001` | Ordinary research through one governed Gateway; distinct registration, exposure, Capability, Approval, and effect roles. `OWN-TOOL`, `OWN-CTX`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-REQ-002` | Exact untrusted MCP registration, Project use, incompatible drift refusal, and protected credentials. `OWN-MCP`, `OWN-TRUST`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-REQ-003` | Normalized model Tool request and result re-entry through Context Assembly. `OWN-MODEL`, `OWN-CTX`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-REQ-004` | Research synthesis, exact claims/sources, supporting/conflicting/limiting evidence, and visible gaps. `OWN-MEM`, `OWN-ARTIFACT`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-REQ-005` | Durable cancellation, interruption, unknown effect, and permitted reconciliation without blind resend. `OWN-AGENT`, `OWN-TOOL`, `OWN-RET`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-REQ-006` | Research/Tool/MCP assistance can create inspectable Proposals, never direct creative authority. `OWN-ARTIFACT`, `OWN-CORE`, `OWN-ADM`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-EVD-001` | Real integration, registration/Project use, effect/approval/drift, and zero-authority evidence. `OWN-TOOL`, `OWN-MCP`, `OWN-TRUST`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-EVD-002` | Source/claim/synthesis/provenance/gap and complete Context/disclosure re-entry evidence. `OWN-MEM`, `OWN-CTX`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-EVD-003` | Interrupted/unknown operation, Proposal-only change, and complete AI-disabled regression evidence. `OWN-AGENT`, `OWN-CORE`, `OWN-WEB`. | `SMAP-STAGE-5` | `BLOCK-ALL`. |
+| `S5-JRN-001` | Execute every step of the accepted Stage 5 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-5` | `BLOCK-ALL`; every journey step is mandatory. |
+| `S6-REQ-001` | Standard package selection, installation scope, name conflict, snapshot, and explicit reason without mandatory extensions. `OWN-SKILL`. | `SMAP-STAGE-6` | `BLOCK-ALL`. |
+| `S6-REQ-002` | Progressive instructions/resources and fixed precedence without permission or authority. `OWN-SKILL`, `OWN-CTX`. | `SMAP-STAGE-6` | `BLOCK-ALL`. |
+| `S6-REQ-003` | Tool roles, extensions, bounded scripts, outcomes, and missing/conflicting prerequisites through existing execution. `OWN-SKILL`, `OWN-TOOL`, `OWN-AGENT`. | `SMAP-STAGE-6` | `BLOCK-ALL`. |
+| `S6-REQ-004` | Inspectable selection/composition/conflicts/outcomes and create/install/update/revoke lifecycle with fixed active snapshots. `OWN-SKILL`. | `SMAP-STAGE-6` | `BLOCK-ALL`. |
+| `S6-EVD-001` | Compatibility, selection/snapshot, loading, composition, and instruction-boundary evidence. `OWN-SKILL`, `OWN-CTX`. | `SMAP-STAGE-6` | `BLOCK-ALL`. |
+| `S6-EVD-002` | Tool/script admission, outcomes, failure/revocation, fixed Run binding, and editor regression. `OWN-SKILL`, `OWN-TOOL`, `OWN-AGENT`. | `SMAP-STAGE-6` | `BLOCK-ALL`. |
+| `S6-JRN-001` | Execute every step of the accepted Stage 6 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-6` | `BLOCK-ALL`; every journey step is mandatory. |
+| `S7-REQ-001` | One Project main Agent and eligible exact continuity across threads. `OWN-AGENT`, `OWN-CTX`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-REQ-002` | Author-owned fiction assertions, characters/relations/timeline, Story/Epistemic Scope, conflicts, and explicit settlement. `OWN-ARTIFACT`, `OWN-MEM`, `OWN-CORE`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-REQ-003` | Current feedback, explicit Author Preference, and Inferred Preference stay distinct and inspectable. `OWN-MEM`, `OWN-ADM`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-REQ-004` | Optional Project Instruction revisions, top-level binding, descendants, compaction, and old/new Run separation. `OWN-CTX`, `OWN-AGENT`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-REQ-005` | Source-bearing Memory, admission/invalidation/suppression, conflicts/gaps, and rebuild. `OWN-MEM`, `OWN-RET`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-REQ-006` | Inspect/include/pin/exclude controls, usable defaults, mandatory/dynamic context, budget/projection/manifests. `OWN-CTX`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-REQ-007` | Exact embedding/retrieval/compaction/cache/Provider-continuity bindings without revival or authority. `OWN-CTX`, `OWN-MODEL`, `OWN-PG`, `OWN-RET`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-EVD-001` | Cross-thread identity, structured truth/preference, instruction revision/binding, and author-authority proof. `OWN-AGENT`, `OWN-MEM`, `OWN-ADM`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-EVD-002` | Memory eligibility, suppression/invalidation, controls, rebuild, lifecycle, and non-revival. `OWN-MEM`, `OWN-CTX`, `OWN-RET`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-EVD-003` | Complete context/embedding/disclosure, continuity/cache/compaction, recovery, and editor regression. `OWN-CTX`, `OWN-MODEL`, `OWN-WEB`. | `SMAP-STAGE-7` | `BLOCK-ALL`. |
+| `S7-JRN-001` | Execute every step of the accepted Stage 7 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-7` | `BLOCK-ALL`; every journey step is mandatory. |
+| `S8-REQ-001` | Production character, relationship, timeline, and research transcript views over StoryOS-owned data. `OWN-APP`, `OWN-ARTIFACT`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
+| `S8-REQ-002` | Immutable resources/View revisions, sandbox Instances, negotiation, limits, revocation, and termination. `OWN-APP`, `OWN-TRUST`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
+| `S8-REQ-003` | Stored-resource replay, Prepared Receipt, and terminal static fallback without repeated ToolCall. `OWN-APP`, `OWN-RET`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
+| `S8-REQ-004` | Persisted semantic actions with fresh applicable Admission and requesting-Instance delivery. `OWN-APP`, `OWN-TOOL`, `OWN-ADM`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
+| `S8-EVD-001` | Four production views, sandbox/resource binding, lifecycle/negotiation/limits/revocation. `OWN-APP`, `OWN-TRUST`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
+| `S8-EVD-002` | Fallback, non-executing replay, persisted action routing, instance-scoped response, and editor regression. `OWN-APP`, `OWN-RET`, `OWN-WEB`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
+| `S8-JRN-001` | Execute every step of the accepted Stage 8 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-8` | `BLOCK-ALL`; every journey step is mandatory. |
+| `S9-REQ-001` | Adaptive Plan, durable Step, lease, hold/wait, steering/cancellation/finalization, and layered timeline. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-REQ-002` | Hierarchical child, narrowed scope/context/Capability, budget reservation, execution record, and typed result. `OWN-SUBRUN`, `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-REQ-003` | Mailbox/follow-up/interrupt, Required/Advisory join, backpressure, Seal, late result, and parent-child recovery. `OWN-SUBRUN`, `OWN-RET`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-REQ-004` | Explicit proactive event/schedule enablement, grants, bounds, misfire, and duplicate-effect refusal. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-REQ-005` | Resource/safety holds, budgets, usage classification, and exact settlement across each delivered operation. `OWN-AGENT`, `OWN-TOOL`, `OWN-SKILL`, `OWN-MODEL`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-REQ-006` | Configured model policy and visible route/fallback decisions without hidden destination or Agent identity change. `OWN-MODEL`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-EVD-001` | Plan/Step/lease/wait/hold/steering/interruption/finalization/timeline proof. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-EVD-002` | Child scope/reservation/Mailbox/join/Seal/late-result/cancellation/recovery proof. `OWN-SUBRUN`, `OWN-RET`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-EVD-003` | Authorized proactive work, misfire/deduplication, guardrails/model policy, and editor regression. `OWN-AGENT`, `OWN-MODEL`, `OWN-WEB`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-JRN-001` | Execute every step of the accepted Stage 9 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-9` | `BLOCK-ALL`; every journey step is mandatory. |
+| `S10-REQ-001` | Separate optional scoped Eval page with no-effect open and undisturbed writing. `OWN-EVAL`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-REQ-002` | Explicit eligible Case/Corpus and exact retained evidence with visible lifecycle gaps. `OWN-EVAL`, `OWN-RET`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-REQ-003` | Chosen applicable Definition and inputs, admitted Assessment, advisory result/comparison/feedback, explicit unavailable state. `OWN-EVAL`, `OWN-CTX`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-REQ-004` | No hidden coupling to release proof, routing, Memory, preferences, or creative authority. `OWN-EVAL`, `OWN-ARTIFACT`, `OWN-CTX`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-EVD-001` | Case/Definition binding, gaps, advisory outcomes, and no-effect-open evidence. `OWN-EVAL`, `OWN-RET`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-EVD-002` | Destination/Scope/authority negatives, no automatic tuning or release-proof substitution, and editor regression. `OWN-EVAL`, `OWN-CTX`, `OWN-WEB`. | `SMAP-STAGE-10` | `BLOCK-ALL`. |
+| `S10-JRN-001` | Execute every step of the accepted Stage 10 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-10` | `BLOCK-ALL`; every journey step is mandatory. |
+
+## 6. Release branches
+
+Each branch consumes its mandatory map and author journey only after both
+pass on one exact candidate. It emits `EV-SR`, `PASS-STAGE`, and that
+candidate's commit/tree. No branch consumes a future-stage result.
+
+| Release selector | Mandatory input | Journey | Successor |
+| --- | --- | --- | --- |
+| `SMAP-RELEASE-STAGE-5` | `SMAP-STAGE-5` | `S5-JRN-001` | Exact Stage 6 input. |
+| `SMAP-RELEASE-STAGE-6` | `SMAP-STAGE-6` | `S6-JRN-001` | Exact Stage 7 input. |
+| `SMAP-RELEASE-STAGE-7` | `SMAP-STAGE-7` | `S7-JRN-001` | Exact Stage 8 input. |
+| `SMAP-RELEASE-STAGE-8` | `SMAP-STAGE-8` | `S8-JRN-001` | Exact Stage 9 input. |
+| `SMAP-RELEASE-STAGE-9` | `SMAP-STAGE-9` | `S9-JRN-001` | Exact Stage 10 input. |
+| `SMAP-RELEASE-STAGE-10` | `SMAP-STAGE-10` | `S10-JRN-001` | Complete accepted local product route; no new stage is inferred. |
+
+Controlled-cloud delivery remains a separate gate after the first four
+stages. It proves the exact selected released local stage, not all future
+capabilities, and does not wait for Stage 10 by implication.
+
+## 7. Source and ticket audit
+
+Before planning handoff, the planning owner and an independent reviewer:
+
+1. Compare the exact accepted release ID set with this combined crosswalk.
+   Check every full source obligation, not only headings or counts.
+2. Follow all 71 source dispositions to requirements, then to concrete
+   acceptance responsibilities. Assign each responsibility to one ticket;
+   a broad Requirement may have several contributing tickets.
+3. Read the proposed tickets in reverse. Each delivers a named accepted
+   behavior or fixes a current defect. Remove speculative infrastructure.
+   Preserve closed owners and their evidence when the existing contract fits.
+4. Check the proposed list against native parent/blocker state, actual input
+   dependencies, no cycles, and the published serial priority. A parent
+   specification need not close before its own children can execute.
+5. Record approval of the exact breakdown, current body revisions, and the
+   read-only audit. No new or split child is published as executable before
+   that approval. A held graph has no current implementation Claim.
+6. Reject lost source/requirement/journey, duplicate acceptance ownership,
+   unknown proof reference, wrong successor, body/edge mismatch, positive
+   capability backed only by absence, and prototype/history used as current
+   product proof. Record each uncovered item; a summary count cannot erase it.
+
+Use the existing repository checks plus this bounded source/graph review.
+The historical Stage 1 checker keeps its original inputs and claim ceiling.
+A permanent new ledger, parser, workflow runtime, or CI system is not required
+to complete this planning correction. Implementation agents add behavior
+tests through existing repository commands when they implement each ticket.
