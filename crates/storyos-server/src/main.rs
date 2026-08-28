@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::env;
 use std::io::{self, Write as _};
+use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use storyos_application::UserId;
@@ -9,7 +10,14 @@ use uuid::Uuid;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let bind_address = bind_address()?;
+    let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
+    if let [flag, root] = arguments.as_slice()
+        && flag == "--check-web-root"
+    {
+        storyos_server::WebAssetSet::load(Path::new(root))?;
+        return Ok(());
+    }
+    let bind_address = bind_address(&arguments)?;
     let listener = TcpListener::bind(&bind_address).await?;
     let address = listener.local_addr()?;
     let host = address.to_string();
@@ -63,11 +71,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn bind_address() -> Result<String, String> {
-    let arguments = env::args().skip(/*n*/ 1).collect::<Vec<_>>();
-    match arguments.as_slice() {
+fn bind_address(arguments: &[String]) -> Result<String, String> {
+    match arguments {
         [] => Ok("127.0.0.1:3000".to_owned()),
         [flag, address] if flag == "--bind" => Ok(address.clone()),
-        _ => Err("usage: storyos-server [--bind <address>]".to_owned()),
+        _ => Err(
+            "usage: storyos-server [--bind <address>] | --check-web-root <directory>".to_owned(),
+        ),
     }
 }

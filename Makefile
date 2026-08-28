@@ -1,4 +1,4 @@
-.PHONY: contracts generate-contracts project-scope verify verify-local verify-pr verify-tracker web web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-pr verify-tracker web web-typecheck
 
 contracts:
 	cargo fmt --all -- --check
@@ -14,6 +14,9 @@ contracts:
 web-typecheck:
 	pnpm install --frozen-lockfile
 	pnpm --dir apps/web run typecheck
+
+release-package: web-typecheck
+	python3 scripts/package-release.py
 
 web: web-typecheck
 	pnpm --dir apps/web exec vite build
