@@ -38,7 +38,7 @@ The following inputs are settled and are not reopened here:
   destinations are External Processing Destinations. Tool, MCP, and Research
   handling follows the [existing Context Processing Boundary classification](context-assembly-retrieval-and-outbound-disclosure-semantics.md#91-processing-boundary-classifications):
   StoryOS Host Internal Processing, StoryOS Controlled Processing Destination,
-  or External Processing Destination. Each downstream external call from a
+  or External Processing Destination. Each [downstream external call](context-assembly-retrieval-and-outbound-disclosure-semantics.md#96-telemetry-and-non-model-destinations) from a
   controlled processor requires its own complete Context Assembly, disclosure,
   and Destination Attempt evidence under the owning authorization and
   destination contracts. Bailian is only a current test Provider.
