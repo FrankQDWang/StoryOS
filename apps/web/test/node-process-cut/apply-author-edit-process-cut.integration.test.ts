@@ -24,7 +24,7 @@ import {
 } from "../support/node-integration.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-const serverBinary = join(repositoryRoot, "target", "debug", process.platform === "win32"
+const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32"
   ? "storyos-server.exe" : "storyos-server");
 const USER = "018f0000-0000-7001-8000-000000000001";
 const PROJECT = "018f0000-0000-7001-8000-000000000002";

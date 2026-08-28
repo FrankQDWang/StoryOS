@@ -17,8 +17,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         storyos_server::WebAssetSet::load(Path::new(root))?;
         return Ok(());
     }
-    let bind_address = bind_address(&arguments)?;
-    let listener = TcpListener::bind(&bind_address).await?;
+    let (bind_address, web_root) = server_options(&arguments)?;
+    let assets = storyos_server::WebAssetSet::load(web_root)?;
+    let listener = TcpListener::bind(bind_address).await?;
     let address = listener.local_addr()?;
     let host = address.to_string();
     let session_users = env::var("STORYOS_BOOTSTRAP_SESSIONS")
@@ -67,16 +68,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("STORYOS_SERVER_URL=http://{address}");
     io::stdout().flush()?;
-    axum::serve(listener, storyos_server::router_with_config(config)).await?;
+    axum::serve(listener, storyos_server::router_with_web(config, assets)).await?;
     Ok(())
 }
 
-fn bind_address(arguments: &[String]) -> Result<String, String> {
+fn server_options(arguments: &[String]) -> Result<(&str, &Path), String> {
     match arguments {
-        [] => Ok("127.0.0.1:3000".to_owned()),
-        [flag, address] if flag == "--bind" => Ok(address.clone()),
+        [flag, root] if flag == "--web-root" => Ok(("127.0.0.1:3000", Path::new(root))),
+        [bind_flag, address, root_flag, root] if bind_flag == "--bind" && root_flag == "--web-root" => {
+            Ok((address, Path::new(root)))
+        }
+        [root_flag, root, bind_flag, address] if root_flag == "--web-root" && bind_flag == "--bind" => {
+            Ok((address, Path::new(root)))
+        }
         _ => Err(
-            "usage: storyos-server [--bind <address>] | --check-web-root <directory>".to_owned(),
+            "usage: storyos-server --web-root <directory> [--bind <address>] | --check-web-root <directory>".to_owned(),
         ),
     }
 }

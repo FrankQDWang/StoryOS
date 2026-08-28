@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { execFile, spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { once } from "node:events";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { StoryOSProtocolError } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -28,9 +29,11 @@ export async function startStoryOSServer(options: {
   readonly bind?: string;
   readonly repositoryRoot: string;
   readonly serverBinary: string;
+  readonly webRoot?: string;
   readonly sessions?: Readonly<Record<string, string>>;
 }): Promise<StoryOSServer> {
   const { bind = "127.0.0.1:0", repositoryRoot, serverBinary, sessions } = options;
+  const webRoot = options.webRoot ?? join(dirname(serverBinary), "web");
   const env = { ...process.env };
   if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
     env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
@@ -41,7 +44,7 @@ export async function startStoryOSServer(options: {
       "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
   }
   return new Promise((resolve, reject) => {
-    const server = spawn(serverBinary, ["--bind", bind], {
+    const server = spawn(serverBinary, ["--bind", bind, "--web-root", webRoot], {
       cwd: repositoryRoot,
       env,
       stdio: ["ignore", "pipe", "pipe"],
