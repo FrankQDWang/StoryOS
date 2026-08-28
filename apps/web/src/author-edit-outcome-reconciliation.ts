@@ -297,10 +297,11 @@ export async function commitOutcomeQueryWithGroup(
   const committed = putStrongerGroup(
     transaction, durable, next, activeBase, workspace.partition.journal_partition_id,
   );
-  attempts.put({
+  const completedAttempt: OutcomeQueryAttempt = {
     ...storedAttempt,
     outcome: { kind: "response_observed", outcome_query_observation_id: observationId },
-  });
+  };
+  attempts.put(completedAttempt);
   transaction.objectStore("outcome_query_observations").add(observation);
   await transactionResult(transaction);
   return committed;

@@ -15,6 +15,7 @@ import {
 import type {
   EditorReadyState,
   JournalSubmissionGroup,
+  OutcomeQueryAttempt,
   ValidatedJournalSnapshot,
 } from "../../src/editor-types.ts";
 import {
@@ -38,6 +39,7 @@ import {
   requireEditorReady,
   requireRecord,
   requireRequestBody,
+  requireString,
   trackDatabase,
 } from "./scenario.ts";
 
@@ -46,6 +48,8 @@ type OutcomeMode = "challenge" | "committed" | "rejected" | "unavailable";
 const NEXT_REVISION = "018f0000-0000-7001-8000-000000000034";
 const EXPIRES = "2026-08-13T08:05:00.000Z";
 const NONCE = "a".repeat(64);
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 
 function transactionResult(transaction: IDBTransaction): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -204,28 +208,16 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     return group;
   }
 
-  async function countGroupRows(
+  async function groupRows(
     database: IDBDatabase,
     store: string,
     groupId: string,
-  ): Promise<number> {
+  ): Promise<Record<string, unknown>[]> {
     const value: unknown = await requestResult(
       database.transaction(store, "readonly").objectStore(store).index("group").getAll(groupId),
     );
     if (!Array.isArray(value)) throw new Error(`${store} did not return a row array`);
-    return value.length;
-  }
-
-  async function groupObservations(
-    database: IDBDatabase,
-    groupId: string,
-  ): Promise<Record<string, unknown>[]> {
-    const value: unknown = await requestResult(
-      database.transaction("outcome_query_observations", "readonly")
-        .objectStore("outcome_query_observations").index("group").getAll(groupId),
-    );
-    if (!Array.isArray(value)) throw new Error("outcome observations are unavailable");
-    return value.map((item, index) => requireRecord(item, `outcome observation ${index}`));
+    return value.map((item, index) => requireRecord(item, `${store} row ${index}`));
   }
 
   async function loseAcknowledgement(): Promise<{
@@ -313,11 +305,32 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       .not.toContain(NONCE);
     expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
       .toEqual({ authorEdits: 1, outcomes: 1 });
-    expect(await countGroupRows(
+    const expectedUnavailable: OutcomeQueryAttempt = {
+      outcome_query_attempt_id: expect.stringMatching(UUID),
+      journal_submission_group_id: unresolved.groupId,
+      exact_transport_retry_capsule_id: expect.stringMatching(UUID),
+      request_identity: {
+        method: "GET",
+        route_template:
+          "/api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}",
+        request_schema: "storyos.query.apply-author-edit-outcome.request.v1",
+        idempotency_key: requireString(lastIdempotencyKey, "original idempotency key"),
+      },
+      started_at: expect.stringMatching(TIMESTAMP),
+      outcome: {
+        kind: "query_unavailable",
+        observed_at: expect.stringMatching(TIMESTAMP),
+        evidence: "delivery_unknown",
+        local_response_payload_ref: null,
+        exact_response_payload_digest: null,
+      },
+    };
+    const unavailableAttempts = await groupRows(
       unresolved.workspace.database,
       "outcome_query_attempts",
       unresolved.groupId,
-    )).toBe(1);
+    );
+    expect(unavailableAttempts).toEqual([expectedUnavailable]);
     unresolved.workspace.database.close();
 
     canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
@@ -336,19 +349,40 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     });
     expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
       .toEqual({ authorEdits: 1, outcomes: 2 });
-    expect(await countGroupRows(
+    const settledAttempts = await groupRows(
       reopened.database,
       "outcome_query_attempts",
       unresolved.groupId,
-    )).toBe(2);
-    expect(await countGroupRows(
+    );
+    expect(settledAttempts).toHaveLength(2);
+    expect(await groupRows(
       reopened.database,
       "outcome_query_observations",
       unresolved.groupId,
-    )).toBe(1);
+    )).toHaveLength(1);
     const settled = requireGroup(await journalSnapshot(reopened));
-    const committedObservation = (await groupObservations(reopened.database, unresolved.groupId))[0];
+    const committedObservation = (await groupRows(
+      reopened.database, "outcome_query_observations", unresolved.groupId,
+    ))[0];
     if (!committedObservation) throw new Error("the committed observation is unavailable");
+    const expectedObserved: OutcomeQueryAttempt = {
+      ...expectedUnavailable,
+      outcome_query_attempt_id: requireString(
+        committedObservation.outcome_query_attempt_id, "observed attempt identity",
+      ),
+      exact_transport_retry_capsule_id: requireString(
+        committedObservation.exact_transport_retry_capsule_id, "observed capsule identity",
+      ),
+      outcome: {
+        kind: "response_observed",
+        outcome_query_observation_id: requireString(
+          committedObservation.outcome_query_observation_id, "observation identity",
+        ),
+      },
+    };
+    expect(settledAttempts).toEqual(expect.arrayContaining([
+      ...unavailableAttempts, expectedObserved,
+    ]));
     expect(requireRecord(committedObservation.outcome, "observation outcome").kind).toBe("committed");
     expect(settled.settlement.kind).toBe("applied_receipt_settled");
     expect(committedObservation.local_response_payload_ref)
@@ -423,7 +457,9 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
           strongest: { kind: "challenge_issued", expires_at: EXPIRES },
         });
       }
-      const observation = (await groupObservations(reopened.database, unresolved.groupId))[0];
+      const observation = (await groupRows(
+        reopened.database, "outcome_query_observations", unresolved.groupId,
+      ))[0];
       if (!observation) throw new Error("the reload observation is unavailable");
       expect(requireRecord(observation.outcome, "observation outcome").kind)
         .toBe(mode === "rejected" ? "rejected_no_admission" : "still_unknown");
