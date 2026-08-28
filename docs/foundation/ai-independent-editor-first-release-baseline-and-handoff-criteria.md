@@ -1,10 +1,10 @@
 # AI-Independent Editor-First Release Baseline and Handoff Criteria
 
 - Status: current
-- Contract revision: `release-baseline-editor-first-2026-07-31-issue62`
+- Contract revision: `product-delivery-realignment-2026-08-28-v1`
 - Canonical issue: [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
-- Exact planning baseline: `main@6c6e99cfcc31fc3cdff592e8a472cffe8b4a4858`
-- Exact planning tree: `ea5efeb0e2d6ac82d0aa0309a59bee38ada8ac39`
+- Exact planning baseline: `main@34a4d64501bfe3024e8206e27679aec5c42375b2`
+- Exact planning tree: `2756e6bb7e5e4c77b9411a73452d63feda335cd4`
 - Product goal: [GOAL.md](../../GOAL.md)
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Issue execution rules: [Issue-Tracker Execution Contract](../agents/issue-tracker.md)
@@ -14,6 +14,12 @@ journeys that make each stage meaningful, the explicit exclusions that keep
 the stages bounded, and the handoff criteria between planning, implementation,
 verification, release, and later deployment. It does not become a second
 domain owner for any semantic contract named below.
+
+The same release owner defines the later production stages and retained-source
+coverage in [StoryOS Product Delivery Continuation](storyos-product-delivery-continuation.md).
+Read that contract when selecting a stage after Stage 4, checking complete
+product scope, or changing a stage exclusion. Stage 4 is an intermediate
+milestone. A stage-local exclusion does not remove a retained product promise.
 
 ## 1. Release promise and product boundary
 
@@ -42,8 +48,9 @@ outline, or an automatic authority path.
 
 The initial delivery and validation scope is local. A later controlled-cloud
 deployment must use the same User, Project Scope, authority, isolation,
-recovery, and disclosure contracts, but that deployment is a validation gate
-over the resulting product rather than a fifth implementation stage.
+recovery, and disclosure contracts. Deployment is a separate validation gate
+over the declared local product baseline, not a substitute for a production
+capability stage.
 
 ### 1.1 Release invariants
 
@@ -55,9 +62,10 @@ across later implementation revisions:
 | REL-001 | With all AI capabilities disabled, the complete AI-independent editor remains a high-quality, daily-usable novel editor. |
 | REL-002 | Authoritative creative state is changed only through existing direct-author or accepted Core Proposal paths; browser, Agent, Tool, MCP, model, cache, projection, and transcript state are not authority. |
 | REL-003 | Every project-bearing record and operation binds the exact User and Project Scope, and the production path uses StoryOS Core and PostgreSQL rather than an in-memory or prototype authority. |
-| REL-004 | Delivery occurs in exactly this order: production-shaped manual-editor risk slice, complete AI-independent editor, contract-faithful fake-model Proposal loop, one real external model with disclosure evidence. |
+| REL-004 | Delivery retains the first four stages in order: production-shaped manual-editor risk slice, complete AI-independent editor, contract-faithful fake-model Proposal loop, and one real external model with disclosure evidence. The explicit continuation stages then deliver the retained product capabilities. Stage 4 does not complete the product route. |
 | REL-005 | A stage is complete only when its author journey and mandatory evidence are current, attributable, replayable where applicable, and passed; failed, unrun, stale, unavailable, or unreplayable mandatory evidence blocks the stage. |
 | REL-006 | Planning closure, implementation handoff, stage implementation evidence, stage release, and controlled-cloud deployment are separate gates; no implementation issue or product implementation is created by this document. |
+| REL-007 | Every retained product obligation has an exact source, canonical semantic owner, delivery stage, observable acceptance, and evidence obligation. Research and prototype records remain evidence. Unpublished implementation tickets are explicit planning work, not ready execution. Missing coverage blocks planning closure and execution release. |
 
 ### 1.2 Existing semantic owners
 
@@ -86,7 +94,7 @@ retention value, recovery rule, AgentRun meaning, or verification mechanism.
 The current protocol and persistence catalogs remain the unique machine-readable
 ledgers for their respective owners.
 
-## 2. Fixed delivery order
+## 2. Delivery order
 
 Each stage begins only from the resulting current main of the preceding stage.
 The stage names below are contract identifiers, not separate workflow runtimes:
@@ -102,6 +110,27 @@ The stage names below are contract identifiers, not separate workflow runtimes:
 4. **One real external model with disclosure evidence.** Add one separately
    admitted real external-model path and prove StoryOS-owned disclosure and
    uncertainty evidence without claiming opaque Provider internals.
+5. **Governed Tools, MCP servers, and source-backed research.** Deliver the
+   ordinary research conversation through the existing Tool and disclosure
+   boundaries, with inspectable sources and no direct creative authority.
+6. **Production Skill packages and composition.** Deliver standard Skill
+   selection, exact package loading, governed resources and scripts, and
+   inspectable outcomes through the same Agent Loop.
+7. **Structured project continuity and Memory.** Deliver author-owned fiction
+   facts, preferences, optional Project Instruction, cross-thread continuity,
+   and inspectable, source-bearing retrieval without a second truth store.
+8. **Transcript MCP Apps.** Deliver the accepted dynamic domain views,
+   mediated actions, replay, and safe fallback inside the Agent transcript.
+9. **Complete Run control and orchestration.** Deliver bounded long work,
+   Subruns, controlled proactive execution, and explicit model-policy behavior.
+10. **Standalone advisory Eval.** Deliver the separate, optional evidence and
+    evaluation surface without changing author authority or ordinary writing.
+
+The continuation contract defines `S5-*` through `S10-*`. Stage order is the
+serial delivery policy, not proof that every earlier feature is a
+technical dependency. Implementation blockers name actual inputs, interfaces,
+or acceptance gates. Existing Stage 1 evidence remains bound to its historical
+contract; it is not rewritten to certify the expanded route.
 
 The terminal planning handoff issue, [Create and Lock the First Editor-First
 Implementation Issue](https://github.com/FrankQDWang/StoryOS/issues/77), creates
@@ -112,9 +141,11 @@ product Rust, TypeScript, SQL, UI, runtime, or deployment change.
 Controlled-cloud deployment is a later gate that checks deployment identity,
 operational recovery, security, cache refresh, same-release activation, and
 upgrade evidence for the author's controlled domain. It is not an additional
-stage in the four-stage implementation order and does not pull cloud
+stage in the production delivery order and does not pull cloud
 configuration, collaboration, billing, or service-fleet work into local
-Release 1.
+Release 1. Its original entry remains completion of the first four stages.
+The gate names the exact released local stage it validates; it does not claim
+that later capabilities are complete or require their completion first.
 
 ## 3. Complete acceptance journey
 
@@ -223,12 +254,22 @@ initialization through export, not merely prove one write path.
 | --- | --- | --- |
 | S2-REQ-001 | Work from a new or controlled Project initialization with AI, Agent, model, Provider, Tool, MCP, research, embedding, and network-dependent AI capabilities disabled. Manual writing must not require AI configuration. | Project/identity, PostgreSQL, Protocol, and Web Editor Session owners |
 | S2-REQ-002 | Create, open, rename, and archive the Project through the existing typed author-command and persistence paths, with exact User and Project Scope binding. | Project domain, Admission, Core, Protocol, and PostgreSQL owners |
-| S2-REQ-003 | Create, rename, reorder, remove, and navigate volumes and chapters without losing pending editor work; reopen the Project and display the current chapter and save state from an authorized Snapshot. | Web Editor Session, Protocol, Core, and PostgreSQL owners |
+| S2-REQ-003 | Create, rename, reorder, remove, and navigate volumes and chapters without losing pending editor work. An admitted author command can make another eligible Chapter current; install its authorized base and preserve unsettled input under the same Project writer boundary. Write in more than one Chapter and reopen the Project at its authoritative current Chapter with truthful save state. Presentation selection alone is not the current-Chapter transition. | Web Editor Session, Protocol, Core, and PostgreSQL owners |
 | S2-REQ-004 | Directly write and revise supported manuscript blocks with typing, paste, cut, selection replacement, split, join, move, retype, keyboard navigation, clipboard, undo, and Chinese and English IME behavior. | Web Editor Session, Admission, Core, Artifact, and Protocol owners |
 | S2-REQ-005 | Show durable saving, saved, and needs-attention states; preserve input through network delay, acknowledgement/Event ordering, reload, Web Client crash, Server restart, Project Activity replay-floor resynchronization, writer takeover, and recovery-draft/reconfirmation paths. In an isolated verification environment, also exercise the applicable Recovery Copy/PITR restore path, validate the runtime roles and forced RLS, rebuild disposable projections from canonical facts, apply the applicable lifecycle ranges and gaps, and expose ordinary reads or execution only after Recovery Visibility Proof succeeds. | Web Editor Session, Protocol, Core, PostgreSQL, and retention owners |
-| S2-REQ-006 | Search the current chapter and full manuscript with bounded results; perform direct replacement of one visible match; keep selected multi-match or cross-location replacement on the existing Proposal-gated path rather than silently bulk-writing. | Protocol, Web Editor Session, Core/Proposal, and search projection owners |
+| S2-REQ-006 | Search the current chapter and full manuscript with bounded results and directly replace one visible match. A broader, multi-match, or cross-location change reaches the existing Core classification and returns the approved typed refusal with zero direct authority effect. Stage 2 does not add the full Proposal experience or a second direct-write path. | Protocol, Web Editor Session, Core/Proposal, and search projection owners |
 | S2-REQ-007 | Show basic word, character, chapter, and manuscript progress statistics and export a deterministic, human-readable manuscript in volume/chapter order with explicit representation of unavailable content. Produce the versioned Project Export Archive only through its existing owner contracts. | Protocol, Web Editor Session, PostgreSQL, retention, and Artifact owners |
 | S2-REQ-008 | Sustain a long writing session with responsive local input, repeated chapter switches, reload, controlled upgrade, and the measured cold-open, search, journal, Snapshot, replay, storage, and restore envelope adopted by the relevant owner. | Web Editor Session, PostgreSQL, retention, protocol, and measurement owners |
+| S2-REQ-009 | Adopt Tiptap and ProseMirror in the production Protected Web Client through a StoryOS-owned adapter, with an exact dependency graph and production adoption decision. Deliver the approved fixed three-column workspace: manuscript tree, central editor, and collapsible adjacent Agent area. Keep the quiet visual direction, stable Block identity, versioned coordinates, and reconstructible projection boundary. Unavailable AI cannot prevent writing. | Web Editor Session and Core owners, consuming the approved workspace design and editor-mechanics evidence |
+
+The [approved workspace](../design/storyos-three-column-writing-workspace.md)
+and [Tiptap/ProseMirror research](../research/tiptap-prosemirror-proposal-mechanics.md)
+are required design inputs. Prototype dependencies and successful prototype
+tests do not establish production adoption. The production adapter must join
+the real Journal, Admission, Core, PostgreSQL, Receipt, and recovery path.
+Changing the text-only representation must explicitly preserve or safely
+recover existing prose and unsettled Journal work under the owning migration
+and compatibility contracts.
 
 ### 5.2 Explicitly absent or prohibited
 
@@ -247,7 +288,9 @@ add:
 
 The existing Core Proposal boundary still applies when a manual command is
 bulk, cross-location, or otherwise not fully previsible. AI being disabled
-does not authorize a second direct-write path.
+does not authorize a second direct-write path. Stage 2 proves the typed
+refusal already required by its approved parent specification; Stage 3 owns
+the complete editable Proposal experience.
 
 ### 5.3 Entry, author journey, and completion
 
@@ -260,9 +303,13 @@ does not create it.
 
 1. Bootstrap the local User, create a new Project or perform the allowed
    controlled initialization, and confirm that no AI capability is needed.
-2. Create a volume and three chapters, rename and reorder them, close and
-   reopen the Project, and navigate the manuscript tree without losing work.
-3. Write Chinese and English prose using complete IME composition, keyboard
+2. Use the approved production workspace to create a volume and three
+   chapters, rename and reorder them, and write distinct prose in at least two
+   chapters. Make another Chapter current through the admitted transition,
+   preserve unsettled input while switching, and close and reopen at the
+   authoritative current Chapter without losing work.
+3. Write Chinese and English prose in the production Tiptap editor using
+   complete IME composition, keyboard
    navigation, clipboard operations, block operations, and author-visible undo.
 4. Observe immediate pending projection and the durable saving, saved, and
    needs-attention states while the service is delayed and acknowledgements or
@@ -283,8 +330,8 @@ does not create it.
    takeover, and preserve the prior tab's unsettled text through the existing
    recovery path.
 8. Search the current chapter and full manuscript, replace one visible match
-   directly, and verify that any selected multi-match or cross-location
-   operation remains inspectable and Proposal-gated.
+   directly, and verify that a selected multi-match or cross-location change
+   returns the approved inspectable refusal without direct authority.
 9. Navigate among chapters, inspect word, character, chapter, and manuscript
    statistics, and continue writing after repeated chapter switches.
 10. Exercise the replay-floor boundary through the existing typed Snapshot/resync
@@ -315,9 +362,10 @@ complete AI-independent editor promise.
 | S2-EVD-003 | Browser input evidence for IME, keyboard, clipboard, undo, block operations, local continuity, and responsive long-session editing. |
 | S2-EVD-004 | Durable save/settlement evidence for pending, saved, needs-attention, Admission, Core, Receipt, Event, and idempotent convergence states. |
 | S2-EVD-005 | Reload, crash, restart, writer-takeover, replay-floor, Snapshot/resync, and recovery-draft evidence, plus an isolated Recovery Copy/PITR restore; runtime-role and forced-RLS validation; disposable-projection rebuild; applicable lifecycle ranges and gaps; successful Recovery Visibility Proof before ordinary read or execution; and continued writing after the verified restore. #56 owns the physical recovery mechanism and #64 owns lifecycle visibility. |
-| S2-EVD-006 | Search/replace, statistics, navigation, and explicit Proposal-gated multi-location operation evidence. |
+| S2-EVD-006 | Bounded search, direct visible replacement, typed broader-change refusal with zero direct authority effect, statistics, and writable navigation evidence. |
 | S2-EVD-007 | Human-readable export and Project Export Archive evidence, including deterministic order, unavailable-content representation, scope, provenance, and lifecycle treatment. |
 | S2-EVD-008 | Long-session and storage-growth evidence using only measured values adopted by their named owner; no measurement is silently promoted to a new retention default or SLA. |
+| S2-EVD-009 | Production editor adoption and exact dependency evidence; real-browser comparison with the approved workspace; stable Block and coordinate evidence across editing, settlement, and reload; and safe handling of prior prose and unsettled Journal data. Prototype or textarea-only evidence cannot satisfy this obligation. |
 
 Any failed, unrun, stale, unavailable, non-replayable, or unverified S2
 obligation blocks the complete AI-independent release. A working editor with
@@ -328,6 +376,10 @@ an omitted recovery, IME, export, or long-session obligation is incomplete.
 Stage 3 adds adjacent assistance after the editor is independently complete.
 The fake destination is a deterministic implementation of the real model-path
 contracts, not a shortcut around them.
+
+Its exclusions below bound this stage. The continuation stages retain the
+excluded production capabilities and do not postpone the Host, Context,
+durable AgentRun, or recovery foundations already required here.
 
 ### 6.1 Required capabilities and owners
 
@@ -340,6 +392,7 @@ contracts, not a shortcut around them.
 | S3-REQ-005 | Keep chat adjacent to and non-authoritative over the editor; a fake result, transcript message, MCP App, or Agent action cannot write authoritative prose or an outline. | Artifact, Core/Proposal, MCP App, and product-map owners |
 | S3-REQ-006 | Record a bounded, inspectable fake-model result and uncertainty/recovery evidence without claiming model understanding, literary quality, Provider behavior, or external retention. | Model Gateway, Context/Disclosure, deterministic verification, and retention owners |
 | S3-REQ-007 | Preserve the Stage 2 AI-independent journey as a release requirement even when the fake path is unavailable. | AI-independent editor owners and repository governance |
+| S3-REQ-008 | Deliver the complete accepted Proposal interaction contract: inline and Block scope, stable Operations, non-overlapping Proposals, author input that pauses generation, safe Undo Accept that reopens the Proposal, and redo through a fresh Acceptance. Derive optional comparison from exact revisions and normalize adjacent fragmented matches into coherent replacement spans in comparison or diagnostics. This does not replace the editable candidate with a default diff interface. | Core/Proposal and Web Editor Session owners |
 
 ### 6.2 Explicitly absent or prohibited
 
@@ -371,7 +424,10 @@ must bind to that main and the current owner contracts.
    revision; repeat with explicit Rejection and verify no authority change.
 5. Exercise a refused, conflicted, or interrupted Proposal through its
    existing recovery path and verify that late or stale work cannot publish.
-6. Turn the fake destination off and repeat the Stage 2 manual journey; the
+6. Exercise inline and Block Proposals, multiple non-overlapping candidates,
+   author editing during generation, stable Operation decisions, Undo Accept,
+   and redo. Verify the exact accepted state-machine outcomes.
+7. Turn the fake destination off and repeat the Stage 2 manual journey; the
    editor remains usable and no fake result is treated as a required source of
    truth.
 
@@ -391,6 +447,7 @@ passes with the fake destination unavailable.
 | S3-EVD-005 | Interruption, late-result, stale-fence, and recovery evidence showing no blind retry, duplicate authority, or hidden disclosure. |
 | S3-EVD-006 | Fake-destination limitation evidence that separates StoryOS-owned facts from Provider-internal, model-quality, and literary-quality claims. |
 | S3-EVD-007 | AI-independent regression evidence proving that the complete Stage 2 editor remains usable with the fake path unavailable. |
+| S3-EVD-008 | Complete Proposal interaction evidence for scope, stable Operations, non-overlap, input pause, exact-version comparison with normalized replacement spans, safe compensation, reopened Proposal, and fresh-Acceptance redo. Adjacent fragmented matches must form coherent spans without changing operation identity or authority. |
 
 Any failed, unrun, stale, unavailable, non-replayable, or unverified S3
 obligation blocks Stage 3 release. A chat transcript or fake response without
@@ -401,6 +458,10 @@ the real Proposal path is not a passing substitute.
 Stage 4 adds exactly one separately admitted real external-model operation. It
 does not make the Provider a StoryOS authority and does not weaken the
 AI-independent editor.
+
+This is the final stage of the initial model path, not the final StoryOS
+product stage. Its execution exclusions apply only until the corresponding
+continuation stage passes its own admission and release gates.
 
 ### 7.1 Required capabilities and owners
 
@@ -539,19 +600,20 @@ ownership from cycling:
 
 | ID | Gate | Passing condition | If not passed |
 | --- | --- | --- | --- |
-| HND-001 | Planning closure | The tracked contract owners and current design map agree on one exact main, with no unresolved contradiction in the four-stage baseline. | The release baseline remains open; no implementation handoff. |
-| HND-002 | Implementation handoff | The terminal handoff owner verifies the complete current contract set, consumes this document's Stage 1 requirements, and creates exactly one bounded Stage 1 implementation issue. | No product implementation issue or product code begins. |
+| HND-001 | Planning closure | The tracked owners and current Map agree on one exact main; this baseline, its continuation contract, and the retained-source coverage have no unresolved contradiction or unowned obligation. | Planning closure and implementation handoff remain blocked. An upstream owner can resolve its own correction before the downstream proof and specification corrections, without claiming this gate. |
+| HND-002 | Implementation handoff | The initial Stage 1 handoff remains historical. Each later stage consumes the current release and proof contracts through its parent specification, then presents the tracer-bullet child breakdown and real dependencies for user approval before publication. | No unapproved child graph or product implementation begins. |
 | HND-003 | Stage implementation evidence | The applicable stage issue runs the evidence obligations against the exact implementation baseline and records complete, attributable evidence. | The stage is incomplete; the issue cannot claim release. |
 | HND-004 | Stage release | The stage author journey passes, every mandatory obligation passes, and the resulting main is the next stage's exact input. | The current stage remains the active implementation frontier; no next stage starts. |
-| HND-005 | Controlled-cloud deployment gate | After the four implementation stages, the same contracts pass deployment identity, security, operational recovery, cache refresh, same-release activation, and upgrade checks for the controlled domain. | Controlled-cloud deployment is blocked; local AI-independent editor claims do not become invalid solely because cloud deployment is later. |
-| HND-006 | Serial issue direction | Release requirements flow from this issue to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and the resulting proof contract flows to [Create and Lock the First Editor-First Implementation Issue](https://github.com/FrankQDWang/StoryOS/issues/77). | This issue must not select executable proof mechanics, and no downstream issue may infer missing product scope. |
+| HND-005 | Controlled-cloud deployment gate | After the first four stages, the same contracts pass deployment identity, security, operational recovery, cache refresh, same-release activation, and upgrade checks for the exact released local stage selected for the controlled domain. Later capabilities are not implicitly included. | Controlled-cloud deployment is blocked; local AI-independent editor claims do not become invalid solely because cloud deployment is later. |
+| HND-006 | Serial issue direction | Release requirements flow from this owner to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), then to the relevant stage specification and its approved child graph. The original first-implementation handoff stays closed as historical evidence. | This owner does not select proof mechanics; downstream owners cannot infer scope or bypass the approved graph. |
 
 Planning closure is not stage implementation evidence. A current contract can
 be ready for the implementation handoff while every future stage test remains
 unrun. Conversely, passing a test or a fake destination cannot close a
-planning contradiction or redefine an owner. The current issue stays focused
-on the release contract; it does not update the map, the proof owner, or the
-terminal implementation issue.
+planning contradiction or redefine an owner. The release owner updates this
+contract and its continuation/source coverage. The Map indexes the current
+answer and execution hold; the separate proof owner consumes the exact
+release revision before implementation can resume.
 
 ## 10. Explicit non-scope of this contract
 
