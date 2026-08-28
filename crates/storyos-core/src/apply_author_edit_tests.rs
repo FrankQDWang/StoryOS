@@ -98,7 +98,7 @@ fn invalid_later_unit_refuses_the_complete_batch() {
 }
 
 #[test]
-fn stale_head_and_surrogate_split_fail_without_a_partial_result() {
+fn stale_head_and_invalid_selections_fail_without_a_partial_result() {
     let mut stale = command();
     stale.expected_authoritative_revision_id = "revision-0".to_owned();
     assert_eq!(
@@ -108,17 +108,22 @@ fn stale_head_and_surrogate_split_fail_without_a_partial_result() {
         }
     );
 
-    let mut split = command();
-    split.author_edit_units[0].selection_snapshot.to = 2;
-    let AuthorEditPrimitive::ReplaceSelection { to, .. } =
-        &mut split.author_edit_units[0].normalized_primitives[0];
-    *to = 2;
-    assert_eq!(
-        apply_author_edit(&split),
-        ApplyAuthorEditResult::Refused {
-            reason: AuthorEditRefusal::InvalidSelection
-        }
-    );
+    for (start, end) in [(1, 2), (2, 2), (5, 5)] {
+        let mut invalid = command();
+        let unit = &mut invalid.author_edit_units[0];
+        unit.selection_snapshot.from = start;
+        unit.selection_snapshot.to = end;
+        let AuthorEditPrimitive::ReplaceSelection { from, to, .. } =
+            &mut unit.normalized_primitives[0];
+        *from = start;
+        *to = end;
+        assert_eq!(
+            apply_author_edit(&invalid),
+            ApplyAuthorEditResult::Refused {
+                reason: AuthorEditRefusal::InvalidSelection
+            }
+        );
+    }
 }
 
 #[test]
@@ -135,15 +140,22 @@ fn current_proposal_fact_conflicts_with_a_stale_authoritative_observation() {
 
 #[test]
 fn unchanged_content_is_a_no_effect_core_result() {
-    let mut unchanged = command();
-    let AuthorEditPrimitive::ReplaceSelection { text, .. } =
-        &mut unchanged.author_edit_units[0].normalized_primitives[0];
-    *text = "😀".to_owned();
+    for (start, end, replacement) in [(1, 3, "😀"), (3, 3, "")] {
+        let mut unchanged = command();
+        let unit = &mut unchanged.author_edit_units[0];
+        unit.selection_snapshot.from = start;
+        unit.selection_snapshot.to = end;
+        let AuthorEditPrimitive::ReplaceSelection { from, to, text } =
+            &mut unit.normalized_primitives[0];
+        *from = start;
+        *to = end;
+        *text = replacement.to_owned();
 
-    assert_eq!(
-        apply_author_edit(&unchanged),
-        ApplyAuthorEditResult::NoEffect {
-            reason: AuthorEditNoEffect::ContentUnchanged
-        }
-    );
+        assert_eq!(
+            apply_author_edit(&unchanged),
+            ApplyAuthorEditResult::NoEffect {
+                reason: AuthorEditNoEffect::ContentUnchanged
+            }
+        );
+    }
 }

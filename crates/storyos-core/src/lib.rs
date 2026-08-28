@@ -166,7 +166,11 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
                 reason: AuthorEditRefusal::InvalidSelection,
             };
         };
-        let Some(to_byte) = utf16_offset_to_byte(&body, *to) else {
+        let to_byte = if from == to {
+            from_byte
+        } else if let Some(to_byte) = utf16_offset_to_byte(&body, *to) {
+            to_byte
+        } else {
             return ApplyAuthorEditResult::Refused {
                 reason: AuthorEditRefusal::InvalidSelection,
             };
