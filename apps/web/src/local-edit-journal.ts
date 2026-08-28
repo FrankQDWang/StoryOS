@@ -302,13 +302,13 @@ async function validateCoverage(
   records: JournalIntentRecord[],
   groups: JournalSubmissionGroup[],
 ) {
-  const recordsBySequence = new Map(records.map((record) => [record.local_intent_sequence, record]));
   const covered = new Set<number>();
-  let nextCoveredSequence = 1;
+  let coveredRecordCount = 0;
   for (const group of groups) {
     const first = group.covered_sequence_range?.first;
     const last = group.covered_sequence_range?.last;
     const coverage = group.ordered_coverage ?? [];
+    const coveredRecords = records.slice(coveredRecordCount, coveredRecordCount + coverage.length);
     if (group.journal_partition_id !== workspace.partition.journal_partition_id
       || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
@@ -316,15 +316,15 @@ async function validateCoverage(
       || !closedReconciliation(group)
       || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last)
-      || first !== nextCoveredSequence
+      || first !== coveredRecords[0]?.local_intent_sequence
+      || last !== coveredRecords.at(-1)?.local_intent_sequence
       || first > last
-      || coverage.length !== last - first + 1
+      || coverage.length === 0 || coverage.length !== coveredRecords.length
       || coverage.length > AUTHOR_EDIT_MAX_UNITS) {
       throw new Error("Journal Submission Group is corrupt");
     }
-    const firstRecord = recordsBySequence.get(first);
+    const firstRecord = coveredRecords[0];
     const request = group.frozen_request_body;
-    const coveredRecords = coverage.map((_, index) => recordsBySequence.get(first + index));
     const collected = group.payload_collection?.kind === "collected";
     const [requestDigest, coverageDigest] = await Promise.all([
       collected
@@ -374,8 +374,8 @@ async function validateCoverage(
       throw new Error("Journal Submission Group is corrupt");
     }
     for (const [index, item] of coverage.entries()) {
-      const sequence = first + index;
-      const record = recordsBySequence.get(sequence);
+      const record = coveredRecords[index]!;
+      const sequence = record.local_intent_sequence;
       if (covered.has(sequence)
         || item.local_intent_sequence !== sequence
         || item.intent_record_ref !== record?.completed_intent_record_id
@@ -387,7 +387,7 @@ async function validateCoverage(
       }
       covered.add(sequence);
     }
-    nextCoveredSequence = last + 1;
+    coveredRecordCount += coverage.length;
   }
   return covered;
 }
@@ -404,8 +404,9 @@ export async function validateJournalSnapshot(
       || record.writer_generation !== workspace.partition.writer_generation
       || record.limit_profile_revision !== workspace.partition.limit_profile_revision
       || JSON.stringify(record.project_scope) !== JSON.stringify(workspace.partition.project_scope)
-      || record.local_intent_sequence !== priorSequence + 1
-      || record.projection_dependency?.prior_sequence !== record.local_intent_sequence - 1
+      || !Number.isSafeInteger(record.local_intent_sequence)
+      || record.local_intent_sequence <= priorSequence
+      || record.projection_dependency?.prior_sequence !== priorSequence
       || record.projection_dependency?.snapshot_id !== record.base_snapshot_id
       || record.retry_source?.kind !== "fresh_editor_intent"
       || record.editor_contract_revision !== EDITOR_CONTRACT_REVISION
@@ -567,7 +568,9 @@ export async function persistReplaceSelection(
     - right.covered_sequence_range.first);
   const current = currentValue as { value?: number } | undefined;
   const currentSequence = current?.value ?? 0;
-  if (currentSequence !== (snapshot.watermark?.value ?? 0)
+  // The allocator is Project-wide. Another partition can advance it without
+  // changing this partition's complete, linked projection history.
+  if (!Number.isSafeInteger(currentSequence) || currentSequence < (snapshot.watermark?.value ?? 0)
     || JSON.stringify(durableWatermark) !== JSON.stringify(snapshot.watermark)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(snapshot.activeBase)
     || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
@@ -658,7 +661,7 @@ export async function persistReplaceSelection(
     undo_group_binding: { kind: "direct_author_input", undo_group_id: undoGroupId },
     payload_chain_ref: payloadChain.payload_chain_id,
     payload_digest: payloadDigest,
-    projection_dependency: { snapshot_id: base.snapshot_id, prior_sequence: sequence - 1 },
+    projection_dependency: { snapshot_id: base.snapshot_id, prior_sequence: snapshot.watermark?.value ?? 0 },
     created_at: createdAt,
   };
   metadata.put({ key: "local_intent_sequence", value: sequence });
