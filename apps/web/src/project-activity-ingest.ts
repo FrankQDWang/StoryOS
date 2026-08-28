@@ -89,7 +89,7 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     || payload?.chapter_id !== workspace.session.base_snapshot.chapter_id
     || !UUID.test(payload?.authoritative_revision_id ?? "")
     || !UUID.test(payload?.authoritative_commit_id ?? "")
-    || payload?.author_action_sequence !== event.stream_sequence
+    || !boundedU64(payload?.author_action_sequence) || payload.author_action_sequence === "0"
     || event.payload_digest?.algorithm !== "sha256"
     || event.payload_digest?.profile !== "storyos.event-payload.jcs.v1"
     || !/^[0-9a-f]{64}$/.test(event.payload_digest?.value_hex_lowercase ?? "")

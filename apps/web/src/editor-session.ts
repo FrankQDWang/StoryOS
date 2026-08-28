@@ -321,7 +321,7 @@ export async function openEditorWorkspace({
         throw new Error("Takeover Session binding mismatch");
       }
       // The base and the canonical query boundary have separate roles. Read the
-      // locator independently, then recheck the Session before any local write.
+      // locator independently, then recheck the Session before local writes.
       const tree = await getManuscriptTree({ baseUrl, projectId: scope.project_id, fetchImpl });
       const snapshotId = tree?.snapshot?.snapshot_id;
       if (tree?.schema_id !== "storyos.query.manuscript-tree.response.v1"
@@ -364,14 +364,24 @@ export async function openEditorWorkspace({
       throw new Error("Local Edit Journal active base is corrupt");
     }
     const fences: JournalPartition[] = [];
-    const sessionPrefix = `${scope.owner_user_id}:${scope.project_id}:${partition.editor_session_id}:`;
     for (const older of storedPartitions as JournalPartition[]) {
-      if (older.editor_session_id !== partition.editor_session_id
-        && !older.journal_partition_id.startsWith(sessionPrefix)) continue;
+      const sameSession = older.editor_session_id === partition.editor_session_id;
+      const binding = sameSession ? session.editor_session : {
+        ...older, opened_at: older.created_at, disposition: "open" as const,
+      };
       const expected = partitionFrom({ ...session,
-        writer: { kind: "current_writer", writer_generation: older.writer_generation } }, scope, profile);
-      if (!positiveU64(older.writer_generation)
+        editor_session: binding,
+        writer: { kind: "current_writer", writer_generation: older.writer_generation } },
+      scope, sameSession ? profile : { ...profile, limit_profile_revision: older.limit_profile_revision });
+      if (!UUID.test(older.editor_session_id) || !positiveU64(older.writer_generation)
+        || !boundedU64(older.client_session_generation)
+        || !Number.isFinite(Date.parse(older.created_at))
+        || [older.client_session_binding_ref, older.client_contract_revision,
+          older.security_policy_revision, older.limit_profile_revision]
+          .some((value) => typeof value !== "string" || value.length === 0)
         || BigInt(older.writer_generation) > BigInt(partition.writer_generation)
+        || (!sameSession && older.writer_generation === partition.writer_generation
+          && older.disposition === "current_writer_open")
         || (older.disposition !== "current_writer_open" && older.disposition !== "read_only_observer")
         || JSON.stringify(older) !== JSON.stringify({ ...expected, disposition: older.disposition })) {
         transaction.abort();
@@ -393,7 +403,8 @@ export async function openEditorWorkspace({
       }
     }
     // Snapshot ingest, the new partition, and old-generation fences commit as
-    // one unit. Retained bases, payloads, groups, and outcomes are not rewritten.
+    // one unit across this Project. Retained bases, payloads, groups, and outcomes
+    // are not rewritten. Each old Session keeps its own immutable binding.
     if (canonicalSnapshot) await stageProjectActivitySnapshot(workspace, transaction, canonicalSnapshot);
     for (const fenced of fences) partitions.put(fenced);
     if (!existingPartition) partitions.add(partition);

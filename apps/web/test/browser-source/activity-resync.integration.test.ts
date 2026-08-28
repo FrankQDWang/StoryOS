@@ -143,6 +143,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
       revisionId: "018f0000-0000-7001-8000-000000000401",
       commitId: "018f0000-0000-7001-8000-000000000402",
       sequence: "6",
+      authorActionSequence: "2",
       occurredAt: "2026-08-20T04:00:01.000Z",
     });
     await ingestProjectActivityFrames(workspace, [{
@@ -199,8 +200,7 @@ it.each([
 ])("resumes a Takeover winner without rebinding old journal evidence: %s", async (fault) => {
   const scenario = createBrowserScenario();
   const otherSession = "018f0000-0000-7001-8000-000000000414";
-  const interleaved = fault === "valid_other_session";
-  const expectedBody = interleaved ? "Base!?" : "Base!";
+  const differentSession = fault === "valid_other_session";
   const databases = new Set<IDBDatabase>();
   const requests: string[] = [];
   const failures: unknown[] = [];
@@ -226,7 +226,7 @@ it.each([
   };
   if (fault === "scope") session.project_scope.project_id = OWNER;
   if (fault === "session") session.editor_session.editor_session_id = OWNER;
-  if (interleaved) session.editor_session.editor_session_id = otherSession;
+  if (differentSession) session.editor_session.editor_session_id = otherSession;
   if (fault === "generation") session.writer = { kind: "current_writer", writer_generation: "03" };
   if (fault === "binding") session.editor_session.client_session_binding_ref = "binding:changed";
   if (fault === "reused_base") session.base_snapshot.snapshot_id = scenario.session.base_snapshot.snapshot_id;
@@ -278,7 +278,7 @@ it.each([
       if (!commandDigest) throw new Error("The command challenge is missing");
       const response = createAppliedAuthorEditResponse({ request: requireRequestBody(init),
         commandDigest, idempotencyKey: requireString(new Headers(init?.headers)
-          .get("idempotency-key"), "idempotency key"), body: expectedBody, projectActivityPosition: "6" });
+          .get("idempotency-key"), "idempotency key"), body: "Base!", projectActivityPosition: "6" });
       if (response.effect.kind !== "authoritative_applied") throw new Error("The edit did not apply");
       response.receipt.author_action_sequence = "1";
       response.effect.author_action_sequence = "1";
@@ -310,8 +310,8 @@ it.each([
     const edit = { from: 4, to: 4, text: " retained", resultingBody: "Base retained",
       undoGroupId: "018f0000-0000-7001-8000-000000000415", createdAt: "2026-08-20T05:00:00.000Z" };
     await persistReplaceSelection(old, edit);
-    if (!interleaved) await freezeOneIntentSubmission(old);
-    let retained = await readJournalSnapshot(old);
+    await freezeOneIntentSubmission(old);
+    const retained = await readJournalSnapshot(old);
     const readAll = async (): Promise<Record<string, unknown[]>> => {
       const transaction = old.database.transaction([...JOURNAL_OBJECT_STORES], "readonly");
       return Object.fromEntries(await Promise.all(JOURNAL_OBJECT_STORES.map(async (name) =>
@@ -320,7 +320,7 @@ it.each([
     const before = await readAll();
     resuming = true;
     requests.length = 0;
-    if (interleaved) sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, otherSession);
+    if (differentSession) sessionStorage.setItem(`active_session:${OWNER}:${PROJECT}`, otherSession);
     const options = { baseUrl: location.origin, project: scenario.project,
       chapter, profile: scenario.profile, fetchImpl };
     const winner = await openEditorWorkspace(options);
@@ -338,14 +338,14 @@ it.each([
     expect(await readProjectActivityIngest(winner)).toEqual({ replay_generation: "2",
       processed_through_stream_sequence: "5", events: [], held: [] });
     const installed = await readAll();
-    const fenced = interleaved ? old.partition : { ...old.partition, disposition: "read_only_observer" };
+    const fenced = { ...old.partition, disposition: "read_only_observer" };
     expect(installed.partitions).toEqual([fenced, winner.partition]);
     expect(installed.metadata).toEqual(expect.arrayContaining(before.metadata!));
     for (const name of JOURNAL_OBJECT_STORES.filter((name) => name !== "metadata" && name !== "partitions")) {
       expect(installed[name]).toEqual(before[name]);
     }
     expect(await readJournalSnapshot(old)).toEqual(retained);
-    if (!interleaved) await expect(persistReplaceSelection(old, edit)).rejects.toThrow();
+    await expect(persistReplaceSelection(old, edit)).rejects.toThrow();
     expect(await readAll()).toEqual(installed);
     const reload = await openEditorWorkspace(options);
     requireEditorReady(reload);
@@ -362,29 +362,17 @@ it.each([
     editor.setSelectionRange(4, 4);
     await applyTrustedInput({ operation: "insert_text", text: "!" });
     await controller.whenIdle();
-    if (interleaved) {
-      // The old tab has not observed a writer refusal. Its local input has no
-      // authority, but it still consumes the shared allocator before that fence.
-      await persistReplaceSelection(old, { ...edit, from: edit.resultingBody.length,
-        to: edit.resultingBody.length, text: "?", resultingBody: `${edit.resultingBody}?`,
-        createdAt: "2026-08-20T05:00:00.001Z" });
-      retained = await readJournalSnapshot(old);
-      await applyTrustedInput({ operation: "insert_text", text: "?" });
-      await controller.whenIdle();
-    }
     await controller.flush();
     expect(failures).toEqual([]);
-    expect(reload.pending).toEqual({ body: expectedBody, save_state: "saved", unsettled_intent_count: 0,
+    expect(reload.pending).toEqual({ body: "Base!", save_state: "saved", unsettled_intent_count: 0,
       authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id });
     expect(commands).toBe(1);
     const journal = await readJournalSnapshot(reload);
-    const sequences = interleaved ? [2, 4] : [2];
     expect(journal.records.map((record) => ({ sequence: record.local_intent_sequence,
-      dependency: record.projection_dependency }))).toEqual(sequences.map((sequence, index) => ({ sequence,
-      dependency: { snapshot_id: winner.session.base_snapshot.snapshot_id,
-        prior_sequence: sequences[index - 1] ?? 0 } })));
+      dependency: record.projection_dependency }))).toEqual([{ sequence: 2,
+      dependency: { snapshot_id: winner.session.base_snapshot.snapshot_id, prior_sequence: 0 } }]);
     expect(journal.groups.map((group) => group.covered_sequence_range))
-      .toEqual([{ first: 2, last: sequences.at(-1) }]);
+      .toEqual([{ first: 2, last: 2 }]);
     const savedOptions = { ...options, chapter: { ...chapter, project_activity_position: "6",
       chapter: { ...chapter.chapter, current_revision: session.base_snapshot.materialized_revision } } };
     const saved = await openEditorWorkspace(savedOptions);
