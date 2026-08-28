@@ -244,7 +244,7 @@ proof owner maps these obligations to exact executable evidence.
 | [Keep Proposal Review and Editing Inside the Editor](https://github.com/FrankQDWang/StoryOS/issues/31) | Core/Proposal and workspace; S3 onward. | `S3-REQ-004` |
 | [Use an Editable In-Context Proposal](https://github.com/FrankQDWang/StoryOS/issues/32) | Core/Proposal; S3 onward. | `S3-REQ-004` |
 | [Derive Optional Comparison from Exact Proposal Revisions](https://github.com/FrankQDWang/StoryOS/issues/33) | Core-derived comparison semantics; S3. No default diff UI is added. | `S3-REQ-008` |
-| [Normalize Derived Replacement Spans](https://github.com/FrankQDWang/StoryOS/issues/34) | Core/Proposal operation identity and exact versions; S3. | `S3-REQ-008` |
+| [Normalize Derived Replacement Spans](https://github.com/FrankQDWang/StoryOS/issues/34) | Core-derived comparison/diagnostic span normalization, with stable Operation identity and exact versions; S3. | `S3-REQ-008` |
 | [Accept or Reject by Stable Top-Level Blocks](https://github.com/FrankQDWang/StoryOS/issues/35) | Core stable Operations; S2 Block foundation, S3 Acceptance/Rejection. | `S2-REQ-004`; `S2-REQ-009`; `S3-REQ-008` |
 | [Allow Multiple Non-Overlapping Proposals per Chapter](https://github.com/FrankQDWang/StoryOS/issues/36) | Core reservations and non-overlap; S3. | `S3-REQ-008` |
 | [Make Undo Accept Reopen the Proposal](https://github.com/FrankQDWang/StoryOS/issues/37) | Exact safe compensation and Proposal restoration; S3. | `S3-REQ-008` |

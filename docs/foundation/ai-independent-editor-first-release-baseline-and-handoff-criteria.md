@@ -392,7 +392,7 @@ durable AgentRun, or recovery foundations already required here.
 | S3-REQ-005 | Keep chat adjacent to and non-authoritative over the editor; a fake result, transcript message, MCP App, or Agent action cannot write authoritative prose or an outline. | Artifact, Core/Proposal, MCP App, and product-map owners |
 | S3-REQ-006 | Record a bounded, inspectable fake-model result and uncertainty/recovery evidence without claiming model understanding, literary quality, Provider behavior, or external retention. | Model Gateway, Context/Disclosure, deterministic verification, and retention owners |
 | S3-REQ-007 | Preserve the Stage 2 AI-independent journey as a release requirement even when the fake path is unavailable. | AI-independent editor owners and repository governance |
-| S3-REQ-008 | Deliver the complete accepted Proposal interaction contract: inline and Block scope, stable Operations, non-overlapping Proposals, author input that pauses generation, safe Undo Accept that reopens the Proposal, and redo through a fresh Acceptance. Optional comparison is derived from exact revisions; it does not replace the editable candidate with a default diff interface. | Core/Proposal and Web Editor Session owners |
+| S3-REQ-008 | Deliver the complete accepted Proposal interaction contract: inline and Block scope, stable Operations, non-overlapping Proposals, author input that pauses generation, safe Undo Accept that reopens the Proposal, and redo through a fresh Acceptance. Derive optional comparison from exact revisions and normalize adjacent fragmented matches into coherent replacement spans in comparison or diagnostics. This does not replace the editable candidate with a default diff interface. | Core/Proposal and Web Editor Session owners |
 
 ### 6.2 Explicitly absent or prohibited
 
@@ -447,7 +447,7 @@ passes with the fake destination unavailable.
 | S3-EVD-005 | Interruption, late-result, stale-fence, and recovery evidence showing no blind retry, duplicate authority, or hidden disclosure. |
 | S3-EVD-006 | Fake-destination limitation evidence that separates StoryOS-owned facts from Provider-internal, model-quality, and literary-quality claims. |
 | S3-EVD-007 | AI-independent regression evidence proving that the complete Stage 2 editor remains usable with the fake path unavailable. |
-| S3-EVD-008 | Complete Proposal interaction evidence for scope, stable Operations, non-overlap, input pause, exact-version comparison, safe compensation, reopened Proposal, and fresh-Acceptance redo. |
+| S3-EVD-008 | Complete Proposal interaction evidence for scope, stable Operations, non-overlap, input pause, exact-version comparison with normalized replacement spans, safe compensation, reopened Proposal, and fresh-Acceptance redo. Adjacent fragmented matches must form coherent spans without changing operation identity or authority. |
 
 Any failed, unrun, stale, unavailable, non-replayable, or unverified S3
 obligation blocks Stage 3 release. A chat transcript or fake response without
