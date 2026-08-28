@@ -6,7 +6,7 @@ import { test } from "vitest";
 import {
   applyAuthorEdit, createEditorSession, createProjectCommandChallenge, digestApplyAuthorEdit,
   digestCreateEditorSession, digestTakeOverProjectWriter, getApplyAuthorEditOutcome,
-  getEditorSession, takeOverProjectWriter,
+  getChapter, getEditorSession, getManuscriptTree, getSnapshot, takeOverProjectWriter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest,
@@ -53,6 +53,12 @@ async function manuscriptAuthority() {
     'takeover_payloads', (SELECT count(*) FROM storyos.project_activity_event_payloads
       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid)
   )::text`));
+}
+
+async function canonicalSnapshots(): Promise<Record<string, unknown>> {
+  return JSON.parse(await queryPostgres(`SELECT jsonb_object_agg(
+    snapshot_id::text, to_jsonb(snapshot))::text FROM storyos.project_snapshots AS snapshot
+    WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid`));
 }
 
 async function openEditorSession(
@@ -174,6 +180,11 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
         throw new Error("simulated acknowledgement delivery loss");
       },
     }), /simulated acknowledgement delivery loss/);
+    const priorWriter = await getEditorSession({
+      baseUrl, projectId: PROJECT_A, editorSessionId: writer.editor_session.editor_session_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    const oldSnapshots = await canonicalSnapshots();
 
     const takeoverRequest = {
       command_schema: "storyos.command.take-over-project-writer.request.v1",
@@ -197,12 +208,65 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
         idempotency_key: takeoverKey,
       },
     }));
-    await takeOverProjectWriter({
+    const takeoverOptions = {
       baseUrl, projectId: PROJECT_A,
       editorSessionId: observer.editor_session.editor_session_id,
       request: takeoverRequest, idempotencyKey: takeoverKey,
       antiForgery: takeoverChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
+    };
+    const takeover = await takeOverProjectWriter(takeoverOptions);
+    if (takeover.result.kind !== "takeover_applied") throw new Error("Takeover did not apply");
+    const winner = await getEditorSession({
+      baseUrl, projectId: PROJECT_A, editorSessionId: observer.editor_session.editor_session_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
     });
+    const chapter = await getChapter({
+      baseUrl, projectId: PROJECT_A, chapterId: winner.base_snapshot.chapter_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    const canonical = await getSnapshot({
+      baseUrl, projectId: PROJECT_A, snapshotId: takeover.result.resulting_snapshot_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    const tree = await getManuscriptTree({
+      baseUrl, projectId: PROJECT_A, fetchImpl: browserFetch(baseUrl, "session-a"),
+    });
+    assert.match(winner.base_snapshot.snapshot_id, UUID);
+    assert.match(winner.base_snapshot.created_at, ISO_INSTANT);
+    assert.notEqual(winner.base_snapshot.snapshot_id, observer.base_snapshot.snapshot_id);
+    assert.notEqual(winner.base_snapshot.snapshot_id, canonical.snapshot.snapshot_id);
+    assert.deepEqual(winner, {
+      ...observer,
+      schema_id: "storyos.query.editor-session.response.v1",
+      correlation_id: winner.correlation_id,
+      writer: { kind: "current_writer", writer_generation: takeover.result.resulting_writer_generation },
+      base_snapshot: {
+        ...priorWriter.base_snapshot,
+        snapshot_id: winner.base_snapshot.snapshot_id,
+        project_activity_position: takeover.result.resulting_snapshot_activity_position,
+        created_at: winner.base_snapshot.created_at,
+      },
+    });
+    assert.deepEqual(chapter.chapter.current_revision, {
+      revision_id: winner.base_snapshot.authoritative_head_revision_id, body: expectedBody,
+    });
+    assert.equal(chapter.project_activity_position, winner.base_snapshot.project_activity_position);
+    assert.equal(canonical.snapshot.project_activity_position, chapter.project_activity_position);
+    assert.deepEqual(tree.snapshot, canonical.snapshot);
+    const newSnapshots = await canonicalSnapshots();
+    assert.deepEqual(Object.fromEntries(Object.keys(oldSnapshots)
+      .map((id) => [id, newSnapshots[id]])), oldSnapshots);
+    assert.equal(Object.keys(newSnapshots).length, Object.keys(oldSnapshots).length + 1);
+    assert.deepEqual((await getEditorSession({
+      baseUrl, projectId: PROJECT_A, editorSessionId: writer.editor_session.editor_session_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    })).base_snapshot, priorWriter.base_snapshot);
+    assert.deepEqual(await takeOverProjectWriter(takeoverOptions), takeover);
+    assert.deepEqual((await getEditorSession({
+      baseUrl, projectId: PROJECT_A, editorSessionId: observer.editor_session.editor_session_id,
+      fetchImpl: browserFetch(baseUrl, "session-a"),
+    })).base_snapshot, winner.base_snapshot);
+    assert.deepEqual(await canonicalSnapshots(), newSnapshots);
     const authorityAfterFence = await manuscriptAuthority();
 
     const committedOutcome = await getApplyAuthorEditOutcome({
