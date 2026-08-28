@@ -206,8 +206,10 @@ export function attachManualInput({
   const submitPending = async (): Promise<void> => {
     clearIdle();
     if (pendingIntentCount === 0 || composition) return;
-    const projection = await submitGroup({ workspace, baseUrl, fetchImpl, cryptoImpl,
-      onWriterFenced: () => fail(new Error("Editor Session is read only")) });
+    const projection = await submitGroup({
+      workspace, baseUrl, fetchImpl, cryptoImpl,
+      onWriterFenced: () => fail(new Error("Editor Session is read only")),
+    });
     workspace.pending = projection;
     pendingIntentCount = projection.unsettled_intent_count;
     onProjection(projection);

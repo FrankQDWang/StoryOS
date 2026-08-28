@@ -191,9 +191,10 @@ function assertMatchingDurableGroup(
   }
 }
 
-export async function commitStrongerGroup(
+async function commitGroupEvidence(
   workspace: EditorWorkspace,
-  next: JournalSubmissionGroup,
+  group: JournalSubmissionGroup,
+  nextFromDurable: (durable: JournalSubmissionGroup) => JournalSubmissionGroup,
   activeBase?: EditorBaseSnapshot,
 ): Promise<JournalSubmissionGroup> {
   const stores = [
@@ -203,8 +204,8 @@ export async function commitStrongerGroup(
   ];
   const transaction = workspace.database.transaction(stores, "readwrite");
   const groups = transaction.objectStore("submission_groups");
-  const durable = await requestResult(groups.get(next.journal_submission_group_id));
-  assertMatchingDurableGroup(durable, next, transaction);
+  const durable = await requestResult(groups.get(group.journal_submission_group_id));
+  assertMatchingDurableGroup(durable, group, transaction);
   if (workspace.partition.disposition === "read_only_observer") {
     const durablePartition = await requestResult(
       transaction.objectStore("partitions").get(workspace.partition.journal_partition_id),
@@ -216,10 +217,18 @@ export async function commitStrongerGroup(
     putTakeoverFencePartition(transaction, durablePartition, workspace.partition);
   }
   const committed = putStrongerGroup(
-    transaction, durable, next, activeBase, workspace.partition.journal_partition_id,
+    transaction, durable, nextFromDurable(durable), activeBase, workspace.partition.journal_partition_id,
   );
   await transactionResult(transaction);
   return committed;
+}
+
+export async function commitStrongerGroup(
+  workspace: EditorWorkspace,
+  next: JournalSubmissionGroup,
+  activeBase?: EditorBaseSnapshot,
+): Promise<JournalSubmissionGroup> {
+  return commitGroupEvidence(workspace, next, () => next, activeBase);
 }
 
 export async function commitOutcomeQueryWithGroup(
@@ -397,13 +406,18 @@ export async function markOutcomeQueryUnresolved(
   workspace: EditorWorkspace,
   group: JournalSubmissionGroup,
 ): Promise<JournalSubmissionGroup> {
-  return commitStrongerGroup(workspace, {
-    ...group,
-    settlement: { kind: "unsettled" },
-    reconciliation: {
-      kind: "outcome_query_unresolved",
-      strongest: { kind: "no_outcome_observed" },
-    },
+  // Read the strongest group in the fence transaction. A concurrent outcome must
+  // not turn an observed writer fence into a rejected evidence downgrade.
+  return commitGroupEvidence(workspace, group, (durable) => {
+    if (groupEvidenceRank(durable) > 0) return durable;
+    return {
+      ...durable,
+      settlement: { kind: "unsettled" },
+      reconciliation: {
+        kind: "outcome_query_unresolved",
+        strongest: { kind: "no_outcome_observed" },
+      },
+    };
   });
 }
 

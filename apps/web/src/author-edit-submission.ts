@@ -554,11 +554,13 @@ export async function submitOnePendingAuthorEdit({
         onWriterFenced();
       }
       // Persist the fence with unresolved evidence. Staleness does not settle an older command.
-      const unresolved = await markOutcomeQueryUnresolved(workspace, group);
-      await reconcileLostAcknowledgement({
-        workspace, group: unresolved, baseUrl, fetchImpl, cryptoImpl,
-        settleFromCommandResponse: settleAuthorEditResponse,
-      });
+      const current = await markOutcomeQueryUnresolved(workspace, group);
+      if (current.settlement.kind === "unsettled") {
+        await reconcileLostAcknowledgement({
+          workspace, group: current, baseUrl, fetchImpl, cryptoImpl,
+          settleFromCommandResponse: settleAuthorEditResponse,
+        });
+      }
       const pending = await rebuildPendingProjection(workspace);
       return staleWriter ? { ...pending, save_state: "needs_attention" } : pending;
     }
