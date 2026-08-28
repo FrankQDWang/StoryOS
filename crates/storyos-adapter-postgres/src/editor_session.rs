@@ -47,33 +47,42 @@ impl EditorSessionStore for PostgresProjectReader {
                     )
                     .await
                     .map_err(session_database_error)?;
-                let snapshots = transaction.client.execute(
+                let snapshot = transaction.client.query_opt(
                     "INSERT INTO storyos.editor_session_base_snapshots
                        (owner_user_id, project_id, snapshot_id, editor_session_id,
-                        chapter_object_id, authoritative_revision_id)
+                        chapter_object_id, authoritative_revision_id, project_activity_position)
                      SELECT project.owner_user_id, project.project_id, $3::text::uuid, $4::text::uuid,
-                            project.current_chapter_id, head.current_revision_id
+                            project.current_chapter_id, head.current_revision_id,
+                            coalesce(counters.project_activity_position, 0)
                      FROM storyos.projects AS project
                      JOIN storyos.authoritative_heads AS head
                        ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
                           (project.owner_user_id, project.project_id, project.current_chapter_id)
+                     LEFT JOIN storyos.scope_counters AS counters
+                       ON (counters.owner_user_id, counters.project_id) =
+                          (project.owner_user_id, project.project_id)
                      WHERE project.owner_user_id = $1::text::uuid AND project.project_id = $2::text::uuid
-                       AND project.lifecycle_state = 'active'",
+                       AND project.lifecycle_state = 'active'
+                     RETURNING project_activity_position::text",
                     &[&request.project_scope.owner_user_id.as_ref(), &request.project_scope.project_id.as_ref(),
                       &request.snapshot_id, &request.editor_session_id.as_ref()],
                 ).await.map_err(session_database_error)?;
-                if snapshots != 1 {
+                let Some(snapshot) = snapshot else {
                     transaction
                         .rollback()
                         .await
                         .map_err(session_challenge_error)?;
                     return Err(EditorSessionError::BindingConflict);
-                }
+                };
+                let project_activity_position = snapshot
+                    .get::<_, String>(0)
+                    .parse::<u64>()
+                    .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
                 crate::snapshot::persist_canonical_snapshot(
                     &transaction.client,
                     &request.project_scope,
                     &request.snapshot_id,
-                    /*project_activity_position*/ 0,
+                    project_activity_position,
                 )
                 .await
                 .map_err(session_database_error)?;
