@@ -1117,7 +1117,8 @@ state:
 - the target document is UTF-8, LF-only, has exactly one final newline, and
   passes `git diff --check`;
 - no `.reference/**` file changes or dependency enters the proof input, and
-  only the two proof documents change for this correction; and
+  changes stay within the two proof documents and the single source-range
+  copy edit in the release continuation; and
 - the complete diff has been reviewed for owner distortion, circular handoff,
   unverifiable evidence, stale baseline references, implementation selection,
   invented numeric defaults, and accidental stable-identifier repurposing.
@@ -1144,4 +1145,5 @@ Historical implementation and prototype evidence retains its original claim
 ceiling. The accepted source identity and the planning audit in the companion
 are the current proof inputs. The result passes to stage specifications and
 user-approved tickets. Product and verification-code implementation belongs
-to execution agents; this correction changes only proof documentation.
+to execution agents; this correction changes only the two proof documents
+and the single source-range reference specified in the companion.
