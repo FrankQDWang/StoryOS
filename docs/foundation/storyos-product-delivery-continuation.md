@@ -210,7 +210,7 @@ proof owner maps these obligations to exact executable evidence.
 | [Support Controlled Proactive Runs](https://github.com/FrankQDWang/StoryOS/issues/8) | AgentRun; S9. | `S9-REQ-004` |
 | [Expose a Layered Interruptible Run Timeline](https://github.com/FrankQDWang/StoryOS/issues/9) | AgentRun; S3 foundation, S5 activity, S9 complete control. | `S3-REQ-003`; `S5-REQ-005`; `S9-REQ-001` |
 | [Use Adaptive Plan-and-Act Execution](https://github.com/FrankQDWang/StoryOS/issues/10) | AgentRun; S3 foundation and S9 long work. | `S3-REQ-003`; `S9-REQ-001` |
-| [Enforce Multidimensional Run Guardrails](https://github.com/FrankQDWang/StoryOS/issues/11) | Exact AgentRun guardrails as each execution family enters; S3–S10. | `S3-REQ-003`; `S9-REQ-005` |
+| [Enforce Multidimensional Run Guardrails](https://github.com/FrankQDWang/StoryOS/issues/11) | Exact AgentRun guardrails as each execution family enters; S3–S9. | `S3-REQ-003`; `S9-REQ-005` |
 | [Unify Capabilities in a Tool Registry](https://github.com/FrankQDWang/StoryOS/issues/12) | Tool/MCP; S5. Static ToolSpec and dynamic authority remain distinct. | `S5-REQ-001` |
 | [Separate Composable Read Tools from Domain Write Commands](https://github.com/FrankQDWang/StoryOS/issues/13) | Tool/MCP and Core boundaries; S5 onward. | `S5-REQ-001`; `S5-REQ-006` |
 | [Support Hierarchical Ephemeral Subruns](https://github.com/FrankQDWang/StoryOS/issues/14) | Durable Subrun contract; S9. Ephemeral scope is not disposable execution history. | `S9-REQ-002`; `S9-REQ-003` |
