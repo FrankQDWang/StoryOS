@@ -7,6 +7,7 @@ import {
   updateClientSessionCookie,
   updateClipboardPermission,
 } from "../support/browser-command-client";
+import { parseProductionHostRequest } from "../support/browser-command-contract";
 
 afterEach(async () => {
   await updateClientSessionCookie({ action: "clear" });
@@ -14,7 +15,7 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-it("uses only the four typed StoryOS command families in Google Chrome", async () => {
+it("uses typed input, clipboard, and Client Session commands in Google Chrome", async () => {
   document.body.innerHTML = `
     <label for="story-input">Story text</label>
     <input id="story-input" type="text">
@@ -53,4 +54,12 @@ it("uses only the four typed StoryOS command families in Google Chrome", async (
   const sessionProbe: unknown = await sessionResponse.json();
   expect(sessionProbe).toEqual({ bound: true });
   expect(navigator.userAgent).toContain("Chrome/");
+});
+
+it("refuses navigation and code inputs at the production command boundary", () => {
+  for (const input of [null, {}, { scenario: "navigate" },
+    { scenario: "open_edit_reload_takeover", url: "https://example.invalid/" },
+    { scenario: "open_edit_reload_takeover", source: "document.body.remove()" }]) {
+    expect(() => parseProductionHostRequest(input)).toThrow(TypeError);
+  }
 });

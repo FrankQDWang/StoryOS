@@ -5,9 +5,11 @@ import {
   parseClientSessionCookieRequest,
   parseClipboardPermissionRequest,
   parseImeCompositionRequest,
+  parseProductionHostRequest,
   parseTrustedInputRequest,
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
+import { verifyProductionHostJourney } from "./production-host-command";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
 
@@ -22,6 +24,13 @@ async function focusedApplicationFrame(context: BrowserCommandContext) {
 }
 
 export const storyOSBrowserCommands = {
+  [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
+    async (context, value) => {
+      parseProductionHostRequest(value);
+      await verifyProductionHostJourney(context.context);
+      return { kind: "production_host_verified" } as const;
+    },
+  ),
   [storyOSBrowserCommandNames.imeComposition]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseImeCompositionRequest(value);

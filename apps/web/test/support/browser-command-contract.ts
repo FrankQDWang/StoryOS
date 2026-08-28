@@ -3,6 +3,7 @@ export const storyOSBrowserCommandNames = {
   clientSessionCookie: "storyosClientSessionCookie",
   imeComposition: "storyosImeComposition",
   trustedInput: "storyosTrustedInput",
+  productionHost: "storyosProductionHost",
 } as const;
 
 export interface ImeCompositionRequest {
@@ -27,6 +28,8 @@ export type ImeCompositionResult = Readonly<{ kind: "ime_composition_applied" }>
 export type TrustedInputResult = Readonly<{ kind: "trusted_input_applied" }>;
 export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_updated" }>;
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
+export type ProductionHostRequest = Readonly<{ scenario: "open_edit_reload_takeover" }>;
+export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
 
 function exactObject(value: unknown, keys: readonly string[], label: string): object {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -170,4 +173,16 @@ export function parseClipboardPermissionResult(value: unknown): ClipboardPermiss
 
 export function parseClientSessionCookieResult(value: unknown): ClientSessionCookieResult {
   return parseResult(value, "client_session_cookie_updated", "Client Session cookie");
+}
+
+export function parseProductionHostRequest(value: unknown): ProductionHostRequest {
+  const request = exactObject(value, ["scenario"], "production host request");
+  if (property(request, "scenario") !== "open_edit_reload_takeover") {
+    throw new TypeError("production host scenario is unsupported");
+  }
+  return { scenario: "open_edit_reload_takeover" };
+}
+
+export function parseProductionHostResult(value: unknown): ProductionHostResult {
+  return parseResult(value, "production_host_verified", "production host");
 }

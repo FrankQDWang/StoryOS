@@ -7,11 +7,14 @@ import {
   type ClipboardPermissionResult,
   type ImeCompositionRequest,
   type ImeCompositionResult,
+  type ProductionHostRequest,
+  type ProductionHostResult,
   type TrustedInputRequest,
   type TrustedInputResult,
   parseClientSessionCookieResult,
   parseClipboardPermissionResult,
   parseImeCompositionResult,
+  parseProductionHostResult,
   parseTrustedInputResult,
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
@@ -54,5 +57,13 @@ export async function updateClientSessionCookie(
 ): Promise<ClientSessionCookieResult> {
   return parseClientSessionCookieResult(
     await invokeStoryOSCommand(storyOSBrowserCommandNames.clientSessionCookie, request),
+  );
+}
+
+export async function verifyProductionHost(
+  request: ProductionHostRequest,
+): Promise<ProductionHostResult> {
+  return parseProductionHostResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.productionHost, request),
   );
 }
