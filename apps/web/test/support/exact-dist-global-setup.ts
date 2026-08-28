@@ -10,7 +10,37 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
   if (process.env.STORYOS_STAGE1_AUTHORITY_ORACLE !== "1") return undefined;
   return async () => {
     const authorityJson = await queryStoryOSPostgres(`
+      WITH production AS (
+        SELECT owner_user_id, project_id, current_chapter_id FROM storyos.projects
+        WHERE owner_user_id = '${USER_A}'::uuid AND title = 'Production host acceptance'
+      )
       SELECT json_build_object(
+        'production_host', json_build_object(
+          'project_count', (SELECT count(*) FROM production),
+          'receipts', (SELECT json_object_agg(command_kind, count) FROM (
+            SELECT command_kind, count(*) FROM storyos.domain_receipts
+            JOIN production USING (owner_user_id, project_id) GROUP BY command_kind
+          ) AS receipts),
+          'session_count', (SELECT count(*) FROM storyos.editor_sessions
+            JOIN production USING (owner_user_id, project_id)),
+          'writer_generations', (SELECT json_agg(writer_generation::text ORDER BY writer_generation)
+            FROM storyos.project_writer_generations JOIN production USING (owner_user_id, project_id)),
+          'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
+            JOIN production USING (owner_user_id, project_id)),
+          'manuscript_body', (SELECT convert_from(payload.canonical_bytes, 'UTF8')
+            FROM production
+            JOIN storyos.authoritative_heads AS head
+              ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
+                 (production.owner_user_id, production.project_id, production.current_chapter_id)
+            JOIN storyos.authoritative_revisions AS revision
+              ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+                  revision.revision_id) =
+                 (head.owner_user_id, head.project_id, head.manuscript_object_id,
+                  head.current_revision_id)
+            JOIN storyos.authoritative_payloads AS payload
+              ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                 (revision.owner_user_id, revision.project_id, revision.payload_id))
+        ),
         'receipt_count', (SELECT count(*) FROM storyos.domain_receipts AS receipt
           WHERE receipt.owner_user_id = '${USER_A}'::uuid
             AND receipt.project_id = '${PROJECT_A}'::uuid),
@@ -42,6 +72,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
         'non_fixture_non_create_project_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
           WHERE owner_user_id = '${USER_A}'::uuid
             AND project_id <> '${PROJECT_A}'::uuid
+            AND project_id NOT IN (SELECT project_id FROM production)
             AND command_kind <> 'createProject'
             AND command_kind <> 'updateProject'
             AND command_kind <> 'archiveProject'
@@ -52,6 +83,15 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {
+      production_host: {
+        project_count: 1,
+        receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+          applyAuthorEdit: 2, takeOverProjectWriter: 1 },
+        session_count: 2,
+        writer_generations: ["1", "2"],
+        author_action_count: 2,
+        manuscript_body: "Saved by the new production writer.",
+      },
       receipt_count: 4,
       activity_count: 4,
       author_action_count: 4,

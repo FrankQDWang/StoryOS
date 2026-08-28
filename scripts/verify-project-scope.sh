@@ -56,6 +56,7 @@ verify_web_migration_guards() {
     apps/web/test/browser-source apps/web/test/browser-exact-dist \
       apps/web/test/support/browser-command-client.ts \
       apps/web/test/support/browser-command-contract.ts \
+      apps/web/test/support/production-host-command.ts \
       apps/web/test/support/browser-commands.ts apps/web/vitest.config.ts \
       --glob '*.ts' --glob '*.tsx' \
       --glob '*.js' --glob '*.jsx' --glob '*.mjs' --glob '*.cjs' || true)
@@ -266,7 +267,7 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
    END \$\$;" >/dev/null
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
-echo "Running the S1-JRN-001 Vite production journey"
+echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
 stage1_user_id="018f0000-0000-7001-8000-000000000001"
 STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
