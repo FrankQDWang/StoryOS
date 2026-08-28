@@ -213,8 +213,8 @@ fn expected_mandatory_evidence() -> Value {
         "fx_handoff": {
             "id": "FX-HANDOFF",
             "delivery_baseline": {
-                "commit": "3523494b0b4d934032576b822895b8f3ebc7ef87",
-                "tree": "5e155a851b1debf555e1d5f20fde09956b609c5d"
+                "commit": "6d812db143a03cea7b7e76254450693c86887a67",
+                "tree": "0735f004a407cbdc6706c4e48c17762598d300a7"
             },
             "execution_baseline": {
                 "commit": "bab4c0ac5ca3da20b01ea1d61783aaba414f493f",
@@ -222,7 +222,7 @@ fn expected_mandatory_evidence() -> Value {
             },
             "contract_revisions": {
                 "parent": "stage1-production-shaped-manual-editor-risk-slice-2026-08-18-v6",
-                "delivery": "stage1-ticketed-delivery-2026-08-28-v22",
+                "delivery": "stage1-ticketed-delivery-2026-08-28-v23",
                 "issue": "issue-112-provenance-workspace-isolation-2026-08-23-v4"
             },
             "release_ids": ["storyos.public.release.1"],
