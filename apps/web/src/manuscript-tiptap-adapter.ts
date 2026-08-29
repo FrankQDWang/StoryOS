@@ -7,7 +7,12 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
-import { isSupportedManuscriptDoc, manuscriptJson } from "./manuscript-doc.ts";
+import {
+  contiguousUtf16Replace,
+  isSupportedManuscriptDoc,
+  manuscriptJson,
+  paragraphUtf16,
+} from "./manuscript-doc.ts";
 
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
@@ -38,14 +43,6 @@ export function originFromTransaction(
 function insertNewline(view: EditorView): boolean {
   const { from, to } = view.state.selection;
   view.dispatch(view.state.tr.insertText("\n", from, to));
-  return true;
-}
-
-function insertPlainText(view: EditorView, text: string, origin: InputOrigin): boolean {
-  const { from, to } = view.state.selection;
-  const transaction = view.state.tr.insertText(text, from, to);
-  transaction.setMeta(STORYOS_ORIGIN, origin);
-  view.dispatch(transaction);
   return true;
 }
 
@@ -81,7 +78,15 @@ export function storyosManuscriptExtensions(blockId: string) {
               if (transaction.getMeta(STORYOS_HYDRATE) === true || !transaction.docChanged) {
                 return true;
               }
-              return isSupportedManuscriptDoc(state.doc, transaction.doc, blockId);
+              if (!isSupportedManuscriptDoc(state.doc, transaction.doc, blockId)) {
+                return false;
+              }
+              const nextText = paragraphUtf16(transaction.doc);
+              if (nextText === undefined) return false;
+              const previousText = paragraphUtf16(state.doc);
+              if (previousText === undefined) return state.doc.childCount === 0;
+              return previousText === nextText
+                || contiguousUtf16Replace(previousText, nextText) !== undefined;
             },
           }),
         ];
@@ -99,7 +104,15 @@ export function storyosEditorProps(blockId: string) {
     },
     handlePaste: (view: EditorView, event: ClipboardEvent) => {
       event.preventDefault();
-      return insertPlainText(view, event.clipboardData?.getData("text/plain") ?? "", "paste");
+      const { from, to } = view.state.selection;
+      const transaction = view.state.tr.insertText(
+        event.clipboardData?.getData("text/plain") ?? "",
+        from,
+        to,
+      );
+      transaction.setMeta(STORYOS_ORIGIN, "paste");
+      view.dispatch(transaction);
+      return true;
     },
     handleDOMEvents: {
       cut: (view: EditorView, event: Event) => {
