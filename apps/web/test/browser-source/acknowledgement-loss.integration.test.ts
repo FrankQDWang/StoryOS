@@ -32,7 +32,6 @@ import {
   SESSION,
   chapterRevision,
   closeTrackedDatabases,
-  chapterRevision,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,

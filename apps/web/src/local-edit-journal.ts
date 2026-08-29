@@ -485,9 +485,11 @@ function pendingProjectionFromSnapshot(
   const body = (activeRecords.length === 0
     ? base.materialized_revision.body
     : snapshot.bodyBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
+  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
+    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
   const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
     snapshot.records,
-    appliedSequences,
+    coveredSequences,
     base.snapshot_id,
   );
   return {
