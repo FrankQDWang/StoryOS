@@ -92,17 +92,16 @@ record remains.
 
 ### 2.4 Reference evidence and local snapshots
 
-`.reference/codex` remains the tracked, commit-pinned, read-only upstream
-reference allowed by repository rules. It is evidence only, not a Cargo or npm
-workspace member, dependency, build input, test input, package, release, or
-runtime component.
+Every `.reference/**` entry is local-only, Git-ignored, read-only upstream
+reference material. Before a local snapshot can support reproducible evidence,
+a **Reference Evidence Locator** outside that directory must independently
+identify it. A local snapshot alone is never tracked or accepted evidence.
 
-Any other `.reference/**` material is machine-local exploration unless it is
-independently identified by a **Reference Evidence Locator** outside that
-directory. A Locator records the canonical upstream URL, exact immutable
-revision or digest, license, retrieval date, and relevant scope. Untracked or
-modified local snapshots are never committed, cited as accepted evidence,
-packaged, or made reproducibility prerequisites.
+A Locator records the canonical upstream URL, exact immutable revision or
+digest, license, retrieval date, and relevant scope. Local snapshots are never
+committed, packaged, or made reproducibility prerequisites. No `.reference/**`
+entry is a Cargo or npm workspace member, dependency, build input, test input,
+package, release, or runtime component.
 
 ## 3. Ownership zones
 
