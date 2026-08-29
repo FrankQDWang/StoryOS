@@ -10,6 +10,9 @@ import { withChallengeRetry } from "./node-integration";
 
 const USER = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const MANUSCRIPT_EDITOR = "[data-manuscript-editor]";
+const MANUSCRIPT_EDITABLE = "[data-manuscript-editor][contenteditable='true']";
+const MANUSCRIPT_READONLY = "[data-manuscript-editor][contenteditable='false']";
 type JournalEvidence = Record<"partitions" | "intents" | "payload_chains", unknown[]>;
 
 async function sessionId(page: Page, projectId: string): Promise<string> {
@@ -83,15 +86,22 @@ function takeoverFetch(page: Page, origin: string, projectId: string,
   };
 }
 
+async function manuscriptBody(page: Page): Promise<string> {
+  const value = await page.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body");
+  assert.ok(value !== null, "the production manuscript body must be present");
+  return value;
+}
+
 async function replaceAndSave(page: Page, text: string): Promise<void> {
   const settled = page.waitForResponse((response) =>
     response.url().endsWith("/manuscript/author-edits") && response.request().method() === "POST");
-  const editor = page.locator("textarea:not([readonly])");
+  const editor = page.locator(MANUSCRIPT_EDITABLE);
+  await editor.click();
   await editor.press("ControlOrMeta+A");
   await page.keyboard.insertText(text);
   assert.equal((await settled).status(), 200);
   await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
-  assert.equal(await editor.inputValue(), text);
+  assert.equal(await manuscriptBody(page), text);
 }
 
 export async function verifyProductionHostJourney(context: BrowserContext): Promise<void> {
@@ -140,19 +150,19 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator('input[name="volume-title"]').press("Enter");
     await writer.locator('input[name="chapter-title"]').fill("Production Chapter");
     await writer.locator('input[name="chapter-title"]').press("Enter");
-    await writer.locator("textarea:not([readonly])").waitFor();
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const projectUrl = `${origin}/projects/${projectId}`;
     assert.equal((await writer.goto(projectUrl))?.status(), 200);
-    await writer.locator("textarea:not([readonly])").waitFor();
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const writerId = await sessionId(writer, projectId);
     await replaceAndSave(writer, "Saved through the production host.");
     await writer.reload();
-    await writer.locator("textarea:not([readonly])").waitFor();
-    assert.equal(await writer.locator("textarea").inputValue(), "Saved through the production host.");
+    await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
+    assert.equal(await manuscriptBody(writer), "Saved through the production host.");
     assert.equal(await sessionId(writer, projectId), writerId);
 
     assert.equal((await observer.goto(projectUrl))?.status(), 200);
-    await observer.locator("textarea[readonly]").waitFor();
+    await observer.locator(MANUSCRIPT_READONLY).waitFor();
     const observerId = await sessionId(observer, projectId);
     assert.notEqual(observerId, writerId);
     const options = { baseUrl: origin, projectId,
@@ -190,19 +200,19 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
 
     const refusal = writer.waitForResponse((response) => response.status() === 412
       && response.url().startsWith(`${origin}/api/v1/projects/${projectId}/`));
-    await writer.locator("textarea").press("ControlOrMeta+A");
+    await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
     await writer.keyboard.insertText("Unsent after takeover.");
     const problem: unknown = await (await refusal).json();
     assert.ok(typeof problem === "object" && problem !== null);
     assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
-    await writer.locator('textarea[readonly]').waitFor();
+    await writer.locator(MANUSCRIPT_READONLY).waitFor();
     await writer.locator('[data-save-state="needs_attention"]').waitFor();
-    assert.equal(await writer.locator("textarea").inputValue(), "Unsent after takeover.");
+    assert.equal(await manuscriptBody(writer), "Unsent after takeover.");
     const oldJournal = await readJournal(writer, projectId);
     assert.equal(oldJournal.partitions.length, 2);
     assert.ok(oldJournal.intents.length > 0 && oldJournal.payload_chains.length > 0);
     await observer.reload();
-    await observer.locator("textarea:not([readonly])").waitFor();
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await sessionId(observer, projectId), observerId);
     const newJournal = await readJournal(observer, projectId);
     assertPreservedJournal(oldJournal, newJournal);
@@ -215,10 +225,12 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
       generation: Reflect.get(partition, "writer_generation"),
       disposition: Reflect.get(partition, "disposition") },
     { session: observerId, generation, disposition: "current_writer_open" });
-    assert.equal(await observer.locator("textarea").inputValue(), "Saved through the production host.");
+    assert.equal(await observer.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body"),
+      "Saved through the production host.");
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
-    assert.equal(await writer.locator("textarea[readonly]").inputValue(), "Unsent after takeover.");
+    assert.equal(await writer.locator(MANUSCRIPT_READONLY).getAttribute("data-manuscript-body"),
+      "Unsent after takeover.");
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));

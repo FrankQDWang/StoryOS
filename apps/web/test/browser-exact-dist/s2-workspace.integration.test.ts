@@ -1,6 +1,13 @@
 import { afterEach, expect, it } from "vitest";
 
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import {
+  focusManuscriptEnd,
+  manuscriptBody,
+  manuscriptEditor,
+  manuscriptIsEditable,
+  MANUSCRIPT_EDITOR_SELECTOR,
+} from "../support/manuscript-surface.ts";
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -116,20 +123,19 @@ it("the production page uses the approved workspace without losing writing state
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "project-ready"
-      && root.querySelector("textarea")?.tagName === "TEXTAREA";
+      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
   }).toBe(true);
 
   const root = appRoot(frame);
   const shell = workspace(frame);
   const childWindow = applicationWindow(frame);
-  const editor = root.querySelector("textarea");
+  const editor = manuscriptEditor(root, childWindow);
   const assistant = shell.querySelector("[data-writing-assistant]");
   const toggle = shell.querySelector("[data-assistant-toggle]");
   const currentChapter = root.querySelector(
     'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
   );
-  if (!(editor instanceof childWindow.HTMLTextAreaElement)
-    || !(assistant instanceof childWindow.HTMLElement)
+  if (!(assistant instanceof childWindow.HTMLElement)
     || !(toggle instanceof childWindow.HTMLButtonElement)
     || currentChapter === null) {
     throw new Error("the production writing columns are incomplete");
@@ -167,9 +173,9 @@ it("the production page uses the approved workspace without losing writing state
   expect(root.textContent).not.toMatch(/\{[^{]*"code"/);
 
   editor.focus();
-  editor.setSelectionRange(0, 0);
+  focusManuscriptEnd(editor, childWindow);
   await applyTrustedInput({ operation: "insert_text", text: "Quiet prose" });
-  await expect.poll(() => editor.value).toBe("Quiet prose");
+  await expect.poll(() => manuscriptBody(editor)).toBe("Quiet prose");
 
   expect(toggle.getAttribute("aria-expanded")).toBe("true");
   toggle.click();
@@ -177,13 +183,13 @@ it("the production page uses the approved workspace without losing writing state
   expect(Math.round(assistant.getBoundingClientRect().width)).toBe(44);
   expect(assistant.innerText.trim()).toBe("");
   expect({
-    body: editor.value,
+    body: manuscriptBody(editor),
     chapter: root.querySelector(
       'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
     )?.textContent ?? null,
     writerKind: shell.getAttribute("data-writer-kind"),
     writerGeneration: shell.getAttribute("data-writer-generation"),
-    readOnly: editor.readOnly,
+    readOnly: !manuscriptIsEditable(editor),
   }).toEqual({
     body: "Quiet prose",
     chapter: "Chapter A",
@@ -198,11 +204,10 @@ it("the production page uses the approved workspace without losing writing state
   if (composer === null) throw new Error("the writing-assistant composer is missing");
   composer.requestSubmit();
   await expect.poll(() => assistant.getAttribute("data-assistant-dispatch")).toBe("refused");
-  expect(editor.value).toBe("Quiet prose");
+  expect(manuscriptBody(editor)).toBe("Quiet prose");
   expect(shell.getAttribute("data-writer-generation")).toBe("1");
 
-  editor.focus();
-  editor.setSelectionRange(editor.value.length, editor.value.length);
+  focusManuscriptEnd(editor, childWindow);
   await applyTrustedInput({ operation: "insert_text", text: " remains" });
-  await expect.poll(() => editor.value).toBe("Quiet prose remains");
+  await expect.poll(() => manuscriptBody(editor)).toBe("Quiet prose remains");
 });
