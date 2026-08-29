@@ -57,9 +57,20 @@ pub(super) async fn persist_author_edit_settlement(
                 authoritative_commit_sequence,
             )
             .await?;
+            let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+                client,
+                command.project_scope.owner_user_id.as_ref(),
+                command.project_scope.project_id.as_ref(),
+                &command.chapter_id,
+                &ids.revision_id,
+                &body,
+            )
+            .await
+            .map_err(author_edit_database_error)?;
             PreparedSettlement::AuthoritativeApplied {
                 ids,
                 body,
+                blocks,
                 author_action_sequence,
                 project_activity_position,
             }
@@ -152,6 +163,7 @@ pub(super) async fn persist_author_edit_settlement(
         PreparedSettlement::AuthoritativeApplied {
             ids,
             body,
+            blocks,
             author_action_sequence,
             project_activity_position,
         } => {
@@ -240,6 +252,7 @@ pub(super) async fn persist_author_edit_settlement(
             AuthorEditSettlementEffect::AuthoritativeApplied {
                 ids,
                 body,
+                blocks,
                 author_action_sequence,
                 project_activity_position,
             }
@@ -337,6 +350,16 @@ async fn persist_authority_change(
         )
         .await
         .map_err(author_edit_database_error)?;
+    crate::manuscript_block::copy_or_upgrade_revision_members(
+        client,
+        command.project_scope.owner_user_id.as_ref(),
+        command.project_scope.project_id.as_ref(),
+        &command.chapter_id,
+        current_revision_id,
+        &ids.revision_id,
+    )
+    .await
+    .map_err(author_edit_database_error)?;
     client
         .execute(
             "INSERT INTO storyos.authoritative_revision_envelopes
@@ -408,6 +431,7 @@ enum PreparedSettlement {
     AuthoritativeApplied {
         ids: AuthoritativeAppliedIds,
         body: String,
+        blocks: Vec<storyos_core::ManuscriptBlock>,
         author_action_sequence: u64,
         project_activity_position: u64,
     },

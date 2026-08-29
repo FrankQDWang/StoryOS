@@ -3,7 +3,10 @@ use storyos_application::{
     ProjectCommandChallengeError, ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
 };
 use storyos_core::{
-    ApplyAuthorEdit, CurrentOwnershipFacts, apply_author_edit as apply_core_author_edit,
+    ApplyAuthorEdit, ApplyAuthorEditResult, ApplyVersionedAuthorEdit,
+    ApplyVersionedAuthorEditResult, AuthorEditPrimitive, COORDINATE_VERSION, CurrentOwnershipFacts,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptPayload, apply_author_edit as apply_core_author_edit,
+    apply_versioned_author_edit,
 };
 
 use super::*;
@@ -119,23 +122,13 @@ impl PostgresProjectReader {
         };
         let current_revision_id = row.get::<_, String>(0);
         let current_body = row.get::<_, String>(1);
-        let core_result = apply_core_author_edit(&ApplyAuthorEdit {
-            chapter_id: command.chapter_id.clone(),
-            current_authoritative_revision_id: current_revision_id.clone(),
+        let core_result = classify_author_edit(
+            &transaction.client,
+            command,
+            &current_revision_id,
             current_body,
-            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
-            expected_proposal_head_revision_ids: command
-                .expected_proposal_head_revision_ids
-                .clone(),
-            current_ownership: CurrentOwnershipFacts {
-                proposal_head_revision_ids: Vec::new(),
-                anchor_refs: Vec::new(),
-                unresolved_reservation_refs: Vec::new(),
-            },
-            target_refs: command.target_refs.clone(),
-            observed_ownership_partition: command.observed_ownership_partition.clone(),
-            author_edit_units: command.author_edit_units.clone(),
-        });
+        )
+        .await?;
         let settlement = match super::author_edit_settlement::persist_author_edit_settlement(
             &transaction.client,
             command,
@@ -386,6 +379,88 @@ pub(super) fn author_edit_database_error(error: tokio_postgres::Error) -> Author
 
 fn fault_error(point: &'static str) -> AuthorEditError {
     AuthorEditError::Unavailable(Box::new(std::io::Error::other(point)))
+}
+
+async fn classify_author_edit(
+    client: &tokio_postgres::Client,
+    command: &ApplyAuthorEditCommand,
+    current_revision_id: &str,
+    current_body: String,
+) -> Result<ApplyAuthorEditResult, AuthorEditError> {
+    let uses_block_selection = command.author_edit_units.iter().any(|unit| {
+        unit.normalized_primitives
+            .iter()
+            .any(|primitive| matches!(primitive, AuthorEditPrimitive::ReplaceBlockSelection { .. }))
+    });
+    let current_ownership = CurrentOwnershipFacts {
+        proposal_head_revision_ids: Vec::new(),
+        anchor_refs: Vec::new(),
+        unresolved_reservation_refs: Vec::new(),
+    };
+    if !uses_block_selection {
+        return Ok(apply_core_author_edit(&ApplyAuthorEdit {
+            chapter_id: command.chapter_id.clone(),
+            current_authoritative_revision_id: current_revision_id.to_owned(),
+            current_body,
+            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
+            expected_proposal_head_revision_ids: command
+                .expected_proposal_head_revision_ids
+                .clone(),
+            current_ownership,
+            target_refs: command.target_refs.clone(),
+            observed_ownership_partition: command.observed_ownership_partition.clone(),
+            author_edit_units: command.author_edit_units.clone(),
+        }));
+    }
+    let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+        client,
+        command.project_scope.owner_user_id.as_ref(),
+        command.project_scope.project_id.as_ref(),
+        &command.chapter_id,
+        current_revision_id,
+        &current_body,
+    )
+    .await
+    .map_err(author_edit_database_error)?;
+    Ok(
+        match apply_versioned_author_edit(&ApplyVersionedAuthorEdit {
+            chapter_id: command.chapter_id.clone(),
+            current_authoritative_revision_id: current_revision_id.to_owned(),
+            current_payload: ManuscriptPayload {
+                schema_version: MANUSCRIPT_SCHEMA_VERSION,
+                coordinate_version: COORDINATE_VERSION,
+                blocks,
+            },
+            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
+            expected_proposal_head_revision_ids: command
+                .expected_proposal_head_revision_ids
+                .clone(),
+            current_ownership,
+            target_refs: command.target_refs.clone(),
+            observed_ownership_partition: command.observed_ownership_partition.clone(),
+            author_edit_units: command.author_edit_units.clone(),
+        }) {
+            ApplyVersionedAuthorEditResult::AuthoritativeApplied { payload } => {
+                ApplyAuthorEditResult::AuthoritativeApplied {
+                    body: payload
+                        .blocks
+                        .into_iter()
+                        .next()
+                        .map(|block| block.text)
+                        .unwrap_or_default(),
+                }
+            }
+            ApplyVersionedAuthorEditResult::Conflicted { reason } => {
+                ApplyAuthorEditResult::Conflicted { reason }
+            }
+            ApplyVersionedAuthorEditResult::NoEffect { reason } => {
+                ApplyAuthorEditResult::NoEffect { reason }
+            }
+            ApplyVersionedAuthorEditResult::Refused { reason } => {
+                ApplyAuthorEditResult::Refused { reason }
+            }
+        },
+    )
 }
 
 #[cfg(test)]

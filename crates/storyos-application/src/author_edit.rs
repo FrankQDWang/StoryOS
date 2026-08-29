@@ -56,6 +56,7 @@ pub enum AuthorEditSettlementEffect {
     AuthoritativeApplied {
         ids: AuthoritativeAppliedIds,
         body: String,
+        blocks: Vec<crate::ManuscriptBlock>,
         author_action_sequence: u64,
         project_activity_position: u64,
     },

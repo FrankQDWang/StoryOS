@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::{ProjectId, UserId};
+use crate::{ManuscriptBlock, ManuscriptBlockKind, ProjectId, UserId};
 
 struct Store(Mutex<Vec<OpenEditorSession>>);
 
@@ -39,6 +39,11 @@ fn session(id: &EditorSessionId, binding: &EditorClientBinding) -> EditorSession
             authoritative_revision_id: "revision".to_owned(),
             project_activity_position: 0,
             body: "Body".to_owned(),
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: "block".to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "Body".to_owned(),
+            }],
             payload_digest_hex: "a".repeat(64),
             created_at: "2026-08-13T08:00:00.000Z".to_owned(),
         },

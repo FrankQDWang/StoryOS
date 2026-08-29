@@ -2,6 +2,7 @@ use super::{
     Chapter, ChapterId, Project, ProjectId, ProjectReadError, ProjectReader, ProjectScope,
     RevisionId, UserId, open_current_chapter,
 };
+use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
 struct FixtureReader;
 
@@ -28,6 +29,11 @@ impl ProjectReader for FixtureReader {
             title: "Chapter".to_owned(),
             revision_id: RevisionId::new("revision-current"),
             body: "Current body".to_owned(),
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: "block-current".to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "Current body".to_owned(),
+            }],
             project_activity_position: 0,
         }))
     }

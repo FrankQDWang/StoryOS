@@ -9,7 +9,9 @@ use storyos_application::{
     create_editor_session, get_apply_author_edit_outcome, get_editor_session,
     issue_project_command_challenge,
 };
-use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
+use storyos_core::{
+    AuthorEditPrimitive, AuthorEditUnit, ManuscriptBlock, ManuscriptBlockKind, SelectionSnapshot,
+};
 use tokio_postgres::NoTls;
 
 use super::*;
@@ -18,6 +20,7 @@ const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER: &str = "018f0000-0000-7001-8000-000000000003";
 const REVISION: &str = "018f0000-0000-7001-8000-000000000005";
+const BLOCK: &str = "018f0000-0000-7001-8000-0000000000b1";
 pub(crate) static AUTHOR_EDIT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[test]
@@ -358,6 +361,11 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied {
             ids: replay_applied_ids.clone(),
             body: "Authoritative A!".to_owned(),
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: BLOCK.to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "Authoritative A!".to_owned(),
+            }],
             author_action_sequence: 1,
             project_activity_position: 1,
         }
@@ -391,6 +399,11 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             authoritative_revision_id: replay_applied_ids.revision_id.clone(),
             project_activity_position: 1,
             body: "Authoritative A!".to_owned(),
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: BLOCK.to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "Authoritative A!".to_owned(),
+            }],
             payload_digest_hex: sha256_hex(b"Authoritative A!"),
             created_at: refreshed_session.base_snapshot.created_at.clone(),
         }
@@ -424,7 +437,10 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         }
         if index == 1 {
             let storyos_core::AuthorEditPrimitive::ReplaceSelection { from, to, text } =
-                &mut outcome_command.author_edit_units[0].normalized_primitives[0];
+                &mut outcome_command.author_edit_units[0].normalized_primitives[0]
+            else {
+                panic!("legacy command must use ReplaceSelection")
+            };
             *from = 16;
             *to = 16;
             text.clear();
@@ -1424,6 +1440,15 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND editor_session_id = $3::text::uuid",
             &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.manuscript_revision_members
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND revision_id = $3::text::uuid",
+            &[&USER, &PROJECT, &replay_applied_ids.revision_id],
         )
         .await
         .unwrap();

@@ -4,12 +4,14 @@ use storyos_application::{
     ProjectReader, ProjectScope, RevisionId, UserId, list_owned_projects, open_chapter,
     open_current_chapter, open_project,
 };
+use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A: &str = "018f0000-0000-7001-8000-000000000002";
 const CHAPTER_A: &str = "018f0000-0000-7001-8000-000000000003";
 const REVISION_A: &str = "018f0000-0000-7001-8000-000000000005";
+const BLOCK_A: &str = "018f0000-0000-7001-8000-0000000000b1";
 const STALE_CHAPTER_A: &str = "018f0000-0000-7001-8000-000000000006";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
@@ -54,6 +56,11 @@ async fn two_users_and_projects_are_isolated_at_application_and_rls_boundaries()
             title: "Chapter A".to_owned(),
             revision_id: RevisionId::new(REVISION_A),
             body: "Authoritative A".to_owned(),
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: BLOCK_A.to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "Authoritative A".to_owned(),
+            }],
             project_activity_position: 0,
         })
     );

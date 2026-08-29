@@ -19,8 +19,11 @@
 //!     title: "Chapter".to_owned(),
 //!     revision_id: ChapterId::new("018f0000-0000-7001-8000-000000000003"),
 //!     body: "Body".to_owned(),
+//!     blocks: Vec::new(),
 //! };
 //! ```
+
+pub use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
 use std::future::Future;
 
@@ -317,6 +320,7 @@ pub struct Chapter {
     pub title: String,
     pub revision_id: RevisionId,
     pub body: String,
+    pub blocks: Vec<ManuscriptBlock>,
     pub project_activity_position: u64,
 }
 

@@ -122,6 +122,9 @@ fn prepare_follow_up(
             *to = position;
             *text = "x".to_owned();
         }
+        AuthorEditPrimitive::ReplaceBlockSelection { .. } => {
+            panic!("counter test command must use ReplaceSelection")
+        }
     }
     insert.selection_snapshot.from = position;
     insert.selection_snapshot.to = position;
@@ -130,6 +133,9 @@ fn prepare_follow_up(
             *from = position;
             *to = position + 1;
             *text = replacement.to_owned();
+        }
+        AuthorEditPrimitive::ReplaceBlockSelection { .. } => {
+            panic!("counter test command must use ReplaceSelection")
         }
     }
     replace.selection_snapshot.from = position;
@@ -309,15 +315,20 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     let first = storyos_application::apply_author_edit(&store, &first_command)
         .await
         .unwrap();
-    let first_ids = match &first.effect {
-        AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => ids.clone(),
+    let (first_ids, first_blocks) = match &first.effect {
+        AuthorEditSettlementEffect::AuthoritativeApplied { ids, blocks, .. } => {
+            (ids.clone(), blocks.clone())
+        }
         effect => panic!("expected authoritative first effect, received {effect:?}"),
     };
+    assert_eq!(first_blocks.len(), 1);
+    assert_eq!(first_blocks[0].text, "Authoritative A!");
     assert_eq!(
         first.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {
             ids: first_ids.clone(),
             body: "Authoritative A!".to_owned(),
+            blocks: first_blocks.clone(),
             author_action_sequence: 1,
             project_activity_position: 1,
         }
@@ -369,15 +380,22 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     let existing = storyos_application::apply_author_edit(&store, &existing_command)
         .await
         .unwrap();
-    let existing_ids = match &existing.effect {
-        AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => ids.clone(),
+    let (existing_ids, existing_blocks) = match &existing.effect {
+        AuthorEditSettlementEffect::AuthoritativeApplied { ids, blocks, .. } => {
+            (ids.clone(), blocks.clone())
+        }
         effect => panic!("expected authoritative existing effect, received {effect:?}"),
     };
+    assert_eq!(
+        existing_blocks[0].manuscript_block_id,
+        first_blocks[0].manuscript_block_id
+    );
     assert_eq!(
         existing.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {
             ids: existing_ids.clone(),
             body: "Authoritative A!?".to_owned(),
+            blocks: existing_blocks,
             author_action_sequence: 8,
             project_activity_position: 14,
         }

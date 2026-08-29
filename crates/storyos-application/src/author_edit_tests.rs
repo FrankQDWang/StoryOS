@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 
 use super::*;
-use crate::{ProjectId, UserId};
+use crate::{ManuscriptBlock, ManuscriptBlockKind, ProjectId, UserId};
 
 struct Store(Mutex<usize>);
 
@@ -23,6 +23,11 @@ impl AuthorEditStore for Store {
                     project_activity_event_id: "event".to_owned(),
                 },
                 body: "Base!".to_owned(),
+                blocks: vec![ManuscriptBlock {
+                    manuscript_block_id: "block".to_owned(),
+                    block_kind: ManuscriptBlockKind::Paragraph,
+                    text: "Base!".to_owned(),
+                }],
                 author_action_sequence: 1,
                 project_activity_position: 1,
             },
@@ -120,6 +125,11 @@ async fn matching_bindings_reach_the_atomic_store_once() {
                 project_activity_event_id: "event".to_owned(),
             },
             body: "Base!".to_owned(),
+            blocks: vec![ManuscriptBlock {
+                manuscript_block_id: "block".to_owned(),
+                block_kind: ManuscriptBlockKind::Paragraph,
+                text: "Base!".to_owned(),
+            }],
             author_action_sequence: 1,
             project_activity_position: 1,
         }
