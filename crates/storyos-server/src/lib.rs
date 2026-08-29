@@ -568,6 +568,29 @@ fn problem(status: StatusCode, code: &str, message: &str) -> ApiError {
     )
 }
 
+fn contract_chapter_revision(
+    revision_id: String,
+    body: String,
+    blocks: &[storyos_application::ManuscriptBlock],
+) -> contracts::AuthoritativeChapterRevision {
+    contracts::AuthoritativeChapterRevision {
+        revision_id,
+        body,
+        blocks: blocks
+            .iter()
+            .map(|block| contracts::ManuscriptBlock {
+                manuscript_block_id: block.manuscript_block_id.clone(),
+                block_kind: match block.block_kind {
+                    storyos_application::ManuscriptBlockKind::Paragraph => {
+                        contracts::ManuscriptBlockKind::Paragraph
+                    }
+                },
+                text: block.text.clone(),
+            })
+            .collect(),
+    }
+}
+
 #[cfg(test)]
 #[path = "client_session_binding_tests.rs"]
 mod tests;

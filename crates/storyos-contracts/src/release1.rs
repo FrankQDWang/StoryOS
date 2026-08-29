@@ -11,12 +11,11 @@ pub(super) const ACTIVITY_PROFILE: &str = "storyos.project-activity.v1";
 pub const LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
 const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
-pub(super) const CONTRACT_REVISION: &str =
-    "release1-wire-catalog-2026-08-17-author-edit-outcome-v1";
+pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-08-29-manuscript-block-v1";
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
 pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v3";
 pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v3";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v9";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v10";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -413,10 +412,25 @@ pub struct GetProjectResponse {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ManuscriptBlockKind {
+    Paragraph,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ManuscriptBlock {
+    pub manuscript_block_id: String,
+    pub block_kind: ManuscriptBlockKind,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct AuthoritativeChapterRevision {
     pub revision_id: String,
     pub body: String,
+    pub blocks: Vec<ManuscriptBlock>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

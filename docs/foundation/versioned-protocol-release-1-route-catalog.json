@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-08-17-author-edit-outcome-v1",
+  "contract_revision": "release1-wire-catalog-2026-08-29-manuscript-block-v1",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",

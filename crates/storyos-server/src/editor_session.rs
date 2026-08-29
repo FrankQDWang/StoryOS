@@ -251,10 +251,11 @@ fn create_response(
             proposal_head_revision_ids: Vec::new(),
             target_refs: vec![format!("manuscript:{chapter_id}")],
             observed_ownership_partition: "authoritative".to_owned(),
-            materialized_revision: contracts::AuthoritativeChapterRevision {
-                revision_id: session.base_snapshot.authoritative_revision_id,
-                body: session.base_snapshot.body,
-            },
+            materialized_revision: contract_chapter_revision(
+                session.base_snapshot.authoritative_revision_id.clone(),
+                session.base_snapshot.body,
+                &session.base_snapshot.blocks,
+            ),
             materialized_payload_digest: contracts::DigestValue {
                 algorithm: contracts::DigestAlgorithm::Sha256,
                 profile: "storyos.canonical-payload.sha256.v1".to_owned(),

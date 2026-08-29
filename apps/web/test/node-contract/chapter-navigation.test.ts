@@ -25,7 +25,15 @@ function chapterB(source: GetChapterResponse): GetChapterResponse {
     chapter: {
       chapter_id: CHAPTER_B,
       title: "Chapter B",
-      current_revision: { revision_id: REVISION_B, body: "" },
+      current_revision: {
+        revision_id: REVISION_B,
+        body: "",
+        blocks: [{
+          manuscript_block_id: "018f0000-0000-7001-8000-0000000000b1",
+          block_kind: "paragraph",
+          text: "",
+        }],
+      },
     },
   };
 }

@@ -29,6 +29,38 @@
             "text"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "from": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "replace_block_selection",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "to": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "from",
+            "to",
+            "text"
+          ],
+          "type": "object"
         }
       ]
     },

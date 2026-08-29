@@ -112,6 +112,17 @@ pub(super) async fn apply_author_edit(
                             text: text.clone(),
                         }
                     }
+                    contracts::AuthorEditPrimitive::ReplaceBlockSelection {
+                        manuscript_block_id,
+                        from,
+                        to,
+                        text,
+                    } => storyos_core::AuthorEditPrimitive::ReplaceBlockSelection {
+                        manuscript_block_id: manuscript_block_id.clone(),
+                        from: *from,
+                        to: *to,
+                        text: text.clone(),
+                    },
                 })
                 .collect(),
             selection_snapshot: storyos_core::SelectionSnapshot {
@@ -198,6 +209,7 @@ pub(super) fn author_edit_response(
         AuthorEditSettlementEffect::AuthoritativeApplied {
             ids,
             body,
+            blocks,
             author_action_sequence,
             project_activity_position,
             ..
@@ -209,10 +221,11 @@ pub(super) fn author_edit_response(
             vec![ids.authoritative_commit_id.clone()],
             Some(author_action_sequence.to_string()),
             contracts::ApplyAuthorEditEffect::AuthoritativeApplied {
-                authoritative_revision: contracts::AuthoritativeChapterRevision {
-                    revision_id: ids.revision_id.clone(),
+                authoritative_revision: contract_chapter_revision(
+                    ids.revision_id.clone(),
                     body,
-                },
+                    &blocks,
+                ),
                 authoritative_commit_id: ids.authoritative_commit_id,
                 author_action_sequence: author_action_sequence.to_string(),
                 project_activity_position: project_activity_position.to_string(),

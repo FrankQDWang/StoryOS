@@ -163,7 +163,7 @@ pub(super) fn fixture() -> Value {
         },
         "effect": {
             "kind": "authoritative_applied",
-            "authoritative_revision": {"revision_id": "018f0000-0000-7001-8000-000000000034", "body": "雨落在窗沿。"},
+            "authoritative_revision": {"revision_id": "018f0000-0000-7001-8000-000000000034", "body": "雨落在窗沿。", "blocks": [{"manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1", "block_kind": "paragraph", "text": "雨落在窗沿。"}]},
             "authoritative_commit_id": "018f0000-0000-7001-8000-000000000035",
             "author_action_sequence": "1",
             "project_activity_position": "1"

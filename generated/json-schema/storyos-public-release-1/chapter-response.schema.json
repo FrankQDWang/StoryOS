@@ -3,6 +3,12 @@
     "AuthoritativeChapterRevision": {
       "additionalProperties": false,
       "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/ManuscriptBlock"
+          },
+          "type": "array"
+        },
         "body": {
           "type": "string"
         },
@@ -12,7 +18,8 @@
       },
       "required": [
         "revision_id",
-        "body"
+        "body",
+        "blocks"
       ],
       "type": "object"
     },
@@ -35,6 +42,32 @@
         "current_revision"
       ],
       "type": "object"
+    },
+    "ManuscriptBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "manuscript_block_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manuscript_block_id",
+        "block_kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ManuscriptBlockKind": {
+      "enum": [
+        "paragraph"
+      ],
+      "type": "string"
     },
     "ProjectScope": {
       "additionalProperties": false,

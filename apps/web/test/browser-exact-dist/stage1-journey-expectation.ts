@@ -66,6 +66,7 @@ const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const BODIES = [OPEN_BODY, AFTER_TYPE, AFTER_IME, AFTER_PASTE, AFTER_UNSETTLED] as const;
 const TEXTS = [" Hello", "中文", " EN", "!"] as const;
 const ORIGINS = ["typing", "typing", "paste", "typing"] as const;
+const CHAPTER_BLOCK = "018f0000-0000-7001-8000-0000000000b1";
 const UNIT_DIGESTS = [
   "8ffb38577db2c7858ade72684cf5100a5cfe9cd305b50e7c94a1fb0167beebbe",
   "b8dde1c51a0b6118f0cf143a6dabacdf81f65a6932f9f2c3d8a1038381a62a8b",
@@ -109,6 +110,14 @@ function pendingProjection(
 
 function priorRevision(index: number): string {
   return index === 0 ? INITIAL_REVISION : `revision-${index}`;
+}
+
+function chapterBlocks(body: string) {
+  return [{
+    manuscript_block_id: CHAPTER_BLOCK,
+    block_kind: "paragraph",
+    text: body,
+  }];
 }
 
 function replaceUnit(index: number) {
@@ -170,6 +179,7 @@ function appliedEffect(index: number) {
     authoritative_revision: {
       revision_id: slot("revision", sequence),
       body: requiredAt(BODIES, sequence, "body"),
+      blocks: chapterBlocks(requiredAt(BODIES, sequence, "body")),
     },
     authoritative_commit_id: slot("commit", sequence),
     author_action_sequence: String(sequence),
@@ -260,6 +270,7 @@ function installedSnapshot(index: number) {
     materialized_revision: {
       revision_id: revision,
       body: requiredAt(BODIES, sequence, "body"),
+      blocks: chapterBlocks(requiredAt(BODIES, sequence, "body")),
     },
     materialized_payload_digest: bodyDigest(sequence),
     created_at: "instant",
@@ -321,6 +332,7 @@ function collectedGroup(index: number) {
       authoritative_revision: {
         revision_id: slot("revision", sequence),
         body: requiredAt(BODIES, sequence, "body"),
+        blocks: chapterBlocks(requiredAt(BODIES, sequence, "body")),
       },
       authoritative_commit_id: slot("commit", sequence),
       author_action_sequence: String(sequence),

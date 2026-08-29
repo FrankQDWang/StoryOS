@@ -70,7 +70,17 @@ pub struct AuthorEditUnit {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AuthorEditPrimitive {
-    ReplaceSelection { from: u32, to: u32, text: String },
+    ReplaceSelection {
+        from: u32,
+        to: u32,
+        text: String,
+    },
+    ReplaceBlockSelection {
+        manuscript_block_id: String,
+        from: u32,
+        to: u32,
+        text: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -19,6 +19,19 @@ export const CHAPTER = "018f0000-0000-7001-8000-000000000003";
 export const REVISION = "018f0000-0000-7001-8000-000000000004";
 export const SESSION = "018f0000-0000-7001-8000-000000000021";
 export const EDITOR_SNAPSHOT = "018f0000-0000-7001-8000-000000000022";
+export const BLOCK = "018f0000-0000-7001-8000-0000000000b1";
+
+export function chapterRevision(revisionId: string, body: string, blockId = BLOCK) {
+  return {
+    revision_id: revisionId,
+    body,
+    blocks: [{
+      manuscript_block_id: blockId,
+      block_kind: "paragraph" as const,
+      text: body,
+    }],
+  };
+}
 
 export interface BrowserScenario {
   readonly chapter: GetChapterResponse;
@@ -43,7 +56,7 @@ export function createBrowserScenario(): BrowserScenario {
     chapter: {
       chapter_id: CHAPTER,
       title: "Chapter A",
-      current_revision: { revision_id: REVISION, body: "Base" },
+      current_revision: chapterRevision(REVISION, "Base"),
     },
   };
   const session: CreateEditorSessionResponse = {
@@ -68,7 +81,7 @@ export function createBrowserScenario(): BrowserScenario {
       proposal_head_revision_ids: [],
       target_refs: [`manuscript:${CHAPTER}`],
       observed_ownership_partition: "authoritative",
-      materialized_revision: { revision_id: REVISION, body: "Base" },
+      materialized_revision: chapterRevision(REVISION, "Base"),
       materialized_payload_digest: {
         algorithm: "sha256",
         profile: "storyos.canonical-payload.sha256.v1",
@@ -222,7 +235,7 @@ export function createAppliedAuthorEditResponse(
     },
     effect: {
       kind: "authoritative_applied",
-      authoritative_revision: { revision_id: revisionId, body: options.body ?? "Base!?" },
+      authoritative_revision: chapterRevision(revisionId, options.body ?? "Base!?"),
       authoritative_commit_id: commitId,
       author_action_sequence: position,
       project_activity_position: position,

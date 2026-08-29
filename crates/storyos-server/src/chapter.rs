@@ -34,10 +34,11 @@ pub(super) async fn get_chapter(
             chapter: contracts::CurrentChapter {
                 chapter_id: facts.chapter.chapter_id.as_ref().to_owned(),
                 title: facts.chapter.title,
-                current_revision: contracts::AuthoritativeChapterRevision {
-                    revision_id: facts.chapter.revision_id.as_ref().to_owned(),
-                    body: facts.chapter.body,
-                },
+                current_revision: contract_chapter_revision(
+                    facts.chapter.revision_id.as_ref().to_owned(),
+                    facts.chapter.body,
+                    &facts.chapter.blocks,
+                ),
             },
         })),
     }
