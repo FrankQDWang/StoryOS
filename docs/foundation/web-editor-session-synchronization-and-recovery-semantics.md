@@ -922,7 +922,7 @@ The client-observable versus Server-only audit is closed:
 | Authoritative Server fact | Permitted browser-local evidence |
 | --- | --- |
 | `PreAdmissionRefusalRecord` identity and audit fields | no record reference; only the exact sanitized Problem observation and local correlation |
-| Author Command Admission record, issuance time, and expiry | no universal local copy; Admission ID only when `RequiresReconfirmation`, `outcome_unknown`, or the exact outcome Query `AdmissionCommitted` observation supplies it; only `ChallengeIssued` supplies challenge expiry |
+| Author Command Admission record, issuance time, and expiry | no universal local copy; Admission ID only when the exact received variant supplies it through `ApplyAuthorEditAppliedObservation`, `ApplyAuthorEditZeroAuthorityObservation`, `RequiresReconfirmationObservation`, `OutcomeUnknownProblemObservation`, or the outcome Query `AdmissionCommitted` observation; only `ChallengeIssued` supplies challenge expiry |
 | Admission settlement record/reference | no local record reference; only the exact applied, zero-authority, other-editor committed, or `RequiresReconfirmationObservation` branch |
 | outcome bootstrap and settlement Query | the named `getApplyAuthorEditOutcome` route uses only the original capsule key and nonce; any other settlement Query exists only when `Accepted` or `outcome_unknown` supplies it |
 | idempotency and nonce record identities | no Server-record references; only frozen local key/digest plus the protected exact-retry capsule |
@@ -1681,8 +1681,11 @@ The compact group and intent identities, command digest/idempotency binding,
 attempt log, typed Receipt or refusal/reconfirmation observations,
 reconciliation states, successor references, projection convergence, and
 collection fence remain inspectable under their owning retention contracts.
-Browser evidence retains an Admission identity only when the exact
-`RequiresReconfirmation` or `outcome_unknown` variant supplied it. GC never
+Browser evidence retains an Admission identity only when the exact received
+variant supplied it through `ApplyAuthorEditAppliedObservation`,
+`ApplyAuthorEditZeroAuthorityObservation`, `RequiresReconfirmationObservation`,
+`OutcomeUnknownProblemObservation`, or the outcome Query `AdmissionCommitted`
+observation. GC never
 silently erases evidence needed to reject an exact duplicate, explain a
 result, or reconstruct why payload collection was safe.
 
