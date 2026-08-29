@@ -469,15 +469,18 @@ function pendingProjectionFromSnapshot(
   const appliedSequences = new Set<number>();
   let hasAppliedSettlement = false;
   let hasZeroAuthoritySettlement = false;
+  const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
+    const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
     if (isAppliedSettlement(group)) {
-      hasAppliedSettlement = true;
+      // A later authorized current-Chapter base must not inherit the prior
+      // Chapter save state.
+      if (groupTargetsCurrentChapter) hasAppliedSettlement = true;
       for (const item of group.ordered_coverage) appliedSequences.add(item.local_intent_sequence);
-    } else if (isZeroAuthoritySettlement(group)) {
+    } else if (isZeroAuthoritySettlement(group) && groupTargetsCurrentChapter) {
       hasZeroAuthoritySettlement = true;
     }
   }
-  const base = workspace.session.base_snapshot;
   const activeRecords = snapshot.records.filter((record) =>
     record.chapter_object_id === base.chapter_id
     && record.base_snapshot_id === base.snapshot_id

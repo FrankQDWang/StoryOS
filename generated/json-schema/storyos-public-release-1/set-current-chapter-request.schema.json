@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "SetCurrentChapterInput": {
+      "additionalProperties": false,
+      "properties": {
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_current_chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_target_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "chapter_id",
+        "expected_current_chapter_id",
+        "expected_target_revision_id",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.set-current-chapter.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.set-current-chapter.request.v1",
+      "type": "string"
+    },
+    "set_current_chapter_input": {
+      "$ref": "#/$defs/SetCurrentChapterInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "set_current_chapter_input"
+  ],
+  "title": "StoryOS Set Current Chapter Request",
+  "type": "object"
+}

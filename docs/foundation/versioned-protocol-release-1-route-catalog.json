@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-08-29-manuscript-block-v1",
+  "contract_revision": "release1-wire-catalog-2026-08-29-set-current-chapter-v1",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",
@@ -106,7 +106,7 @@
       {
         "capability_id": "chapter_navigation",
         "journey": "Chapter navigation and manuscript tree",
-        "required_operations": ["getManuscriptTree", "getChapter"]
+        "required_operations": ["getManuscriptTree", "getChapter", "setCurrentChapter"]
       },
       {
         "capability_id": "manuscript_search",
@@ -1817,6 +1817,93 @@
         "json_schema_ids": [
           "storyos.command.delete-chapter.request.v1",
           "storyos.command.delete-chapter.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      }
+    },
+    {
+      "operation_id": "setCurrentChapter",
+      "kind": "command",
+      "method": "PUT",
+      "path": "/api/v1/projects/{project_id}/current-chapter",
+      "shape": "project:set-current-chapter",
+      "semantic_owner": "core",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.command.set-current-chapter.request.v1",
+        "response": "storyos.command.set-current-chapter.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "core"
+      },
+      "action_class": "explicit_editor_command",
+      "admission": "author_command",
+      "editor": {
+        "session": "required",
+        "writer_generation": "current",
+        "takeover": "no"
+      },
+      "idempotency": "header_and_admission_record",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_active",
+        "editor_session_writer_generation",
+        "expected_current_chapter",
+        "expected_authoritative_head"
+      ],
+      "settlement": {
+        "mode": "sync",
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "editor_command",
+      "activity": {
+        "success": [
+          "storyos.event.domain-receipt-settled.v1",
+          "storyos.event.current-chapter-set.v1"
+        ],
+        "no_effect": [
+          "storyos.event.domain-receipt-settled.v1"
+        ],
+        "pre_admission": "none",
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.setCurrentChapter.positive.v1",
+        "negative": [
+          "storyos.golden.setCurrentChapter.invalid.v1",
+          "storyos.golden.setCurrentChapter.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "setCurrentChapter",
+        "typescript_operation": "setCurrentChapter",
+        "json_schema_ids": [
+          "storyos.command.set-current-chapter.request.v1",
+          "storyos.command.set-current-chapter.response.v1"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
@@ -5525,6 +5612,15 @@
       "description": "",
       "positive_fixture": "storyos.golden.storyos.event.chapter-deleted.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.chapter-deleted.v1.negative.v1"
+    },
+    {
+      "schema_id": "storyos.event.current-chapter-set.v1",
+      "event_kind": "current_chapter_set",
+      "semantic_owner": "core",
+      "wire_profile": "storyos.project-activity.v1",
+      "description": "",
+      "positive_fixture": "storyos.golden.storyos.event.current-chapter-set.v1.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.current-chapter-set.v1.negative.v1"
     },
     {
       "schema_id": "storyos.event.authoritative-author-edit-applied.v1",

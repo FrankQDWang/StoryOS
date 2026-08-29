@@ -106,6 +106,9 @@ export function ManuscriptTree({
   createEnabled,
   selectedChapterId,
   onSelectChapter,
+  currentChapterId,
+  makeCurrentEnabled,
+  onMakeCurrent,
   onChapterCreated,
   onVolumeUpdated,
 }: {
@@ -117,6 +120,9 @@ export function ManuscriptTree({
   createEnabled: boolean;
   selectedChapterId?: string;
   onSelectChapter?: (chapterId: string) => void;
+  currentChapterId?: string;
+  makeCurrentEnabled?: boolean;
+  onMakeCurrent?: (chapterId: string) => void;
   onChapterCreated: () => void;
   onVolumeUpdated: () => void;
 }) {
@@ -178,6 +184,9 @@ export function ManuscriptTree({
                     expectedChapterRevision={tree.tree_revision}
                     selectedChapterId={selectedChapterId}
                     onSelectChapter={onSelectChapter}
+                    currentChapterId={currentChapterId}
+                    makeCurrentEnabled={makeCurrentEnabled}
+                    onMakeCurrent={onMakeCurrent}
                     createEnabled={createEnabled}
                     baseUrl={baseUrl}
                     fetchImpl={fetchImpl}

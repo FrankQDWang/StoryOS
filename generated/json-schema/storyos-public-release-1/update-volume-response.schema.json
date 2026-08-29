@@ -167,7 +167,8 @@
         "createVolume",
         "createChapter",
         "updateVolume",
-        "updateChapter"
+        "updateChapter",
+        "setCurrentChapter"
       ],
       "type": "string"
     },

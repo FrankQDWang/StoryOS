@@ -19,15 +19,15 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:fc1b54b6f3ce16b2593e1d06503d2ac52a72e3751e5e49e282ba6f9aa100e8ac",
+    "migration_chain_digest": "sha256:9bd2e44f05f2a584c86a89e8eae6dc69138aa66ea006f38cb9a22693d795a338",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-08-29-manuscript-block-v1",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-08-29-set-current-chapter-v1",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:413da04ca790543815914078c57eeb41e25598378edb0170cf8e0677bb0f6a79",
+      "route_catalog_sha256": "sha256:d6570c68b7d7a65e3be832caacab5830614302afdd8e2993c3bc4992cdbd068b",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:5a6b40e40b590454ab0121d6a8c1c12290fbd215e11381c003cd93b235c42a26",
+      "manifest_sha256": "sha256:ebe559ff375a3a34e452b6e4af04930951cef0c4230eeae709e81cdd5fab24e4",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -307,6 +307,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0018_manuscript_blocks.sql",
           "lf_sha256": "sha256:46f71260d7d0e47664afd6e1df1cde248cbb12e10ab80ddee6c54302fe5d94b3"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0019_set_current_chapter.sql",
+          "lf_sha256": "sha256:99279ff9d1effc5ff816e2e22ee5efabc309d630649146638def9338156fb604"
         }
       ]
     },
@@ -432,7 +436,7 @@
       "head": "scoped_head_and_counter",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "canonical_facts_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects", "getProject", "updateProject", "createVolume", "updateVolume", "deleteVolume", "createChapter", "updateChapter", "deleteChapter", "applyAuthorEdit", "getApplyAuthorEditOutcome", "getManuscriptTree", "getChapter", "getStatistics", "searchManuscript", "exportHumanReadableManuscript", "getHumanReadableManuscriptExport"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects", "getProject", "updateProject", "createVolume", "updateVolume", "deleteVolume", "createChapter", "updateChapter", "deleteChapter", "setCurrentChapter", "applyAuthorEdit", "getApplyAuthorEditOutcome", "getManuscriptTree", "getChapter", "getStatistics", "searchManuscript", "exportHumanReadableManuscript", "getHumanReadableManuscriptExport"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "artifact-proposal-draft",

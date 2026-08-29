@@ -48,6 +48,10 @@ mod update_volume_tests;
 #[path = "update_chapter_tests.rs"]
 mod update_chapter_tests;
 
+#[cfg(test)]
+#[path = "set_current_chapter_tests.rs"]
+mod set_current_chapter_tests;
+
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
@@ -63,6 +67,7 @@ mod editor_session;
 mod list_projects;
 mod manuscript_block;
 mod manuscript_tree;
+mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod update_chapter;

@@ -29,6 +29,7 @@ mod list_projects;
 mod manuscript_tree;
 mod project_command_challenge;
 mod request_origin;
+mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod update_chapter;
@@ -56,6 +57,7 @@ use list_projects::list_projects;
 use manuscript_tree::get_manuscript_tree;
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
+use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use takeover::take_over_project_writer;
 use update_chapter::update_chapter;
@@ -235,6 +237,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             routing::on(
                 method_filter(contracts::CREATE_CHAPTER_METHOD),
                 create_chapter,
+            ),
+        )
+        .route(
+            contracts::SET_CURRENT_CHAPTER_PATH,
+            routing::on(
+                method_filter(contracts::SET_CURRENT_CHAPTER_METHOD),
+                set_current_chapter,
             ),
         )
         .route(

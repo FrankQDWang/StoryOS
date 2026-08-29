@@ -1,0 +1,58 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000922",
+  "command_id": "018f0000-0000-7001-8000-000000000921",
+  "correlation_id": "018f0000-0000-7001-8000-000000000920",
+  "effect": {
+    "base_snapshot_id": "018f0000-0000-7001-8000-000000000925",
+    "current_chapter_id": "018f0000-0000-7001-8000-000000000803",
+    "kind": "authoritative_applied",
+    "project_activity_position": "4"
+  },
+  "project": {
+    "open": {
+      "current_chapter_id": "018f0000-0000-7001-8000-000000000803",
+      "kind": "current_chapter"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000002",
+    "title": "Project A"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "receipt": {
+    "artifact_lifecycle_event_refs": [],
+    "author_action_sequence": null,
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000922",
+    "authoritative_commit_ids": [],
+    "authoritative_revision_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.setCurrentChapter.jcs.v1",
+      "value_hex_lowercase": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "command_kind": "setCurrentChapter",
+    "condition_refs": [],
+    "created_at": "1970-01-01T00:00:00.000Z",
+    "draft_artifact_refs": [],
+    "expected_heads": [
+      "018f0000-0000-7001-8000-000000000805"
+    ],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000924",
+    "prior_heads": [
+      "018f0000-0000-7001-8000-000000000805"
+    ],
+    "producer_cause": "author_command_admission",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+    },
+    "proposal_revision_ids": [],
+    "receipt_id": "018f0000-0000-7001-8000-000000000923",
+    "result": "authoritative_applied",
+    "resulting_heads": [
+      "018f0000-0000-7001-8000-000000000805"
+    ]
+  },
+  "schema_id": "storyos.command.set-current-chapter.response.v1"
+}

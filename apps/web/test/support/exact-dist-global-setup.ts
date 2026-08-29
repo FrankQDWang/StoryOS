@@ -79,7 +79,9 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND command_kind <> 'createVolume'
             AND command_kind <> 'createChapter'
             AND command_kind <> 'updateVolume'
-            AND command_kind <> 'updateChapter')
+            AND command_kind <> 'updateChapter'
+            AND command_kind <> 'applyAuthorEdit'
+            AND command_kind <> 'setCurrentChapter')
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {
