@@ -31,6 +31,12 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
+function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis {
+  const result = frame.contentWindow;
+  if (result === null) throw new Error("the production page realm is unavailable");
+  return result as Window & typeof globalThis;
+}
+
 function appRoot(frame: HTMLIFrameElement): Element {
   const root = frame.contentDocument?.querySelector("#app");
   if (root === null || root === undefined) {
@@ -39,9 +45,10 @@ function appRoot(frame: HTMLIFrameElement): Element {
   return root;
 }
 
-function workspace(root: Element): HTMLElement {
-  const node = root.querySelector("[data-writing-workspace]");
-  if (!(node instanceof HTMLElement)) {
+function workspace(frame: HTMLIFrameElement): HTMLElement {
+  const childWindow = applicationWindow(frame);
+  const node = frame.contentDocument?.querySelector("[data-writing-workspace]");
+  if (!(node instanceof childWindow.HTMLElement)) {
     throw new Error("the writing workspace is missing");
   }
   return node;
@@ -71,7 +78,7 @@ it("the production page uses the approved workspace without losing writing state
   ).toBe("empty-project-ready");
 
   const empty = appRoot(frame);
-  const emptyWorkspace = workspace(empty);
+  const emptyWorkspace = workspace(frame);
   expect(empty.querySelector('nav[aria-label="稿件目录"]')).not.toBeNull();
   expect(empty.querySelector("textarea")).toBeNull();
   expect(emptyWorkspace.querySelector("[data-writing-assistant]")?.getAttribute(
@@ -113,16 +120,17 @@ it("the production page uses the approved workspace without losing writing state
   }).toBe(true);
 
   const root = appRoot(frame);
-  const shell = workspace(root);
+  const shell = workspace(frame);
+  const childWindow = applicationWindow(frame);
   const editor = root.querySelector("textarea");
   const assistant = shell.querySelector("[data-writing-assistant]");
-  const toggle = shell.querySelector<HTMLButtonElement>("[data-assistant-toggle]");
-  const currentChapter = root.querySelector<HTMLButtonElement>(
+  const toggle = shell.querySelector("[data-assistant-toggle]");
+  const currentChapter = root.querySelector(
     'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
   );
-  if (!(editor instanceof HTMLTextAreaElement)
-    || !(assistant instanceof HTMLElement)
-    || toggle === null
+  if (!(editor instanceof childWindow.HTMLTextAreaElement)
+    || !(assistant instanceof childWindow.HTMLElement)
+    || !(toggle instanceof childWindow.HTMLButtonElement)
     || currentChapter === null) {
     throw new Error("the production writing columns are incomplete");
   }
