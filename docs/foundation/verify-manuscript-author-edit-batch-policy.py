@@ -519,7 +519,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "f6dba7e83770d82dc8fe1a723ce08ee26559732c6d1f7f721c67c8caf7c92c18":
+    ).encode()).hexdigest() != "2723ca5f79a8f04ddb6d42d49a5f9fb0dc3ca779d0aeaa9895bcf46657253c29":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
