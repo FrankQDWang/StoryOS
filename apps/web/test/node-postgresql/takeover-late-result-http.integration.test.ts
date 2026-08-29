@@ -248,7 +248,14 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
       },
     });
     assert.deepEqual(chapter.chapter.current_revision, {
-      revision_id: winner.base_snapshot.authoritative_head_revision_id, body: expectedBody,
+      revision_id: winner.base_snapshot.authoritative_head_revision_id,
+      body: expectedBody,
+      blocks: [{
+        manuscript_block_id:
+          writer.base_snapshot.materialized_revision.blocks[0]!.manuscript_block_id,
+        block_kind: "paragraph",
+        text: expectedBody,
+      }],
     });
     assert.equal(chapter.project_activity_position, winner.base_snapshot.project_activity_position);
     assert.equal(canonical.snapshot.project_activity_position, chapter.project_activity_position);
@@ -337,7 +344,16 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
       },
       effect: {
         kind: "authoritative_applied",
-        authoritative_revision: { revision_id: revisionId, body: expectedBody },
+        authoritative_revision: {
+          revision_id: revisionId,
+          body: expectedBody,
+          blocks: [{
+            manuscript_block_id:
+              writer.base_snapshot.materialized_revision.blocks[0]!.manuscript_block_id,
+            block_kind: "paragraph",
+            text: expectedBody,
+          }],
+        },
         authoritative_commit_id: commitId,
         author_action_sequence: late.effect.author_action_sequence,
         project_activity_position: late.effect.project_activity_position,
