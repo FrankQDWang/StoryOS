@@ -95,6 +95,28 @@ async fn read_settlement_owned_state(
     }
 }
 
+async fn revision_member_block_id(
+    admin: &Client,
+    owner_user_id: &str,
+    project_id: &str,
+    chapter_id: &str,
+    revision_id: &str,
+) -> String {
+    admin
+        .query_one(
+            "SELECT manuscript_block_id::text
+               FROM storyos.manuscript_revision_members
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND manuscript_object_id = $3::text::uuid
+                AND revision_id = $4::text::uuid",
+            &[&owner_user_id, &project_id, &chapter_id, &revision_id],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+
 fn set_unique_command_identity(command: &mut ApplyAuthorEditCommand, chapter_id: &str) {
     command.correlation_id = Uuid::now_v7().to_string();
     command.ids.command_id = Uuid::now_v7().to_string();
@@ -309,7 +331,7 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
         "91",
     );
     set_unique_command_identity(&mut first_command, &chapter_id);
-    first_command.expected_authoritative_revision_id = initial_revision_id;
+    first_command.expected_authoritative_revision_id = initial_revision_id.clone();
     bind_canonical_payload(&mut first_command);
     issue_command_challenge(&store, &first_command, "counter-first-nonce").await;
     let first = storyos_application::apply_author_edit(&store, &first_command)
@@ -323,6 +345,28 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     };
     assert_eq!(first_blocks.len(), 1);
     assert_eq!(first_blocks[0].text, "Authoritative A!");
+    assert_eq!(
+        revision_member_block_id(
+            &admin,
+            &owner_user_id,
+            &project_id,
+            &chapter_id,
+            &initial_revision_id,
+        )
+        .await,
+        first_blocks[0].manuscript_block_id
+    );
+    assert_eq!(
+        revision_member_block_id(
+            &admin,
+            &owner_user_id,
+            &project_id,
+            &chapter_id,
+            &first_ids.revision_id,
+        )
+        .await,
+        first_blocks[0].manuscript_block_id
+    );
     assert_eq!(
         first.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {

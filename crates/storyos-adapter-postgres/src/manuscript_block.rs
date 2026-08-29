@@ -42,7 +42,7 @@ pub(crate) async fn insert_paragraph_block(
     Ok(())
 }
 
-pub(crate) async fn load_or_upgrade_blocks(
+pub(crate) async fn load_revision_blocks(
     client: &impl GenericClient,
     owner_user_id: &str,
     project_id: &str,
@@ -65,9 +65,31 @@ pub(crate) async fn load_or_upgrade_blocks(
             &[&owner_user_id, &project_id, &chapter_id, &revision_id],
         )
         .await?;
-    if let Some(row) = rows.first() {
-        let manuscript_block_id = row.get::<_, String>(0);
-        return Ok(upgrade_legacy_manuscript(body, &manuscript_block_id).blocks);
+    let Some(row) = rows.first() else {
+        return Ok(Vec::new());
+    };
+    Ok(upgrade_legacy_manuscript(body, &row.get::<_, String>(0)).blocks)
+}
+
+pub(crate) async fn load_or_upgrade_blocks(
+    client: &impl GenericClient,
+    owner_user_id: &str,
+    project_id: &str,
+    chapter_id: &str,
+    revision_id: &str,
+    body: &str,
+) -> Result<Vec<ManuscriptBlock>, tokio_postgres::Error> {
+    let blocks = load_revision_blocks(
+        client,
+        owner_user_id,
+        project_id,
+        chapter_id,
+        revision_id,
+        body,
+    )
+    .await?;
+    if !blocks.is_empty() {
+        return Ok(blocks);
     }
     let manuscript_block_id = Uuid::now_v7().to_string();
     insert_paragraph_block(
@@ -89,7 +111,7 @@ pub(crate) async fn copy_or_upgrade_revision_members(
     chapter_id: &str,
     from_revision_id: &str,
     to_revision_id: &str,
-) -> Result<(), tokio_postgres::Error> {
+) -> Result<u64, tokio_postgres::Error> {
     for already_upgraded in [false, true] {
         let copied = client
             .execute(
@@ -113,10 +135,10 @@ pub(crate) async fn copy_or_upgrade_revision_members(
             )
             .await?;
         if copied > 0 {
-            return Ok(());
+            return Ok(copied);
         }
         if already_upgraded {
-            return Ok(());
+            return Ok(0);
         }
         let manuscript_block_id = Uuid::now_v7().to_string();
         insert_paragraph_block(
@@ -129,5 +151,5 @@ pub(crate) async fn copy_or_upgrade_revision_members(
         )
         .await?;
     }
-    Ok(())
+    Ok(0)
 }

@@ -57,7 +57,7 @@ pub(super) async fn persist_author_edit_settlement(
                 authoritative_commit_sequence,
             )
             .await?;
-            let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+            let blocks = crate::manuscript_block::load_revision_blocks(
                 client,
                 command.project_scope.owner_user_id.as_ref(),
                 command.project_scope.project_id.as_ref(),
@@ -67,6 +67,11 @@ pub(super) async fn persist_author_edit_settlement(
             )
             .await
             .map_err(author_edit_database_error)?;
+            if blocks.is_empty() {
+                return Err(AuthorEditError::Unavailable(Box::new(
+                    std::io::Error::other("successor revision members were not copied"),
+                )));
+            }
             PreparedSettlement::AuthoritativeApplied {
                 ids,
                 body,
@@ -350,7 +355,7 @@ async fn persist_authority_change(
         )
         .await
         .map_err(author_edit_database_error)?;
-    crate::manuscript_block::copy_or_upgrade_revision_members(
+    let copied = crate::manuscript_block::copy_or_upgrade_revision_members(
         client,
         command.project_scope.owner_user_id.as_ref(),
         command.project_scope.project_id.as_ref(),
@@ -360,6 +365,11 @@ async fn persist_authority_change(
     )
     .await
     .map_err(author_edit_database_error)?;
+    if copied == 0 {
+        return Err(AuthorEditError::Unavailable(Box::new(
+            std::io::Error::other("successor revision members were not copied"),
+        )));
+    }
     client
         .execute(
             "INSERT INTO storyos.authoritative_revision_envelopes
