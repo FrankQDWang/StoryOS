@@ -30,12 +30,10 @@ import type {
 } from "./editor-types.ts";
 import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./editor-session.ts";
 import { archiveOwnedProject } from "./archive-project.ts";
-import { createOwnedChapter } from "./create-chapter.ts";
-import { createOwnedVolume } from "./create-volume.ts";
 import { attachManualInput, type ManualInputController } from "./manual-input.ts";
+import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import { renameOwnedProject } from "./rename-project.ts";
-import { ChapterTreeActions } from "./chapter-tree-actions.tsx";
-import { VolumeTreeActions } from "./volume-tree-actions.tsx";
+import { WritingWorkspace } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
   state: ControlledProjectState;
@@ -180,88 +178,103 @@ function ProjectReadyView({
   };
 
   const archived = lifecycle === "archived";
+  const writer = state.editor.kind === "editor-ready"
+    ? state.editor.session.writer
+    : state.editor.writer;
+  const refreshTree = () => {
+    void getManuscriptTree({
+      baseUrl,
+      projectId: state.project.project.project_id,
+      fetchImpl,
+    }).then(setTree).catch(() => {});
+  };
   return (
-    <section>
-      <h1>{title}</h1>
-      {archived ? null : (
+    <WritingWorkspace
+      writer={writer}
+      tree={(
         <>
-          <RenameProjectForm
-            projectId={state.project.project.project_id}
-            revision={revision}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            cryptoImpl={cryptoImpl}
-            onRenamed={(nextTitle, nextRevision) => {
-              setTitle(nextTitle);
-              setRevision(nextRevision);
-            }}
-          />
-          <ArchiveProjectForm
-            projectId={state.project.project.project_id}
-            revision={revision}
-            baseUrl={baseUrl}
-            fetchImpl={fetchImpl}
-            cryptoImpl={cryptoImpl}
-            onArchived={onArchived}
-          />
+          <h1>{title}</h1>
+          {tree === undefined ? null : (
+            <ManuscriptTree
+              projectId={state.project.project.project_id}
+              tree={tree}
+              baseUrl={baseUrl}
+              fetchImpl={fetchImpl}
+              cryptoImpl={cryptoImpl}
+              createEnabled={!archived}
+              selectedChapterId={selectedChapter.chapter.chapter_id}
+              onSelectChapter={selectChapter}
+              onChapterCreated={refreshTree}
+              onVolumeUpdated={refreshTree}
+            />
+          )}
+          {archived ? null : (
+            <div className="tree-footer">
+              <RenameProjectForm
+                projectId={state.project.project.project_id}
+                revision={revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onRenamed={(nextTitle, nextRevision) => {
+                  setTitle(nextTitle);
+                  setRevision(nextRevision);
+                }}
+              />
+              <ArchiveProjectForm
+                projectId={state.project.project.project_id}
+                revision={revision}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                onArchived={onArchived}
+              />
+            </div>
+          )}
         </>
       )}
-      {tree === undefined ? null : (
-        <ManuscriptTree
-          projectId={state.project.project.project_id}
-          tree={tree}
-          baseUrl={baseUrl}
-          fetchImpl={fetchImpl}
-          cryptoImpl={cryptoImpl}
-          createEnabled={!archived}
-          selectedChapterId={selectedChapter.chapter.chapter_id}
-          onSelectChapter={selectChapter}
-          onChapterCreated={() => {
-            void getManuscriptTree({
-              baseUrl,
-              projectId: state.project.project.project_id,
-              fetchImpl,
-            }).then(setTree).catch(() => {});
-          }}
-          onVolumeUpdated={() => {
-            void getManuscriptTree({
-              baseUrl,
-              projectId: state.project.project.project_id,
-              fetchImpl,
-            }).then(setTree).catch(() => {});
-          }}
-        />
-      )}
-      {switchRecovery === undefined ? null : <p role="alert">{switchRecovery}</p>}
-      <h2>{selectedChapter.chapter.title}</h2>
-      <textarea ref={editorRef} defaultValue={initialBody} readOnly={readOnly || archived} />
-      <small
-        data-save-state={saveState}
-        data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
-        data-authoritative-revision-id={pending?.authoritative_revision_id ?? ""}
-      >
-        {saveState}
-      </small>
-      {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
-        ? (
-          <button
-            type="button"
-            data-reconfirm-legacy-blocks=""
-            onClick={() => {
-              void reconfirmLegacyReplaceSelection(state.editor as EditorReadyState)
-                .then((projection) => {
-                  (state.editor as EditorReadyState).pending = projection;
-                  setPending(projection);
-                  setSaveState(projection.save_state);
-                });
-            }}
+      editor={(
+        <>
+          {switchRecovery === undefined ? null : <p role="alert">{switchRecovery}</p>}
+          <h2>{selectedChapter.chapter.title}</h2>
+          <textarea
+            ref={editorRef}
+            className="manuscript-editor"
+            data-manuscript-editor=""
+            defaultValue={initialBody}
+            readOnly={readOnly || archived}
+          />
+          <small
+            data-save-state={saveState}
+            data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
+            data-authoritative-revision-id={
+              pending?.authoritative_revision_id
+                ?? selectedChapter.chapter.current_revision.revision_id
+            }
           >
-            确认待写入正文
-          </button>
-        )
-        : null}
-      <small>{`权威修订 ${selectedChapter.chapter.current_revision.revision_id}`}</small>
-    </section>
+            {saveState}
+          </small>
+          {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
+            ? (
+              <button
+                type="button"
+                data-reconfirm-legacy-blocks=""
+                onClick={() => {
+                  void reconfirmLegacyReplaceSelection(state.editor as EditorReadyState)
+                    .then((projection) => {
+                      (state.editor as EditorReadyState).pending = projection;
+                      setPending(projection);
+                      setSaveState(projection.save_state);
+                    });
+                }}
+              >
+                确认待写入正文
+              </button>
+            )
+            : null}
+        </>
+      )}
+    />
   );
 }
 
@@ -351,179 +364,6 @@ function ArchiveProjectForm({
   );
 }
 
-function CreateChapterForm({
-  projectId,
-  volumeId,
-  treeRevision,
-  baseUrl,
-  fetchImpl,
-  cryptoImpl,
-  onCreated,
-}: {
-  projectId: string;
-  volumeId: string;
-  treeRevision: string;
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  cryptoImpl: Crypto;
-  onCreated: () => void;
-}) {
-  return (
-    <form
-      data-create-chapter={volumeId}
-      onSubmit={(event) => {
-        event.preventDefault();
-        const title = String(new FormData(event.currentTarget).get("chapter-title") ?? "").trim();
-        if (!title) return;
-        void createOwnedChapter({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId,
-          volumeId,
-          title,
-          expectedTreeRevision: treeRevision,
-        }).then((created) => {
-          if (created.effect.kind !== "authoritative_applied") return;
-          onCreated();
-        }).catch(() => {});
-      }}
-    >
-      <label>
-        章标题
-        <input name="chapter-title" required maxLength={1024} />
-      </label>
-      <button type="submit">创建章</button>
-    </form>
-  );
-}
-
-function ManuscriptTree({
-  projectId,
-  tree,
-  baseUrl,
-  fetchImpl,
-  cryptoImpl,
-  createEnabled,
-  selectedChapterId,
-  onSelectChapter,
-  onChapterCreated,
-  onVolumeUpdated,
-}: {
-  projectId: string;
-  tree: GetManuscriptTreeResponse;
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  cryptoImpl: Crypto;
-  createEnabled: boolean;
-  selectedChapterId?: string;
-  onSelectChapter?: (chapterId: string) => void;
-  onChapterCreated: () => void;
-  onVolumeUpdated: () => void;
-}) {
-  const volumeCount = tree.volumes.length;
-  return (
-    <nav aria-label="稿件目录">
-      <ul>
-        {tree.volumes.map((volume) => (
-          <li key={volume.volume_id} data-volume-id={volume.volume_id} data-volume-order={volume.order}>
-            <span data-volume-title>{volume.title}</span>
-            {createEnabled ? (
-              <VolumeTreeActions
-                projectId={projectId}
-                volumeId={volume.volume_id}
-                title={volume.title}
-                order={volume.order}
-                volumeCount={volumeCount}
-                expectedVolumeRevision={tree.tree_revision}
-                baseUrl={baseUrl}
-                fetchImpl={fetchImpl}
-                cryptoImpl={cryptoImpl}
-                onUpdated={onVolumeUpdated}
-              />
-            ) : null}
-            <ul>
-              {volume.chapters.map((chapter) => (
-                <ChapterTreeActions
-                  key={chapter.chapter_id}
-                  projectId={projectId}
-                  chapterId={chapter.chapter_id}
-                  title={chapter.title}
-                  order={chapter.order}
-                  chapterCount={volume.chapters.length}
-                  expectedChapterRevision={tree.tree_revision}
-                  selectedChapterId={selectedChapterId}
-                  onSelectChapter={onSelectChapter}
-                  createEnabled={createEnabled}
-                  baseUrl={baseUrl}
-                  fetchImpl={fetchImpl}
-                  cryptoImpl={cryptoImpl}
-                  onUpdated={onVolumeUpdated}
-                />
-              ))}
-            </ul>
-            {createEnabled ? (
-              <CreateChapterForm
-                projectId={projectId}
-                volumeId={volume.volume_id}
-                treeRevision={tree.tree_revision}
-                baseUrl={baseUrl}
-                fetchImpl={fetchImpl}
-                cryptoImpl={cryptoImpl}
-                onCreated={onChapterCreated}
-              />
-            ) : null}
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
-}
-
-function CreateVolumeForm({
-  projectId,
-  treeRevision,
-  baseUrl,
-  fetchImpl,
-  cryptoImpl,
-  onCreated,
-}: {
-  projectId: string;
-  treeRevision: string;
-  baseUrl: string;
-  fetchImpl: typeof fetch;
-  cryptoImpl: Crypto;
-  onCreated: () => void;
-}) {
-  return (
-    <form
-      data-create-volume={projectId}
-      onSubmit={(event) => {
-        event.preventDefault();
-        const title = String(new FormData(event.currentTarget).get("volume-title") ?? "").trim();
-        if (!title) return;
-        void createOwnedVolume({
-          baseUrl,
-          fetchImpl,
-          cryptoImpl,
-          projectId,
-          title,
-          expectedTreeRevision: treeRevision,
-        }).then((created) => {
-          if (created.effect.kind !== "authoritative_applied") return;
-          onCreated();
-        }).catch(() => {});
-      }}
-    >
-      <label>
-        卷标题
-        <input name="volume-title" required maxLength={1024} />
-      </label>
-      <button type="submit">创建卷</button>
-    </form>
-  );
-}
-
 function EmptyProjectReadyView({
   project,
   tree,
@@ -554,47 +394,53 @@ function EmptyProjectReadyView({
     }).catch(() => {});
   }, [baseUrl, fetchImpl, project.project.project_id]);
   return (
-    <section>
-      <h1>{title}</h1>
-      <p>空工作区</p>
-      <ManuscriptTree
-        projectId={project.project.project_id}
-        tree={tree}
-        baseUrl={baseUrl}
-        fetchImpl={fetchImpl}
-        cryptoImpl={cryptoImpl}
-        createEnabled
-        onChapterCreated={onChapterCreated}
-        onVolumeUpdated={onVolumeCreated}
-      />
-      <CreateVolumeForm
-        projectId={project.project.project_id}
-        treeRevision={tree.tree_revision}
-        baseUrl={baseUrl}
-        fetchImpl={fetchImpl}
-        cryptoImpl={cryptoImpl}
-        onCreated={onVolumeCreated}
-      />
-      <RenameProjectForm
-        projectId={project.project.project_id}
-        revision={revision}
-        baseUrl={baseUrl}
-        fetchImpl={fetchImpl}
-        cryptoImpl={cryptoImpl}
-        onRenamed={(nextTitle, nextRevision) => {
-          setTitle(nextTitle);
-          setRevision(nextRevision);
-        }}
-      />
-      <ArchiveProjectForm
-        projectId={project.project.project_id}
-        revision={revision}
-        baseUrl={baseUrl}
-        fetchImpl={fetchImpl}
-        cryptoImpl={cryptoImpl}
-        onArchived={onArchived}
-      />
-    </section>
+    <WritingWorkspace
+      tree={(
+        <>
+          <h1>{title}</h1>
+          <ManuscriptTree
+            projectId={project.project.project_id}
+            tree={tree}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+            cryptoImpl={cryptoImpl}
+            createEnabled
+            onChapterCreated={onChapterCreated}
+            onVolumeUpdated={onVolumeCreated}
+          />
+          <CreateVolumeForm
+            projectId={project.project.project_id}
+            treeRevision={tree.tree_revision}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+            cryptoImpl={cryptoImpl}
+            onCreated={onVolumeCreated}
+          />
+          <div className="tree-footer">
+            <RenameProjectForm
+              projectId={project.project.project_id}
+              revision={revision}
+              baseUrl={baseUrl}
+              fetchImpl={fetchImpl}
+              cryptoImpl={cryptoImpl}
+              onRenamed={(nextTitle, nextRevision) => {
+                setTitle(nextTitle);
+                setRevision(nextRevision);
+              }}
+            />
+            <ArchiveProjectForm
+              projectId={project.project.project_id}
+              revision={revision}
+              baseUrl={baseUrl}
+              fetchImpl={fetchImpl}
+              cryptoImpl={cryptoImpl}
+              onArchived={onArchived}
+            />
+          </div>
+        </>
+      )}
+      editor={<p>空工作区</p>}
+    />
   );
 }
 
