@@ -1,4 +1,4 @@
-import { Extension } from "@tiptap/core";
+import { Extension, type Editor } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
@@ -7,13 +7,21 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
-import { isSupportedManuscriptDoc } from "./manuscript-doc.ts";
+import { isSupportedManuscriptDoc, manuscriptJson } from "./manuscript-doc.ts";
 
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
 
 export function isStoryosHydrateTransaction(transaction: { getMeta: (key: string) => unknown }): boolean {
   return transaction.getMeta(STORYOS_HYDRATE) === true;
+}
+
+export function hydrateManuscript(editor: Editor, blockId: string, body: string): void {
+  const next = editor.schema.nodeFromJSON(manuscriptJson(blockId, body));
+  const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size, next);
+  transaction.setMeta(STORYOS_HYDRATE, true);
+  transaction.setMeta("addToHistory", false);
+  editor.view.dispatch(transaction);
 }
 
 export function originFromTransaction(

@@ -26,7 +26,7 @@ export function paragraphUtf16(doc: Node): string | undefined {
   const paragraph = doc.firstChild;
   if (paragraph === null || paragraph.type.name !== "paragraph") return undefined;
   const id: unknown = paragraph.attrs.id;
-  if (typeof id !== "string" || id.length === 0) return undefined;
+  if (typeof id !== "string") return undefined;
   let text = "";
   for (let offset = 0; offset < paragraph.childCount; offset += 1) {
     const child = paragraph.child(offset);

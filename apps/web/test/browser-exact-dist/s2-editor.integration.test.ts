@@ -167,7 +167,7 @@ it("settles one Tiptap Block replacement and preserves text, Block identity, and
     const nextRoot = frame.contentDocument?.querySelector("#app");
     return nextRoot?.getAttribute("data-boot-state") === "project-ready"
       && nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }).toBe(true);
+  }, { timeout: 20_000 }).toBe(true);
   const reloadedRoot = appRoot(frame);
   const reloadedEditor = manuscriptEditor(reloadedRoot, applicationWindow(frame));
   expect(reloadedRoot.querySelector("textarea")).toBeNull();

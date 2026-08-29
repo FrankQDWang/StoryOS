@@ -12,6 +12,7 @@ import {
   paragraphUtf16,
 } from "./manuscript-doc.ts";
 import {
+  hydrateManuscript,
   isStoryosHydrateTransaction,
   originFromTransaction,
   storyosEditorProps,
@@ -59,12 +60,15 @@ export function ManuscriptEditor({
     extensions: storyosManuscriptExtensions(blockId),
     content: manuscriptJson(blockId, body),
     editable,
+    injectCSS: false,
     enableInputRules: false,
     enablePasteRules: false,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
     editorProps: storyosEditorProps(blockId),
     onCreate({ editor: created }) {
+      const rendered = paragraphUtf16(created.state.doc);
+      if (rendered !== body) hydrateManuscript(created, blockId, body);
       observedBodyRef.current = paragraphUtf16(created.state.doc) ?? body;
       syncManuscriptSurface(created.view.dom, observedBodyRef.current, blockId);
     },
@@ -92,6 +96,14 @@ export function ManuscriptEditor({
   useEffect(() => {
     editor?.setEditable(editable);
   }, [editable, editor]);
+
+  useEffect(() => {
+    if (editor === null) return;
+    const rendered = paragraphUtf16(editor.state.doc);
+    if (rendered !== body) hydrateManuscript(editor, blockId, body);
+    observedBodyRef.current = paragraphUtf16(editor.state.doc) ?? body;
+    syncManuscriptSurface(editor.view.dom, observedBodyRef.current, blockId);
+  }, [blockId, editor]);
 
   useEffect(() => {
     if (editor === null || persistWorkspace === undefined) {

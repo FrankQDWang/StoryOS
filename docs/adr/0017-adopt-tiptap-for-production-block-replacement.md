@@ -26,7 +26,7 @@ UniqueID declares the paragraph `id` attribute. Core owns the Manuscript Block i
 
 The adapter captures only a complete supported replacement. Hydration, Snapshot installation, decoration, and other non-edit transactions create no author intent. An unsupported transaction is refused. The editor document stays at the previous supported state, and recovery material is not partially edited.
 
-The production page retires the textarea write path. Paste and cut use `text/plain` only, so the existing Trusted Types policy without a default policy remains in force. Enter inserts U+000A in the same paragraph Block. Full IME product behavior, split, join, move, retype, and Undo remain later tickets.
+The production page retires the textarea write path. The adapter sets Tiptap `injectCSS` to false so the editor does not write a style element through `innerHTML`. Paste and cut use `text/plain` only. These choices keep the Trusted Types policy without a default policy. Enter inserts U+000A in the same paragraph Block. Full IME product behavior, split, join, move, retype, and Undo remain later tickets.
 
 This decision does not change `web_client_contract_revision`, IndexedDB meaning, or the Apply Author Edit command.
 
