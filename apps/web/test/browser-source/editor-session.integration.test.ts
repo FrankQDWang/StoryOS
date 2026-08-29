@@ -14,6 +14,7 @@ import {
   openEditorWorkspace,
   persistReplaceSelection,
   rebuildPendingProjection,
+  reconfirmLegacyReplaceSelection,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import type {
@@ -28,7 +29,11 @@ import {
   readJournalSnapshot,
   validateJournalSnapshot,
 } from "../../src/local-edit-journal.ts";
-import { withDigest } from "./local-edit-journal-append-fixture.ts";
+import {
+  FIRST_APPEND_EDIT,
+  openJournalAppendTestWorkspace,
+  withDigest,
+} from "./local-edit-journal-append-fixture.ts";
 import {
   CHAPTER,
   OWNER,
@@ -36,6 +41,7 @@ import {
   REVISION,
   SESSION,
   chapterRevision,
+  replaceBlockUnit,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -97,6 +103,91 @@ it("preserves the complete Journal when a retained Session Snapshot does not mat
     database?.close();
     sessionStorage.removeItem(activeSessionKey);
     await deleteJournal(scenario.journalName);
+  }
+});
+
+it("keeps incompatible pending ReplaceSelection inspectable until Block reconfirmation", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  try {
+    const workspace = test.workspace;
+    await persistReplaceSelection(workspace, FIRST_APPEND_EDIT);
+    const snapshot = await validateJournalSnapshot(
+      workspace,
+      await readJournalSnapshot(workspace),
+    );
+    const record = recordAt(snapshot.records, 0);
+    const primitive = requireAuthorEditUnit(record).normalized_primitives[0];
+    if (primitive?.kind !== "replace_block_selection") {
+      throw new Error("the persisted Author Edit is not a Block selection");
+    }
+    const authorEditUnit = {
+      ...requireAuthorEditUnit(record),
+      normalized_primitives: [{
+        kind: "replace_selection" as const,
+        from: primitive.from,
+        to: primitive.to,
+        text: primitive.text,
+      }],
+    };
+    const rewritten = {
+      ...record,
+      author_edit_unit: authorEditUnit,
+      payload_digest: await digestJournalValue(authorEditUnit, crypto),
+    };
+    const chain = snapshot.payloadChains[0];
+    if (chain === undefined) throw new Error("the payload chain is unavailable");
+    const rewrittenChain = {
+      ...chain,
+      ordered_patch_refs: chain.ordered_patch_refs.map((patch) =>
+        patch.completed_intent_record_id === record.completed_intent_record_id
+          ? { ...patch, normalized_primitives: authorEditUnit.normalized_primitives }
+          : patch),
+    };
+    const transaction = workspace.database.transaction(
+      ["intents", "payload_chains"],
+      "readwrite",
+      { durability: "strict" },
+    );
+    transaction.objectStore("intents").put(rewritten);
+    transaction.objectStore("payload_chains").put(rewrittenChain);
+    await transactionResult(transaction);
+
+    workspace.pending = await rebuildPendingProjection(workspace);
+    expect(workspace.pending).toEqual({
+      body: "Base!",
+      save_state: "needs_attention",
+      unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    });
+    await expect(freezeOneIntentSubmission(workspace, crypto))
+      .rejects.toThrow(/Block reconfirmation/);
+    await expect(persistReplaceSelection(workspace, {
+      from: 5,
+      to: 5,
+      text: "?",
+      resultingBody: "Base!?",
+    })).rejects.toThrow(/limit failed/);
+
+    workspace.pending = await reconfirmLegacyReplaceSelection(workspace, crypto);
+    expect(workspace.pending).toEqual({
+      body: "Base!",
+      save_state: "saving",
+      unsettled_intent_count: 1,
+      authoritative_revision_id: REVISION,
+    });
+    const confirmed = await validateJournalSnapshot(
+      workspace,
+      await readJournalSnapshot(workspace),
+    );
+    expect(confirmed.records).toHaveLength(1);
+    expect(recordAt(confirmed.records, 0).completed_intent_record_id)
+      .toBe(record.completed_intent_record_id);
+    expect(requireAuthorEditUnit(recordAt(confirmed.records, 0)))
+      .toEqual(replaceBlockUnit(4, 4, "!"));
+    const group = await freezeOneIntentSubmission(workspace, crypto);
+    expect(group.frozen_request_body.author_edit_units).toEqual([replaceBlockUnit(4, 4, "!")]);
+  } finally {
+    await test.close();
   }
 });
 
@@ -549,21 +640,10 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       authoritative_revision_id: FIRST_REVISION,
     });
     expect(authorEditRequests).toHaveLength(1);
-    expect(authorEditRequests[0]?.request.author_edit_units).toEqual([{
-      normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: 4,
-        to: 4,
-      },
-    }, {
-      normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
-      selection_snapshot: {
-        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-        from: 5,
-        to: 5,
-      },
-    }]);
+    expect(authorEditRequests[0]?.request.author_edit_units).toEqual([
+      replaceBlockUnit(4, 4, "!"),
+      replaceBlockUnit(5, 5, "?"),
+    ]);
     const editChallenges = challengeRequests.filter(
       (request) => request.command_schema === "storyos.command.apply-author-edit.request.v1",
     );
@@ -652,14 +732,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         sequence: 1,
         origin: "typing",
         base: scenario.session.base_snapshot,
-        unit: {
-          normalized_primitives: [{ kind: "replace_selection", from: 4, to: 4, text: "!" }],
-          selection_snapshot: {
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-            from: 4,
-            to: 4,
-          },
-        },
+        unit: replaceBlockUnit(4, 4, "!"),
         undoGroupId: "018f0000-0000-7001-8000-000000000040",
         createdAt: "2026-08-15T08:00:00.000Z",
       }),
@@ -667,14 +740,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         sequence: 2,
         origin: "typing",
         base: scenario.session.base_snapshot,
-        unit: {
-          normalized_primitives: [{ kind: "replace_selection", from: 5, to: 5, text: "?" }],
-          selection_snapshot: {
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-            from: 5,
-            to: 5,
-          },
-        },
+        unit: replaceBlockUnit(5, 5, "?"),
         undoGroupId: "018f0000-0000-7001-8000-000000000040",
         createdAt: "2026-08-15T08:00:00.250Z",
       }),
@@ -682,14 +748,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         sequence: 3,
         origin: "paste",
         base: freshSession.base_snapshot,
-        unit: {
-          normalized_primitives: [{ kind: "replace_selection", from: 6, to: 6, text: "+" }],
-          selection_snapshot: {
-            coordinate_profile: "storyos.editor.utf16-code-unit.v1",
-            from: 6,
-            to: 6,
-          },
-        },
+        unit: replaceBlockUnit(6, 6, "+"),
         undoGroupId: "018f0000-0000-7001-8000-000000000049",
         createdAt: "2026-08-15T08:00:00.500Z",
       }),

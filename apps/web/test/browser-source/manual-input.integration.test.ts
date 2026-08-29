@@ -26,6 +26,7 @@ import {
   updateClipboardPermission,
 } from "../support/browser-command-client.ts";
 import {
+  BLOCK,
   OWNER,
   PROJECT,
   SESSION,
@@ -529,7 +530,8 @@ it("settles trusted input, clipboard actions, and controlled Chrome IME in the J
     ]);
     const expectedUnits = trace.persisted.map((edit) => ({
       normalized_primitives: [{
-        kind: "replace_selection" as const,
+        kind: "replace_block_selection" as const,
+        manuscript_block_id: BLOCK,
         from: edit.from,
         to: edit.to,
         text: edit.text,

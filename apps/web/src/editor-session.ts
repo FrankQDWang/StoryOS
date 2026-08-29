@@ -35,7 +35,8 @@ export {
   freezeOneIntentSubmission,
   submitOnePendingAuthorEdit,
 } from "./author-edit-submission.ts";
-export { persistReplaceSelection, rebuildPendingProjection } from "./local-edit-journal.ts";
+export { persistReplaceSelection, rebuildPendingProjection, reconfirmLegacyReplaceSelection }
+  from "./local-edit-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -222,7 +223,11 @@ async function validateSession(
       proposal_head_revision_ids?: unknown;
       target_refs?: unknown;
       observed_ownership_partition?: unknown;
-      materialized_revision?: { revision_id?: unknown; body?: unknown };
+      materialized_revision?: {
+        revision_id?: unknown;
+        body?: unknown;
+        blocks?: unknown;
+      };
       materialized_payload_digest?: {
         algorithm?: unknown; profile?: unknown; value_hex_lowercase?: unknown;
       };
@@ -250,6 +255,8 @@ async function validateSession(
     || base?.materialized_revision?.revision_id !== chapter.chapter.current_revision.revision_id
     || base?.authoritative_head_revision_id !== base?.materialized_revision?.revision_id
     || base?.materialized_revision?.body !== chapter.chapter.current_revision.body
+    || JSON.stringify(base?.materialized_revision?.blocks)
+      !== JSON.stringify(chapter.chapter.current_revision.blocks)
     || base?.project_activity_position !== chapter.project_activity_position
     || base?.observed_ownership_partition !== "authoritative"
     || JSON.stringify(base?.target_refs)

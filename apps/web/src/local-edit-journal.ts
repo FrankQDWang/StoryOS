@@ -139,7 +139,7 @@ async function digestSubmissionCoverage(
 
 function replaceSelection(body: string, value: unknown) {
   const primitive = value as AuthorEditPrimitive | undefined;
-  if (primitive?.kind !== "replace_selection"
+  if ((primitive?.kind !== "replace_selection" && primitive?.kind !== "replace_block_selection")
     || !Number.isSafeInteger(primitive.from)
     || !Number.isSafeInteger(primitive.to)
     || primitive.from < 0
@@ -149,6 +149,24 @@ function replaceSelection(body: string, value: unknown) {
     throw new Error("Local Edit Journal reconstruction failed");
   }
   return `${body.slice(0, primitive.from)}${primitive.text}${body.slice(primitive.to)}`;
+}
+
+function isLegacyReplaceSelectionPrimitive(value: unknown) {
+  return typeof value === "object"
+    && value !== null
+    && Reflect.get(value, "kind") === "replace_selection";
+}
+
+export function journalHasIncompatiblePendingReplaceSelection(
+  records: JournalIntentRecord[],
+  coveredSequences: Set<number>,
+  baseSnapshotId: string,
+) {
+  return records.some((record) =>
+    record.base_snapshot_id === baseSnapshotId
+    && !coveredSequences.has(record.local_intent_sequence)
+    && (record.author_edit_unit?.normalized_primitives ?? [])
+      .some(isLegacyReplaceSelectionPrimitive));
 }
 
 function isAppliedSettlement(group: JournalSubmissionGroup) {
@@ -467,9 +485,16 @@ function pendingProjectionFromSnapshot(
   const body = (activeRecords.length === 0
     ? base.materialized_revision.body
     : snapshot.bodyBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
+  const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
+    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
+  const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
+    snapshot.records,
+    coveredSequences,
+    base.snapshot_id,
+  );
   return {
     body,
-    save_state: hasZeroAuthoritySettlement
+    save_state: hasZeroAuthoritySettlement || hasLegacyReplaceSelection
       ? "needs_attention"
       : activeRecords.length
         ? "saving"
@@ -499,8 +524,20 @@ export async function persistReplaceSelection(
   const undoGroupId = edit.undoGroupId ?? createJournalUuid(cryptoImpl);
   const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
+  const block = workspace.session.base_snapshot.materialized_revision.blocks[0];
+  if (workspace.session.base_snapshot.materialized_revision.blocks.length !== 1
+    || block?.block_kind !== "paragraph"
+    || block.text !== workspace.session.base_snapshot.materialized_revision.body
+    || typeof block.manuscript_block_id !== "string"
+    || !UUID.test(block.manuscript_block_id)) {
+    throw new Error("Local Edit Journal limit failed");
+  }
   const expectedBody = replaceSelection(projection.body, {
-    kind: "replace_selection", from: edit.from, to: edit.to, text: edit.text,
+    kind: "replace_block_selection",
+    manuscript_block_id: block.manuscript_block_id,
+    from: edit.from,
+    to: edit.to,
+    text: edit.text,
   });
   if (!INPUT_ORIGINS.has(inputOrigin)
     || !UUID.test(undoGroupId)
@@ -520,7 +557,11 @@ export async function persistReplaceSelection(
   const patchId = createJournalUuid(cryptoImpl);
   const authorEditUnit: AuthorEditUnit = {
     normalized_primitives: [{
-      kind: "replace_selection", from: edit.from, to: edit.to, text: edit.text,
+      kind: "replace_block_selection",
+      manuscript_block_id: block.manuscript_block_id,
+      from: edit.from,
+      to: edit.to,
+      text: edit.text,
     }],
     selection_snapshot: {
       coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: edit.from, to: edit.to,
@@ -676,4 +717,82 @@ export async function persistReplaceSelection(
     unsettled_intent_count: projection.unsettled_intent_count + 1,
     authoritative_revision_id: projection.authoritative_revision_id,
   };
+}
+
+export async function reconfirmLegacyReplaceSelection(
+  workspace: EditorWorkspace,
+  cryptoImpl: Crypto = globalThis.crypto,
+): Promise<PendingEditProjection> {
+  if (workspace.partition.disposition !== "current_writer_open") {
+    throw new Error("Editor Session is read only");
+  }
+  const block = workspace.session.base_snapshot.materialized_revision.blocks[0];
+  if (workspace.session.base_snapshot.materialized_revision.blocks.length !== 1
+    || block?.block_kind !== "paragraph"
+    || block.text !== workspace.session.base_snapshot.materialized_revision.body
+    || !UUID.test(block.manuscript_block_id)) {
+    throw new Error("Local Edit Journal limit failed");
+  }
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const covered = new Set(snapshot.groups.flatMap((group) =>
+    (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
+  if (snapshot.groups.some((group) => group.settlement?.kind === "unsettled")) {
+    throw new Error("Local Edit Journal requires prior group settlement");
+  }
+  const pendingLegacy = snapshot.records.filter((record) =>
+    record.base_snapshot_id === workspace.session.base_snapshot.snapshot_id
+    && !covered.has(record.local_intent_sequence)
+    && (record.author_edit_unit?.normalized_primitives ?? [])
+      .some(isLegacyReplaceSelectionPrimitive));
+  if (pendingLegacy.length === 0) {
+    return pendingProjectionFromSnapshot(workspace, snapshot);
+  }
+  const rewrittenRecords = new Map<string, JournalIntentRecord>();
+  for (const record of pendingLegacy) {
+    const authorEditUnit = {
+      ...record.author_edit_unit!,
+      normalized_primitives: record.author_edit_unit!.normalized_primitives.map((primitive) =>
+        primitive.kind === "replace_selection"
+          ? {
+              kind: "replace_block_selection" as const,
+              manuscript_block_id: block.manuscript_block_id,
+              from: primitive.from,
+              to: primitive.to,
+              text: primitive.text,
+            }
+          : primitive),
+    };
+    rewrittenRecords.set(record.completed_intent_record_id, {
+      ...record,
+      author_edit_unit: authorEditUnit,
+      payload_digest: await digestJournalValue(authorEditUnit, cryptoImpl),
+    });
+  }
+  const transaction = workspace.database.transaction(
+    ["intents", "payload_chains"],
+    "readwrite",
+    { durability: "strict" },
+  );
+  const intents = transaction.objectStore("intents");
+  const chains = transaction.objectStore("payload_chains");
+  for (const record of rewrittenRecords.values()) {
+    intents.put(record);
+  }
+  for (const chain of snapshot.payloadChains) {
+    let changed = false;
+    const orderedPatchRefs = chain.ordered_patch_refs.map((patch) => {
+      const rewritten = rewrittenRecords.get(patch.completed_intent_record_id);
+      if (!rewritten) return patch;
+      changed = true;
+      return {
+        ...patch,
+        normalized_primitives: rewritten.author_edit_unit!.normalized_primitives,
+      };
+    });
+    if (changed) {
+      chains.put({ ...chain, ordered_patch_refs: orderedPatchRefs });
+    }
+  }
+  await transactionResult(transaction);
+  return rebuildPendingProjection(workspace);
 }
