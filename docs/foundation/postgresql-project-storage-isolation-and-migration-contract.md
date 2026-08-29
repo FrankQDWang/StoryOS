@@ -989,15 +989,14 @@ atomic bootstrap. The empty migration-chain identity and digest are still
 checked against the public same-release identity; a matching semantic version
 alone never activates storage.
 
-The active bootstrap source set is exactly the seven catalogued SQL files under
-`crates/storyos-adapter-postgres/migrations/`. It contains the roles, controlled
-Project schema, challenge/idempotency schema, Editor Session schema, Author
-Edit schema, Snapshot/replay schema, and takeover Admission/Activity schema.
-The files contain no inner transaction boundary. The runner
-executes the ordered set in one PostgreSQL transaction. The catalog stores each
-LF-normalized source SHA-256 and the canonical manifest SHA-256. An unlisted
-SQL file, a missing file, source drift, manifest drift, or partial transaction
-blocks activation.
+The active bootstrap uses the catalogued ordered SQL source set under
+`crates/storyos-adapter-postgres/migrations/`. The Release 1 persistence
+catalog is the sole exhaustive authority for the membership and order of that
+set. The sources contain no inner transaction boundary. The runner executes
+the catalogued ordered set in one PostgreSQL transaction. The catalog stores
+each LF-normalized source SHA-256 and the canonical manifest SHA-256. An
+unlisted SQL file, a missing file, source drift, manifest drift, or partial
+transaction blocks activation.
 
 The role source contains no password or secret material. Runtime credential
 provisioning is a deployment-secret step after the atomic bootstrap. It is not
