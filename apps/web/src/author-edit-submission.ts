@@ -33,6 +33,7 @@ import {
   AUTHOR_EDIT_MAX_UNITS,
   AUTHOR_EDIT_MAX_WIRE_BODY_BYTES,
   JOURNAL_DATABASE_VERSION,
+  journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
   rebuildPendingProjection,
   readJournalSnapshot,
@@ -224,6 +225,13 @@ export async function freezeOneIntentSubmission(
     && record.base_snapshot_id === workspace.session.base_snapshot.snapshot_id);
   if (candidates.length === 0) {
     throw new Error("One pending Author Edit is required");
+  }
+  if (journalHasIncompatiblePendingReplaceSelection(
+    candidates,
+    new Set(),
+    workspace.session.base_snapshot.snapshot_id,
+  )) {
+    throw new Error("Local Edit Journal requires Block reconfirmation");
   }
   const firstCandidate = candidates[0]!;
   if (firstCandidate.local_intent_sequence !== firstUncovered?.local_intent_sequence) {
@@ -499,7 +507,17 @@ export async function submitOnePendingAuthorEdit({
   onWriterFenced?: () => void;
 }): Promise<PendingEditProjection> {
   const run = async (): Promise<PendingEditProjection> => {
-    const group = await freezeOneIntentSubmission(workspace, cryptoImpl);
+    let group: JournalSubmissionGroup;
+    try {
+      group = await freezeOneIntentSubmission(workspace, cryptoImpl);
+    } catch (error) {
+      if (error instanceof Error
+        && error.message === "Local Edit Journal requires Block reconfirmation") {
+        const pending = await rebuildPendingProjection(workspace);
+        return { ...pending, save_state: "needs_attention" };
+      }
+      throw error;
+    }
     const alreadyUnresolved = group.reconciliation?.kind === "outcome_query_unresolved";
     const proof = alreadyUnresolved ? null : await readAvailableCommandProof(workspace, group);
     if (alreadyUnresolved || proof) {

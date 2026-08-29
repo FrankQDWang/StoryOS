@@ -33,6 +33,28 @@ export function chapterRevision(revisionId: string, body: string, blockId = BLOC
   };
 }
 
+export function replaceBlockUnit(
+  from: number,
+  to: number,
+  text: string,
+  blockId = BLOCK,
+) {
+  return {
+    normalized_primitives: [{
+      kind: "replace_block_selection" as const,
+      manuscript_block_id: blockId,
+      from,
+      to,
+      text,
+    }],
+    selection_snapshot: {
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1" as const,
+      from,
+      to,
+    },
+  };
+}
+
 export interface BrowserScenario {
   readonly chapter: GetChapterResponse;
   readonly journalName: string;

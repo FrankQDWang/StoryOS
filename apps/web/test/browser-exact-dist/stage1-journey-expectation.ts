@@ -68,10 +68,10 @@ const TEXTS = [" Hello", "中文", " EN", "!"] as const;
 const ORIGINS = ["typing", "typing", "paste", "typing"] as const;
 const CHAPTER_BLOCK = "018f0000-0000-7001-8000-0000000000b1";
 const UNIT_DIGESTS = [
-  "8ffb38577db2c7858ade72684cf5100a5cfe9cd305b50e7c94a1fb0167beebbe",
-  "b8dde1c51a0b6118f0cf143a6dabacdf81f65a6932f9f2c3d8a1038381a62a8b",
-  "ad2b8fdada8755d7381925fc994d4c9b1be0193afcd88bd68eb05647d8b12b2d",
-  "6816d9d0141a07449962a67a93603332b26ce69ed5a1f1a6ce9d2cbe3b676b7e",
+  "9cbf58542af767161a6e2eaef4eb8af14221c12f8ba065f705bcc10831e65ad4",
+  "5d04aa846fe165198afc55b63931eba67ffa1eae4603385fe3fc717f82a640cf",
+  "8226324c0c63a87159ceff1f00f2917b489495088f0fb1393a7ae5cc56937ce1",
+  "babaa3609cdece53108dcd3120e4226e20a7c9bf9ec07a73cf5c716018fdc569",
 ] as const;
 const BODY_DIGESTS = [
   "87857d5ef182d0ec64f1674d9eb1d0b15ce31ede622af3527ba72a8405417109",
@@ -124,7 +124,8 @@ function replaceUnit(index: number) {
   const from = requiredAt(BODIES, index, "body").length;
   return {
     normalized_primitives: [{
-      kind: "replace_selection",
+      kind: "replace_block_selection",
+      manuscript_block_id: CHAPTER_BLOCK,
       from,
       to: from,
       text: requiredAt(TEXTS, index, "edit text"),

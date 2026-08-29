@@ -28,7 +28,7 @@ import type {
   PendingEditProjection,
   ProjectReadyState,
 } from "./editor-types.ts";
-import { rebuildPendingProjection } from "./editor-session.ts";
+import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./editor-session.ts";
 import { archiveOwnedProject } from "./archive-project.ts";
 import { createOwnedChapter } from "./create-chapter.ts";
 import { createOwnedVolume } from "./create-volume.ts";
@@ -242,6 +242,24 @@ function ProjectReadyView({
       >
         {saveState}
       </small>
+      {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
+        ? (
+          <button
+            type="button"
+            data-reconfirm-legacy-blocks=""
+            onClick={() => {
+              void reconfirmLegacyReplaceSelection(state.editor as EditorReadyState)
+                .then((projection) => {
+                  (state.editor as EditorReadyState).pending = projection;
+                  setPending(projection);
+                  setSaveState(projection.save_state);
+                });
+            }}
+          >
+            确认待写入正文
+          </button>
+        )
+        : null}
       <small>{`权威修订 ${selectedChapter.chapter.current_revision.revision_id}`}</small>
     </section>
   );

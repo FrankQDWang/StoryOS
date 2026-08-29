@@ -18,6 +18,7 @@ import {
   OWNER,
   PROJECT,
   SESSION,
+  chapterRevision,
   closeTrackedDatabases,
   chapterRevision,
   createAppliedAuthorEditResponse,

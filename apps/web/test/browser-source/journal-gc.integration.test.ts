@@ -19,6 +19,7 @@ import {
   PROJECT,
   REVISION,
   SESSION,
+  chapterRevision,
   closeTrackedDatabases,
   chapterRevision,
   createAppliedAuthorEditResponse,
