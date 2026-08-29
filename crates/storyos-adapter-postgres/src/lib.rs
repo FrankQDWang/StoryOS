@@ -61,6 +61,7 @@ mod create_project_challenge;
 mod create_volume;
 mod editor_session;
 mod list_projects;
+mod manuscript_block;
 mod manuscript_tree;
 mod snapshot;
 mod takeover;
@@ -578,7 +579,7 @@ impl ProjectReader for PostgresProjectReader {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
-        let chapter = transaction
+        let row = transaction
             .query_opt(
                 "SELECT object.manuscript_object_id::text, object.title, \
                         revision.revision_id::text, convert_from(payload.canonical_bytes, 'UTF8'), \
@@ -608,18 +609,38 @@ impl ProjectReader for PostgresProjectReader {
                 ],
             )
             .await
-            .map_err(read_error)?
-            .map(|row| -> Result<Chapter, ProjectReadError> { Ok(Chapter {
-                chapter_id: ChapterId::new(row.get::<_, String>(0)),
-                title: row.get(1),
-                revision_id: RevisionId::new(row.get::<_, String>(2)),
-                body: row.get(3),
-                project_activity_position: row
+            .map_err(read_error)?;
+        let chapter = match row {
+            None => None,
+            Some(row) => {
+                let chapter_id = ChapterId::new(row.get::<_, String>(0));
+                let title = row.get(1);
+                let revision_id = RevisionId::new(row.get::<_, String>(2));
+                let body: String = row.get(3);
+                let project_activity_position = row
                     .get::<_, String>(4)
                     .parse()
-                    .map_err(ProjectReadError::unavailable)?,
-            })})
-            .transpose()?;
+                    .map_err(ProjectReadError::unavailable)?;
+                let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+                    &transaction,
+                    scope.owner_user_id.as_ref(),
+                    scope.project_id.as_ref(),
+                    chapter_id.as_ref(),
+                    revision_id.as_ref(),
+                    &body,
+                )
+                .await
+                .map_err(read_error)?;
+                Some(Chapter {
+                    chapter_id,
+                    title,
+                    revision_id,
+                    body,
+                    blocks,
+                    project_activity_position,
+                })
+            }
+        };
         transaction.commit().await.map_err(read_error)?;
         Ok(chapter)
     }

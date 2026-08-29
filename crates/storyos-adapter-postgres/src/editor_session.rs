@@ -2,7 +2,7 @@ use sha2::{Digest, Sha256};
 use storyos_application::{
     EditorSession, EditorSessionError, EditorSessionLookup, EditorSessionSnapshot,
     EditorSessionStore, EditorWriterState, OpenEditorSession, ProjectCommandChallengeError,
-    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
+    ProjectCommandChallengeTransaction, ProjectCommandChallengeUse, ProjectScope,
 };
 
 use super::*;
@@ -116,6 +116,7 @@ impl EditorSessionStore for PostgresProjectReader {
         };
         let result = read_session(
             &transaction.client,
+            &request.project_scope,
             &editor_session_id,
             &request.client_binding,
         )
@@ -146,6 +147,7 @@ impl EditorSessionStore for PostgresProjectReader {
                 .map_err(session_challenge_error)?;
             read_session(
                 &client,
+                &request.project_scope,
                 request.editor_session_id.as_ref(),
                 &request.client_binding,
             )
@@ -173,6 +175,7 @@ impl EditorSessionStore for PostgresProjectReader {
 
 async fn read_session(
     client: &tokio_postgres::Client,
+    scope: &ProjectScope,
     editor_session_id: &str,
     binding: &storyos_application::EditorClientBinding,
 ) -> Result<Option<EditorSession>, EditorSessionError> {
@@ -220,51 +223,64 @@ async fn read_session(
         &[&editor_session_id, &binding.binding_ref, &generation,
           &binding.client_contract_revision, &binding.security_policy_revision],
     ).await.map_err(session_database_error)?;
-    row.map(|row| {
-        let writer_generation = row
-            .get::<_, String>(5)
-            .parse::<u64>()
-            .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-        let project_activity_position = row
-            .get::<_, String>(11)
-            .parse::<u64>()
-            .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-        let body = row.get::<_, String>(12);
-        Ok(EditorSession {
-            editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
-            client_binding: binding.clone(),
-            opened_at: row.get(4),
-            writer: if row.get::<_, String>(6) == editor_session_id {
-                EditorWriterState::CurrentWriter { writer_generation }
-            } else {
-                EditorWriterState::ReadOnly {
-                    observed_writer_generation: writer_generation,
-                    reason: if row.get::<_, bool>(7) {
-                        storyos_application::EditorReadOnlyReason::SupersededByTakeover
-                    } else {
-                        storyos_application::EditorReadOnlyReason::SecondarySession
-                    },
-                }
-            },
-            base_snapshot: EditorSessionSnapshot {
-                snapshot_id: row.get(8),
-                chapter_id: row.get(9),
-                authoritative_revision_id: row.get(10),
-                project_activity_position,
-                payload_digest_hex: Sha256::digest(body.as_bytes()).iter().fold(
-                    String::with_capacity(64),
-                    |mut encoded, byte| {
-                        use std::fmt::Write as _;
-                        write!(encoded, "{byte:02x}").expect("writing to String cannot fail");
-                        encoded
-                    },
-                ),
-                body,
-                created_at: row.get(13),
-            },
-        })
-    })
-    .transpose()
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let writer_generation = row
+        .get::<_, String>(5)
+        .parse::<u64>()
+        .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
+    let project_activity_position = row
+        .get::<_, String>(11)
+        .parse::<u64>()
+        .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
+    let body = row.get::<_, String>(12);
+    let chapter_id: String = row.get(9);
+    let authoritative_revision_id: String = row.get(10);
+    let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+        client,
+        scope.owner_user_id.as_ref(),
+        scope.project_id.as_ref(),
+        &chapter_id,
+        &authoritative_revision_id,
+        &body,
+    )
+    .await
+    .map_err(session_database_error)?;
+    Ok(Some(EditorSession {
+        editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
+        client_binding: binding.clone(),
+        opened_at: row.get(4),
+        writer: if row.get::<_, String>(6) == editor_session_id {
+            EditorWriterState::CurrentWriter { writer_generation }
+        } else {
+            EditorWriterState::ReadOnly {
+                observed_writer_generation: writer_generation,
+                reason: if row.get::<_, bool>(7) {
+                    storyos_application::EditorReadOnlyReason::SupersededByTakeover
+                } else {
+                    storyos_application::EditorReadOnlyReason::SecondarySession
+                },
+            }
+        },
+        base_snapshot: EditorSessionSnapshot {
+            snapshot_id: row.get(8),
+            chapter_id,
+            authoritative_revision_id,
+            project_activity_position,
+            payload_digest_hex: Sha256::digest(body.as_bytes()).iter().fold(
+                String::with_capacity(64),
+                |mut encoded, byte| {
+                    use std::fmt::Write as _;
+                    write!(encoded, "{byte:02x}").expect("writing to String cannot fail");
+                    encoded
+                },
+            ),
+            body,
+            blocks,
+            created_at: row.get(13),
+        },
+    }))
 }
 
 fn session_challenge_error(error: ProjectCommandChallengeError) -> EditorSessionError {

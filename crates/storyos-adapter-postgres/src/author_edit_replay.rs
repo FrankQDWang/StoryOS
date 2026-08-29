@@ -271,6 +271,16 @@ impl PostgresProjectReader {
                 {
                     return Err(AuthorEditError::BindingConflict);
                 }
+                let blocks = crate::manuscript_block::load_or_upgrade_blocks(
+                    &client,
+                    identity.project_scope.owner_user_id.as_ref(),
+                    identity.project_scope.project_id.as_ref(),
+                    &identity.chapter_id,
+                    &revision_id,
+                    &body,
+                )
+                .await
+                .map_err(author_edit_database_error)?;
                 AuthorEditSettlementEffect::AuthoritativeApplied {
                     ids: AuthoritativeAppliedIds {
                         revision_id,
@@ -279,6 +289,7 @@ impl PostgresProjectReader {
                         project_activity_event_id: relation.get(0),
                     },
                     body,
+                    blocks,
                     author_action_sequence: parse_u64(relation.get(5))?,
                     project_activity_position: parse_u64(relation.get(1))?,
                 }

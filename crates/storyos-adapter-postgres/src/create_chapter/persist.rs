@@ -100,6 +100,17 @@ pub(super) async fn persist_created_chapter(
         )
         .await
         .map_err(create_chapter_database_error)?;
+    let manuscript_block_id = Uuid::now_v7().to_string();
+    crate::manuscript_block::insert_paragraph_block(
+        client,
+        command.project_scope.owner_user_id.as_ref(),
+        command.project_scope.project_id.as_ref(),
+        chapter_id,
+        &revision_id,
+        &manuscript_block_id,
+    )
+    .await
+    .map_err(create_chapter_database_error)?;
     let updated = match current {
         CreateChapterCurrent::SelectCreated => client
             .execute(

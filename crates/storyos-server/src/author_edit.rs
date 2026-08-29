@@ -200,6 +200,7 @@ pub(super) fn author_edit_response(
             body,
             author_action_sequence,
             project_activity_position,
+            ..
         } => (
             contracts::DomainReceiptResult::AuthoritativeApplied,
             vec![identity.expected_authoritative_revision_id.clone()],

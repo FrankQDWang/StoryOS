@@ -4,6 +4,7 @@ mod archive_project;
 mod create_chapter;
 mod create_project;
 mod create_volume;
+mod manuscript_payload;
 mod update_chapter;
 mod update_project;
 mod update_volume;
@@ -19,6 +20,11 @@ pub use create_chapter::{
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{
     CreateVolume, CreateVolumeConflict, CreateVolumeRefusal, CreateVolumeResult, create_volume,
+};
+pub use manuscript_payload::{
+    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
+    apply_versioned_author_edit, upgrade_legacy_manuscript,
 };
 pub use update_chapter::{
     ChapterJoin, UpdateChapter, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
@@ -61,7 +67,17 @@ pub struct AuthorEditUnit {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorEditPrimitive {
-    ReplaceSelection { from: u32, to: u32, text: String },
+    ReplaceSelection {
+        from: u32,
+        to: u32,
+        text: String,
+    },
+    ReplaceBlockSelection {
+        manuscript_block_id: String,
+        from: u32,
+        to: u32,
+        text: String,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -191,7 +207,7 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
     }
 }
 
-fn utf16_offset_to_byte(value: &str, wanted: u32) -> Option<usize> {
+pub(crate) fn utf16_offset_to_byte(value: &str, wanted: u32) -> Option<usize> {
     if wanted == 0 {
         return Some(0);
     }
@@ -231,6 +247,10 @@ mod create_volume_tests;
 #[cfg(test)]
 #[path = "create_chapter_tests.rs"]
 mod create_chapter_tests;
+
+#[cfg(test)]
+#[path = "manuscript_payload_tests.rs"]
+mod manuscript_payload_tests;
 
 #[cfg(test)]
 #[path = "update_volume_tests.rs"]

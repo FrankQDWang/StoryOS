@@ -3,6 +3,7 @@ use crate::{
     CanonicalSnapshot, Chapter, ChapterId, ProjectId, ProjectReadError, ProjectScope, RevisionId,
     UserId,
 };
+use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
 struct FixtureReader {
     read: OpenChapter,
@@ -41,6 +42,11 @@ fn later_chapter() -> Chapter {
         title: "Chapter B".to_owned(),
         revision_id: RevisionId::new("revision-b"),
         body: String::new(),
+        blocks: vec![ManuscriptBlock {
+            manuscript_block_id: "block-b".to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: String::new(),
+        }],
         project_activity_position: 4,
     }
 }

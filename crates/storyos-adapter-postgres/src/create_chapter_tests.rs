@@ -438,6 +438,13 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     );
     assert_eq!(later_facts.chapter.title, "Chapter B");
     assert_eq!(later_facts.chapter.body, "");
+    assert_eq!(later_facts.chapter.blocks.len(), 1);
+    assert_eq!(
+        later_facts.chapter.blocks[0].block_kind,
+        storyos_core::ManuscriptBlockKind::Paragraph
+    );
+    assert_eq!(later_facts.chapter.blocks[0].text, "");
+    assert!(!later_facts.chapter.blocks[0].manuscript_block_id.is_empty());
     assert!(!later_facts.snapshot.snapshot_id.is_empty());
     assert_eq!(
         open_chapter(

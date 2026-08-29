@@ -95,6 +95,28 @@ async fn read_settlement_owned_state(
     }
 }
 
+async fn revision_member_block_id(
+    admin: &Client,
+    owner_user_id: &str,
+    project_id: &str,
+    chapter_id: &str,
+    revision_id: &str,
+) -> String {
+    admin
+        .query_one(
+            "SELECT manuscript_block_id::text
+               FROM storyos.manuscript_revision_members
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND manuscript_object_id = $3::text::uuid
+                AND revision_id = $4::text::uuid",
+            &[&owner_user_id, &project_id, &chapter_id, &revision_id],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+
 fn set_unique_command_identity(command: &mut ApplyAuthorEditCommand, chapter_id: &str) {
     command.correlation_id = Uuid::now_v7().to_string();
     command.ids.command_id = Uuid::now_v7().to_string();
@@ -122,6 +144,9 @@ fn prepare_follow_up(
             *to = position;
             *text = "x".to_owned();
         }
+        AuthorEditPrimitive::ReplaceBlockSelection { .. } => {
+            panic!("counter test command must use ReplaceSelection")
+        }
     }
     insert.selection_snapshot.from = position;
     insert.selection_snapshot.to = position;
@@ -130,6 +155,9 @@ fn prepare_follow_up(
             *from = position;
             *to = position + 1;
             *text = replacement.to_owned();
+        }
+        AuthorEditPrimitive::ReplaceBlockSelection { .. } => {
+            panic!("counter test command must use ReplaceSelection")
         }
     }
     replace.selection_snapshot.from = position;
@@ -303,21 +331,48 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
         "91",
     );
     set_unique_command_identity(&mut first_command, &chapter_id);
-    first_command.expected_authoritative_revision_id = initial_revision_id;
+    first_command.expected_authoritative_revision_id = initial_revision_id.clone();
     bind_canonical_payload(&mut first_command);
     issue_command_challenge(&store, &first_command, "counter-first-nonce").await;
     let first = storyos_application::apply_author_edit(&store, &first_command)
         .await
         .unwrap();
-    let first_ids = match &first.effect {
-        AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => ids.clone(),
+    let (first_ids, first_blocks) = match &first.effect {
+        AuthorEditSettlementEffect::AuthoritativeApplied { ids, blocks, .. } => {
+            (ids.clone(), blocks.clone())
+        }
         effect => panic!("expected authoritative first effect, received {effect:?}"),
     };
+    assert_eq!(first_blocks.len(), 1);
+    assert_eq!(first_blocks[0].text, "Authoritative A!");
+    assert_eq!(
+        revision_member_block_id(
+            &admin,
+            &owner_user_id,
+            &project_id,
+            &chapter_id,
+            &initial_revision_id,
+        )
+        .await,
+        first_blocks[0].manuscript_block_id
+    );
+    assert_eq!(
+        revision_member_block_id(
+            &admin,
+            &owner_user_id,
+            &project_id,
+            &chapter_id,
+            &first_ids.revision_id,
+        )
+        .await,
+        first_blocks[0].manuscript_block_id
+    );
     assert_eq!(
         first.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {
             ids: first_ids.clone(),
             body: "Authoritative A!".to_owned(),
+            blocks: first_blocks.clone(),
             author_action_sequence: 1,
             project_activity_position: 1,
         }
@@ -369,15 +424,22 @@ async fn author_edit_counters_cover_missing_existing_and_limit_rows() {
     let existing = storyos_application::apply_author_edit(&store, &existing_command)
         .await
         .unwrap();
-    let existing_ids = match &existing.effect {
-        AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => ids.clone(),
+    let (existing_ids, existing_blocks) = match &existing.effect {
+        AuthorEditSettlementEffect::AuthoritativeApplied { ids, blocks, .. } => {
+            (ids.clone(), blocks.clone())
+        }
         effect => panic!("expected authoritative existing effect, received {effect:?}"),
     };
+    assert_eq!(
+        existing_blocks[0].manuscript_block_id,
+        first_blocks[0].manuscript_block_id
+    );
     assert_eq!(
         existing.effect,
         AuthorEditSettlementEffect::AuthoritativeApplied {
             ids: existing_ids.clone(),
             body: "Authoritative A!?".to_owned(),
+            blocks: existing_blocks,
             author_action_sequence: 8,
             project_activity_position: 14,
         }

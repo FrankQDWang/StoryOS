@@ -83,7 +83,10 @@ fn invalid_later_unit_refuses_the_complete_batch() {
     let mut invalid_later = batch.author_edit_units[0].clone();
     invalid_later.selection_snapshot.to = 2;
     let AuthorEditPrimitive::ReplaceSelection { from, to, text } =
-        &mut invalid_later.normalized_primitives[0];
+        &mut invalid_later.normalized_primitives[0]
+    else {
+        panic!("legacy command must use ReplaceSelection")
+    };
     *from = 4;
     *to = 4;
     *text = "!".to_owned();
@@ -114,7 +117,10 @@ fn stale_head_and_invalid_selections_fail_without_a_partial_result() {
         unit.selection_snapshot.from = start;
         unit.selection_snapshot.to = end;
         let AuthorEditPrimitive::ReplaceSelection { from, to, .. } =
-            &mut unit.normalized_primitives[0];
+            &mut unit.normalized_primitives[0]
+        else {
+            panic!("legacy command must use ReplaceSelection")
+        };
         *from = start;
         *to = end;
         assert_eq!(
@@ -146,7 +152,10 @@ fn unchanged_content_is_a_no_effect_core_result() {
         unit.selection_snapshot.from = start;
         unit.selection_snapshot.to = end;
         let AuthorEditPrimitive::ReplaceSelection { from, to, text } =
-            &mut unit.normalized_primitives[0];
+            &mut unit.normalized_primitives[0]
+        else {
+            panic!("legacy command must use ReplaceSelection")
+        };
         *from = start;
         *to = end;
         *text = replacement.to_owned();
