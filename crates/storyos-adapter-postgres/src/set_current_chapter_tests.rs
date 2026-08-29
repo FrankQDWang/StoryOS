@@ -230,7 +230,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let issue = create_project_issue("018f0000-0000-7001-8000-000000000b10", "0b10");
+    let issue = create_project_issue("018f0000-0000-7001-8000-000000000e10", "0e10");
     let issued = issue_create_project_challenge(&store, &issue)
         .await
         .unwrap();
@@ -239,7 +239,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     project_binding.canonical_command_digest = issued.canonical_command_digest.clone();
     create_project(
         &store,
-        &create_project_command(project_binding.clone(), &issue.nonce_digest, "0b11"),
+        &create_project_command(project_binding.clone(), &issue.nonce_digest, "0e11"),
     )
     .await
     .unwrap();
@@ -247,7 +247,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         project_binding.owner_user_id.clone(),
         project_binding.prospective_project_id.clone(),
     );
-    let volume_issue = volume_issue(&scope, "0b12");
+    let volume_issue = volume_issue(&scope, "0e12");
     issue_project_command_challenge(&store, &volume_issue)
         .await
         .unwrap();
@@ -256,7 +256,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &volume_command(
             volume_issue.binding.clone(),
             &volume_issue.nonce_digest,
-            "0b13",
+            "0e13",
         ),
     )
     .await
@@ -266,7 +266,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     else {
         panic!("Create Volume on an empty active Project must apply");
     };
-    let first_issue = chapter_issue(&scope, "0b14", CHAPTER_A_DIGEST);
+    let first_issue = chapter_issue(&scope, "0e14", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &first_issue)
         .await
         .unwrap();
@@ -275,7 +275,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &chapter_command(
             first_issue.binding.clone(),
             &first_issue.nonce_digest,
-            "0b15",
+            "0e15",
             &volume_id,
             "Chapter A",
             2,
@@ -291,7 +291,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     else {
         panic!("the first Chapter must apply");
     };
-    let second_issue = chapter_issue(&scope, "0b16", CHAPTER_B_DIGEST);
+    let second_issue = chapter_issue(&scope, "0e16", CHAPTER_B_DIGEST);
     issue_project_command_challenge(&store, &second_issue)
         .await
         .unwrap();
@@ -300,7 +300,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &chapter_command(
             second_issue.binding.clone(),
             &second_issue.nonce_digest,
-            "0b17",
+            "0e17",
             &volume_id,
             "Chapter B",
             3,
@@ -318,23 +318,23 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
     };
     let session_issue = command_issue(
         &scope,
-        "0b18",
+        "0e18",
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         "createEditorSession",
-        "sha256:storyos.test:0b18",
+        "sha256:storyos.test:0e18",
     );
     issue_project_command_challenge(&store, &session_issue)
         .await
         .unwrap();
-    let editor_session_id = "018f0000-0000-7001-8000-000000000b19";
+    let editor_session_id = "018f0000-0000-7001-8000-000000000e19";
     create_editor_session(
         &store,
         &OpenEditorSession {
             project_scope: scope.clone(),
             editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: "018f0000-0000-7001-8000-000000000b1a".to_owned(),
+            snapshot_id: "018f0000-0000-7001-8000-000000000e1a".to_owned(),
             client_binding: client_binding(&session_issue.binding),
             challenge_binding: session_issue.binding,
             nonce_digest: session_issue.nonce_digest,
@@ -353,7 +353,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
 
     let switch_issue = command_issue(
         &scope,
-        "0b1b",
+        "0e1b",
         "PUT",
         "/api/v1/projects/{project_id}/current-chapter",
         "storyos.command.set-current-chapter.request.v1",
@@ -368,7 +368,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &current_command(
             switch_issue.binding.clone(),
             &switch_issue.nonce_digest,
-            "0b1c",
+            "0e1c",
             editor_session_id,
             &chapter_b,
             &chapter_a,
@@ -389,7 +389,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &current_command(
             switch_issue.binding.clone(),
             &switch_issue.nonce_digest,
-            "0b1d",
+            "0e1d",
             editor_session_id,
             &chapter_b,
             &chapter_a,
@@ -410,7 +410,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
 
     let stale_issue = command_issue(
         &scope,
-        "0b1e",
+        "0e1e",
         "PUT",
         "/api/v1/projects/{project_id}/current-chapter",
         "storyos.command.set-current-chapter.request.v1",
@@ -425,7 +425,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &current_command(
             stale_issue.binding,
             &stale_issue.nonce_digest,
-            "0b1f",
+            "0e1f",
             editor_session_id,
             &chapter_a,
             &chapter_a,
@@ -443,7 +443,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
 
     let wrong_issue = command_issue(
         &scope,
-        "0b20",
+        "0e20",
         "PUT",
         "/api/v1/projects/{project_id}/current-chapter",
         "storyos.command.set-current-chapter.request.v1",
@@ -458,7 +458,7 @@ async fn set_current_chapter_is_atomic_replayable_and_fail_closed() {
         &current_command(
             wrong_issue.binding,
             &wrong_issue.nonce_digest,
-            "0b21",
+            "0e21",
             editor_session_id,
             &chapter_a,
             &chapter_b,
