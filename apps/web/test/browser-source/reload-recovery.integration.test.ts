@@ -29,6 +29,7 @@ import {
   REVISION,
   SESSION,
   closeTrackedDatabases,
+  chapterRevision,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -74,7 +75,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       snapshot_id: "018f0000-0000-7001-8000-000000000038",
       project_activity_position: "1",
       authoritative_head_revision_id: NEXT_REVISION,
-      materialized_revision: { revision_id: NEXT_REVISION, body: "Base!?" },
+      materialized_revision: chapterRevision(NEXT_REVISION, "Base!?"),
       materialized_payload_digest: {
         algorithm: "sha256",
         profile: "storyos.canonical-payload.sha256.v1",
@@ -405,7 +406,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       project_activity_position: "1",
       chapter: {
         ...scenario.chapter.chapter,
-        current_revision: { revision_id: NEXT_REVISION, body: "Base!?" },
+        current_revision: chapterRevision(NEXT_REVISION, "Base!?"),
       },
     });
     await expect(submitOnePendingAuthorEdit({

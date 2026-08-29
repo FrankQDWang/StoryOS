@@ -9,6 +9,7 @@ import {
   OWNER,
   PROJECT,
   SESSION,
+  chapterRevision,
   closeTrackedDatabases,
   createBrowserScenario,
   deleteJournal,
@@ -37,7 +38,7 @@ it("selects a tree Chapter through getChapter and keeps pending on the current C
     chapter: {
       chapter_id: CHAPTER_B,
       title: "Chapter B",
-      current_revision: { revision_id: REVISION_B, body: "" },
+      current_revision: chapterRevision(REVISION_B, ""),
     },
   };
   const requests: string[] = [];

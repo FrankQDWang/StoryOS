@@ -29,6 +29,7 @@ import {
   OWNER,
   PROJECT,
   SESSION,
+  chapterRevision,
   createAppliedAuthorEditResponse,
   createBrowserScenario,
   deleteJournal,
@@ -159,7 +160,7 @@ it("settles trusted input, clipboard actions, and controlled Chrome IME in the J
           snapshot_id: uuid(100 + settlementSequence * 10 + 7),
           project_activity_position: position,
           authoritative_head_revision_id: revisionId,
-          materialized_revision: { revision_id: revisionId, body },
+          materialized_revision: chapterRevision(revisionId, body),
           materialized_payload_digest: {
             algorithm: "sha256",
             profile: "storyos.canonical-payload.sha256.v1",
