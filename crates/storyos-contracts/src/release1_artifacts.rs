@@ -128,8 +128,17 @@ const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
-/// Build the one active Release 1 protocol profile from the Rust contract source.
-pub fn release1_protocol_profile() -> Release1ProtocolProfile {
+struct Release1ArtifactAssembly {
+    openapi: Vec<u8>,
+    schemas: Vec<(&'static str, &'static str, Vec<u8>)>,
+    schema_catalog: Vec<u8>,
+    typescript_client: Vec<u8>,
+    typescript_declaration: Vec<u8>,
+    release_profile_declaration: Vec<u8>,
+    profile: Release1ProtocolProfile,
+}
+
+fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let openapi = openapi_bytes();
     let request_schema = json_bytes(&protocol_profile_request_schema());
     let response_schema = json_bytes(&protocol_profile_schema());
@@ -204,241 +213,255 @@ pub fn release1_protocol_profile() -> Release1ProtocolProfile {
     let update_chapter_response_schema = update_chapter_artifacts::response_schema_bytes();
     let create_chapter_request_schema = create_chapter_artifacts::request_schema_bytes();
     let create_chapter_response_schema = create_chapter_artifacts::response_schema_bytes();
-    let schema_catalog = schema_catalog_bytes(&[
+    let schemas = vec![
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
             REQUEST_SCHEMA_PATH,
-            &request_schema,
+            request_schema,
         ),
         (
             PROTOCOL_PROFILE_SCHEMA_ID,
             RESPONSE_SCHEMA_PATH,
-            &response_schema,
+            response_schema,
         ),
         (
             PROJECT_REQUEST_SCHEMA_ID,
             PROJECT_REQUEST_SCHEMA_PATH,
-            &project_request_schema,
+            project_request_schema,
         ),
         (
             PROJECT_RESPONSE_SCHEMA_ID,
             PROJECT_RESPONSE_SCHEMA_PATH,
-            &project_response_schema,
+            project_response_schema,
         ),
         (
             CHAPTER_REQUEST_SCHEMA_ID,
             CHAPTER_REQUEST_SCHEMA_PATH,
-            &chapter_request_schema,
+            chapter_request_schema,
         ),
         (
             CHAPTER_RESPONSE_SCHEMA_ID,
             CHAPTER_RESPONSE_SCHEMA_PATH,
-            &chapter_response_schema,
+            chapter_response_schema,
         ),
         (
             PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
             CHALLENGE_REQUEST_SCHEMA_PATH,
-            &challenge_request_schema,
+            challenge_request_schema,
         ),
         (
             PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
             CHALLENGE_RESPONSE_SCHEMA_PATH,
-            &challenge_response_schema,
+            challenge_response_schema,
         ),
         (
             crate::CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID,
             create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH,
-            &create_project_challenge_request_schema,
+            create_project_challenge_request_schema,
         ),
         (
             crate::CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
             create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
-            &create_project_challenge_response_schema,
+            create_project_challenge_response_schema,
         ),
         (
             crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
             create_project_artifacts::REQUEST_SCHEMA_PATH,
-            &create_project_request_schema,
+            create_project_request_schema,
         ),
         (
             crate::CREATE_PROJECT_RESPONSE_SCHEMA_ID,
             create_project_artifacts::RESPONSE_SCHEMA_PATH,
-            &create_project_response_schema,
+            create_project_response_schema,
         ),
         (
             crate::LIST_PROJECTS_REQUEST_SCHEMA_ID,
             list_projects_artifacts::REQUEST_SCHEMA_PATH,
-            &list_projects_request_schema,
+            list_projects_request_schema,
         ),
         (
             crate::LIST_PROJECTS_RESPONSE_SCHEMA_ID,
             list_projects_artifacts::RESPONSE_SCHEMA_PATH,
-            &list_projects_response_schema,
+            list_projects_response_schema,
         ),
         (
             crate::GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
             manuscript_tree_artifacts::REQUEST_SCHEMA_PATH,
-            &manuscript_tree_request_schema,
+            manuscript_tree_request_schema,
         ),
         (
             crate::GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
             manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH,
-            &manuscript_tree_response_schema,
+            manuscript_tree_response_schema,
         ),
         (
             crate::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
             update_project_artifacts::REQUEST_SCHEMA_PATH,
-            &update_project_request_schema,
+            update_project_request_schema,
         ),
         (
             crate::UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
             update_project_artifacts::RESPONSE_SCHEMA_PATH,
-            &update_project_response_schema,
+            update_project_response_schema,
         ),
         (
             crate::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
             archive_project_artifacts::REQUEST_SCHEMA_PATH,
-            &archive_project_request_schema,
+            archive_project_request_schema,
         ),
         (
             crate::ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID,
             archive_project_artifacts::RESPONSE_SCHEMA_PATH,
-            &archive_project_response_schema,
+            archive_project_response_schema,
         ),
         (
             crate::CREATE_VOLUME_REQUEST_SCHEMA_ID,
             create_volume_artifacts::REQUEST_SCHEMA_PATH,
-            &create_volume_request_schema,
+            create_volume_request_schema,
         ),
         (
             crate::CREATE_VOLUME_RESPONSE_SCHEMA_ID,
             create_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            &create_volume_response_schema,
+            create_volume_response_schema,
         ),
         (
             crate::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
             update_volume_artifacts::REQUEST_SCHEMA_PATH,
-            &update_volume_request_schema,
+            update_volume_request_schema,
         ),
         (
             crate::UPDATE_VOLUME_RESPONSE_SCHEMA_ID,
             update_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            &update_volume_response_schema,
+            update_volume_response_schema,
         ),
         (
             crate::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
             update_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            &update_chapter_request_schema,
+            update_chapter_request_schema,
         ),
         (
             crate::UPDATE_CHAPTER_RESPONSE_SCHEMA_ID,
             update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            &update_chapter_response_schema,
+            update_chapter_response_schema,
         ),
         (
             crate::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
             create_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            &create_chapter_request_schema,
+            create_chapter_request_schema,
         ),
         (
             crate::CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
             create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            &create_chapter_response_schema,
+            create_chapter_response_schema,
         ),
         (
             CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
             EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-            &editor_create_request_schema,
+            editor_create_request_schema,
         ),
         (
             CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
             EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-            &editor_create_response_schema,
+            editor_create_response_schema,
         ),
         (
             GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
             EDITOR_SESSION_GET_REQUEST_SCHEMA_PATH,
-            &editor_get_request_schema,
+            editor_get_request_schema,
         ),
         (
             GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
             EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-            &editor_get_response_schema,
+            editor_get_response_schema,
         ),
         (
             APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
             author_edit_artifacts::REQUEST_SCHEMA_PATH,
-            &apply_edit_request_schema,
+            apply_edit_request_schema,
         ),
         (
             APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
             author_edit_artifacts::RESPONSE_SCHEMA_PATH,
-            &apply_edit_response_schema,
+            apply_edit_response_schema,
         ),
         (
             crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
             author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
-            &apply_edit_outcome_request_schema,
+            apply_edit_outcome_request_schema,
         ),
         (
             crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
             author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
-            &apply_edit_outcome_response_schema,
+            apply_edit_outcome_response_schema,
         ),
         (
             crate::GET_SNAPSHOT_REQUEST_SCHEMA_ID,
             snapshot_artifacts::SNAPSHOT_REQUEST_SCHEMA_PATH,
-            &snapshot_request_schema,
+            snapshot_request_schema,
         ),
         (
             crate::GET_SNAPSHOT_RESPONSE_SCHEMA_ID,
             snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH,
-            &snapshot_response_schema,
+            snapshot_response_schema,
         ),
         (
             crate::release1_snapshot::ACTIVITY_STREAM_REQUEST_SCHEMA_ID,
             snapshot_artifacts::ACTIVITY_STREAM_REQUEST_SCHEMA_PATH,
-            &activity_stream_request_schema,
+            activity_stream_request_schema,
         ),
         (
             crate::release1_snapshot::ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
             snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
-            &activity_stream_response_schema,
+            activity_stream_response_schema,
         ),
         (
             crate::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
             takeover_artifacts::REQUEST_SCHEMA_PATH,
-            &takeover_request_schema,
+            takeover_request_schema,
         ),
         (
             crate::TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
             takeover_artifacts::RESPONSE_SCHEMA_PATH,
-            &takeover_response_schema,
+            takeover_response_schema,
         ),
-    ]);
-    let client = typescript_client_bytes();
-    let declaration = typescript_declaration_bytes();
-    let profile_declaration = release_profile_declaration_bytes();
+    ];
+    let schema_catalog = schema_catalog_bytes(&schemas);
+    let typescript_client = typescript_client_bytes();
+    let typescript_declaration = typescript_declaration_bytes();
+    let release_profile_declaration = release_profile_declaration_bytes();
     let contract_graph = contract_graph_bytes();
     let typescript = [
-        client.as_slice(),
+        typescript_client.as_slice(),
         b"\n--declaration--\n",
-        declaration.as_slice(),
+        typescript_declaration.as_slice(),
         b"\n--release-profile-declaration--\n",
-        profile_declaration.as_slice(),
+        release_profile_declaration.as_slice(),
     ]
     .concat();
 
     let mut profile = protocol_profile(ArtifactDigests {
-        contract_graph: sha256_prefixed(contract_graph),
-        openapi: sha256_prefixed(openapi),
-        json_schema_catalog: sha256_prefixed(schema_catalog),
+        contract_graph: sha256_prefixed(contract_graph.as_slice()),
+        openapi: sha256_prefixed(openapi.as_slice()),
+        json_schema_catalog: sha256_prefixed(schema_catalog.as_slice()),
         typescript: sha256_prefixed(typescript),
         fixture_corpus: FIXTURE_DIGEST_PLACEHOLDER.to_owned(),
     });
     profile.release_identity.fixture_corpus_digest =
         sha256_prefixed(fixture_corpus_bytes(&profile));
-    profile
+    Release1ArtifactAssembly {
+        openapi,
+        schemas,
+        schema_catalog,
+        typescript_client,
+        typescript_declaration,
+        release_profile_declaration,
+        profile,
+    }
+}
+
+/// Build the one active Release 1 protocol profile from the Rust contract source.
+pub fn release1_protocol_profile() -> Release1ProtocolProfile {
+    release1_artifact_assembly().profile
 }
 
 /// Write all checked-in artifacts for the implemented Release 1 profile route.
@@ -473,296 +496,19 @@ pub fn check_release1_artifacts(repo_root: &Path) -> io::Result<()> {
 }
 
 fn generated_files() -> Vec<GeneratedFile> {
-    let request_schema = json_bytes(&protocol_profile_request_schema());
-    let response_schema = json_bytes(&protocol_profile_schema());
-    let project_request_schema = json_bytes(&path_request_schema(
-        PROJECT_REQUEST_SCHEMA_ID,
-        &["project_id"],
-    ));
-    let project_response_schema = json_bytes(&typed_schema::<GetProjectResponse>(
-        PROJECT_RESPONSE_SCHEMA_ID,
-        "StoryOS Project Query Response",
-    ));
-    let chapter_request_schema = json_bytes(&path_request_schema(
-        CHAPTER_REQUEST_SCHEMA_ID,
-        &["project_id", "chapter_id"],
-    ));
-    let chapter_response_schema = json_bytes(&typed_schema::<GetChapterResponse>(
-        CHAPTER_RESPONSE_SCHEMA_ID,
-        "StoryOS Chapter Query Response",
-    ));
-    let challenge_request_schema =
-        json_bytes(&typed_schema::<CreateProjectCommandChallengeRequest>(
-            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-            "StoryOS Project Command Challenge Request",
-        ));
-    let challenge_response_schema = json_bytes(&challenge_response_schema());
-    let create_project_challenge_request_schema =
-        create_project_artifacts::challenge_request_schema_bytes();
-    let create_project_challenge_response_schema =
-        create_project_artifacts::challenge_response_schema_bytes();
-    let create_project_request_schema = create_project_artifacts::command_request_schema_bytes();
-    let create_project_response_schema = create_project_artifacts::command_response_schema_bytes();
-    let editor_create_request_schema = json_bytes(&typed_schema::<CreateEditorSessionRequest>(
-        CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-        "StoryOS Create Editor Session Request",
-    ));
-    let editor_create_response_schema = json_bytes(&typed_schema::<CreateEditorSessionResponse>(
-        CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-        "StoryOS Create Editor Session Response",
-    ));
-    let editor_get_request_schema = json_bytes(&path_request_schema(
-        GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-        &["project_id", "editor_session_id"],
-    ));
-    let editor_get_response_schema = json_bytes(&typed_schema::<GetEditorSessionResponse>(
-        GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-        "StoryOS Get Editor Session Response",
-    ));
-    let apply_edit_request_schema = author_edit_artifacts::request_schema_bytes();
-    let apply_edit_response_schema = author_edit_artifacts::response_schema_bytes();
-    let apply_edit_outcome_request_schema = author_edit_outcome_artifacts::request_schema_bytes();
-    let apply_edit_outcome_response_schema = author_edit_outcome_artifacts::response_schema_bytes();
-    let snapshot_request_schema = snapshot_artifacts::snapshot_request_schema_bytes();
-    let snapshot_response_schema = snapshot_artifacts::snapshot_response_schema_bytes();
-    let activity_stream_request_schema = snapshot_artifacts::activity_stream_request_schema_bytes();
-    let activity_stream_response_schema =
-        snapshot_artifacts::activity_stream_response_schema_bytes();
-    let takeover_request_schema = takeover_artifacts::request_schema_bytes();
-    let takeover_response_schema = takeover_artifacts::response_schema_bytes();
-    let list_projects_request_schema = list_projects_artifacts::request_schema_bytes();
-    let list_projects_response_schema = list_projects_artifacts::response_schema_bytes();
-    let manuscript_tree_request_schema = manuscript_tree_artifacts::request_schema_bytes();
-    let manuscript_tree_response_schema = manuscript_tree_artifacts::response_schema_bytes();
-    let update_project_request_schema = update_project_artifacts::request_schema_bytes();
-    let update_project_response_schema = update_project_artifacts::response_schema_bytes();
-    let archive_project_request_schema = archive_project_artifacts::request_schema_bytes();
-    let archive_project_response_schema = archive_project_artifacts::response_schema_bytes();
-    let create_volume_request_schema = create_volume_artifacts::request_schema_bytes();
-    let create_volume_response_schema = create_volume_artifacts::response_schema_bytes();
-    let update_volume_request_schema = update_volume_artifacts::request_schema_bytes();
-    let update_volume_response_schema = update_volume_artifacts::response_schema_bytes();
-    let update_chapter_request_schema = update_chapter_artifacts::request_schema_bytes();
-    let update_chapter_response_schema = update_chapter_artifacts::response_schema_bytes();
-    let create_chapter_request_schema = create_chapter_artifacts::request_schema_bytes();
-    let create_chapter_response_schema = create_chapter_artifacts::response_schema_bytes();
-    let schema_catalog = schema_catalog_bytes(&[
-        (
-            PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
-            REQUEST_SCHEMA_PATH,
-            &request_schema,
-        ),
-        (
-            PROTOCOL_PROFILE_SCHEMA_ID,
-            RESPONSE_SCHEMA_PATH,
-            &response_schema,
-        ),
-        (
-            PROJECT_REQUEST_SCHEMA_ID,
-            PROJECT_REQUEST_SCHEMA_PATH,
-            &project_request_schema,
-        ),
-        (
-            PROJECT_RESPONSE_SCHEMA_ID,
-            PROJECT_RESPONSE_SCHEMA_PATH,
-            &project_response_schema,
-        ),
-        (
-            CHAPTER_REQUEST_SCHEMA_ID,
-            CHAPTER_REQUEST_SCHEMA_PATH,
-            &chapter_request_schema,
-        ),
-        (
-            CHAPTER_RESPONSE_SCHEMA_ID,
-            CHAPTER_RESPONSE_SCHEMA_PATH,
-            &chapter_response_schema,
-        ),
-        (
-            PROJECT_COMMAND_CHALLENGE_REQUEST_SCHEMA_ID,
-            CHALLENGE_REQUEST_SCHEMA_PATH,
-            &challenge_request_schema,
-        ),
-        (
-            PROJECT_COMMAND_CHALLENGE_RESPONSE_SCHEMA_ID,
-            CHALLENGE_RESPONSE_SCHEMA_PATH,
-            &challenge_response_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_CHALLENGE_REQUEST_SCHEMA_ID,
-            create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH,
-            &create_project_challenge_request_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_CHALLENGE_RESPONSE_SCHEMA_ID,
-            create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
-            &create_project_challenge_response_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_REQUEST_SCHEMA_ID,
-            create_project_artifacts::REQUEST_SCHEMA_PATH,
-            &create_project_request_schema,
-        ),
-        (
-            crate::CREATE_PROJECT_RESPONSE_SCHEMA_ID,
-            create_project_artifacts::RESPONSE_SCHEMA_PATH,
-            &create_project_response_schema,
-        ),
-        (
-            crate::LIST_PROJECTS_REQUEST_SCHEMA_ID,
-            list_projects_artifacts::REQUEST_SCHEMA_PATH,
-            &list_projects_request_schema,
-        ),
-        (
-            crate::LIST_PROJECTS_RESPONSE_SCHEMA_ID,
-            list_projects_artifacts::RESPONSE_SCHEMA_PATH,
-            &list_projects_response_schema,
-        ),
-        (
-            crate::GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
-            manuscript_tree_artifacts::REQUEST_SCHEMA_PATH,
-            &manuscript_tree_request_schema,
-        ),
-        (
-            crate::GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
-            manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH,
-            &manuscript_tree_response_schema,
-        ),
-        (
-            crate::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
-            update_project_artifacts::REQUEST_SCHEMA_PATH,
-            &update_project_request_schema,
-        ),
-        (
-            crate::UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
-            update_project_artifacts::RESPONSE_SCHEMA_PATH,
-            &update_project_response_schema,
-        ),
-        (
-            crate::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
-            archive_project_artifacts::REQUEST_SCHEMA_PATH,
-            &archive_project_request_schema,
-        ),
-        (
-            crate::ARCHIVE_PROJECT_RESPONSE_SCHEMA_ID,
-            archive_project_artifacts::RESPONSE_SCHEMA_PATH,
-            &archive_project_response_schema,
-        ),
-        (
-            crate::CREATE_VOLUME_REQUEST_SCHEMA_ID,
-            create_volume_artifacts::REQUEST_SCHEMA_PATH,
-            &create_volume_request_schema,
-        ),
-        (
-            crate::CREATE_VOLUME_RESPONSE_SCHEMA_ID,
-            create_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            &create_volume_response_schema,
-        ),
-        (
-            crate::UPDATE_VOLUME_REQUEST_SCHEMA_ID,
-            update_volume_artifacts::REQUEST_SCHEMA_PATH,
-            &update_volume_request_schema,
-        ),
-        (
-            crate::UPDATE_VOLUME_RESPONSE_SCHEMA_ID,
-            update_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            &update_volume_response_schema,
-        ),
-        (
-            crate::UPDATE_CHAPTER_REQUEST_SCHEMA_ID,
-            update_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            &update_chapter_request_schema,
-        ),
-        (
-            crate::UPDATE_CHAPTER_RESPONSE_SCHEMA_ID,
-            update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            &update_chapter_response_schema,
-        ),
-        (
-            crate::CREATE_CHAPTER_REQUEST_SCHEMA_ID,
-            create_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            &create_chapter_request_schema,
-        ),
-        (
-            crate::CREATE_CHAPTER_RESPONSE_SCHEMA_ID,
-            create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            &create_chapter_response_schema,
-        ),
-        (
-            CREATE_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-            EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-            &editor_create_request_schema,
-        ),
-        (
-            CREATE_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-            EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-            &editor_create_response_schema,
-        ),
-        (
-            GET_EDITOR_SESSION_REQUEST_SCHEMA_ID,
-            EDITOR_SESSION_GET_REQUEST_SCHEMA_PATH,
-            &editor_get_request_schema,
-        ),
-        (
-            GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID,
-            EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-            &editor_get_response_schema,
-        ),
-        (
-            APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID,
-            author_edit_artifacts::REQUEST_SCHEMA_PATH,
-            &apply_edit_request_schema,
-        ),
-        (
-            APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID,
-            author_edit_artifacts::RESPONSE_SCHEMA_PATH,
-            &apply_edit_response_schema,
-        ),
-        (
-            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
-            author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
-            &apply_edit_outcome_request_schema,
-        ),
-        (
-            crate::GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID,
-            author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
-            &apply_edit_outcome_response_schema,
-        ),
-        (
-            crate::GET_SNAPSHOT_REQUEST_SCHEMA_ID,
-            snapshot_artifacts::SNAPSHOT_REQUEST_SCHEMA_PATH,
-            &snapshot_request_schema,
-        ),
-        (
-            crate::GET_SNAPSHOT_RESPONSE_SCHEMA_ID,
-            snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH,
-            &snapshot_response_schema,
-        ),
-        (
-            crate::release1_snapshot::ACTIVITY_STREAM_REQUEST_SCHEMA_ID,
-            snapshot_artifacts::ACTIVITY_STREAM_REQUEST_SCHEMA_PATH,
-            &activity_stream_request_schema,
-        ),
-        (
-            crate::release1_snapshot::ACTIVITY_STREAM_RESPONSE_SCHEMA_ID,
-            snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
-            &activity_stream_response_schema,
-        ),
-        (
-            crate::TAKE_OVER_PROJECT_WRITER_REQUEST_SCHEMA_ID,
-            takeover_artifacts::REQUEST_SCHEMA_PATH,
-            &takeover_request_schema,
-        ),
-        (
-            crate::TAKE_OVER_PROJECT_WRITER_RESPONSE_SCHEMA_ID,
-            takeover_artifacts::RESPONSE_SCHEMA_PATH,
-            &takeover_response_schema,
-        ),
-    ]);
-    let profile = release1_protocol_profile();
+    let Release1ArtifactAssembly {
+        openapi,
+        schemas,
+        schema_catalog,
+        typescript_client,
+        typescript_declaration,
+        release_profile_declaration,
+        profile,
+    } = release1_artifact_assembly();
     let profile_json =
         serde_json::to_string_pretty(&profile).expect("protocol profile should serialize");
     let profile_module = format!("// @generated by storyos-contracts; do not edit.\nexport const RELEASE_1_PROTOCOL_PROFILE = Object.freeze({profile_json});\n").into_bytes();
-    vec![
+    let mut generated = vec![
         (
             "generated/json-schema/storyos-web-assets/manifest.schema.json",
             json_bytes(&typed_schema::<crate::WebAssetManifest>(
@@ -770,157 +516,20 @@ fn generated_files() -> Vec<GeneratedFile> {
                 "StoryOS Web Asset Manifest",
             )),
         ),
-        (OPENAPI_PATH, openapi_bytes()),
-        (REQUEST_SCHEMA_PATH, request_schema),
-        (RESPONSE_SCHEMA_PATH, response_schema),
-        (PROJECT_REQUEST_SCHEMA_PATH, project_request_schema),
-        (PROJECT_RESPONSE_SCHEMA_PATH, project_response_schema),
-        (CHAPTER_REQUEST_SCHEMA_PATH, chapter_request_schema),
-        (CHAPTER_RESPONSE_SCHEMA_PATH, chapter_response_schema),
-        (CHALLENGE_REQUEST_SCHEMA_PATH, challenge_request_schema),
-        (CHALLENGE_RESPONSE_SCHEMA_PATH, challenge_response_schema),
-        (
-            create_project_artifacts::CHALLENGE_REQUEST_SCHEMA_PATH,
-            create_project_challenge_request_schema,
-        ),
-        (
-            create_project_artifacts::CHALLENGE_RESPONSE_SCHEMA_PATH,
-            create_project_challenge_response_schema,
-        ),
-        (
-            create_project_artifacts::REQUEST_SCHEMA_PATH,
-            create_project_request_schema,
-        ),
-        (
-            create_project_artifacts::RESPONSE_SCHEMA_PATH,
-            create_project_response_schema,
-        ),
-        (
-            list_projects_artifacts::REQUEST_SCHEMA_PATH,
-            list_projects_request_schema,
-        ),
-        (
-            list_projects_artifacts::RESPONSE_SCHEMA_PATH,
-            list_projects_response_schema,
-        ),
-        (
-            manuscript_tree_artifacts::REQUEST_SCHEMA_PATH,
-            manuscript_tree_request_schema,
-        ),
-        (
-            manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH,
-            manuscript_tree_response_schema,
-        ),
-        (
-            update_project_artifacts::REQUEST_SCHEMA_PATH,
-            update_project_request_schema,
-        ),
-        (
-            update_project_artifacts::RESPONSE_SCHEMA_PATH,
-            update_project_response_schema,
-        ),
-        (
-            archive_project_artifacts::REQUEST_SCHEMA_PATH,
-            archive_project_request_schema,
-        ),
-        (
-            archive_project_artifacts::RESPONSE_SCHEMA_PATH,
-            archive_project_response_schema,
-        ),
-        (
-            create_volume_artifacts::REQUEST_SCHEMA_PATH,
-            create_volume_request_schema,
-        ),
-        (
-            create_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            create_volume_response_schema,
-        ),
-        (
-            update_volume_artifacts::REQUEST_SCHEMA_PATH,
-            update_volume_request_schema,
-        ),
-        (
-            update_volume_artifacts::RESPONSE_SCHEMA_PATH,
-            update_volume_response_schema,
-        ),
-        (
-            update_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            update_chapter_request_schema,
-        ),
-        (
-            update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            update_chapter_response_schema,
-        ),
-        (
-            create_chapter_artifacts::REQUEST_SCHEMA_PATH,
-            create_chapter_request_schema,
-        ),
-        (
-            create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
-            create_chapter_response_schema,
-        ),
-        (
-            EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
-            editor_create_request_schema,
-        ),
-        (
-            EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
-            editor_create_response_schema,
-        ),
-        (
-            EDITOR_SESSION_GET_REQUEST_SCHEMA_PATH,
-            editor_get_request_schema,
-        ),
-        (
-            EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
-            editor_get_response_schema,
-        ),
-        (
-            author_edit_artifacts::REQUEST_SCHEMA_PATH,
-            apply_edit_request_schema,
-        ),
-        (
-            author_edit_artifacts::RESPONSE_SCHEMA_PATH,
-            apply_edit_response_schema,
-        ),
-        (
-            author_edit_outcome_artifacts::REQUEST_SCHEMA_PATH,
-            apply_edit_outcome_request_schema,
-        ),
-        (
-            author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH,
-            apply_edit_outcome_response_schema,
-        ),
-        (
-            snapshot_artifacts::SNAPSHOT_REQUEST_SCHEMA_PATH,
-            snapshot_request_schema,
-        ),
-        (
-            snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH,
-            snapshot_response_schema,
-        ),
-        (
-            snapshot_artifacts::ACTIVITY_STREAM_REQUEST_SCHEMA_PATH,
-            activity_stream_request_schema,
-        ),
-        (
-            snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH,
-            activity_stream_response_schema,
-        ),
-        (
-            takeover_artifacts::REQUEST_SCHEMA_PATH,
-            takeover_request_schema,
-        ),
-        (
-            takeover_artifacts::RESPONSE_SCHEMA_PATH,
-            takeover_response_schema,
-        ),
-        (TYPESCRIPT_CLIENT_PATH, typescript_client_bytes()),
-        (TYPESCRIPT_DECLARATION_PATH, typescript_declaration_bytes()),
+        (OPENAPI_PATH, openapi),
+    ];
+    generated.extend(
+        schemas
+            .into_iter()
+            .map(|(_schema_id, path, bytes)| (path, bytes)),
+    );
+    generated.extend([
+        (TYPESCRIPT_CLIENT_PATH, typescript_client),
+        (TYPESCRIPT_DECLARATION_PATH, typescript_declaration),
         (RELEASE_PROFILE_MODULE_PATH, profile_module),
         (
             RELEASE_PROFILE_DECLARATION_PATH,
-            release_profile_declaration_bytes(),
+            release_profile_declaration,
         ),
         (SCHEMA_CATALOG_PATH, schema_catalog),
         (FIXTURE_CATALOG_PATH, fixture_catalog_bytes(&profile)),
@@ -1146,7 +755,8 @@ fn generated_files() -> Vec<GeneratedFile> {
             takeover_artifacts::FIXTURE_PATHS[2],
             takeover_artifacts::boundary_fixture_bytes(),
         ),
-    ]
+    ]);
+    generated
 }
 
 fn path_error(path: &Path, source: io::Error) -> io::Error {
@@ -1460,7 +1070,7 @@ fn path_request_schema(schema_id: &str, fields: &[&str]) -> Value {
            "properties": properties})
 }
 
-fn schema_catalog_bytes(schemas: &[(&str, &str, &[u8])]) -> Vec<u8> {
+fn schema_catalog_bytes(schemas: &[(&str, &str, Vec<u8>)]) -> Vec<u8> {
     json_bytes(&json!({
         "schema_id": "storyos.schema-catalog.v1", "public_protocol_release": PUBLIC_PROTOCOL_RELEASE,
         "implemented_operations": implemented_operation_ids(),
