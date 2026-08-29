@@ -124,6 +124,8 @@ export function createAuthorEditIdleController({
     }, AUTHOR_EDIT_BATCH_IDLE_MS);
   };
 
+  if (pendingIntentCount > 0) scheduleIdle();
+
   return {
     persist(edit, origin, createdAt) {
       return enqueue(async () => {

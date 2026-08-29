@@ -135,6 +135,12 @@ it("settles one Tiptap Block replacement and preserves text, Block identity, and
   await expect.poll(() =>
     root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count")
   ).toBe("0");
+  await expect.poll(() =>
+    root.querySelector("form[data-rename]")?.getAttribute("data-rename") !== null
+    && root.querySelector(
+      'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
+    )?.getAttribute("data-chapter-id") !== null
+  ).toBe(true);
 
   const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
   const chapterId = root.querySelector(
