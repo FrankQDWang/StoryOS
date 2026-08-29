@@ -9,7 +9,11 @@ export type ProjectOpenState = { "kind": "empty" } | { "kind": "current_chapter"
 
 export type ControlledProject = { project_id: string, title: string, open: ProjectOpenState, };
 
-export type AuthoritativeChapterRevision = { revision_id: string, body: string, };
+export type ManuscriptBlockKind = "paragraph";
+
+export type ManuscriptBlock = { manuscript_block_id: string, block_kind: ManuscriptBlockKind, text: string, };
+
+export type AuthoritativeChapterRevision = { revision_id: string, body: string, blocks: Array<ManuscriptBlock>, };
 
 export type CurrentChapter = { chapter_id: string, title: string, current_revision: AuthoritativeChapterRevision, };
 
@@ -131,7 +135,7 @@ export type UpdateChapterEffect = { "kind": "authoritative_applied", chapter_id:
 
 export type UpdateChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateChapterEffect, };
 
-export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, };
+export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
 

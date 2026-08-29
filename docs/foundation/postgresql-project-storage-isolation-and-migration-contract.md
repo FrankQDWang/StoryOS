@@ -33,8 +33,8 @@ StorageCompatibilityIdentity {
   migration_chain_digest: sha256 over the catalogued chain and LF-normalized bootstrap manifest
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
-  route_catalog_contract_revision: release1-wire-catalog-2026-08-17-author-edit-outcome-v1
-  route_catalog_sha256: sha256:ebd74322ed08d6f049f899ea50af4d307ae75507311985b423c201489daf395e
+  route_catalog_contract_revision: release1-wire-catalog-2026-08-29-manuscript-block-v1
+  route_catalog_sha256: sha256:413da04ca790543815914078c57eeb41e25598378edb0170cf8e0677bb0f6a79
   compatibility_profile: storyos.public.same-release.v1
   release_identity_schema_id: storyos.compatibility.release-identity.v1
 }

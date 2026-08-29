@@ -9,6 +9,13 @@
       "value_hex_lowercase": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     },
     "materialized_revision": {
+      "blocks": [
+        {
+          "block_kind": "paragraph",
+          "manuscript_block_id": "018f0000-0000-7001-8000-0000000000b1",
+          "text": "雨落在窗沿。"
+        }
+      ],
       "body": "雨落在窗沿。",
       "revision_id": "018f0000-0000-7001-8000-000000000004"
     },

@@ -58,8 +58,9 @@ pub use release1::{
     EditorWriterProjection, GET_CHAPTER_METHOD, GET_CHAPTER_PATH, GET_EDITOR_SESSION_METHOD,
     GET_EDITOR_SESSION_PATH, GET_PROJECT_METHOD, GET_PROJECT_PATH, GET_PROTOCOL_PROFILE_METHOD,
     GET_PROTOCOL_PROFILE_PATH, GetChapterResponse, GetEditorSessionResponse, GetProjectResponse,
-    LIMIT_PROFILE_REVISION, PUBLIC_PROTOCOL_RELEASE, ProjectOpenState, ProjectScope,
-    Release1CompatibilityIdentity, Release1ProtocolProfile, StoryOSProblem, project_command_kind,
+    LIMIT_PROFILE_REVISION, ManuscriptBlock, ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE,
+    ProjectOpenState, ProjectScope, Release1CompatibilityIdentity, Release1ProtocolProfile,
+    StoryOSProblem, project_command_kind,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,
