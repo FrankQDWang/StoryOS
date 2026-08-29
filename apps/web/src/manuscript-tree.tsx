@@ -124,6 +124,7 @@ export function ManuscriptTree({
   const [collapsedVolumes, setCollapsedVolumes] = useState<ReadonlySet<string>>(() => new Set());
   return (
     <nav aria-label="稿件目录">
+      <div className="tree-heading">目录</div>
       <ul>
         {tree.volumes.map((volume) => {
           const expanded = !collapsedVolumes.has(volume.volume_id);

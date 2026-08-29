@@ -252,7 +252,7 @@ function ProjectReadyView({
                 ?? selectedChapter.chapter.current_revision.revision_id
             }
           >
-            {saveState}
+            {saveState === "saved" ? "已保存" : saveState === "saving" ? "保存中" : "需要处理"}
           </small>
           {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
             ? (

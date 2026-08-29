@@ -157,6 +157,8 @@ it("the production page uses the approved workspace without losing writing state
     writerGeneration: "1",
     availability: "unavailable",
   });
+  expect(Number.parseInt(childWindow.getComputedStyle(currentChapter).fontWeight, 10))
+    .toBeGreaterThanOrEqual(600);
   expect(root.textContent).not.toContain("模型");
   expect(root.textContent).not.toContain("Agent");
   expect(root.textContent).not.toContain("Provider");

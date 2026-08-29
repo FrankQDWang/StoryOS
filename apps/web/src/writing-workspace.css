@@ -89,7 +89,53 @@ input:focus-visible {
   list-style: none;
 }
 
-.tree-panel nav > ul > li { padding: 0 12px 12px; }
+.tree-panel nav > ul > li > ul {
+  padding: 0 0 0 28px;
+}
+
+.tree-panel button[data-chapter-id] {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px 8px 12px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  text-align: left;
+  color: #77746d;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tree-panel button[data-chapter-id]:hover {
+  background: var(--hover);
+  color: #3f3d38;
+}
+
+.tree-panel button[data-chapter-id][aria-current="true"] {
+  color: #24231f;
+  background: #f1f0ee;
+  border-left-color: #34332f;
+  font-weight: 600;
+}
+
+.tree-panel [data-volume-title] {
+  display: inline-block;
+  padding: 10px 0 6px;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tree-heading {
+  padding: 0 22px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  color: #74716a;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
 
 .tree-panel li[data-volume-expanded="false"] > ul,
 .tree-panel li[data-volume-expanded="false"] > form[data-create-chapter] {
