@@ -22,6 +22,8 @@ mod release1_list_projects;
 mod release1_list_projects_artifacts;
 mod release1_manuscript_tree;
 mod release1_manuscript_tree_artifacts;
+mod release1_set_current_chapter;
+mod release1_set_current_chapter_artifacts;
 mod release1_snapshot;
 mod release1_snapshot_artifacts;
 mod release1_takeover;
@@ -112,6 +114,13 @@ pub use release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
     GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
     ManuscriptVolumeNode,
+};
+pub use release1_set_current_chapter::{
+    SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,
+    SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID, SET_CURRENT_CHAPTER_RESPONSE_SCHEMA_ID,
+    SetCurrentChapterConflictReason, SetCurrentChapterEffect, SetCurrentChapterInput,
+    SetCurrentChapterNoEffectReason, SetCurrentChapterRefusalReason, SetCurrentChapterRequest,
+    SetCurrentChapterResponse,
 };
 pub use release1_snapshot::{
     ACTIVITY_STREAM_METHOD, ACTIVITY_STREAM_PATH, ActivityStreamRequest, CanonicalSnapshotMaps,

@@ -82,6 +82,12 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.update-chapter.request.v1",
     ),
     target(
+        "setCurrentChapter",
+        "PUT",
+        "/api/v1/projects/{project_id}/current-chapter",
+        "storyos.command.set-current-chapter.request.v1",
+    ),
+    target(
         "deleteChapter",
         "DELETE",
         "/api/v1/projects/{project_id}/chapters/{chapter_id}",

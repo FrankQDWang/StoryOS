@@ -157,7 +157,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,createChapter,updateChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,createChapter,updateChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter"
     ));
 
     let client = String::from_utf8(
@@ -288,7 +288,8 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
             "createVolume",
             "createChapter",
             "updateVolume",
-            "updateChapter"
+            "updateChapter",
+            "setCurrentChapter"
         ])
     );
 
@@ -465,6 +466,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_update_volume_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_update_chapter_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_set_current_chapter_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_set_current_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_REQUEST_SCHEMA_PATH,
         super::EDITOR_SESSION_CREATE_RESPONSE_SCHEMA_PATH,
         super::EDITOR_SESSION_GET_RESPONSE_SCHEMA_PATH,
@@ -524,7 +527,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let profile = release1_protocol_profile();
     assert_eq!(
         profile.contract_revision,
-        "release1-wire-catalog-2026-08-29-manuscript-block-v1"
+        "release1-wire-catalog-2026-08-29-set-current-chapter-v1"
     );
     assert_eq!(
         profile.release_identity.web_client_contract_revision,

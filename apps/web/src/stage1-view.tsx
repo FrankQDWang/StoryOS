@@ -33,6 +33,7 @@ import type { ManualInputController } from "./manual-input.ts";
 import { ManuscriptEditor } from "./manuscript-editor.tsx";
 import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import { renameOwnedProject } from "./rename-project.ts";
+import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
@@ -45,6 +46,7 @@ interface Stage1ViewProps {
 interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
   state: ProjectReadyState;
   onArchived: () => void;
+  onReopened: (state: ControlledProjectState) => void;
 }
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
@@ -70,7 +72,7 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
 }
 
 function ProjectReadyView({
-  state, baseUrl, fetchImpl, cryptoImpl, onArchived,
+  state, baseUrl, fetchImpl, cryptoImpl, onArchived, onReopened,
 }: ProjectReadyViewProps) {
   const inputRef = useRef<ManualInputController | null>(null);
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
@@ -157,6 +159,66 @@ function ProjectReadyView({
     })();
   };
 
+  const makeCurrent = (chapterId: string) => {
+    if (chapterId === currentChapterId || state.editor.kind !== "editor-ready") return;
+    const editorSessionId = state.editor.session.editor_session.editor_session_id;
+    const generation = switchGenerationRef.current + 1;
+    switchGenerationRef.current = generation;
+    void (async () => {
+      await inputRef.current?.flush();
+      const gate = await completeJournalOrRefuse({
+        incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
+        whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
+      });
+      if (generation !== switchGenerationRef.current) return;
+      if (gate.kind === "refused") {
+        setSwitchRecovery(chapterSwitchRecoveryMessage(gate.reason));
+        return;
+      }
+      const opened = await openSelectedChapter({
+        baseUrl,
+        projectId: state.project.project.project_id,
+        chapterId,
+        expectedScope: state.project.project_scope,
+        fetchImpl,
+      });
+      if (generation !== switchGenerationRef.current) return;
+      if (opened.kind !== "opened") {
+        setSwitchRecovery(chapterSwitchRecoveryMessage(opened.kind));
+        return;
+      }
+      try {
+        const switched = await setOwnedCurrentChapter({
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+          projectId: state.project.project.project_id,
+          chapterId,
+          expectedCurrentChapterId: currentChapterId,
+          expectedTargetRevisionId: opened.chapter.chapter.current_revision.revision_id,
+          editorSessionId,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        if (switched.effect.kind !== "authoritative_applied"
+          && switched.effect.kind !== "no_effect") {
+          setSwitchRecovery("无法设为当前章节。");
+          return;
+        }
+        const next = await openControlledProject({
+          baseUrl,
+          projectId: state.project.project.project_id,
+          fetchImpl,
+          cryptoImpl,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        onReopened(next);
+      } catch {
+        if (generation !== switchGenerationRef.current) return;
+        setSwitchRecovery("无法设为当前章节。");
+      }
+    })();
+  };
+
   const archived = lifecycle === "archived";
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
@@ -191,6 +253,9 @@ function ProjectReadyView({
               createEnabled={!archived}
               selectedChapterId={selectedChapter.chapter.chapter_id}
               onSelectChapter={selectChapter}
+              currentChapterId={currentChapterId}
+              makeCurrentEnabled={!archived && state.editor.kind === "editor-ready"}
+              onMakeCurrent={makeCurrent}
               onChapterCreated={refreshTree}
               onVolumeUpdated={refreshTree}
             />
@@ -599,6 +664,9 @@ function Stage1View({
   if (current.kind === "project-ready") {
     return (
       <ProjectReadyView
+        key={current.project.project.open.kind === "current_chapter"
+          ? current.project.project.open.current_chapter_id
+          : current.project.project.project_id}
         state={current}
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
@@ -606,6 +674,7 @@ function Stage1View({
         onArchived={() => {
           setCurrent({ kind: "protected-ready", profile: current.profile });
         }}
+        onReopened={setCurrent}
       />
     );
   }

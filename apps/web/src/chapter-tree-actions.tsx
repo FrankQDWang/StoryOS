@@ -9,6 +9,9 @@ export function ChapterTreeActions({
   expectedChapterRevision,
   selectedChapterId,
   onSelectChapter,
+  currentChapterId,
+  makeCurrentEnabled,
+  onMakeCurrent,
   createEnabled,
   baseUrl,
   fetchImpl,
@@ -23,6 +26,9 @@ export function ChapterTreeActions({
   expectedChapterRevision: string;
   selectedChapterId?: string | undefined;
   onSelectChapter?: ((chapterId: string) => void) | undefined;
+  currentChapterId?: string | undefined;
+  makeCurrentEnabled?: boolean | undefined;
+  onMakeCurrent?: ((chapterId: string) => void) | undefined;
   createEnabled: boolean;
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -66,6 +72,17 @@ export function ChapterTreeActions({
           {title}
         </button>
       )}
+      {makeCurrentEnabled === true && onMakeCurrent !== undefined && chapterId !== currentChapterId ? (
+        <button
+          type="button"
+          data-make-current-chapter={chapterId}
+          onClick={() => {
+            onMakeCurrent(chapterId);
+          }}
+        >
+          设为当前章节
+        </button>
+      ) : null}
       {createEnabled ? (
         <>
           <form

@@ -39,6 +39,7 @@ mod create_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_tree;
+mod set_current_chapter;
 mod snapshot;
 mod takeover;
 mod update_chapter;
@@ -91,6 +92,10 @@ pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use set_current_chapter::{
+    SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,
+    SetCurrentChapterSettlementEffect, SetCurrentChapterStore, set_current_chapter,
 };
 pub use update_chapter::{
     UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,

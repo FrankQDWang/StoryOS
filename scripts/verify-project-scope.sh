@@ -157,7 +157,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0015_create_chapter.sql \
   -f /tmp/storyos-release1-bootstrap/0016_update_volume.sql \
   -f /tmp/storyos-release1-bootstrap/0017_update_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0018_manuscript_blocks.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0018_manuscript_blocks.sql \
+  -f /tmp/storyos-release1-bootstrap/0019_set_current_chapter.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -188,7 +189,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0015_create_chapter.sql \
   -f /tmp/storyos-release1-bootstrap/0016_update_volume.sql \
   -f /tmp/storyos-release1-bootstrap/0017_update_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0018_manuscript_blocks.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0018_manuscript_blocks.sql \
+  -f /tmp/storyos-release1-bootstrap/0019_set_current_chapter.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
@@ -251,6 +253,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP updateChapter tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/update-chapter-http.integration.test.ts
+echo "Running HTTP setCurrentChapter tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/set-current-chapter-http.integration.test.ts
 echo "Running HTTP getManuscriptTree tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/manuscript-tree-http.integration.test.ts

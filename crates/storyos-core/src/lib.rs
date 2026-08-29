@@ -5,6 +5,7 @@ mod create_chapter;
 mod create_project;
 mod create_volume;
 mod manuscript_payload;
+mod set_current_chapter;
 mod update_chapter;
 mod update_project;
 mod update_volume;
@@ -25,6 +26,10 @@ pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
     apply_versioned_author_edit, upgrade_legacy_manuscript,
+};
+pub use set_current_chapter::{
+    SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
+    SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
 };
 pub use update_chapter::{
     ChapterJoin, UpdateChapter, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
@@ -255,3 +260,7 @@ mod manuscript_payload_tests;
 #[cfg(test)]
 #[path = "update_volume_tests.rs"]
 mod update_volume_tests;
+
+#[cfg(test)]
+#[path = "set_current_chapter_tests.rs"]
+mod set_current_chapter_tests;

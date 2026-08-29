@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:de590b2ac2596b58e7fa2b709e04ed66f0ab8521af3dd4cd677b438c78ef6558",
+  "corpus_digest": "sha256:cfcdabf9720fe159f69f84fc0f8a400be80f98ca215579e54b9f8f3b144c9382",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -45,6 +45,9 @@
       "generated/golden-wire/storyos-public-release-1/update-chapter.json",
       "generated/golden-wire/storyos-public-release-1/update-chapter.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-chapter.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/set-current-chapter.json",
+      "generated/golden-wire/storyos-public-release-1/set-current-chapter.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/set-current-chapter.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -320,6 +323,24 @@
       "fixture_id": "storyos.golden.updateChapter.boundary.v1",
       "operation_id": "updateChapter",
       "path": "generated/golden-wire/storyos-public-release-1/update-chapter.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.setCurrentChapter.positive.v1",
+      "operation_id": "setCurrentChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/set-current-chapter.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.setCurrentChapter.invalid.v1",
+      "operation_id": "setCurrentChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/set-current-chapter.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.setCurrentChapter.boundary.v1",
+      "operation_id": "setCurrentChapter",
+      "path": "generated/golden-wire/storyos-public-release-1/set-current-chapter.boundary.json"
     },
     {
       "classification": "positive",
