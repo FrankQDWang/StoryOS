@@ -102,7 +102,11 @@ it("opens the URL-selected Project and fails closed before invalid entry request
     expect(root.textContent).toContain("Project A");
     expect(root.textContent).toContain("Chapter A");
     expect(root.textContent).toContain("Base");
-    expect(root.textContent).toContain(scenario.chapter.chapter.current_revision.revision_id);
+    expect(
+      root.querySelector("[data-authoritative-revision-id]")?.getAttribute(
+        "data-authoritative-revision-id",
+      ),
+    ).toBe(scenario.chapter.chapter.current_revision.revision_id);
     expect(requests.slice(0, 4).map(({ path }) => path)).toEqual([
       "/api/v1/protocol",
       `/api/v1/projects/${PROJECT}`,

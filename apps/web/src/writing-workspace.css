@@ -1,0 +1,252 @@
+:root {
+  --canvas: #fbfbfa;
+  --tree-panel: #f7f6f5;
+  --assistant-panel: #f9f8f7;
+  --ink: #23221e;
+  --muted: #77756e;
+  --line: #ece9e5;
+  --hover: #f0eeea;
+  --assistant-header-height: 40px;
+  --assistant-rail-width: 44px;
+  --assistant-toggle-size: 36px;
+}
+
+* { box-sizing: border-box; }
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 920px;
+  color: var(--ink);
+  background: var(--canvas);
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+}
+
+button,
+textarea,
+input { font: inherit; }
+
+button:focus-visible,
+textarea:focus-visible,
+input:focus-visible {
+  outline: 2px solid #78756e;
+  outline-offset: 2px;
+}
+
+.workspace {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: clamp(220px, 17.5vw, 268px) minmax(480px, 1fr) clamp(340px, 27.1vw, 404px);
+  position: relative;
+  background: var(--canvas);
+}
+
+.workspace.agent-is-collapsed {
+  grid-template-columns: clamp(220px, 17.5vw, 268px) minmax(560px, 1fr) var(--assistant-rail-width);
+}
+
+.tree-panel,
+.agent-panel,
+.editor-panel {
+  min-width: 0;
+  min-height: 0;
+}
+
+.tree-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  background: var(--tree-panel);
+  border-right: 1px solid var(--line);
+}
+
+.tree-panel h1 {
+  margin: 0;
+  padding: 0 22px;
+  height: 78px;
+  display: flex;
+  align-items: center;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tree-panel nav[aria-label="稿件目录"] {
+  min-height: 0;
+  overflow: auto;
+}
+
+.tree-panel nav ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tree-panel nav > ul > li > ul {
+  padding: 0 0 0 28px;
+}
+
+.tree-panel button[data-chapter-id] {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px 10px 8px 12px;
+  border: 0;
+  border-left: 2px solid transparent;
+  background: transparent;
+  text-align: left;
+  color: #77746d;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tree-panel button[data-chapter-id]:hover {
+  background: var(--hover);
+  color: #3f3d38;
+}
+
+.tree-panel button[data-chapter-id][aria-current="true"] {
+  color: #24231f;
+  background: #f1f0ee;
+  border-left-color: #34332f;
+  font-weight: 600;
+}
+
+.tree-panel [data-volume-title] {
+  display: inline-block;
+  padding: 10px 0 6px;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tree-heading {
+  padding: 0 22px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  color: #74716a;
+  font-size: 13px;
+  border-bottom: 1px solid var(--line);
+}
+
+.tree-panel li[data-volume-expanded="false"] > ul,
+.tree-panel li[data-volume-expanded="false"] > form[data-create-chapter] {
+  display: none;
+}
+
+.tree-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.editor-panel { overflow: auto; background: var(--canvas); }
+
+.editor-panel h2,
+.manuscript-editor,
+.editor-panel [data-save-state] {
+  width: min(100%, 850px);
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 84px;
+  padding-right: 66px;
+  box-sizing: border-box;
+}
+
+.editor-panel h2 {
+  margin-top: 91px;
+  margin-bottom: 38px;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: clamp(27px, 2.1vw, 32px);
+  font-weight: 600;
+}
+
+.manuscript-editor {
+  display: block;
+  min-height: 50%;
+  margin-bottom: 48px;
+  border: 0;
+  resize: none;
+  background: transparent;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 16.5px;
+  line-height: 2;
+}
+
+.editor-panel [data-save-state] {
+  display: block;
+  margin-bottom: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.workspace.agent-is-collapsed .agent-panel { width: var(--assistant-rail-width); }
+
+.agent-panel {
+  height: 100%;
+  overflow: hidden;
+  background: var(--assistant-panel);
+  border-left: 1px solid var(--line);
+}
+
+.assistant-body {
+  display: grid;
+  grid-template-rows: var(--assistant-header-height) minmax(0, 1fr) auto;
+  height: 100%;
+}
+
+.assistant-body[hidden] { display: none; }
+
+.agent-header {
+  display: flex;
+  align-items: center;
+  padding: 0 29px;
+  border-bottom: 1px solid var(--line);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+}
+
+.assistant-status {
+  padding: 24px 28px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.composer { margin: 0; padding: 0 20px 14px; }
+
+.composer input {
+  width: 100%;
+  border: 1px solid #dfdcd7;
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+.assistant-toggle {
+  position: absolute;
+  z-index: 2;
+  top: calc((var(--assistant-header-height) - var(--assistant-toggle-size)) / 2);
+  right: calc((var(--assistant-rail-width) - var(--assistant-toggle-size)) / 2);
+  width: var(--assistant-toggle-size);
+  height: var(--assistant-toggle-size);
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #77746d;
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.assistant-toggle:hover { background: var(--hover); }
+.assistant-toggle svg { width: 20px; height: 20px; }
