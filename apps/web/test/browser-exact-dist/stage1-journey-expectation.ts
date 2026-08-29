@@ -553,11 +553,7 @@ export function expectedStage1Journey() {
       receipts: [0, 1, 2, 3].map(appliedReceipt),
       effects: [0, 1, 2, 3].map(appliedEffect),
       activities: [0, 1, 2, 3].map(appliedActivity),
-      manuscript: {
-        revision_id: "revision-4",
-        body: AFTER_UNSETTLED,
-        blocks: chapterBlocks(AFTER_UNSETTLED),
-      },
+      manuscript: { revision_id: "revision-4", body: AFTER_UNSETTLED },
     },
   };
 }
