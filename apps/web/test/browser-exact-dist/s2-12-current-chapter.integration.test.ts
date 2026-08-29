@@ -73,6 +73,10 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
+  await expect.poll(() =>
+    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
+    { timeout: 10_000 },
+  ).toBe("saving");
   await waitSaved(root);
 }
 
@@ -147,11 +151,16 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
     `[data-make-current-chapter="${chapterBId}"]`,
   );
   makeCurrent?.click();
-  await expect.poll(() => appRoot(frame).querySelector("h2")?.textContent, { timeout: 15_000 })
-    .toBe("Chapter B");
+  await expect.poll(() => {
+    const nextRoot = appRoot(frame);
+    const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return nextRoot.querySelector("h2")?.textContent === "Chapter B"
+      && editor !== null
+      && editor !== undefined
+      && manuscriptIsEditable(editor);
+  }, { timeout: 15_000 }).toBe(true);
   const switchedRoot = appRoot(frame);
   const switchedEditor = manuscriptEditor(switchedRoot, applicationWindow(frame));
-  expect(manuscriptIsEditable(switchedEditor)).toBe(true);
   expect(manuscriptBody(switchedEditor)).toBe("");
   expect(switchedRoot.querySelector(`[data-make-current-chapter="${chapterBId}"]`)).toBeNull();
   await typeIntoCurrent(frame, "Beta prose");
@@ -186,11 +195,14 @@ it("writes in two Chapters, switches current Chapter, and reopens the current Ch
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
+  await expect.poll(() =>
+    appRoot(frame).querySelector(`[data-make-current-chapter="${chapterAId}"]`) !== null,
+    { timeout: 10_000 },
+  ).toBe(true);
   const reopenedRoot = appRoot(frame);
   expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter B");
   const reopenedEditor = manuscriptEditor(reopenedRoot, applicationWindow(frame));
   expect(manuscriptBody(reopenedEditor)).toBe("Beta prose");
   expect(manuscriptIsEditable(reopenedEditor)).toBe(true);
   expect(reopenedRoot.querySelector(`[data-make-current-chapter="${chapterBId}"]`)).toBeNull();
-  expect(reopenedRoot.querySelector(`[data-make-current-chapter="${chapterAId}"]`)).not.toBeNull();
 });

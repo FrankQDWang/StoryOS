@@ -365,8 +365,23 @@ export async function openEditorWorkspace({
       transaction.abort();
       throw new Error("Local Edit Journal partition is corrupt");
     }
-    if (activeBase && JSON.stringify((activeBase as { value?: unknown }).value)
-      !== JSON.stringify(session.base_snapshot)) {
+    const storedBase = (activeBase as { value?: GetEditorSessionResponse["base_snapshot"] } | undefined)
+      ?.value;
+    const storedMatchesSession = activeBase !== undefined
+      && JSON.stringify(storedBase) === JSON.stringify(session.base_snapshot);
+    // The current writer Session may install a later authorized base in this
+    // Journal partition. An admitted current-Chapter transition changes the
+    // snapshot identity and advances project_activity_position. Older retained
+    // partitions keep their own bases.
+    const successorAuthorizedBase = session.writer.kind === "current_writer"
+      && storedBase !== undefined
+      && UUID.test(storedBase.snapshot_id)
+      && UUID.test(storedBase.chapter_id)
+      && boundedU64(storedBase.project_activity_position)
+      && storedBase.snapshot_id !== session.base_snapshot.snapshot_id
+      && BigInt(storedBase.project_activity_position)
+        < BigInt(session.base_snapshot.project_activity_position);
+    if (activeBase && !storedMatchesSession && !successorAuthorizedBase) {
       transaction.abort();
       throw new Error("Local Edit Journal active base is corrupt");
     }
@@ -417,6 +432,8 @@ export async function openEditorWorkspace({
     if (!existingPartition) partitions.add(partition);
     if (!activeBase) {
       metadata.add({ key: activeBaseKey, value: session.base_snapshot });
+    } else if (!storedMatchesSession) {
+      metadata.put({ key: activeBaseKey, value: session.base_snapshot });
     }
     await transactionResult(transaction);
     globalThis.sessionStorage?.setItem(activeSessionKey, session.editor_session.editor_session_id);
