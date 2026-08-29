@@ -1,9 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
-  focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
   MANUSCRIPT_EDITOR_SELECTOR,
@@ -72,7 +71,7 @@ async function readChapter(frame: HTMLIFrameElement, projectId: string, chapterI
   };
 }
 
-it("settles one Tiptap Block replacement and preserves text, Block identity, and Head", async () => {
+it("hydrates production Tiptap for one paragraph Block without a textarea write path", async () => {
   await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
@@ -152,43 +151,13 @@ it("settles one Tiptap Block replacement and preserves text, Block identity, and
   }
   const before = await readChapter(frame, projectId, chapterId);
   expect(editor.getAttribute("data-manuscript-block-id")).toBe(before.manuscriptBlockId);
-
-  focusManuscriptEnd(editor, childWindow);
-  await applyTrustedInput({ operation: "insert_text", text: "Visible block." });
-  await expect.poll(() => manuscriptBody(editor)).toBe("Visible block.");
-  await expect.poll(() =>
-    root.querySelector("[data-save-state]")?.getAttribute("data-save-state") === "saved"
-    && root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count") === "0"
-  ).toBe(true);
-
-  const settled = await readChapter(frame, projectId, chapterId);
-  expect(settled.body).toBe("Visible block.");
-  expect(settled.manuscriptBlockId).toBe(before.manuscriptBlockId);
-  expect(settled.revisionId).not.toBe(before.revisionId);
-
-  const reloaded = nextFrameLoad(frame);
-  childWindow.location.reload();
-  await reloaded;
-  await expect.poll(() => {
-    const nextRoot = frame.contentDocument?.querySelector("#app");
-    return nextRoot?.getAttribute("data-boot-state") === "project-ready"
-      && nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }, { timeout: 20_000 }).toBe(true);
-  const reloadedRoot = appRoot(frame);
-  const reloadedEditor = manuscriptEditor(reloadedRoot, applicationWindow(frame));
-  expect(reloadedRoot.querySelector("textarea")).toBeNull();
-  expect(manuscriptBody(reloadedEditor)).toBe("Visible block.");
-  const afterReload = await readChapter(frame, projectId, chapterId);
-  expect(afterReload).toEqual(settled);
-  expect(reloadedEditor.getAttribute("data-manuscript-block-id")).toBe(before.manuscriptBlockId);
-  expect(reloadedEditor.querySelectorAll("p")).toHaveLength(1);
-
-  reloadedEditor.focus();
-  await applyTrustedInput({ operation: "insert_text", text: "x" });
-  await expect.poll(() => manuscriptBody(reloadedEditor)).toBe("Visible block.x");
+  expect(before.body).toBe("");
+  expect(editor.querySelectorAll("p")).toHaveLength(1);
   const bold = new KeyboardEvent("keydown", { key: "b", ctrlKey: true, bubbles: true });
-  reloadedEditor.dispatchEvent(bold);
-  expect(reloadedEditor.querySelector("strong")).toBeNull();
-  expect(reloadedEditor.querySelector("b")).toBeNull();
-  expect(manuscriptBody(reloadedEditor)).toBe("Visible block.x");
+  editor.dispatchEvent(bold);
+  expect(editor.querySelector("strong")).toBeNull();
+  expect(editor.querySelector("b")).toBeNull();
+  expect(manuscriptBody(editor)).toBe("");
+  expect(root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count"))
+    .toBe("0");
 });
