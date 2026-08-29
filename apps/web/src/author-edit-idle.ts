@@ -3,7 +3,9 @@ import {
   AUTHOR_EDIT_BATCH_IDLE_MS,
   AUTHOR_EDIT_MAX_UNITS,
   createJournalUuid,
+  persistJoinBlocks,
   persistReplaceSelection,
+  persistSplitBlock,
 } from "./local-edit-journal.ts";
 import type {
   EditorReadyState,
@@ -12,12 +14,15 @@ import type {
   PendingEditProjection,
   ReplaceSelectionEdit,
 } from "./editor-types.ts";
+import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
 
+export type IdlePersistEdit = ReplaceSelectionEdit | CapturedManuscriptEdit;
+
 export interface AuthorEditIdleController {
   persist(
-    edit: ReplaceSelectionEdit,
+    edit: IdlePersistEdit,
     origin: InputOrigin,
     createdAt: string,
   ): Promise<void>;
@@ -130,15 +135,40 @@ export function createAuthorEditIdleController({
     persist(edit, origin, createdAt) {
       return enqueue(async () => {
         const hardBoundary = origin === "composition_confirmation"
-          || origin === "paste" || origin === "cut";
+          || origin === "paste" || origin === "cut"
+          || origin === "split_block" || origin === "join_blocks";
         const completedAt = Date.parse(createdAt);
         const idleBoundary = lastCompletedAt !== undefined
           && completedAt - lastCompletedAt > AUTHOR_EDIT_BATCH_IDLE_MS;
         if (hardBoundary || idleBoundary) await submitPending();
         if (!undoGroupId) undoGroupId = createJournalUuid(cryptoImpl);
-        const projection = await persistIntent(workspace, {
-          ...edit, inputOrigin: origin, undoGroupId, createdAt,
-        }, cryptoImpl);
+        const persistFields = { inputOrigin: origin, undoGroupId, createdAt };
+        const projection = !("kind" in edit)
+          ? await persistIntent(workspace, { ...edit, ...persistFields }, cryptoImpl)
+          : edit.kind === "split_block"
+            ? await persistSplitBlock(workspace, {
+              manuscript_block_id: edit.manuscript_block_id,
+              offset: edit.offset,
+              new_manuscript_block_id: edit.new_manuscript_block_id,
+              resultingBody: edit.resultingBody,
+              ...persistFields,
+            }, cryptoImpl)
+            : edit.kind === "join_blocks"
+              ? await persistJoinBlocks(workspace, {
+                left_manuscript_block_id: edit.left_manuscript_block_id,
+                right_manuscript_block_id: edit.right_manuscript_block_id,
+                caret: edit.caret,
+                resultingBody: edit.resultingBody,
+                ...persistFields,
+              }, cryptoImpl)
+              : await persistIntent(workspace, {
+                from: edit.from,
+                to: edit.to,
+                text: edit.text,
+                resultingBody: edit.resultingBody,
+                manuscript_block_id: edit.manuscript_block_id,
+                ...persistFields,
+              }, cryptoImpl);
         workspace.pending = projection;
         pendingIntentCount = projection.unsettled_intent_count;
         lastCompletedAt = completedAt;

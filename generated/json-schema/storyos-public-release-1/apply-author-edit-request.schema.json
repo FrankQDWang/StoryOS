@@ -61,6 +61,52 @@
             "text"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "split_block",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "new_manuscript_block_id": {
+              "type": "string"
+            },
+            "offset": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "offset",
+            "new_manuscript_block_id"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "join_blocks",
+              "type": "string"
+            },
+            "left_manuscript_block_id": {
+              "type": "string"
+            },
+            "right_manuscript_block_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "left_manuscript_block_id",
+            "right_manuscript_block_id"
+          ],
+          "type": "object"
         }
       ]
     },

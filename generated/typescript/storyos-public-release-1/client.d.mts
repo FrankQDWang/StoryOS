@@ -149,7 +149,7 @@ export type SetCurrentChapterEffect = { "kind": "authoritative_applied", current
 
 export type SetCurrentChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: SetCurrentChapterEffect, };
 
-export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, };
+export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, } | { "kind": "split_block", manuscript_block_id: string, offset: number, new_manuscript_block_id: string, } | { "kind": "join_blocks", left_manuscript_block_id: string, right_manuscript_block_id: string, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
 

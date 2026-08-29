@@ -25,7 +25,7 @@ pub use create_volume::{
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
-    apply_versioned_author_edit, upgrade_legacy_manuscript,
+    apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
 };
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
@@ -82,6 +82,15 @@ pub enum AuthorEditPrimitive {
         from: u32,
         to: u32,
         text: String,
+    },
+    SplitBlock {
+        manuscript_block_id: String,
+        offset: u32,
+        new_manuscript_block_id: String,
+    },
+    JoinBlocks {
+        left_manuscript_block_id: String,
+        right_manuscript_block_id: String,
     },
 }
 

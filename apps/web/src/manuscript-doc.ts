@@ -2,15 +2,57 @@ import type { Node } from "@tiptap/pm/model";
 
 import type { ReplaceSelectionEdit } from "./editor-types.ts";
 
-export function manuscriptJson(blockId: string, body: string) {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+export interface ManuscriptParagraph {
+  manuscript_block_id: string;
+  text: string;
+}
+
+export type CapturedManuscriptEdit =
+  | {
+    kind: "replace_block_selection";
+    manuscript_block_id: string;
+    from: number;
+    to: number;
+    text: string;
+    resultingBody: string;
+    resultingBlocks: ManuscriptParagraph[];
+  }
+  | {
+    kind: "split_block";
+    manuscript_block_id: string;
+    offset: number;
+    new_manuscript_block_id: string;
+    resultingBody: string;
+    resultingBlocks: ManuscriptParagraph[];
+  }
+  | {
+    kind: "join_blocks";
+    left_manuscript_block_id: string;
+    right_manuscript_block_id: string;
+    caret: number;
+    resultingBody: string;
+    resultingBlocks: ManuscriptParagraph[];
+  };
+
+export function flattenChapterBody(blocks: readonly { text: string }[]): string {
+  return blocks.map((block) => block.text).join("\n");
+}
+
+export function manuscriptBlocksJson(blocks: readonly ManuscriptParagraph[]) {
   return {
     type: "doc",
-    content: [{
+    content: blocks.map((block) => ({
       type: "paragraph",
-      attrs: { id: blockId },
-      ...(body.length === 0 ? {} : { content: [{ type: "text", text: body }] }),
-    }],
+      attrs: { id: block.manuscript_block_id },
+      ...(block.text.length === 0 ? {} : { content: [{ type: "text", text: block.text }] }),
+    })),
   };
+}
+
+export function manuscriptJson(blockId: string, body: string) {
+  return manuscriptBlocksJson([{ manuscript_block_id: blockId, text: body }]);
 }
 
 function isUtf16Boundary(body: string, offset: number): boolean {
@@ -21,12 +63,7 @@ function isUtf16Boundary(body: string, offset: number): boolean {
   return !(prior >= 0xd800 && prior <= 0xdbff && next >= 0xdc00 && next <= 0xdfff);
 }
 
-export function paragraphUtf16(doc: Node): string | undefined {
-  if (doc.childCount !== 1) return undefined;
-  const paragraph = doc.firstChild;
-  if (paragraph === null || paragraph.type.name !== "paragraph") return undefined;
-  const id: unknown = paragraph.attrs.id;
-  if (typeof id !== "string") return undefined;
+function paragraphText(paragraph: Node): string | undefined {
   let text = "";
   for (let offset = 0; offset < paragraph.childCount; offset += 1) {
     const child = paragraph.child(offset);
@@ -36,14 +73,49 @@ export function paragraphUtf16(doc: Node): string | undefined {
   return text;
 }
 
+export function readManuscriptParagraphs(doc: Node): ManuscriptParagraph[] | undefined {
+  if (doc.childCount < 1) return undefined;
+  const blocks: ManuscriptParagraph[] = [];
+  const seen = new Set<string>();
+  for (let index = 0; index < doc.childCount; index += 1) {
+    const paragraph = doc.child(index);
+    if (paragraph.type.name !== "paragraph") return undefined;
+    const id: unknown = paragraph.attrs.id;
+    const text = paragraphText(paragraph);
+    if (typeof id !== "string" || !UUID.test(id) || text === undefined || seen.has(id)) {
+      return undefined;
+    }
+    seen.add(id);
+    blocks.push({ manuscript_block_id: id, text });
+  }
+  return blocks;
+}
+
+export function paragraphUtf16(doc: Node): string | undefined {
+  const blocks = readManuscriptParagraphs(doc);
+  if (blocks === undefined || blocks.length !== 1) return undefined;
+  return blocks[0]?.text;
+}
+
+export function paragraphsEqual(
+  left: readonly ManuscriptParagraph[],
+  right: readonly ManuscriptParagraph[],
+): boolean {
+  return left.length === right.length
+    && left.every((block, index) =>
+      block.manuscript_block_id === right[index]?.manuscript_block_id
+      && block.text === right[index]?.text);
+}
+
 export function isSupportedManuscriptDoc(previous: Node, next: Node, blockId: string): boolean {
-  const nextText = paragraphUtf16(next);
-  if (nextText === undefined) return false;
-  const nextId: unknown = next.firstChild?.attrs.id;
-  if (nextId !== blockId) return false;
+  const nextBlocks = readManuscriptParagraphs(next);
+  if (nextBlocks === undefined) return false;
   if (previous.childCount === 0) return true;
-  const previousId: unknown = previous.firstChild?.attrs.id;
-  return previousId === undefined || previousId === blockId;
+  const previousBlocks = readManuscriptParagraphs(previous);
+  if (previousBlocks === undefined) return nextBlocks.length === 1
+    && nextBlocks[0]?.manuscript_block_id === blockId;
+  return captureManuscriptChange(previousBlocks, nextBlocks) !== undefined
+    || paragraphsEqual(previousBlocks, nextBlocks);
 }
 
 export function contiguousUtf16Replace(
@@ -75,4 +147,99 @@ export function contiguousUtf16Replace(
   const expected = `${before.slice(0, from)}${text}${before.slice(beforeEnd)}`;
   if (expected !== after) return undefined;
   return { from, to: beforeEnd, text, resultingBody: after };
+}
+
+export function captureManuscriptChange(
+  previous: readonly ManuscriptParagraph[],
+  next: readonly ManuscriptParagraph[],
+): CapturedManuscriptEdit | undefined {
+  if (paragraphsEqual(previous, next) || previous.length === 0 || next.length === 0) {
+    return undefined;
+  }
+  if (next.length === previous.length) {
+    let changed = -1;
+    for (let index = 0; index < previous.length; index += 1) {
+      const before = previous[index];
+      const after = next[index];
+      if (before === undefined || after === undefined) return undefined;
+      if (before.manuscript_block_id !== after.manuscript_block_id) return undefined;
+      if (before.text === after.text) continue;
+      if (changed !== -1) return undefined;
+      changed = index;
+    }
+    if (changed === -1) return undefined;
+    const before = previous[changed]!;
+    const after = next[changed]!;
+    const replace = contiguousUtf16Replace(before.text, after.text);
+    if (replace === undefined) return undefined;
+    const resultingBlocks = next.map((block) => ({ ...block }));
+    return {
+      kind: "replace_block_selection",
+      manuscript_block_id: before.manuscript_block_id,
+      from: replace.from,
+      to: replace.to,
+      text: replace.text,
+      resultingBlocks,
+      resultingBody: flattenChapterBody(resultingBlocks),
+    };
+  }
+  if (next.length === previous.length + 1) {
+    for (let index = 0; index < previous.length; index += 1) {
+      const before = previous[index]!;
+      const left = next[index];
+      const right = next[index + 1];
+      if (left === undefined || right === undefined) return undefined;
+      if (left.manuscript_block_id !== before.manuscript_block_id) continue;
+      if (right.manuscript_block_id === before.manuscript_block_id) return undefined;
+      if (left.text + right.text !== before.text) return undefined;
+      const prefix = previous.slice(0, index);
+      const suffix = previous.slice(index + 1);
+      const nextPrefix = next.slice(0, index);
+      const nextSuffix = next.slice(index + 2);
+      if (!paragraphsEqual(prefix, nextPrefix) || !paragraphsEqual(suffix, nextSuffix)) {
+        return undefined;
+      }
+      if (next.some((block, blockIndex) =>
+        blockIndex !== index + 1 && block.manuscript_block_id === right.manuscript_block_id)) {
+        return undefined;
+      }
+      const resultingBlocks = next.map((block) => ({ ...block }));
+      return {
+        kind: "split_block",
+        manuscript_block_id: before.manuscript_block_id,
+        offset: left.text.length,
+        new_manuscript_block_id: right.manuscript_block_id,
+        resultingBlocks,
+        resultingBody: flattenChapterBody(resultingBlocks),
+      };
+    }
+    return undefined;
+  }
+  if (next.length === previous.length - 1) {
+    for (let index = 0; index < next.length; index += 1) {
+      const left = previous[index];
+      const right = previous[index + 1];
+      const joined = next[index];
+      if (left === undefined || right === undefined || joined === undefined) return undefined;
+      if (joined.manuscript_block_id !== left.manuscript_block_id) continue;
+      if (joined.text !== left.text + right.text) return undefined;
+      const prefix = previous.slice(0, index);
+      const suffix = previous.slice(index + 2);
+      const nextPrefix = next.slice(0, index);
+      const nextSuffix = next.slice(index + 1);
+      if (!paragraphsEqual(prefix, nextPrefix) || !paragraphsEqual(suffix, nextSuffix)) {
+        return undefined;
+      }
+      const resultingBlocks = next.map((block) => ({ ...block }));
+      return {
+        kind: "join_blocks",
+        left_manuscript_block_id: left.manuscript_block_id,
+        right_manuscript_block_id: right.manuscript_block_id,
+        caret: left.text.length,
+        resultingBlocks,
+        resultingBody: flattenChapterBody(resultingBlocks),
+      };
+    }
+  }
+  return undefined;
 }

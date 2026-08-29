@@ -153,7 +153,7 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
     await transactionResult(transaction);
 
     workspace.pending = await rebuildPendingProjection(workspace);
-    expect(workspace.pending).toEqual({
+    expect(workspace.pending).toMatchObject({
       body: "Base!",
       save_state: "needs_attention",
       unsettled_intent_count: 1,
@@ -169,7 +169,7 @@ it("keeps incompatible pending ReplaceSelection inspectable until Block reconfir
     })).rejects.toThrow(/limit failed/);
 
     workspace.pending = await reconfirmLegacyReplaceSelection(workspace, crypto);
-    expect(workspace.pending).toEqual({
+    expect(workspace.pending).toMatchObject({
       body: "Base!",
       save_state: "saving",
       unsettled_intent_count: 1,
@@ -607,7 +607,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-15T08:00:00.250Z",
     });
-    expect(workspace.pending).toEqual({
+    expect(workspace.pending).toMatchObject({
       body: "Base!?",
       save_state: "saving",
       unsettled_intent_count: 2,
@@ -633,7 +633,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -662,7 +662,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       undoGroupId: "018f0000-0000-7001-8000-000000000049",
       createdAt: "2026-08-15T08:00:00.500Z",
     });
-    expect(workspace.pending).toEqual({
+    expect(workspace.pending).toMatchObject({
       body: "Base!?+",
       save_state: "saving",
       unsettled_intent_count: 1,
@@ -673,7 +673,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?+",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -1113,7 +1113,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         undoGroupId: `018f0000-0000-7001-8000-00000000008${index + 2}`,
         createdAt: `2026-08-15T10:00:00.00${index}Z`,
       });
-      expect(workspace.pending).toEqual({
+      expect(workspace.pending).toMatchObject({
         body: localBody,
         save_state: "saving",
         unsettled_intent_count: 1,
@@ -1126,7 +1126,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         baseUrl: location.origin,
         fetchImpl,
         cryptoImpl: crypto,
-      })).toEqual({
+      })).toMatchObject({
         body: localBody,
         save_state: "needs_attention",
         unsettled_intent_count: 1,

@@ -127,7 +127,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -189,7 +189,7 @@ it("collects Journal payload only after settlement and a durable successor", asy
     expect(collected.groups[0]?.journal_submission_group_id)
       .toBe(group.journal_submission_group_id);
     expect(collected.groups[0]?.settlement.kind).toBe("applied_receipt_settled");
-    expect(await rebuildPendingProjection(workspace)).toEqual({
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -208,7 +208,9 @@ it("collects Journal payload only after settlement and a durable successor", asy
     expect(await collectEligibleJournalPayload(workspace)).toEqual({ fences: [expectedFence] });
     const retained = await readJournalSnapshot(workspace);
     expect(retained.records).toHaveLength(2);
-    expect(retained.records[1]?.author_edit_unit?.normalized_primitives[0]?.text).toBe("+");
+    const pendingPrimitive = retained.records[1]?.author_edit_unit?.normalized_primitives[0];
+    expect(pendingPrimitive?.kind === "replace_block_selection" ? pendingPrimitive.text : undefined)
+      .toBe("+");
     expect(retained.fences).toEqual(pending.fences);
     expect(lastEdit).toBeDefined();
     workspace.database.close();

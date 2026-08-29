@@ -3,15 +3,18 @@ import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import UniqueID from "@tiptap/extension-unique-id";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
+import { createJournalUuid } from "./local-edit-journal.ts";
 import {
-  contiguousUtf16Replace,
-  isSupportedManuscriptDoc,
+  captureManuscriptChange,
+  type ManuscriptParagraph,
+  manuscriptBlocksJson,
   manuscriptJson,
-  paragraphUtf16,
+  paragraphsEqual,
+  readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 
 const STORYOS_HYDRATE = "storyos.hydrate";
@@ -22,7 +25,11 @@ export function isStoryosHydrateTransaction(transaction: { getMeta: (key: string
 }
 
 export function hydrateManuscript(editor: Editor, blockId: string, body: string): void {
-  const next = editor.schema.nodeFromJSON(manuscriptJson(blockId, body));
+  hydrateManuscriptBlocks(editor, [{ manuscript_block_id: blockId, text: body }]);
+}
+
+export function hydrateManuscriptBlocks(editor: Editor, blocks: readonly ManuscriptParagraph[]): void {
+  const next = editor.schema.nodeFromJSON(manuscriptBlocksJson(blocks));
   const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size, next);
   transaction.setMeta(STORYOS_HYDRATE, true);
   transaction.setMeta("addToHistory", false);
@@ -46,9 +53,28 @@ function insertNewline(view: EditorView): boolean {
   return true;
 }
 
+function splitParagraphTransaction(state: EditorState, newId: string): Transaction | undefined {
+  if (state.selection.$from.parent.type.name !== "paragraph") return undefined;
+  let transaction = state.tr;
+  if (!state.selection.empty) {
+    transaction = transaction.deleteSelection();
+  }
+  const splitPos = transaction.selection.from;
+  transaction = transaction.split(splitPos);
+  const newParagraphPos = splitPos + 1;
+  const newParagraph = transaction.doc.nodeAt(newParagraphPos);
+  if (newParagraph?.type.name !== "paragraph") {
+    return undefined;
+  }
+  return transaction.setNodeMarkup(newParagraphPos, undefined, {
+    ...newParagraph.attrs,
+    id: newId,
+  });
+}
+
 export function storyosManuscriptExtensions(blockId: string) {
   return [
-    Document.extend({ content: "paragraph" }),
+    Document.extend({ content: "paragraph+" }),
     Paragraph,
     Text,
     UniqueID.configure({
@@ -60,7 +86,15 @@ export function storyosManuscriptExtensions(blockId: string) {
       name: "storyosManuscriptAdapter",
       addKeyboardShortcuts() {
         return {
-          Enter: () => insertNewline(this.editor.view),
+          Enter: () => {
+            const newId = createJournalUuid();
+            return this.editor.commands.command(({ state, dispatch }) => {
+              const transaction = splitParagraphTransaction(state, newId);
+              if (transaction === undefined) return true;
+              dispatch?.(transaction);
+              return true;
+            });
+          },
           "Shift-Enter": () => insertNewline(this.editor.view),
           "Mod-b": () => true,
           "Mod-i": () => true,
@@ -78,15 +112,16 @@ export function storyosManuscriptExtensions(blockId: string) {
               if (transaction.getMeta(STORYOS_HYDRATE) === true || !transaction.docChanged) {
                 return true;
               }
-              if (!isSupportedManuscriptDoc(state.doc, transaction.doc, blockId)) {
-                return false;
+              const next = readManuscriptParagraphs(transaction.doc);
+              if (next === undefined) return false;
+              const previous = readManuscriptParagraphs(state.doc);
+              if (previous === undefined) {
+                return state.doc.childCount === 0
+                  && next.length === 1
+                  && next[0]?.manuscript_block_id === blockId;
               }
-              const nextText = paragraphUtf16(transaction.doc);
-              if (nextText === undefined) return false;
-              const previousText = paragraphUtf16(state.doc);
-              if (previousText === undefined) return state.doc.childCount === 0;
-              return previousText === nextText
-                || contiguousUtf16Replace(previousText, nextText) !== undefined;
+              return captureManuscriptChange(previous, next) !== undefined
+                || paragraphsEqual(previous, next);
             },
           }),
         ];
@@ -128,3 +163,5 @@ export function storyosEditorProps(blockId: string) {
     },
   };
 }
+
+export { manuscriptJson };

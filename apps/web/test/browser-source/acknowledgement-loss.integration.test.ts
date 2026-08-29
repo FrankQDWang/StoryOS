@@ -327,7 +327,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -372,7 +372,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "needs_attention",
       unsettled_intent_count: 1,

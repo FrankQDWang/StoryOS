@@ -51,12 +51,15 @@ interface ProjectReadyViewProps extends Omit<Stage1ViewProps, "state"> {
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
-function paragraphBlockId(
+function editorParagraphs(
   blocks: ProjectReadyViewProps["state"]["chapter"]["chapter"]["current_revision"]["blocks"],
-): string {
-  const block = blocks[0];
-  if (blocks.length !== 1 || block === undefined || block.block_kind !== "paragraph") return "";
-  return block.manuscript_block_id;
+): { manuscript_block_id: string; text: string }[] {
+  return blocks
+    .filter((block) => block.block_kind === "paragraph")
+    .map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    }));
 }
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
@@ -235,13 +238,12 @@ function ProjectReadyView({
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
     : state.editor.writer;
-  const editorBody = selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
-    ? pending.body
-    : selectedChapter.chapter.current_revision.body;
-  const editorBlockId = state.editor.kind === "editor-ready"
-    && selectedChapter.chapter.chapter_id === currentChapterId
-    ? paragraphBlockId(state.editor.session.base_snapshot.materialized_revision.blocks)
-    : paragraphBlockId(selectedChapter.chapter.current_revision.blocks);
+  const editorBlocks = selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
+    ? pending.blocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    }))
+    : editorParagraphs(selectedChapter.chapter.current_revision.blocks);
   const refreshTree = () => {
     void getManuscriptTree({
       baseUrl,
@@ -303,8 +305,7 @@ function ProjectReadyView({
           <h2>{selectedChapter.chapter.title}</h2>
           <ManuscriptEditor
             key={selectedChapter.chapter.chapter_id}
-            body={editorBody}
-            blockId={editorBlockId}
+            blocks={editorBlocks}
             editable={!readOnly && !archived}
             persistWorkspace={
               state.editor.kind === "editor-ready"

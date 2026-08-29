@@ -256,7 +256,7 @@ impl PostgresProjectReader {
                     return Err(AuthorEditError::BindingConflict);
                 }
                 let relation = &relations[0];
-                let body = relation.get::<_, String>(7);
+                let stored = relation.get::<_, String>(7);
                 if relation.get::<_, String>(2) != "authoritative_author_edit_applied"
                     || relation.get::<_, String>(3) != commit_id
                     || relation.get::<_, String>(4) != revision_id
@@ -267,7 +267,7 @@ impl PostgresProjectReader {
                     || relation.get::<_, String>(11) != prior_head
                     || relation.get::<_, String>(12) != prior_head
                     || expected_head != prior_head
-                    || relation.get::<_, String>(13) != sha256_hex(body.as_bytes())
+                    || relation.get::<_, String>(13) != sha256_hex(stored.as_bytes())
                 {
                     return Err(AuthorEditError::BindingConflict);
                 }
@@ -277,7 +277,7 @@ impl PostgresProjectReader {
                     identity.project_scope.project_id.as_ref(),
                     &identity.chapter_id,
                     &revision_id,
-                    &body,
+                    &stored,
                 )
                 .await
                 .map_err(author_edit_database_error)?;
@@ -288,7 +288,7 @@ impl PostgresProjectReader {
                         authoritative_commit_id: commit_id,
                         project_activity_event_id: relation.get(0),
                     },
-                    body,
+                    body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
                     blocks,
                     author_action_sequence: parse_u64(relation.get(5))?,
                     project_activity_position: parse_u64(relation.get(1))?,

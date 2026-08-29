@@ -35,7 +35,8 @@ export {
   freezeOneIntentSubmission,
   submitOnePendingAuthorEdit,
 } from "./author-edit-submission.ts";
-export { persistReplaceSelection, rebuildPendingProjection, reconfirmLegacyReplaceSelection }
+export { persistReplaceSelection, persistSplitBlock, persistJoinBlocks,
+  rebuildPendingProjection, reconfirmLegacyReplaceSelection }
   from "./local-edit-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";

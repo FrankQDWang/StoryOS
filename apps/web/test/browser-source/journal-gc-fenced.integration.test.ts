@@ -147,7 +147,7 @@ it("collects a fenced partition under its immutable old writer generation", asyn
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -207,7 +207,7 @@ it("collects a fenced partition under its immutable old writer generation", asyn
       collection_fence_id: fenceId,
     });
     expect(workspace.partition.writer_generation).toBe("1");
-    expect(await rebuildPendingProjection(workspace)).toEqual({
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,

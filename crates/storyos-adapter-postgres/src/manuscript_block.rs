@@ -1,6 +1,65 @@
-use storyos_core::{ManuscriptBlock, upgrade_legacy_manuscript};
+use storyos_core::{
+    ManuscriptBlock, ManuscriptBlockKind, chapter_display_body, upgrade_legacy_manuscript,
+};
 use tokio_postgres::GenericClient;
 use uuid::Uuid;
+
+const VERSIONED_PAYLOAD_FORMAT: &str = "storyos.manuscript-payload.v1";
+
+pub(crate) fn persist_canonical_bytes(blocks: &[ManuscriptBlock]) -> String {
+    if blocks.len() <= 1 {
+        return blocks
+            .first()
+            .map(|block| block.text.clone())
+            .unwrap_or_default();
+    }
+    serde_json::json!({
+        "format": VERSIONED_PAYLOAD_FORMAT,
+        "schema_version": 1,
+        "coordinate_version": 1,
+        "blocks": blocks.iter().map(|block| {
+            serde_json::json!({
+                "manuscript_block_id": block.manuscript_block_id,
+                "block_kind": "paragraph",
+                "text": block.text,
+            })
+        }).collect::<Vec<_>>(),
+    })
+    .to_string()
+}
+
+pub(crate) fn display_body_from_stored(stored: &str, blocks: &[ManuscriptBlock]) -> String {
+    if blocks.is_empty() {
+        stored.to_owned()
+    } else {
+        chapter_display_body(blocks)
+    }
+}
+
+fn parse_versioned_payload(body: &str) -> Option<Vec<ManuscriptBlock>> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    if value.get("format")?.as_str()? != VERSIONED_PAYLOAD_FORMAT {
+        return None;
+    }
+    if value.get("schema_version")?.as_u64()? != 1
+        || value.get("coordinate_version")?.as_u64()? != 1
+    {
+        return None;
+    }
+    let encoded = value.get("blocks")?.as_array()?;
+    let mut blocks = Vec::with_capacity(encoded.len());
+    for block in encoded {
+        if block.get("block_kind")?.as_str()? != "paragraph" {
+            return None;
+        }
+        blocks.push(ManuscriptBlock {
+            manuscript_block_id: block.get("manuscript_block_id")?.as_str()?.to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: block.get("text")?.as_str()?.to_owned(),
+        });
+    }
+    Some(blocks)
+}
 
 pub(crate) async fn insert_paragraph_block(
     client: &impl GenericClient,
@@ -65,10 +124,24 @@ pub(crate) async fn load_revision_blocks(
             &[&owner_user_id, &project_id, &chapter_id, &revision_id],
         )
         .await?;
-    let Some(row) = rows.first() else {
+    let ids: Vec<String> = rows.iter().map(|row| row.get::<_, String>(0)).collect();
+    if let Some(parsed) = parse_versioned_payload(body) {
+        if parsed
+            .iter()
+            .map(|block| block.manuscript_block_id.as_str())
+            .eq(ids.iter().map(String::as_str))
+        {
+            return Ok(parsed);
+        }
+        return Ok(Vec::new());
+    }
+    let Some(manuscript_block_id) = ids.first() else {
         return Ok(Vec::new());
     };
-    Ok(upgrade_legacy_manuscript(body, &row.get::<_, String>(0)).blocks)
+    if ids.len() != 1 {
+        return Ok(Vec::new());
+    }
+    Ok(upgrade_legacy_manuscript(body, manuscript_block_id).blocks)
 }
 
 pub(crate) async fn load_or_upgrade_blocks(
@@ -152,4 +225,50 @@ pub(crate) async fn copy_or_upgrade_revision_members(
         .await?;
     }
     Ok(0)
+}
+
+pub(crate) async fn persist_revision_members_from_blocks(
+    client: &impl GenericClient,
+    owner_user_id: &str,
+    project_id: &str,
+    chapter_id: &str,
+    revision_id: &str,
+    blocks: &[ManuscriptBlock],
+) -> Result<u64, tokio_postgres::Error> {
+    let mut inserted = 0_u64;
+    for (index, block) in blocks.iter().enumerate() {
+        client
+            .execute(
+                "INSERT INTO storyos.manuscript_blocks
+                   (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'paragraph')
+                 ON CONFLICT (owner_user_id, project_id, manuscript_block_id) DO NOTHING",
+                &[
+                    &owner_user_id,
+                    &project_id,
+                    &block.manuscript_block_id,
+                    &chapter_id,
+                ],
+            )
+            .await?;
+        let order = (index + 1).to_string();
+        inserted += client
+            .execute(
+                "INSERT INTO storyos.manuscript_revision_members
+                   (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id,
+                    block_order)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid,
+                         $6::text::numeric)",
+                &[
+                    &owner_user_id,
+                    &project_id,
+                    &chapter_id,
+                    &revision_id,
+                    &block.manuscript_block_id,
+                    &order,
+                ],
+            )
+            .await?;
+    }
+    Ok(inserted)
 }

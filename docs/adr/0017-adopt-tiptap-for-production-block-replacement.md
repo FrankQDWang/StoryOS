@@ -26,7 +26,7 @@ UniqueID declares the paragraph `id` attribute. Core owns the Manuscript Block i
 
 The adapter captures only a complete supported replacement. Hydration, Snapshot installation, decoration, and other non-edit transactions create no author intent. An unsupported transaction is refused. The editor document stays at the previous supported state, and recovery material is not partially edited.
 
-The production page retires the textarea write path. The adapter sets Tiptap `injectCSS` to false so the editor does not write a style element through `innerHTML`. Paste and cut use `text/plain` only. These choices keep the Trusted Types policy without a default policy. Enter inserts U+000A in the same paragraph Block. Full IME product behavior, split, join, move, retype, and Undo remain later tickets.
+The production page retires the textarea write path. The adapter sets Tiptap `injectCSS` to false so the editor does not write a style element through `innerHTML`. Paste and cut use `text/plain` only. These choices keep the Trusted Types policy without a default policy. Enter splits one paragraph Block: the starting fragment keeps its Block ID, and the new right fragment receives a StoryOS UUID v7. Shift-Enter inserts U+000A in the same paragraph. Backspace at the start of a following paragraph joins adjacent Blocks: the left identity remains, and the right identity leaves current Authoritative State. Full IME product behavior, move, retype, and Undo remain later tickets.
 
 This decision does not change `web_client_contract_revision`, IndexedDB meaning, or the Apply Author Edit command.
 
@@ -40,5 +40,5 @@ This decision does not change `web_client_contract_revision`, IndexedDB meaning,
 ## Consequences
 
 - Production exact-dist and production-host journeys bind to `[data-manuscript-editor]`, not `textarea`.
-- Later IME, structure, and Undo tickets extend this adapter. They must not introduce a second write path.
+- Later IME, move, retype, and Undo tickets extend this adapter. They must not introduce a second write path.
 - A Tiptap or ProseMirror major upgrade is a new adoption review. It must re-pin this graph and re-run the production replacement journey.
