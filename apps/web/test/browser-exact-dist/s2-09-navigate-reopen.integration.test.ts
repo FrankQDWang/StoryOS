@@ -1,6 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { manuscriptBody, manuscriptIsEditable, MANUSCRIPT_EDITOR_SELECTOR }
+  from "../support/manuscript-surface.ts";
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -102,17 +104,24 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   chapterButton(root, "Chapter B")?.click();
   await expect.poll(() => root?.querySelector("h2")?.textContent, { timeout: 10_000 })
     .toBe("Chapter B");
-  expect(root?.querySelector("textarea")?.value).toBe("");
-  expect(root?.querySelector("textarea")?.hasAttribute("readonly")).toBe(true);
+  const chapterBEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+  expect(chapterBEditor === null || chapterBEditor === undefined
+    ? undefined : manuscriptBody(chapterBEditor)).toBe("");
+  expect(chapterBEditor === null || chapterBEditor === undefined
+    ? undefined : manuscriptIsEditable(chapterBEditor)).toBe(false);
   expect(root?.querySelector('[role="alert"]')).toBeNull();
 
   chapterButton(root, "Chapter C")?.click();
   await expect.poll(() => root?.querySelector("h2")?.textContent).toBe("Chapter C");
-  expect(root?.querySelector("textarea")?.value).toBe("");
+  const chapterCEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+  expect(chapterCEditor === null || chapterCEditor === undefined
+    ? undefined : manuscriptBody(chapterCEditor)).toBe("");
 
   chapterButton(root, "Chapter A")?.click();
   await expect.poll(() => root?.querySelector("h2")?.textContent).toBe("Chapter A");
-  expect(root?.querySelector("textarea")?.value).toBe("");
+  const chapterAEditor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+  expect(chapterAEditor === null || chapterAEditor === undefined
+    ? undefined : manuscriptBody(chapterAEditor)).toBe("");
 
   const projectId = root?.querySelector("form[data-rename]")?.getAttribute("data-rename");
   const chapterBId = chapterButton(root, "Chapter B")?.getAttribute("data-chapter-id");
@@ -132,7 +141,9 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   ).toBe("project-ready");
   const reopenedRoot = frame.contentDocument?.querySelector("#app");
   expect(reopenedRoot?.querySelector("h2")?.textContent).toBe("Chapter A");
-  expect(reopenedRoot?.querySelector("textarea")?.value).toBe("");
+  const reopenedEditor = reopenedRoot?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+  expect(reopenedEditor === null || reopenedEditor === undefined
+    ? undefined : manuscriptBody(reopenedEditor)).toBe("");
   expect(reopenedRoot?.textContent).not.toContain("模型");
   expect(reopenedRoot?.textContent).not.toContain("Agent");
 });

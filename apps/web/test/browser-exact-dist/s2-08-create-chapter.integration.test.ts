@@ -1,6 +1,8 @@
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { manuscriptBody, MANUSCRIPT_EDITOR_SELECTOR }
+  from "../support/manuscript-surface.ts";
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -89,7 +91,9 @@ it("the author creates three named Chapters and keeps the first current Chapter"
   ).toBe("project-ready");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
-    return root?.querySelector("textarea")?.value === ""
+    const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return editor !== null && editor !== undefined
+      && manuscriptBody(editor) === ""
       && root?.querySelector("h2")?.textContent === "Chapter A"
       && chapterTitles(root).join("\n") === "Chapter A";
   }).toBe(true);
@@ -112,7 +116,7 @@ it("the author creates three named Chapters and keeps the first current Chapter"
       const root = frame.contentDocument?.querySelector("#app");
       return root?.getAttribute("data-boot-state") === "project-ready"
         && root?.querySelector("h2")?.textContent === "Chapter A"
-        && root?.querySelector("textarea") !== null
+        && root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null
         && chapterTitles(root).join("\n") === expected;
     }).toBe(true);
   }
@@ -121,7 +125,8 @@ it("the author creates three named Chapters and keeps the first current Chapter"
   const chapterItems = [...(root?.querySelectorAll('nav[aria-label="稿件目录"] > ul > li > ul > li') ?? [])];
   expect(chapterItems).toHaveLength(3);
   expect(root?.querySelector("h2")?.textContent).toBe("Chapter A");
-  expect(root?.querySelector("textarea")?.value).toBe("");
+  const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+  expect(editor === null || editor === undefined ? undefined : manuscriptBody(editor)).toBe("");
   expect(root?.textContent).not.toContain("模型");
   expect(root?.textContent).not.toContain("Agent");
 });

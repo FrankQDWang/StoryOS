@@ -8,6 +8,13 @@ import {
   updateClipboardPermission,
 } from "../support/browser-command-client.ts";
 import {
+  focusManuscriptEnd,
+  manuscriptBody,
+  manuscriptEditor,
+  manuscriptIsEditable,
+  MANUSCRIPT_EDITOR_SELECTOR,
+} from "../support/manuscript-surface.ts";
+import {
   AFTER_IME,
   AFTER_PASTE,
   AFTER_TYPE,
@@ -99,34 +106,33 @@ function applicationWindow(frame: HTMLIFrameElement): Window & typeof globalThis
   return result as Window & typeof globalThis;
 }
 
-function editor(frame: HTMLIFrameElement): HTMLTextAreaElement {
+function editor(frame: HTMLIFrameElement): HTMLElement {
   const childWindow = applicationWindow(frame);
-  const result = frame.contentDocument?.querySelector("textarea");
-  if (!(result instanceof childWindow.HTMLTextAreaElement)) {
-    throw new Error("the Stage 1 editor is unavailable");
-  }
-  return result;
+  return manuscriptEditor(frame.contentDocument ?? document, childWindow);
 }
 
 function readSurface(frame: HTMLIFrameElement) {
   const root = frame.contentDocument?.querySelector("#app");
   if (root === null || root === undefined) throw new Error("the Stage 1 root is unavailable");
-  const currentEditor = frame.contentDocument?.querySelector("textarea");
+  const currentEditor = frame.contentDocument?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   return {
     alert: root.querySelector('[role="alert"]') !== null,
     bootState: root.getAttribute("data-boot-state"),
     chapter: root.querySelector("h2")?.textContent ?? null,
     heading: root.querySelector("h1")?.textContent ?? null,
-    readOnly: currentEditor?.hasAttribute("readonly") ?? null,
+    readOnly: currentEditor === null || currentEditor === undefined
+      ? null
+      : !manuscriptIsEditable(currentEditor),
   };
 }
 
 function readPending(frame: HTMLIFrameElement): PendingSurface {
   const saveState = frame.contentDocument?.querySelector("[data-save-state]");
+  const currentEditor = frame.contentDocument?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   return {
-    body: frame.contentDocument?.querySelector("textarea")?.getAttribute("value")
-      ?? frame.contentDocument?.querySelector("textarea")?.textContent
-      ?? null,
+    body: currentEditor === null || currentEditor === undefined
+      ? null
+      : manuscriptBody(currentEditor),
     save_state: saveState?.getAttribute("data-save-state") ?? null,
     unsettled_intent_count: Number(
       saveState?.getAttribute("data-unsettled-intent-count") ?? "NaN",
@@ -138,14 +144,13 @@ function readPending(frame: HTMLIFrameElement): PendingSurface {
 
 function pendingWithLiveBody(frame: HTMLIFrameElement): PendingSurface {
   const pending = readPending(frame);
-  return { ...pending, body: editor(frame).value };
+  return { ...pending, body: manuscriptBody(editor(frame)) };
 }
 
 function focusAtEnd(frame: HTMLIFrameElement): number {
   const currentEditor = editor(frame);
-  currentEditor.focus();
-  currentEditor.setSelectionRange(currentEditor.value.length, currentEditor.value.length);
-  return currentEditor.value.length;
+  focusManuscriptEnd(currentEditor, applicationWindow(frame));
+  return manuscriptBody(currentEditor).length;
 }
 
 function requestResult<Result>(request: IDBRequest<Result>): Promise<Result> {
@@ -312,7 +317,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   await loaded;
   await waitFor("the Project-ready editor", () =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state") === "project-ready"
-    && frame.contentDocument?.querySelector("textarea") !== null);
+    && frame.contentDocument?.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null);
 
   const firstRealm = applicationWindow(frame);
   Reflect.set(firstRealm, "__storyosStage1Realm", "first");
@@ -383,7 +388,7 @@ it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core,
   await reloaded;
   await waitFor("the recovered Project-ready editor", () =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state") === "project-ready"
-    && frame.contentDocument?.querySelector("textarea") !== null);
+    && frame.contentDocument?.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null);
   expect(Reflect.get(window, "__storyosStage1Orchestrator")).toBe("retained");
   expect(Reflect.get(applicationWindow(frame), "__storyosStage1Realm")).toBeUndefined();
   await waitFor("the recovered pending projection", () =>

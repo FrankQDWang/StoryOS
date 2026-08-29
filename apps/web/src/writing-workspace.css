@@ -34,7 +34,8 @@ input { font: inherit; }
 
 button:focus-visible,
 textarea:focus-visible,
-input:focus-visible {
+input:focus-visible,
+.manuscript-editor:focus-visible {
   outline: 2px solid #78756e;
   outline-offset: 2px;
 }
@@ -178,9 +179,15 @@ input:focus-visible {
   border: 0;
   resize: none;
   background: transparent;
+  white-space: pre-wrap;
+  outline: none;
   font-family: "Noto Serif SC", "Songti SC", serif;
   font-size: 16.5px;
   line-height: 2;
+}
+
+.manuscript-editor p {
+  margin: 0;
 }
 
 .editor-panel [data-save-state] {

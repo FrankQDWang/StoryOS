@@ -5,6 +5,12 @@ import { loadStoryOSWebState } from "../../src/app.ts";
 import { mountStage1View } from "../../src/stage1-view.tsx";
 import { applyTrustedInput } from "../support/browser-command-client.ts";
 import {
+  focusManuscriptEnd,
+  manuscriptBody,
+  manuscriptEditor,
+  manuscriptIsEditable,
+} from "../support/manuscript-surface.ts";
+import {
   CHAPTER,
   OWNER,
   PROJECT,
@@ -135,32 +141,30 @@ it("selects a tree Chapter through getChapter and keeps pending on the current C
     await expect.poll(() => chapterTitles(root).join("\n"))
       .toBe("Chapter A\nChapter B\nChapter C");
     expect(root.querySelector("h2")?.textContent).toBe("Chapter A");
-    expect(root.querySelector("textarea")?.value).toBe("Base");
+    expect(manuscriptBody(manuscriptEditor(root, window))).toBe("Base");
     expect(requests.some((entry) => entry.includes(CHAPTER_B))).toBe(false);
 
-    const editor = root.querySelector("textarea");
-    if (!(editor instanceof HTMLTextAreaElement)) throw new Error("the editor is missing");
-    editor.focus();
-    editor.setSelectionRange(editor.value.length, editor.value.length);
+    const editor = manuscriptEditor(root, window);
+    focusManuscriptEnd(editor, window);
     await applyTrustedInput({ operation: "insert_text", text: "!" });
-    await expect.poll(() => editor.value).toBe("Base!");
+    await expect.poll(() => manuscriptBody(editor)).toBe("Base!");
 
     root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_B}"]`)?.click();
     await expect.poll(() => root.querySelector("h2")?.textContent).toBe("Chapter B");
-    expect(root.querySelector("textarea")?.value).toBe("");
-    expect(root.querySelector("textarea")?.hasAttribute("readonly")).toBe(true);
+    expect(manuscriptBody(manuscriptEditor(root, window))).toBe("");
+    expect(manuscriptIsEditable(manuscriptEditor(root, window))).toBe(false);
     expect(requests).toContain(`GET /api/v1/projects/${PROJECT}/chapters/${CHAPTER_B}`);
     expect(root.querySelector('[role="alert"]')).toBeNull();
 
     root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER}"]`)?.click();
     await expect.poll(() => root.querySelector("h2")?.textContent).toBe("Chapter A");
-    expect(root.querySelector("textarea")?.value).toBe("Base!");
+    expect(manuscriptBody(manuscriptEditor(root, window))).toBe("Base!");
     expect(root.querySelector("[data-save-state]")?.getAttribute("data-save-state"))
       .toBe("saving");
     root.querySelector<HTMLButtonElement>(`button[data-chapter-id="${CHAPTER_C}"]`)?.click();
     await expect.poll(() => root.querySelector('[role="alert"]') !== null).toBe(true);
     expect(root.querySelector("h2")?.textContent).toBe("Chapter A");
-    expect(root.querySelector("textarea")?.value).toBe("Base!");
+    expect(manuscriptBody(manuscriptEditor(root, window))).toBe("Base!");
     expect(root.textContent).not.toContain("snapshot_expired");
     expect(root.textContent).not.toContain("The Snapshot is no longer available.");
   } finally {

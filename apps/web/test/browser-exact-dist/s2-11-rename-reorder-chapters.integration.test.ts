@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 
 import { updateClientSessionCookie } from "../support/browser-command-client.ts";
+import { manuscriptBody, MANUSCRIPT_EDITOR_SELECTOR } from "../support/manuscript-surface.ts";
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -145,7 +146,8 @@ it("the author renames and reorders Chapters from the canonical tree and they su
   await openNamedProject(libraryRoot, "Empty Novel");
   await expect.poll(() => chapterTitles(libraryRoot)).toEqual(["Chapter C", "Chapter B"]);
   expect(libraryRoot.querySelector("h2")?.textContent).toBe("Chapter C");
-  expect(libraryRoot.querySelector("textarea")?.value).toBe("");
+  const libraryEditor = libraryRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+  expect(libraryEditor === null ? undefined : manuscriptBody(libraryEditor)).toBe("");
   expect(libraryRoot.textContent).not.toContain("模型");
   expect(libraryRoot.textContent).not.toContain("Agent");
 
