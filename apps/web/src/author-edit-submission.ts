@@ -121,7 +121,7 @@ async function digestSubmissionCoverage(
 }
 
 const HARD_FLUSH_ORIGINS = new Set<InputOrigin>([
-  "composition_confirmation", "paste", "cut", "split_block", "join_blocks",
+  "composition_confirmation", "paste", "cut", "drop", "split_block", "join_blocks",
 ]);
 
 async function validateFrozenGroup(

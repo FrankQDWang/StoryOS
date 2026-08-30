@@ -19,6 +19,7 @@ import type {
   ValidatedJournalSnapshot,
 } from "./editor-types.ts";
 import { flattenChapterBody } from "./manuscript-doc.ts";
+import type { ContiguousReplacementPrimitive } from "./manuscript-doc.ts";
 
 export const JOURNAL_DATABASE_VERSION = 3;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
@@ -49,6 +50,7 @@ const INPUT_ORIGINS = new Set<InputOrigin>([
   "selection_replacement",
   "paste",
   "cut",
+  "drop",
   "composition_confirmation",
   "split_block",
   "join_blocks",
@@ -56,6 +58,7 @@ const INPUT_ORIGINS = new Set<InputOrigin>([
 const HARD_BOUNDARY_INPUT_ORIGINS = new Set<InputOrigin>([
   "paste",
   "cut",
+  "drop",
   "composition_confirmation",
   "split_block",
   "join_blocks",
@@ -444,7 +447,7 @@ async function validatePayloadChains(
     }
     for (const [index, record] of chainRecords.entries()) {
       const patchRef = patches[index];
-      const [primitive] = patchRef?.normalized_primitives ?? [];
+      const primitives = patchRef?.normalized_primitives ?? [];
       const authorEditUnit = record.author_edit_unit!;
       const expectedDigest = await digestJournalValue(authorEditUnit, workspace.cryptoImpl);
       if (record.base_snapshot_id !== chain.checkpoint_ref.source_snapshot_id
@@ -456,11 +459,14 @@ async function validatePayloadChains(
         || JSON.stringify(patchRef?.normalized_primitives)
           !== JSON.stringify(authorEditUnit.normalized_primitives)
         || JSON.stringify(record.payload_digest) !== JSON.stringify(expectedDigest)
-        || authorEditUnit.normalized_primitives.length !== 1
-        || primitive === undefined) {
+        || authorEditUnit.normalized_primitives.length < 1
+        || authorEditUnit.normalized_primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES
+        || primitives.length !== authorEditUnit.normalized_primitives.length) {
         throw new Error("Local Edit Journal is corrupt");
       }
-      blocks = applyAuthorEditPrimitive(blocks, primitive);
+      for (const primitive of primitives) {
+        blocks = applyAuthorEditPrimitive(blocks, primitive);
+      }
       const body = flattenChapterBody(blocks);
       if (new TextEncoder().encode(body).byteLength > workspace.maxJsonStringUtf8Bytes
         || JSON.stringify(await digestJournalValue(body, workspace.cryptoImpl))
@@ -828,6 +834,61 @@ export async function persistJoinBlocks(
   }, cryptoImpl);
 }
 
+export async function persistContiguousReplacement(
+  workspace: EditorWorkspace,
+  edit: {
+    primitives: readonly ContiguousReplacementPrimitive[];
+    from: number;
+    to: number;
+    resultingBody: string;
+    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
+    inputOrigin?: InputOrigin;
+    undoGroupId?: string;
+    createdAt?: string;
+  },
+  cryptoImpl: Crypto = globalThis.crypto,
+): Promise<PendingEditProjection> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
+  const primitives = edit.primitives.map((primitive): AuthorEditPrimitive => primitive);
+  if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
+    throw new Error("Local Edit Journal limit failed");
+  }
+  let expectedBlocks = cloneBlocks(projection.blocks);
+  for (const primitive of primitives) {
+    expectedBlocks = applyAuthorEditPrimitive(expectedBlocks, primitive);
+  }
+  if (edit.resultingBlocks !== undefined
+    && JSON.stringify(expectedBlocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    })))) {
+    throw new Error("Local Edit Journal reconstruction failed");
+  }
+  return persistAuthorEditUnit(workspace, {
+    snapshot,
+    projection,
+    authorEditUnit: {
+      normalized_primitives: primitives,
+      selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+        from: edit.from,
+        to: edit.to,
+      },
+    },
+    expectedBody: flattenChapterBody(expectedBlocks),
+    expectedBlocks,
+    extraUtf8: "",
+    resultingBody: edit.resultingBody,
+    inputOrigin: edit.inputOrigin ?? "selection_replacement",
+    undoGroupId: edit.undoGroupId,
+    createdAt: edit.createdAt,
+  }, cryptoImpl);
+}
+
 async function persistAuthorEditUnit(
   workspace: EditorWorkspace,
   edit: {
@@ -877,6 +938,10 @@ async function persistAuthorEditUnit(
   const completedIntentRecordId = createJournalUuid(cryptoImpl);
   const patchId = createJournalUuid(cryptoImpl);
   const authorEditUnit = edit.authorEditUnit;
+  if (authorEditUnit.normalized_primitives.length < 1
+    || authorEditUnit.normalized_primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
+    throw new Error("Local Edit Journal limit failed");
+  }
   const expectedBody = edit.expectedBody;
   const [payloadDigest, resultingPayloadDigest] = await Promise.all([
     digestJournalValue(authorEditUnit, cryptoImpl),

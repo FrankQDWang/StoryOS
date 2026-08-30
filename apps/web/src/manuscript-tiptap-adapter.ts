@@ -14,6 +14,7 @@ import {
   manuscriptBlocksJson,
   manuscriptJson,
   paragraphsEqual,
+  paragraphsFromPlainTextReplacement,
   readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 
@@ -41,7 +42,7 @@ export function originFromTransaction(
   edit: { from: number; to: number; text: string },
 ): InputOrigin {
   const origin: unknown = transaction.getMeta(STORYOS_ORIGIN);
-  if (origin === "paste" || origin === "cut") return origin;
+  if (origin === "paste" || origin === "cut" || origin === "drop") return origin;
   if (edit.text.length === 0 && edit.to > edit.from) return "deletion";
   if (edit.to > edit.from) return "selection_replacement";
   return "typing";
@@ -143,29 +144,66 @@ export function storyosEditorProps(blockId: string) {
     },
     handlePaste: (view: EditorView, event: ClipboardEvent) => {
       event.preventDefault();
-      const { from, to } = view.state.selection;
-      const transaction = view.state.tr.insertText(
+      dispatchPlainTextReplacement(
+        view,
+        "paste",
         event.clipboardData?.getData("text/plain") ?? "",
-        from,
-        to,
       );
-      transaction.setMeta(STORYOS_ORIGIN, "paste");
-      view.dispatch(transaction);
+      return true;
+    },
+    handleDrop: (view: EditorView, event: DragEvent) => {
+      event.preventDefault();
+      dispatchPlainTextReplacement(
+        view,
+        "drop",
+        event.dataTransfer?.getData("text/plain") ?? "",
+      );
       return true;
     },
     handleDOMEvents: {
+      dragover: (_view: EditorView, event: Event) => {
+        event.preventDefault();
+        return true;
+      },
       cut: (view: EditorView, event: Event) => {
         if (!(event instanceof ClipboardEvent)) return false;
         const { from, to } = view.state.selection;
         event.clipboardData?.setData("text/plain", view.state.doc.textBetween(from, to, "\n"));
         event.preventDefault();
-        const transaction = view.state.tr.delete(from, to);
-        transaction.setMeta(STORYOS_ORIGIN, "cut");
-        view.dispatch(transaction);
+        dispatchPlainTextReplacement(view, "cut", "");
         return true;
       },
     },
   };
+}
+
+function dispatchPlainTextReplacement(
+  view: EditorView,
+  origin: "paste" | "cut" | "drop",
+  text: string,
+): void {
+  const previous = readManuscriptParagraphs(view.state.doc);
+  if (previous === undefined) return;
+  const { from, to } = view.state.selection;
+  const $from = view.state.doc.resolve(from);
+  const $to = view.state.doc.resolve(to);
+  if ($from.parent.type.name !== "paragraph" || $to.parent.type.name !== "paragraph") {
+    return;
+  }
+  const next = paragraphsFromPlainTextReplacement(
+    previous,
+    $from.index(0),
+    $from.parentOffset,
+    $to.index(0),
+    $to.parentOffset,
+    text,
+    createJournalUuid,
+  );
+  if (next === undefined) return;
+  const node = view.state.schema.nodeFromJSON(manuscriptBlocksJson(next));
+  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, node.content);
+  transaction.setMeta(STORYOS_ORIGIN, origin);
+  view.dispatch(transaction);
 }
 
 export { manuscriptJson };
