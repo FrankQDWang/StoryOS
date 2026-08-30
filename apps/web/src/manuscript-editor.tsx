@@ -55,6 +55,23 @@ function syncManuscriptSurface(
   );
 }
 
+function projectLocalPending(
+  workspace: EditorReadyState,
+  blocks: readonly ManuscriptParagraph[],
+): PendingEditProjection | undefined {
+  if (workspace.pending.save_state === "needs_attention") return undefined;
+  return {
+    ...workspace.pending,
+    body: flattenChapterBody(blocks),
+    blocks: blocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
+      text: block.text,
+    })),
+    save_state: workspace.pending.save_state === "saving" ? "saving" : "clean",
+  };
+}
+
 export function ManuscriptEditor({
   blocks,
   editable,
@@ -113,6 +130,9 @@ export function ManuscriptEditor({
         return;
       }
       const createdAt = new Date().toISOString();
+      const workspace = persistWorkspaceRef.current;
+      const local = workspace === undefined ? undefined : projectLocalPending(workspace, nextBlocks);
+      if (local !== undefined) onProjectionRef.current(local);
       const origin = edit.kind === "split_block"
         || edit.kind === "join_blocks"
         || edit.kind === "move_block"
@@ -228,6 +248,9 @@ export function ManuscriptEditor({
         idle.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
       }
+      const workspace = persistWorkspaceRef.current;
+      const local = workspace === undefined ? undefined : projectLocalPending(workspace, nextBlocks);
+      if (local !== undefined) onProjectionRef.current(local);
       void idle.persist(edit, "composition_confirmation", new Date().toISOString());
     };
     dom.addEventListener("compositionstart", onCompositionStart);
