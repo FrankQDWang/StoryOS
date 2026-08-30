@@ -170,18 +170,33 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const writerEditsHeld = new Promise<void>((resolve) => {
       releaseWriterEdits = resolve;
     });
-    const posted = writer.waitForEvent("request", {
-      predicate: (request) => request.method() === "POST"
-        && request.url().includes("/manuscript/author-edits"),
+    let recordLateAuthorEdit = (_value: { status: number; body: unknown }): void => {};
+    const lateAuthorEdit = new Promise<{ status: number; body: unknown }>((resolve) => {
+      recordLateAuthorEdit = resolve;
     });
     await writer.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
-      if (route.request().method() === "POST") await writerEditsHeld;
-      await route.continue();
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      await writerEditsHeld;
+      const response = await route.fetch();
+      const body: unknown = JSON.parse(await response.text());
+      recordLateAuthorEdit({ status: response.status(), body });
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body: JSON.stringify(body),
+      });
     });
     await writer.locator(MANUSCRIPT_EDITOR).click();
     await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
     await writer.keyboard.insertText("Unsettled before takeover.");
     await writer.locator('[data-save-state="saving"]').waitFor();
+    // Idle submit is 250ms after persist. Hold that POST before Takeover remounts.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 400);
+    });
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
@@ -192,10 +207,9 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
       observed_writer_generation: generation });
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     releaseWriterEdits();
-    const refused = await (await posted).response();
-    assert.ok(refused !== null, "the prior writer must receive a late Author Edit result");
-    assert.equal(refused.status(), 412);
-    const problem: unknown = await refused.json();
+    const refused = await lateAuthorEdit;
+    assert.equal(refused.status, 412);
+    const problem = refused.body;
     assert.ok(typeof problem === "object" && problem !== null);
     assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
     await writer.locator(MANUSCRIPT_READONLY).waitFor();
