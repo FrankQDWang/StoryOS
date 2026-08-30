@@ -135,18 +135,27 @@ export function ManuscriptEditor({
       const workspace = persistWorkspaceRef.current;
       if (editor === null || workspace === undefined) return;
       await idleRef.current?.flush();
-      const settled = await undoOwnedLatestAuthorAction({
-        workspace,
-        baseUrl,
-        fetchImpl,
-        cryptoImpl,
-      });
-      if (settled?.effect.kind !== "compensated") return;
-      const restored = workspace.session.base_snapshot.materialized_revision.blocks;
-      hydrateManuscriptBlocks(editor, restored);
-      observedBlocksRef.current = restored.map((block) => ({ ...block }));
-      syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-      onProjectionRef.current(await rebuildPendingProjection(workspace));
+      try {
+        const settled = await undoOwnedLatestAuthorAction({
+          workspace,
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+        });
+        if (settled === undefined || settled.effect.kind !== "compensated") {
+          if (settled !== undefined) {
+            onFailureRef.current(new Error("Author Undo did not compensate"));
+          }
+          return;
+        }
+        const restored = workspace.session.base_snapshot.materialized_revision.blocks;
+        hydrateManuscriptBlocks(editor, restored);
+        observedBlocksRef.current = restored.map((block) => ({ ...block }));
+        syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
+        onProjectionRef.current(await rebuildPendingProjection(workspace));
+      } catch (error) {
+        onFailureRef.current(error);
+      }
     })();
     return true;
   };

@@ -290,7 +290,7 @@ async fn read_session(
     }))
 }
 
-async fn current_author_undo_frontier_sequence(
+pub(super) async fn current_author_undo_frontier_sequence(
     client: &tokio_postgres::Client,
     owner_user_id: &str,
     project_id: &str,

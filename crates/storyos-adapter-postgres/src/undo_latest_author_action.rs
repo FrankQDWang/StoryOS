@@ -1,7 +1,8 @@
 use storyos_application::{
-    ProjectCommandChallengeError, ProjectCommandChallengeUse, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
-    UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore,
+    AuthorCommandAdmissionIds, EditorSessionError, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse, UndoLatestAuthorActionCommand, UndoLatestAuthorActionError,
+    UndoLatestAuthorActionSettlement, UndoLatestAuthorActionSettlementEffect,
+    UndoLatestAuthorActionStore,
 };
 use storyos_core::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction as CoreUndo,
@@ -184,7 +185,16 @@ async fn persist_undo(
                 client,
                 command,
                 observed.as_ref(),
-                classified_conflict(reason),
+                (
+                    "conflicted",
+                    match &reason {
+                        UndoLatestAuthorActionConflict::FrontierMismatch { .. } => {
+                            "frontier_mismatch"
+                        }
+                        UndoLatestAuthorActionConflict::WrongTargetHead => "wrong_target_head",
+                    },
+                    UndoLatestAuthorActionSettlementEffect::Conflicted { reason },
+                ),
             )
             .await
         }
@@ -207,24 +217,6 @@ async fn persist_undo(
             .await
         }
     }
-}
-
-fn classified_conflict(
-    reason: UndoLatestAuthorActionConflict,
-) -> (
-    &'static str,
-    &'static str,
-    UndoLatestAuthorActionSettlementEffect,
-) {
-    let payload_reason = match &reason {
-        UndoLatestAuthorActionConflict::FrontierMismatch { .. } => "frontier_mismatch",
-        UndoLatestAuthorActionConflict::WrongTargetHead => "wrong_target_head",
-    };
-    (
-        "conflicted",
-        payload_reason,
-        UndoLatestAuthorActionSettlementEffect::Conflicted { reason },
-    )
 }
 
 async fn persist_compensation(
@@ -475,32 +467,14 @@ async fn persist_compensation(
     .await
     .map_err(undo_database_error)?;
     settle_idempotency(client, command).await?;
-    let next_frontier = client
-        .query_opt(
-            "SELECT action.author_action_sequence::text
-               FROM storyos.author_action_entries AS action
-          LEFT JOIN storyos.author_action_entries AS compensation
-                 ON compensation.owner_user_id = action.owner_user_id
-                AND compensation.project_id = action.project_id
-                AND compensation.disposition = 'compensation'
-                AND compensation.compensated_source_sequence = action.author_action_sequence
-              WHERE action.owner_user_id = $1::text::uuid
-                AND action.project_id = $2::text::uuid
-                AND action.disposition = 'forward'
-                AND compensation.author_action_sequence IS NULL
-           ORDER BY action.author_action_sequence DESC
-              LIMIT 1",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
+    let author_undo_frontier_sequence =
+        crate::editor_session::current_author_undo_frontier_sequence(
+            client,
+            command.project_scope.owner_user_id.as_ref(),
+            command.project_scope.project_id.as_ref(),
         )
         .await
-        .map_err(undo_database_error)?;
-    let author_undo_frontier_sequence = next_frontier
-        .map(|row| row.get::<_, String>(0).parse::<u64>())
-        .transpose()
-        .map_err(undo_parse_error)?;
+        .map_err(undo_from_session)?;
     Ok(UndoLatestAuthorActionSettlement {
         ids: command.ids.clone(),
         effect: UndoLatestAuthorActionSettlementEffect::Compensated {
@@ -539,7 +513,7 @@ async fn persist_zero_authority(
         &result_payload,
         head,
         head,
-        None,
+        /*authority*/ None,
     )
     .await?;
     settle_idempotency(client, command).await?;
@@ -741,7 +715,10 @@ async fn read_undo_settlement(
             .map_err(undo_challenge_error)?;
         let row = client
             .query_opt(
-                "SELECT receipt.result_kind,
+                "SELECT receipt.command_id::text,
+                        receipt.author_command_admission_id::text,
+                        receipt.receipt_id::text,
+                        receipt.result_kind,
                         receipt.result_payload->>'reason',
                         to_char(receipt.created_at AT TIME ZONE 'UTC',
                                 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
@@ -793,19 +770,26 @@ async fn read_undo_settlement(
             .await
             .map_err(undo_database_error)?
             .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(0);
-        let reason = row.get::<_, Option<String>>(1);
-        let receipt_created_at = row.get::<_, String>(2);
+        let current_frontier = crate::editor_session::current_author_undo_frontier_sequence(
+            &client,
+            command.project_scope.owner_user_id.as_ref(),
+            command.project_scope.project_id.as_ref(),
+        )
+        .await
+        .map_err(undo_from_session)?;
+        let result_kind = row.get::<_, String>(3);
+        let reason = row.get::<_, Option<String>>(4);
+        let receipt_created_at = row.get::<_, String>(5);
         let effect = match (result_kind.as_str(), reason.as_deref()) {
             ("authoritative_applied", None) => {
                 let revision_id = row
-                    .get::<_, Option<String>>(6)
+                    .get::<_, Option<String>>(9)
                     .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
                 let stored = row
-                    .get::<_, Option<String>>(7)
+                    .get::<_, Option<String>>(10)
                     .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
                 let chapter_id = row
-                    .get::<_, Option<String>>(9)
+                    .get::<_, Option<String>>(12)
                     .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
                 let blocks = crate::manuscript_block::load_revision_blocks(
                     &client,
@@ -819,28 +803,28 @@ async fn read_undo_settlement(
                 .map_err(undo_database_error)?;
                 UndoLatestAuthorActionSettlementEffect::Compensated {
                     source_sequence: row
-                        .get::<_, Option<String>>(3)
+                        .get::<_, Option<String>>(6)
                         .ok_or(UndoLatestAuthorActionError::BindingConflict)?
                         .parse()
                         .map_err(undo_parse_error)?,
                     author_action_sequence: row
-                        .get::<_, Option<String>>(4)
+                        .get::<_, Option<String>>(7)
                         .ok_or(UndoLatestAuthorActionError::BindingConflict)?
                         .parse()
                         .map_err(undo_parse_error)?,
                     authoritative_commit_id: row
-                        .get::<_, Option<String>>(5)
+                        .get::<_, Option<String>>(8)
                         .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
                     revision_id: revision_id.clone(),
                     body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
                     blocks,
-                    author_undo_frontier_sequence: None,
+                    author_undo_frontier_sequence: current_frontier,
                 }
             }
             ("conflicted", Some("frontier_mismatch")) => {
                 UndoLatestAuthorActionSettlementEffect::Conflicted {
                     reason: UndoLatestAuthorActionConflict::FrontierMismatch {
-                        current_author_undo_frontier_sequence: None,
+                        current_author_undo_frontier_sequence: current_frontier,
                     },
                 }
             }
@@ -860,13 +844,17 @@ async fn read_undo_settlement(
             _ => return Err(UndoLatestAuthorActionError::BindingConflict),
         };
         let project_activity_position = row
-            .get::<_, Option<String>>(8)
+            .get::<_, Option<String>>(11)
             .map(|value| value.parse::<u64>())
             .transpose()
             .map_err(undo_parse_error)?
             .unwrap_or(0);
         Ok(UndoLatestAuthorActionSettlement {
-            ids: command.ids.clone(),
+            ids: AuthorCommandAdmissionIds {
+                command_id: row.get(0),
+                author_command_admission_id: row.get(1),
+                receipt_id: row.get(2),
+            },
             effect,
             receipt_created_at,
             project_activity_position,
@@ -906,4 +894,13 @@ fn undo_from_author_edit(
     error: storyos_application::AuthorEditError,
 ) -> UndoLatestAuthorActionError {
     UndoLatestAuthorActionError::Unavailable(Box::new(error))
+}
+
+fn undo_from_session(error: EditorSessionError) -> UndoLatestAuthorActionError {
+    match error {
+        EditorSessionError::BindingConflict | EditorSessionError::InvalidChallenge => {
+            UndoLatestAuthorActionError::BindingConflict
+        }
+        EditorSessionError::Unavailable(source) => UndoLatestAuthorActionError::Unavailable(source),
+    }
 }
