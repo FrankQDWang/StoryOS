@@ -16,7 +16,7 @@ let applicationFrame: HTMLIFrameElement | undefined;
 function nextFrameLoad(frame: HTMLIFrameElement): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = window.setTimeout(() => {
-      reject(new Error("the exact-dist interruption page did not load"));
+      reject(new Error("the exact-dist Local Edit Journal recovery page did not load"));
     }, 10_000);
     frame.addEventListener("load", () => {
       window.clearTimeout(timeout);
@@ -87,23 +87,11 @@ async function reloadProject(
   return appRoot(frame);
 }
 
-async function waitJournaled(root: Element, editor: Element, expectedBody: string): Promise<void> {
-  await expect.poll(() => {
-    const node = saveNode(root);
-    if (manuscriptBody(editor) !== expectedBody) return null;
-    if (node?.getAttribute("data-save-state") === "saved") return "saved";
-    if (node?.getAttribute("data-save-state") === "saving") return "saving";
-    const unsettled = node?.getAttribute("data-unsettled-intent-count");
-    if (unsettled !== null && unsettled !== undefined && unsettled !== "0") return "journaled";
-    return null;
-  }, { timeout: 10_000 }).not.toBeNull();
-}
-
-it("recovers journaled prose after reload and does not duplicate the Author Edit", async () => {
+it("recovers Local Edit Journal text after reload without a second Author Edit", async () => {
   await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
-  frame.title = "StoryOS exact-dist interruption recovery";
+  frame.title = "StoryOS exact-dist Local Edit Journal recovery";
   const loaded = nextFrameLoad(frame);
   frame.src = "/";
   document.body.append(frame);
@@ -116,7 +104,7 @@ it("recovers journaled prose after reload and does not duplicate the Author Edit
   if (title === null || title === undefined || form === null || form === undefined) {
     throw new Error("the protected-ready form is missing");
   }
-  title.value = "Interruption Novel";
+  title.value = "Journal Recovery Novel";
   form.requestSubmit();
   await expect.poll(() =>
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
@@ -174,40 +162,35 @@ it("recovers journaled prose after reload and does not duplicate the Author Edit
   editor.focus();
   focusManuscriptEnd(editor, applicationWindow(frame));
   await applyTrustedInput({ operation: "insert_text", text: " more" });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(FULL);
-  await waitJournaled(root, editor, FULL);
+  await expect.poll(() => {
+    const node = saveNode(root);
+    if (manuscriptBody(editor) !== FULL) return null;
+    const save = node?.getAttribute("data-save-state");
+    const unsettled = node?.getAttribute("data-unsettled-intent-count");
+    if (save === "saving" || (unsettled !== null && unsettled !== undefined && unsettled !== "0")) {
+      return "pending";
+    }
+    if (save === "saved" && unsettled === "0") return "saved";
+    return null;
+  }, { timeout: 10_000 }).toMatch(/^(pending|saved)$/);
 
   root = await reloadProject(frame, projectId);
   editor = manuscriptEditor(root, applicationWindow(frame));
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(FULL);
-  expect(manuscriptBody(editor)).not.toContain("Settled prose more more");
-  const recoveredSave = saveNode(root)?.getAttribute("data-save-state");
-  if (recoveredSave === "needs_attention") {
-    expect(root.querySelector("[data-reconfirm-legacy-blocks]")?.textContent)
-      .toBe("确认待写入正文");
-  } else {
-    await waitSaved(root);
-  }
+  await waitSaved(root);
 
-  const afterInterrupt = applicationWindow(frame);
+  const afterReload = applicationWindow(frame);
   const firstRecovered = await getChapter({
-    baseUrl: afterInterrupt.location.origin,
+    baseUrl: afterReload.location.origin,
     projectId,
     chapterId,
-    fetchImpl: afterInterrupt.fetch.bind(afterInterrupt),
+    fetchImpl: afterReload.fetch.bind(afterReload),
   });
-  if (recoveredSave !== "needs_attention") {
-    expect(firstRecovered.chapter.current_revision.body).toBe(FULL);
-  }
+  expect(firstRecovered.chapter.current_revision.body).toBe(FULL);
 
   root = await reloadProject(frame, projectId);
   editor = manuscriptEditor(root, applicationWindow(frame));
   expect(manuscriptBody(editor)).toBe(FULL);
-  if (saveNode(root)?.getAttribute("data-save-state") === "needs_attention") {
-    expect(root.querySelector("[data-reconfirm-legacy-blocks]")?.textContent)
-      .toBe("确认待写入正文");
-    return;
-  }
   await waitSaved(root);
   const afterRepeat = applicationWindow(frame);
   const repeated = await getChapter({
