@@ -196,10 +196,10 @@ fn apply_primitive(
             to,
             text,
         } => {
-            if let Some(snapshot) = snapshot {
-                if snapshot.from != *from || snapshot.to != *to {
-                    return Err(AuthorEditRefusal::InvalidSelection);
-                }
+            if let Some(snapshot) = snapshot
+                && (snapshot.from != *from || snapshot.to != *to)
+            {
+                return Err(AuthorEditRefusal::InvalidSelection);
             }
             let Some(block) = payload
                 .blocks
@@ -215,10 +215,10 @@ fn apply_primitive(
             offset,
             new_manuscript_block_id,
         } => {
-            if let Some(snapshot) = snapshot {
-                if snapshot.from != *offset || snapshot.to != *offset {
-                    return Err(AuthorEditRefusal::InvalidSelection);
-                }
+            if let Some(snapshot) = snapshot
+                && (snapshot.from != *offset || snapshot.to != *offset)
+            {
+                return Err(AuthorEditRefusal::InvalidSelection);
             }
             split_block(
                 payload,
@@ -303,10 +303,10 @@ fn join_blocks(
         return Err(AuthorEditRefusal::InvalidSelection);
     }
     let left_utf16 = payload.blocks[left_index].text.encode_utf16().count() as u32;
-    if let Some(snapshot) = snapshot {
-        if snapshot.from != left_utf16 || snapshot.to != left_utf16 {
-            return Err(AuthorEditRefusal::InvalidSelection);
-        }
+    if let Some(snapshot) = snapshot
+        && (snapshot.from != left_utf16 || snapshot.to != left_utf16)
+    {
+        return Err(AuthorEditRefusal::InvalidSelection);
     }
     let right_text = payload.blocks[right_index].text.clone();
     payload.blocks[left_index].text.push_str(&right_text);
