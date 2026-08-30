@@ -223,15 +223,18 @@ it("moves and retypes Blocks with stable identity and refuses copy as a move", a
   ]);
 
   await updateClipboardPermission({ action: "grant" });
-  await childWindow.navigator.clipboard.writeText("\nCopied");
+  await childWindow.navigator.clipboard.writeText("Copied\nExtra");
   focusManuscriptEnd(editor, childWindow);
   await applyTrustedInput({ operation: "paste" });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("World\nHello\nCopied");
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 })
+    .toBe("World\nHelloCopied\nExtra");
   await waitSaved(root, moved.revision_id);
   const pasted = await readRevision(frame, projectId, chapterId);
   const copiedId = pasted.blocks[2]?.manuscript_block_id;
-  expect(pasted.blocks.map((block) => block.manuscript_block_id)).toEqual([
-    rightId, leftId, copiedId,
+  expect(pasted.blocks).toEqual([
+    { manuscript_block_id: rightId, block_kind: "paragraph", text: "World" },
+    { manuscript_block_id: leftId, block_kind: "paragraph", text: "HelloCopied" },
+    { manuscript_block_id: copiedId, block_kind: "paragraph", text: "Extra" },
   ]);
   expect(copiedId).toMatch(UUID);
   expect(copiedId).not.toBe(leftId);
@@ -245,8 +248,8 @@ it("moves and retypes Blocks with stable identity and refuses copy as a move", a
   const retyped = await readRevision(frame, projectId, chapterId);
   expect(retyped.blocks).toEqual([
     { manuscript_block_id: rightId, block_kind: "heading", text: "World" },
-    { manuscript_block_id: leftId, block_kind: "paragraph", text: "Hello" },
-    { manuscript_block_id: copiedId, block_kind: "paragraph", text: "Copied" },
+    { manuscript_block_id: leftId, block_kind: "paragraph", text: "HelloCopied" },
+    { manuscript_block_id: copiedId, block_kind: "paragraph", text: "Extra" },
   ]);
 
   await destroyApplicationFrame(frame);
@@ -265,11 +268,11 @@ it("moves and retypes Blocks with stable identity and refuses copy as a move", a
   const reopenedEditor = manuscriptEditor(appRoot(reopened), applicationWindow(reopened));
   await expect.poll(() => reopenedEditor.getAttribute("data-manuscript-block-kinds"))
     .toBe("heading paragraph paragraph");
-  expect(manuscriptBody(reopenedEditor)).toBe("World\nHello\nCopied");
+  expect(manuscriptBody(reopenedEditor)).toBe("World\nHelloCopied\nExtra");
   const reopenedRevision = await readRevision(reopened, projectId, chapterId);
   expect(reopenedRevision.blocks).toEqual([
     { manuscript_block_id: rightId, block_kind: "heading", text: "World" },
-    { manuscript_block_id: leftId, block_kind: "paragraph", text: "Hello" },
-    { manuscript_block_id: copiedId, block_kind: "paragraph", text: "Copied" },
+    { manuscript_block_id: leftId, block_kind: "paragraph", text: "HelloCopied" },
+    { manuscript_block_id: copiedId, block_kind: "paragraph", text: "Extra" },
   ]);
 });
