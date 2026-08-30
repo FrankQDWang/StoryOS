@@ -170,6 +170,10 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const writerEditsHeld = new Promise<void>((resolve) => {
       releaseWriterEdits = resolve;
     });
+    let noteAuthorEditPosted = (): void => {};
+    const authorEditPosted = new Promise<void>((resolve) => {
+      noteAuthorEditPosted = resolve;
+    });
     let recordLateAuthorEdit = (_value: { status: number; body: unknown }): void => {};
     const lateAuthorEdit = new Promise<{ status: number; body: unknown }>((resolve) => {
       recordLateAuthorEdit = resolve;
@@ -179,6 +183,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
         await route.continue();
         return;
       }
+      noteAuthorEditPosted();
       await writerEditsHeld;
       const response = await route.fetch();
       const body: unknown = JSON.parse(await response.text());
@@ -193,10 +198,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
     await writer.keyboard.insertText("Unsettled before takeover.");
     await writer.locator('[data-save-state="saving"]').waitFor();
-    // Idle submit is 250ms after persist. Hold that POST before Takeover remounts.
-    await new Promise((resolve) => {
-      setTimeout(resolve, 400);
-    });
+    await authorEditPosted;
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
