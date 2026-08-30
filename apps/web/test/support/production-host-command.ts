@@ -177,7 +177,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator(MANUSCRIPT_EDITOR).click();
     await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
     await writer.keyboard.insertText("Unsettled before takeover.");
-    await writer.locator('[data-save-state="unsaved"]').waitFor();
+    await writer.locator('[data-save-state="saving"]').waitFor();
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
