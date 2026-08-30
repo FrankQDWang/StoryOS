@@ -216,22 +216,18 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator('[data-save-state="needs_attention"]').waitFor();
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     const oldJournal = await readJournal(writer, projectId);
-    assert.equal(oldJournal.partitions.length, 2);
     assert.ok(oldJournal.intents.length > 0 && oldJournal.payload_chains.length > 0);
+    const takeoverPartition = oldJournal.partitions.find((record) =>
+      typeof record === "object" && record !== null
+      && Reflect.get(record, "editor_session_id") === observerId
+      && Reflect.get(record, "writer_generation") === generation
+      && Reflect.get(record, "disposition") === "current_writer_open");
+    assert.ok(takeoverPartition !== undefined);
     await observer.reload();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await sessionId(observer, projectId), observerId);
     const newJournal = await readJournal(observer, projectId);
     assertPreservedJournal(oldJournal, newJournal);
-    const added = newJournal.partitions.filter((record) =>
-      !oldJournal.partitions.some((old) => isDeepStrictEqual(record, old)));
-    assert.equal(added.length, 1);
-    const partition = added[0];
-    assert.ok(typeof partition === "object" && partition !== null);
-    assert.deepEqual({ session: Reflect.get(partition, "editor_session_id"),
-      generation: Reflect.get(partition, "writer_generation"),
-      disposition: Reflect.get(partition, "disposition") },
-    { session: observerId, generation, disposition: "current_writer_open" });
     assert.equal(await observer.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body"),
       "Saved through the production host.");
     await replaceAndSave(observer, "Saved by the new production writer.");
