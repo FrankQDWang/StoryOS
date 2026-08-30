@@ -122,6 +122,11 @@ export function createAuthorEditIdleController({
     if (projection.save_state === "needs_attention") {
       throw new Error("Author Edit requires attention");
     }
+    // A still-unknown Outcome Query leaves the group saving. Query the same
+    // identity again. Do not obtain a new challenge or send a new command.
+    if (projection.save_state === "saving" && pendingIntentCount > 0 && !holdSubmission) {
+      scheduleIdle();
+    }
   };
 
   const scheduleIdle = (): void => {
