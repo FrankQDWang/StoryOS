@@ -121,7 +121,14 @@ export function ManuscriptEditor({
         observedBlocksRef.current = nextBlocks;
         return;
       }
-      if (current.view.composing || composingRef.current) return;
+      if (current.view.composing || composingRef.current) {
+        const workspace = persistWorkspaceRef.current;
+        const local = workspace === undefined
+          ? undefined
+          : projectLocalPending(workspace, nextBlocks);
+        if (local !== undefined) onProjectionRef.current(local);
+        return;
+      }
       if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
       const edit = captureManuscriptChange(observedBlocksRef.current, nextBlocks);
       observedBlocksRef.current = nextBlocks;
