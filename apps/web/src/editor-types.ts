@@ -21,6 +21,7 @@ export type InputOrigin =
   | "selection_replacement"
   | "paste"
   | "cut"
+  | "drop"
   | "composition_confirmation"
   | "split_block"
   | "join_blocks";

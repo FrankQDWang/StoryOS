@@ -308,6 +308,115 @@ fn split_at_the_end_keeps_an_empty_right_block_and_the_starting_identity() {
 }
 
 #[test]
+fn one_unit_joins_then_replaces_across_adjacent_blocks_atomically() {
+    let mut command = split_command();
+    command.current_payload = two_paragraphs();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![
+            AuthorEditPrimitive::JoinBlocks {
+                left_manuscript_block_id: "block-left".to_owned(),
+                right_manuscript_block_id: "block-right".to_owned(),
+            },
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: "block-left".to_owned(),
+                from: 2,
+                to: 8,
+                text: "X".to_owned(),
+            },
+        ],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 2,
+            to: 8,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
+            payload: upgrade_legacy_manuscript("HeXld", "block-left")
+        }
+    );
+}
+
+#[test]
+fn a_later_invalid_primitive_in_the_same_unit_refuses_the_complete_range() {
+    let mut command = split_command();
+    command.current_payload = two_paragraphs();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![
+            AuthorEditPrimitive::JoinBlocks {
+                left_manuscript_block_id: "block-left".to_owned(),
+                right_manuscript_block_id: "block-right".to_owned(),
+            },
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: "block-left".to_owned(),
+                from: 0,
+                to: 99,
+                text: "X".to_owned(),
+            },
+        ],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 0,
+            to: 99,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::Refused {
+            reason: AuthorEditRefusal::InvalidSelection
+        }
+    );
+}
+
+#[test]
+fn one_unit_replaces_then_splits_so_pasted_paragraphs_receive_new_identities() {
+    let mut command = split_command();
+    command.current_payload = upgrade_legacy_manuscript("Hello", "block-left");
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: "block-left".to_owned(),
+                from: 5,
+                to: 5,
+                text: "XY".to_owned(),
+            },
+            AuthorEditPrimitive::SplitBlock {
+                manuscript_block_id: "block-left".to_owned(),
+                offset: 6,
+                new_manuscript_block_id: "block-pasted".to_owned(),
+            },
+        ],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 5,
+            to: 5,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
+            payload: ManuscriptPayload {
+                schema_version: MANUSCRIPT_SCHEMA_VERSION,
+                coordinate_version: COORDINATE_VERSION,
+                blocks: vec![
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-left".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: "HelloX".to_owned(),
+                    },
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-pasted".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: "Y".to_owned(),
+                    },
+                ],
+            }
+        }
+    );
+}
+
+#[test]
 fn chapter_display_body_joins_current_paragraphs_with_one_line_break() {
     assert_eq!(
         chapter_display_body(&two_paragraphs().blocks),

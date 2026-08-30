@@ -108,7 +108,14 @@ export function ManuscriptEditor({
         ? "split_block"
         : edit.kind === "join_blocks"
           ? "join_blocks"
-          : originFromTransaction(transaction, edit);
+          : originFromTransaction(transaction, edit.kind === "contiguous_replacement"
+            ? {
+              from: edit.from,
+              to: edit.to,
+              text: edit.primitives.find((primitive) =>
+                primitive.kind === "replace_block_selection")?.text ?? "",
+            }
+            : edit);
       void idleRef.current?.persist(edit, origin, createdAt);
     },
   }, []);

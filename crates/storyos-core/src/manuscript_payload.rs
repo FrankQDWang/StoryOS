@@ -165,16 +165,40 @@ fn apply_unit(
     payload: &mut ManuscriptPayload,
     unit: &AuthorEditUnit,
 ) -> Result<(), AuthorEditRefusal> {
-    match unit.normalized_primitives.as_slice() {
-        [
-            AuthorEditPrimitive::ReplaceBlockSelection {
-                manuscript_block_id,
-                from,
-                to,
-                text,
-            },
-        ] => {
-            if unit.selection_snapshot.from != *from || unit.selection_snapshot.to != *to {
+    if unit.normalized_primitives.is_empty() {
+        return Err(AuthorEditRefusal::UnsupportedIntentShape);
+    }
+    if unit.normalized_primitives.len() > 1
+        && unit.selection_snapshot.from > unit.selection_snapshot.to
+    {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
+    for primitive in &unit.normalized_primitives {
+        let snapshot = if unit.normalized_primitives.len() == 1 {
+            Some(&unit.selection_snapshot)
+        } else {
+            None
+        };
+        apply_primitive(payload, primitive, snapshot)?;
+    }
+    Ok(())
+}
+
+fn apply_primitive(
+    payload: &mut ManuscriptPayload,
+    primitive: &AuthorEditPrimitive,
+    snapshot: Option<&crate::SelectionSnapshot>,
+) -> Result<(), AuthorEditRefusal> {
+    match primitive {
+        AuthorEditPrimitive::ReplaceBlockSelection {
+            manuscript_block_id,
+            from,
+            to,
+            text,
+        } => {
+            if let Some(snapshot) = snapshot
+                && (snapshot.from != *from || snapshot.to != *to)
+            {
                 return Err(AuthorEditRefusal::InvalidSelection);
             }
             let Some(block) = payload
@@ -186,14 +210,14 @@ fn apply_unit(
             };
             replace_block_text(block, *from, *to, text)
         }
-        [
-            AuthorEditPrimitive::SplitBlock {
-                manuscript_block_id,
-                offset,
-                new_manuscript_block_id,
-            },
-        ] => {
-            if unit.selection_snapshot.from != *offset || unit.selection_snapshot.to != *offset {
+        AuthorEditPrimitive::SplitBlock {
+            manuscript_block_id,
+            offset,
+            new_manuscript_block_id,
+        } => {
+            if let Some(snapshot) = snapshot
+                && (snapshot.from != *offset || snapshot.to != *offset)
+            {
                 return Err(AuthorEditRefusal::InvalidSelection);
             }
             split_block(
@@ -203,18 +227,18 @@ fn apply_unit(
                 new_manuscript_block_id,
             )
         }
-        [
-            AuthorEditPrimitive::JoinBlocks {
-                left_manuscript_block_id,
-                right_manuscript_block_id,
-            },
-        ] => join_blocks(
+        AuthorEditPrimitive::JoinBlocks {
+            left_manuscript_block_id,
+            right_manuscript_block_id,
+        } => join_blocks(
             payload,
             left_manuscript_block_id,
             right_manuscript_block_id,
-            &unit.selection_snapshot,
+            snapshot,
         ),
-        _ => Err(AuthorEditRefusal::UnsupportedIntentShape),
+        AuthorEditPrimitive::ReplaceSelection { .. } => {
+            Err(AuthorEditRefusal::UnsupportedIntentShape)
+        }
     }
 }
 
@@ -259,7 +283,7 @@ fn join_blocks(
     payload: &mut ManuscriptPayload,
     left_manuscript_block_id: &str,
     right_manuscript_block_id: &str,
-    snapshot: &crate::SelectionSnapshot,
+    snapshot: Option<&crate::SelectionSnapshot>,
 ) -> Result<(), AuthorEditRefusal> {
     let Some(left_index) = payload
         .blocks
@@ -279,7 +303,9 @@ fn join_blocks(
         return Err(AuthorEditRefusal::InvalidSelection);
     }
     let left_utf16 = payload.blocks[left_index].text.encode_utf16().count() as u32;
-    if snapshot.from != left_utf16 || snapshot.to != left_utf16 {
+    if let Some(snapshot) = snapshot
+        && (snapshot.from != left_utf16 || snapshot.to != left_utf16)
+    {
         return Err(AuthorEditRefusal::InvalidSelection);
     }
     let right_text = payload.blocks[right_index].text.clone();

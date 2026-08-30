@@ -6,6 +6,7 @@ import {
   persistJoinBlocks,
   persistReplaceSelection,
   persistSplitBlock,
+  persistContiguousReplacement,
 } from "./local-edit-journal.ts";
 import type {
   EditorReadyState,
@@ -135,7 +136,7 @@ export function createAuthorEditIdleController({
     persist(edit, origin, createdAt) {
       return enqueue(async () => {
         const hardBoundary = origin === "composition_confirmation"
-          || origin === "paste" || origin === "cut"
+          || origin === "paste" || origin === "cut" || origin === "drop"
           || origin === "split_block" || origin === "join_blocks";
         const completedAt = Date.parse(createdAt);
         const idleBoundary = lastCompletedAt !== undefined
@@ -159,6 +160,15 @@ export function createAuthorEditIdleController({
                 left_manuscript_block_id: edit.left_manuscript_block_id,
                 right_manuscript_block_id: edit.right_manuscript_block_id,
                 caret: edit.caret,
+                resultingBody: edit.resultingBody,
+                resultingBlocks: edit.resultingBlocks,
+                ...persistFields,
+              }, cryptoImpl)
+            : edit.kind === "contiguous_replacement"
+              ? await persistContiguousReplacement(workspace, {
+                primitives: edit.primitives,
+                from: edit.from,
+                to: edit.to,
                 resultingBody: edit.resultingBody,
                 resultingBlocks: edit.resultingBlocks,
                 ...persistFields,
