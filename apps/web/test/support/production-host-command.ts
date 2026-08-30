@@ -166,18 +166,15 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const secondary = await getEditorSession({ ...options, editorSessionId: observerId });
     assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session",
       observed_writer_generation: prior.writer.writer_generation });
-    let releaseWriterEdits = (): void => {};
-    const writerEditsHeld = new Promise<void>((resolve) => {
-      releaseWriterEdits = resolve;
-    });
-    await writer.route("**/manuscript/author-edits", async (route) => {
-      if (route.request().method() === "POST") await writerEditsHeld;
-      await route.continue();
-    });
+    const frozenAt = Date.now();
+    await writer.clock.install({ time: frozenAt });
+    await writer.clock.pauseAt(frozenAt);
+    const refusal = writer.waitForResponse((response) => response.status() === 412
+      && response.url().startsWith(`${origin}/api/v1/projects/${projectId}/`));
     await writer.locator(MANUSCRIPT_EDITOR).click();
     await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
     await writer.keyboard.insertText("Unsettled before takeover.");
-    await writer.locator('[data-save-state="saving"]').waitFor();
+    await writer.locator(`${MANUSCRIPT_EDITOR}[data-manuscript-body="Unsettled before takeover."]`).waitFor();
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
@@ -187,9 +184,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     assert.deepEqual(fenced.writer, { kind: "read_only", reason: "superseded_by_takeover",
       observed_writer_generation: generation });
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
-    const refusal = writer.waitForResponse((response) => response.status() === 412
-      && response.url().startsWith(`${origin}/api/v1/projects/${projectId}/`));
-    releaseWriterEdits();
+    await writer.clock.fastForward(300);
     const problem: unknown = await (await refusal).json();
     assert.ok(typeof problem === "object" && problem !== null);
     assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
