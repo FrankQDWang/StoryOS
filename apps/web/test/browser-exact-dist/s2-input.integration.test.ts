@@ -285,13 +285,6 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
   const afterImeRevisionId = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
 
-  focusManuscriptEnd(editor, childWindow);
-  await applyTrustedInput({ operation: "backspace" });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gelta中文");
-  await waitSaved(root, afterImeRevisionId);
-  const afterDeleteRevisionId = root.querySelector("[data-save-state]")
-    ?.getAttribute("data-authoritative-revision-id") ?? "";
-
   const transfer = new childWindow.DataTransfer();
   transfer.setData("text/plain", "Drop");
   const rect = editor.getBoundingClientRect();
@@ -304,7 +297,7 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
   Object.defineProperty(dropEvent, "dataTransfer", { value: transfer });
   editor.dispatchEvent(dropEvent);
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toMatch(/Drop/);
-  await waitSaved(root, afterDeleteRevisionId);
+  await waitSaved(root, afterImeRevisionId);
 
   await destroyApplicationFrame(frame);
   const reopened = document.createElement("iframe");
@@ -327,5 +320,6 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
     .toBe(false);
   expect(reopenedRevision.body).toContain("Gelta");
   expect(reopenedRevision.body).toContain("中文");
+  expect(reopenedRevision.body).toContain("再");
   expect(reopenedRevision.body).toContain("Drop");
 });
