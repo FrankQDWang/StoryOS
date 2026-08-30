@@ -253,6 +253,18 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
   await applyTrustedInput({ operation: "insert_text", text: "中文" });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Alpha\nBeta中文");
   await waitSaved(root, pasted.revision_id);
+  const afterFirstIme = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  await applyImeComposition({
+    text: "再",
+    replacementStart: 2,
+    replacementEnd: 2,
+    selectionStart: 1,
+    selectionEnd: 1,
+  });
+  await applyTrustedInput({ operation: "insert_text", text: "再" });
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Alpha\nBeta中文再");
+  await waitSaved(root, afterFirstIme);
   const afterImeRevisionId = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
 
@@ -285,5 +297,6 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
     .toBe(false);
   expect(reopenedRevision.body).toContain("Alpha");
   expect(reopenedRevision.body).toContain("中文");
+  expect(reopenedRevision.body).toContain("再");
   expect(reopenedRevision.body).toContain("Drop");
 });

@@ -186,30 +186,38 @@ export function captureManuscriptChange(
   }
   if (next.length === previous.length) {
     let changed = -1;
+    let identitiesMatch = true;
     for (let index = 0; index < previous.length; index += 1) {
       const before = previous[index];
       const after = next[index];
       if (before === undefined || after === undefined) return undefined;
-      if (before.manuscript_block_id !== after.manuscript_block_id) return undefined;
+      if (before.manuscript_block_id !== after.manuscript_block_id) {
+        identitiesMatch = false;
+        break;
+      }
       if (before.text === after.text) continue;
-      if (changed !== -1) return undefined;
+      if (changed !== -1) {
+        identitiesMatch = false;
+        break;
+      }
       changed = index;
     }
-    if (changed === -1) return undefined;
-    const before = previous[changed]!;
-    const after = next[changed]!;
-    const replace = contiguousUtf16Replace(before.text, after.text);
-    if (replace === undefined) return undefined;
-    const resultingBlocks = next.map((block) => ({ ...block }));
-    return {
-      kind: "replace_block_selection",
-      manuscript_block_id: before.manuscript_block_id,
-      from: replace.from,
-      to: replace.to,
-      text: replace.text,
-      resultingBlocks,
-      resultingBody: flattenChapterBody(resultingBlocks),
-    };
+    if (identitiesMatch && changed !== -1) {
+      const before = previous[changed]!;
+      const after = next[changed]!;
+      const replace = contiguousUtf16Replace(before.text, after.text);
+      if (replace === undefined) return undefined;
+      const resultingBlocks = next.map((block) => ({ ...block }));
+      return {
+        kind: "replace_block_selection",
+        manuscript_block_id: before.manuscript_block_id,
+        from: replace.from,
+        to: replace.to,
+        text: replace.text,
+        resultingBlocks,
+        resultingBody: flattenChapterBody(resultingBlocks),
+      };
+    }
   }
   if (next.length === previous.length + 1) {
     for (let index = 0; index < previous.length; index += 1) {
@@ -241,7 +249,6 @@ export function captureManuscriptChange(
         resultingBody: flattenChapterBody(resultingBlocks),
       };
     }
-    return undefined;
   }
   if (next.length === previous.length - 1) {
     for (let index = 0; index < next.length; index += 1) {

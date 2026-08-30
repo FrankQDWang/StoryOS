@@ -28,7 +28,7 @@ The adapter captures only a complete supported replacement. Hydration, Snapshot 
 
 The production page retires the textarea write path. The adapter sets Tiptap `injectCSS` to false so the editor does not write a style element through `innerHTML`. Paste, cut, and external-text drop use `text/plain` only. New pasted or dropped paragraphs receive new StoryOS UUID v7 identities; they do not reuse another Block identity. These choices keep the Trusted Types policy without a default policy. Enter splits one paragraph Block: the starting fragment keeps its Block ID, and the new right fragment receives a StoryOS UUID v7. Shift-Enter inserts U+000A in the same paragraph. Backspace at the start of a following paragraph joins adjacent Blocks: the left identity remains, and the right identity leaves current Authoritative State. A supported contiguous replacement across Blocks settles the complete selected range in one Author Edit Unit. Completed, cancelled, and repeated IME output persist only after composition confirmation. Move, retype, and Undo remain later tickets.
 
-This decision does not change `web_client_contract_revision`, IndexedDB meaning, or the Apply Author Edit command.
+This decision does not change `web_client_contract_revision`, IndexedDB meaning, or the Apply Author Edit command schema. One Author Edit Unit may apply an ordered list of the existing `ReplaceBlockSelection`, `SplitBlock`, and `JoinBlocks` primitives so a contiguous replacement across Blocks settles atomically.
 
 ## Considered options
 

@@ -3,7 +3,7 @@ import Document from "@tiptap/extension-document";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import UniqueID from "@tiptap/extension-unique-id";
-import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } from "@tiptap/pm/state";
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
@@ -153,6 +153,15 @@ export function storyosEditorProps(blockId: string) {
     },
     handleDrop: (view: EditorView, event: DragEvent) => {
       event.preventDefault();
+      const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
+      if (dropPos !== null) {
+        const $pos = view.state.doc.resolve(dropPos.pos);
+        if ($pos.parent.type.name === "paragraph") {
+          view.dispatch(view.state.tr.setSelection(
+            TextSelection.create(view.state.doc, dropPos.pos),
+          ));
+        }
+      }
       dispatchPlainTextReplacement(
         view,
         "drop",
