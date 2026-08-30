@@ -126,6 +126,21 @@ it("the production page uses the approved workspace without losing writing state
       && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
   }).toBe(true);
 
+  await expect.poll(() => {
+    const nextRoot = appRoot(frame);
+    const nextShell = workspace(frame);
+    const nextWindow = applicationWindow(frame);
+    const nextAssistant = nextShell.querySelector("[data-writing-assistant]");
+    const nextToggle = nextShell.querySelector("[data-assistant-toggle]");
+    const nextChapter = nextRoot.querySelector(
+      'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
+    );
+    return nextAssistant instanceof nextWindow.HTMLElement
+      && nextToggle instanceof nextWindow.HTMLButtonElement
+      && nextChapter !== null
+      && nextChapter.textContent === "Chapter A";
+  }, { timeout: 10_000 }).toBe(true);
+
   const root = appRoot(frame);
   const shell = workspace(frame);
   const childWindow = applicationWindow(frame);
