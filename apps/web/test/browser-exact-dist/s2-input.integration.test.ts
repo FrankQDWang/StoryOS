@@ -196,76 +196,100 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
     .toBe("0");
   expect(manuscriptBody(editor)).toBe("Hello");
 
-  editor.focus();
-  focusManuscriptEnd(editor, childWindow);
-  await applyTrustedInput({ operation: "enter" });
-  await expect.poll(() => editor.querySelectorAll("p").length, { timeout: 10_000 }).toBe(2);
-  await waitSaved(root, helloRevisionId);
-  const splitRevisionId = root.querySelector("[data-save-state]")
-    ?.getAttribute("data-authoritative-revision-id") ?? "";
-  await applyTrustedInput({ operation: "insert_text", text: "World" });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Hello\nWorld");
-  await waitSaved(root, splitRevisionId);
-  const split = await readRevision(frame, projectId, chapterId);
-  const rightId = split.blocks[1]?.manuscript_block_id;
-  expect(split.blocks[0]?.manuscript_block_id).toBe(leftId);
-  expect(rightId).toMatch(UUID);
-
   await updateClipboardPermission({ action: "grant" });
   await childWindow.navigator.clipboard.writeText("Alpha\nBeta");
   selectAll(editor, childWindow);
   await applyTrustedInput({ operation: "paste" });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Alpha\nBeta");
-  await waitSaved(root, split.revision_id);
-  const pasted = await readRevision(frame, projectId, chapterId);
-  expect(pasted.blocks.map((block) => block.text)).toEqual(["Alpha", "Beta"]);
-  expect(pasted.blocks[0]?.manuscript_block_id).toBe(leftId);
-  expect(pasted.blocks[1]?.manuscript_block_id).toMatch(UUID);
-  expect(pasted.blocks[1]?.manuscript_block_id).not.toBe(rightId);
+  await waitSaved(root, helloRevisionId);
+  const pastedOnce = await readRevision(frame, projectId, chapterId);
+  const firstMintedId = pastedOnce.blocks[1]?.manuscript_block_id;
+  expect(pastedOnce.blocks.map((block) => block.text)).toEqual(["Alpha", "Beta"]);
+  expect(pastedOnce.blocks[0]?.manuscript_block_id).toBe(leftId);
+  expect(firstMintedId).toMatch(UUID);
 
+  await childWindow.navigator.clipboard.writeText("Gamma\nDelta");
+  selectAll(editor, childWindow);
+  await applyTrustedInput({ operation: "paste" });
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gamma\nDelta");
+  await waitSaved(root, pastedOnce.revision_id);
+  const pasted = await readRevision(frame, projectId, chapterId);
+  const rightId = pasted.blocks[1]?.manuscript_block_id;
+  expect(pasted.blocks.map((block) => block.text)).toEqual(["Gamma", "Delta"]);
+  expect(pasted.blocks[0]?.manuscript_block_id).toBe(leftId);
+  expect(rightId).toMatch(UUID);
+  expect(rightId).not.toBe(firstMintedId);
+
+  const paragraphs = [...editor.querySelectorAll("p")];
+  const startText = paragraphs[0]?.firstChild;
+  const endText = paragraphs[1]?.firstChild;
+  if (!(startText instanceof childWindow.Text) || !(endText instanceof childWindow.Text)) {
+    throw new Error("the manuscript text nodes are missing");
+  }
+  const cutRange = editor.ownerDocument.createRange();
+  cutRange.setStart(startText, 1);
+  cutRange.setEnd(endText, 1);
+  const selection = childWindow.getSelection();
+  if (selection === null) throw new Error("the manuscript selection is unavailable");
   editor.focus();
+  selection.removeAllRanges();
+  selection.addRange(cutRange);
+  await applyTrustedInput({ operation: "cut" });
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gelta");
+  await waitSaved(root, pasted.revision_id);
+  const afterCutRevisionId = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+
   focusManuscriptEnd(editor, childWindow);
+  const imeOffset = () => manuscriptBody(editor).length;
   await applyImeComposition({
     text: "取消",
-    replacementStart: 4,
-    replacementEnd: 4,
+    replacementStart: imeOffset(),
+    replacementEnd: imeOffset(),
     selectionStart: 2,
     selectionEnd: 2,
   });
   await applyImeComposition({
     text: "",
-    replacementStart: 4,
-    replacementEnd: 4,
+    replacementStart: imeOffset(),
+    replacementEnd: imeOffset(),
     selectionStart: 0,
     selectionEnd: 0,
   });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Alpha\nBeta");
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gelta");
   expect(root.querySelector("[data-save-state]")?.getAttribute("data-unsettled-intent-count"))
     .toBe("0");
 
   await applyImeComposition({
     text: "中文",
-    replacementStart: 4,
-    replacementEnd: 4,
+    replacementStart: imeOffset(),
+    replacementEnd: imeOffset(),
     selectionStart: 2,
     selectionEnd: 2,
   });
   await applyTrustedInput({ operation: "insert_text", text: "中文" });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Alpha\nBeta中文");
-  await waitSaved(root, pasted.revision_id);
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gelta中文");
+  await waitSaved(root, afterCutRevisionId);
   const afterFirstIme = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
   await applyImeComposition({
     text: "再",
-    replacementStart: 2,
-    replacementEnd: 2,
+    replacementStart: imeOffset(),
+    replacementEnd: imeOffset(),
     selectionStart: 1,
     selectionEnd: 1,
   });
   await applyTrustedInput({ operation: "insert_text", text: "再" });
-  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Alpha\nBeta中文再");
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gelta中文再");
   await waitSaved(root, afterFirstIme);
   const afterImeRevisionId = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+
+  focusManuscriptEnd(editor, childWindow);
+  await applyTrustedInput({ operation: "backspace" });
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Gelta中文");
+  await waitSaved(root, afterImeRevisionId);
+  const afterDeleteRevisionId = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
 
   const transfer = new childWindow.DataTransfer();
@@ -276,7 +300,7 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
     dataTransfer: transfer,
   }));
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toMatch(/Drop/);
-  await waitSaved(root, afterImeRevisionId);
+  await waitSaved(root, afterDeleteRevisionId);
 
   await destroyApplicationFrame(frame);
   const reopened = document.createElement("iframe");
@@ -293,10 +317,11 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
   }, { timeout: 10_000 }).toBe(true);
   const reopenedRevision = await readRevision(reopened, projectId, chapterId);
   expect(reopenedRevision.blocks[0]?.manuscript_block_id).toBe(leftId);
+  expect(reopenedRevision.blocks.some((block) => block.manuscript_block_id === firstMintedId))
+    .toBe(false);
   expect(reopenedRevision.blocks.some((block) => block.manuscript_block_id === rightId))
     .toBe(false);
-  expect(reopenedRevision.body).toContain("Alpha");
+  expect(reopenedRevision.body).toContain("Gelta");
   expect(reopenedRevision.body).toContain("中文");
-  expect(reopenedRevision.body).toContain("再");
   expect(reopenedRevision.body).toContain("Drop");
 });

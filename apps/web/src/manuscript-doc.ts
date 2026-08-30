@@ -226,18 +226,18 @@ export function captureManuscriptChange(
       const right = next[index + 1];
       if (left === undefined || right === undefined) return undefined;
       if (left.manuscript_block_id !== before.manuscript_block_id) continue;
-      if (right.manuscript_block_id === before.manuscript_block_id) return undefined;
-      if (left.text + right.text !== before.text) return undefined;
+      if (right.manuscript_block_id === before.manuscript_block_id) continue;
+      if (left.text + right.text !== before.text) continue;
       const prefix = previous.slice(0, index);
       const suffix = previous.slice(index + 1);
       const nextPrefix = next.slice(0, index);
       const nextSuffix = next.slice(index + 2);
       if (!paragraphsEqual(prefix, nextPrefix) || !paragraphsEqual(suffix, nextSuffix)) {
-        return undefined;
+        continue;
       }
       if (next.some((block, blockIndex) =>
         blockIndex !== index + 1 && block.manuscript_block_id === right.manuscript_block_id)) {
-        return undefined;
+        continue;
       }
       const resultingBlocks = next.map((block) => ({ ...block }));
       return {
@@ -257,13 +257,13 @@ export function captureManuscriptChange(
       const joined = next[index];
       if (left === undefined || right === undefined || joined === undefined) return undefined;
       if (joined.manuscript_block_id !== left.manuscript_block_id) continue;
-      if (joined.text !== left.text + right.text) return undefined;
+      if (joined.text !== left.text + right.text) continue;
       const prefix = previous.slice(0, index);
       const suffix = previous.slice(index + 2);
       const nextPrefix = next.slice(0, index);
       const nextSuffix = next.slice(index + 1);
       if (!paragraphsEqual(prefix, nextPrefix) || !paragraphsEqual(suffix, nextSuffix)) {
-        return undefined;
+        continue;
       }
       const resultingBlocks = next.map((block) => ({ ...block }));
       return {
