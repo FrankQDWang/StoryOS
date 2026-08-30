@@ -106,6 +106,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     && !server.username && !server.password, "the production fixture needs an exact loopback origin");
   const origin = server.origin;
   const pages: Page[] = [];
+  let releaseWriterEdits = (): void => {};
   try {
     await context.addCookies([{
       name: "storyos_session", value: "session-a", url: `${origin}/`,
@@ -166,20 +167,21 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const secondary = await getEditorSession({ ...options, editorSessionId: observerId });
     assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session",
       observed_writer_generation: prior.writer.writer_generation });
-    let releaseWriterEdits = (): void => {};
     const writerEditsHeld = new Promise<void>((resolve) => {
       releaseWriterEdits = resolve;
     });
-    await writer.route("**/manuscript/author-edits", async (route) => {
+    const posted = writer.waitForEvent("request", {
+      predicate: (request) => request.method() === "POST"
+        && request.url().includes("/manuscript/author-edits"),
+    });
+    await writer.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
       if (route.request().method() === "POST") await writerEditsHeld;
       await route.continue();
     });
-    const posted = writer.waitForRequest((request) => request.method() === "POST"
-      && request.url().includes("/manuscript/author-edits"));
     await writer.locator(MANUSCRIPT_EDITOR).click();
     await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
     await writer.keyboard.insertText("Unsettled before takeover.");
-    const held = await posted;
+    await writer.locator('[data-save-state="saving"]').waitFor();
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
@@ -190,7 +192,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
       observed_writer_generation: generation });
     assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     releaseWriterEdits();
-    const refused = await held.response();
+    const refused = await (await posted).response();
     assert.ok(refused !== null, "the prior writer must receive a late Author Edit result");
     assert.equal(refused.status(), 412);
     const problem: unknown = await refused.json();
@@ -227,6 +229,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
     assert.ok(requests.every((url) => !url.pathname.startsWith("/@vite/")));
   } finally {
+    releaseWriterEdits();
     await Promise.all(pages.map((page) => page.close()));
     await context.clearCookies({ name: "storyos_session" });
   }
