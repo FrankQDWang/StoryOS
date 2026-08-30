@@ -471,4 +471,3 @@ ALTER TABLE storyos.author_command_admission_outcome_unknown_observations
     'archiveProject', 'createVolume', 'createChapter', 'updateVolume', 'updateChapter',
     'setCurrentChapter', 'undoLatestAuthorAction'
   ));
-
