@@ -294,11 +294,15 @@ it("settles IME, clipboard, drop, and contiguous Block replacement without reusi
 
   const transfer = new childWindow.DataTransfer();
   transfer.setData("text/plain", "Drop");
-  editor.dispatchEvent(new childWindow.DragEvent("drop", {
+  const rect = editor.getBoundingClientRect();
+  const dropEvent = new childWindow.DragEvent("drop", {
     bubbles: true,
     cancelable: true,
-    dataTransfer: transfer,
-  }));
+    clientX: rect.left + rect.width / 2,
+    clientY: rect.top + rect.height / 2,
+  });
+  Object.defineProperty(dropEvent, "dataTransfer", { value: transfer });
+  editor.dispatchEvent(dropEvent);
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toMatch(/Drop/);
   await waitSaved(root, afterDeleteRevisionId);
 
