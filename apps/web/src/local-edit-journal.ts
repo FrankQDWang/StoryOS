@@ -707,7 +707,9 @@ function pendingProjectionFromSnapshot(
         : hasAppliedSettlement ? "saved" : "clean",
     unsettled_intent_count: activeRecords.length,
     authoritative_revision_id: base.authoritative_head_revision_id,
-    author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence ?? "",
+    ...(workspace.session.author_undo_frontier_sequence
+      ? { author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence }
+      : {}),
   };
 }
 
@@ -1241,7 +1243,9 @@ async function persistAuthorEditUnit(
     save_state: "saving",
     unsettled_intent_count: projection.unsettled_intent_count + 1,
     authoritative_revision_id: projection.authoritative_revision_id,
-    author_undo_frontier_sequence: projection.author_undo_frontier_sequence ?? "",
+    ...(projection.author_undo_frontier_sequence
+      ? { author_undo_frontier_sequence: projection.author_undo_frontier_sequence }
+      : {}),
   };
 }
 
