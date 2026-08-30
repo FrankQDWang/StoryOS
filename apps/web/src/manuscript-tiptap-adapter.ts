@@ -1,5 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import Document from "@tiptap/extension-document";
+import Heading from "@tiptap/extension-heading";
 import Paragraph from "@tiptap/extension-paragraph";
 import Text from "@tiptap/extension-text";
 import UniqueID from "@tiptap/extension-unique-id";
@@ -42,10 +43,17 @@ export function originFromTransaction(
   edit: { from: number; to: number; text: string },
 ): InputOrigin {
   const origin: unknown = transaction.getMeta(STORYOS_ORIGIN);
-  if (origin === "paste" || origin === "cut" || origin === "drop") return origin;
+  if (origin === "paste" || origin === "cut" || origin === "drop"
+    || origin === "move_block" || origin === "retype_block") {
+    return origin;
+  }
   if (edit.text.length === 0 && edit.to > edit.from) return "deletion";
   if (edit.to > edit.from) return "selection_replacement";
   return "typing";
+}
+
+function isBlockNode(name: string): boolean {
+  return name === "paragraph" || name === "heading";
 }
 
 function insertNewline(view: EditorView): boolean {
@@ -55,29 +63,66 @@ function insertNewline(view: EditorView): boolean {
 }
 
 function splitParagraphTransaction(state: EditorState, newId: string): Transaction | undefined {
-  if (state.selection.$from.parent.type.name !== "paragraph") return undefined;
+  if (!isBlockNode(state.selection.$from.parent.type.name)) return undefined;
   if (!state.selection.empty) return undefined;
   const splitPos = state.selection.from;
   const transaction = state.tr.split(splitPos);
   const newParagraphPos = splitPos + 1;
   const newParagraph = transaction.doc.nodeAt(newParagraphPos);
-  if (newParagraph?.type.name !== "paragraph") {
+  const paragraph = transaction.doc.type.schema.nodes.paragraph;
+  if (newParagraph === null || !isBlockNode(newParagraph.type.name)
+    || paragraph === undefined) {
     return undefined;
   }
-  return transaction.setNodeMarkup(newParagraphPos, undefined, {
-    ...newParagraph.attrs,
+  return transaction.setNodeMarkup(newParagraphPos, paragraph, {
     id: newId,
   });
 }
 
+function moveCurrentBlock(view: EditorView, delta: -1 | 1): boolean {
+  const blocks = readManuscriptParagraphs(view.state.doc);
+  if (blocks === undefined) return true;
+  const $from = view.state.selection.$from;
+  if (!isBlockNode($from.parent.type.name)) return true;
+  const fromIndex = $from.index(0);
+  const toIndex = fromIndex + delta;
+  if (toIndex < 0 || toIndex >= blocks.length) return true;
+  const next = blocks.map((block) => ({ ...block }));
+  const [block] = next.splice(fromIndex, 1);
+  if (block === undefined) return true;
+  next.splice(toIndex, 0, block);
+  const node = view.state.schema.nodeFromJSON(manuscriptBlocksJson(next));
+  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, node.content);
+  transaction.setMeta(STORYOS_ORIGIN, "move_block");
+  view.dispatch(transaction);
+  return true;
+}
+
+function retypeCurrentBlock(view: EditorView): boolean {
+  const $from = view.state.selection.$from;
+  if (!isBlockNode($from.parent.type.name)) return true;
+  const heading = view.state.schema.nodes.heading;
+  const paragraph = view.state.schema.nodes.paragraph;
+  if (heading === undefined || paragraph === undefined) return true;
+  const nextType = $from.parent.type.name === "heading" ? paragraph : heading;
+  const attrs = nextType.name === "heading"
+    ? { ...$from.parent.attrs, level: 1 }
+    : { id: $from.parent.attrs.id };
+  const transaction = view.state.tr.setNodeMarkup($from.before($from.depth), nextType, attrs);
+  transaction.setMeta(STORYOS_ORIGIN, "retype_block");
+  view.dispatch(transaction);
+  return true;
+}
+
 export function storyosManuscriptExtensions(blockId: string) {
   return [
-    Document.extend({ content: "paragraph+" }),
+    Document.extend({ content: "(paragraph | heading)+" }),
     Paragraph,
+    Heading.configure({ levels: [1] }),
     Text,
     UniqueID.configure({
       attributeName: "id",
-      types: ["paragraph"],
+      types: ["paragraph", "heading"],
       generateID: () => createJournalUuid(),
       updateDocument: false,
     }),
@@ -101,6 +146,9 @@ export function storyosManuscriptExtensions(blockId: string) {
             });
           },
           "Shift-Enter": () => insertNewline(this.editor.view),
+          "Mod-ArrowUp": () => moveCurrentBlock(this.editor.view, -1),
+          "Mod-ArrowDown": () => moveCurrentBlock(this.editor.view, 1),
+          "Mod-Alt-1": () => retypeCurrentBlock(this.editor.view),
           "Mod-b": () => true,
           "Mod-i": () => true,
           "Mod-u": () => true,
@@ -156,7 +204,7 @@ export function storyosEditorProps(blockId: string) {
       const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
       if (dropPos !== null) {
         const $pos = view.state.doc.resolve(dropPos.pos);
-        if ($pos.parent.type.name === "paragraph") {
+        if ($pos.parent.type.name === "paragraph" || $pos.parent.type.name === "heading") {
           view.dispatch(view.state.tr.setSelection(
             TextSelection.create(view.state.doc, dropPos.pos),
           ));
@@ -196,7 +244,8 @@ function dispatchPlainTextReplacement(
   const { from, to } = view.state.selection;
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
-  if ($from.parent.type.name !== "paragraph" || $to.parent.type.name !== "paragraph") {
+  if ($from.parent.type.name !== "paragraph" && $from.parent.type.name !== "heading"
+    || $to.parent.type.name !== "paragraph" && $to.parent.type.name !== "heading") {
     return;
   }
   const next = paragraphsFromPlainTextReplacement(

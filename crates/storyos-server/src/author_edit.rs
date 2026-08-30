@@ -139,6 +139,27 @@ pub(super) async fn apply_author_edit(
                         left_manuscript_block_id: left_manuscript_block_id.clone(),
                         right_manuscript_block_id: right_manuscript_block_id.clone(),
                     },
+                    contracts::AuthorEditPrimitive::MoveBlock {
+                        manuscript_block_id,
+                        to_index,
+                    } => storyos_core::AuthorEditPrimitive::MoveBlock {
+                        manuscript_block_id: manuscript_block_id.clone(),
+                        to_index: *to_index,
+                    },
+                    contracts::AuthorEditPrimitive::RetypeBlock {
+                        manuscript_block_id,
+                        block_kind,
+                    } => storyos_core::AuthorEditPrimitive::RetypeBlock {
+                        manuscript_block_id: manuscript_block_id.clone(),
+                        block_kind: match block_kind {
+                            contracts::ManuscriptBlockKind::Paragraph => {
+                                storyos_core::ManuscriptBlockKind::Paragraph
+                            }
+                            contracts::ManuscriptBlockKind::Heading => {
+                                storyos_core::ManuscriptBlockKind::Heading
+                            }
+                        },
+                    },
                 })
                 .collect(),
             selection_snapshot: storyos_core::SelectionSnapshot {

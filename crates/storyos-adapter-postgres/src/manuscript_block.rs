@@ -7,7 +7,10 @@ use uuid::Uuid;
 const VERSIONED_PAYLOAD_FORMAT: &str = "storyos.manuscript-payload.v1";
 
 pub(crate) fn persist_canonical_bytes(blocks: &[ManuscriptBlock]) -> String {
-    if blocks.len() <= 1 {
+    let only_paragraphs = blocks
+        .iter()
+        .all(|block| block.block_kind == ManuscriptBlockKind::Paragraph);
+    if blocks.len() <= 1 && only_paragraphs {
         return blocks
             .first()
             .map(|block| block.text.clone())
@@ -20,7 +23,10 @@ pub(crate) fn persist_canonical_bytes(blocks: &[ManuscriptBlock]) -> String {
         "blocks": blocks.iter().map(|block| {
             serde_json::json!({
                 "manuscript_block_id": block.manuscript_block_id,
-                "block_kind": "paragraph",
+                "block_kind": match block.block_kind {
+                    ManuscriptBlockKind::Paragraph => "paragraph",
+                    ManuscriptBlockKind::Heading => "heading",
+                },
                 "text": block.text,
             })
         }).collect::<Vec<_>>(),
@@ -49,12 +55,14 @@ fn parse_versioned_payload(body: &str) -> Option<Vec<ManuscriptBlock>> {
     let encoded = value.get("blocks")?.as_array()?;
     let mut blocks = Vec::with_capacity(encoded.len());
     for block in encoded {
-        if block.get("block_kind")?.as_str()? != "paragraph" {
-            return None;
-        }
+        let kind = match block.get("block_kind")?.as_str()? {
+            "paragraph" => ManuscriptBlockKind::Paragraph,
+            "heading" => ManuscriptBlockKind::Heading,
+            _ => return None,
+        };
         blocks.push(ManuscriptBlock {
             manuscript_block_id: block.get("manuscript_block_id")?.as_str()?.to_owned(),
-            block_kind: ManuscriptBlockKind::Paragraph,
+            block_kind: kind,
             text: block.get("text")?.as_str()?.to_owned(),
         });
     }

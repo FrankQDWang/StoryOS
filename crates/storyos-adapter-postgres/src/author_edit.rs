@@ -400,6 +400,8 @@ async fn classify_author_edit(
                 AuthorEditPrimitive::ReplaceBlockSelection { .. }
                     | AuthorEditPrimitive::SplitBlock { .. }
                     | AuthorEditPrimitive::JoinBlocks { .. }
+                    | AuthorEditPrimitive::MoveBlock { .. }
+                    | AuthorEditPrimitive::RetypeBlock { .. }
             )
         })
     });

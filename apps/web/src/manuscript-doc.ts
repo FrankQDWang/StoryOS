@@ -7,6 +7,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12
 export interface ManuscriptParagraph {
   manuscript_block_id: string;
   text: string;
+  block_kind?: "paragraph" | "heading";
 }
 
 export type CapturedManuscriptEdit =
@@ -42,6 +43,20 @@ export type CapturedManuscriptEdit =
     to: number;
     resultingBody: string;
     resultingBlocks: ManuscriptParagraph[];
+  }
+  | {
+    kind: "move_block";
+    manuscript_block_id: string;
+    to_index: number;
+    resultingBody: string;
+    resultingBlocks: ManuscriptParagraph[];
+  }
+  | {
+    kind: "retype_block";
+    manuscript_block_id: string;
+    block_kind: "paragraph" | "heading";
+    resultingBody: string;
+    resultingBlocks: ManuscriptParagraph[];
   };
 
 export type ContiguousReplacementPrimitive =
@@ -62,6 +77,16 @@ export type ContiguousReplacementPrimitive =
     kind: "join_blocks";
     left_manuscript_block_id: string;
     right_manuscript_block_id: string;
+  }
+  | {
+    kind: "move_block";
+    manuscript_block_id: string;
+    to_index: number;
+  }
+  | {
+    kind: "retype_block";
+    manuscript_block_id: string;
+    block_kind: "paragraph" | "heading";
   };
 
 export function flattenChapterBody(blocks: readonly { text: string }[]): string {
@@ -72,8 +97,10 @@ export function manuscriptBlocksJson(blocks: readonly ManuscriptParagraph[]) {
   return {
     type: "doc",
     content: blocks.map((block) => ({
-      type: "paragraph",
-      attrs: { id: block.manuscript_block_id },
+      type: block.block_kind === "heading" ? "heading" : "paragraph",
+      attrs: block.block_kind === "heading"
+        ? { id: block.manuscript_block_id, level: 1 }
+        : { id: block.manuscript_block_id },
       ...(block.text.length === 0 ? {} : { content: [{ type: "text", text: block.text }] }),
     })),
   };
@@ -107,14 +134,20 @@ export function readManuscriptParagraphs(doc: Node): ManuscriptParagraph[] | und
   const seen = new Set<string>();
   for (let index = 0; index < doc.childCount; index += 1) {
     const paragraph = doc.child(index);
-    if (paragraph.type.name !== "paragraph") return undefined;
+    if (paragraph.type.name !== "paragraph" && paragraph.type.name !== "heading") {
+      return undefined;
+    }
     const id: unknown = paragraph.attrs.id;
     const text = paragraphText(paragraph);
     if (typeof id !== "string" || !UUID.test(id) || text === undefined || seen.has(id)) {
       return undefined;
     }
     seen.add(id);
-    blocks.push({ manuscript_block_id: id, text });
+    blocks.push({
+      manuscript_block_id: id,
+      text,
+      block_kind: paragraph.type.name === "heading" ? "heading" : "paragraph",
+    });
   }
   return blocks;
 }
@@ -132,7 +165,8 @@ export function paragraphsEqual(
   return left.length === right.length
     && left.every((block, index) =>
       block.manuscript_block_id === right[index]?.manuscript_block_id
-      && block.text === right[index]?.text);
+      && block.text === right[index]?.text
+      && (block.block_kind ?? "paragraph") === (right[index]?.block_kind ?? "paragraph"));
 }
 
 export function isSupportedManuscriptDoc(previous: Node, next: Node, blockId: string): boolean {
@@ -276,7 +310,86 @@ export function captureManuscriptChange(
       };
     }
   }
+  const moved = captureMove(previous, next);
+  if (moved !== undefined) return moved;
+  const retyped = captureRetype(previous, next);
+  if (retyped !== undefined) return retyped;
   return encodeContiguousReplacement(previous, next);
+}
+
+function blockKind(block: ManuscriptParagraph): "paragraph" | "heading" {
+  return block.block_kind ?? "paragraph";
+}
+
+function captureMove(
+  previous: readonly ManuscriptParagraph[],
+  next: readonly ManuscriptParagraph[],
+): CapturedManuscriptEdit | undefined {
+  if (previous.length !== next.length || previous.length < 2) return undefined;
+  const previousById = new Map(
+    previous.map((block) => [block.manuscript_block_id, block] as const),
+  );
+  if (next.some((block) => {
+    const before = previousById.get(block.manuscript_block_id);
+    return before === undefined
+      || before.text !== block.text
+      || blockKind(before) !== blockKind(block);
+  })) {
+    return undefined;
+  }
+  if (previous.every((block, index) =>
+    block.manuscript_block_id === next[index]?.manuscript_block_id)) {
+    return undefined;
+  }
+  const movedId = next.find((block, index) =>
+    block.manuscript_block_id !== previous[index]?.manuscript_block_id)?.manuscript_block_id;
+  if (movedId === undefined) return undefined;
+  const fromIndex = previous.findIndex((block) => block.manuscript_block_id === movedId);
+  const toIndex = next.findIndex((block) => block.manuscript_block_id === movedId);
+  if (fromIndex < 0 || toIndex < 0) return undefined;
+  const simulated = previous.map((block) => ({ ...block }));
+  const [block] = simulated.splice(fromIndex, 1);
+  if (block === undefined) return undefined;
+  simulated.splice(toIndex, 0, block);
+  if (!paragraphsEqual(simulated, next)) return undefined;
+  const resultingBlocks = next.map((item) => ({ ...item }));
+  return {
+    kind: "move_block",
+    manuscript_block_id: movedId,
+    to_index: toIndex,
+    resultingBlocks,
+    resultingBody: flattenChapterBody(resultingBlocks),
+  };
+}
+
+function captureRetype(
+  previous: readonly ManuscriptParagraph[],
+  next: readonly ManuscriptParagraph[],
+): CapturedManuscriptEdit | undefined {
+  if (previous.length !== next.length) return undefined;
+  let changed = -1;
+  for (let index = 0; index < previous.length; index += 1) {
+    const before = previous[index];
+    const after = next[index];
+    if (before === undefined || after === undefined
+      || before.manuscript_block_id !== after.manuscript_block_id
+      || before.text !== after.text) {
+      return undefined;
+    }
+    if (blockKind(before) === blockKind(after)) continue;
+    if (changed !== -1) return undefined;
+    changed = index;
+  }
+  if (changed === -1) return undefined;
+  const after = next[changed]!;
+  const resultingBlocks = next.map((block) => ({ ...block }));
+  return {
+    kind: "retype_block",
+    manuscript_block_id: after.manuscript_block_id,
+    block_kind: blockKind(after),
+    resultingBlocks,
+    resultingBody: flattenChapterBody(resultingBlocks),
+  };
 }
 
 function encodeContiguousReplacement(
@@ -378,13 +491,13 @@ export function paragraphsFromPlainTextReplacement(
   if (parts.length <= 1) {
     return [
       ...prefix,
-      { manuscript_block_id: start.manuscript_block_id, text: head + (parts[0] ?? "") + tail },
+      { ...start, text: head + (parts[0] ?? "") + tail },
       ...suffix,
     ];
   }
   return [
     ...prefix,
-    { manuscript_block_id: start.manuscript_block_id, text: head + parts[0] },
+    { ...start, text: head + parts[0] },
     ...parts.slice(1, -1).map((part) => ({
       manuscript_block_id: mintId(),
       text: part,

@@ -53,11 +53,12 @@ const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
 function editorParagraphs(
   blocks: ProjectReadyViewProps["state"]["chapter"]["chapter"]["current_revision"]["blocks"],
-): { manuscript_block_id: string; text: string }[] {
+): { manuscript_block_id: string; text: string; block_kind: "paragraph" | "heading" }[] {
   return blocks
-    .filter((block) => block.block_kind === "paragraph")
+    .filter((block) => block.block_kind === "paragraph" || block.block_kind === "heading")
     .map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
+      block_kind: block.block_kind,
       text: block.text,
     }));
 }
@@ -242,6 +243,7 @@ function ProjectReadyView({
   const editorBlocks = selectedChapter.chapter.chapter_id === currentChapterId && pending !== null
     ? pending.blocks.map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
+      block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
       text: block.text,
     }))
     : editorParagraphs(selectedChapter.chapter.current_revision.blocks);

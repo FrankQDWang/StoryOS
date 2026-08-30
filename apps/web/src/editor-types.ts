@@ -24,7 +24,9 @@ export type InputOrigin =
   | "drop"
   | "composition_confirmation"
   | "split_block"
-  | "join_blocks";
+  | "join_blocks"
+  | "move_block"
+  | "retype_block";
 
 export interface JournalPartition {
   journal_partition_id: string;

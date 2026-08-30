@@ -57,6 +57,9 @@ export const storyOSBrowserCommands = {
           delete: "Delete",
           enter: "Enter",
           paste: process.platform === "darwin" ? "Meta+V" : "Control+V",
+          move_block_up: process.platform === "darwin" ? "Meta+ArrowUp" : "Control+ArrowUp",
+          move_block_down: process.platform === "darwin" ? "Meta+ArrowDown" : "Control+ArrowDown",
+          retype_block: process.platform === "darwin" ? "Meta+Alt+1" : "Control+Alt+1",
         }[request.operation];
         await context.page.keyboard.press(key);
       }

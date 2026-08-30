@@ -8,7 +8,7 @@ This decision records the production Protected Web Client editor adoption requir
 
 ## Decision
 
-The production manuscript surface uses Tiptap 3.27.3 and the ProseMirror packages re-exported by `@tiptap/pm` 3.27.3. StoryOS owns the adapter. Tiptap is never Authoritative State. The supported write shape is one or more ordered paragraph Manuscript Blocks. Author input becomes one complete `ReplaceBlockSelection`, `SplitBlock`, or `JoinBlocks` intent, then settles through the existing Local Edit Journal, Admission, Core, and PostgreSQL path.
+The production manuscript surface uses Tiptap 3.27.3 and the ProseMirror packages re-exported by `@tiptap/pm` 3.27.3. StoryOS owns the adapter. Tiptap is never Authoritative State. The supported write shape is one or more ordered paragraph or heading Manuscript Blocks. Author input becomes one complete `ReplaceBlockSelection`, `SplitBlock`, `JoinBlocks`, `MoveBlock`, or `RetypeBlock` intent, then settles through the existing Local Edit Journal, Admission, Core, and PostgreSQL path.
 
 The exact direct production package graph is:
 
@@ -17,28 +17,29 @@ The exact direct production package graph is:
 - `@tiptap/pm` 3.27.3
 - `@tiptap/extension-document` 3.27.3
 - `@tiptap/extension-paragraph` 3.27.3
+- `@tiptap/extension-heading` 3.27.3
 - `@tiptap/extension-text` 3.27.3
 - `@tiptap/extension-unique-id` 3.27.3
 
 `@tiptap/pm` 3.27.3 re-exports ProseMirror, including `prosemirror-model` 1.25.11, `prosemirror-state` 1.4.4, `prosemirror-view` 1.42.3, and `prosemirror-transform` 1.12.0. UniqueID depends on `uuid` 14.0.2. All of these packages use the MIT license. StoryOS does not import StarterKit, History, marks, or list extensions in this slice.
 
-UniqueID declares the paragraph `id` attribute. Core owns the Manuscript Block identity. The adapter writes that identity into the document, sets UniqueID `generateID` to a StoryOS UUID v7, and sets UniqueID `updateDocument` to `false`, so UniqueID does not mint a new id after hydration.
+UniqueID declares the paragraph and heading `id` attributes. Core owns the Manuscript Block identity. The adapter writes that identity into the document, sets UniqueID `generateID` to a StoryOS UUID v7, and sets UniqueID `updateDocument` to `false`, so UniqueID does not mint a new id after hydration.
 
 The adapter captures only a complete supported replacement. Hydration, Snapshot installation, decoration, and other non-edit transactions create no author intent. An unsupported transaction is refused. The editor document stays at the previous supported state, and recovery material is not partially edited.
 
-The production page retires the textarea write path. The adapter sets Tiptap `injectCSS` to false so the editor does not write a style element through `innerHTML`. Paste, cut, and external-text drop use `text/plain` only. New pasted or dropped paragraphs receive new StoryOS UUID v7 identities; they do not reuse another Block identity. These choices keep the Trusted Types policy without a default policy. Enter splits one paragraph Block: the starting fragment keeps its Block ID, and the new right fragment receives a StoryOS UUID v7. Shift-Enter inserts U+000A in the same paragraph. Backspace at the start of a following paragraph joins adjacent Blocks: the left identity remains, and the right identity leaves current Authoritative State. A supported contiguous replacement across Blocks settles the complete selected range in one Author Edit Unit. Completed, cancelled, and repeated IME output persist only after composition confirmation. Move, retype, and Undo remain later tickets.
+The production page retires the textarea write path. The adapter sets Tiptap `injectCSS` to false so the editor does not write a style element through `innerHTML`. Paste, cut, and external-text drop use `text/plain` only. New pasted or dropped paragraphs receive new StoryOS UUID v7 identities; they do not reuse another Block identity. These choices keep the Trusted Types policy without a default policy. Enter splits one Block: the starting fragment keeps its Block ID, and the new right fragment is a paragraph with a StoryOS UUID v7. Shift-Enter inserts U+000A in the same Block. Backspace at the start of a following Block joins adjacent Blocks: the left identity remains, and the right identity leaves current Authoritative State. A supported contiguous replacement across Blocks settles the complete selected range in one Author Edit Unit. Completed, cancelled, and repeated IME output persist only after composition confirmation. Mod-ArrowUp and Mod-ArrowDown move the current Block and keep its identity. Mod-Alt-1 changes paragraph and heading one-to-one and keeps its identity. Copy and paste never reuse a source Block identity as a move. Undo remains a later ticket.
 
-This decision does not change `web_client_contract_revision`, IndexedDB meaning, or the Apply Author Edit command schema. One Author Edit Unit may apply an ordered list of the existing `ReplaceBlockSelection`, `SplitBlock`, and `JoinBlocks` primitives so a contiguous replacement across Blocks settles atomically.
+This decision does not change `web_client_contract_revision` or IndexedDB database version. Apply Author Edit adds `MoveBlock` and `RetypeBlock` primitives and heading as a Manuscript Block kind. Journal reconstruction stays on database version 3: a heading checkpoint uses the existing JSON Block array, and a paragraph-only single Block still uses the display body string. One Author Edit Unit may apply an ordered list of the supported primitives so a contiguous replacement across Blocks settles atomically.
 
 ## Considered options
 
 - Keeping the production textarea was rejected because `S2-EVD-009` says textarea-only evidence cannot satisfy `S2-REQ-009`.
 - Promoting `prototypes/tiptap-proposal-lab` was rejected because that tree is Prototype Evidence, not the Protected Web Client.
-- Adopting StarterKit was rejected because this slice supports paragraph Block replacement, split, and join, not headings, lists, marks, or editor History.
+- Adopting StarterKit was rejected because this slice supports paragraph and heading Block replacement, split, join, move, and one-to-one retype, not lists, marks, or editor History.
 - Allowing UniqueID to generate ids was rejected because Manuscript Block identity is Core-owned and must survive settlement and reload.
 
 ## Consequences
 
 - Production exact-dist and production-host journeys bind to `[data-manuscript-editor]`, not `textarea`.
-- Later move, retype, and Undo tickets extend this adapter. They must not introduce a second write path.
+- Later Undo tickets extend this adapter. They must not introduce a second write path.
 - A Tiptap or ProseMirror major upgrade is a new adoption review. It must re-pin this graph and re-run the production replacement journey.

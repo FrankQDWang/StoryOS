@@ -92,6 +92,14 @@ pub enum AuthorEditPrimitive {
         left_manuscript_block_id: String,
         right_manuscript_block_id: String,
     },
+    MoveBlock {
+        manuscript_block_id: String,
+        to_index: u32,
+    },
+    RetypeBlock {
+        manuscript_block_id: String,
+        block_kind: crate::ManuscriptBlockKind,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
