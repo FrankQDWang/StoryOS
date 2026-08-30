@@ -20,6 +20,10 @@ it("returns the valid append projection without a second Journal reconstruction"
 
     expect(projection).toEqual({
       body: "Base!?",
+      blocks: [{
+        ...test.workspace.session.base_snapshot.materialized_revision.blocks[0]!,
+        text: "Base!?",
+      }],
       save_state: "saving",
       unsettled_intent_count: 2,
       authoritative_revision_id:

@@ -81,6 +81,15 @@ pub enum AuthorEditPrimitive {
         to: u32,
         text: String,
     },
+    SplitBlock {
+        manuscript_block_id: String,
+        offset: u32,
+        new_manuscript_block_id: String,
+    },
+    JoinBlocks {
+        left_manuscript_block_id: String,
+        right_manuscript_block_id: String,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

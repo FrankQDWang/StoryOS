@@ -135,6 +135,7 @@ export function selectedChapterSurface(options: {
     save_state: saveState,
     pending: {
       body: opened.chapter.current_revision.body,
+      blocks: opened.chapter.current_revision.blocks,
       save_state: saveState,
       unsettled_intent_count: 0,
       authoritative_revision_id: opened.chapter.current_revision.revision_id,

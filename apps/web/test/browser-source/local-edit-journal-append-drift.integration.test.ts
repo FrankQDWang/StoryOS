@@ -48,8 +48,16 @@ it.each(["intent_payload", "project_allocator"] as const)(
 
     if (change === "project_allocator") {
       const pending = await append;
-      expect(pending).toEqual({ body: "Base!?", save_state: "saving", unsettled_intent_count: 2,
-        authoritative_revision_id: test.workspace.session.base_snapshot.authoritative_head_revision_id });
+      expect(pending).toEqual({
+        body: "Base!?",
+        blocks: [{
+          ...test.workspace.session.base_snapshot.materialized_revision.blocks[0]!,
+          text: "Base!?",
+        }],
+        save_state: "saving",
+        unsettled_intent_count: 2,
+        authoritative_revision_id: test.workspace.session.base_snapshot.authoritative_head_revision_id,
+      });
       const appended = await readJournalSnapshot(test.workspace);
       expect(appended.records[0]).toEqual(before.records[0]);
       expect(appended.records.map((record) => ({ sequence: record.local_intent_sequence,

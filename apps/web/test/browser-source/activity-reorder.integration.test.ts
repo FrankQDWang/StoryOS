@@ -115,7 +115,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
       frame("cursor-a", eventA),
     ]);
     expect(await readProjectActivityIngest(workspace)).toEqual(contiguous);
-    expect(await rebuildPendingProjection(workspace)).toEqual(expectedProjection);
+    expect(await rebuildPendingProjection(workspace)).toMatchObject(expectedProjection);
     workspace.database.close();
 
     await deleteJournal(scenario.journalName);

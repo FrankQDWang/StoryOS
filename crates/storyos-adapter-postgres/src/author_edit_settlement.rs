@@ -4,20 +4,26 @@ use storyos_application::{
 };
 use storyos_core::{
     ApplyAuthorEditResult, AuthorEditConflict, AuthorEditNoEffect, AuthorEditRefusal,
+    ManuscriptBlock,
 };
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::author_edit::{author_edit_database_error, parse_u64, sha256_hex};
+use super::author_edit::{ClassifiedAuthorEdit, author_edit_database_error, parse_u64, sha256_hex};
 
 pub(super) async fn persist_author_edit_settlement(
     client: &Client,
     command: &ApplyAuthorEditCommand,
     current_revision_id: &str,
-    core_result: ApplyAuthorEditResult,
+    classified: ClassifiedAuthorEdit,
 ) -> Result<AuthorEditSettlement, AuthorEditError> {
-    let prepared = match core_result {
+    let prepared = match classified.result {
         ApplyAuthorEditResult::AuthoritativeApplied { body } => {
+            let persist_body = classified
+                .successor_blocks
+                .as_ref()
+                .map(|blocks| crate::manuscript_block::persist_canonical_bytes(blocks))
+                .unwrap_or(body);
             let counter_row = client
                 .query_one(
                     "INSERT INTO storyos.scope_counters AS counters
@@ -53,7 +59,8 @@ pub(super) async fn persist_author_edit_settlement(
                 command,
                 current_revision_id,
                 &ids,
-                &body,
+                &persist_body,
+                classified.successor_blocks.as_deref(),
                 authoritative_commit_sequence,
             )
             .await?;
@@ -63,7 +70,7 @@ pub(super) async fn persist_author_edit_settlement(
                 command.project_scope.project_id.as_ref(),
                 &command.chapter_id,
                 &ids.revision_id,
-                &body,
+                &persist_body,
             )
             .await
             .map_err(author_edit_database_error)?;
@@ -74,7 +81,7 @@ pub(super) async fn persist_author_edit_settlement(
             }
             PreparedSettlement::AuthoritativeApplied {
                 ids,
-                body,
+                body: crate::manuscript_block::display_body_from_stored(&persist_body, &blocks),
                 blocks,
                 author_action_sequence,
                 project_activity_position,
@@ -324,6 +331,7 @@ async fn persist_authority_change(
     current_revision_id: &str,
     ids: &AuthoritativeAppliedIds,
     body: &str,
+    successor_blocks: Option<&[ManuscriptBlock]>,
     authoritative_commit_sequence: u64,
 ) -> Result<(), AuthorEditError> {
     client
@@ -355,16 +363,29 @@ async fn persist_authority_change(
         )
         .await
         .map_err(author_edit_database_error)?;
-    let copied = crate::manuscript_block::copy_or_upgrade_revision_members(
-        client,
-        command.project_scope.owner_user_id.as_ref(),
-        command.project_scope.project_id.as_ref(),
-        &command.chapter_id,
-        current_revision_id,
-        &ids.revision_id,
-    )
-    .await
-    .map_err(author_edit_database_error)?;
+    let copied = if let Some(blocks) = successor_blocks {
+        crate::manuscript_block::persist_revision_members_from_blocks(
+            client,
+            command.project_scope.owner_user_id.as_ref(),
+            command.project_scope.project_id.as_ref(),
+            &command.chapter_id,
+            &ids.revision_id,
+            blocks,
+        )
+        .await
+        .map_err(author_edit_database_error)?
+    } else {
+        crate::manuscript_block::copy_or_upgrade_revision_members(
+            client,
+            command.project_scope.owner_user_id.as_ref(),
+            command.project_scope.project_id.as_ref(),
+            &command.chapter_id,
+            current_revision_id,
+            &ids.revision_id,
+        )
+        .await
+        .map_err(author_edit_database_error)?
+    };
     if copied == 0 {
         return Err(AuthorEditError::Unavailable(Box::new(
             std::io::Error::other("successor revision members were not copied"),

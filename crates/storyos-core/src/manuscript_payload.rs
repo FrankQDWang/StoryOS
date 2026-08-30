@@ -102,11 +102,7 @@ pub fn apply_versioned_author_edit(
             reason: AuthorEditRefusal::TargetMismatch,
         };
     }
-    if command.current_payload.schema_version != MANUSCRIPT_SCHEMA_VERSION
-        || command.current_payload.coordinate_version != COORDINATE_VERSION
-        || command.current_payload.blocks.len() != 1
-        || command.current_payload.blocks[0].block_kind != ManuscriptBlockKind::Paragraph
-    {
+    if !payload_is_supported(&command.current_payload) {
         return ApplyVersionedAuthorEditResult::Refused {
             reason: AuthorEditRefusal::UnsupportedIntentShape,
         };
@@ -118,37 +114,12 @@ pub fn apply_versioned_author_edit(
     }
     let mut payload = command.current_payload.clone();
     for unit in &command.author_edit_units {
-        let [
-            AuthorEditPrimitive::ReplaceBlockSelection {
-                manuscript_block_id,
-                from,
-                to,
-                text,
-            },
-        ] = unit.normalized_primitives.as_slice()
-        else {
-            return ApplyVersionedAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::UnsupportedIntentShape,
-            };
-        };
-        if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE
-            || unit.selection_snapshot.from != *from
-            || unit.selection_snapshot.to != *to
-        {
+        if unit.selection_snapshot.coordinate_profile != UTF16_COORDINATE_PROFILE {
             return ApplyVersionedAuthorEditResult::Refused {
                 reason: AuthorEditRefusal::InvalidSelection,
             };
         }
-        let Some(block) = payload
-            .blocks
-            .iter_mut()
-            .find(|block| block.manuscript_block_id == *manuscript_block_id)
-        else {
-            return ApplyVersionedAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection,
-            };
-        };
-        if let Err(reason) = replace_block_text(block, *from, *to, text) {
+        if let Err(reason) = apply_unit(&mut payload, unit) {
             return ApplyVersionedAuthorEditResult::Refused { reason };
         }
     }
@@ -159,6 +130,162 @@ pub fn apply_versioned_author_edit(
     } else {
         ApplyVersionedAuthorEditResult::AuthoritativeApplied { payload }
     }
+}
+
+/// Flatten current Block texts for the Chapter body wire field.
+pub fn chapter_display_body(blocks: &[ManuscriptBlock]) -> String {
+    blocks
+        .iter()
+        .map(|block| block.text.as_str())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn payload_is_supported(payload: &ManuscriptPayload) -> bool {
+    if payload.schema_version != MANUSCRIPT_SCHEMA_VERSION
+        || payload.coordinate_version != COORDINATE_VERSION
+        || payload.blocks.is_empty()
+        || payload
+            .blocks
+            .iter()
+            .any(|block| block.block_kind != ManuscriptBlockKind::Paragraph)
+    {
+        return false;
+    }
+    let mut ids: Vec<&str> = payload
+        .blocks
+        .iter()
+        .map(|block| block.manuscript_block_id.as_str())
+        .collect();
+    ids.sort_unstable();
+    ids.windows(2).all(|pair| pair[0] != pair[1])
+}
+
+fn apply_unit(
+    payload: &mut ManuscriptPayload,
+    unit: &AuthorEditUnit,
+) -> Result<(), AuthorEditRefusal> {
+    match unit.normalized_primitives.as_slice() {
+        [
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id,
+                from,
+                to,
+                text,
+            },
+        ] => {
+            if unit.selection_snapshot.from != *from || unit.selection_snapshot.to != *to {
+                return Err(AuthorEditRefusal::InvalidSelection);
+            }
+            let Some(block) = payload
+                .blocks
+                .iter_mut()
+                .find(|block| block.manuscript_block_id == *manuscript_block_id)
+            else {
+                return Err(AuthorEditRefusal::InvalidSelection);
+            };
+            replace_block_text(block, *from, *to, text)
+        }
+        [
+            AuthorEditPrimitive::SplitBlock {
+                manuscript_block_id,
+                offset,
+                new_manuscript_block_id,
+            },
+        ] => {
+            if unit.selection_snapshot.from != *offset || unit.selection_snapshot.to != *offset {
+                return Err(AuthorEditRefusal::InvalidSelection);
+            }
+            split_block(
+                payload,
+                manuscript_block_id,
+                *offset,
+                new_manuscript_block_id,
+            )
+        }
+        [
+            AuthorEditPrimitive::JoinBlocks {
+                left_manuscript_block_id,
+                right_manuscript_block_id,
+            },
+        ] => join_blocks(
+            payload,
+            left_manuscript_block_id,
+            right_manuscript_block_id,
+            &unit.selection_snapshot,
+        ),
+        _ => Err(AuthorEditRefusal::UnsupportedIntentShape),
+    }
+}
+
+fn split_block(
+    payload: &mut ManuscriptPayload,
+    manuscript_block_id: &str,
+    offset: u32,
+    new_manuscript_block_id: &str,
+) -> Result<(), AuthorEditRefusal> {
+    if new_manuscript_block_id == manuscript_block_id
+        || payload
+            .blocks
+            .iter()
+            .any(|block| block.manuscript_block_id == new_manuscript_block_id)
+    {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
+    let Some(index) = payload
+        .blocks
+        .iter()
+        .position(|block| block.manuscript_block_id == manuscript_block_id)
+    else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    let Some(byte) = utf16_offset_to_byte(&payload.blocks[index].text, offset) else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    let right_text = payload.blocks[index].text[byte..].to_owned();
+    payload.blocks[index].text.truncate(byte);
+    payload.blocks.insert(
+        index + 1,
+        ManuscriptBlock {
+            manuscript_block_id: new_manuscript_block_id.to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: right_text,
+        },
+    );
+    Ok(())
+}
+
+fn join_blocks(
+    payload: &mut ManuscriptPayload,
+    left_manuscript_block_id: &str,
+    right_manuscript_block_id: &str,
+    snapshot: &crate::SelectionSnapshot,
+) -> Result<(), AuthorEditRefusal> {
+    let Some(left_index) = payload
+        .blocks
+        .iter()
+        .position(|block| block.manuscript_block_id == left_manuscript_block_id)
+    else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    let Some(right_index) = payload
+        .blocks
+        .iter()
+        .position(|block| block.manuscript_block_id == right_manuscript_block_id)
+    else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    if right_index != left_index + 1 {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
+    let left_utf16 = payload.blocks[left_index].text.encode_utf16().count() as u32;
+    if snapshot.from != left_utf16 || snapshot.to != left_utf16 {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
+    let right_text = payload.blocks[right_index].text.clone();
+    payload.blocks[left_index].text.push_str(&right_text);
+    payload.blocks.remove(right_index);
+    Ok(())
 }
 
 fn replace_block_text(

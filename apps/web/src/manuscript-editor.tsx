@@ -7,12 +7,15 @@ import { createAuthorEditIdleController, type AuthorEditIdleController }
 import type { EditorReadyState, PendingEditProjection } from "./editor-types.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import {
-  contiguousUtf16Replace,
-  manuscriptJson,
-  paragraphUtf16,
+  captureManuscriptChange,
+  flattenChapterBody,
+  type ManuscriptParagraph,
+  manuscriptBlocksJson,
+  paragraphsEqual,
+  readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 import {
-  hydrateManuscript,
+  hydrateManuscriptBlocks,
   isStoryosHydrateTransaction,
   originFromTransaction,
   storyosEditorProps,
@@ -20,8 +23,7 @@ import {
 } from "./manuscript-tiptap-adapter.ts";
 
 export interface ManuscriptEditorProps {
-  body: string;
-  blockId: string;
+  blocks: readonly ManuscriptParagraph[];
   editable: boolean;
   persistWorkspace: EditorReadyState | undefined;
   baseUrl: string;
@@ -29,17 +31,26 @@ export interface ManuscriptEditorProps {
   cryptoImpl: Crypto;
   controllerRef: { current: ManualInputController | null };
   onProjection: (projection: PendingEditProjection) => void;
-  onFailure: () => void;
+  onFailure: (error: unknown) => void;
 }
 
-function syncManuscriptSurface(dom: HTMLElement, body: string, blockId: string): void {
-  dom.setAttribute("data-manuscript-body", body);
-  dom.setAttribute("data-manuscript-block-id", blockId);
+function syncManuscriptSurface(
+  dom: HTMLElement,
+  blocks: readonly ManuscriptParagraph[],
+): void {
+  const first = blocks[0];
+  dom.setAttribute("data-manuscript-body", flattenChapterBody(blocks));
+  if (first !== undefined) {
+    dom.setAttribute("data-manuscript-block-id", first.manuscript_block_id);
+  }
+  dom.setAttribute(
+    "data-manuscript-block-ids",
+    blocks.map((block) => block.manuscript_block_id).join(" "),
+  );
 }
 
 export function ManuscriptEditor({
-  body,
-  blockId,
+  blocks,
   editable,
   persistWorkspace,
   baseUrl,
@@ -49,47 +60,56 @@ export function ManuscriptEditor({
   onProjection,
   onFailure,
 }: ManuscriptEditorProps) {
-  const observedBodyRef = useRef(body);
+  const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
   const idleRef = useRef<AuthorEditIdleController | null>(null);
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
+  const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
   const editor = useEditor({
-    extensions: storyosManuscriptExtensions(blockId),
-    content: manuscriptJson(blockId, body),
+    extensions: storyosManuscriptExtensions(firstBlockId),
+    content: manuscriptBlocksJson(blocks),
     editable,
     injectCSS: false,
     enableInputRules: false,
     enablePasteRules: false,
     immediatelyRender: true,
     shouldRerenderOnTransaction: false,
-    editorProps: storyosEditorProps(blockId),
+    editorProps: storyosEditorProps(firstBlockId),
     onCreate({ editor: created }) {
-      const rendered = paragraphUtf16(created.state.doc);
-      if (rendered !== body) hydrateManuscript(created, blockId, body);
-      observedBodyRef.current = paragraphUtf16(created.state.doc) ?? body;
-      syncManuscriptSurface(created.view.dom, observedBodyRef.current, blockId);
+      const rendered = readManuscriptParagraphs(created.state.doc);
+      if (rendered === undefined || !paragraphsEqual(rendered, blocks)) {
+        hydrateManuscriptBlocks(created, blocks);
+      }
+      observedBlocksRef.current = readManuscriptParagraphs(created.state.doc)
+        ?? blocks.map((block) => ({ ...block }));
+      syncManuscriptSurface(created.view.dom, observedBlocksRef.current);
     },
     onTransaction({ editor: current, transaction }) {
-      const nextBody = paragraphUtf16(current.state.doc);
-      if (nextBody === undefined) return;
-      syncManuscriptSurface(current.view.dom, nextBody, blockId);
+      const nextBlocks = readManuscriptParagraphs(current.state.doc);
+      if (nextBlocks === undefined) return;
+      syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
-        observedBodyRef.current = nextBody;
+        observedBlocksRef.current = nextBlocks;
         return;
       }
       if (current.view.composing || composingRef.current) return;
-      if (nextBody === observedBodyRef.current) return;
-      const edit = contiguousUtf16Replace(observedBodyRef.current, nextBody);
-      observedBodyRef.current = nextBody;
+      if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
+      const edit = captureManuscriptChange(observedBlocksRef.current, nextBlocks);
+      observedBlocksRef.current = nextBlocks;
       if (edit === undefined) {
         idleRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;
       }
       const createdAt = new Date().toISOString();
-      void idleRef.current?.persist(edit, originFromTransaction(transaction, edit), createdAt);
+      const origin = edit.kind === "split_block"
+        ? "split_block"
+        : edit.kind === "join_blocks"
+          ? "join_blocks"
+          : originFromTransaction(transaction, edit);
+      void idleRef.current?.persist(edit, origin, createdAt);
     },
   }, []);
 
@@ -99,11 +119,16 @@ export function ManuscriptEditor({
 
   useEffect(() => {
     if (editor === null) return;
-    const rendered = paragraphUtf16(editor.state.doc);
-    if (rendered !== body) hydrateManuscript(editor, blockId, body);
-    observedBodyRef.current = paragraphUtf16(editor.state.doc) ?? body;
-    syncManuscriptSurface(editor.view.dom, observedBodyRef.current, blockId);
-  }, [blockId, editor]);
+    const identityKey = blocks.map((block) => block.manuscript_block_id).join(" ");
+    const rendered = readManuscriptParagraphs(editor.state.doc);
+    const renderedKey = rendered?.map((block) => block.manuscript_block_id).join(" ");
+    if (renderedKey !== identityKey) {
+      hydrateManuscriptBlocks(editor, blocks);
+    }
+    observedBlocksRef.current = readManuscriptParagraphs(editor.state.doc)
+      ?? blocks.map((block) => ({ ...block }));
+    syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
+  }, [blocks.map((block) => block.manuscript_block_id).join(" "), editor]);
 
   useEffect(() => {
     if (editor === null || persistWorkspace === undefined) {
@@ -125,7 +150,7 @@ export function ManuscriptEditor({
       cryptoImpl,
       afterAppliedSettlement: collectEligibleJournalPayload,
       onProjection: (projection) => { onProjectionRef.current(projection); },
-      onFailure: () => { onFailureRef.current(); },
+      onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
     const controller: ManualInputController = {
@@ -143,10 +168,12 @@ export function ManuscriptEditor({
     const onCompositionEnd = (): void => {
       composingRef.current = false;
       idle.setHoldSubmission(false);
-      const nextBody = paragraphUtf16(editor.state.doc);
-      if (nextBody === undefined || nextBody === observedBodyRef.current) return;
-      const edit = contiguousUtf16Replace(observedBodyRef.current, nextBody);
-      observedBodyRef.current = nextBody;
+      const nextBlocks = readManuscriptParagraphs(editor.state.doc);
+      if (nextBlocks === undefined || paragraphsEqual(nextBlocks, observedBlocksRef.current)) {
+        return;
+      }
+      const edit = captureManuscriptChange(observedBlocksRef.current, nextBlocks);
+      observedBlocksRef.current = nextBlocks;
       if (edit === undefined) {
         idle.fail(new Error("Manuscript replacement is not a supported Block edit"));
         return;

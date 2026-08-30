@@ -55,6 +55,7 @@ export const storyOSBrowserCommands = {
           backspace: "Backspace",
           cut: process.platform === "darwin" ? "Meta+X" : "Control+X",
           delete: "Delete",
+          enter: "Enter",
           paste: process.platform === "darwin" ? "Meta+V" : "Control+V",
         }[request.operation];
         await context.page.keyboard.press(key);

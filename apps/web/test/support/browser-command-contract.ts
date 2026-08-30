@@ -15,7 +15,7 @@ export interface ImeCompositionRequest {
 }
 
 export type TrustedInputRequest =
-  | Readonly<{ operation: "backspace" | "cut" | "delete" | "paste" }>
+  | Readonly<{ operation: "backspace" | "cut" | "delete" | "enter" | "paste" }>
   | Readonly<{ operation: "insert_text"; text: string }>;
 
 export type ClipboardPermissionRequest = Readonly<{ action: "clear" | "grant" }>;
@@ -111,7 +111,8 @@ export function parseTrustedInputRequest(value: unknown): TrustedInputRequest {
       text: boundedText(property(request, "text"), "trusted input text"),
     };
   }
-  if (operation === "backspace" || operation === "cut" || operation === "delete" || operation === "paste") {
+  if (operation === "backspace" || operation === "cut" || operation === "delete"
+    || operation === "enter" || operation === "paste") {
     exactObject(value, ["operation"], "trusted input request");
     return { operation };
   }

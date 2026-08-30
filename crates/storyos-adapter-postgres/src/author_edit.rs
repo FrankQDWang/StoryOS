@@ -5,11 +5,17 @@ use storyos_application::{
 use storyos_core::{
     ApplyAuthorEdit, ApplyAuthorEditResult, ApplyVersionedAuthorEdit,
     ApplyVersionedAuthorEditResult, AuthorEditPrimitive, COORDINATE_VERSION, CurrentOwnershipFacts,
-    MANUSCRIPT_SCHEMA_VERSION, ManuscriptPayload, apply_author_edit as apply_core_author_edit,
-    apply_versioned_author_edit,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload,
+    apply_author_edit as apply_core_author_edit, apply_versioned_author_edit, chapter_display_body,
 };
 
 use super::*;
+
+#[derive(Debug)]
+pub(crate) struct ClassifiedAuthorEdit {
+    pub result: ApplyAuthorEditResult,
+    pub successor_blocks: Option<Vec<ManuscriptBlock>>,
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum AuthorEditFault {
@@ -122,7 +128,7 @@ impl PostgresProjectReader {
         };
         let current_revision_id = row.get::<_, String>(0);
         let current_body = row.get::<_, String>(1);
-        let core_result = classify_author_edit(
+        let classified = classify_author_edit(
             &transaction.client,
             command,
             &current_revision_id,
@@ -133,7 +139,7 @@ impl PostgresProjectReader {
             &transaction.client,
             command,
             &current_revision_id,
-            core_result,
+            classified,
         )
         .await
         {
@@ -386,31 +392,41 @@ async fn classify_author_edit(
     command: &ApplyAuthorEditCommand,
     current_revision_id: &str,
     current_body: String,
-) -> Result<ApplyAuthorEditResult, AuthorEditError> {
-    let uses_block_selection = command.author_edit_units.iter().any(|unit| {
-        unit.normalized_primitives
-            .iter()
-            .any(|primitive| matches!(primitive, AuthorEditPrimitive::ReplaceBlockSelection { .. }))
+) -> Result<ClassifiedAuthorEdit, AuthorEditError> {
+    let uses_versioned_payload = command.author_edit_units.iter().any(|unit| {
+        unit.normalized_primitives.iter().any(|primitive| {
+            matches!(
+                primitive,
+                AuthorEditPrimitive::ReplaceBlockSelection { .. }
+                    | AuthorEditPrimitive::SplitBlock { .. }
+                    | AuthorEditPrimitive::JoinBlocks { .. }
+            )
+        })
     });
     let current_ownership = CurrentOwnershipFacts {
         proposal_head_revision_ids: Vec::new(),
         anchor_refs: Vec::new(),
         unresolved_reservation_refs: Vec::new(),
     };
-    if !uses_block_selection {
-        return Ok(apply_core_author_edit(&ApplyAuthorEdit {
-            chapter_id: command.chapter_id.clone(),
-            current_authoritative_revision_id: current_revision_id.to_owned(),
-            current_body,
-            expected_authoritative_revision_id: command.expected_authoritative_revision_id.clone(),
-            expected_proposal_head_revision_ids: command
-                .expected_proposal_head_revision_ids
-                .clone(),
-            current_ownership,
-            target_refs: command.target_refs.clone(),
-            observed_ownership_partition: command.observed_ownership_partition.clone(),
-            author_edit_units: command.author_edit_units.clone(),
-        }));
+    if !uses_versioned_payload {
+        return Ok(ClassifiedAuthorEdit {
+            result: apply_core_author_edit(&ApplyAuthorEdit {
+                chapter_id: command.chapter_id.clone(),
+                current_authoritative_revision_id: current_revision_id.to_owned(),
+                current_body,
+                expected_authoritative_revision_id: command
+                    .expected_authoritative_revision_id
+                    .clone(),
+                expected_proposal_head_revision_ids: command
+                    .expected_proposal_head_revision_ids
+                    .clone(),
+                current_ownership,
+                target_refs: command.target_refs.clone(),
+                observed_ownership_partition: command.observed_ownership_partition.clone(),
+                author_edit_units: command.author_edit_units.clone(),
+            }),
+            successor_blocks: None,
+        });
     }
     let blocks = crate::manuscript_block::load_or_upgrade_blocks(
         client,
@@ -441,24 +457,25 @@ async fn classify_author_edit(
             author_edit_units: command.author_edit_units.clone(),
         }) {
             ApplyVersionedAuthorEditResult::AuthoritativeApplied { payload } => {
-                ApplyAuthorEditResult::AuthoritativeApplied {
-                    body: payload
-                        .blocks
-                        .into_iter()
-                        .next()
-                        .map(|block| block.text)
-                        .unwrap_or_default(),
+                ClassifiedAuthorEdit {
+                    result: ApplyAuthorEditResult::AuthoritativeApplied {
+                        body: chapter_display_body(&payload.blocks),
+                    },
+                    successor_blocks: Some(payload.blocks),
                 }
             }
-            ApplyVersionedAuthorEditResult::Conflicted { reason } => {
-                ApplyAuthorEditResult::Conflicted { reason }
-            }
-            ApplyVersionedAuthorEditResult::NoEffect { reason } => {
-                ApplyAuthorEditResult::NoEffect { reason }
-            }
-            ApplyVersionedAuthorEditResult::Refused { reason } => {
-                ApplyAuthorEditResult::Refused { reason }
-            }
+            ApplyVersionedAuthorEditResult::Conflicted { reason } => ClassifiedAuthorEdit {
+                result: ApplyAuthorEditResult::Conflicted { reason },
+                successor_blocks: None,
+            },
+            ApplyVersionedAuthorEditResult::NoEffect { reason } => ClassifiedAuthorEdit {
+                result: ApplyAuthorEditResult::NoEffect { reason },
+                successor_blocks: None,
+            },
+            ApplyVersionedAuthorEditResult::Refused { reason } => ClassifiedAuthorEdit {
+                result: ApplyAuthorEditResult::Refused { reason },
+                successor_blocks: None,
+            },
         },
     )
 }

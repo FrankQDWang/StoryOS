@@ -123,6 +123,22 @@ pub(super) async fn apply_author_edit(
                         to: *to,
                         text: text.clone(),
                     },
+                    contracts::AuthorEditPrimitive::SplitBlock {
+                        manuscript_block_id,
+                        offset,
+                        new_manuscript_block_id,
+                    } => storyos_core::AuthorEditPrimitive::SplitBlock {
+                        manuscript_block_id: manuscript_block_id.clone(),
+                        offset: *offset,
+                        new_manuscript_block_id: new_manuscript_block_id.clone(),
+                    },
+                    contracts::AuthorEditPrimitive::JoinBlocks {
+                        left_manuscript_block_id,
+                        right_manuscript_block_id,
+                    } => storyos_core::AuthorEditPrimitive::JoinBlocks {
+                        left_manuscript_block_id: left_manuscript_block_id.clone(),
+                        right_manuscript_block_id: right_manuscript_block_id.clone(),
+                    },
                 })
                 .collect(),
             selection_snapshot: storyos_core::SelectionSnapshot {

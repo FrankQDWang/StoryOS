@@ -124,7 +124,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
       unsettled_intent_count: 1,
       authoritative_revision_id: REVISION,
     };
-    expect(pending).toEqual(expectedProjection);
+    expect(pending).toMatchObject(expectedProjection);
     const eventA = await createAppliedActivityEvent({
       eventId: "018f0000-0000-7001-8000-000000000392",
       commandId: "018f0000-0000-7001-8000-000000000393",
@@ -184,7 +184,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
       held: [],
     });
     expect(await readJournalSnapshot(workspace)).toEqual(retainedJournal);
-    expect(await rebuildPendingProjection(workspace)).toEqual(expectedProjection);
+    expect(await rebuildPendingProjection(workspace)).toMatchObject(expectedProjection);
     expect(counts).toEqual({ activity: 0, snapshots: 1 });
     workspace.database.close();
   } finally {
@@ -364,7 +364,7 @@ it.each([
     await controller.whenIdle();
     await controller.flush();
     expect(failures).toEqual([]);
-    expect(reload.pending).toEqual({ body: "Base!", save_state: "saved", unsettled_intent_count: 0,
+    expect(reload.pending).toMatchObject({ body: "Base!", save_state: "saved", unsettled_intent_count: 0,
       authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id });
     expect(commands).toBe(1);
     const journal = await readJournalSnapshot(reload);

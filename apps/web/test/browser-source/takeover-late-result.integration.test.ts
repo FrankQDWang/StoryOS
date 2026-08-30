@@ -150,7 +150,7 @@ it("fences the old Journal partition before a late applied result settles", asyn
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,

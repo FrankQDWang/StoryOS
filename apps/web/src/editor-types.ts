@@ -21,7 +21,9 @@ export type InputOrigin =
   | "selection_replacement"
   | "paste"
   | "cut"
-  | "composition_confirmation";
+  | "composition_confirmation"
+  | "split_block"
+  | "join_blocks";
 
 export interface JournalPartition {
   journal_partition_id: string;
@@ -170,11 +172,13 @@ export interface JournalSnapshot {
 
 export interface ValidatedJournalSnapshot extends JournalSnapshot {
   bodyBySequence: Map<number, string>;
+  blocksBySequence: Map<number, EditorBaseSnapshot["materialized_revision"]["blocks"]>;
   covered: Set<number>;
 }
 
 export interface PendingEditProjection {
   body: string;
+  blocks: EditorBaseSnapshot["materialized_revision"]["blocks"];
   save_state: "clean" | "saving" | "saved" | "needs_attention";
   unsettled_intent_count: number;
   authoritative_revision_id: string;
@@ -210,6 +214,7 @@ export interface ReplaceSelectionEdit {
   to: number;
   text: string;
   resultingBody: string;
+  manuscript_block_id?: string;
   inputOrigin?: InputOrigin;
   undoGroupId?: string;
   createdAt?: string;

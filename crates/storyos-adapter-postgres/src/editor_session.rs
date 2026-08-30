@@ -234,7 +234,7 @@ async fn read_session(
         .get::<_, String>(11)
         .parse::<u64>()
         .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))?;
-    let body = row.get::<_, String>(12);
+    let stored = row.get::<_, String>(12);
     let chapter_id: String = row.get(9);
     let authoritative_revision_id: String = row.get(10);
     let blocks = crate::manuscript_block::load_or_upgrade_blocks(
@@ -243,10 +243,11 @@ async fn read_session(
         scope.project_id.as_ref(),
         &chapter_id,
         &authoritative_revision_id,
-        &body,
+        &stored,
     )
     .await
     .map_err(session_database_error)?;
+    let body = crate::manuscript_block::display_body_from_stored(&stored, &blocks);
     Ok(Some(EditorSession {
         editor_session_id: storyos_application::EditorSessionId::new(editor_session_id),
         client_binding: binding.clone(),

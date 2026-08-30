@@ -144,7 +144,9 @@ fn prepare_follow_up(
             *to = position;
             *text = "x".to_owned();
         }
-        AuthorEditPrimitive::ReplaceBlockSelection { .. } => {
+        AuthorEditPrimitive::ReplaceBlockSelection { .. }
+        | AuthorEditPrimitive::SplitBlock { .. }
+        | AuthorEditPrimitive::JoinBlocks { .. } => {
             panic!("counter test command must use ReplaceSelection")
         }
     }
@@ -156,7 +158,9 @@ fn prepare_follow_up(
             *to = position + 1;
             *text = replacement.to_owned();
         }
-        AuthorEditPrimitive::ReplaceBlockSelection { .. } => {
+        AuthorEditPrimitive::ReplaceBlockSelection { .. }
+        | AuthorEditPrimitive::SplitBlock { .. }
+        | AuthorEditPrimitive::JoinBlocks { .. } => {
             panic!("counter test command must use ReplaceSelection")
         }
     }

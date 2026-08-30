@@ -242,7 +242,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saving",
       unsettled_intent_count: 1,
@@ -342,7 +342,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       baseUrl: location.origin,
       fetchImpl,
       cryptoImpl: crypto,
-    })).toEqual({
+    })).toMatchObject({
       body: "Base!?",
       save_state: "saved",
       unsettled_intent_count: 0,
@@ -436,7 +436,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
         fetchImpl,
         cryptoImpl: crypto,
       });
-      expect(projection).toEqual(mode === "rejected" ? {
+      expect(projection).toMatchObject(mode === "rejected" ? {
         body: "Base!?",
         save_state: "needs_attention",
         unsettled_intent_count: 1,

@@ -285,8 +285,11 @@ async fn append_is_exact_serialized_and_has_zero_authority_effect() {
         &settlement.client,
         &command,
         "018f0000-0000-7001-8000-000000000005",
-        storyos_core::ApplyAuthorEditResult::NoEffect {
-            reason: storyos_core::AuthorEditNoEffect::ContentUnchanged,
+        crate::author_edit::ClassifiedAuthorEdit {
+            result: storyos_core::ApplyAuthorEditResult::NoEffect {
+                reason: storyos_core::AuthorEditNoEffect::ContentUnchanged,
+            },
+            successor_blocks: None,
         },
     )
     .await

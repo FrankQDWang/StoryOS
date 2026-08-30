@@ -150,6 +150,10 @@ test("selectedChapterSurface keeps pending bytes on the current Chapter", () => 
   const openedB = chapterB(source);
   const currentPending: PendingEditProjection = {
     body: "雨落在窗沿。Hello",
+    blocks: [{
+      ...source.chapter.current_revision.blocks[0]!,
+      text: "雨落在窗沿。Hello",
+    }],
     save_state: "saving",
     unsettled_intent_count: 1,
     authoritative_revision_id: source.chapter.current_revision.revision_id,
@@ -178,6 +182,7 @@ test("selectedChapterSurface keeps pending bytes on the current Chapter", () => 
     save_state: "clean",
     pending: {
       body: "",
+      blocks: openedB.chapter.current_revision.blocks,
       save_state: "clean",
       unsettled_intent_count: 0,
       authoritative_revision_id: REVISION_B,
@@ -196,6 +201,7 @@ test("selectedChapterSurface keeps pending bytes on the current Chapter", () => 
     save_state: "needs_attention",
     pending: {
       body: source.chapter.current_revision.body,
+      blocks: source.chapter.current_revision.blocks,
       save_state: "needs_attention",
       unsettled_intent_count: 0,
       authoritative_revision_id: source.chapter.current_revision.revision_id,

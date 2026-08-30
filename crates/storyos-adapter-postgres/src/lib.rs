@@ -621,7 +621,7 @@ impl ProjectReader for PostgresProjectReader {
                 let chapter_id = ChapterId::new(row.get::<_, String>(0));
                 let title = row.get(1);
                 let revision_id = RevisionId::new(row.get::<_, String>(2));
-                let body: String = row.get(3);
+                let stored: String = row.get(3);
                 let project_activity_position = row
                     .get::<_, String>(4)
                     .parse()
@@ -632,7 +632,7 @@ impl ProjectReader for PostgresProjectReader {
                     scope.project_id.as_ref(),
                     chapter_id.as_ref(),
                     revision_id.as_ref(),
-                    &body,
+                    &stored,
                 )
                 .await
                 .map_err(read_error)?;
@@ -640,7 +640,7 @@ impl ProjectReader for PostgresProjectReader {
                     chapter_id,
                     title,
                     revision_id,
-                    body,
+                    body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
                     blocks,
                     project_activity_position,
                 })
