@@ -9,7 +9,7 @@ export type ProjectOpenState = { "kind": "empty" } | { "kind": "current_chapter"
 
 export type ControlledProject = { project_id: string, title: string, open: ProjectOpenState, };
 
-export type ManuscriptBlockKind = "paragraph";
+export type ManuscriptBlockKind = "paragraph" | "heading";
 
 export type ManuscriptBlock = { manuscript_block_id: string, block_kind: ManuscriptBlockKind, text: string, };
 
@@ -149,7 +149,7 @@ export type SetCurrentChapterEffect = { "kind": "authoritative_applied", current
 
 export type SetCurrentChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: SetCurrentChapterEffect, };
 
-export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, } | { "kind": "split_block", manuscript_block_id: string, offset: number, new_manuscript_block_id: string, } | { "kind": "join_blocks", left_manuscript_block_id: string, right_manuscript_block_id: string, };
+export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, } | { "kind": "split_block", manuscript_block_id: string, offset: number, new_manuscript_block_id: string, } | { "kind": "join_blocks", left_manuscript_block_id: string, right_manuscript_block_id: string, } | { "kind": "move_block", manuscript_block_id: string, to_index: number, } | { "kind": "retype_block", manuscript_block_id: string, block_kind: ManuscriptBlockKind, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
 

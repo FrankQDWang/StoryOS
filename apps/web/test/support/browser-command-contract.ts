@@ -15,7 +15,10 @@ export interface ImeCompositionRequest {
 }
 
 export type TrustedInputRequest =
-  | Readonly<{ operation: "backspace" | "cut" | "delete" | "enter" | "paste" }>
+  | Readonly<{
+    operation: "backspace" | "cut" | "delete" | "enter" | "paste"
+      | "move_block_up" | "move_block_down" | "retype_block";
+  }>
   | Readonly<{ operation: "insert_text"; text: string }>;
 
 export type ClipboardPermissionRequest = Readonly<{ action: "clear" | "grant" }>;
@@ -112,7 +115,9 @@ export function parseTrustedInputRequest(value: unknown): TrustedInputRequest {
     };
   }
   if (operation === "backspace" || operation === "cut" || operation === "delete"
-    || operation === "enter" || operation === "paste") {
+    || operation === "enter" || operation === "paste"
+    || operation === "move_block_up" || operation === "move_block_down"
+    || operation === "retype_block") {
     exactObject(value, ["operation"], "trusted input request");
     return { operation };
   }

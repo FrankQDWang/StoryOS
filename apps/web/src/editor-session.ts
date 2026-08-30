@@ -36,6 +36,7 @@ export {
   submitOnePendingAuthorEdit,
 } from "./author-edit-submission.ts";
 export { persistReplaceSelection, persistSplitBlock, persistJoinBlocks,
+  persistMoveBlock, persistRetypeBlock,
   rebuildPendingProjection, reconfirmLegacyReplaceSelection }
   from "./local-edit-journal.ts";
 

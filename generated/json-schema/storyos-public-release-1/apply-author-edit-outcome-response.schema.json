@@ -480,7 +480,8 @@
     },
     "ManuscriptBlockKind": {
       "enum": [
-        "paragraph"
+        "paragraph",
+        "heading"
       ],
       "type": "string"
     },

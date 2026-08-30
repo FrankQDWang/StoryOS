@@ -416,6 +416,7 @@ pub struct GetProjectResponse {
 #[serde(rename_all = "snake_case")]
 pub enum ManuscriptBlockKind {
     Paragraph,
+    Heading,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

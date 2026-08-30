@@ -146,7 +146,9 @@ fn prepare_follow_up(
         }
         AuthorEditPrimitive::ReplaceBlockSelection { .. }
         | AuthorEditPrimitive::SplitBlock { .. }
-        | AuthorEditPrimitive::JoinBlocks { .. } => {
+        | AuthorEditPrimitive::JoinBlocks { .. }
+        | AuthorEditPrimitive::MoveBlock { .. }
+        | AuthorEditPrimitive::RetypeBlock { .. } => {
             panic!("counter test command must use ReplaceSelection")
         }
     }
@@ -160,7 +162,9 @@ fn prepare_follow_up(
         }
         AuthorEditPrimitive::ReplaceBlockSelection { .. }
         | AuthorEditPrimitive::SplitBlock { .. }
-        | AuthorEditPrimitive::JoinBlocks { .. } => {
+        | AuthorEditPrimitive::JoinBlocks { .. }
+        | AuthorEditPrimitive::MoveBlock { .. }
+        | AuthorEditPrimitive::RetypeBlock { .. } => {
             panic!("counter test command must use ReplaceSelection")
         }
     }

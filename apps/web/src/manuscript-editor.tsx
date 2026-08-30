@@ -47,6 +47,10 @@ function syncManuscriptSurface(
     "data-manuscript-block-ids",
     blocks.map((block) => block.manuscript_block_id).join(" "),
   );
+  dom.setAttribute(
+    "data-manuscript-block-kinds",
+    blocks.map((block) => block.block_kind ?? "paragraph").join(" "),
+  );
 }
 
 export function ManuscriptEditor({
@@ -105,10 +109,11 @@ export function ManuscriptEditor({
       }
       const createdAt = new Date().toISOString();
       const origin = edit.kind === "split_block"
-        ? "split_block"
-        : edit.kind === "join_blocks"
-          ? "join_blocks"
-          : originFromTransaction(transaction, edit.kind === "contiguous_replacement"
+        || edit.kind === "join_blocks"
+        || edit.kind === "move_block"
+        || edit.kind === "retype_block"
+        ? edit.kind
+        : originFromTransaction(transaction, edit.kind === "contiguous_replacement"
             ? {
               from: edit.from,
               to: edit.to,
@@ -126,16 +131,19 @@ export function ManuscriptEditor({
 
   useEffect(() => {
     if (editor === null) return;
-    const identityKey = blocks.map((block) => block.manuscript_block_id).join(" ");
+    const identityKey = blocks.map((block) =>
+      `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
     const rendered = readManuscriptParagraphs(editor.state.doc);
-    const renderedKey = rendered?.map((block) => block.manuscript_block_id).join(" ");
+    const renderedKey = rendered?.map((block) =>
+      `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" ");
     if (renderedKey !== identityKey) {
       hydrateManuscriptBlocks(editor, blocks);
     }
     observedBlocksRef.current = readManuscriptParagraphs(editor.state.doc)
       ?? blocks.map((block) => ({ ...block }));
     syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-  }, [blocks.map((block) => block.manuscript_block_id).join(" "), editor]);
+  }, [blocks.map((block) =>
+    `${block.manuscript_block_id}:${block.block_kind ?? "paragraph"}`).join(" "), editor]);
 
   useEffect(() => {
     if (editor === null || persistWorkspace === undefined) {

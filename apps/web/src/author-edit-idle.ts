@@ -4,7 +4,9 @@ import {
   AUTHOR_EDIT_MAX_UNITS,
   createJournalUuid,
   persistJoinBlocks,
+  persistMoveBlock,
   persistReplaceSelection,
+  persistRetypeBlock,
   persistSplitBlock,
   persistContiguousReplacement,
 } from "./local-edit-journal.ts";
@@ -137,7 +139,8 @@ export function createAuthorEditIdleController({
       return enqueue(async () => {
         const hardBoundary = origin === "composition_confirmation"
           || origin === "paste" || origin === "cut" || origin === "drop"
-          || origin === "split_block" || origin === "join_blocks";
+          || origin === "split_block" || origin === "join_blocks"
+          || origin === "move_block" || origin === "retype_block";
         const completedAt = Date.parse(createdAt);
         const idleBoundary = lastCompletedAt !== undefined
           && completedAt - lastCompletedAt > AUTHOR_EDIT_BATCH_IDLE_MS;
@@ -160,6 +163,22 @@ export function createAuthorEditIdleController({
                 left_manuscript_block_id: edit.left_manuscript_block_id,
                 right_manuscript_block_id: edit.right_manuscript_block_id,
                 caret: edit.caret,
+                resultingBody: edit.resultingBody,
+                resultingBlocks: edit.resultingBlocks,
+                ...persistFields,
+              }, cryptoImpl)
+            : edit.kind === "move_block"
+              ? await persistMoveBlock(workspace, {
+                manuscript_block_id: edit.manuscript_block_id,
+                to_index: edit.to_index,
+                resultingBody: edit.resultingBody,
+                resultingBlocks: edit.resultingBlocks,
+                ...persistFields,
+              }, cryptoImpl)
+            : edit.kind === "retype_block"
+              ? await persistRetypeBlock(workspace, {
+                manuscript_block_id: edit.manuscript_block_id,
+                block_kind: edit.block_kind,
                 resultingBody: edit.resultingBody,
                 resultingBlocks: edit.resultingBlocks,
                 ...persistFields,

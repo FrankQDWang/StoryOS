@@ -21,3 +21,16 @@ fn two_paragraphs_including_empty_right_roundtrip_through_canonical_bytes() {
     assert_eq!(parsed, blocks);
     assert_eq!(display_body_from_stored(&stored, &parsed), "Hello\n");
 }
+
+#[test]
+fn one_heading_roundtrips_through_versioned_payload_bytes() {
+    let blocks = vec![ManuscriptBlock {
+        manuscript_block_id: "018f0000-0000-7001-8000-0000000000b1".to_owned(),
+        block_kind: ManuscriptBlockKind::Heading,
+        text: "Hello".to_owned(),
+    }];
+    let stored = persist_canonical_bytes(&blocks);
+    let parsed = parse_versioned_payload(&stored).expect("versioned payload");
+    assert_eq!(parsed, blocks);
+    assert_eq!(display_body_from_stored(&stored, &parsed), "Hello");
+}

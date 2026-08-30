@@ -107,6 +107,48 @@
             "right_manuscript_block_id"
           ],
           "type": "object"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "move_block",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "to_index": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "to_index"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "block_kind": {
+              "$ref": "#/$defs/ManuscriptBlockKind"
+            },
+            "kind": {
+              "const": "retype_block",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "block_kind"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -128,6 +170,13 @@
         "selection_snapshot"
       ],
       "type": "object"
+    },
+    "ManuscriptBlockKind": {
+      "enum": [
+        "paragraph",
+        "heading"
+      ],
+      "type": "string"
     },
     "SelectionSnapshot": {
       "additionalProperties": false,

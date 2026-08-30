@@ -417,6 +417,129 @@ fn one_unit_replaces_then_splits_so_pasted_paragraphs_receive_new_identities() {
 }
 
 #[test]
+fn one_unit_moves_a_block_and_keeps_both_identities() {
+    let mut command = split_command();
+    command.current_payload = two_paragraphs();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![AuthorEditPrimitive::MoveBlock {
+            manuscript_block_id: "block-left".to_owned(),
+            to_index: 1,
+        }],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 0,
+            to: 0,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
+            payload: ManuscriptPayload {
+                schema_version: MANUSCRIPT_SCHEMA_VERSION,
+                coordinate_version: COORDINATE_VERSION,
+                blocks: vec![
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-right".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: "World".to_owned(),
+                    },
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-left".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: "Hello".to_owned(),
+                    },
+                ],
+            }
+        }
+    );
+}
+
+#[test]
+fn an_invalid_move_index_refuses_without_changing_payload_order() {
+    let mut command = split_command();
+    command.current_payload = two_paragraphs();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![AuthorEditPrimitive::MoveBlock {
+            manuscript_block_id: "block-left".to_owned(),
+            to_index: 2,
+        }],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 0,
+            to: 0,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::Refused {
+            reason: AuthorEditRefusal::InvalidSelection,
+        }
+    );
+}
+
+#[test]
+fn one_to_one_retype_keeps_identity_and_text() {
+    let mut command = split_command();
+    command.current_payload = two_paragraphs();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![AuthorEditPrimitive::RetypeBlock {
+            manuscript_block_id: "block-left".to_owned(),
+            block_kind: ManuscriptBlockKind::Heading,
+        }],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 0,
+            to: 0,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
+            payload: ManuscriptPayload {
+                schema_version: MANUSCRIPT_SCHEMA_VERSION,
+                coordinate_version: COORDINATE_VERSION,
+                blocks: vec![
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-left".to_owned(),
+                        block_kind: ManuscriptBlockKind::Heading,
+                        text: "Hello".to_owned(),
+                    },
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-right".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: "World".to_owned(),
+                    },
+                ],
+            }
+        }
+    );
+}
+
+#[test]
+fn a_stale_head_still_has_zero_authority_effect_for_move() {
+    let mut command = split_command();
+    command.current_payload = two_paragraphs();
+    command.expected_authoritative_revision_id = "stale".to_owned();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![AuthorEditPrimitive::MoveBlock {
+            manuscript_block_id: "block-left".to_owned(),
+            to_index: 1,
+        }],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 0,
+            to: 0,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::Conflicted {
+            reason: AuthorEditConflict::StaleAuthoritativeHead,
+        }
+    );
+}
+
+#[test]
 fn chapter_display_body_joins_current_paragraphs_with_one_line_break() {
     assert_eq!(
         chapter_display_body(&two_paragraphs().blocks),

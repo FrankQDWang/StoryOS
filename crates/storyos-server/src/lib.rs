@@ -593,6 +593,9 @@ fn contract_chapter_revision(
                     storyos_application::ManuscriptBlockKind::Paragraph => {
                         contracts::ManuscriptBlockKind::Paragraph
                     }
+                    storyos_application::ManuscriptBlockKind::Heading => {
+                        contracts::ManuscriptBlockKind::Heading
+                    }
                 },
                 text: block.text.clone(),
             })

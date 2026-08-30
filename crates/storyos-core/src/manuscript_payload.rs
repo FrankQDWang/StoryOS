@@ -25,6 +25,7 @@ pub struct ManuscriptBlock {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ManuscriptBlockKind {
     Paragraph,
+    Heading,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -145,10 +146,6 @@ fn payload_is_supported(payload: &ManuscriptPayload) -> bool {
     if payload.schema_version != MANUSCRIPT_SCHEMA_VERSION
         || payload.coordinate_version != COORDINATE_VERSION
         || payload.blocks.is_empty()
-        || payload
-            .blocks
-            .iter()
-            .any(|block| block.block_kind != ManuscriptBlockKind::Paragraph)
     {
         return false;
     }
@@ -236,6 +233,14 @@ fn apply_primitive(
             right_manuscript_block_id,
             snapshot,
         ),
+        AuthorEditPrimitive::MoveBlock {
+            manuscript_block_id,
+            to_index,
+        } => move_block(payload, manuscript_block_id, *to_index),
+        AuthorEditPrimitive::RetypeBlock {
+            manuscript_block_id,
+            block_kind,
+        } => retype_block(payload, manuscript_block_id, block_kind),
         AuthorEditPrimitive::ReplaceSelection { .. } => {
             Err(AuthorEditRefusal::UnsupportedIntentShape)
         }
@@ -311,6 +316,46 @@ fn join_blocks(
     let right_text = payload.blocks[right_index].text.clone();
     payload.blocks[left_index].text.push_str(&right_text);
     payload.blocks.remove(right_index);
+    Ok(())
+}
+
+fn move_block(
+    payload: &mut ManuscriptPayload,
+    manuscript_block_id: &str,
+    to_index: u32,
+) -> Result<(), AuthorEditRefusal> {
+    let to_index = to_index as usize;
+    let Some(from_index) = payload
+        .blocks
+        .iter()
+        .position(|block| block.manuscript_block_id == manuscript_block_id)
+    else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    if to_index >= payload.blocks.len() {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
+    if from_index == to_index {
+        return Ok(());
+    }
+    let block = payload.blocks.remove(from_index);
+    payload.blocks.insert(to_index, block);
+    Ok(())
+}
+
+fn retype_block(
+    payload: &mut ManuscriptPayload,
+    manuscript_block_id: &str,
+    block_kind: &ManuscriptBlockKind,
+) -> Result<(), AuthorEditRefusal> {
+    let Some(block) = payload
+        .blocks
+        .iter_mut()
+        .find(|block| block.manuscript_block_id == manuscript_block_id)
+    else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    block.block_kind = block_kind.clone();
     Ok(())
 }
 
