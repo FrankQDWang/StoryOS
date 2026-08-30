@@ -122,6 +122,9 @@ export function createAuthorEditIdleController({
     if (projection.save_state === "needs_attention") {
       throw new Error("Author Edit requires attention");
     }
+    if (projection.save_state === "saving" && pendingIntentCount > 0 && !holdSubmission) {
+      scheduleIdle();
+    }
   };
 
   const scheduleIdle = (): void => {

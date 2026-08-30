@@ -271,9 +271,11 @@ test("Server restart and bounded PostgreSQL interruption keep GET-first ApplyAut
       assert.equal(fabricatedCommit, false);
       await unpausePostgres();
       postgresPaused = false;
+      actions = [];
       const recovered = await getApplyAuthorEditOutcome(
-        outcomeOptions(baseUrl, idempotencyKey, challenge.nonce),
+        outcomeOptions(baseUrl, idempotencyKey, challenge.nonce, trackingFetch(baseUrl, actions)),
       );
+      assertFirstActionIsOutcomeGet(actions, idempotencyKey);
       assert.deepEqual(recovered.outcome, committedBeforeCut.outcome);
       assert.deepEqual(await projectAuthoritySnapshot(), authorityAfterCommit);
     } finally {
