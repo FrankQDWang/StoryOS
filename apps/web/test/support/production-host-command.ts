@@ -166,6 +166,18 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const secondary = await getEditorSession({ ...options, editorSessionId: observerId });
     assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session",
       observed_writer_generation: prior.writer.writer_generation });
+    let releaseWriterEdits = (): void => {};
+    const writerEditsHeld = new Promise<void>((resolve) => {
+      releaseWriterEdits = resolve;
+    });
+    await writer.route("**/manuscript/author-edits", async (route) => {
+      if (route.request().method() === "POST") await writerEditsHeld;
+      await route.continue();
+    });
+    await writer.locator(MANUSCRIPT_EDITOR).click();
+    await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
+    await writer.keyboard.insertText("Unsettled before takeover.");
+    await writer.locator('[data-save-state="unsaved"]').waitFor();
     await observer.locator("[data-take-over-writer]").click();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
@@ -174,17 +186,16 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const fenced = await getEditorSession({ ...options, editorSessionId: writerId });
     assert.deepEqual(fenced.writer, { kind: "read_only", reason: "superseded_by_takeover",
       observed_writer_generation: generation });
-
+    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     const refusal = writer.waitForResponse((response) => response.status() === 412
       && response.url().startsWith(`${origin}/api/v1/projects/${projectId}/`));
-    await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
-    await writer.keyboard.insertText("Unsent after takeover.");
+    releaseWriterEdits();
     const problem: unknown = await (await refusal).json();
     assert.ok(typeof problem === "object" && problem !== null);
     assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
     await writer.locator(MANUSCRIPT_READONLY).waitFor();
     await writer.locator('[data-save-state="needs_attention"]').waitFor();
-    assert.equal(await manuscriptBody(writer), "Unsent after takeover.");
+    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     const oldJournal = await readJournal(writer, projectId);
     assert.equal(oldJournal.partitions.length, 2);
     assert.ok(oldJournal.intents.length > 0 && oldJournal.payload_chains.length > 0);
@@ -207,7 +218,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
     assert.equal(await writer.locator(MANUSCRIPT_READONLY).getAttribute("data-manuscript-body"),
-      "Unsent after takeover.");
+      "Unsettled before takeover.");
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));

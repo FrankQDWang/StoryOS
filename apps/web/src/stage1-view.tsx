@@ -707,9 +707,16 @@ function Stage1View({
   if (current.kind === "project-ready") {
     return (
       <ProjectReadyView
-        key={current.project.project.open.kind === "current_chapter"
-          ? current.project.project.open.current_chapter_id
-          : current.project.project.project_id}
+        key={`${
+          current.project.project.open.kind === "current_chapter"
+            ? current.project.project.open.current_chapter_id
+            : current.project.project.project_id
+        }:${
+          current.editor.kind === "editor-ready"
+            && current.editor.session.writer.kind === "current_writer"
+            ? current.editor.session.writer.writer_generation
+            : current.editor.kind
+        }`}
         state={current}
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}
