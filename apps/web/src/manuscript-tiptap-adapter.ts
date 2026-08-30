@@ -55,12 +55,9 @@ function insertNewline(view: EditorView): boolean {
 
 function splitParagraphTransaction(state: EditorState, newId: string): Transaction | undefined {
   if (state.selection.$from.parent.type.name !== "paragraph") return undefined;
-  let transaction = state.tr;
-  if (!state.selection.empty) {
-    transaction = transaction.deleteSelection();
-  }
-  const splitPos = transaction.selection.from;
-  transaction = transaction.split(splitPos);
+  if (!state.selection.empty) return undefined;
+  const splitPos = state.selection.from;
+  const transaction = state.tr.split(splitPos);
   const newParagraphPos = splitPos + 1;
   const newParagraph = transaction.doc.nodeAt(newParagraphPos);
   if (newParagraph?.type.name !== "paragraph") {
@@ -80,6 +77,7 @@ export function storyosManuscriptExtensions(blockId: string) {
     UniqueID.configure({
       attributeName: "id",
       types: ["paragraph"],
+      generateID: () => createJournalUuid(),
       updateDocument: false,
     }),
     Extension.create({
@@ -87,6 +85,12 @@ export function storyosManuscriptExtensions(blockId: string) {
       addKeyboardShortcuts() {
         return {
           Enter: () => {
+            if (!this.editor.state.selection.empty) {
+              this.editor.commands.command(({ tr, dispatch }) => {
+                dispatch?.(tr.deleteSelection());
+                return true;
+              });
+            }
             const newId = createJournalUuid();
             return this.editor.commands.command(({ state, dispatch }) => {
               const transaction = splitParagraphTransaction(state, newId);

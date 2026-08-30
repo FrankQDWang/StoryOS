@@ -8,7 +8,7 @@ This decision records the production Protected Web Client editor adoption requir
 
 ## Decision
 
-The production manuscript surface uses Tiptap 3.27.3 and the ProseMirror packages re-exported by `@tiptap/pm` 3.27.3. StoryOS owns the adapter. Tiptap is never Authoritative State. One visible paragraph Manuscript Block is the supported write shape for this slice. Author input becomes one complete `ReplaceBlockSelection` intent, then settles through the existing Local Edit Journal, Admission, Core, and PostgreSQL path.
+The production manuscript surface uses Tiptap 3.27.3 and the ProseMirror packages re-exported by `@tiptap/pm` 3.27.3. StoryOS owns the adapter. Tiptap is never Authoritative State. The supported write shape is one or more ordered paragraph Manuscript Blocks. Author input becomes one complete `ReplaceBlockSelection`, `SplitBlock`, or `JoinBlocks` intent, then settles through the existing Local Edit Journal, Admission, Core, and PostgreSQL path.
 
 The exact direct production package graph is:
 
@@ -22,7 +22,7 @@ The exact direct production package graph is:
 
 `@tiptap/pm` 3.27.3 re-exports ProseMirror, including `prosemirror-model` 1.25.11, `prosemirror-state` 1.4.4, `prosemirror-view` 1.42.3, and `prosemirror-transform` 1.12.0. UniqueID depends on `uuid` 14.0.2. All of these packages use the MIT license. StoryOS does not import StarterKit, History, marks, or list extensions in this slice.
 
-UniqueID declares the paragraph `id` attribute. Core owns the Manuscript Block identity. The adapter writes that identity into the document and sets UniqueID `updateDocument` to `false`, so UniqueID does not mint a new id.
+UniqueID declares the paragraph `id` attribute. Core owns the Manuscript Block identity. The adapter writes that identity into the document, sets UniqueID `generateID` to a StoryOS UUID v7, and sets UniqueID `updateDocument` to `false`, so UniqueID does not mint a new id after hydration.
 
 The adapter captures only a complete supported replacement. Hydration, Snapshot installation, decoration, and other non-edit transactions create no author intent. An unsupported transaction is refused. The editor document stays at the previous supported state, and recovery material is not partially edited.
 
@@ -34,7 +34,7 @@ This decision does not change `web_client_contract_revision`, IndexedDB meaning,
 
 - Keeping the production textarea was rejected because `S2-EVD-009` says textarea-only evidence cannot satisfy `S2-REQ-009`.
 - Promoting `prototypes/tiptap-proposal-lab` was rejected because that tree is Prototype Evidence, not the Protected Web Client.
-- Adopting StarterKit was rejected because this slice supports one paragraph Block replacement, not headings, lists, marks, or editor History.
+- Adopting StarterKit was rejected because this slice supports paragraph Block replacement, split, and join, not headings, lists, marks, or editor History.
 - Allowing UniqueID to generate ids was rejected because Manuscript Block identity is Core-owned and must survive settlement and reload.
 
 ## Consequences
