@@ -235,18 +235,24 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
     assert.match(winner.base_snapshot.created_at, ISO_INSTANT);
     assert.notEqual(winner.base_snapshot.snapshot_id, observer.base_snapshot.snapshot_id);
     assert.notEqual(winner.base_snapshot.snapshot_id, canonical.snapshot.snapshot_id);
-    assert.deepEqual(winner, {
+    const expectedWinner = {
       ...observer,
       schema_id: "storyos.query.editor-session.response.v1",
       correlation_id: winner.correlation_id,
-      writer: { kind: "current_writer", writer_generation: takeover.result.resulting_writer_generation },
+      writer: { kind: "current_writer" as const, writer_generation: takeover.result.resulting_writer_generation },
       base_snapshot: {
         ...priorWriter.base_snapshot,
         snapshot_id: winner.base_snapshot.snapshot_id,
         project_activity_position: takeover.result.resulting_snapshot_activity_position,
         created_at: winner.base_snapshot.created_at,
       },
-    });
+    };
+    if (priorWriter.author_undo_frontier_sequence === undefined) {
+      delete expectedWinner.author_undo_frontier_sequence;
+    } else {
+      expectedWinner.author_undo_frontier_sequence = priorWriter.author_undo_frontier_sequence;
+    }
+    assert.deepEqual(winner, expectedWinner);
     assert.deepEqual(chapter.chapter.current_revision, {
       revision_id: winner.base_snapshot.authoritative_head_revision_id,
       body: expectedBody,

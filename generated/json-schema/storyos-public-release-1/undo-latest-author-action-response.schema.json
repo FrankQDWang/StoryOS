@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "AuthoritativeChapterRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/ManuscriptBlock"
+          },
+          "type": "array"
+        },
+        "body": {
+          "type": "string"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision_id",
+        "body",
+        "blocks"
+      ],
+      "type": "object"
+    },
     "ControlledProject": {
       "additionalProperties": false,
       "properties": {
@@ -188,6 +211,33 @@
       ],
       "type": "string"
     },
+    "ManuscriptBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "manuscript_block_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manuscript_block_id",
+        "block_kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ManuscriptBlockKind": {
+      "enum": [
+        "paragraph",
+        "heading"
+      ],
+      "type": "string"
+    },
     "ProjectOpenState": {
       "oneOf": [
         {
@@ -238,35 +288,50 @@
       ],
       "type": "object"
     },
-    "UpdateProjectConflictReason": {
+    "UndoLatestAuthorActionConflictReason": {
       "enum": [
-        "stale_project_revision"
+        "frontier_mismatch",
+        "wrong_target_head"
       ],
       "type": "string"
     },
-    "UpdateProjectEffect": {
+    "UndoLatestAuthorActionEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
+            "author_action_sequence": {
+              "type": "string"
+            },
+            "author_undo_frontier_sequence": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "authoritative_commit_id": {
+              "type": "string"
+            },
+            "authoritative_revision": {
+              "$ref": "#/$defs/AuthoritativeChapterRevision"
+            },
             "kind": {
-              "const": "authoritative_applied",
+              "const": "compensated",
               "type": "string"
             },
             "project_activity_position": {
               "type": "string"
             },
-            "revision": {
-              "type": "string"
-            },
-            "title": {
+            "source_sequence": {
               "type": "string"
             }
           },
           "required": [
             "kind",
-            "title",
-            "revision",
+            "source_sequence",
+            "author_action_sequence",
+            "authoritative_commit_id",
+            "authoritative_revision",
             "project_activity_position"
           ],
           "type": "object"
@@ -274,12 +339,18 @@
         {
           "additionalProperties": false,
           "properties": {
+            "current_author_undo_frontier_sequence": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
             "kind": {
-              "const": "no_effect",
+              "const": "conflicted",
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateProjectNoEffectReason"
+              "$ref": "#/$defs/UndoLatestAuthorActionConflictReason"
             }
           },
           "required": [
@@ -292,11 +363,11 @@
           "additionalProperties": false,
           "properties": {
             "kind": {
-              "const": "conflicted",
+              "const": "unavailable",
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/UpdateProjectConflictReason"
+              "$ref": "#/$defs/UndoLatestAuthorActionUnavailableReason"
             }
           },
           "required": [
@@ -307,14 +378,15 @@
         }
       ]
     },
-    "UpdateProjectNoEffectReason": {
+    "UndoLatestAuthorActionUnavailableReason": {
       "enum": [
-        "title_unchanged"
+        "no_frontier",
+        "barrier"
       ],
       "type": "string"
     }
   },
-  "$id": "storyos.command.update-project.response.v1",
+  "$id": "storyos.command.undo-latest-author-action.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -331,7 +403,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateProjectEffect"
+      "$ref": "#/$defs/UndoLatestAuthorActionEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -343,7 +415,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-project.response.v1",
+      "const": "storyos.command.undo-latest-author-action.response.v1",
       "type": "string"
     }
   },
@@ -357,6 +429,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Update Project Response",
+  "title": "StoryOS Undo Latest Author Action Response",
   "type": "object"
 }

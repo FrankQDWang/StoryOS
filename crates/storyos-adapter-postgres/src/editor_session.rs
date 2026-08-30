@@ -281,7 +281,45 @@ async fn read_session(
             blocks,
             created_at: row.get(13),
         },
+        author_undo_frontier_sequence: current_author_undo_frontier_sequence(
+            client,
+            scope.owner_user_id.as_ref(),
+            scope.project_id.as_ref(),
+        )
+        .await?,
     }))
+}
+
+pub(super) async fn current_author_undo_frontier_sequence(
+    client: &tokio_postgres::Client,
+    owner_user_id: &str,
+    project_id: &str,
+) -> Result<Option<u64>, EditorSessionError> {
+    let row = client
+        .query_opt(
+            "SELECT action.author_action_sequence::text
+               FROM storyos.author_action_entries AS action
+          LEFT JOIN storyos.author_action_entries AS compensation
+                 ON compensation.owner_user_id = action.owner_user_id
+                AND compensation.project_id = action.project_id
+                AND compensation.disposition = 'compensation'
+                AND compensation.compensated_source_sequence = action.author_action_sequence
+              WHERE action.owner_user_id = $1::text::uuid
+                AND action.project_id = $2::text::uuid
+                AND action.disposition = 'forward'
+                AND compensation.author_action_sequence IS NULL
+           ORDER BY action.author_action_sequence DESC
+              LIMIT 1",
+            &[&owner_user_id, &project_id],
+        )
+        .await
+        .map_err(session_database_error)?;
+    row.map(|row| {
+        row.get::<_, String>(0)
+            .parse::<u64>()
+            .map_err(|error| EditorSessionError::Unavailable(Box::new(error)))
+    })
+    .transpose()
 }
 
 fn session_challenge_error(error: ProjectCommandChallengeError) -> EditorSessionError {

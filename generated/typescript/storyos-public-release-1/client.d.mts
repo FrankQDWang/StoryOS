@@ -39,9 +39,9 @@ export type EditorSessionBinding = { editor_session_id: string, client_session_b
 
 export type EditorBaseSnapshot = { snapshot_id: string, chapter_id: string, project_activity_position: string, authoritative_head_revision_id: string, proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, materialized_revision: AuthoritativeChapterRevision, materialized_payload_digest: DigestValue, created_at: string, };
 
-export type CreateEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, };
+export type CreateEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
 
-export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, };
+export type GetEditorSessionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, editor_session: EditorSessionBinding, writer: EditorWriterProjection, base_snapshot: EditorBaseSnapshot, author_undo_frontier_sequence?: string | null, };
 
 export type CreateProjectInput = { title: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -149,6 +149,18 @@ export type SetCurrentChapterEffect = { "kind": "authoritative_applied", current
 
 export type SetCurrentChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: SetCurrentChapterEffect, };
 
+export type UndoLatestAuthorActionInput = { expected_author_undo_frontier_sequence: string, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type UndoLatestAuthorActionRequest = { command_schema: string, undo_latest_author_action_input: UndoLatestAuthorActionInput, };
+
+export type UndoLatestAuthorActionConflictReason = "frontier_mismatch" | "wrong_target_head";
+
+export type UndoLatestAuthorActionUnavailableReason = "no_frontier" | "barrier";
+
+export type UndoLatestAuthorActionEffect = { "kind": "compensated", source_sequence: string, author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, author_undo_frontier_sequence: string | null, } | { "kind": "conflicted", reason: UndoLatestAuthorActionConflictReason, current_author_undo_frontier_sequence: string | null, } | { "kind": "unavailable", reason: UndoLatestAuthorActionUnavailableReason, };
+
+export type UndoLatestAuthorActionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UndoLatestAuthorActionEffect, };
+
 export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, } | { "kind": "split_block", manuscript_block_id: string, offset: number, new_manuscript_block_id: string, } | { "kind": "join_blocks", left_manuscript_block_id: string, right_manuscript_block_id: string, } | { "kind": "move_block", manuscript_block_id: string, to_index: number, } | { "kind": "retype_block", manuscript_block_id: string, block_kind: ManuscriptBlockKind, };
 
 export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
@@ -157,7 +169,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "setCurrentChapter";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "setCurrentChapter" | "undoLatestAuthorAction";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -247,6 +259,8 @@ export declare function digestUpdateChapter(request: UpdateChapterRequest, crypt
 export declare function updateChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string; request: UpdateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateChapterResponse>;
 export declare function digestSetCurrentChapter(request: SetCurrentChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function setCurrentChapter(options: StoryOSQueryOptions & { projectId: string; request: SetCurrentChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<SetCurrentChapterResponse>;
+export declare function digestUndoLatestAuthorAction(request: UndoLatestAuthorActionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function undoLatestAuthorAction(options: StoryOSQueryOptions & { projectId: string; request: UndoLatestAuthorActionRequest; idempotencyKey: string; antiForgery: string }): Promise<UndoLatestAuthorActionResponse>;
 export declare function digestApplyAuthorEdit(request: ApplyAuthorEditRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function applyAuthorEdit(options: StoryOSQueryOptions & { projectId: string; request: ApplyAuthorEditRequest; idempotencyKey: string; antiForgery: string }): Promise<ApplyAuthorEditResponse>;
 export declare function getApplyAuthorEditOutcome(options: StoryOSQueryOptions & { projectId: string; idempotencyKey: string; antiForgery: string }): Promise<GetApplyAuthorEditOutcomeResponse>;

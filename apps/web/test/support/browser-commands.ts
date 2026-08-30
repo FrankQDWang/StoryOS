@@ -60,6 +60,7 @@ export const storyOSBrowserCommands = {
           move_block_up: process.platform === "darwin" ? "Meta+ArrowUp" : "Control+ArrowUp",
           move_block_down: process.platform === "darwin" ? "Meta+ArrowDown" : "Control+ArrowDown",
           retype_block: process.platform === "darwin" ? "Meta+Alt+1" : "Control+Alt+1",
+          undo_latest_author_action: process.platform === "darwin" ? "Meta+Z" : "Control+Z",
         }[request.operation];
         await context.page.keyboard.press(key);
       }

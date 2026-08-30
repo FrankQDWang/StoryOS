@@ -239,6 +239,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "author_undo_frontier_sequence": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "base_snapshot": {
       "$ref": "#/$defs/EditorBaseSnapshot"
     },

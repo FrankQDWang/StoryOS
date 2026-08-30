@@ -42,6 +42,7 @@ mod manuscript_tree;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
+mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_volume;
@@ -96,6 +97,10 @@ pub use manuscript_tree::{
 pub use set_current_chapter::{
     SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,
     SetCurrentChapterSettlementEffect, SetCurrentChapterStore, set_current_chapter,
+};
+pub use undo_latest_author_action::{
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
+    UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
 };
 pub use update_chapter::{
     UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,

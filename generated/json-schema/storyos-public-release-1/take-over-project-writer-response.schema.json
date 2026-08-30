@@ -156,7 +156,8 @@
         "createChapter",
         "updateVolume",
         "updateChapter",
-        "setCurrentChapter"
+        "setCurrentChapter",
+        "undoLatestAuthorAction"
       ],
       "type": "string"
     },

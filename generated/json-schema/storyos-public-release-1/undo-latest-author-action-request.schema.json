@@ -1,0 +1,57 @@
+{
+  "$defs": {
+    "UndoLatestAuthorActionInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_author_undo_frontier_sequence": {
+          "type": "string"
+        },
+        "expected_authoritative_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_author_undo_frontier_sequence",
+        "expected_authoritative_revision_id",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.undo-latest-author-action.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.undo-latest-author-action.request.v1",
+      "type": "string"
+    },
+    "undo_latest_author_action_input": {
+      "$ref": "#/$defs/UndoLatestAuthorActionInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "undo_latest_author_action_input"
+  ],
+  "title": "StoryOS Undo Latest Author Action Request",
+  "type": "object"
+}

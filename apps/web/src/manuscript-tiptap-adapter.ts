@@ -114,7 +114,10 @@ function retypeCurrentBlock(view: EditorView): boolean {
   return true;
 }
 
-export function storyosManuscriptExtensions(blockId: string) {
+export function storyosManuscriptExtensions(
+  blockId: string,
+  onAuthorUndo?: () => boolean,
+) {
   return [
     Document.extend({ content: "(paragraph | heading)+" }),
     Paragraph,
@@ -152,7 +155,7 @@ export function storyosManuscriptExtensions(blockId: string) {
           "Mod-b": () => true,
           "Mod-i": () => true,
           "Mod-u": () => true,
-          "Mod-z": () => true,
+          "Mod-z": () => onAuthorUndo?.() ?? true,
           "Mod-y": () => true,
           "Shift-Mod-z": () => true,
         };

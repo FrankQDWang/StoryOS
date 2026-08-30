@@ -6,6 +6,7 @@ mod create_project;
 mod create_volume;
 mod manuscript_payload;
 mod set_current_chapter;
+mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_volume;
@@ -30,6 +31,11 @@ pub use manuscript_payload::{
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
+};
+pub use undo_latest_author_action::{
+    AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,
+    UndoLatestAuthorActionConflict, UndoLatestAuthorActionResult,
+    UndoLatestAuthorActionUnavailable, undo_latest_author_action,
 };
 pub use update_chapter::{
     ChapterJoin, UpdateChapter, UpdateChapterConflict, UpdateChapterNoEffect, UpdateChapterRefusal,
@@ -281,3 +287,7 @@ mod update_volume_tests;
 #[cfg(test)]
 #[path = "set_current_chapter_tests.rs"]
 mod set_current_chapter_tests;
+
+#[cfg(test)]
+#[path = "undo_latest_author_action_tests.rs"]
+mod undo_latest_author_action_tests;

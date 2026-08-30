@@ -374,6 +374,8 @@ pub struct CreateEditorSessionResponse {
     pub editor_session: EditorSessionBinding,
     pub writer: EditorWriterProjection,
     pub base_snapshot: EditorBaseSnapshot,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_undo_frontier_sequence: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -385,6 +387,8 @@ pub struct GetEditorSessionResponse {
     pub editor_session: EditorSessionBinding,
     pub writer: EditorWriterProjection,
     pub base_snapshot: EditorBaseSnapshot,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author_undo_frontier_sequence: Option<String>,
 }
 
 pub use crate::project_command_targets::project_command_kind;

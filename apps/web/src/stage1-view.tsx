@@ -343,6 +343,7 @@ function ProjectReadyView({
               pending?.authoritative_revision_id
                 ?? selectedChapter.chapter.current_revision.revision_id
             }
+            data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
           >
             {saveState === "saved" ? "已保存" : saveState === "saving" ? "保存中" : "需要处理"}
           </small>

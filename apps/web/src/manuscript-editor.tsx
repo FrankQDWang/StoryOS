@@ -5,6 +5,7 @@ import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import { createAuthorEditIdleController, type AuthorEditIdleController }
   from "./author-edit-idle.ts";
 import type { EditorReadyState, PendingEditProjection } from "./editor-types.ts";
+import { rebuildPendingProjection } from "./local-edit-journal.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import {
   captureManuscriptChange,
@@ -21,6 +22,7 @@ import {
   storyosEditorProps,
   storyosManuscriptExtensions,
 } from "./manuscript-tiptap-adapter.ts";
+import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
 export interface ManuscriptEditorProps {
   blocks: readonly ManuscriptParagraph[];
@@ -69,11 +71,14 @@ export function ManuscriptEditor({
   const idleRef = useRef<AuthorEditIdleController | null>(null);
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
+  const persistWorkspaceRef = useRef(persistWorkspace);
+  const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
+  persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
-    extensions: storyosManuscriptExtensions(firstBlockId),
+    extensions: storyosManuscriptExtensions(firstBlockId, () => onAuthorUndoRef.current()),
     content: manuscriptBlocksJson(blocks),
     editable,
     injectCSS: false,
@@ -124,6 +129,36 @@ export function ManuscriptEditor({
       void idleRef.current?.persist(edit, origin, createdAt);
     },
   }, []);
+
+  onAuthorUndoRef.current = () => {
+    void (async () => {
+      const workspace = persistWorkspaceRef.current;
+      if (editor === null || workspace === undefined) return;
+      await idleRef.current?.flush();
+      try {
+        const settled = await undoOwnedLatestAuthorAction({
+          workspace,
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+        });
+        if (settled === undefined || settled.effect.kind !== "compensated") {
+          if (settled !== undefined) {
+            onFailureRef.current(new Error("Author Undo did not compensate"));
+          }
+          return;
+        }
+        const restored = workspace.session.base_snapshot.materialized_revision.blocks;
+        hydrateManuscriptBlocks(editor, restored);
+        observedBlocksRef.current = restored.map((block) => ({ ...block }));
+        syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
+        onProjectionRef.current(await rebuildPendingProjection(workspace));
+      } catch (error) {
+        onFailureRef.current(error);
+      }
+    })();
+    return true;
+  };
 
   useEffect(() => {
     editor?.setEditable(editable);
