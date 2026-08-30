@@ -47,6 +47,7 @@ fn session(id: &EditorSessionId, binding: &EditorClientBinding) -> EditorSession
             payload_digest_hex: "a".repeat(64),
             created_at: "2026-08-13T08:00:00.000Z".to_owned(),
         },
+        author_undo_frontier_sequence: None,
     }
 }
 

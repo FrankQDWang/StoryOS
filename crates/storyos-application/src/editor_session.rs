@@ -79,6 +79,7 @@ pub struct EditorSession {
     pub opened_at: String,
     pub writer: EditorWriterState,
     pub base_snapshot: EditorSessionSnapshot,
+    pub author_undo_frontier_sequence: Option<u64>,
 }
 
 #[derive(Debug)]

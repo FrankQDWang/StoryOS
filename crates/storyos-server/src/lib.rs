@@ -32,6 +32,7 @@ mod request_origin;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
+mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_volume;
@@ -60,6 +61,7 @@ use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
 use takeover::take_over_project_writer;
+use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;
 use update_project::update_project;
 use update_volume::update_volume;
@@ -261,6 +263,13 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::APPLY_AUTHOR_EDIT_PATH,
             routing::on(apply_author_edit_method, apply_author_edit),
+        )
+        .route(
+            contracts::UNDO_LATEST_AUTHOR_ACTION_PATH,
+            routing::on(
+                method_filter(contracts::UNDO_LATEST_AUTHOR_ACTION_METHOD),
+                undo_latest_author_action,
+            ),
         )
         .route(
             contracts::TAKE_OVER_PROJECT_WRITER_PATH,

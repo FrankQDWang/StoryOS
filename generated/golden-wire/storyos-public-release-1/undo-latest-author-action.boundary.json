@@ -1,0 +1,74 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000932",
+  "command_id": "018f0000-0000-7001-8000-000000000931",
+  "correlation_id": "018f0000-0000-7001-8000-000000000930",
+  "effect": {
+    "author_action_sequence": "2",
+    "authoritative_commit_id": "018f0000-0000-7001-8000-000000000807",
+    "authoritative_revision": {
+      "blocks": [
+        {
+          "block_kind": "paragraph",
+          "manuscript_block_id": "018f0000-0000-7001-8000-000000000808",
+          "text": "Hello"
+        }
+      ],
+      "body": "Hello",
+      "revision_id": "018f0000-0000-7001-8000-000000000806"
+    },
+    "kind": "compensated",
+    "project_activity_position": "3",
+    "source_sequence": "1"
+  },
+  "project": {
+    "open": {
+      "current_chapter_id": "018f0000-0000-7001-8000-000000000803",
+      "kind": "current_chapter"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000002",
+    "title": "Project A"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "receipt": {
+    "artifact_lifecycle_event_refs": [],
+    "author_action_sequence": "2",
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000932",
+    "authoritative_commit_ids": [
+      "018f0000-0000-7001-8000-000000000807"
+    ],
+    "authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000806"
+    ],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.undoLatestAuthorAction.jcs.v1",
+      "value_hex_lowercase": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "command_kind": "undoLatestAuthorAction",
+    "condition_refs": [],
+    "created_at": "1970-01-01T00:00:00.000Z",
+    "draft_artifact_refs": [],
+    "expected_heads": [
+      "018f0000-0000-7001-8000-000000000805"
+    ],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000934",
+    "prior_heads": [
+      "018f0000-0000-7001-8000-000000000805"
+    ],
+    "producer_cause": "author_command_admission",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+    },
+    "proposal_revision_ids": [],
+    "receipt_id": "018f0000-0000-7001-8000-000000000933",
+    "result": "authoritative_applied",
+    "resulting_heads": [
+      "018f0000-0000-7001-8000-000000000806"
+    ]
+  },
+  "schema_id": "storyos.command.undo-latest-author-action.response.v1"
+}

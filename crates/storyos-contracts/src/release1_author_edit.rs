@@ -146,6 +146,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "setCurrentChapter")]
     #[ts(rename = "setCurrentChapter")]
     SetCurrentChapter,
+    #[serde(rename = "undoLatestAuthorAction")]
+    #[ts(rename = "undoLatestAuthorAction")]
+    UndoLatestAuthorAction,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

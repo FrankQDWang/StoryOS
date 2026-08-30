@@ -70,6 +70,7 @@ mod manuscript_tree;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
+mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_volume;

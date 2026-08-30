@@ -184,6 +184,7 @@ pub(super) async fn get_editor_session(
         editor_session: response.editor_session,
         writer: response.writer,
         base_snapshot: response.base_snapshot,
+        author_undo_frontier_sequence: response.author_undo_frontier_sequence,
     }))
 }
 
@@ -263,6 +264,9 @@ fn create_response(
             },
             created_at: session.base_snapshot.created_at,
         },
+        author_undo_frontier_sequence: session
+            .author_undo_frontier_sequence
+            .map(|sequence| sequence.to_string()),
     }
 }
 

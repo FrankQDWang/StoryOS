@@ -185,6 +185,7 @@ export interface PendingEditProjection {
   save_state: "clean" | "saving" | "saved" | "needs_attention";
   unsettled_intent_count: number;
   authoritative_revision_id: string;
+  author_undo_frontier_sequence?: string;
 }
 
 export interface EditorWorkspace {

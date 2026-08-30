@@ -17,7 +17,7 @@ export interface ImeCompositionRequest {
 export type TrustedInputRequest =
   | Readonly<{
     operation: "backspace" | "cut" | "delete" | "enter" | "paste"
-      | "move_block_up" | "move_block_down" | "retype_block";
+      | "move_block_up" | "move_block_down" | "retype_block" | "undo_latest_author_action";
   }>
   | Readonly<{ operation: "insert_text"; text: string }>;
 
@@ -117,7 +117,7 @@ export function parseTrustedInputRequest(value: unknown): TrustedInputRequest {
   if (operation === "backspace" || operation === "cut" || operation === "delete"
     || operation === "enter" || operation === "paste"
     || operation === "move_block_up" || operation === "move_block_down"
-    || operation === "retype_block") {
+    || operation === "retype_block" || operation === "undo_latest_author_action") {
     exactObject(value, ["operation"], "trusted input request");
     return { operation };
   }

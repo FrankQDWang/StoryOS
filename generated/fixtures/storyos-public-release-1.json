@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:fe16c6c7dc629319f12f52c287ef28ce88e39bf348646c7f96415df79a9b6a99",
+  "corpus_digest": "sha256:0e15e079d3ff89450b19d7ee778dc394cd486f95e9cb5a72c6e1c708c48031f5",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -48,6 +48,9 @@
       "generated/golden-wire/storyos-public-release-1/set-current-chapter.json",
       "generated/golden-wire/storyos-public-release-1/set-current-chapter.invalid.json",
       "generated/golden-wire/storyos-public-release-1/set-current-chapter.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json",
+      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-editor-session.boundary.json",
@@ -341,6 +344,24 @@
       "fixture_id": "storyos.golden.setCurrentChapter.boundary.v1",
       "operation_id": "setCurrentChapter",
       "path": "generated/golden-wire/storyos-public-release-1/set-current-chapter.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.undoLatestAuthorAction.positive.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.undoLatestAuthorAction.invalid.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.undoLatestAuthorAction.boundary.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/undo-latest-author-action.boundary.json"
     },
     {
       "classification": "positive",
