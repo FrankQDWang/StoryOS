@@ -34,6 +34,7 @@ import { ManuscriptEditor } from "./manuscript-editor.tsx";
 import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
+import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
 
 interface Stage1ViewProps {
@@ -82,6 +83,7 @@ function ProjectReadyView({
   const selectedChapterIdRef = useRef(state.chapter.chapter.chapter_id);
   const switchGenerationRef = useRef(0);
   const makeCurrentInFlightRef = useRef(false);
+  const takeOverInFlightRef = useRef(false);
   const currentChapterId = state.project.project.open.kind === "current_chapter"
     ? state.project.project.open.current_chapter_id
     : state.chapter.chapter.chapter_id;
@@ -366,6 +368,22 @@ function ProjectReadyView({
               >
                 确认待写入正文
               </button>
+            )
+            : null}
+          {writer?.kind === "read_only"
+            ? (
+              <TakeOverWriterButton
+                state={state}
+                writer={writer}
+                baseUrl={baseUrl}
+                fetchImpl={fetchImpl}
+                cryptoImpl={cryptoImpl}
+                inFlightRef={takeOverInFlightRef}
+                onReopened={onReopened}
+                onRefused={() => {
+                  setSwitchRecovery("无法接管写作。");
+                }}
+              />
             )
             : null}
         </>
@@ -689,9 +707,16 @@ function Stage1View({
   if (current.kind === "project-ready") {
     return (
       <ProjectReadyView
-        key={current.project.project.open.kind === "current_chapter"
-          ? current.project.project.open.current_chapter_id
-          : current.project.project.project_id}
+        key={`${
+          current.project.project.open.kind === "current_chapter"
+            ? current.project.project.open.current_chapter_id
+            : current.project.project.project_id
+        }:${
+          current.editor.kind === "editor-ready"
+            && current.editor.session.writer.kind === "current_writer"
+            ? current.editor.session.writer.writer_generation
+            : current.editor.kind
+        }`}
         state={current}
         baseUrl={baseUrl}
         fetchImpl={fetchImpl}

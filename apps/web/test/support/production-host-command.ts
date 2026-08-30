@@ -2,11 +2,8 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import type { BrowserContext, Page } from "playwright";
 
-import {
-  createProjectCommandChallenge, digestTakeOverProjectWriter, getEditorSession,
-  takeOverProjectWriter,
-} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { withChallengeRetry } from "./node-integration";
+import { getEditorSession }
+  from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 const USER = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -59,29 +56,25 @@ function assertPreservedJournal(before: JournalEvidence, after: JournalEvidence)
   }
 }
 
-// Only the generated session queries and Takeover challenge/command cross this bridge.
+// Only generated Editor Session queries cross this bridge. Explicit Takeover
+// stays on the production page.
 function takeoverFetch(page: Page, origin: string, projectId: string,
   writerId: string, observerId: string): typeof fetch {
   const scope = `/api/v1/projects/${projectId}`;
   const queryPaths = [writerId, observerId].map((id) => `${scope}/editor-sessions/${id}`);
-  const commandPaths = [`${scope}/anti-forgery-challenges`,
-    `${scope}/editor-sessions/${observerId}/takeovers`];
   return async (input, init) => {
     assert.ok(input instanceof URL && input.origin === origin && !input.search && !input.hash);
     assert.equal(new URL(page.url()).origin, origin);
-    const method = init?.method;
-    assert.ok((method === "GET" && queryPaths.includes(input.pathname))
-      || (method === "POST" && commandPaths.includes(input.pathname)));
-    assert.ok(init?.body === undefined || typeof init.body === "string");
+    assert.equal(init?.method, "GET");
+    assert.ok(queryPaths.includes(input.pathname));
+    assert.equal(init?.body, undefined);
     const result = await page.evaluate(async (request) => {
       const response = await fetch(request.url, {
         method: request.method, headers: request.headers, credentials: "same-origin",
-        ...(request.body === null ? {} : { body: request.body }),
       });
       return { body: await response.text(), status: response.status,
         headers: Object.fromEntries(response.headers) };
-    }, { url: input.href, method, headers: Object.fromEntries(new Headers(init?.headers)),
-      body: init?.body ?? null });
+    }, { url: input.href, method: init?.method, headers: Object.fromEntries(new Headers(init?.headers)) });
     return new Response(result.body, { status: result.status, headers: result.headers });
   };
 }
@@ -113,6 +106,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     && !server.username && !server.password, "the production fixture needs an exact loopback origin");
   const origin = server.origin;
   const pages: Page[] = [];
+  let releaseWriterEdits = (): void => {};
   try {
     await context.addCookies([{
       name: "storyos_session", value: "session-a", url: `${origin}/`,
@@ -163,6 +157,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
 
     assert.equal((await observer.goto(projectUrl))?.status(), 200);
     await observer.locator(MANUSCRIPT_READONLY).waitFor();
+    await observer.locator("[data-take-over-writer]").waitFor();
     const observerId = await sessionId(observer, projectId);
     assert.notEqual(observerId, writerId);
     const options = { baseUrl: origin, projectId,
@@ -172,70 +167,81 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const secondary = await getEditorSession({ ...options, editorSessionId: observerId });
     assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session",
       observed_writer_generation: prior.writer.writer_generation });
-    const request = {
-      command_schema: "storyos.command.take-over-project-writer.request.v1",
-      client_contract_revision: "storyos.web-client.release-1.v3",
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
-      correlation_id: "018f0000-0000-7001-8000-000000000901",
-      editor_session_id: observerId, observed_writer_generation: prior.writer.writer_generation,
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
-    };
-    const idempotencyKey = "018f0000-0000-7001-8000-000000000902";
-    const digest = await digestTakeOverProjectWriter(request);
-    const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
-      ...options, request: { method: "POST",
-        route_template: "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers",
-        command_schema: request.command_schema, canonical_command_digest: digest,
-        idempotency_key: idempotencyKey },
-    }));
-    const takeover = await takeOverProjectWriter({ ...options, editorSessionId: observerId,
-      request, idempotencyKey, antiForgery: challenge.nonce });
-    assert.ok(takeover.result.kind === "takeover_applied");
+    const writerEditsHeld = new Promise<void>((resolve) => {
+      releaseWriterEdits = resolve;
+    });
+    let noteAuthorEditPosted = (): void => {};
+    const authorEditPosted = new Promise<void>((resolve) => {
+      noteAuthorEditPosted = resolve;
+    });
+    let recordLateAuthorEdit = (_value: { status: number; body: unknown }): void => {};
+    const lateAuthorEdit = new Promise<{ status: number; body: unknown }>((resolve) => {
+      recordLateAuthorEdit = resolve;
+    });
+    await writer.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      noteAuthorEditPosted();
+      await writerEditsHeld;
+      const response = await route.fetch();
+      const body: unknown = JSON.parse(await response.text());
+      recordLateAuthorEdit({ status: response.status(), body });
+      await route.fulfill({
+        status: response.status(),
+        headers: response.headers(),
+        body: JSON.stringify(body),
+      });
+    });
+    await writer.locator(MANUSCRIPT_EDITOR).click();
+    await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
+    await writer.keyboard.insertText("Unsettled before takeover.");
+    await writer.locator('[data-save-state="saving"]').waitFor();
+    await authorEditPosted;
+    await observer.locator("[data-take-over-writer]").click();
+    await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const generation = String(BigInt(prior.writer.writer_generation) + 1n);
     const winner = await getEditorSession({ ...options, editorSessionId: observerId });
     assert.deepEqual(winner.writer, { kind: "current_writer", writer_generation: generation });
     const fenced = await getEditorSession({ ...options, editorSessionId: writerId });
     assert.deepEqual(fenced.writer, { kind: "read_only", reason: "superseded_by_takeover",
       observed_writer_generation: generation });
-
-    const refusal = writer.waitForResponse((response) => response.status() === 412
-      && response.url().startsWith(`${origin}/api/v1/projects/${projectId}/`));
-    await writer.locator(MANUSCRIPT_EDITOR).press("ControlOrMeta+A");
-    await writer.keyboard.insertText("Unsent after takeover.");
-    const problem: unknown = await (await refusal).json();
+    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
+    releaseWriterEdits();
+    const refused = await lateAuthorEdit;
+    assert.equal(refused.status, 412);
+    const problem = refused.body;
     assert.ok(typeof problem === "object" && problem !== null);
     assert.equal(Reflect.get(problem, "code"), "editor_writer_stale");
     await writer.locator(MANUSCRIPT_READONLY).waitFor();
     await writer.locator('[data-save-state="needs_attention"]').waitFor();
-    assert.equal(await manuscriptBody(writer), "Unsent after takeover.");
+    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     const oldJournal = await readJournal(writer, projectId);
-    assert.equal(oldJournal.partitions.length, 2);
     assert.ok(oldJournal.intents.length > 0 && oldJournal.payload_chains.length > 0);
+    const takeoverPartition = oldJournal.partitions.find((record) =>
+      typeof record === "object" && record !== null
+      && Reflect.get(record, "editor_session_id") === observerId
+      && Reflect.get(record, "writer_generation") === generation
+      && Reflect.get(record, "disposition") === "current_writer_open");
+    assert.ok(takeoverPartition !== undefined);
     await observer.reload();
     await observer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await sessionId(observer, projectId), observerId);
     const newJournal = await readJournal(observer, projectId);
     assertPreservedJournal(oldJournal, newJournal);
-    const added = newJournal.partitions.filter((record) =>
-      !oldJournal.partitions.some((old) => isDeepStrictEqual(record, old)));
-    assert.equal(added.length, 1);
-    const partition = added[0];
-    assert.ok(typeof partition === "object" && partition !== null);
-    assert.deepEqual({ session: Reflect.get(partition, "editor_session_id"),
-      generation: Reflect.get(partition, "writer_generation"),
-      disposition: Reflect.get(partition, "disposition") },
-    { session: observerId, generation, disposition: "current_writer_open" });
     assert.equal(await observer.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body"),
       "Saved through the production host.");
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
     assert.equal(await writer.locator(MANUSCRIPT_READONLY).getAttribute("data-manuscript-body"),
-      "Unsent after takeover.");
+      "Unsettled before takeover.");
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
     assert.ok(requests.every((url) => !url.pathname.startsWith("/@vite/")));
   } finally {
+    releaseWriterEdits();
     await Promise.all(pages.map((page) => page.close()));
     await context.clearCookies({ name: "storyos_session" });
   }
