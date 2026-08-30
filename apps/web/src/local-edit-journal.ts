@@ -92,6 +92,76 @@ export function mayAppendJournalSubmissionRecord(
     && JSON.stringify(first.retry_source) === JSON.stringify(next.retry_source);
 }
 
+export function recordTargetsCurrentBase(
+  record: Pick<JournalIntentRecord, "base_snapshot_id" | "chapter_object_id" | "expected_authoritative_heads">,
+  base: EditorBaseSnapshot,
+) {
+  return record.chapter_object_id === base.chapter_id
+    && (record.base_snapshot_id === base.snapshot_id
+      || JSON.stringify(record.expected_authoritative_heads)
+        === JSON.stringify([base.authoritative_head_revision_id]));
+}
+
+function isOpenPayloadChainForBase(chain: JournalPayloadChain, snapshotId: string) {
+  return chain.payload_collection?.kind !== "collected"
+    && chain.checkpoint_ref?.source_snapshot_id === snapshotId;
+}
+
+function checkpointMaterialization(base: EditorBaseSnapshot): string {
+  const { blocks, body } = base.materialized_revision;
+  if (blocks.length <= 1) return body;
+  return JSON.stringify(blocks.map((block) => ({
+    manuscript_block_id: block.manuscript_block_id,
+    block_kind: block.block_kind,
+    text: block.text,
+  })));
+}
+
+function isCheckpointBlock(value: unknown): value is ManuscriptBlock {
+  if (typeof value !== "object" || value === null) return false;
+  const block = value as Record<string, unknown>;
+  return typeof block.manuscript_block_id === "string"
+    && UUID.test(block.manuscript_block_id)
+    && block.block_kind === "paragraph"
+    && typeof block.text === "string";
+}
+
+function blocksFromCheckpoint(
+  checkpoint: string,
+  fallbackBlockId: string,
+): ManuscriptBlock[] {
+  if (checkpoint.startsWith("[")) {
+    try {
+      const parsed: unknown = JSON.parse(checkpoint);
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed.every(isCheckpointBlock)) {
+        return parsed.map((block) => ({
+          manuscript_block_id: block.manuscript_block_id,
+          block_kind: "paragraph" as const,
+          text: block.text,
+        }));
+      }
+    } catch {
+      // Display flatten is not a Block array.
+    }
+  }
+  return [{
+    manuscript_block_id: fallbackBlockId,
+    block_kind: "paragraph",
+    text: checkpoint,
+  }];
+}
+
+function manuscriptBlocksEqual(
+  left: readonly ManuscriptBlock[],
+  right: readonly ManuscriptBlock[],
+) {
+  return left.length === right.length
+    && left.every((block, index) =>
+      block.manuscript_block_id === right[index]?.manuscript_block_id
+      && block.block_kind === right[index]?.block_kind
+      && block.text === right[index]?.text);
+}
+
 const requestResult = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error ?? new Error("IndexedDB request failed"));
@@ -224,10 +294,10 @@ function isLegacyReplaceSelectionPrimitive(value: unknown) {
 export function journalHasIncompatiblePendingReplaceSelection(
   records: JournalIntentRecord[],
   coveredSequences: Set<number>,
-  baseSnapshotId: string,
+  base: EditorBaseSnapshot,
 ) {
   return records.some((record) =>
-    record.base_snapshot_id === baseSnapshotId
+    recordTargetsCurrentBase(record, base)
     && !coveredSequences.has(record.local_intent_sequence)
     && (record.author_edit_unit?.normalized_primitives ?? [])
       .some(isLegacyReplaceSelectionPrimitive));
@@ -353,26 +423,24 @@ async function validatePayloadChains(
       || new TextEncoder().encode(checkpoint).byteLength > workspace.maxJsonStringUtf8Bytes) {
       throw new Error("Local Edit Journal is corrupt");
     }
+    const firstPrimitive = patches[0]?.normalized_primitives?.[0];
+    const checkpointBlockId = firstPrimitive?.kind === "replace_block_selection"
+      || firstPrimitive?.kind === "split_block"
+      ? firstPrimitive.manuscript_block_id
+      : firstPrimitive?.kind === "join_blocks"
+        ? firstPrimitive.left_manuscript_block_id
+        : "journal-checkpoint";
+    const checkpointBlocks = blocksFromCheckpoint(checkpoint, checkpointBlockId);
     let blocks: ManuscriptBlock[];
     if (chain.checkpoint_ref.source_snapshot_id
       === workspace.session.base_snapshot.snapshot_id) {
-      if (flattenChapterBody(baseBlocks) !== checkpoint) {
+      if (!manuscriptBlocksEqual(baseBlocks, checkpointBlocks)
+        && flattenChapterBody(baseBlocks) !== checkpoint) {
         throw new Error("Local Edit Journal is corrupt");
       }
       blocks = cloneBlocks(baseBlocks);
     } else {
-      const firstPrimitive = patches[0]?.normalized_primitives?.[0];
-      const checkpointBlockId = firstPrimitive?.kind === "replace_block_selection"
-        || firstPrimitive?.kind === "split_block"
-        ? firstPrimitive.manuscript_block_id
-        : firstPrimitive?.kind === "join_blocks"
-          ? firstPrimitive.left_manuscript_block_id
-          : "journal-checkpoint";
-      blocks = [{
-        manuscript_block_id: checkpointBlockId,
-        block_kind: "paragraph",
-        text: checkpoint,
-      }];
+      blocks = checkpointBlocks;
     }
     for (const [index, record] of chainRecords.entries()) {
       const patchRef = patches[index];
@@ -547,7 +615,7 @@ export async function validateJournalSnapshot(
   const covered = await validateCoverage(workspace, records, groups);
   const pendingRecords = records.filter((record) => !covered.has(record.local_intent_sequence));
   if (pendingRecords.some((record) =>
-    record.base_snapshot_id !== workspace.session.base_snapshot.snapshot_id)
+    !recordTargetsCurrentBase(record, workspace.session.base_snapshot))
     || pendingRecords.some((record, index) => index > 0
       && !mayAppendJournalSubmissionRecord(
         pendingRecords[0]!, pendingRecords[index - 1]!, record,
@@ -577,8 +645,7 @@ function pendingProjectionFromSnapshot(
     }
   }
   const activeRecords = snapshot.records.filter((record) =>
-    record.chapter_object_id === base.chapter_id
-    && record.base_snapshot_id === base.snapshot_id
+    recordTargetsCurrentBase(record, base)
     && !appliedSequences.has(record.local_intent_sequence));
   const blocks = (activeRecords.length === 0
     ? cloneBlocks(base.materialized_revision.blocks)
@@ -591,7 +658,7 @@ function pendingProjectionFromSnapshot(
   const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
     snapshot.records,
     coveredSequences,
-    base.snapshot_id,
+    base,
   );
   return {
     body,
@@ -661,6 +728,7 @@ export async function persistSplitBlock(
     offset: number;
     new_manuscript_block_id: string;
     resultingBody: string;
+    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
     inputOrigin?: InputOrigin;
     undoGroupId?: string;
     createdAt?: string;
@@ -676,6 +744,16 @@ export async function persistSplitBlock(
     new_manuscript_block_id: edit.new_manuscript_block_id,
   };
   const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  if (edit.resultingBlocks !== undefined
+    && JSON.stringify(expectedBlocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    })))) {
+    throw new Error("Local Edit Journal reconstruction failed");
+  }
   return persistAuthorEditUnit(workspace, {
     snapshot,
     projection,
@@ -704,6 +782,7 @@ export async function persistJoinBlocks(
     right_manuscript_block_id: string;
     caret: number;
     resultingBody: string;
+    resultingBlocks?: readonly { manuscript_block_id: string; text: string }[];
     inputOrigin?: InputOrigin;
     undoGroupId?: string;
     createdAt?: string;
@@ -718,6 +797,16 @@ export async function persistJoinBlocks(
     right_manuscript_block_id: edit.right_manuscript_block_id,
   };
   const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  if (edit.resultingBlocks !== undefined
+    && JSON.stringify(expectedBlocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    }))) !== JSON.stringify(edit.resultingBlocks.map((block) => ({
+      manuscript_block_id: block.manuscript_block_id,
+      text: block.text,
+    })))) {
+    throw new Error("Local Edit Journal reconstruction failed");
+  }
   return persistAuthorEditUnit(workspace, {
     snapshot,
     projection,
@@ -874,8 +963,8 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
   const existingPayloadChain = chains.find((chain) =>
-    chain.checkpoint_ref?.source_snapshot_id === base.snapshot_id);
-  if (chains.filter((chain) => chain.checkpoint_ref?.source_snapshot_id === base.snapshot_id).length > 1
+    isOpenPayloadChainForBase(chain, base.snapshot_id));
+  if (chains.filter((chain) => isOpenPayloadChainForBase(chain, base.snapshot_id)).length > 1
     || (existingPayloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {
     transaction.abort();
     throw new Error("Local Edit Journal limit failed");
@@ -886,7 +975,7 @@ async function persistAuthorEditUnit(
       journal_partition_id: partitionId,
       checkpoint_ref: {
         chapter_object_id: base.chapter_id,
-        materialized_payload: base.materialized_revision.body,
+        materialized_payload: checkpointMaterialization(base),
         materialized_payload_digest: base.materialized_payload_digest,
         source_snapshot_id: base.snapshot_id,
         source_heads: [base.authoritative_head_revision_id],
@@ -963,7 +1052,7 @@ export async function reconfirmLegacyReplaceSelection(
     throw new Error("Local Edit Journal requires prior group settlement");
   }
   const pendingLegacy = snapshot.records.filter((record) =>
-    record.base_snapshot_id === workspace.session.base_snapshot.snapshot_id
+    recordTargetsCurrentBase(record, workspace.session.base_snapshot)
     && !covered.has(record.local_intent_sequence)
     && (record.author_edit_unit?.normalized_primitives ?? [])
       .some(isLegacyReplaceSelectionPrimitive));

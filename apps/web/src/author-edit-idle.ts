@@ -111,11 +111,11 @@ export function createAuthorEditIdleController({
     });
     workspace.pending = projection;
     pendingIntentCount = projection.unsettled_intent_count;
-    onProjection(projection);
     undoGroupId = undefined;
     if (projection.save_state === "saved" && afterAppliedSettlement) {
       await afterAppliedSettlement(workspace);
     }
+    onProjection(projection);
     if (projection.save_state === "needs_attention") {
       throw new Error("Author Edit requires attention");
     }
@@ -151,6 +151,7 @@ export function createAuthorEditIdleController({
               offset: edit.offset,
               new_manuscript_block_id: edit.new_manuscript_block_id,
               resultingBody: edit.resultingBody,
+              resultingBlocks: edit.resultingBlocks,
               ...persistFields,
             }, cryptoImpl)
             : edit.kind === "join_blocks"
@@ -159,6 +160,7 @@ export function createAuthorEditIdleController({
                 right_manuscript_block_id: edit.right_manuscript_block_id,
                 caret: edit.caret,
                 resultingBody: edit.resultingBody,
+                resultingBlocks: edit.resultingBlocks,
                 ...persistFields,
               }, cryptoImpl)
               : await persistIntent(workspace, {

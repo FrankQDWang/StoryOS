@@ -35,6 +35,7 @@ import {
   JOURNAL_DATABASE_VERSION,
   journalHasIncompatiblePendingReplaceSelection,
   mayAppendJournalSubmissionRecord,
+  recordTargetsCurrentBase,
   rebuildPendingProjection,
   readJournalSnapshot,
   validateJournalSnapshot,
@@ -120,7 +121,7 @@ async function digestSubmissionCoverage(
 }
 
 const HARD_FLUSH_ORIGINS = new Set<InputOrigin>([
-  "composition_confirmation", "paste", "cut",
+  "composition_confirmation", "paste", "cut", "split_block", "join_blocks",
 ]);
 
 async function validateFrozenGroup(
@@ -217,19 +218,19 @@ export async function freezeOneIntentSubmission(
   const firstUncovered = snapshot.records.find((record) =>
     !coveredSequences.has(record.local_intent_sequence));
   if (firstUncovered
-    && firstUncovered.base_snapshot_id !== workspace.session.base_snapshot.snapshot_id) {
+    && !recordTargetsCurrentBase(firstUncovered, workspace.session.base_snapshot)) {
     throw new Error("Local Edit Journal is corrupt");
   }
   const candidates = snapshot.records.filter((record) =>
     !coveredSequences.has(record.local_intent_sequence)
-    && record.base_snapshot_id === workspace.session.base_snapshot.snapshot_id);
+    && recordTargetsCurrentBase(record, workspace.session.base_snapshot));
   if (candidates.length === 0) {
     throw new Error("One pending Author Edit is required");
   }
   if (journalHasIncompatiblePendingReplaceSelection(
     candidates,
     new Set(),
-    workspace.session.base_snapshot.snapshot_id,
+    workspace.session.base_snapshot,
   )) {
     throw new Error("Local Edit Journal requires Block reconfirmation");
   }

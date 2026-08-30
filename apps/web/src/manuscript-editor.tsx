@@ -31,7 +31,7 @@ export interface ManuscriptEditorProps {
   cryptoImpl: Crypto;
   controllerRef: { current: ManualInputController | null };
   onProjection: (projection: PendingEditProjection) => void;
-  onFailure: () => void;
+  onFailure: (error: unknown) => void;
 }
 
 function syncManuscriptSurface(
@@ -150,7 +150,7 @@ export function ManuscriptEditor({
       cryptoImpl,
       afterAppliedSettlement: collectEligibleJournalPayload,
       onProjection: (projection) => { onProjectionRef.current(projection); },
-      onFailure: () => { onFailureRef.current(); },
+      onFailure: (error) => { onFailureRef.current(error); },
     });
     idleRef.current = idle;
     const controller: ManualInputController = {

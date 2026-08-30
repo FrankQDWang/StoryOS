@@ -281,6 +281,33 @@ fn replace_still_targets_one_block_inside_a_split_payload() {
 }
 
 #[test]
+fn split_at_the_end_keeps_an_empty_right_block_and_the_starting_identity() {
+    let mut command = split_command();
+    command.current_payload = upgrade_legacy_manuscript("Hello", "block-left");
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::AuthoritativeApplied {
+            payload: ManuscriptPayload {
+                schema_version: MANUSCRIPT_SCHEMA_VERSION,
+                coordinate_version: COORDINATE_VERSION,
+                blocks: vec![
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-left".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: "Hello".to_owned(),
+                    },
+                    ManuscriptBlock {
+                        manuscript_block_id: "block-right".to_owned(),
+                        block_kind: ManuscriptBlockKind::Paragraph,
+                        text: String::new(),
+                    },
+                ],
+            }
+        }
+    );
+}
+
+#[test]
 fn chapter_display_body_joins_current_paragraphs_with_one_line_break() {
     assert_eq!(
         chapter_display_body(&two_paragraphs().blocks),

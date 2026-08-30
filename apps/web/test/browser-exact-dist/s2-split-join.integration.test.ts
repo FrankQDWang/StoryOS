@@ -54,11 +54,21 @@ function appRoot(frame: HTMLIFrameElement): Element {
   return root;
 }
 
-async function waitSaved(root: Element): Promise<void> {
-  await expect.poll(() =>
-    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
-    { timeout: 10_000 },
-  ).toBe("saved");
+async function waitSaved(root: Element, previousRevisionId?: string): Promise<void> {
+  await expect.poll(() => {
+    const node = root.querySelector("[data-save-state]");
+    const revision = node?.getAttribute("data-authoritative-revision-id") ?? "";
+    const failure = node?.getAttribute("data-editor-failure") ?? "";
+    const save = node?.getAttribute("data-save-state");
+    const unsettled = node?.getAttribute("data-unsettled-intent-count");
+    if (save === "saved"
+      && unsettled === "0"
+      && failure === ""
+      && (previousRevisionId === undefined || revision !== previousRevisionId)) {
+      return { ok: true as const, failure: "" };
+    }
+    return { ok: false as const, save, unsettled, failure, revision };
+  }, { timeout: 10_000 }).toEqual({ ok: true, failure: "" });
 }
 
 async function openChapterEditor(): Promise<{
@@ -112,16 +122,18 @@ async function openChapterEditor(): Promise<{
   chapterForm.requestSubmit();
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
-    return root?.getAttribute("data-boot-state") === "project-ready"
-      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }).toBe(true);
-  const root = appRoot(frame);
-  await expect.poll(() =>
-    root.querySelector("form[data-rename]")?.getAttribute("data-rename") !== null
-    && root.querySelector(
+    const projectId = root?.querySelector("form[data-rename]")?.getAttribute("data-rename");
+    const chapterId = root?.querySelector(
       'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
-    )?.getAttribute("data-chapter-id") !== null
-  ).toBe(true);
+    )?.getAttribute("data-chapter-id");
+    return root?.getAttribute("data-boot-state") === "project-ready"
+      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null
+      && typeof projectId === "string"
+      && UUID.test(projectId)
+      && typeof chapterId === "string"
+      && UUID.test(chapterId);
+  }, { timeout: 10_000 }).toBe(true);
+  const root = appRoot(frame);
   const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
   const chapterId = root.querySelector(
     'nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]',
@@ -176,15 +188,19 @@ it("splits and joins adjacent Blocks and reopens the same identities", async () 
   focusManuscriptEnd(editor, childWindow);
   await applyTrustedInput({ operation: "insert_text", text: "Hello" });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Hello");
-  await waitSaved(root);
+  await waitSaved(root, before.revision_id);
+  const helloRevisionId = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
 
   await applyTrustedInput({ operation: "enter" });
   await expect.poll(() => editor.querySelectorAll("p").length, { timeout: 10_000 }).toBe(2);
-  await waitSaved(root);
+  await waitSaved(root, helloRevisionId);
+  const splitRevisionId = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
 
   await applyTrustedInput({ operation: "insert_text", text: "World" });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe("Hello\nWorld");
-  await waitSaved(root);
+  await waitSaved(root, splitRevisionId);
 
   const split = await readRevision(frame, projectId, chapterId);
   expect(split.blocks.map((block) => block.text)).toEqual(["Hello", "World"]);
@@ -198,14 +214,14 @@ it("splits and joins adjacent Blocks and reopens the same identities", async () 
   applicationFrame = reopened;
   reopened.title = "StoryOS exact-dist split and join reload";
   const reopenedLoaded = nextFrameLoad(reopened);
-  reopened.src = "/";
+  reopened.src = `/projects/${projectId}`;
   document.body.append(reopened);
   await reopenedLoaded;
   await expect.poll(() => {
     const nextRoot = reopened.contentDocument?.querySelector("#app");
     return nextRoot?.getAttribute("data-boot-state") === "project-ready"
       && nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }).toBe(true);
+  }, { timeout: 10_000 }).toBe(true);
   const reopenedRevision = await readRevision(reopened, projectId, chapterId);
   expect(reopenedRevision.blocks.map((block) => ({
     manuscript_block_id: block.manuscript_block_id,
@@ -217,11 +233,13 @@ it("splits and joins adjacent Blocks and reopens the same identities", async () 
 
   const reopenedRoot = appRoot(reopened);
   const reopenedEditor = manuscriptEditor(reopenedRoot, applicationWindow(reopened));
+  const reopenedRevisionId = reopenedRoot.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
   focusParagraphStart(reopenedEditor, applicationWindow(reopened), 1);
   await applyTrustedInput({ operation: "backspace" });
   await expect.poll(() => reopenedEditor.querySelectorAll("p").length, { timeout: 10_000 }).toBe(1);
   await expect.poll(() => manuscriptBody(reopenedEditor), { timeout: 10_000 }).toBe("HelloWorld");
-  await waitSaved(reopenedRoot);
+  await waitSaved(reopenedRoot, reopenedRevisionId);
 
   const joined = await readRevision(reopened, projectId, chapterId);
   expect(joined.blocks).toEqual([{
@@ -235,14 +253,14 @@ it("splits and joins adjacent Blocks and reopens the same identities", async () 
   applicationFrame = finalFrame;
   finalFrame.title = "StoryOS exact-dist split and join final reload";
   const finalLoaded = nextFrameLoad(finalFrame);
-  finalFrame.src = "/";
+  finalFrame.src = `/projects/${projectId}`;
   document.body.append(finalFrame);
   await finalLoaded;
   await expect.poll(() => {
     const nextRoot = finalFrame.contentDocument?.querySelector("#app");
     return nextRoot?.getAttribute("data-boot-state") === "project-ready"
       && nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
-  }).toBe(true);
+  }, { timeout: 10_000 }).toBe(true);
   const finalRevision = await readRevision(finalFrame, projectId, chapterId);
   expect(finalRevision.blocks).toEqual([{
     manuscript_block_id: leftId,

@@ -90,6 +90,7 @@ function ProjectReadyView({
   const [saveState, setSaveState] = useState<PendingEditProjection["save_state"]>(
     state.editor.kind === "editor-ready" ? state.editor.pending.save_state : "needs_attention",
   );
+  const [editorFailure, setEditorFailure] = useState<string>();
   const [readOnly, setReadOnly] = useState(state.editor.kind !== "editor-ready");
   const [title, setTitle] = useState(state.project.project.title);
   const [revision, setRevision] = useState<string>();
@@ -322,14 +323,19 @@ function ProjectReadyView({
               if (selectedChapterIdRef.current !== currentChapterId) return;
               setPending(projection);
               setSaveState(projection.save_state);
+              if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
             }}
-            onFailure={() => {
+            onFailure={(error) => {
               setReadOnly(true);
               setSaveState("needs_attention");
+              setEditorFailure(
+                error instanceof Error ? error.message : "Manuscript editor failed",
+              );
             }}
           />
           <small
             data-save-state={saveState}
+            data-editor-failure={editorFailure ?? ""}
             data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
             data-authoritative-revision-id={
               pending?.authoritative_revision_id

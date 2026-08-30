@@ -272,3 +272,7 @@ pub(crate) async fn persist_revision_members_from_blocks(
     }
     Ok(inserted)
 }
+
+#[cfg(test)]
+#[path = "manuscript_block_tests.rs"]
+mod persist_encoding_tests;
