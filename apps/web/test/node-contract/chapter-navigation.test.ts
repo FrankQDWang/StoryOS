@@ -179,11 +179,11 @@ test("selectedChapterSurface keeps pending bytes on the current Chapter", () => 
   }), {
     title: "Chapter B",
     body: "",
-    save_state: "clean",
+    save_state: "saved",
     pending: {
       body: "",
       blocks: openedB.chapter.current_revision.blocks,
-      save_state: "clean",
+      save_state: "saved",
       unsettled_intent_count: 0,
       authoritative_revision_id: REVISION_B,
     },

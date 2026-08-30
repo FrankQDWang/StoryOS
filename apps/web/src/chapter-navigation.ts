@@ -128,7 +128,7 @@ export function selectedChapterSurface(options: {
   }
   const saveState = options.selectedChapterId === options.currentChapterId
     ? "needs_attention"
-    : "clean";
+    : "saved";
   return {
     title: opened.chapter.title,
     body: opened.chapter.current_revision.body,

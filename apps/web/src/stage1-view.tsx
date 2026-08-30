@@ -345,7 +345,10 @@ function ProjectReadyView({
             }
             data-author-undo-frontier={pending?.author_undo_frontier_sequence ?? ""}
           >
-            {saveState === "saved" ? "已保存" : saveState === "saving" ? "保存中" : "需要处理"}
+            {saveState === "saved" ? "已保存"
+              : saveState === "saving" ? "保存中"
+              : saveState === "needs_attention" ? "需要处理"
+              : "未保存"}
           </small>
           {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
             ? (
