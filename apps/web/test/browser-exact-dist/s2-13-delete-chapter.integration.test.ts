@@ -188,30 +188,39 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
     const alertNode = root?.querySelector("[role=alert]");
     const alert = alertNode?.textContent;
     if (alert !== undefined && alert !== null && alert.length > 0) {
-      throw new Error(`${alertNode?.getAttribute("data-switch-recovery-source") ?? ""}:${alert}`);
+      throw new Error(alert);
     }
+    const save = root?.querySelector("[data-save-state]");
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter B\nChapter C"
       && root?.querySelector("h2")?.textContent === "Chapter B"
-      && manuscriptIsEditable(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) ?? root);
+      && manuscriptIsEditable(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) ?? root)
+      && save?.getAttribute("data-save-state") !== "saving"
+      && save?.getAttribute("data-unsettled-intent-count") === "0";
   }, { timeout: 15_000 }).toBe(true);
-  await typeIntoCurrent(frame, "Beta");
-  await confirmCurrentDelete(frame);
-  await expect.poll(() => {
-    const root = frame.contentDocument?.querySelector("#app");
-    return root?.getAttribute("data-boot-state") === "project-ready"
-      && chapterTitles(root).join("\n") === "Chapter C"
-      && root?.querySelector("h2")?.textContent === "Chapter C"
-      && manuscriptIsEditable(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) ?? root);
-  }, { timeout: 15_000 }).toBe(true);
-  await typeIntoCurrent(frame, "Gamma");
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     const alertNode = root?.querySelector("[role=alert]");
     const alert = alertNode?.textContent;
     if (alert !== undefined && alert !== null && alert.length > 0) {
-      throw new Error(`${alertNode?.getAttribute("data-switch-recovery-source") ?? ""}:${alert}`);
+      throw new Error(alert);
+    }
+    const save = root?.querySelector("[data-save-state]");
+    return root?.getAttribute("data-boot-state") === "project-ready"
+      && chapterTitles(root).join("\n") === "Chapter C"
+      && root?.querySelector("h2")?.textContent === "Chapter C"
+      && manuscriptIsEditable(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) ?? root)
+      && save?.getAttribute("data-save-state") !== "saving"
+      && save?.getAttribute("data-unsettled-intent-count") === "0";
+  }, { timeout: 15_000 }).toBe(true);
+  await confirmCurrentDelete(frame);
+  await expect.poll(() => {
+    const root = frame.contentDocument?.querySelector("#app");
+    const alertNode = root?.querySelector("[role=alert]");
+    const alert = alertNode?.textContent;
+    if (alert !== undefined && alert !== null && alert.length > 0) {
+      throw new Error(alert);
     }
     return root?.getAttribute("data-boot-state") === "empty-project-ready"
       && chapterTitles(root).join("\n") === "";

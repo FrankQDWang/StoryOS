@@ -2,6 +2,7 @@ import {
   createProjectCommandChallenge,
   deleteChapter,
   digestDeleteChapter,
+  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { DeleteChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -57,7 +58,13 @@ export async function deleteOwnedChapter(options: {
     const removed = await submitDeleteChapter(options, flight);
     inFlightDeletes.delete(identity);
     return removed;
-  } catch {
+  } catch (error) {
+    if (error instanceof StoryOSProtocolError && error.status === 429) {
+      flight.nonce = undefined;
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, ((error.retryAfterSeconds ?? 1) + 1) * 1000);
+      });
+    }
     const removed = await submitDeleteChapter(options, flight);
     inFlightDeletes.delete(identity);
     return removed;
