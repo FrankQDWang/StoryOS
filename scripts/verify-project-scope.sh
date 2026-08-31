@@ -308,3 +308,5 @@ pnpm --dir apps/web exec vitest run --project browser-exact-dist
 kill "$s1_server_pid" >/dev/null 2>&1 || true
 wait "$s1_server_pid" >/dev/null 2>&1 || true
 s1_server_pid=""
+echo "Running isolated Recovery Copy hold restore"
+"$repository_root/scripts/verify-recovery-hold.sh"
