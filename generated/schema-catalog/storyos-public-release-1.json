@@ -23,6 +23,7 @@
     "getSnapshot",
     "getManuscriptTree",
     "searchManuscript",
+    "getStatistics",
     "activityStream",
     "takeOverProjectWriter",
     "undoLatestAuthorAction"
@@ -119,6 +120,16 @@
       "path": "generated/json-schema/storyos-public-release-1/manuscript-search-response.schema.json",
       "schema_id": "storyos.query.manuscript-search.response.v1",
       "sha256": "sha256:935530dade72279944f0c75f729aa94c0ebf1773d4116ec9350a386a43f1f919"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/statistics-request.schema.json",
+      "schema_id": "storyos.query.statistics.request.v1",
+      "sha256": "sha256:8bc456b950ceac2f213d1d9e68113b9d0b8d5d8a56e6ba13b7b85e94ab4af231"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/statistics-response.schema.json",
+      "schema_id": "storyos.query.statistics.response.v1",
+      "sha256": "sha256:fda140de2ddf3dbde1d96e7e727516447fcf62017ab8fa6fb2ad9c667c493a62"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/update-project-request.schema.json",

@@ -8,6 +8,7 @@ mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
 mod set_current_chapter;
+mod statistics_profile;
 mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
@@ -41,6 +42,9 @@ pub use manuscript_payload::{
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,
     SetCurrentChapterRefusal, SetCurrentChapterResult, set_current_chapter,
+};
+pub use statistics_profile::{
+    STATISTICS_COUNTING_PROFILE, TextStatistics, count_stored_text, count_stored_texts,
 };
 pub use undo_latest_author_action::{
     AuthorUndoFrontier, AuthorUndoFrontierKind, UndoLatestAuthorAction,

@@ -34,6 +34,7 @@ import { archiveOwnedProject } from "./archive-project.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import { ManuscriptEditor } from "./manuscript-editor.tsx";
 import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
+import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import { renameOwnedProject } from "./rename-project.ts";
@@ -456,6 +457,14 @@ function ProjectReadyView({
             <p role="alert">{switchRecovery}</p>
           )}
           <h2>{selectedChapter.chapter.title}</h2>
+          <ManuscriptStatisticsPanel
+            projectId={state.project.project.project_id}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+            currentChapterId={currentChapterId}
+            saveState={saveState}
+            treeRevision={tree?.tree_revision}
+          />
           <ManuscriptSearchPanel
             projectId={state.project.project.project_id}
             baseUrl={baseUrl}

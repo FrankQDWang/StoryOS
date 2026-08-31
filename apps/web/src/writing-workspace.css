@@ -154,6 +154,7 @@ input:focus-visible,
 .editor-panel { overflow: auto; background: var(--canvas); }
 
 .editor-panel h2,
+.editor-panel [data-manuscript-statistics],
 .editor-panel [data-manuscript-search],
 .manuscript-editor,
 .editor-panel [data-save-state],
@@ -174,6 +175,7 @@ input:focus-visible,
   font-weight: 600;
 }
 
+.editor-panel [data-manuscript-statistics],
 .editor-panel [data-manuscript-search] {
   margin-bottom: 24px;
   color: var(--muted);

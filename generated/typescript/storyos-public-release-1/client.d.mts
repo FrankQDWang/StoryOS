@@ -253,6 +253,14 @@ export type ManuscriptSearchCompleteness = "complete" | "truncated";
 
 export type SearchManuscriptResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, source_snapshot: SnapshotDescriptor, projection_kind: string, projection_generation: string, projection_watermark: string, required_watermark: string | null, completeness: ManuscriptSearchCompleteness, lag: string, items: Array<ManuscriptSearchMatch>, next_cursor: string | null, page_count: string, page_bytes: string, redaction_profile: string, limit_profile_revision: string, };
 
+export type ManuscriptStatisticsCompleteness = "complete" | "truncated";
+
+export type ChapterStatistics = { chapter_id: string, word_count: string, character_count: string, };
+
+export type ManuscriptTotals = { chapter_count: string, word_count: string, character_count: string, };
+
+export type GetStatisticsResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, source_snapshot: SnapshotDescriptor, projection_kind: string, projection_generation: string, projection_watermark: string, required_watermark: string | null, completeness: ManuscriptStatisticsCompleteness, lag: string, counting_profile: string, current_chapter: ChapterStatistics | null, manuscript: ManuscriptTotals, next_cursor: string | null, page_count: string, page_bytes: string, redaction_profile: string, limit_profile_revision: string, };
+
 export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
 
 export type TakeoverCompareFailedReason = "writer_generation_advanced_after_admission" | "requester_became_current_after_admission";
@@ -310,5 +318,6 @@ export declare function getSnapshot(options: StoryOSQueryOptions & { projectId: 
 export declare function activityStream(options: StoryOSQueryOptions & { projectId: string; snapshotId: string; protocolRelease: string; lastEventId?: string }): Promise<string>;
 export declare function getManuscriptTree(options: StoryOSQueryOptions & { projectId: string }): Promise<GetManuscriptTreeResponse>;
 export declare function searchManuscript(options: StoryOSQueryOptions & { projectId: string; request: SearchManuscriptRequest }): Promise<SearchManuscriptResponse>;
+export declare function getStatistics(options: StoryOSQueryOptions & { projectId: string; requiredWatermark?: string | null }): Promise<GetStatisticsResponse>;
 export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;
