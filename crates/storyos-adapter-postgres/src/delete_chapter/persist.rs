@@ -284,6 +284,15 @@ pub(super) async fn persist_delete_chapter(
             )
             .await
             .map_err(delete_chapter_database_error)?;
+        if let Some(current_chapter_id) = resulting_current.as_deref() {
+            bind_current_writer_base_to_chapter(
+                client,
+                command,
+                current_chapter_id,
+                project_activity_position,
+            )
+            .await?;
+        }
     }
     client
         .execute(
@@ -389,6 +398,77 @@ async fn persist_removed_chapter(
             std::io::Error::other("tree revision changed under FOR UPDATE"),
         )));
     }
+    Ok(())
+}
+
+async fn bind_current_writer_base_to_chapter(
+    client: &tokio_postgres::Client,
+    command: &DeleteChapterCommand,
+    chapter_id: &str,
+    project_activity_position: u64,
+) -> Result<(), DeleteChapterError> {
+    let Some(authoritative_revision_id) = client
+        .query_opt(
+            "SELECT head.current_revision_id::text
+               FROM storyos.authoritative_heads AS head
+              WHERE head.owner_user_id = $1::text::uuid AND head.project_id = $2::text::uuid
+                AND head.manuscript_object_id = $3::text::uuid",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &chapter_id,
+            ],
+        )
+        .await
+        .map_err(delete_chapter_database_error)?
+        .map(|row| row.get::<_, String>(0))
+    else {
+        return Err(DeleteChapterError::Unavailable(Box::new(std::io::Error::other(
+            "successor Chapter has no authoritative head",
+        ))));
+    };
+    let snapshot_id = Uuid::now_v7().to_string();
+    crate::snapshot::persist_canonical_snapshot(
+        client,
+        &command.project_scope,
+        &snapshot_id,
+        project_activity_position,
+    )
+    .await
+    .map_err(delete_chapter_database_error)?;
+    let activity_position_text = project_activity_position.to_string();
+    client
+        .execute(
+            "UPDATE storyos.editor_session_base_snapshots AS snapshot
+                SET snapshot_id = $3::text::uuid,
+                    chapter_object_id = $4::text::uuid,
+                    authoritative_revision_id = $5::text::uuid,
+                    project_activity_position = $6::text::numeric,
+                    created_at = clock_timestamp()
+               FROM storyos.project_writer_generations AS writer
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND (writer.owner_user_id, writer.project_id,
+                     writer.current_editor_session_id) =
+                    (snapshot.owner_user_id, snapshot.project_id,
+                     snapshot.editor_session_id)
+                AND writer.writer_generation = (
+                  SELECT max(current_writer.writer_generation)
+                    FROM storyos.project_writer_generations AS current_writer
+                   WHERE current_writer.owner_user_id = snapshot.owner_user_id
+                     AND current_writer.project_id = snapshot.project_id
+                )",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &snapshot_id,
+                &chapter_id,
+                &authoritative_revision_id,
+                &activity_position_text,
+            ],
+        )
+        .await
+        .map_err(delete_chapter_database_error)?;
     Ok(())
 }
 
