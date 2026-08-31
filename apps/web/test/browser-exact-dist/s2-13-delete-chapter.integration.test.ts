@@ -68,6 +68,11 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
   focusManuscriptEnd(editor, realm as Window & typeof globalThis);
   await applyTrustedInput({ operation: "insert_text", text });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
+  await expect.poll(() => {
+    return frame.contentDocument
+      ?.querySelector("[data-save-state]")
+      ?.getAttribute("data-save-state") === "saving";
+  }, { timeout: 10_000 }).toBe(true);
   await waitSaved(frame);
 }
 
@@ -197,6 +202,10 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
+    const alert = root?.querySelector("[role=alert]")?.textContent;
+    if (alert !== undefined && alert !== null && alert.length > 0) {
+      throw new Error(alert);
+    }
     return root?.getAttribute("data-boot-state") === "empty-project-ready"
       && chapterTitles(root).join("\n") === "";
   }, { timeout: 15_000 }).toBe(true);

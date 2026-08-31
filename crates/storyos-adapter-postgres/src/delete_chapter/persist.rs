@@ -292,6 +292,16 @@ pub(super) async fn persist_delete_chapter(
                 project_activity_position,
             )
             .await?;
+        } else {
+            let snapshot_id = Uuid::now_v7().to_string();
+            crate::snapshot::persist_canonical_snapshot(
+                client,
+                &command.project_scope,
+                &snapshot_id,
+                project_activity_position,
+            )
+            .await
+            .map_err(delete_chapter_database_error)?;
         }
     }
     client
