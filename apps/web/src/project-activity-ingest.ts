@@ -86,7 +86,7 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     || !UUID.test(event.receipt_ref?.id ?? "")
     || !isoInstant(event.occurred_at)
     || event.recorded_at !== event.occurred_at
-    || payload?.chapter_id !== workspace.session.base_snapshot.chapter_id
+    || !UUID.test(payload?.chapter_id ?? "")
     || !UUID.test(payload?.authoritative_revision_id ?? "")
     || !UUID.test(payload?.authoritative_commit_id ?? "")
     || !boundedU64(payload?.author_action_sequence) || payload.author_action_sequence === "0"
@@ -127,9 +127,11 @@ function applyFrames(
     const knownBySequence = known.find(
       (candidate) => candidate.stream_sequence === event.stream_sequence,
     );
-    if (knownBySequence
-      || BigInt(event.stream_sequence) <= BigInt(next.processed_through_stream_sequence)) {
+    if (knownBySequence) {
       throw new Error("Project Activity Event conflict");
+    }
+    if (BigInt(event.stream_sequence) <= BigInt(next.processed_through_stream_sequence)) {
+      continue;
     }
     next.held.push(event);
     known.push(event);

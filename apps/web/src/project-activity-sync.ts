@@ -8,7 +8,6 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import type { EditorWorkspace, ProjectActivityIngest } from "./editor-types.ts";
 import {
   ingestProjectActivityFrames,
-  readProjectActivityIngest,
   resyncProjectActivityFromSnapshot,
 } from "./project-activity-ingest.ts";
 
@@ -146,10 +145,11 @@ async function replayActivityBody(
 ): Promise<ProjectActivitySyncResult> {
   const frames = parseSseFrames(body);
   if (frames.length === 0) {
+    const ingest = await ingestProjectActivityFrames(workspace, []);
     await writeActivityStreamCursor(workspace, cursor);
     return {
       kind: "idle",
-      ingest: await readProjectActivityIngest(workspace),
+      ingest,
       last_event_id: cursor.last_event_id,
     };
   }
