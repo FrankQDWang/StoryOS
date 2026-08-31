@@ -36,10 +36,16 @@ impl ManuscriptTreeReader for PostgresProjectReader {
         let volume_rows = transaction
             .query(
                 "SELECT manuscript_object_id::text, title, tree_order::text
-                   FROM storyos.manuscript_objects
+                   FROM storyos.manuscript_objects AS volume
                   WHERE owner_user_id = $1::text::uuid
                     AND project_id = $2::text::uuid
                     AND object_kind = 'volume'
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                       WHERE removal.owner_user_id = volume.owner_user_id
+                         AND removal.project_id = volume.project_id
+                         AND removal.volume_id = volume.manuscript_object_id
+                    )
                   ORDER BY tree_order",
                 &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
             )
@@ -80,15 +86,13 @@ impl ManuscriptTreeReader for PostgresProjectReader {
         let mut volumes = Vec::with_capacity(volume_rows.len());
         for volume in volume_rows {
             let volume_id = volume.get::<_, String>(0);
+            let next_order = volumes.len() as u64 + 1;
             volumes.push(VolumeFact {
                 project_scope: scope.clone(),
                 chapters: chapters_by_volume.remove(&volume_id).unwrap_or_default(),
                 volume_id: VolumeId::new(volume_id),
                 title: volume.get(1),
-                order: volume
-                    .get::<_, String>(2)
-                    .parse()
-                    .map_err(ProjectReadError::unavailable)?,
+                order: next_order,
             });
         }
         Ok(Some(CanonicalTreeFacts {

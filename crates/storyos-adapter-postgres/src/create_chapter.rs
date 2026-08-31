@@ -99,9 +99,15 @@ async fn persist_create_chapter(
     let volume_join = if client
         .query_opt(
             "SELECT manuscript_object_id
-               FROM storyos.manuscript_objects
+               FROM storyos.manuscript_objects AS volume
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND manuscript_object_id = $3::text::uuid AND object_kind = 'volume'",
+                AND manuscript_object_id = $3::text::uuid AND object_kind = 'volume'
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                   WHERE removal.owner_user_id = volume.owner_user_id
+                     AND removal.project_id = volume.project_id
+                     AND removal.volume_id = volume.manuscript_object_id
+                )",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),

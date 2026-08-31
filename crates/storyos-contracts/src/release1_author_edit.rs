@@ -146,6 +146,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "deleteChapter")]
     #[ts(rename = "deleteChapter")]
     DeleteChapter,
+    #[serde(rename = "deleteVolume")]
+    #[ts(rename = "deleteVolume")]
+    DeleteVolume,
     #[serde(rename = "setCurrentChapter")]
     #[ts(rename = "setCurrentChapter")]
     SetCurrentChapter,

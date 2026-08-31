@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 import { updateOwnedVolume } from "./update-volume.ts";
 
 export function VolumeTreeActions({
@@ -11,6 +13,7 @@ export function VolumeTreeActions({
   fetchImpl,
   cryptoImpl,
   onUpdated,
+  onRemoveVolume,
 }: {
   projectId: string;
   volumeId: string;
@@ -22,7 +25,9 @@ export function VolumeTreeActions({
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   onUpdated: () => void;
+  onRemoveVolume?: ((volumeId: string) => void) | undefined;
 }) {
+  const [pendingRemoval, setPendingRemoval] = useState(false);
   const currentOrder = Number(order);
   const canMove = Number.isInteger(currentOrder) && currentOrder >= 1;
   const submitUpdate = (nextTitle: string, nextOrder: string) => {
@@ -84,6 +89,37 @@ export function VolumeTreeActions({
       >
         下移
       </button>
+      {onRemoveVolume !== undefined ? (
+        pendingRemoval ? (
+          <>
+            <button
+              type="button"
+              data-confirm-delete-volume={volumeId}
+              onClick={() => {
+                setPendingRemoval(false);
+                onRemoveVolume(volumeId);
+              }}
+            >
+              确认删除此卷？
+            </button>
+            <button
+              type="button"
+              data-cancel-delete-volume={volumeId}
+              onClick={() => setPendingRemoval(false)}
+            >
+              取消
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            data-delete-volume={volumeId}
+            onClick={() => setPendingRemoval(true)}
+          >
+            删除卷
+          </button>
+        )
+      ) : null}
     </>
   );
 }

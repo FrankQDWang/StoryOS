@@ -240,6 +240,7 @@
         "updateVolume",
         "updateChapter",
         "deleteChapter",
+        "deleteVolume",
         "setCurrentChapter",
         "undoLatestAuthorAction"
       ],
