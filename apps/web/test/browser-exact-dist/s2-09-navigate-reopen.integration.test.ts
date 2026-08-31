@@ -137,10 +137,12 @@ it("the author opens each Chapter from the tree and reopens the current Chapter"
   frame.src = `/projects/${projectId}?chapter=${chapterBId}#chapter=${chapterBId}`;
   await reopened;
   await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("project-ready");
+    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state") === "project-ready"
+  ).toBe(true);
+  await expect.poll(() =>
+    frame.contentDocument?.querySelector("h2")?.textContent
+  ).toBe("Chapter A");
   const reopenedRoot = frame.contentDocument?.querySelector("#app");
-  expect(reopenedRoot?.querySelector("h2")?.textContent).toBe("Chapter A");
   const reopenedEditor = reopenedRoot?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   expect(reopenedEditor === null || reopenedEditor === undefined
     ? undefined : manuscriptBody(reopenedEditor)).toBe("");

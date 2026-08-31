@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:9d8c024fe68fc48bb4a5f406ad5d536cca64de32b1b7260d87351def97489ee8",
+  "corpus_digest": "sha256:c60b0b4cab45679eec379c12efbb757077dfc6d11e59adf252dbdcf8b06ad81f",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -39,6 +39,9 @@
       "generated/golden-wire/storyos-public-release-1/update-volume.json",
       "generated/golden-wire/storyos-public-release-1/update-volume.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-volume.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/delete-volume.json",
+      "generated/golden-wire/storyos-public-release-1/delete-volume.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/delete-volume.boundary.json",
       "generated/golden-wire/storyos-public-release-1/create-chapter.json",
       "generated/golden-wire/storyos-public-release-1/create-chapter.invalid.json",
       "generated/golden-wire/storyos-public-release-1/create-chapter.boundary.json",
@@ -293,6 +296,24 @@
       "fixture_id": "storyos.golden.updateVolume.boundary.v1",
       "operation_id": "updateVolume",
       "path": "generated/golden-wire/storyos-public-release-1/update-volume.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.deleteVolume.positive.v1",
+      "operation_id": "deleteVolume",
+      "path": "generated/golden-wire/storyos-public-release-1/delete-volume.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.deleteVolume.invalid.v1",
+      "operation_id": "deleteVolume",
+      "path": "generated/golden-wire/storyos-public-release-1/delete-volume.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.deleteVolume.boundary.v1",
+      "operation_id": "deleteVolume",
+      "path": "generated/golden-wire/storyos-public-release-1/delete-volume.boundary.json"
     },
     {
       "classification": "positive",

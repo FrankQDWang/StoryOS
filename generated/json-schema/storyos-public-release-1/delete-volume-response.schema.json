@@ -20,6 +20,106 @@
       ],
       "type": "object"
     },
+    "DeleteVolumeConflictReason": {
+      "enum": [
+        "stale_volume_revision"
+      ],
+      "type": "string"
+    },
+    "DeleteVolumeEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "authoritative_applied",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            },
+            "tree_revision": {
+              "type": "string"
+            },
+            "volume_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "volume_id",
+            "tree_revision",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/DeleteVolumeNoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/DeleteVolumeConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/DeleteVolumeRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "DeleteVolumeNoEffectReason": {
+      "enum": [
+        "already_removed"
+      ],
+      "type": "string"
+    },
+    "DeleteVolumeRefusalReason": {
+      "enum": [
+        "archived_project",
+        "invalid_volume_join",
+        "nonempty_volume"
+      ],
+      "type": "string"
+    },
     "DigestAlgorithm": {
       "enum": [
         "sha256"
@@ -239,110 +339,9 @@
         "project_id"
       ],
       "type": "object"
-    },
-    "SetCurrentChapterConflictReason": {
-      "enum": [
-        "stale_current_chapter",
-        "wrong_target_head"
-      ],
-      "type": "string"
-    },
-    "SetCurrentChapterEffect": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "base_snapshot_id": {
-              "type": "string"
-            },
-            "current_chapter_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "authoritative_applied",
-              "type": "string"
-            },
-            "project_activity_position": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "current_chapter_id",
-            "base_snapshot_id",
-            "project_activity_position"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "no_effect",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/SetCurrentChapterNoEffectReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/SetCurrentChapterConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "refused",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/SetCurrentChapterRefusalReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "SetCurrentChapterNoEffectReason": {
-      "enum": [
-        "already_current"
-      ],
-      "type": "string"
-    },
-    "SetCurrentChapterRefusalReason": {
-      "enum": [
-        "archived_project",
-        "invalid_chapter_join",
-        "empty_project"
-      ],
-      "type": "string"
     }
   },
-  "$id": "storyos.command.set-current-chapter.response.v1",
+  "$id": "storyos.command.delete-volume.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -359,7 +358,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/SetCurrentChapterEffect"
+      "$ref": "#/$defs/DeleteVolumeEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -371,7 +370,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.set-current-chapter.response.v1",
+      "const": "storyos.command.delete-volume.response.v1",
       "type": "string"
     }
   },
@@ -385,6 +384,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Set Current Chapter Response",
+  "title": "StoryOS Delete Volume Response",
   "type": "object"
 }

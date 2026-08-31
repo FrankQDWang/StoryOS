@@ -25,6 +25,7 @@ mod create_project;
 mod create_project_challenge;
 mod create_volume;
 mod delete_chapter;
+mod delete_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_tree;
@@ -55,6 +56,7 @@ use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use create_volume::create_volume;
 use delete_chapter::delete_chapter;
+use delete_volume::delete_volume;
 use editor_session::{create_editor_session, get_editor_session};
 use list_projects::list_projects;
 use manuscript_tree::get_manuscript_tree;
@@ -239,6 +241,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             routing::on(
                 method_filter(contracts::UPDATE_VOLUME_METHOD),
                 update_volume,
+            )
+            .on(
+                method_filter(contracts::DELETE_VOLUME_METHOD),
+                delete_volume,
             ),
         )
         .route(

@@ -112,6 +112,7 @@ export function ManuscriptTree({
   onChapterCreated,
   onVolumeUpdated,
   onRemoveChapter,
+  onRemoveVolume,
 }: {
   projectId: string;
   tree: GetManuscriptTreeResponse;
@@ -127,6 +128,7 @@ export function ManuscriptTree({
   onChapterCreated: () => void;
   onVolumeUpdated: () => void;
   onRemoveChapter?: (chapterId: string) => void;
+  onRemoveVolume?: (volumeId: string) => void;
 }) {
   const volumeCount = tree.volumes.length;
   const [collapsedVolumes, setCollapsedVolumes] = useState<ReadonlySet<string>>(() => new Set());
@@ -172,6 +174,7 @@ export function ManuscriptTree({
                   fetchImpl={fetchImpl}
                   cryptoImpl={cryptoImpl}
                   onUpdated={onVolumeUpdated}
+                  onRemoveVolume={createEnabled ? onRemoveVolume : undefined}
                 />
               ) : null}
               <ul>

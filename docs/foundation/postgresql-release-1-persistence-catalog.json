@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:a2dc0dff7d0b649a9bbf0910057c47ba803b6a8682abf7af1bf272982dc234bd"
+    "digest": "sha256:461fc2eb3f85dd2c344a4e06b9b2e16db17baa7b87a8874be51408961181f33d"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:b30a4433d755bd212bb7d25a097a4d5aed5756edbf521920cb7db70bff03d14e",
+    "migration_chain_digest": "sha256:e3af9ca7bd7c42bd66c13424bf3799ef26d048c24770a7ea11112fa790be5bca",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:26ef3ba82ca5c6034923f7f3af570bd0193fb87bada67012b30b1ddca38462b6",
+      "manifest_sha256": "sha256:ff80e8071130907ced022d602a484c2e897801afb1ddcaeab6982b32365d110b",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -319,6 +319,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0021_delete_chapter.sql",
           "lf_sha256": "sha256:12cb40d3427a42fe92987ef1725d753ac11c8fe8b69f997cd7660394624ffb85"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0022_delete_volume.sql",
+          "lf_sha256": "sha256:a348fed8283b2661397c9086a9eea729f0ed0a7c9df070d205263396a9c6dc56"
         }
       ]
     },
@@ -576,7 +580,7 @@
     },
     {
       "family_id": "operational-lifecycle",
-      "table_families": ["artifact_lifecycle_events", "project_archival_decisions", "chapter_removal_decisions", "project_tombstones", "memory_suppression_decisions", "retention_decisions", "project_deletion_records"],
+      "table_families": ["artifact_lifecycle_events", "project_archival_decisions", "chapter_removal_decisions", "volume_removal_decisions", "project_tombstones", "memory_suppression_decisions", "retention_decisions", "project_deletion_records"],
       "owner": "retention",
       "authority_class": "operational",
       "durability_class": "immutable_lifecycle_decisions",
@@ -588,7 +592,7 @@
       "head": "lifecycle_current_projection",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": ["projection-generation-control"], "rebuild": "not_applicable", "visibility_gate": "lifecycle_floor_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify_before_visibility", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "lifecycle_persistence", "operation_ids": ["archiveProject", "deleteProject", "deleteChapter"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "lifecycle_persistence", "operation_ids": ["archiveProject", "deleteProject", "deleteChapter", "deleteVolume"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "projection-generation-control",

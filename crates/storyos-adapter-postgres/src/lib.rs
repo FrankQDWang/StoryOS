@@ -64,6 +64,7 @@ mod create_project;
 mod create_project_challenge;
 mod create_volume;
 mod delete_chapter;
+mod delete_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_block;

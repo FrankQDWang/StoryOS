@@ -22,6 +22,7 @@ import {
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
 import { deleteOwnedChapter } from "./delete-chapter.ts";
+import { deleteOwnedVolume } from "./delete-volume.ts";
 import type {
   ControlledProjectState,
   EditorReadyState,
@@ -310,6 +311,76 @@ function ProjectReadyView({
     })();
   };
 
+  const removeVolume = (volumeId: string) => {
+    if (tree === undefined) return;
+    if (makeCurrentInFlightRef.current) return;
+    makeCurrentInFlightRef.current = true;
+    const generation = switchGenerationRef.current + 1;
+    switchGenerationRef.current = generation;
+    void (async () => {
+      try {
+        await inputRef.current?.flush();
+        const gate = await completeJournalOrRefuse({
+          incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
+          whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
+        });
+        if (generation !== switchGenerationRef.current) return;
+        if (gate.kind === "refused") {
+          setSwitchRecovery(
+            gate.reason === "incomplete_semantic_intent"
+              ? "无法删除卷：请先完成当前输入。"
+              : "无法删除卷：本地编辑需要恢复。",
+          );
+          return;
+        }
+        if (state.editor.kind === "editor-ready") {
+          const drained = await rebuildPendingProjection(state.editor);
+          state.editor.pending = drained;
+          setPending(drained);
+          setSaveState(drained.save_state);
+          if (drained.unsettled_intent_count > 0) {
+            setSwitchRecovery("无法删除卷。");
+            return;
+          }
+        }
+        const latestTree = await getManuscriptTree({
+          baseUrl,
+          projectId: state.project.project.project_id,
+          fetchImpl,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        const removed = await deleteOwnedVolume({
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+          projectId: state.project.project.project_id,
+          volumeId,
+          expectedVolumeRevision: latestTree.tree_revision,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        if (
+          removed.effect.kind !== "authoritative_applied"
+          && removed.effect.kind !== "no_effect"
+        ) {
+          setSwitchRecovery("无法删除卷。");
+          return;
+        }
+        const next = await openControlledProject({
+          baseUrl,
+          projectId: state.project.project.project_id,
+          fetchImpl,
+          cryptoImpl,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        onReopened(next);
+      } catch {
+        setSwitchRecovery("无法删除卷。");
+      } finally {
+        makeCurrentInFlightRef.current = false;
+      }
+    })();
+  };
+
   const archived = lifecycle === "archived";
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
@@ -350,6 +421,7 @@ function ProjectReadyView({
               onChapterCreated={refreshTree}
               onVolumeUpdated={refreshTree}
               onRemoveChapter={removeChapter}
+              onRemoveVolume={removeVolume}
             />
           )}
           {archived ? null : (
@@ -590,6 +662,7 @@ function EmptyProjectReadyView({
 }) {
   const [title, setTitle] = useState(project.project.title);
   const [revision, setRevision] = useState<string>();
+  const [volumeRemoval, setVolumeRemoval] = useState<string>();
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
       const item = response.projects.find((entry) =>
@@ -603,6 +676,9 @@ function EmptyProjectReadyView({
       tree={(
         <>
           <h1>{title}</h1>
+          {volumeRemoval === undefined ? null : (
+            <p role="alert">{volumeRemoval}</p>
+          )}
           <ManuscriptTree
             projectId={project.project.project_id}
             tree={tree}
@@ -629,6 +705,27 @@ function EmptyProjectReadyView({
                 }
                 onChapterCreated();
               }).catch(() => {});
+            }}
+            onRemoveVolume={(volumeId) => {
+              void deleteOwnedVolume({
+                baseUrl,
+                fetchImpl,
+                cryptoImpl,
+                projectId: project.project.project_id,
+                volumeId,
+                expectedVolumeRevision: tree.tree_revision,
+              }).then((removed) => {
+                if (
+                  removed.effect.kind !== "authoritative_applied"
+                  && removed.effect.kind !== "no_effect"
+                ) {
+                  setVolumeRemoval("无法删除卷。");
+                  return;
+                }
+                onVolumeCreated();
+              }).catch(() => {
+                setVolumeRemoval("无法删除卷。");
+              });
             }}
           />
           <CreateVolumeForm
@@ -814,6 +911,8 @@ function Stage1View({
   const [current, setCurrent] = useState(state);
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
+    // Volume removal keeps the current Chapter, so chapter and writer keys
+    // stay put. The new editor base snapshot remounts the tree after honor-deletion.
     return (
       <ProjectReadyView
         key={`${
@@ -824,6 +923,10 @@ function Stage1View({
           current.editor.kind === "editor-ready"
             && current.editor.session.writer.kind === "current_writer"
             ? current.editor.session.writer.writer_generation
+            : current.editor.kind
+        }:${
+          current.editor.kind === "editor-ready"
+            ? current.editor.session.base_snapshot.snapshot_id
             : current.editor.kind
         }`}
         state={current}

@@ -44,9 +44,15 @@ pub(super) async fn persist_update_volume(
     let volumes = client
         .query(
             "SELECT manuscript_object_id::text, title, tree_order::text
-               FROM storyos.manuscript_objects
+               FROM storyos.manuscript_objects AS volume
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND object_kind = 'volume'
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                   WHERE removal.owner_user_id = volume.owner_user_id
+                     AND removal.project_id = volume.project_id
+                     AND removal.volume_id = volume.manuscript_object_id
+                )
               ORDER BY tree_order
               FOR UPDATE",
             &[
@@ -61,18 +67,23 @@ pub(super) async fn persist_update_volume(
         .iter()
         .find(|volume| volume.get::<_, String>(0) == command.volume_id.as_ref());
     let (volume_join, current_title, current_order, ordered_ids) = match current {
-        Some(volume) => (
-            VolumeJoin::ExactScope,
-            volume.get::<_, String>(1),
-            volume
-                .get::<_, String>(2)
-                .parse::<u64>()
-                .map_err(update_volume_parse_error)?,
-            volumes
+        Some(volume) => {
+            let ordered_ids = volumes
                 .iter()
                 .map(|volume| volume.get::<_, String>(0))
-                .collect::<Vec<_>>(),
-        ),
+                .collect::<Vec<_>>();
+            let current_order = ordered_ids
+                .iter()
+                .position(|volume_id| volume_id == command.volume_id.as_ref())
+                .map(|index| index as u64 + 1)
+                .unwrap_or(1);
+            (
+                VolumeJoin::ExactScope,
+                volume.get::<_, String>(1),
+                current_order,
+                ordered_ids,
+            )
+        }
         None => (VolumeJoin::Invalid, String::new(), 1, Vec::new()),
     };
     let classified = classify_update_volume(&CoreUpdateVolume {
