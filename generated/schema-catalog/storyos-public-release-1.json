@@ -22,6 +22,7 @@
     "getApplyAuthorEditOutcome",
     "getSnapshot",
     "getManuscriptTree",
+    "searchManuscript",
     "activityStream",
     "takeOverProjectWriter",
     "undoLatestAuthorAction"
@@ -108,6 +109,16 @@
       "path": "generated/json-schema/storyos-public-release-1/manuscript-tree-response.schema.json",
       "schema_id": "storyos.query.manuscript-tree.response.v1",
       "sha256": "sha256:436ec14659a2e6fca4f88ba1b4d94947878121b1d0cc4ef911c55014cb10ea32"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/manuscript-search-request.schema.json",
+      "schema_id": "storyos.query.manuscript-search.request.v1",
+      "sha256": "sha256:0e9cfe7c3cecc1cfaa68a9a265aa22c1a90bc00aeb9b8d753e9528812f8081fa"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/manuscript-search-response.schema.json",
+      "schema_id": "storyos.query.manuscript-search.response.v1",
+      "sha256": "sha256:935530dade72279944f0c75f729aa94c0ebf1773d4116ec9350a386a43f1f919"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/update-project-request.schema.json",

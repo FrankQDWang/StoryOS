@@ -3,7 +3,7 @@ info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
   x-storyos-contract-revision: release1-wire-catalog-2026-08-29-set-current-chapter-v1
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter,undoLatestAuthorAction
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,activityStream,takeOverProjectWriter,undoLatestAuthorAction
 paths:
   /api/v1/protocol:
     get:
@@ -1489,6 +1489,52 @@ paths:
           description: Rate limited
         '503':
           description: Service unavailable
+  /api/v1/projects/{project_id}/queries/manuscript-search:
+    post:
+      operationId: searchManuscript
+      summary: Search the current Chapter or manuscript
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '../json-schema/storyos-public-release-1/manuscript-search-request.schema.json'
+      responses:
+        '200':
+          description: Bounded manuscript search page
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/manuscript-search-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Snapshot expired
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
+        '503':
+          description: Projection not ready
   /api/v1/projects/{project_id}/activity:
     get:
       operationId: activityStream

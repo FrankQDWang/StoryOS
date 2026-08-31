@@ -1,0 +1,21 @@
+{
+  "completeness": "complete",
+  "correlation_id": "018f0000-0000-7001-8000-000000000062",
+  "items": [],
+  "lag": "0",
+  "limit_profile_revision": "storyos.foundation.absolute.v1",
+  "next_cursor": null,
+  "page_bytes": "2",
+  "page_count": "0",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "projection_generation": "4",
+  "projection_kind": "manuscript_search",
+  "projection_watermark": "4",
+  "query_id": "018f0000-0000-7001-8000-000000000061",
+  "redaction_profile": "storyos.author.v1",
+  "required_watermark": null,
+  "schema_id": "storyos.query.manuscript-search.response.v1"
+}
