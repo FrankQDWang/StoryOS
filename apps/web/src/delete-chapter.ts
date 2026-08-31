@@ -60,7 +60,7 @@ export async function deleteOwnedChapter(options: {
     return removed;
   } catch (error) {
     if (error instanceof StoryOSProtocolError && error.status === 429) {
-      flight.nonce = undefined;
+      delete flight.nonce;
       await new Promise<void>((resolve) => {
         setTimeout(resolve, ((error.retryAfterSeconds ?? 1) + 1) * 1000);
       });
