@@ -221,11 +221,13 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
         ):
             fail(errors, "Release 1 role bootstrap contains tracked password material")
         if source["path"].endswith("/0000_roles.sql"):
-            for role_name in (b"storyos_backup", b"storyos_restore"):
-                if not re.search(rb"CREATE ROLE " + role_name + rb" LOGIN NOSUPERUSER NOBYPASSRLS", normalized):
-                    fail(errors, f"Release 1 role bootstrap omits {role_name.decode()} maintenance role")
-            if not re.search(rb"CREATE ROLE storyos_backup LOGIN NOSUPERUSER NOBYPASSRLS REPLICATION", normalized):
+            if not re.search(
+                rb"CREATE ROLE storyos_backup LOGIN NOSUPERUSER NOBYPASSRLS REPLICATION",
+                normalized,
+            ):
                 fail(errors, "storyos_backup must be a REPLICATION role without superuser or BYPASSRLS")
+            if not re.search(rb"CREATE ROLE storyos_restore LOGIN NOSUPERUSER NOBYPASSRLS", normalized):
+                fail(errors, "Release 1 role bootstrap omits storyos_restore maintenance role")
         actual_manifest.append({"path": source["path"], "lf_sha256": actual_digest})
     manifest_digest = "sha256:" + hashlib.sha256(canonical_bytes(actual_manifest)).hexdigest()
     if bootstrap.get("manifest_sha256") != manifest_digest:
