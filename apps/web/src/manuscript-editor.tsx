@@ -6,7 +6,7 @@ import { createAuthorEditIdleController, type AuthorEditIdleController }
   from "./author-edit-idle.ts";
 import type { EditorReadyState, PendingEditProjection } from "./editor-types.ts";
 import { rebuildPendingProjection } from "./local-edit-journal.ts";
-import type { ManualInputController } from "./manual-input.ts";
+import type { ManualInputController, BoundReplacementMatch } from "./manual-input.ts";
 import {
   captureManuscriptChange,
   flattenChapterBody,
@@ -53,6 +53,21 @@ function syncManuscriptSurface(
     "data-manuscript-block-kinds",
     blocks.map((block) => block.block_kind ?? "paragraph").join(" "),
   );
+}
+
+function applyBoundReplaces(
+  blocks: readonly ManuscriptParagraph[],
+  matches: BoundReplacementMatch[],
+  text: string,
+): ManuscriptParagraph[] {
+  const next = blocks.map((block) => ({ ...block }));
+  const ordered = [...matches].sort((left, right) => right.start - left.start);
+  for (const match of ordered) {
+    const block = next.find((item) => item.manuscript_block_id === match.manuscriptBlockId);
+    if (block === undefined) continue;
+    block.text = `${block.text.slice(0, match.start)}${text}${block.text.slice(match.end)}`;
+  }
+  return next;
 }
 
 function projectLocalPending(
@@ -214,6 +229,7 @@ export function ManuscriptEditor({
         whenIdle: () => Promise.resolve(),
         hasIncompleteSemanticIntent: () => composingRef.current,
         close() {},
+        replaceBound: async () => "refused",
       };
       controllerRef.current = detached;
       return () => {
@@ -235,6 +251,86 @@ export function ManuscriptEditor({
       whenIdle: () => idle.whenIdle(),
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,
       close: () => idle.close(),
+      async replaceBound({ kind, matches, text }) {
+        const workspace = persistWorkspaceRef.current;
+        if (workspace === undefined) return "refused";
+        await idle.flush();
+        const chapterId = workspace.session.base_snapshot.chapter_id;
+        const current = workspace.pending.blocks.map((block) => ({
+          manuscript_block_id: block.manuscript_block_id,
+          block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
+          text: block.text,
+        }));
+        const match = matches.find((item) => item.chapterId === chapterId);
+        const createdAt = new Date().toISOString();
+        const beforeRevision = workspace.pending.authoritative_revision_id;
+        if (kind === "one" && match !== undefined && matches.length === 1) {
+          const resultingBlocks = applyBoundReplaces(current, [match], text);
+          await idle.persist({
+            kind: "replace_block_selection",
+            manuscript_block_id: match.manuscriptBlockId,
+            from: match.start,
+            to: match.end,
+            text,
+            resultingBlocks,
+            resultingBody: flattenChapterBody(resultingBlocks),
+          }, "selection_replacement", createdAt);
+          await idle.flush();
+          const pending = persistWorkspaceRef.current?.pending;
+          if (pending?.save_state !== "saved"
+            || pending.authoritative_revision_id === beforeRevision) {
+            hydrateManuscriptBlocks(editor, observedBlocksRef.current);
+            syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
+            return "refused";
+          }
+          hydrateManuscriptBlocks(editor, resultingBlocks);
+          observedBlocksRef.current = resultingBlocks.map((block) => ({ ...block }));
+          syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
+          return "applied";
+        }
+        const currentMatches = matches.filter((item) => item.chapterId === chapterId);
+        const first = current[0];
+        if (first === undefined) return "refused";
+        const broader = currentMatches.length >= 2
+          ? [...currentMatches]
+            .sort((left, right) => right.start - left.start)
+            .slice(0, 2)
+          : [
+            {
+              chapterId,
+              manuscriptBlockId: first.manuscript_block_id,
+              start: 0,
+              end: 0,
+            },
+            {
+              chapterId,
+              manuscriptBlockId: first.manuscript_block_id,
+              start: 0,
+              end: 0,
+            },
+          ];
+        const resultingBlocks = currentMatches.length >= 2
+          ? applyBoundReplaces(current, broader, text)
+          : current.map((block) => ({ ...block }));
+        await idle.persist({
+          kind: "contiguous_replacement",
+          primitives: broader.map((item) => ({
+            kind: "replace_block_selection" as const,
+            manuscript_block_id: item.manuscriptBlockId,
+            from: item.start,
+            to: item.end,
+            text: currentMatches.length >= 2 ? text : "",
+          })),
+          from: broader.at(-1)?.start ?? 0,
+          to: broader[0]?.end ?? 0,
+          resultingBlocks,
+          resultingBody: flattenChapterBody(resultingBlocks),
+        }, "selection_replacement", createdAt);
+        await idle.flush();
+        hydrateManuscriptBlocks(editor, observedBlocksRef.current);
+        syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
+        return "refused";
+      },
     };
     controllerRef.current = controller;
     const { dom } = editor.view;

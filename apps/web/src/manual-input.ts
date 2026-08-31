@@ -29,11 +29,23 @@ interface CompositionObservation {
   to: number;
 }
 
+export interface BoundReplacementMatch {
+  chapterId: string;
+  manuscriptBlockId: string;
+  start: number;
+  end: number;
+}
+
 export interface ManualInputController {
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
   hasIncompleteSemanticIntent(): boolean;
   close(): void;
+  replaceBound(options: {
+    kind: "one" | "broader";
+    matches: BoundReplacementMatch[];
+    text: string;
+  }): Promise<"applied" | "refused">;
 }
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
@@ -400,6 +412,9 @@ export function attachManualInput({
     },
     hasIncompleteSemanticIntent() {
       return composition !== undefined || compositionFinishing;
+    },
+    async replaceBound() {
+      return "refused";
     },
     close() {
       stopped = true;

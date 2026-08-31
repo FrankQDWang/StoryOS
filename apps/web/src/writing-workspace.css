@@ -196,6 +196,14 @@ input:focus-visible,
   padding-left: 1.25em;
 }
 
+.editor-panel [data-manuscript-replace-form] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 16px;
+  align-items: end;
+  margin: 12px 0 0;
+}
+
 .manuscript-editor {
   display: block;
   min-height: 50%;

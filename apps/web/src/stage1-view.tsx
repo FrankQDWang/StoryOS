@@ -460,6 +460,8 @@ function ProjectReadyView({
             projectId={state.project.project.project_id}
             baseUrl={baseUrl}
             fetchImpl={fetchImpl}
+            currentChapterId={currentChapterId}
+            controllerRef={inputRef}
           />
           <ManuscriptEditor
             key={selectedChapter.chapter.chapter_id}
