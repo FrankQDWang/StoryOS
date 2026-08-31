@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { updateOwnedChapter } from "./update-chapter.ts";
 
 export function ChapterTreeActions({
@@ -37,6 +38,7 @@ export function ChapterTreeActions({
   cryptoImpl: Crypto;
   onUpdated: () => void;
 }) {
+  const [pendingRemoval, setPendingRemoval] = useState(false);
   const currentOrder = Number(order);
   const canMove = Number.isInteger(currentOrder) && currentOrder >= 1;
   const submitUpdate = (nextTitle: string, nextOrder: string) => {
@@ -125,16 +127,35 @@ export function ChapterTreeActions({
             下移
           </button>
           {onRemoveChapter !== undefined ? (
-            <button
-              type="button"
-              data-delete-chapter={chapterId}
-              onClick={() => {
-                if (!window.confirm("确认删除此章节？")) return;
-                onRemoveChapter(chapterId);
-              }}
-            >
-              删除章节
-            </button>
+            pendingRemoval ? (
+              <>
+                <button
+                  type="button"
+                  data-confirm-delete-chapter={chapterId}
+                  onClick={() => {
+                    setPendingRemoval(false);
+                    onRemoveChapter(chapterId);
+                  }}
+                >
+                  确认删除此章节？
+                </button>
+                <button
+                  type="button"
+                  data-cancel-delete-chapter={chapterId}
+                  onClick={() => setPendingRemoval(false)}
+                >
+                  取消
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                data-delete-chapter={chapterId}
+                onClick={() => setPendingRemoval(true)}
+              >
+                删除章节
+              </button>
+            )
           ) : null}
         </>
       ) : null}

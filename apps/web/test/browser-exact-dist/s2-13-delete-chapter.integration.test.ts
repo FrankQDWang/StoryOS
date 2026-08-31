@@ -47,11 +47,28 @@ async function waitSettled(frame: HTMLIFrameElement): Promise<void> {
   }, { timeout: 10_000 }).toBe(true);
 }
 
-function currentDeleteControl(frame: HTMLIFrameElement): HTMLButtonElement | undefined {
+function currentChapterRow(frame: HTMLIFrameElement): Element | undefined {
   const heading = frame.contentDocument?.querySelector("h2")?.textContent;
-  const row = [...(frame.contentDocument?.querySelectorAll("li[data-chapter-id]") ?? [])]
+  return [...(frame.contentDocument?.querySelectorAll("li[data-chapter-id]") ?? [])]
     .find((item) => item.querySelector("[data-chapter-title]")?.textContent?.trim() === heading);
-  return row?.querySelector<HTMLButtonElement>("button[data-delete-chapter]") ?? undefined;
+}
+
+async function confirmCurrentDelete(frame: HTMLIFrameElement): Promise<void> {
+  const row = currentChapterRow(frame);
+  const start = row?.querySelector<HTMLButtonElement>("button[data-delete-chapter]");
+  if (start === undefined || start === null) {
+    throw new Error("the Delete Chapter control is missing");
+  }
+  start.click();
+  await expect.poll(() =>
+    currentChapterRow(frame)?.querySelector("button[data-confirm-delete-chapter]")?.tagName
+  ).toBe("BUTTON");
+  const confirm = currentChapterRow(frame)
+    ?.querySelector<HTMLButtonElement>("button[data-confirm-delete-chapter]");
+  if (confirm === undefined || confirm === null) {
+    throw new Error("the Delete Chapter confirmation is missing");
+  }
+  confirm.click();
 }
 
 async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
@@ -130,16 +147,8 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   document.body.append(frame);
   await loaded;
   await createThreeChapters(frame);
-  const realm = frame.contentWindow;
-  if (realm === null) throw new Error("the exact-dist application realm is unavailable");
-  realm.confirm = () => true;
   await waitSettled(frame);
-
-  const firstDelete = currentDeleteControl(frame);
-  if (firstDelete === undefined) {
-    throw new Error("the Delete Chapter control is missing");
-  }
-  firstDelete.click();
+  await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "project-ready"
@@ -147,12 +156,7 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
       && root?.querySelector("h2")?.textContent === "Chapter B";
   }, { timeout: 15_000 }).toBe(true);
   await waitSettled(frame);
-
-  const secondDelete = currentDeleteControl(frame);
-  if (secondDelete === undefined) {
-    throw new Error("the later Delete Chapter control is missing");
-  }
-  secondDelete.click();
+  await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "project-ready"
@@ -160,12 +164,7 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
       && root?.querySelector("h2")?.textContent === "Chapter C";
   }, { timeout: 15_000 }).toBe(true);
   await waitSettled(frame);
-
-  const lastDelete = currentDeleteControl(frame);
-  if (lastDelete === undefined) {
-    throw new Error("the last Delete Chapter control is missing");
-  }
-  lastDelete.click();
+  await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "empty-project-ready"
