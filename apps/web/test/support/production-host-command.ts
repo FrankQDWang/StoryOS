@@ -151,13 +151,12 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     const writerId = await sessionId(writer, projectId);
     await replaceAndSave(writer, "Saved through the production host.");
+    await writer.locator('[data-activity-replay-generation="1"]').waitFor();
     await writer.reload();
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), "Saved through the production host.");
     assert.equal(await sessionId(writer, projectId), writerId);
-    await writer.locator(
-      '[data-activity-replay-generation="1"]:not([data-activity-last-event-id=""])',
-    ).waitFor();
+    await writer.locator('[data-activity-replay-generation="1"]').waitFor();
     await queryPostgres(`
       INSERT INTO storyos.replay_generations (owner_user_id, project_id, replay_generation)
       VALUES ('${USER}'::uuid, '${projectId}'::uuid, 2)

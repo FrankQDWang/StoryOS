@@ -146,6 +146,7 @@ async function replayActivityBody(
 ): Promise<ProjectActivitySyncResult> {
   const frames = parseSseFrames(body);
   if (frames.length === 0) {
+    await writeActivityStreamCursor(workspace, cursor);
     return {
       kind: "idle",
       ingest: await readProjectActivityIngest(workspace),
