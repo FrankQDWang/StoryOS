@@ -467,6 +467,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_create_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_update_volume_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_update_volume_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_delete_volume_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_delete_volume_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_update_chapter_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_delete_chapter_artifacts::REQUEST_SCHEMA_PATH,
