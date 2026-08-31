@@ -157,7 +157,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,createChapter,updateChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -289,6 +289,7 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
             "createChapter",
             "updateVolume",
             "updateChapter",
+            "deleteChapter",
             "setCurrentChapter",
             "undoLatestAuthorAction"
         ])
@@ -467,6 +468,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_update_volume_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_update_chapter_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_update_chapter_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_delete_chapter_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_delete_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_set_current_chapter_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_set_current_chapter_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_undo_latest_author_action_artifacts::REQUEST_SCHEMA_PATH,

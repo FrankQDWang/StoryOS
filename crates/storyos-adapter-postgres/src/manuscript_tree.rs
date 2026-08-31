@@ -48,11 +48,17 @@ impl ManuscriptTreeReader for PostgresProjectReader {
         let chapter_rows = transaction
             .query(
                 "SELECT parent_volume_id::text, manuscript_object_id::text, title, tree_order::text
-                   FROM storyos.manuscript_objects
+                   FROM storyos.manuscript_objects AS chapter
                   WHERE owner_user_id = $1::text::uuid
                     AND project_id = $2::text::uuid
                     AND object_kind = 'chapter'
                     AND parent_volume_id IS NOT NULL
+                    AND NOT EXISTS (
+                      SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                       WHERE removal.owner_user_id = chapter.owner_user_id
+                         AND removal.project_id = chapter.project_id
+                         AND removal.chapter_id = chapter.manuscript_object_id
+                    )
                   ORDER BY parent_volume_id, tree_order",
                 &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
             )
@@ -62,18 +68,14 @@ impl ManuscriptTreeReader for PostgresProjectReader {
         let mut chapters_by_volume = std::collections::BTreeMap::<String, Vec<ChapterFact>>::new();
         for chapter in chapter_rows {
             let volume_id = chapter.get::<_, String>(0);
-            chapters_by_volume
-                .entry(volume_id)
-                .or_default()
-                .push(ChapterFact {
-                    project_scope: scope.clone(),
-                    chapter_id: ChapterId::new(chapter.get::<_, String>(1)),
-                    title: chapter.get(2),
-                    order: chapter
-                        .get::<_, String>(3)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                });
+            let chapters = chapters_by_volume.entry(volume_id).or_default();
+            let next_order = chapters.len() as u64 + 1;
+            chapters.push(ChapterFact {
+                project_scope: scope.clone(),
+                chapter_id: ChapterId::new(chapter.get::<_, String>(1)),
+                title: chapter.get(2),
+                order: next_order,
+            });
         }
         let mut volumes = Vec::with_capacity(volume_rows.len());
         for volume in volume_rows {

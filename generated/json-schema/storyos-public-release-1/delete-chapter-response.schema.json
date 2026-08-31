@@ -20,28 +20,25 @@
       ],
       "type": "object"
     },
-    "CreateVolumeConflictReason": {
+    "DeleteChapterConflictReason": {
       "enum": [
-        "stale_tree_revision"
+        "stale_chapter_revision"
       ],
       "type": "string"
     },
-    "CreateVolumeEffect": {
+    "DeleteChapterEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
+            "chapter_id": {
+              "type": "string"
+            },
             "kind": {
               "const": "authoritative_applied",
               "type": "string"
             },
-            "order": {
-              "type": "string"
-            },
             "project_activity_position": {
-              "type": "string"
-            },
-            "title": {
               "type": "string"
             },
             "tree_revision": {
@@ -53,11 +50,27 @@
           },
           "required": [
             "kind",
+            "chapter_id",
             "volume_id",
-            "title",
             "tree_revision",
-            "order",
             "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/DeleteChapterNoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
           ],
           "type": "object"
         },
@@ -69,7 +82,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/CreateVolumeConflictReason"
+              "$ref": "#/$defs/DeleteChapterConflictReason"
             }
           },
           "required": [
@@ -86,7 +99,7 @@
               "type": "string"
             },
             "reason": {
-              "$ref": "#/$defs/CreateVolumeRefusalReason"
+              "$ref": "#/$defs/DeleteChapterRefusalReason"
             }
           },
           "required": [
@@ -97,10 +110,16 @@
         }
       ]
     },
-    "CreateVolumeRefusalReason": {
+    "DeleteChapterNoEffectReason": {
+      "enum": [
+        "already_removed"
+      ],
+      "type": "string"
+    },
+    "DeleteChapterRefusalReason": {
       "enum": [
         "archived_project",
-        "invalid_title"
+        "invalid_chapter_join"
       ],
       "type": "string"
     },
@@ -324,7 +343,7 @@
       "type": "object"
     }
   },
-  "$id": "storyos.command.create-volume.response.v1",
+  "$id": "storyos.command.delete-chapter.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -341,7 +360,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/CreateVolumeEffect"
+      "$ref": "#/$defs/DeleteChapterEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -353,7 +372,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.create-volume.response.v1",
+      "const": "storyos.command.delete-chapter.response.v1",
       "type": "string"
     }
   },
@@ -367,6 +386,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Create Volume Response",
+  "title": "StoryOS Delete Chapter Response",
   "type": "object"
 }

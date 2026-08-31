@@ -13,6 +13,7 @@ export function ChapterTreeActions({
   makeCurrentEnabled,
   onMakeCurrent,
   createEnabled,
+  onRemoveChapter,
   baseUrl,
   fetchImpl,
   cryptoImpl,
@@ -30,6 +31,7 @@ export function ChapterTreeActions({
   makeCurrentEnabled?: boolean | undefined;
   onMakeCurrent?: ((chapterId: string) => void) | undefined;
   createEnabled: boolean;
+  onRemoveChapter?: ((chapterId: string) => void) | undefined;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -122,6 +124,18 @@ export function ChapterTreeActions({
           >
             下移
           </button>
+          {onRemoveChapter !== undefined ? (
+            <button
+              type="button"
+              data-delete-chapter={chapterId}
+              onClick={() => {
+                if (!window.confirm("确认删除此章节？")) return;
+                onRemoveChapter(chapterId);
+              }}
+            >
+              删除章节
+            </button>
+          ) : null}
         </>
       ) : null}
     </li>

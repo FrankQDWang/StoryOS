@@ -1,27 +1,31 @@
 use storyos_application::{
-    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
-    UpdateChapterSettlementEffect,
+    DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
+    DeleteChapterSettlementEffect,
 };
 use storyos_core::{
-    ChapterJoin, ProjectLifecycle, ProjectPresence, UpdateChapter as CoreUpdateChapter,
-    UpdateChapterResult, update_chapter as classify_update_chapter,
+    ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterCurrent,
+    DeleteChapterResult, ProjectLifecycle, ProjectPresence,
+    delete_chapter as classify_delete_chapter,
 };
 use uuid::Uuid;
 
-use super::{update_chapter_database_error, update_chapter_parse_error};
+use super::{delete_chapter_database_error, delete_chapter_parse_error};
 
-struct ChapterSiblings<'a> {
-    ordered_ids: &'a [String],
-    parent_volume_id: &'a str,
-}
+const ACTIVE_CHAPTER_PREDICATE: &str = "NOT EXISTS (
+                 SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                  WHERE removal.owner_user_id = chapter.owner_user_id
+                    AND removal.project_id = chapter.project_id
+                    AND removal.chapter_id = chapter.manuscript_object_id
+               )";
 
-pub(super) async fn persist_update_chapter(
+pub(super) async fn persist_delete_chapter(
     client: &tokio_postgres::Client,
-    command: &UpdateChapterCommand,
-) -> Result<UpdateChapterSettlement, UpdateChapterError> {
+    command: &DeleteChapterCommand,
+) -> Result<DeleteChapterSettlement, DeleteChapterError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text FROM storyos.projects
+            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
+               FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -30,15 +34,15 @@ pub(super) async fn persist_update_chapter(
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?;
+        .map_err(delete_chapter_database_error)?;
     let Some(row) = row else {
-        return Err(UpdateChapterError::MissingProject);
+        return Err(DeleteChapterError::MissingProject);
     };
     let current_lifecycle = match row.get::<_, String>(0).as_str() {
         "active" => ProjectLifecycle::Active,
         "archived" => ProjectLifecycle::Archived,
         other => {
-            return Err(UpdateChapterError::Unavailable(Box::new(
+            return Err(DeleteChapterError::Unavailable(Box::new(
                 std::io::Error::other(format!("unsupported Project lifecycle {other}")),
             )));
         }
@@ -46,115 +50,122 @@ pub(super) async fn persist_update_chapter(
     let current_chapter_revision = row
         .get::<_, String>(1)
         .parse::<u64>()
-        .map_err(update_chapter_parse_error)?;
-    let chapters = client
-        .query(
-            "SELECT manuscript_object_id::text, title, tree_order::text, parent_volume_id::text
+        .map_err(delete_chapter_parse_error)?;
+    let current_chapter_id = row.get::<_, Option<String>>(2);
+    let target = client
+        .query_opt(
+            "SELECT chapter.parent_volume_id::text, removal.chapter_id IS NOT NULL
                FROM storyos.manuscript_objects AS chapter
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND object_kind = 'chapter'
-                AND NOT EXISTS (
-                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
-                   WHERE removal.owner_user_id = chapter.owner_user_id
-                     AND removal.project_id = chapter.project_id
-                     AND removal.chapter_id = chapter.manuscript_object_id
-                )
-              ORDER BY parent_volume_id, tree_order
-              FOR UPDATE",
+               LEFT JOIN storyos.chapter_removal_decisions AS removal
+                 ON (removal.owner_user_id, removal.project_id, removal.chapter_id) =
+                    (chapter.owner_user_id, chapter.project_id, chapter.manuscript_object_id)
+              WHERE chapter.owner_user_id = $1::text::uuid AND chapter.project_id = $2::text::uuid
+                AND chapter.manuscript_object_id = $3::text::uuid
+                AND chapter.object_kind = 'chapter'
+              FOR UPDATE OF chapter",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.chapter_id.as_ref(),
+            ],
+        )
+        .await
+        .map_err(delete_chapter_database_error)?;
+    let (chapter_join, chapter_lifecycle, volume_id) = match target {
+        Some(target) => {
+            let volume_id = target.get::<_, String>(0);
+            let removed = target.get::<_, bool>(1);
+            (
+                ChapterJoin::ExactScope,
+                if removed {
+                    ChapterRemovalLifecycle::Removed
+                } else {
+                    ChapterRemovalLifecycle::Active
+                },
+                volume_id,
+            )
+        }
+        None => (
+            ChapterJoin::Invalid,
+            ChapterRemovalLifecycle::Active,
+            String::new(),
+        ),
+    };
+    let ordered_rows = client
+        .query(
+            &format!(
+                "SELECT chapter.manuscript_object_id::text
+                   FROM storyos.manuscript_objects AS chapter
+                   JOIN storyos.manuscript_objects AS volume
+                     ON (volume.owner_user_id, volume.project_id, volume.manuscript_object_id) =
+                        (chapter.owner_user_id, chapter.project_id, chapter.parent_volume_id)
+                    AND volume.object_kind = 'volume'
+                  WHERE chapter.owner_user_id = $1::text::uuid AND chapter.project_id = $2::text::uuid
+                    AND chapter.object_kind = 'chapter'
+                    AND {ACTIVE_CHAPTER_PREDICATE}
+                  ORDER BY volume.tree_order, chapter.tree_order
+                  FOR UPDATE"
+            ),
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?;
-    let current = chapters
+        .map_err(delete_chapter_database_error)?;
+    let ordered_active_chapter_ids = ordered_rows
         .iter()
-        .find(|chapter| chapter.get::<_, String>(0) == command.chapter_id.as_ref());
-    let (chapter_join, current_title, current_order, ordered_ids, parent_volume_id) = match current
-    {
-        Some(chapter) => {
-            let parent = chapter.get::<_, String>(3);
-            let ordered_ids = chapters
-                .iter()
-                .filter(|row| row.get::<_, String>(3) == parent)
-                .map(|row| row.get::<_, String>(0))
-                .collect::<Vec<_>>();
-            let current_order = ordered_ids
-                .iter()
-                .position(|chapter_id| chapter_id == command.chapter_id.as_ref())
-                .map(|index| index as u64 + 1)
-                .unwrap_or(1);
-            (
-                ChapterJoin::ExactScope,
-                chapter.get::<_, String>(1),
-                current_order,
-                ordered_ids,
-                parent,
-            )
-        }
-        None => (
-            ChapterJoin::Invalid,
-            String::new(),
-            1,
-            Vec::new(),
-            String::new(),
-        ),
-    };
-    let chapter_count = ordered_ids.len() as u64;
-    let classified = classify_update_chapter(&CoreUpdateChapter {
+        .map(|chapter| chapter.get::<_, String>(0))
+        .collect::<Vec<_>>();
+    let classified = classify_delete_chapter(&CoreDeleteChapter {
         presence: ProjectPresence::Present,
         chapter_join,
+        chapter_lifecycle,
         expected_chapter_revision: command.expected_chapter_revision,
         current_chapter_revision,
         current_lifecycle,
-        title: command.title.clone(),
-        current_title,
-        order: command.order,
-        current_order,
-        chapter_count,
+        chapter_id: command.chapter_id.as_ref().to_owned(),
+        current_chapter_id,
+        ordered_active_chapter_ids,
     });
     let effect = match classified {
-        UpdateChapterResult::Applied {
-            title,
-            order,
+        DeleteChapterResult::Applied {
             tree_revision,
-        } => UpdateChapterSettlementEffect::Applied {
-            title,
-            order,
+            current,
+        } => DeleteChapterSettlementEffect::Applied {
             tree_revision,
+            volume_id,
+            current,
         },
-        UpdateChapterResult::NoEffect { reason } => {
-            UpdateChapterSettlementEffect::NoEffect { reason }
+        DeleteChapterResult::NoEffect { reason } => {
+            DeleteChapterSettlementEffect::NoEffect { reason }
         }
-        UpdateChapterResult::Conflicted { reason } => {
-            UpdateChapterSettlementEffect::Conflicted { reason }
+        DeleteChapterResult::Conflicted { reason } => {
+            DeleteChapterSettlementEffect::Conflicted { reason }
         }
-        UpdateChapterResult::Refused {
-            reason: storyos_core::UpdateChapterRefusal::MissingProject,
-        } => return Err(UpdateChapterError::MissingProject),
-        UpdateChapterResult::Refused { reason } => {
-            UpdateChapterSettlementEffect::Refused { reason }
+        DeleteChapterResult::Refused {
+            reason: storyos_core::DeleteChapterRefusal::MissingProject,
+        } => return Err(DeleteChapterError::MissingProject),
+        DeleteChapterResult::Refused { reason } => {
+            DeleteChapterSettlementEffect::Refused { reason }
         }
     };
-    insert_update_chapter_admission(client, command).await?;
+    insert_delete_chapter_admission(client, command).await?;
     let (result_kind, result_payload) = match &effect {
-        UpdateChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
-        UpdateChapterSettlementEffect::NoEffect { .. } => {
-            ("no_effect", r#"{"reason":"unchanged"}"#.to_owned())
+        DeleteChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
+        DeleteChapterSettlementEffect::NoEffect { .. } => {
+            ("no_effect", r#"{"reason":"already_removed"}"#.to_owned())
         }
-        UpdateChapterSettlementEffect::Conflicted { .. } => (
+        DeleteChapterSettlementEffect::Conflicted { .. } => (
             "conflicted",
             r#"{"reason":"stale_chapter_revision"}"#.to_owned(),
         ),
-        UpdateChapterSettlementEffect::Refused { reason } => {
+        DeleteChapterSettlementEffect::Refused { reason } => {
             let refused = match reason {
-                storyos_core::UpdateChapterRefusal::ArchivedProject => "archived_project",
-                storyos_core::UpdateChapterRefusal::InvalidTitle => "invalid_title",
-                storyos_core::UpdateChapterRefusal::InvalidOrder => "invalid_order",
-                storyos_core::UpdateChapterRefusal::InvalidChapterJoin => "invalid_chapter_join",
-                storyos_core::UpdateChapterRefusal::MissingProject => {
-                    return Err(UpdateChapterError::MissingProject);
+                storyos_core::DeleteChapterRefusal::ArchivedProject => "archived_project",
+                storyos_core::DeleteChapterRefusal::InvalidChapterJoin => "invalid_chapter_join",
+                storyos_core::DeleteChapterRefusal::MissingProject => {
+                    return Err(DeleteChapterError::MissingProject);
                 }
             };
             ("refused", format!(r#"{{"reason":"{refused}"}}"#))
@@ -169,7 +180,7 @@ pub(super) async fn persist_update_chapter(
                 proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
                 artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'updateChapter', $6, $7::text::uuid,
+                     $5::text::uuid, 'deleteChapter', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
                      '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
                      '{}'::text[], $8, $9::text::jsonb)
@@ -188,7 +199,7 @@ pub(super) async fn persist_update_chapter(
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?
+        .map_err(delete_chapter_database_error)?
         .get::<_, String>(0);
     client
         .execute(
@@ -204,28 +215,16 @@ pub(super) async fn persist_update_chapter(
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?;
+        .map_err(delete_chapter_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let UpdateChapterSettlementEffect::Applied {
-        title,
-        order,
+    if let DeleteChapterSettlementEffect::Applied {
         tree_revision,
+        volume_id,
+        current,
     } = &effect
     {
-        apply_chapter_tree(
-            client,
-            command,
-            ChapterSiblings {
-                ordered_ids: &ordered_ids,
-                parent_volume_id: &parent_volume_id,
-            },
-            current_order,
-            title,
-            *order,
-            *tree_revision,
-        )
-        .await?;
+        persist_removed_chapter(client, command, tree_revision, volume_id, current).await?;
         project_activity_position = client
             .query_one(
                 "INSERT INTO storyos.scope_counters AS counters
@@ -241,17 +240,29 @@ pub(super) async fn persist_update_chapter(
                 ],
             )
             .await
-            .map_err(update_chapter_database_error)?
+            .map_err(delete_chapter_database_error)?
             .get::<_, String>(0)
             .parse::<u64>()
-            .map_err(update_chapter_parse_error)?;
+            .map_err(delete_chapter_parse_error)?;
         project_activity_event_id = Uuid::now_v7().to_string();
+        let resulting_current = client
+            .query_one(
+                "SELECT current_chapter_id::text FROM storyos.projects
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                ],
+            )
+            .await
+            .map_err(delete_chapter_database_error)?
+            .get::<_, Option<String>>(0);
         let payload = serde_json::json!({
-            "kind": "chapter_updated",
+            "kind": "chapter_deleted",
             "chapter_id": command.chapter_id.as_ref(),
-            "title": title,
+            "volume_id": volume_id,
             "tree_revision": tree_revision.to_string(),
-            "order": order.to_string(),
+            "current_chapter_id": resulting_current,
         })
         .to_string();
         client
@@ -260,7 +271,7 @@ pub(super) async fn persist_update_chapter(
                    (owner_user_id, project_id, project_activity_position, project_activity_event_id,
                     event_kind, receipt_id, receipt_result_kind, payload)
                  VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                         'chapter_updated', $5::text::uuid, 'authoritative_applied',
+                         'chapter_deleted', $5::text::uuid, 'authoritative_applied',
                          $6::text::jsonb)",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
@@ -272,14 +283,14 @@ pub(super) async fn persist_update_chapter(
                 ],
             )
             .await
-            .map_err(update_chapter_database_error)?;
+            .map_err(delete_chapter_database_error)?;
     }
     client
         .execute(
             "UPDATE storyos.command_idempotency
                 SET outcome_kind = 'settled', result_reference = $3
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'updateChapter' AND idempotency_key = $4::text::uuid",
+                AND command_kind = 'deleteChapter' AND idempotency_key = $4::text::uuid",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -288,8 +299,8 @@ pub(super) async fn persist_update_chapter(
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?;
-    Ok(UpdateChapterSettlement {
+        .map_err(delete_chapter_database_error)?;
+    Ok(DeleteChapterSettlement {
         ids: command.ids.clone(),
         effect,
         receipt_created_at,
@@ -298,99 +309,93 @@ pub(super) async fn persist_update_chapter(
     })
 }
 
-async fn apply_chapter_tree(
+async fn persist_removed_chapter(
     client: &tokio_postgres::Client,
-    command: &UpdateChapterCommand,
-    siblings: ChapterSiblings<'_>,
-    current_order: u64,
-    title: &str,
-    order: u64,
-    tree_revision: u64,
-) -> Result<(), UpdateChapterError> {
-    let updated = client
+    command: &DeleteChapterCommand,
+    tree_revision: &u64,
+    volume_id: &str,
+    current: &DeleteChapterCurrent,
+) -> Result<(), DeleteChapterError> {
+    let decision_id = Uuid::now_v7().to_string();
+    client
         .execute(
-            "UPDATE storyos.manuscript_objects
-                SET title = $3
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
+            "INSERT INTO storyos.chapter_removal_decisions
+               (owner_user_id, project_id, chapter_removal_decision_id, receipt_id,
+                chapter_id, volume_id, tree_revision)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, $6::text::uuid, $7::text::bigint)",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
-                &title,
+                &decision_id,
+                &command.ids.receipt_id,
                 &command.chapter_id.as_ref(),
+                &volume_id,
+                &tree_revision.to_string(),
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?;
-    if updated != 1 {
-        return Err(UpdateChapterError::Unavailable(Box::new(
-            std::io::Error::other("Chapter row changed under FOR UPDATE"),
-        )));
-    }
-    if current_order != order {
-        let mut ids = siblings.ordered_ids.to_vec();
-        let moved = ids.remove((current_order - 1) as usize);
-        ids.insert((order - 1) as usize, moved);
-        client
+        .map_err(delete_chapter_database_error)?;
+    let updated = match current {
+        DeleteChapterCurrent::PreserveExisting => client
             .execute(
-                "UPDATE storyos.manuscript_objects
-                    SET tree_order = tree_order + 1000000
+                "UPDATE storyos.projects
+                    SET tree_revision = $3::text::bigint
                   WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid",
+                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
-                    &siblings.parent_volume_id,
+                    &tree_revision.to_string(),
+                    &command.expected_chapter_revision.to_string(),
                 ],
             )
             .await
-            .map_err(update_chapter_database_error)?;
-        for (index, chapter_id) in ids.iter().enumerate() {
-            let tree_order = (index + 1).to_string();
-            client
-                .execute(
-                    "UPDATE storyos.manuscript_objects
-                        SET tree_order = $3::text::bigint
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                        &tree_order,
-                        chapter_id,
-                    ],
-                )
-                .await
-                .map_err(update_chapter_database_error)?;
-        }
-    }
-    let bumped = client
-        .execute(
-            "UPDATE storyos.projects
-                SET tree_revision = $3::text::bigint
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &tree_revision.to_string(),
-                &command.expected_chapter_revision.to_string(),
-            ],
-        )
-        .await
-        .map_err(update_chapter_database_error)?;
-    if bumped != 1 {
-        return Err(UpdateChapterError::Unavailable(Box::new(
+            .map_err(delete_chapter_database_error)?,
+        DeleteChapterCurrent::SelectSuccessor { chapter_id } => client
+            .execute(
+                "UPDATE storyos.projects
+                    SET tree_revision = $3::text::bigint, current_chapter_id = $5::text::uuid
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &tree_revision.to_string(),
+                    &command.expected_chapter_revision.to_string(),
+                    &chapter_id,
+                ],
+            )
+            .await
+            .map_err(delete_chapter_database_error)?,
+        DeleteChapterCurrent::Empty => client
+            .execute(
+                "UPDATE storyos.projects
+                    SET tree_revision = $3::text::bigint, current_chapter_id = NULL
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &tree_revision.to_string(),
+                    &command.expected_chapter_revision.to_string(),
+                ],
+            )
+            .await
+            .map_err(delete_chapter_database_error)?,
+    };
+    if updated != 1 {
+        return Err(DeleteChapterError::Unavailable(Box::new(
             std::io::Error::other("tree revision changed under FOR UPDATE"),
         )));
     }
     Ok(())
 }
 
-async fn insert_update_chapter_admission(
+async fn insert_delete_chapter_admission(
     client: &tokio_postgres::Client,
-    command: &UpdateChapterCommand,
-) -> Result<(), UpdateChapterError> {
+    command: &DeleteChapterCommand,
+) -> Result<(), DeleteChapterError> {
     let client_session_generation = command.client_binding.session_generation.to_string();
     let inserted = client
         .execute(
@@ -406,14 +411,14 @@ async fn insert_update_chapter_admission(
                 undo_group_id, completed_intent_record_id, local_intent_sequence, command_payload)
              SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                     NULL, NULL, $5, $6::text::numeric, $7, $8,
-                    'explicit_project_command', $9, $10, $11, 'updateChapter',
+                    'explicit_project_command', $9, $10, $11, 'deleteChapter',
                     $12, $13::text::uuid, challenge.consumed_at, challenge.expires_at,
                     $14::text::uuid, NULL, NULL, '{}'::uuid[], '{}'::text[], NULL, $7,
                     NULL, NULL, NULL, convert_from($15::bytea, 'UTF8')::jsonb
                FROM storyos.project_command_challenges AS challenge
               WHERE challenge.owner_user_id = $1::text::uuid
                 AND challenge.project_id = $2::text::uuid
-                AND challenge.command_kind = 'updateChapter'
+                AND challenge.command_kind = 'deleteChapter'
                 AND challenge.idempotency_key = $13::text::uuid",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
@@ -434,9 +439,9 @@ async fn insert_update_chapter_admission(
             ],
         )
         .await
-        .map_err(update_chapter_database_error)?;
+        .map_err(delete_chapter_database_error)?;
     if inserted != 1 {
-        return Err(UpdateChapterError::InvalidChallenge);
+        return Err(DeleteChapterError::InvalidChallenge);
     }
     Ok(())
 }

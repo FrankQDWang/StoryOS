@@ -21,6 +21,7 @@ import {
   openSelectedChapter,
   selectedChapterSurface,
 } from "./chapter-navigation.ts";
+import { deleteOwnedChapter } from "./delete-chapter.ts";
 import type {
   ControlledProjectState,
   EditorReadyState,
@@ -239,6 +240,70 @@ function ProjectReadyView({
     })();
   };
 
+  const removeChapter = (chapterId: string) => {
+    if (tree === undefined) return;
+    if (makeCurrentInFlightRef.current) return;
+    makeCurrentInFlightRef.current = true;
+    const generation = switchGenerationRef.current + 1;
+    switchGenerationRef.current = generation;
+    void (async () => {
+      try {
+        await inputRef.current?.flush();
+        const gate = await completeJournalOrRefuse({
+          incompleteSemanticIntent: inputRef.current?.hasIncompleteSemanticIntent() ?? false,
+          whenIdle: () => inputRef.current?.whenIdle() ?? Promise.resolve(),
+        });
+        if (generation !== switchGenerationRef.current) return;
+        if (gate.kind === "refused") {
+          setSwitchRecovery(
+            gate.reason === "incomplete_semantic_intent"
+              ? "无法删除章节：请先完成当前输入。"
+              : "无法删除章节：本地编辑需要恢复。",
+          );
+          return;
+        }
+        if (state.editor.kind === "editor-ready") {
+          const drained = await rebuildPendingProjection(state.editor);
+          state.editor.pending = drained;
+          setPending(drained);
+          setSaveState(drained.save_state);
+          if (drained.unsettled_intent_count > 0) {
+            setSwitchRecovery("无法删除章节。");
+            return;
+          }
+        }
+        const removed = await deleteOwnedChapter({
+          baseUrl,
+          fetchImpl,
+          cryptoImpl,
+          projectId: state.project.project.project_id,
+          chapterId,
+          expectedChapterRevision: tree.tree_revision,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        if (
+          removed.effect.kind !== "authoritative_applied"
+          && removed.effect.kind !== "no_effect"
+        ) {
+          setSwitchRecovery("无法删除章节。");
+          return;
+        }
+        const next = await openControlledProject({
+          baseUrl,
+          projectId: state.project.project.project_id,
+          fetchImpl,
+          cryptoImpl,
+        });
+        if (generation !== switchGenerationRef.current) return;
+        onReopened(next);
+      } catch {
+        setSwitchRecovery("无法删除章节。");
+      } finally {
+        makeCurrentInFlightRef.current = false;
+      }
+    })();
+  };
+
   const archived = lifecycle === "archived";
   const writer = state.editor.kind === "editor-ready"
     ? state.editor.session.writer
@@ -278,6 +343,7 @@ function ProjectReadyView({
               onMakeCurrent={makeCurrent}
               onChapterCreated={refreshTree}
               onVolumeUpdated={refreshTree}
+              onRemoveChapter={removeChapter}
             />
           )}
           {archived ? null : (
@@ -538,6 +604,24 @@ function EmptyProjectReadyView({
             createEnabled
             onChapterCreated={onChapterCreated}
             onVolumeUpdated={onVolumeCreated}
+            onRemoveChapter={(chapterId) => {
+              void deleteOwnedChapter({
+                baseUrl,
+                fetchImpl,
+                cryptoImpl,
+                projectId: project.project.project_id,
+                chapterId,
+                expectedChapterRevision: tree.tree_revision,
+              }).then((removed) => {
+                if (
+                  removed.effect.kind !== "authoritative_applied"
+                  && removed.effect.kind !== "no_effect"
+                ) {
+                  return;
+                }
+                onChapterCreated();
+              }).catch(() => {});
+            }}
           />
           <CreateVolumeForm
             projectId={project.project.project_id}

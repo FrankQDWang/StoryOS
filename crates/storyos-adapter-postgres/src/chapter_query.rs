@@ -60,7 +60,13 @@ async fn read_scoped_chapter(
                ON (counters.owner_user_id, counters.project_id) = \
                   (object.owner_user_id, object.project_id) \
              WHERE object.owner_user_id = $1::text::uuid AND object.project_id = $2::text::uuid \
-               AND object.manuscript_object_id = $3::text::uuid AND object.object_kind = 'chapter'",
+               AND object.manuscript_object_id = $3::text::uuid AND object.object_kind = 'chapter' \
+               AND NOT EXISTS ( \
+                 SELECT 1 FROM storyos.chapter_removal_decisions AS removal \
+                  WHERE removal.owner_user_id = object.owner_user_id \
+                    AND removal.project_id = object.project_id \
+                    AND removal.chapter_id = object.manuscript_object_id \
+               )",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
