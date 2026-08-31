@@ -423,9 +423,9 @@ async fn bind_current_writer_base_to_chapter(
         .map_err(delete_chapter_database_error)?
         .map(|row| row.get::<_, String>(0))
     else {
-        return Err(DeleteChapterError::Unavailable(Box::new(std::io::Error::other(
-            "successor Chapter has no authoritative head",
-        ))));
+        return Err(DeleteChapterError::Unavailable(Box::new(
+            std::io::Error::other("successor Chapter has no authoritative head"),
+        )));
     };
     let snapshot_id = Uuid::now_v7().to_string();
     crate::snapshot::persist_canonical_snapshot(
