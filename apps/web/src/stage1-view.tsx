@@ -911,6 +911,8 @@ function Stage1View({
   const [current, setCurrent] = useState(state);
   useEffect(() => { setBootState(current.kind); }, [current, setBootState]);
   if (current.kind === "project-ready") {
+    // Volume removal keeps the current Chapter, so chapter and writer keys
+    // stay put. The new editor base snapshot remounts the tree after honor-deletion.
     return (
       <ProjectReadyView
         key={`${
@@ -921,6 +923,10 @@ function Stage1View({
           current.editor.kind === "editor-ready"
             && current.editor.session.writer.kind === "current_writer"
             ? current.editor.session.writer.writer_generation
+            : current.editor.kind
+        }:${
+          current.editor.kind === "editor-ready"
+            ? current.editor.session.base_snapshot.snapshot_id
             : current.editor.kind
         }`}
         state={current}
