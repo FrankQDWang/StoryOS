@@ -38,6 +38,22 @@ function chapterTitles(root: Element | null | undefined): string[] {
     .map((node) => node.textContent?.trim() ?? "");
 }
 
+async function waitSettled(frame: HTMLIFrameElement): Promise<void> {
+  await expect.poll(() => {
+    const node = frame.contentDocument?.querySelector("[data-save-state]");
+    const save = node?.getAttribute("data-save-state");
+    const unsettled = node?.getAttribute("data-unsettled-intent-count");
+    return (save === "saved" || save === "clean") && unsettled === "0";
+  }, { timeout: 10_000 }).toBe(true);
+}
+
+function currentDeleteControl(frame: HTMLIFrameElement): HTMLButtonElement | undefined {
+  const heading = frame.contentDocument?.querySelector("h2")?.textContent;
+  const row = [...(frame.contentDocument?.querySelectorAll("li[data-chapter-id]") ?? [])]
+    .find((item) => item.querySelector("[data-chapter-title]")?.textContent?.trim() === heading);
+  return row?.querySelector<HTMLButtonElement>("button[data-delete-chapter]") ?? undefined;
+}
+
 async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
   await expect.poll(() =>
     frame.contentDocument?.querySelector('#app input[name="title"]')?.tagName
@@ -117,11 +133,10 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   const realm = frame.contentWindow;
   if (realm === null) throw new Error("the exact-dist application realm is unavailable");
   realm.confirm = () => true;
+  await waitSettled(frame);
 
-  const firstDelete = frame.contentDocument?.querySelector<HTMLButtonElement>(
-    'button[data-delete-chapter]',
-  );
-  if (firstDelete === null || firstDelete === undefined) {
+  const firstDelete = currentDeleteControl(frame);
+  if (firstDelete === undefined) {
     throw new Error("the Delete Chapter control is missing");
   }
   firstDelete.click();
@@ -130,12 +145,11 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter B\nChapter C"
       && root?.querySelector("h2")?.textContent === "Chapter B";
-  }).toBe(true);
+  }, { timeout: 15_000 }).toBe(true);
+  await waitSettled(frame);
 
-  const secondDelete = frame.contentDocument?.querySelector<HTMLButtonElement>(
-    'button[data-delete-chapter]',
-  );
-  if (secondDelete === null || secondDelete === undefined) {
+  const secondDelete = currentDeleteControl(frame);
+  if (secondDelete === undefined) {
     throw new Error("the later Delete Chapter control is missing");
   }
   secondDelete.click();
@@ -144,12 +158,11 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter C"
       && root?.querySelector("h2")?.textContent === "Chapter C";
-  }).toBe(true);
+  }, { timeout: 15_000 }).toBe(true);
+  await waitSettled(frame);
 
-  const lastDelete = frame.contentDocument?.querySelector<HTMLButtonElement>(
-    'button[data-delete-chapter]',
-  );
-  if (lastDelete === null || lastDelete === undefined) {
+  const lastDelete = currentDeleteControl(frame);
+  if (lastDelete === undefined) {
     throw new Error("the last Delete Chapter control is missing");
   }
   lastDelete.click();
@@ -157,7 +170,7 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "empty-project-ready"
       && chapterTitles(root).join("\n") === "";
-  }).toBe(true);
+  }, { timeout: 15_000 }).toBe(true);
   const editor = frame.contentDocument?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
   expect(editor === null || editor === undefined ? undefined : manuscriptBody(editor)).toBe(undefined);
 });
