@@ -6,6 +6,7 @@ import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
+  MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 
 const SETTLED = "Settled prose";
@@ -81,9 +82,12 @@ async function reloadProject(
   const reopened = nextFrameLoad(frame);
   frame.src = `/projects/${projectId}`;
   await reopened;
-  await expect.poll(() =>
-    frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
-  ).toBe("project-ready");
+  await expect.poll(() => {
+    const root = frame.contentDocument?.querySelector("#app");
+    if (root === null || root === undefined) return false;
+    return root.getAttribute("data-boot-state") === "project-ready"
+      && root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) !== null;
+  }, { timeout: 10_000 }).toBe(true);
   return appRoot(frame);
 }
 
