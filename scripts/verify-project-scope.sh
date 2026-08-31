@@ -260,6 +260,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP setCurrentChapter tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/set-current-chapter-http.integration.test.ts
+echo "Running HTTP deleteChapter tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/delete-chapter-http.integration.test.ts
 echo "Running HTTP getManuscriptTree tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/manuscript-tree-http.integration.test.ts

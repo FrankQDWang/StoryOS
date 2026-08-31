@@ -169,6 +169,10 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
+    const alert = root?.querySelector("[role=alert]")?.textContent;
+    if (alert !== undefined && alert !== null && alert.length > 0) {
+      throw new Error(alert);
+    }
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter B\nChapter C"
       && root?.querySelector("h2")?.textContent === "Chapter B";

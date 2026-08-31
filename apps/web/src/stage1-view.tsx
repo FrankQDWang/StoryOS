@@ -272,13 +272,19 @@ function ProjectReadyView({
             return;
           }
         }
+        const latestTree = await getManuscriptTree({
+          baseUrl,
+          projectId: state.project.project.project_id,
+          fetchImpl,
+        });
+        if (generation !== switchGenerationRef.current) return;
         const removed = await deleteOwnedChapter({
           baseUrl,
           fetchImpl,
           cryptoImpl,
           projectId: state.project.project.project_id,
           chapterId,
-          expectedChapterRevision: tree.tree_revision,
+          expectedChapterRevision: latestTree.tree_revision,
         });
         if (generation !== switchGenerationRef.current) return;
         if (
