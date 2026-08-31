@@ -1,0 +1,47 @@
+{
+  "completeness": "truncated",
+  "correlation_id": "018f0000-0000-7001-8000-000000000072",
+  "counting_profile": "storyos.statistics.unicode-16.0.0.v1",
+  "current_chapter": {
+    "chapter_id": "018f0000-0000-7001-8000-000000000003",
+    "character_count": "5",
+    "word_count": "1"
+  },
+  "lag": "0",
+  "limit_profile_revision": "storyos.foundation.absolute.v1",
+  "manuscript": {
+    "chapter_count": "1",
+    "character_count": "5",
+    "word_count": "1"
+  },
+  "next_cursor": null,
+  "page_bytes": "2",
+  "page_count": "1",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000002"
+  },
+  "projection_generation": "4",
+  "projection_kind": "manuscript_statistics",
+  "projection_watermark": "4",
+  "query_id": "018f0000-0000-7001-8000-000000000071",
+  "redaction_profile": "storyos.author.v1",
+  "required_watermark": null,
+  "schema_id": "storyos.query.statistics.response.v1",
+  "source_snapshot": {
+    "created_at": "2026-08-31T00:00:00.000Z",
+    "expires_at": null,
+    "project_activity_position": "4",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000002"
+    },
+    "projection_generations": {},
+    "redaction_profile": "storyos.author.v1",
+    "replay_generation": "1",
+    "schema_profile": "storyos.public.release.1",
+    "snapshot_id": "018f0000-0000-7001-8000-000000000032",
+    "snapshot_kind": "canonical",
+    "source_watermarks": {}
+  }
+}

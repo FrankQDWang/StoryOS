@@ -1,0 +1,17 @@
+{
+  "profile": "storyos.statistics.unicode-16.0.0.v1",
+  "cases": [
+    { "name": "empty", "text": "", "word_count": 0, "character_count": 0 },
+    { "name": "ascii_word", "text": "Hello", "word_count": 1, "character_count": 5 },
+    { "name": "ascii_words", "text": "Hello world", "word_count": 2, "character_count": 11 },
+    { "name": "double_space", "text": "Hello  world", "word_count": 2, "character_count": 12 },
+    { "name": "cjk_run", "text": "雨落在窗沿。", "word_count": 1, "character_count": 6 },
+    { "name": "mixed_cn_en", "text": "Hello中文 EN", "word_count": 2, "character_count": 10 },
+    { "name": "newline_split", "text": "a\nb", "word_count": 2, "character_count": 3 },
+    { "name": "emoji_scalar", "text": "🙂", "word_count": 1, "character_count": 1 },
+    { "name": "nfd_combining", "text": "e\u0301", "word_count": 1, "character_count": 2 },
+    { "name": "nfc_precomposed", "text": "\u00e9", "word_count": 1, "character_count": 1 },
+    { "name": "nbsp_is_space", "text": "\u00a0x", "word_count": 1, "character_count": 2 },
+    { "name": "ideographic_space", "text": "\u3000汉", "word_count": 1, "character_count": 2 }
+  ]
+}

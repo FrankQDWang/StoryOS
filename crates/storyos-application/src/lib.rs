@@ -41,6 +41,7 @@ mod delete_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_search;
+mod manuscript_statistics;
 mod manuscript_tree;
 mod set_current_chapter;
 mod snapshot;
@@ -106,6 +107,11 @@ pub use manuscript_search::{
     ManuscriptSearchChapterFact, ManuscriptSearchCompleteness, ManuscriptSearchFacts,
     ManuscriptSearchMatch, ManuscriptSearchPage, ManuscriptSearchRead, ManuscriptSearchReader,
     ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript, search_manuscript,
+};
+pub use manuscript_statistics::{
+    ChapterStatistics, GetManuscriptStatistics, MANUSCRIPT_STATISTICS_LIMIT_PROFILE_REVISION,
+    MANUSCRIPT_STATISTICS_PROJECTION_KIND, ManuscriptStatisticsPage, ManuscriptStatisticsRequest,
+    ManuscriptTotals, get_manuscript_statistics,
 };
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
