@@ -494,6 +494,7 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
     expected_references.push(crate::release1_manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH);
     expected_references.push(crate::release1_manuscript_search_artifacts::REQUEST_SCHEMA_PATH);
     expected_references.push(crate::release1_manuscript_search_artifacts::RESPONSE_SCHEMA_PATH);
+    expected_references.push(crate::release1_manuscript_statistics_artifacts::RESPONSE_SCHEMA_PATH);
     expected_references
         .push(crate::release1_snapshot_artifacts::ACTIVITY_STREAM_RESPONSE_SCHEMA_PATH);
     expected_references.push(crate::release1_takeover_artifacts::REQUEST_SCHEMA_PATH);
