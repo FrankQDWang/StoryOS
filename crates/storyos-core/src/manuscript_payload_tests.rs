@@ -540,6 +540,39 @@ fn a_stale_head_still_has_zero_authority_effect_for_move() {
 }
 
 #[test]
+fn two_disconnected_block_replacements_in_one_unit_are_an_unsupported_intent() {
+    let mut command = versioned_command();
+    command.current_payload = two_paragraphs();
+    command.author_edit_units = vec![AuthorEditUnit {
+        normalized_primitives: vec![
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: "block-left".to_owned(),
+                from: 0,
+                to: 5,
+                text: "Hi".to_owned(),
+            },
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id: "block-right".to_owned(),
+                from: 0,
+                to: 5,
+                text: "Hi".to_owned(),
+            },
+        ],
+        selection_snapshot: SelectionSnapshot {
+            coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
+            from: 0,
+            to: 5,
+        },
+    }];
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::Refused {
+            reason: AuthorEditRefusal::UnsupportedIntentShape
+        }
+    );
+}
+
+#[test]
 fn chapter_display_body_joins_current_paragraphs_with_one_line_break() {
     assert_eq!(
         chapter_display_body(&two_paragraphs().blocks),

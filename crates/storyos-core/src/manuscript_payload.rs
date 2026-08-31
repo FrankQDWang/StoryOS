@@ -165,6 +165,19 @@ fn apply_unit(
     if unit.normalized_primitives.is_empty() {
         return Err(AuthorEditRefusal::UnsupportedIntentShape);
     }
+    let replace_count = unit
+        .normalized_primitives
+        .iter()
+        .filter(|primitive| matches!(primitive, AuthorEditPrimitive::ReplaceBlockSelection { .. }))
+        .count();
+    if replace_count >= 2
+        && unit
+            .normalized_primitives
+            .iter()
+            .all(|primitive| matches!(primitive, AuthorEditPrimitive::ReplaceBlockSelection { .. }))
+    {
+        return Err(AuthorEditRefusal::UnsupportedIntentShape);
+    }
     if unit.normalized_primitives.len() > 1
         && unit.selection_snapshot.from > unit.selection_snapshot.to
     {
