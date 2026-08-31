@@ -40,6 +40,7 @@ mod delete_chapter;
 mod delete_volume;
 mod editor_session;
 mod list_projects;
+mod manuscript_search;
 mod manuscript_tree;
 mod set_current_chapter;
 mod snapshot;
@@ -100,6 +101,12 @@ pub use delete_volume::{
     DeleteVolumeStore, delete_volume,
 };
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
+pub use manuscript_search::{
+    MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION, ManuscriptSearchBlockFact,
+    ManuscriptSearchChapterFact, ManuscriptSearchCompleteness, ManuscriptSearchFacts,
+    ManuscriptSearchMatch, ManuscriptSearchPage, ManuscriptSearchRead, ManuscriptSearchReader,
+    ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript, search_manuscript,
+};
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,

@@ -68,6 +68,7 @@ mod delete_volume;
 mod editor_session;
 mod list_projects;
 mod manuscript_block;
+mod manuscript_search;
 mod manuscript_tree;
 mod set_current_chapter;
 mod snapshot;

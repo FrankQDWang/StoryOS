@@ -24,6 +24,8 @@ mod release1_delete_volume;
 mod release1_delete_volume_artifacts;
 mod release1_list_projects;
 mod release1_list_projects_artifacts;
+mod release1_manuscript_search;
+mod release1_manuscript_search_artifacts;
 mod release1_manuscript_tree;
 mod release1_manuscript_tree_artifacts;
 mod release1_set_current_chapter;
@@ -128,6 +130,11 @@ pub use release1_delete_volume::{
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,
     LIST_PROJECTS_RESPONSE_SCHEMA_ID, ListProjectsResponse, ProjectLifecycleState, ProjectListItem,
+};
+pub use release1_manuscript_search::{
+    ManuscriptSearchCompleteness, ManuscriptSearchMatch, ManuscriptSearchSelection,
+    SEARCH_MANUSCRIPT_METHOD, SEARCH_MANUSCRIPT_PATH, SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID,
+    SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID, SearchManuscriptRequest, SearchManuscriptResponse,
 };
 pub use release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,

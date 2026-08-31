@@ -33,6 +33,7 @@ import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./edi
 import { archiveOwnedProject } from "./archive-project.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import { ManuscriptEditor } from "./manuscript-editor.tsx";
+import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import { renameOwnedProject } from "./rename-project.ts";
@@ -455,6 +456,11 @@ function ProjectReadyView({
             <p role="alert">{switchRecovery}</p>
           )}
           <h2>{selectedChapter.chapter.title}</h2>
+          <ManuscriptSearchPanel
+            projectId={state.project.project.project_id}
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+          />
           <ManuscriptEditor
             key={selectedChapter.chapter.chapter_id}
             blocks={editorBlocks}

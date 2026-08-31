@@ -28,6 +28,7 @@ mod delete_chapter;
 mod delete_volume;
 mod editor_session;
 mod list_projects;
+mod manuscript_search;
 mod manuscript_tree;
 mod project_command_challenge;
 mod request_origin;
@@ -59,6 +60,7 @@ use delete_chapter::delete_chapter;
 use delete_volume::delete_volume;
 use editor_session::{create_editor_session, get_editor_session};
 use list_projects::list_projects;
+use manuscript_search::search_manuscript_query;
 use manuscript_tree::get_manuscript_tree;
 use project_command_challenge::create_project_command_challenge;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
@@ -179,6 +181,7 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         method_filter(contracts::GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD);
     let get_snapshot_method = method_filter(contracts::GET_SNAPSHOT_METHOD);
     let get_manuscript_tree_method = method_filter(contracts::GET_MANUSCRIPT_TREE_METHOD);
+    let search_manuscript_method = method_filter(contracts::SEARCH_MANUSCRIPT_METHOD);
     let activity_stream_method = method_filter(contracts::ACTIVITY_STREAM_METHOD);
     Router::new()
         .route(
@@ -303,6 +306,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::GET_MANUSCRIPT_TREE_PATH,
             routing::on(get_manuscript_tree_method, get_manuscript_tree),
+        )
+        .route(
+            contracts::SEARCH_MANUSCRIPT_PATH,
+            routing::on(search_manuscript_method, search_manuscript_query),
         )
         .route(
             contracts::ACTIVITY_STREAM_PATH,

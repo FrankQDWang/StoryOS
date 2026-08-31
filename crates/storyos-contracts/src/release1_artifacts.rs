@@ -46,6 +46,8 @@ use crate::release1_delete_volume::DELETE_VOLUME;
 use crate::release1_delete_volume_artifacts as delete_volume_artifacts;
 use crate::release1_list_projects::LIST_PROJECTS;
 use crate::release1_list_projects_artifacts as list_projects_artifacts;
+use crate::release1_manuscript_search::SEARCH_MANUSCRIPT;
+use crate::release1_manuscript_search_artifacts as manuscript_search_artifacts;
 use crate::release1_manuscript_tree::GET_MANUSCRIPT_TREE;
 use crate::release1_manuscript_tree_artifacts as manuscript_tree_artifacts;
 use crate::release1_set_current_chapter::SET_CURRENT_CHAPTER;
@@ -133,7 +135,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:d6570c68b7d7a65e3be832caacab5830614302afdd8e2993c3bc4992cdbd068b";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:d22d1d3420fde82057aebf3ad5bddb5b7fe6561fb4233dafd5fcfaf4f2c8ab04";
+    "sha256:f4dad270fa32ce29179d682ee7c1fbfca09f62e928cb59f9219c5e85257a8af0";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -210,6 +212,8 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let list_projects_response_schema = list_projects_artifacts::response_schema_bytes();
     let manuscript_tree_request_schema = manuscript_tree_artifacts::request_schema_bytes();
     let manuscript_tree_response_schema = manuscript_tree_artifacts::response_schema_bytes();
+    let manuscript_search_request_schema = manuscript_search_artifacts::request_schema_bytes();
+    let manuscript_search_response_schema = manuscript_search_artifacts::response_schema_bytes();
     let update_project_request_schema = update_project_artifacts::request_schema_bytes();
     let update_project_response_schema = update_project_artifacts::response_schema_bytes();
     let archive_project_request_schema = archive_project_artifacts::request_schema_bytes();
@@ -313,6 +317,16 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID,
             manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH,
             manuscript_tree_response_schema,
+        ),
+        (
+            crate::SEARCH_MANUSCRIPT_REQUEST_SCHEMA_ID,
+            manuscript_search_artifacts::REQUEST_SCHEMA_PATH,
+            manuscript_search_request_schema,
+        ),
+        (
+            crate::SEARCH_MANUSCRIPT_RESPONSE_SCHEMA_ID,
+            manuscript_search_artifacts::RESPONSE_SCHEMA_PATH,
+            manuscript_search_response_schema,
         ),
         (
             crate::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
@@ -660,6 +674,18 @@ fn generated_files() -> Vec<GeneratedFile> {
             manuscript_tree_artifacts::boundary_fixture_bytes(),
         ),
         (
+            manuscript_search_artifacts::FIXTURE_PATHS[0],
+            manuscript_search_artifacts::fixture_bytes(),
+        ),
+        (
+            manuscript_search_artifacts::FIXTURE_PATHS[1],
+            manuscript_search_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            manuscript_search_artifacts::FIXTURE_PATHS[2],
+            manuscript_search_artifacts::boundary_fixture_bytes(),
+        ),
+        (
             update_project_artifacts::FIXTURE_PATHS[0],
             update_project_artifacts::fixture_bytes(),
         ),
@@ -928,6 +954,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             operation_graph(&GET_APPLY_AUTHOR_EDIT_OUTCOME, &["server_derived_project_scope", "sensitive_safe_read_origin", "protected_client_session_binding", "idempotency_key", "project_command_challenge_proof", "receipt_first_settlement_validation"]),
             operation_graph(&GET_SNAPSHOT, &["snapshot_scope_join", "snapshot_signature", "snapshot_lifecycle_available"]),
             operation_graph(&GET_MANUSCRIPT_TREE, &["server_derived_project_scope", "canonical_snapshot", "tree_scope_join"]),
+            operation_graph(&SEARCH_MANUSCRIPT, &["server_derived_project_scope", "bounded_search_query", "projection_watermark_if_required", "redaction_profile"]),
             stream_operation_graph(&ACTIVITY_STREAM, &["server_derived_project_scope", "snapshot_binding_or_last_event_id", "activity_profile", "replay_generation", "filter_digest", "reauthorize_on_connect"]),
         ],
         "release": {
@@ -1040,6 +1067,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&author_edit_outcome_artifacts::openapi());
     paths.push_str(&snapshot_artifacts::snapshot_openapi());
     paths.push_str(&manuscript_tree_artifacts::openapi());
+    paths.push_str(&manuscript_search_artifacts::openapi());
     paths.push_str(&snapshot_artifacts::activity_stream_openapi());
     paths.push_str(&takeover_artifacts::openapi());
     let implemented_slice = implemented_operation_ids().join(",");
@@ -1223,6 +1251,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
     operation_ids.push(GET_APPLY_AUTHOR_EDIT_OUTCOME.operation_id);
     operation_ids.push(GET_SNAPSHOT.operation_id);
     operation_ids.push(GET_MANUSCRIPT_TREE.operation_id);
+    operation_ids.push(SEARCH_MANUSCRIPT.operation_id);
     operation_ids.push(ACTIVITY_STREAM.operation_id);
     operation_ids.push(TAKE_OVER_PROJECT_WRITER.operation_id);
     operation_ids.push(UNDO_LATEST_AUTHOR_ACTION.operation_id);
@@ -1256,6 +1285,15 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS query requires a fetch implementation\");\n",
             "  const headers = {{ accept: \"application/json\", ...queryHeaders }};\n",
             "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"GET\", headers, credentials: \"same-origin\", signal }});\n",
+            "  const responseBody = await response.text();\n",
+            "  if (!response.ok) throw new StoryOSProtocolError(\"query_http_error\", `StoryOS query failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody }});\n",
+            "  try {{ return JSON.parse(responseBody); }} catch {{\n",
+            "    throw new StoryOSProtocolError(\"query_invalid_json\", \"StoryOS query returned invalid JSON\", {{ status: response.status, responseBody }});\n  }}\n}}\n\n",
+            "async function queryPostJson({{ baseUrl, path, body, queryHeaders = {{}}, fetchImpl = globalThis.fetch, signal }}) {{\n",
+            "  if (typeof baseUrl !== \"string\" || baseUrl.length === 0) throw new TypeError(\"StoryOS query requires a non-empty baseUrl\");\n",
+            "  if (typeof fetchImpl !== \"function\") throw new TypeError(\"StoryOS query requires a fetch implementation\");\n",
+            "  const headers = {{ accept: \"application/json\", \"content-type\": \"application/json\", ...queryHeaders }};\n",
+            "  const response = await fetchImpl(new URL(path, baseUrl), {{ method: \"POST\", headers, credentials: \"same-origin\", body: JSON.stringify(body), signal }});\n",
             "  const responseBody = await response.text();\n",
             "  if (!response.ok) throw new StoryOSProtocolError(\"query_http_error\", `StoryOS query failed with HTTP ${{response.status}}`, {{ status: response.status, responseBody }});\n",
             "  try {{ return JSON.parse(responseBody); }} catch {{\n",
@@ -1302,7 +1340,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1342,6 +1380,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         author_edit_outcome_client,
         snapshot_artifacts::typescript_client_source(),
         manuscript_tree_artifacts::typescript_client_source(),
+        manuscript_search_artifacts::typescript_client_source(),
         takeover_artifacts::typescript_client_source(),
     ).into_bytes()
 }
@@ -1371,7 +1410,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
     let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {block_kind}\n\nexport {manuscript_block}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {block_kind}\n\nexport {manuscript_block}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         create_project_artifacts::typescript_type_declarations(),
         list_projects_artifacts::typescript_type_declarations(),
         update_project_artifacts::typescript_type_declarations(),
@@ -1388,6 +1427,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
         author_edit_outcome_artifacts::typescript_type_declarations(),
         snapshot_artifacts::typescript_type_declarations(),
         manuscript_tree_artifacts::typescript_type_declarations(),
+        manuscript_search_artifacts::typescript_type_declarations(),
         takeover_artifacts::typescript_type_declarations(),
     );
     declaration.push_str("\n\n");
@@ -1421,6 +1461,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(author_edit_outcome_artifacts::typescript_declarations());
     declaration.push_str(snapshot_artifacts::typescript_declarations());
     declaration.push_str(manuscript_tree_artifacts::typescript_declarations());
+    declaration.push_str(manuscript_search_artifacts::typescript_declarations());
     declaration.push_str(takeover_artifacts::typescript_declarations());
     declaration.into_bytes()
 }
@@ -1452,6 +1493,7 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 create_project_artifacts::FIXTURE_PATHS[0], create_project_artifacts::FIXTURE_PATHS[1], create_project_artifacts::FIXTURE_PATHS[2],
                 list_projects_artifacts::FIXTURE_PATHS[0], list_projects_artifacts::FIXTURE_PATHS[1], list_projects_artifacts::FIXTURE_PATHS[2],
                 manuscript_tree_artifacts::FIXTURE_PATHS[0], manuscript_tree_artifacts::FIXTURE_PATHS[1], manuscript_tree_artifacts::FIXTURE_PATHS[2],
+                manuscript_search_artifacts::FIXTURE_PATHS[0], manuscript_search_artifacts::FIXTURE_PATHS[1], manuscript_search_artifacts::FIXTURE_PATHS[2],
                 update_project_artifacts::FIXTURE_PATHS[0], update_project_artifacts::FIXTURE_PATHS[1], update_project_artifacts::FIXTURE_PATHS[2],
                 archive_project_artifacts::FIXTURE_PATHS[0], archive_project_artifacts::FIXTURE_PATHS[1], archive_project_artifacts::FIXTURE_PATHS[2],
                 create_volume_artifacts::FIXTURE_PATHS[0], create_volume_artifacts::FIXTURE_PATHS[1], create_volume_artifacts::FIXTURE_PATHS[2],
@@ -1499,6 +1541,9 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": GET_MANUSCRIPT_TREE.fixtures[0], "classification": "positive", "operation_id": GET_MANUSCRIPT_TREE.operation_id, "path": manuscript_tree_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": GET_MANUSCRIPT_TREE.fixtures[1], "classification": "invalid", "operation_id": GET_MANUSCRIPT_TREE.operation_id, "path": manuscript_tree_artifacts::FIXTURE_PATHS[1]},
             {"fixture_id": GET_MANUSCRIPT_TREE.fixtures[2], "classification": "boundary", "operation_id": GET_MANUSCRIPT_TREE.operation_id, "path": manuscript_tree_artifacts::FIXTURE_PATHS[2]},
+            {"fixture_id": SEARCH_MANUSCRIPT.fixtures[0], "classification": "positive", "operation_id": SEARCH_MANUSCRIPT.operation_id, "path": manuscript_search_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": SEARCH_MANUSCRIPT.fixtures[1], "classification": "invalid", "operation_id": SEARCH_MANUSCRIPT.operation_id, "path": manuscript_search_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": SEARCH_MANUSCRIPT.fixtures[2], "classification": "boundary", "operation_id": SEARCH_MANUSCRIPT.operation_id, "path": manuscript_search_artifacts::FIXTURE_PATHS[2]},
             {"fixture_id": UPDATE_PROJECT.fixtures[0], "classification": "positive", "operation_id": UPDATE_PROJECT.operation_id, "path": update_project_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": UPDATE_PROJECT.fixtures[1], "classification": "invalid", "operation_id": UPDATE_PROJECT.operation_id, "path": update_project_artifacts::FIXTURE_PATHS[1]},
             {"fixture_id": UPDATE_PROJECT.fixtures[2], "classification": "boundary", "operation_id": UPDATE_PROJECT.operation_id, "path": update_project_artifacts::FIXTURE_PATHS[2]},
@@ -1790,6 +1835,10 @@ mod list_projects_tests;
 #[cfg(test)]
 #[path = "release1_manuscript_tree_artifacts_tests.rs"]
 mod manuscript_tree_tests;
+
+#[cfg(test)]
+#[path = "release1_manuscript_search_artifacts_tests.rs"]
+mod manuscript_search_tests;
 
 #[cfg(test)]
 #[path = "release1_archive_project_artifacts_tests.rs"]
