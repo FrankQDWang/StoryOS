@@ -6,6 +6,7 @@ import { test } from "vitest";
 import {
   archiveProject,
   createChapter,
+  createEditorSession,
   createProject,
   createProjectChallenge,
   createProjectCommandChallenge,
@@ -13,6 +14,7 @@ import {
   deleteChapter,
   digestArchiveProject,
   digestCreateChapter,
+  digestCreateEditorSession,
   digestCreateVolume,
   digestDeleteChapter,
   getChapter,
@@ -22,6 +24,7 @@ import {
 import type {
   ArchiveProjectRequest,
   CreateChapterRequest,
+  CreateEditorSessionRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
   DeleteChapterRequest,
@@ -278,6 +281,36 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
     const chapterAId = appliedId(chapterA);
     const chapterBId = appliedId(chapterB);
     const chapterCId = appliedId(chapterC);
+    const sessionRequest: CreateEditorSessionRequest = {
+      command_schema: "storyos.command.create-editor-session.request.v1",
+      client_contract_revision:
+        RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: "018f0000-0000-7001-8000-00000000c230",
+    };
+    const sessionDigest = await digestCreateEditorSession(sessionRequest);
+    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId,
+      fetchImpl,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/editor-sessions",
+        command_schema: sessionRequest.command_schema,
+        canonical_command_digest: sessionDigest,
+        idempotency_key: "018f0000-0000-7001-8000-00000000c231",
+      },
+    }));
+    const session = await createEditorSession({
+      baseUrl,
+      projectId,
+      fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000c231",
+      antiForgery: sessionChallenge.nonce,
+      request: sessionRequest,
+    });
+    assert.equal(session.writer.kind, "current_writer");
+    assert.equal(session.base_snapshot.chapter_id, chapterAId);
 
     const removedB = await deleteOwned(
       baseUrl,
