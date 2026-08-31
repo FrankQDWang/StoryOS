@@ -5,6 +5,7 @@ import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
+  manuscriptIsEditable,
   MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 
@@ -51,6 +52,11 @@ async function waitSaved(frame: HTMLIFrameElement): Promise<void> {
 }
 
 async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
+  await expect.poll(() => {
+    const root = frame.contentDocument?.querySelector("#app");
+    const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return editor !== null && editor !== undefined && manuscriptIsEditable(editor);
+  }, { timeout: 10_000 }).toBe(true);
   const root = frame.contentDocument?.querySelector("#app");
   if (root === null || root === undefined) {
     throw new Error("the production page root is missing");
@@ -175,7 +181,8 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
     }
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter B\nChapter C"
-      && root?.querySelector("h2")?.textContent === "Chapter B";
+      && root?.querySelector("h2")?.textContent === "Chapter B"
+      && manuscriptIsEditable(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) ?? root);
   }, { timeout: 15_000 }).toBe(true);
   await typeIntoCurrent(frame, "Beta");
   await confirmCurrentDelete(frame);
@@ -183,7 +190,8 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
     const root = frame.contentDocument?.querySelector("#app");
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter C"
-      && root?.querySelector("h2")?.textContent === "Chapter C";
+      && root?.querySelector("h2")?.textContent === "Chapter C"
+      && manuscriptIsEditable(root.querySelector(MANUSCRIPT_EDITOR_SELECTOR) ?? root);
   }, { timeout: 15_000 }).toBe(true);
   await typeIntoCurrent(frame, "Gamma");
   await confirmCurrentDelete(frame);
