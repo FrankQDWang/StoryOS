@@ -6,6 +6,7 @@ import {
   createProjectChallenge,
   getManuscriptTree,
   listProjects,
+  StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   GetChapterResponse,
@@ -103,6 +104,7 @@ function ProjectReadyView({
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
+  const [switchRecoverySource, setSwitchRecoverySource] = useState("");
 
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
@@ -255,6 +257,7 @@ function ProjectReadyView({
         });
         if (generation !== switchGenerationRef.current) return;
         if (gate.kind === "refused") {
+          setSwitchRecoverySource(gate.reason);
           setSwitchRecovery(
             gate.reason === "incomplete_semantic_intent"
               ? "无法删除章节：请先完成当前输入。"
@@ -268,6 +271,7 @@ function ProjectReadyView({
           setPending(drained);
           setSaveState(drained.save_state);
           if (drained.unsettled_intent_count > 0) {
+            setSwitchRecoverySource("unsettled");
             setSwitchRecovery("无法删除章节。");
             return;
           }
@@ -291,6 +295,7 @@ function ProjectReadyView({
           removed.effect.kind !== "authoritative_applied"
           && removed.effect.kind !== "no_effect"
         ) {
+          setSwitchRecoverySource(removed.effect.kind);
           setSwitchRecovery("无法删除章节。");
           return;
         }
@@ -302,7 +307,10 @@ function ProjectReadyView({
         });
         if (generation !== switchGenerationRef.current) return;
         onReopened(next);
-      } catch {
+      } catch (error) {
+        setSwitchRecoverySource(
+          error instanceof StoryOSProtocolError ? `http_${error.status}` : "catch",
+        );
         setSwitchRecovery("无法删除章节。");
       } finally {
         makeCurrentInFlightRef.current = false;
@@ -379,7 +387,9 @@ function ProjectReadyView({
       )}
       editor={(
         <>
-          {switchRecovery === undefined ? null : <p role="alert">{switchRecovery}</p>}
+          {switchRecovery === undefined ? null : (
+            <p role="alert" data-switch-recovery-source={switchRecoverySource}>{switchRecovery}</p>
+          )}
           <h2>{selectedChapter.chapter.title}</h2>
           <ManuscriptEditor
             key={selectedChapter.chapter.chapter_id}

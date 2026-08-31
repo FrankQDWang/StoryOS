@@ -185,9 +185,10 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
-    const alert = root?.querySelector("[role=alert]")?.textContent;
+    const alertNode = root?.querySelector("[role=alert]");
+    const alert = alertNode?.textContent;
     if (alert !== undefined && alert !== null && alert.length > 0) {
-      throw new Error(alert);
+      throw new Error(`${alertNode?.getAttribute("data-switch-recovery-source") ?? ""}:${alert}`);
     }
     return root?.getAttribute("data-boot-state") === "project-ready"
       && chapterTitles(root).join("\n") === "Chapter B\nChapter C"
@@ -207,9 +208,10 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
-    const alert = root?.querySelector("[role=alert]")?.textContent;
+    const alertNode = root?.querySelector("[role=alert]");
+    const alert = alertNode?.textContent;
     if (alert !== undefined && alert !== null && alert.length > 0) {
-      throw new Error(alert);
+      throw new Error(`${alertNode?.getAttribute("data-switch-recovery-source") ?? ""}:${alert}`);
     }
     return root?.getAttribute("data-boot-state") === "empty-project-ready"
       && chapterTitles(root).join("\n") === "";
