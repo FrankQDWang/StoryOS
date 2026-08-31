@@ -1,0 +1,13 @@
+---
+description: When editing Rust, use workspace rust-analyzer diagnostics if they are already attached; do not start a second analyzer, and do not treat diagnostics as a substitute for StoryOS verify.
+globs: "**/*.rs"
+alwaysApply: false
+---
+
+# rust-analyzer
+
+The editor language server is already rust-analyzer when the workspace has it. Agent access to that same session is the workspace diagnostic read (`ReadLints`), not a new `rust-analyzer` process and not an extra MCP.
+
+Use those diagnostics after a Rust edit when the question is a type, borrow, visibility, unused item, or unresolved import. A crate-local `cargo check -p <crate>` is the fallback when the diagnostic list is empty.
+
+Keep StoryOS-owned `make verify` and targeted repository checks for format, SQL, HTTP, persistence, and browser journeys. rust-analyzer cannot see those.
