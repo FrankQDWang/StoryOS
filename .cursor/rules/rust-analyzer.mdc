@@ -1,6 +1,5 @@
 ---
 description: When editing Rust, use workspace rust-analyzer diagnostics if they are already attached; do not start a second analyzer, and do not treat diagnostics as a substitute for StoryOS verify.
-globs: "**/*.rs"
 alwaysApply: false
 ---
 
