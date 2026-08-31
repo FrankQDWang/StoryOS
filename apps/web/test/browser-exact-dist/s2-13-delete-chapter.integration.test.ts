@@ -1,8 +1,12 @@
 import { afterEach, expect, it } from "vitest";
 
-import { updateClientSessionCookie } from "../support/browser-command-client.ts";
-import { manuscriptBody, MANUSCRIPT_EDITOR_SELECTOR }
-  from "../support/manuscript-surface.ts";
+import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import {
+  focusManuscriptEnd,
+  manuscriptBody,
+  manuscriptEditor,
+  MANUSCRIPT_EDITOR_SELECTOR,
+} from "../support/manuscript-surface.ts";
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -38,13 +42,27 @@ function chapterTitles(root: Element | null | undefined): string[] {
     .map((node) => node.textContent?.trim() ?? "");
 }
 
-async function waitSettled(frame: HTMLIFrameElement): Promise<void> {
+async function waitSaved(frame: HTMLIFrameElement): Promise<void> {
   await expect.poll(() => {
     const node = frame.contentDocument?.querySelector("[data-save-state]");
-    const save = node?.getAttribute("data-save-state");
-    const unsettled = node?.getAttribute("data-unsettled-intent-count");
-    return (save === "saved" || save === "clean") && unsettled === "0";
+    return node?.getAttribute("data-save-state") === "saved"
+      && node.getAttribute("data-unsettled-intent-count") === "0";
   }, { timeout: 10_000 }).toBe(true);
+}
+
+async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
+  const root = frame.contentDocument?.querySelector("#app");
+  if (root === null || root === undefined) {
+    throw new Error("the production page root is missing");
+  }
+  const realm = frame.contentWindow;
+  if (realm === null) throw new Error("the exact-dist application realm is unavailable");
+  const editor = manuscriptEditor(root, realm as Window & typeof globalThis);
+  editor.focus();
+  focusManuscriptEnd(editor, realm as Window & typeof globalThis);
+  await applyTrustedInput({ operation: "insert_text", text });
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
+  await waitSaved(frame);
 }
 
 function currentChapterRow(frame: HTMLIFrameElement): Element | undefined {
@@ -147,7 +165,7 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
   document.body.append(frame);
   await loaded;
   await createThreeChapters(frame);
-  await waitSettled(frame);
+  await typeIntoCurrent(frame, "Alpha");
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
@@ -155,7 +173,7 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
       && chapterTitles(root).join("\n") === "Chapter B\nChapter C"
       && root?.querySelector("h2")?.textContent === "Chapter B";
   }, { timeout: 15_000 }).toBe(true);
-  await waitSettled(frame);
+  await typeIntoCurrent(frame, "Beta");
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
@@ -163,7 +181,7 @@ it("the author confirms Chapter removal, keeps the next current Chapter, then op
       && chapterTitles(root).join("\n") === "Chapter C"
       && root?.querySelector("h2")?.textContent === "Chapter C";
   }, { timeout: 15_000 }).toBe(true);
-  await waitSettled(frame);
+  await typeIntoCurrent(frame, "Gamma");
   await confirmCurrentDelete(frame);
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
