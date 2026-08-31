@@ -148,6 +148,11 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
     ["Chapter B", "Chapter A\nChapter B"],
     ["Chapter C", "Chapter A\nChapter B\nChapter C"],
   ] as const) {
+    await expect.poll(() =>
+      frame.contentDocument?.querySelector(
+        '#app form[data-create-chapter] input[name="chapter-title"]',
+      )?.tagName
+    ).toBe("INPUT");
     const chapterTitle = frame.contentDocument?.querySelector<HTMLInputElement>(
       '#app form[data-create-chapter] input[name="chapter-title"]',
     );
