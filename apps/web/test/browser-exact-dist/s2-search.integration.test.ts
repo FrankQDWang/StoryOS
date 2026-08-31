@@ -103,11 +103,13 @@ async function search(
   await expect.poll(() => {
     const node = root.querySelector("[data-search-outcome='ready']");
     return node?.getAttribute("data-search-query") === query
+      && node.getAttribute("data-search-selection") === selection
       ? node.getAttribute("data-search-outcome")
       : undefined;
   }, { timeout: 10_000 }).toBe("ready");
   const outcome = [...root.querySelectorAll("[data-search-outcome='ready']")]
-    .find((node) => node.getAttribute("data-search-query") === query);
+    .find((node) => node.getAttribute("data-search-query") === query
+      && node.getAttribute("data-search-selection") === selection);
   if (outcome === undefined) throw new Error("the search outcome is missing");
   return outcome;
 }

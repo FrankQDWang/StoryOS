@@ -8,9 +8,22 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 
 type SearchOutcome =
-  | { kind: "ready"; page: SearchManuscriptResponse }
-  | { kind: "projection_not_ready" }
-  | { kind: "unavailable" };
+  | {
+    kind: "ready";
+    query: string;
+    selection: ManuscriptSearchSelection;
+    page: SearchManuscriptResponse;
+  }
+  | {
+    kind: "projection_not_ready";
+    query: string;
+    selection: ManuscriptSearchSelection;
+  }
+  | {
+    kind: "unavailable";
+    query: string;
+    selection: ManuscriptSearchSelection;
+  };
 
 function problemCode(error: unknown): string | undefined {
   if (!(error instanceof StoryOSProtocolError)) return undefined;
@@ -32,7 +45,6 @@ export function ManuscriptSearchPanel({
   fetchImpl: typeof fetch;
 }) {
   const [selection, setSelection] = useState<ManuscriptSearchSelection>("current_chapter");
-  const [submittedQuery, setSubmittedQuery] = useState("");
   const [outcome, setOutcome] = useState<SearchOutcome | undefined>(undefined);
 
   return (
@@ -49,7 +61,6 @@ export function ManuscriptSearchPanel({
               : "current_chapter";
           if (!query) return;
           setSelection(nextSelection);
-          setSubmittedQuery(query);
           void (async () => {
             try {
               const page = await searchManuscript({
@@ -63,12 +74,12 @@ export function ManuscriptSearchPanel({
                   required_watermark: null,
                 },
               });
-              setOutcome({ kind: "ready", page });
+              setOutcome({ kind: "ready", query, selection: nextSelection, page });
             } catch (error) {
               setOutcome(
                 problemCode(error) === "projection_not_ready"
-                  ? { kind: "projection_not_ready" }
-                  : { kind: "unavailable" },
+                  ? { kind: "projection_not_ready", query, selection: nextSelection }
+                  : { kind: "unavailable", query, selection: nextSelection },
               );
             }
           })();
@@ -110,7 +121,8 @@ export function ManuscriptSearchPanel({
         <p
           role="status"
           data-search-outcome="projection_not_ready"
-          data-search-query={submittedQuery}
+          data-search-query={outcome.query}
+          data-search-selection={outcome.selection}
         >
           检索投影尚未就绪。
         </p>
@@ -118,14 +130,16 @@ export function ManuscriptSearchPanel({
         <p
           role="status"
           data-search-outcome="unavailable"
-          data-search-query={submittedQuery}
+          data-search-query={outcome.query}
+          data-search-selection={outcome.selection}
         >
           无法搜索稿件。
         </p>
       ) : (
         <div
           data-search-outcome="ready"
-          data-search-query={submittedQuery}
+          data-search-query={outcome.query}
+          data-search-selection={outcome.selection}
           data-search-completeness={outcome.page.completeness}
           data-search-lag={outcome.page.lag}
           data-search-watermark={outcome.page.projection_watermark}
