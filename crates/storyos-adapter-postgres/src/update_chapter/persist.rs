@@ -50,9 +50,15 @@ pub(super) async fn persist_update_chapter(
     let chapters = client
         .query(
             "SELECT manuscript_object_id::text, title, tree_order::text, parent_volume_id::text
-               FROM storyos.manuscript_objects
+               FROM storyos.manuscript_objects AS chapter
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND object_kind = 'chapter'
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                   WHERE removal.owner_user_id = chapter.owner_user_id
+                     AND removal.project_id = chapter.project_id
+                     AND removal.chapter_id = chapter.manuscript_object_id
+                )
               ORDER BY parent_volume_id, tree_order
               FOR UPDATE",
             &[
@@ -69,18 +75,21 @@ pub(super) async fn persist_update_chapter(
     {
         Some(chapter) => {
             let parent = chapter.get::<_, String>(3);
+            let ordered_ids = chapters
+                .iter()
+                .filter(|row| row.get::<_, String>(3) == parent)
+                .map(|row| row.get::<_, String>(0))
+                .collect::<Vec<_>>();
+            let current_order = ordered_ids
+                .iter()
+                .position(|chapter_id| chapter_id == command.chapter_id.as_ref())
+                .map(|index| index as u64 + 1)
+                .unwrap_or(1);
             (
                 ChapterJoin::ExactScope,
                 chapter.get::<_, String>(1),
-                chapter
-                    .get::<_, String>(2)
-                    .parse::<u64>()
-                    .map_err(update_chapter_parse_error)?,
-                chapters
-                    .iter()
-                    .filter(|row| row.get::<_, String>(3) == parent)
-                    .map(|row| row.get::<_, String>(0))
-                    .collect::<Vec<_>>(),
+                current_order,
+                ordered_ids,
                 parent,
             )
         }

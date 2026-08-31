@@ -36,6 +36,7 @@ mod create_chapter;
 mod create_project;
 mod create_project_challenge;
 mod create_volume;
+mod delete_chapter;
 mod editor_session;
 mod list_projects;
 mod manuscript_tree;
@@ -88,6 +89,10 @@ pub use create_project_challenge::{
 pub use create_volume::{
     CreateVolumeCommand, CreateVolumeError, CreateVolumeSettlement, CreateVolumeSettlementEffect,
     CreateVolumeStore, create_volume,
+};
+pub use delete_chapter::{
+    DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
+    DeleteChapterSettlementEffect, DeleteChapterStore, delete_chapter,
 };
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
 pub use manuscript_tree::{

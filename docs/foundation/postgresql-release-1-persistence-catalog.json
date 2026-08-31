@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:d50ff9656a4ffc6fde776fb991e160fb65ec2f2257c2bbb611572948748d628b"
+    "digest": "sha256:a2dc0dff7d0b649a9bbf0910057c47ba803b6a8682abf7af1bf272982dc234bd"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:2ba7ce17a09446fa269f55a2ad9e38ab956bde73772d1078686488c87eac738a",
+    "migration_chain_digest": "sha256:b30a4433d755bd212bb7d25a097a4d5aed5756edbf521920cb7db70bff03d14e",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:240926244cf20e242a15752e96c55c392b0a176f68e3da0fd838326fed7f472f",
+      "manifest_sha256": "sha256:26ef3ba82ca5c6034923f7f3af570bd0193fb87bada67012b30b1ddca38462b6",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -315,6 +315,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0020_undo_latest_author_action.sql",
           "lf_sha256": "sha256:106b5332ead89aaf2dfe47d62d497cd2002b5b899bb8a965d9ff5a19a3dc5b86"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0021_delete_chapter.sql",
+          "lf_sha256": "sha256:12cb40d3427a42fe92987ef1725d753ac11c8fe8b69f997cd7660394624ffb85"
         }
       ]
     },
@@ -572,7 +576,7 @@
     },
     {
       "family_id": "operational-lifecycle",
-      "table_families": ["artifact_lifecycle_events", "project_archival_decisions", "project_tombstones", "memory_suppression_decisions", "retention_decisions", "project_deletion_records"],
+      "table_families": ["artifact_lifecycle_events", "project_archival_decisions", "chapter_removal_decisions", "project_tombstones", "memory_suppression_decisions", "retention_decisions", "project_deletion_records"],
       "owner": "retention",
       "authority_class": "operational",
       "durability_class": "immutable_lifecycle_decisions",
@@ -584,7 +588,7 @@
       "head": "lifecycle_current_projection",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": ["projection-generation-control"], "rebuild": "not_applicable", "visibility_gate": "lifecycle_floor_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify_before_visibility", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "lifecycle_persistence", "operation_ids": ["archiveProject", "deleteProject"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "lifecycle_persistence", "operation_ids": ["archiveProject", "deleteProject", "deleteChapter"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "projection-generation-control",

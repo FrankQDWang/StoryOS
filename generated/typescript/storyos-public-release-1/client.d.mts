@@ -135,6 +135,20 @@ export type UpdateChapterEffect = { "kind": "authoritative_applied", chapter_id:
 
 export type UpdateChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateChapterEffect, };
 
+export type DeleteChapterInput = { expected_chapter_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type DeleteChapterRequest = { command_schema: string, delete_chapter_input: DeleteChapterInput, };
+
+export type DeleteChapterNoEffectReason = "already_removed";
+
+export type DeleteChapterConflictReason = "stale_chapter_revision";
+
+export type DeleteChapterRefusalReason = "archived_project" | "invalid_chapter_join";
+
+export type DeleteChapterEffect = { "kind": "authoritative_applied", chapter_id: string, volume_id: string, tree_revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: DeleteChapterNoEffectReason, } | { "kind": "conflicted", reason: DeleteChapterConflictReason, } | { "kind": "refused", reason: DeleteChapterRefusalReason, };
+
+export type DeleteChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: DeleteChapterEffect, };
+
 export type SetCurrentChapterInput = { chapter_id: string, expected_current_chapter_id: string, expected_target_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type SetCurrentChapterRequest = { command_schema: string, set_current_chapter_input: SetCurrentChapterInput, };
@@ -169,7 +183,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "setCurrentChapter" | "undoLatestAuthorAction";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "setCurrentChapter" | "undoLatestAuthorAction";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -257,6 +271,8 @@ export declare function digestCreateChapter(request: CreateChapterRequest, crypt
 export declare function createChapter(options: StoryOSQueryOptions & { projectId: string; volumeId: string; request: CreateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateChapterResponse>;
 export declare function digestUpdateChapter(request: UpdateChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string; request: UpdateChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateChapterResponse>;
+export declare function digestDeleteChapter(request: DeleteChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function deleteChapter(options: StoryOSQueryOptions & { projectId: string; chapterId: string; request: DeleteChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<DeleteChapterResponse>;
 export declare function digestSetCurrentChapter(request: SetCurrentChapterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function setCurrentChapter(options: StoryOSQueryOptions & { projectId: string; request: SetCurrentChapterRequest; idempotencyKey: string; antiForgery: string }): Promise<SetCurrentChapterResponse>;
 export declare function digestUndoLatestAuthorAction(request: UndoLatestAuthorActionRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

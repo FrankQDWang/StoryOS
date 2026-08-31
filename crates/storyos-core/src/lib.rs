@@ -4,6 +4,7 @@ mod archive_project;
 mod create_chapter;
 mod create_project;
 mod create_volume;
+mod delete_chapter;
 mod manuscript_payload;
 mod set_current_chapter;
 mod undo_latest_author_action;
@@ -22,6 +23,10 @@ pub use create_chapter::{
 pub use create_project::{CreateProjectResult, ProjectPresence, create_project};
 pub use create_volume::{
     CreateVolume, CreateVolumeConflict, CreateVolumeRefusal, CreateVolumeResult, create_volume,
+};
+pub use delete_chapter::{
+    ChapterRemovalLifecycle, DeleteChapter, DeleteChapterConflict, DeleteChapterCurrent,
+    DeleteChapterNoEffect, DeleteChapterRefusal, DeleteChapterResult, delete_chapter,
 };
 pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,

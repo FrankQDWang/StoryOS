@@ -24,6 +24,7 @@ mod create_chapter;
 mod create_project;
 mod create_project_challenge;
 mod create_volume;
+mod delete_chapter;
 mod editor_session;
 mod list_projects;
 mod manuscript_tree;
@@ -53,6 +54,7 @@ use create_chapter::create_chapter;
 use create_project::create_project;
 use create_project_challenge::create_project_challenge;
 use create_volume::create_volume;
+use delete_chapter::delete_chapter;
 use editor_session::{create_editor_session, get_editor_session};
 use list_projects::list_projects;
 use manuscript_tree::get_manuscript_tree;
@@ -190,10 +192,15 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         )
         .route(
             contracts::GET_CHAPTER_PATH,
-            routing::on(chapter_method, get_chapter).on(
-                method_filter(contracts::UPDATE_CHAPTER_METHOD),
-                update_chapter,
-            ),
+            routing::on(chapter_method, get_chapter)
+                .on(
+                    method_filter(contracts::UPDATE_CHAPTER_METHOD),
+                    update_chapter,
+                )
+                .on(
+                    method_filter(contracts::DELETE_CHAPTER_METHOD),
+                    delete_chapter,
+                ),
         )
         .route(
             contracts::CREATE_PROJECT_CHALLENGE_PATH,

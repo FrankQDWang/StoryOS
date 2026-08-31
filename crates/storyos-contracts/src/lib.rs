@@ -18,6 +18,8 @@ mod release1_create_project;
 mod release1_create_project_artifacts;
 mod release1_create_volume;
 mod release1_create_volume_artifacts;
+mod release1_delete_chapter;
+mod release1_delete_chapter_artifacts;
 mod release1_list_projects;
 mod release1_list_projects_artifacts;
 mod release1_manuscript_tree;
@@ -107,6 +109,13 @@ pub use release1_create_volume::{
     CREATE_VOLUME_REQUEST_SCHEMA_ID, CREATE_VOLUME_RESPONSE_SCHEMA_ID, CreateVolumeConflictReason,
     CreateVolumeEffect, CreateVolumeInput, CreateVolumeRefusalReason, CreateVolumeRequest,
     CreateVolumeResponse,
+};
+pub use release1_delete_chapter::{
+    DELETE_CHAPTER_DIGEST_PROFILE, DELETE_CHAPTER_METHOD, DELETE_CHAPTER_PATH,
+    DELETE_CHAPTER_REQUEST_SCHEMA_ID, DELETE_CHAPTER_RESPONSE_SCHEMA_ID,
+    DeleteChapterConflictReason, DeleteChapterEffect, DeleteChapterInput,
+    DeleteChapterNoEffectReason, DeleteChapterRefusalReason, DeleteChapterRequest,
+    DeleteChapterResponse,
 };
 pub use release1_list_projects::{
     LIST_PROJECTS_METHOD, LIST_PROJECTS_PATH, LIST_PROJECTS_REQUEST_SCHEMA_ID,

@@ -5,7 +5,7 @@ use storyos_application::{
 
 use super::*;
 
-pub(super) async fn persist_canonical_snapshot(
+pub(crate) async fn persist_canonical_snapshot(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     snapshot_id: &str,

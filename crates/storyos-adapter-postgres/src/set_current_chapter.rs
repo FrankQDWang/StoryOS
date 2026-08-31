@@ -75,6 +75,12 @@ async fn persist_set_current_chapter(
                 AND chapter.project_id = project.project_id
                 AND chapter.object_kind = 'chapter'
                 AND chapter.manuscript_object_id = $3::text::uuid
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                   WHERE removal.owner_user_id = chapter.owner_user_id
+                     AND removal.project_id = chapter.project_id
+                     AND removal.chapter_id = chapter.manuscript_object_id
+                )
           LEFT JOIN storyos.authoritative_heads AS head
                  ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
                     (chapter.owner_user_id, chapter.project_id, chapter.manuscript_object_id)

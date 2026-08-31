@@ -156,6 +156,7 @@
         "createChapter",
         "updateVolume",
         "updateChapter",
+        "deleteChapter",
         "setCurrentChapter",
         "undoLatestAuthorAction"
       ],

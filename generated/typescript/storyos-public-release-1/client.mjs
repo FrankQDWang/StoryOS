@@ -202,6 +202,22 @@ export async function updateChapter({ projectId, chapterId, request, idempotency
   return commandJson({ ...options, method: "PATCH", path: `/api/v1/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function digestDeleteChapter(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestDeleteChapter requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.deleteChapter.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function deleteChapter({ projectId, chapterId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("deleteChapter requires projectId");
+  if (typeof chapterId !== "string" || chapterId.length === 0) throw new TypeError("deleteChapter requires chapterId");
+  if (!request || typeof request !== "object") throw new TypeError("deleteChapter requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("deleteChapter requires security bindings");
+  return commandJson({ ...options, method: "DELETE", path: `/api/v1/projects/${encodeURIComponent(projectId)}/chapters/${encodeURIComponent(chapterId)}`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestSetCurrentChapter(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestSetCurrentChapter requires request");
   const canonical = canonicalJson(request);
