@@ -242,15 +242,17 @@ export async function stageProjectActivitySnapshot(
 }
 
 export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspace, {
-  baseUrl, snapshotId, fetchImpl = globalThis.fetch,
+  baseUrl, snapshotId, fetchImpl = globalThis.fetch, signal,
 }: {
   baseUrl: string;
   snapshotId: string;
   fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
 }): Promise<{ snapshot: SnapshotDescriptor; ingest: ProjectActivityIngest }> {
   const scope = workspace.partition.project_scope;
   const response: unknown = await getSnapshot({
     baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
+    ...(signal === undefined ? {} : { signal }),
   });
   const snapshot = validatedCanonicalSnapshot(
     response,

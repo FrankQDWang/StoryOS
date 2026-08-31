@@ -31,6 +31,7 @@ import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./edi
 import { archiveOwnedProject } from "./archive-project.ts";
 import type { ManualInputController } from "./manual-input.ts";
 import { ManuscriptEditor } from "./manuscript-editor.tsx";
+import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
@@ -352,6 +353,22 @@ function ProjectReadyView({
               : saveState === "needs_attention" ? "需要处理"
               : "未保存"}
           </small>
+          <ProjectActivityStatus
+            workspace={
+              state.editor.kind === "editor-ready"
+                && selectedChapter.chapter.chapter_id === currentChapterId
+                ? state.editor
+                : undefined
+            }
+            baseUrl={baseUrl}
+            fetchImpl={fetchImpl}
+            revisionKey={pending?.authoritative_revision_id ?? ""}
+            onUnavailable={() => {
+              setReadOnly(true);
+              setSaveState("needs_attention");
+              setEditorFailure("活动流无法同步");
+            }}
+          />
           {saveState === "needs_attention" && state.editor.kind === "editor-ready" && pending !== null
             ? (
               <button

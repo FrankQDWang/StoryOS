@@ -10,6 +10,7 @@ import {
   closeTrackedDatabases,
   createBrowserScenario,
   deleteJournal,
+  emptyActivityStream,
   jsonResponse,
   trackDatabase,
 } from "./scenario.ts";
@@ -73,6 +74,7 @@ it("opens the URL-selected Project and fails closed before invalid entry request
         schema_id: "storyos.query.editor-session.response.v1",
       });
     }
+    if (path.endsWith("/activity")) return emptyActivityStream();
     throw new Error(`unexpected request: ${path}`);
   };
   const openDatabases = new Set<IDBDatabase>();

@@ -4,6 +4,7 @@ import type { BrowserContext, Page } from "playwright";
 
 import { getEditorSession }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { queryStoryOSPostgres as queryPostgres } from "./node-integration";
 
 const USER = "018f0000-0000-7001-8000-000000000001";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -154,6 +155,22 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     await writer.locator(MANUSCRIPT_EDITABLE).waitFor();
     assert.equal(await manuscriptBody(writer), "Saved through the production host.");
     assert.equal(await sessionId(writer, projectId), writerId);
+    await writer.locator(
+      '[data-activity-replay-generation="1"]:not([data-activity-last-event-id=""])',
+    ).waitFor();
+    await queryPostgres(`
+      INSERT INTO storyos.replay_generations (owner_user_id, project_id, replay_generation)
+      VALUES ('${USER}'::uuid, '${projectId}'::uuid, 2)
+      ON CONFLICT DO NOTHING;
+      INSERT INTO storyos.replay_floors
+        (owner_user_id, project_id, replay_generation, floor_position)
+      VALUES ('${USER}'::uuid, '${projectId}'::uuid, 2, 0)
+      ON CONFLICT DO NOTHING`);
+    await replaceAndSave(writer, "Saved after replay generation two.");
+    await writer.locator(
+      '[data-activity-resync="applied"][data-activity-replay-generation="2"]',
+    ).waitFor();
+    assert.equal(await manuscriptBody(writer), "Saved after replay generation two.");
 
     assert.equal((await observer.goto(projectUrl))?.status(), 200);
     await observer.locator(MANUSCRIPT_READONLY).waitFor();
@@ -231,7 +248,7 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     const newJournal = await readJournal(observer, projectId);
     assertPreservedJournal(oldJournal, newJournal);
     assert.equal(await observer.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body"),
-      "Saved through the production host.");
+      "Saved after replay generation two.");
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
     assert.equal(await writer.locator(MANUSCRIPT_READONLY).getAttribute("data-manuscript-body"),

@@ -128,6 +128,13 @@ export function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+export function emptyActivityStream(): Response {
+  return new Response("", {
+    status: 200,
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
 export function requestResult<Result>(request: IDBRequest<Result>): Promise<Result> {
   return new Promise((resolve, reject) => {
     request.onsuccess = () => resolve(request.result);

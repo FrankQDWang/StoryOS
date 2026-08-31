@@ -19,6 +19,7 @@ import {
   closeTrackedDatabases,
   createBrowserScenario,
   deleteJournal,
+  emptyActivityStream,
   jsonResponse,
   trackDatabase,
 } from "./scenario.ts";
@@ -116,6 +117,7 @@ it("selects a tree Chapter through getChapter and keeps pending on the current C
         schema_id: "storyos.query.editor-session.response.v1",
       });
     }
+    if (path.endsWith("/activity")) return emptyActivityStream();
     throw new Error(`unexpected request: ${path}`);
   };
   const openDatabases = new Set<IDBDatabase>();
