@@ -107,12 +107,11 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     }).toBe(true);
   }
 
-  const chapterForms = frame.contentDocument?.querySelectorAll(
-    '#app form[data-create-chapter] input[name="chapter-title"]',
-  );
-  const chapterTitle = chapterForms?.[1] as HTMLInputElement | undefined;
+  const chapterTitle = volumeRow(frame, "Volume B")
+    ?.querySelector<HTMLInputElement>('form[data-create-chapter] input[name="chapter-title"]');
   const chapterForm = chapterTitle?.form;
-  if (chapterTitle === undefined || chapterForm === null || chapterForm === undefined) {
+  if (chapterTitle === undefined || chapterTitle === null
+    || chapterForm === null || chapterForm === undefined) {
     throw new Error("the Create Chapter form for Volume B is missing");
   }
   chapterTitle.value = "Chapter B";
@@ -121,6 +120,9 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
 
+  await expect.poll(() =>
+    volumeRow(frame, "Volume B")?.querySelector("button[data-delete-volume]")?.tagName
+  ).toBe("BUTTON");
   await confirmDeleteVolume(frame, "Volume B");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
@@ -128,6 +130,9 @@ it("the author cannot remove a nonempty Volume, then removes an empty Volume", {
       && volumeTitles(root).join("\n") === "Volume A\nVolume B";
   }, { timeout: 15_000 }).toBe(true);
 
+  await expect.poll(() =>
+    volumeRow(frame, "Volume A")?.querySelector("button[data-delete-volume]")?.tagName
+  ).toBe("BUTTON");
   await confirmDeleteVolume(frame, "Volume A");
   await expect.poll(() => {
     const root = frame.contentDocument?.querySelector("#app");
