@@ -77,15 +77,21 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
 }
 
 async function requestExport(root: Element, expected: string): Promise<Element> {
+  const previousId =
+    root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";
   const button = [...root.querySelectorAll<HTMLButtonElement>(
     "[data-readable-export] button",
   )].find((candidate) => candidate.textContent === "导出可读稿件");
   if (button === undefined) throw new Error("the readable export request button is missing");
   button.click();
-  await expect.poll(() =>
-    root.querySelector("[data-readable-export-bytes]")?.textContent,
-    { timeout: 10_000 },
-  ).toBe(expected);
+  await expect.poll(() => {
+    const bytes = root.querySelector("[data-readable-export-bytes]")?.textContent;
+    const exportId = root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";
+    if (bytes !== expected || exportId.length === 0 || exportId === previousId) {
+      return "";
+    }
+    return bytes;
+  }, { timeout: 10_000 }).toBe(expected);
   const bytes = root.querySelector("[data-readable-export-bytes]");
   if (bytes === null) throw new Error("the readable export inspect surface is missing");
   return bytes;
@@ -153,6 +159,7 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
     "[data-readable-export] button",
   )].find((candidate) => candidate.textContent === "下载");
   if (download === undefined) throw new Error("the readable export download button is missing");
+  await expect.poll(() => download.disabled, { timeout: 10_000 }).toBe(false);
   download.click();
   await expect.poll(() =>
     root.querySelector("[data-export-download-sha256]")?.getAttribute("data-export-download-sha256"),
