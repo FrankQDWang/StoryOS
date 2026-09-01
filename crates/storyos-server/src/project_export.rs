@@ -344,10 +344,10 @@ fn export_error(error: ExportProjectArchiveError) -> ApiError {
             },
             "The Project Export Archive did not complete.",
         ),
-        ExportProjectArchiveError::Unavailable(error) => problem(
+        ExportProjectArchiveError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
-            &format!("The Project store is unavailable. {error}"),
+            "The Project store is unavailable.",
         ),
     }
 }
