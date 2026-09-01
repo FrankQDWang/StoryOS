@@ -168,7 +168,7 @@ pub(super) async fn persist_export_archive(
             .map_err(|error| archive_table_error("project_export_entries", error))?;
     }
     let immutable_root = format!("sha256:{}", built.root_digest_hex);
-    client
+    let updated = client
         .execute(
             "UPDATE storyos.project_export_manifests
                 SET immutable_root = $4
@@ -183,6 +183,11 @@ pub(super) async fn persist_export_archive(
         )
         .await
         .map_err(|error| archive_table_error("project_export_manifests", error))?;
+    if updated != 1 {
+        return Err(ExportProjectArchiveError::Unavailable(Box::new(
+            std::io::Error::other("the admitted export did not persist one immutable root"),
+        )));
+    }
     Ok(immutable_root)
 }
 
@@ -227,14 +232,19 @@ fn classify_rows(
                 ProjectArchiveBuildRefusal::InvalidProvenance,
             ));
         };
-        let row_owner = object
+        let Some(row_owner) = object
             .get("owner_user_id")
             .and_then(serde_json::Value::as_str)
-            .unwrap_or(owner);
-        let row_project = object
-            .get("project_id")
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or(project);
+        else {
+            return Err(archive_build_error(
+                ProjectArchiveBuildRefusal::InvalidProvenance,
+            ));
+        };
+        let Some(row_project) = object.get("project_id").and_then(serde_json::Value::as_str) else {
+            return Err(archive_build_error(
+                ProjectArchiveBuildRefusal::InvalidProvenance,
+            ));
+        };
         classify_export_record(
             row_owner,
             row_project,
