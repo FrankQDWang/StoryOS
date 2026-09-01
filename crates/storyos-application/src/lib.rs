@@ -123,9 +123,10 @@ pub use project_export::{
     ExportOperationPage, ExportOperationReader, ExportProjectArchiveCommand,
     ExportProjectArchiveError, ExportProjectArchiveRefusal, ExportProjectArchiveSettlement,
     ExportProjectArchiveSettlementEffect, ExportProjectArchiveStore, GetExportOperation,
-    PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
-    PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE, PROJECT_EXPORT_REQUEST_SCHEMA,
-    PROJECT_EXPORT_ROUTE, get_export_operation, request_export_project_archive,
+    PROJECT_ARCHIVE_ZIP_MEDIA_TYPE, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
+    PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
+    PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, VerifiedExportArchive,
+    get_export_operation, get_verified_export_archive, request_export_project_archive,
 };
 pub use readable_export::{
     ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,

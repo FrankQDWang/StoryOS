@@ -56,7 +56,7 @@ pub(super) fn openapi() -> String {
         .map(|(status, description)| {
             let content = if *status == 200 {
                 format!(
-                    "          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n"
+                    "          content:\n            application/json:\n              schema:\n                $ref: '../{response_schema}'\n            application/vnd.storyos.project-archive+zip:\n              schema:\n                type: string\n                format: binary\n"
                 )
             } else {
                 String::new()
@@ -66,7 +66,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one admitted Project Export operation\n",
+            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect or download one settled Project Export Archive\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: export_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",

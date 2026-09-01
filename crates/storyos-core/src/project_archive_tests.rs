@@ -162,3 +162,64 @@ fn foreign_missing_lifecycle_and_provenance_are_typed_failures() {
         Err(ProjectArchiveBuildRefusal::MissingFamily)
     );
 }
+
+fn protocol_source() -> ArchiveEntrySource {
+    ArchiveEntrySource {
+        path: "canonical/project.json".to_owned(),
+        media_type: "application/json".to_owned(),
+        payload_schema: "storyos.project-record.v1".to_owned(),
+        bytes: PROTOCOL_ENTRY_BYTES.as_bytes().to_vec(),
+    }
+}
+
+#[test]
+fn a_missing_root_is_unsettled_and_exposes_no_zip_bytes() {
+    assert_eq!(
+        package_verified_project_archive_zip(&protocol_facts(), &[protocol_source()], ""),
+        Err(ProjectArchiveBuildRefusal::InvalidProvenance)
+    );
+}
+
+#[test]
+fn a_corrupt_payload_is_refused_before_zip_bytes() {
+    let built = build_project_archive(&protocol_facts(), &[protocol_source()]).expect("built");
+    let mut tampered = protocol_source();
+    tampered.bytes = b"tampered".to_vec();
+    assert_eq!(
+        package_verified_project_archive_zip(
+            &protocol_facts(),
+            &[tampered],
+            &built.root_digest_hex,
+        ),
+        Err(ProjectArchiveBuildRefusal::CorruptDigest)
+    );
+}
+
+#[test]
+fn verified_archive_zip_repeats_and_contains_uncompressed_entry_bytes() {
+    let built = build_project_archive(&protocol_facts(), &[protocol_source()]).expect("built");
+    let first = package_verified_project_archive_zip(
+        &protocol_facts(),
+        &[protocol_source()],
+        &built.root_digest_hex,
+    )
+    .expect("verified zip");
+    let second = package_verified_project_archive_zip(
+        &protocol_facts(),
+        &[protocol_source()],
+        &built.root_digest_hex,
+    )
+    .expect("repeat zip");
+    assert_eq!(first, second);
+    assert!(first.starts_with(b"PK\x03\x04"));
+    assert!(
+        first
+            .windows(PROTOCOL_ENTRY_BYTES.len())
+            .any(|window| { window == PROTOCOL_ENTRY_BYTES.as_bytes() })
+    );
+    assert!(
+        first
+            .windows(b"canonical/project.json".len())
+            .any(|window| { window == b"canonical/project.json" })
+    );
+}

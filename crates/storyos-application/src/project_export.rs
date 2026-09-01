@@ -14,6 +14,8 @@ pub const PROJECT_EXPORT_DIGEST_PROFILE: &str = "storyos.command.exportProjectAr
 pub const PROJECT_EXPORT_ARCHIVE_PROFILE: &str = "storyos.project-export.v1";
 pub const PROJECT_EXPORT_ARCHIVE_PATH_PROFILE: &str =
     "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1";
+pub const PROJECT_ARCHIVE_ZIP_MEDIA_TYPE: &str =
+    "application/vnd.storyos.project-archive+zip; profile=\"storyos.project-export.v1\"";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExportProjectArchiveCommand {
@@ -166,6 +168,22 @@ pub trait ExportOperationReader: Sync {
         scope: &ProjectScope,
         export_id: &str,
     ) -> impl Future<Output = Result<GetExportOperation, ProjectReadError>> + Send;
+
+    fn read_verified_export_archive(
+        &self,
+        scope: &ProjectScope,
+        export_id: &str,
+    ) -> impl Future<Output = Result<VerifiedExportArchive, ProjectReadError>> + Send;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VerifiedExportArchive {
+    Missing,
+    Archived,
+    Expired,
+    Unsettled,
+    Ready(Vec<u8>),
+    Refused(ProjectArchiveBuildRefusal),
 }
 
 pub async fn get_export_operation(
@@ -174,6 +192,14 @@ pub async fn get_export_operation(
     export_id: &str,
 ) -> Result<GetExportOperation, ProjectReadError> {
     reader.read_export_operation(scope, export_id).await
+}
+
+pub async fn get_verified_export_archive(
+    reader: &impl ExportOperationReader,
+    scope: &ProjectScope,
+    export_id: &str,
+) -> Result<VerifiedExportArchive, ProjectReadError> {
+    reader.read_verified_export_archive(scope, export_id).await
 }
 
 #[cfg(test)]

@@ -3,8 +3,9 @@ use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, ExportProjectArchiveCommand,
     ExportProjectArchiveError, ExportProjectArchiveRefusal, ExportProjectArchiveSettlementEffect,
-    GetExportOperation, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
-    ProjectCommandChallengeBinding, get_export_operation, request_export_project_archive,
+    GetExportOperation, PROJECT_ARCHIVE_ZIP_MEDIA_TYPE, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
+    PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectCommandChallengeBinding, VerifiedExportArchive,
+    get_export_operation, get_verified_export_archive, request_export_project_archive,
 };
 
 use super::editor_session::{exact_header, session_binding_ref};
@@ -232,7 +233,7 @@ pub(super) async fn get_export_operation_query(
     State(state): State<Arc<ServerState>>,
     Path((project_id, export_id)): Path<(String, String)>,
     headers: HeaderMap,
-) -> Result<Json<contracts::GetExportOperationResponse>, ApiError> {
+) -> Result<Response, ApiError> {
     let scope = authenticate_scope(
         &state,
         &headers,
@@ -241,6 +242,42 @@ pub(super) async fn get_export_operation_query(
     )?;
     valid_uuid(&export_id)?;
     let reader = project_reader(&state)?;
+    if wants_project_archive_zip(&headers) {
+        return match get_verified_export_archive(&reader, &scope, &export_id)
+            .await
+            .map_err(service_unavailable)?
+        {
+            VerifiedExportArchive::Missing => Err(resource_unavailable()),
+            VerifiedExportArchive::Archived => Err(problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "archived_project",
+                "The Project is archived.",
+            )),
+            VerifiedExportArchive::Expired => Err(problem(
+                StatusCode::CONFLICT,
+                "snapshot_expired",
+                "The Snapshot is no longer available.",
+            )),
+            VerifiedExportArchive::Unsettled => Err(problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_provenance",
+                "The Project Export Archive is not settled.",
+            )),
+            VerifiedExportArchive::Refused(reason) => Err(archive_build_problem(reason)),
+            VerifiedExportArchive::Ready(bytes) => Ok((
+                StatusCode::OK,
+                [
+                    (header::CONTENT_TYPE, PROJECT_ARCHIVE_ZIP_MEDIA_TYPE),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        "attachment; filename=\"storyos-project-export.zip\"",
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()),
+        };
+    }
     match get_export_operation(&reader, &scope, &export_id)
         .await
         .map_err(service_unavailable)?
@@ -285,9 +322,17 @@ pub(super) async fn get_export_operation_query(
                     created_at: page.source_snapshot.created_at,
                     expires_at: page.source_snapshot.expires_at,
                 },
-            }))
+            })
+            .into_response())
         }
     }
+}
+
+fn wants_project_archive_zip(headers: &HeaderMap) -> bool {
+    headers
+        .get(header::ACCEPT)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|accept| accept.contains("application/vnd.storyos.project-archive+zip"))
 }
 
 fn canonical_body_bytes(
@@ -326,28 +371,28 @@ fn export_error(error: ExportProjectArchiveError) -> ApiError {
             "The Project Export Archive challenge is invalid.",
         ),
         ExportProjectArchiveError::MissingProject => resource_unavailable(),
-        ExportProjectArchiveError::ArchiveBuild(reason) => problem(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            match reason {
-                storyos_core::ProjectArchiveBuildRefusal::ForeignMaterial => "foreign_material",
-                storyos_core::ProjectArchiveBuildRefusal::CorruptDigest => "corrupt_digest",
-                storyos_core::ProjectArchiveBuildRefusal::MissingFamily => "missing_family",
-                storyos_core::ProjectArchiveBuildRefusal::IneligibleLifecycle => {
-                    "ineligible_lifecycle"
-                }
-                storyos_core::ProjectArchiveBuildRefusal::InvalidProvenance => "invalid_provenance",
-                storyos_core::ProjectArchiveBuildRefusal::Collision
-                | storyos_core::ProjectArchiveBuildRefusal::DirectoryPrefixCollision
-                | storyos_core::ProjectArchiveBuildRefusal::InvalidPath(_) => {
-                    "archive_path_refused"
-                }
-            },
-            "The Project Export Archive did not complete.",
-        ),
+        ExportProjectArchiveError::ArchiveBuild(reason) => archive_build_problem(reason),
         ExportProjectArchiveError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
             "The Project store is unavailable.",
         ),
     }
+}
+
+fn archive_build_problem(reason: storyos_core::ProjectArchiveBuildRefusal) -> ApiError {
+    problem(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        match reason {
+            storyos_core::ProjectArchiveBuildRefusal::ForeignMaterial => "foreign_material",
+            storyos_core::ProjectArchiveBuildRefusal::CorruptDigest => "corrupt_digest",
+            storyos_core::ProjectArchiveBuildRefusal::MissingFamily => "missing_family",
+            storyos_core::ProjectArchiveBuildRefusal::IneligibleLifecycle => "ineligible_lifecycle",
+            storyos_core::ProjectArchiveBuildRefusal::InvalidProvenance => "invalid_provenance",
+            storyos_core::ProjectArchiveBuildRefusal::Collision
+            | storyos_core::ProjectArchiveBuildRefusal::DirectoryPrefixCollision
+            | storyos_core::ProjectArchiveBuildRefusal::InvalidPath(_) => "archive_path_refused",
+        },
+        "The Project Export Archive did not complete.",
+    )
 }
