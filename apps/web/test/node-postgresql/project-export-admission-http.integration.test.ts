@@ -167,7 +167,7 @@ test("exportProjectArchive admits one inspectable operation without an immutable
       fetchImpl: first.fetchImpl,
     });
     assert.equal(inspected.status, "in_progress");
-    assert.equal(inspected.immutable_root, null);
+    assert.match(inspected.immutable_root ?? "", /^sha256:[0-9a-f]{64}$/);
     assert.equal(inspected.export_id, applied.admitted.effect.export_id);
     assert.equal(inspected.archive_profile, "storyos.project-export.v1");
 
@@ -230,7 +230,7 @@ test("exportProjectArchive admits one inspectable operation without an immutable
       fetchImpl: first.fetchImpl,
     });
     assert.equal(stillVisible.status, "in_progress");
-    assert.equal(stillVisible.immutable_root, null);
+    assert.equal(stillVisible.immutable_root, inspected.immutable_root);
 
     await assert.rejects(
       postExport(

@@ -1,5 +1,6 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
+mod archive_path;
 mod archive_project;
 mod create_chapter;
 mod create_project;
@@ -7,6 +8,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
+mod project_archive;
 mod project_export;
 mod readable_export;
 mod readable_export_command;
@@ -17,6 +19,10 @@ mod update_chapter;
 mod update_project;
 mod update_volume;
 
+pub use archive_path::{
+    ARCHIVE_PATH_MAX_BYTES, ARCHIVE_PATH_MAX_SEGMENTS, ARCHIVE_PATH_PROFILE, AdmittedArchivePath,
+    ArchivePathRefusal, admit_archive_path,
+};
 pub use archive_project::{
     ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
     ArchiveProjectResult, ProjectLifecycle, archive_project,
@@ -41,6 +47,13 @@ pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
     apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
+};
+pub use project_archive::{
+    ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
+    ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
+    PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectArchiveBuildRefusal, ProjectArchiveRootFacts,
+    build_project_archive, canonical_json, classify_export_record, hex_sha256,
+    require_delivered_families, verify_entry_digest,
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,

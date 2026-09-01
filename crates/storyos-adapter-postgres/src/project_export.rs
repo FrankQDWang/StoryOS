@@ -385,6 +385,18 @@ async fn persist_export(
         )
         .await
         .map_err(export_database_error)?;
+    if let ExportProjectArchiveSettlementEffect::Admitted {
+        source_snapshot, ..
+    } = &effect
+    {
+        crate::project_archive_build::persist_export_archive(
+            client,
+            command,
+            source_snapshot,
+            &receipt_created_at,
+        )
+        .await?;
+    }
     Ok(ExportProjectArchiveSettlement {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),

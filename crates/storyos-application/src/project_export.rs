@@ -1,5 +1,7 @@
 use std::future::Future;
 
+use storyos_core::ProjectArchiveBuildRefusal;
+
 use crate::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding,
     ProjectCommandChallengeBinding, ProjectReadError, ProjectScope,
@@ -61,6 +63,7 @@ pub enum ExportProjectArchiveError {
     BindingConflict,
     InvalidChallenge,
     MissingProject,
+    ArchiveBuild(ProjectArchiveBuildRefusal),
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -74,6 +77,9 @@ impl std::fmt::Display for ExportProjectArchiveError {
                 formatter.write_str("The Project Export Archive challenge is invalid")
             }
             Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
+            Self::ArchiveBuild(_) => {
+                formatter.write_str("The Project Export Archive did not complete")
+            }
             Self::Unavailable(_) => {
                 formatter.write_str("The Project Export Archive store is unavailable")
             }
@@ -85,7 +91,10 @@ impl std::error::Error for ExportProjectArchiveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge | Self::MissingProject => None,
+            Self::BindingConflict
+            | Self::InvalidChallenge
+            | Self::MissingProject
+            | Self::ArchiveBuild(_) => None,
         }
     }
 }
