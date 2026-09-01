@@ -1,0 +1,53 @@
+{
+  "profile": "storyos.readable-export.utf8-lf.v1",
+  "cases": [
+    {
+      "name": "empty",
+      "volumes": [],
+      "expected": "\n"
+    },
+    {
+      "name": "one_chapter",
+      "volumes": [
+        {
+          "title": "Volume A",
+          "chapters": [
+            { "title": "Chapter A", "body": "Hello world" }
+          ]
+        }
+      ],
+      "expected": "# Volume A\n\n## Chapter A\n\nHello world\n"
+    },
+    {
+      "name": "unavailable_chapter",
+      "volumes": [
+        {
+          "title": "Volume A",
+          "chapters": [
+            { "title": "Chapter A", "body": "Hello world" },
+            { "title": "Chapter B", "body": null }
+          ]
+        }
+      ],
+      "expected": "# Volume A\n\n## Chapter A\n\nHello world\n\n## Chapter B\n\n[unavailable]\n"
+    },
+    {
+      "name": "two_volumes_ordered",
+      "volumes": [
+        {
+          "title": "Volume A",
+          "chapters": [
+            { "title": "Chapter A", "body": "Hello world" }
+          ]
+        },
+        {
+          "title": "Volume B",
+          "chapters": [
+            { "title": "Chapter C", "body": "雨落在窗沿。" }
+          ]
+        }
+      ],
+      "expected": "# Volume A\n\n## Chapter A\n\nHello world\n\n# Volume B\n\n## Chapter C\n\n雨落在窗沿。\n"
+    }
+  ]
+}

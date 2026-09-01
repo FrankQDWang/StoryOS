@@ -161,7 +161,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0019_set_current_chapter.sql \
   -f /tmp/storyos-release1-bootstrap/0020_undo_latest_author_action.sql \
   -f /tmp/storyos-release1-bootstrap/0021_delete_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql \
+  -f /tmp/storyos-release1-bootstrap/0023_export_human_readable_manuscript.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -196,7 +197,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0019_set_current_chapter.sql \
   -f /tmp/storyos-release1-bootstrap/0020_undo_latest_author_action.sql \
   -f /tmp/storyos-release1-bootstrap/0021_delete_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql \
+  -f /tmp/storyos-release1-bootstrap/0023_export_human_readable_manuscript.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END

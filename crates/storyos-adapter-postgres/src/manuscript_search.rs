@@ -2,6 +2,7 @@ use storyos_application::{
     ChapterId, ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchFacts,
     ManuscriptSearchRead, ManuscriptSearchReader, ProjectReadError, ProjectScope,
 };
+use tokio_postgres::GenericClient;
 
 use super::{PostgresProjectReader, read_error, set_scope};
 use crate::snapshot::CanonicalSnapshotQuery;
@@ -50,11 +51,11 @@ impl ManuscriptSearchReader for PostgresProjectReader {
     }
 }
 
-async fn read_live_chapter_blocks(
-    transaction: &tokio_postgres::Transaction<'_>,
+pub(crate) async fn read_live_chapter_blocks(
+    client: &impl GenericClient,
     scope: &ProjectScope,
 ) -> Result<Vec<ManuscriptSearchChapterFact>, ProjectReadError> {
-    let rows = transaction
+    let rows = client
         .query(
             "SELECT volume.manuscript_object_id::text,
                     chapter.manuscript_object_id::text,
@@ -113,7 +114,7 @@ async fn read_live_chapter_blocks(
         let revision_id = row.get::<_, String>(2);
         let stored: String = row.get(3);
         let blocks = crate::manuscript_block::load_revision_blocks(
-            transaction,
+            client,
             scope.owner_user_id.as_ref(),
             scope.project_id.as_ref(),
             &chapter_id,

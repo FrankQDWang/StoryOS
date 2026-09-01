@@ -32,6 +32,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
 mod project_command_challenge;
+mod readable_export;
 mod request_origin;
 mod set_current_chapter;
 mod snapshot;
@@ -65,6 +66,9 @@ use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
 use project_command_challenge::create_project_command_challenge;
+use readable_export::{
+    export_human_readable_manuscript, get_human_readable_manuscript_export_query,
+};
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
@@ -184,6 +188,10 @@ pub fn router_with_config(config: ServerConfig) -> Router {
     let get_snapshot_method = method_filter(contracts::GET_SNAPSHOT_METHOD);
     let get_manuscript_tree_method = method_filter(contracts::GET_MANUSCRIPT_TREE_METHOD);
     let get_statistics_method = method_filter(contracts::GET_STATISTICS_METHOD);
+    let export_human_readable_method =
+        method_filter(contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD);
+    let get_human_readable_export_method =
+        method_filter(contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_METHOD);
     let search_manuscript_method = method_filter(contracts::SEARCH_MANUSCRIPT_METHOD);
     let activity_stream_method = method_filter(contracts::ACTIVITY_STREAM_METHOD);
     Router::new()
@@ -313,6 +321,20 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         .route(
             contracts::GET_STATISTICS_PATH,
             routing::on(get_statistics_method, get_statistics),
+        )
+        .route(
+            contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_PATH,
+            routing::on(
+                export_human_readable_method,
+                export_human_readable_manuscript,
+            ),
+        )
+        .route(
+            contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_PATH,
+            routing::on(
+                get_human_readable_export_method,
+                get_human_readable_manuscript_export_query,
+            ),
         )
         .route(
             contracts::SEARCH_MANUSCRIPT_PATH,

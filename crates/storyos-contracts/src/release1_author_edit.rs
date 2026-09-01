@@ -155,6 +155,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "undoLatestAuthorAction")]
     #[ts(rename = "undoLatestAuthorAction")]
     UndoLatestAuthorAction,
+    #[serde(rename = "exportHumanReadableManuscript")]
+    #[ts(rename = "exportHumanReadableManuscript")]
+    ExportHumanReadableManuscript,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

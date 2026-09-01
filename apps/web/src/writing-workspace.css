@@ -155,6 +155,7 @@ input:focus-visible,
 
 .editor-panel h2,
 .editor-panel [data-manuscript-statistics],
+.editor-panel [data-readable-export],
 .editor-panel [data-manuscript-search],
 .manuscript-editor,
 .editor-panel [data-save-state],
@@ -176,6 +177,7 @@ input:focus-visible,
 }
 
 .editor-panel [data-manuscript-statistics],
+.editor-panel [data-readable-export],
 .editor-panel [data-manuscript-search] {
   margin-bottom: 24px;
   color: var(--muted);

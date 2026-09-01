@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:303e396d7078bd5e64cc4ecab6c727050e2cb8e46fbf7354363bfd1496f05044",
+  "corpus_digest": "sha256:e8bafe5a9f4180e66a1f8377a0f5ab3c72e5953cb0895e1824716e8cf44193a9",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -33,6 +33,12 @@
       "generated/golden-wire/storyos-public-release-1/get-statistics.json",
       "generated/golden-wire/storyos-public-release-1/get-statistics.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-statistics.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json",
+      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json",
+      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json",
       "generated/golden-wire/storyos-public-release-1/update-project.json",
       "generated/golden-wire/storyos-public-release-1/update-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/update-project.boundary.json",
@@ -266,6 +272,42 @@
       "fixture_id": "storyos.golden.getStatistics.boundary.v1",
       "operation_id": "getStatistics",
       "path": "generated/golden-wire/storyos-public-release-1/get-statistics.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.exportHumanReadableManuscript.positive.v1",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.exportHumanReadableManuscript.invalid.v1",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.exportHumanReadableManuscript.boundary.v1",
+      "operation_id": "exportHumanReadableManuscript",
+      "path": "generated/golden-wire/storyos-public-release-1/export-human-readable-manuscript.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.positive.v1",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.invalid.v1",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getHumanReadableManuscriptExport.boundary.v1",
+      "operation_id": "getHumanReadableManuscriptExport",
+      "path": "generated/golden-wire/storyos-public-release-1/get-human-readable-manuscript-export.boundary.json"
     },
     {
       "classification": "positive",

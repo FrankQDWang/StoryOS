@@ -1,0 +1,135 @@
+{
+  "$defs": {
+    "CanonicalSnapshotMaps": {
+      "additionalProperties": false,
+      "description": "Closed empty maps for Stage 1 `canonical` SnapshotDescriptor watermarks.",
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "SnapshotDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_activity_position": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "projection_generations": {
+          "$ref": "#/$defs/CanonicalSnapshotMaps"
+        },
+        "redaction_profile": {
+          "type": "string"
+        },
+        "replay_generation": {
+          "type": "string"
+        },
+        "schema_profile": {
+          "type": "string"
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "snapshot_kind": {
+          "$ref": "#/$defs/SnapshotKind"
+        },
+        "source_watermarks": {
+          "$ref": "#/$defs/CanonicalSnapshotMaps"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "project_scope",
+        "snapshot_kind",
+        "project_activity_position",
+        "source_watermarks",
+        "projection_generations",
+        "redaction_profile",
+        "schema_profile",
+        "replay_generation",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "SnapshotKind": {
+      "description": "Closed `snapshot_kind` selected by the protocol SnapshotDescriptor.",
+      "enum": [
+        "canonical"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "storyos.query.human-readable-manuscript-export.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "content_sha256": {
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "export_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "export_profile": {
+      "type": "string"
+    },
+    "manuscript_utf8": {
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "query_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "schema_id": {
+      "const": "storyos.query.human-readable-manuscript-export.response.v1",
+      "type": "string"
+    },
+    "source_snapshot": {
+      "$ref": "#/$defs/SnapshotDescriptor"
+    }
+  },
+  "required": [
+    "schema_id",
+    "query_id",
+    "correlation_id",
+    "project_scope",
+    "export_id",
+    "export_profile",
+    "content_sha256",
+    "manuscript_utf8",
+    "source_snapshot"
+  ],
+  "title": "StoryOS Human-Readable Manuscript Export Response",
+  "type": "object"
+}

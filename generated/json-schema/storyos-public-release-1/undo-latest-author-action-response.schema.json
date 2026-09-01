@@ -194,7 +194,8 @@
         "deleteChapter",
         "deleteVolume",
         "setCurrentChapter",
-        "undoLatestAuthorAction"
+        "undoLatestAuthorAction",
+        "exportHumanReadableManuscript"
       ],
       "type": "string"
     },
