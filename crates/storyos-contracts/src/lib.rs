@@ -58,6 +58,7 @@ mod stage1_delivery;
 mod stage1_handoff;
 mod stage1_provenance;
 mod stage1_selection;
+mod stage2_crosswalk;
 mod web_assets;
 
 pub use web_assets::{
@@ -230,4 +231,8 @@ pub use release1_update_volume::{
 pub use stage1_crosswalk::{
     CrosswalkError, GENERATED_CROSSWALK_PATH, check_crosswalk, generate_crosswalk, repository_root,
     write_crosswalk,
+};
+pub use stage2_crosswalk::{
+    GENERATED_STAGE2_CROSSWALK_PATH, check_stage2_crosswalk, generate_stage2_crosswalk,
+    write_stage2_crosswalk,
 };
