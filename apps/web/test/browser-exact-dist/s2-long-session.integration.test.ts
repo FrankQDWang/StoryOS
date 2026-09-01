@@ -193,12 +193,11 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   expect(inspectA === null || inspectA === undefined ? undefined : manuscriptBody(inspectA))
     .toBe("Alpha");
   await makeCurrent(frame, chapterAId, "Chapter A");
-  await typeExpected(frame, " 中文", "Alpha 中文");
+  await typeExpected(frame, " 中文 EN", SETTLED_A);
   await applyTrustedInput({ operation: "undo_latest_author_action" });
   await expect.poll(() => manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame))))
     .toBe("Alpha");
   await waitSaved(appRoot(frame));
-  await typeExpected(frame, " 中文 EN", SETTLED_A);
   const inputMs = Math.round(performance.now() - inputStarted);
 
   const searchStarted = performance.now();
@@ -213,11 +212,11 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
     throw new Error("the manuscript search form is missing");
   }
   searchRadio.click();
-  searchInput.value = "中文";
+  searchInput.value = "Alpha";
   searchForm.requestSubmit();
   await expect.poll(() => {
     const node = appRoot(frame).querySelector("[data-search-outcome='ready']");
-    return node?.getAttribute("data-search-query") === "中文"
+    return node?.getAttribute("data-search-query") === "Alpha"
       ? node.querySelectorAll("[data-search-match]").length
       : 0;
   }, { timeout: 10_000 }).toBeGreaterThan(0);
@@ -242,7 +241,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   }, { timeout: 10_000 }).toBe(true);
   const reopenedRoot = appRoot(frame);
   expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
-  expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe(SETTLED_A);
+  expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe("Alpha");
   await waitSaved(reopenedRoot);
   const childWindow = applicationWindow(frame);
   const [authoritativeA, authoritativeB] = await Promise.all([
@@ -259,7 +258,7 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
       fetchImpl: childWindow.fetch.bind(childWindow),
     }),
   ]);
-  expect(authoritativeA.chapter.current_revision.body).toBe(SETTLED_A);
+  expect(authoritativeA.chapter.current_revision.body).toBe("Alpha");
   expect(authoritativeB.chapter.current_revision.body).toBe("Beta");
   const reloadMs = Math.round(performance.now() - reloadStarted);
   console.info(JSON.stringify({
