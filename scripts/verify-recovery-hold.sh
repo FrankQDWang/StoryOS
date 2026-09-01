@@ -3,7 +3,9 @@ set -eu
 
 # Isolated physical Recovery Copy drill. Archive and base-backup volumes are not
 # primary PGDATA. Ordinary StoryOS reads stay disabled until Recovery Visibility
-# Proof passes; a missing proof keeps the restored copy in recovery_hold.
+# Proof passes; a missing proof keeps the restored copy in recovery_hold. After
+# that proof, this drill enables ordinary writes and continues writing through
+# the production browser.
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
@@ -16,6 +18,8 @@ wal_marker="WAL after base backup"
 project_id="018f0000-0000-7001-8000-000000000002"
 created_volumes=0
 destination_kind=verification_volumes
+drill_server_pid=""
+drill_server_log=""
 
 if [ -n "${STORYOS_RECOVERY_COPY_DIR:-}" ]; then
   recovery_root=$STORYOS_RECOVERY_COPY_DIR
@@ -36,6 +40,13 @@ else
 fi
 
 cleanup() {
+  if [ -n "$drill_server_pid" ]; then
+    kill "$drill_server_pid" >/dev/null 2>&1 || true
+    wait "$drill_server_pid" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$drill_server_log" ]; then
+    rm -f "$drill_server_log"
+  fi
   docker rm -f "$primary" "$hold" >/dev/null 2>&1 || true
   if [ "$created_volumes" = "1" ]; then
     docker volume rm "$archive_volume" "$backup_volume" "$hold_volume" >/dev/null 2>&1 || true
@@ -164,6 +175,7 @@ target_lsn=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc 
 archived_wal=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT pg_walfile_name('$target_lsn'::pg_lsn)")
 docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -c "SELECT pg_switch_wal()" >/dev/null
+rpo_started=$(date +%s)
 attempt=0
 until docker exec "$primary" test -f "/var/lib/postgresql/wal_archive/$archived_wal"; do
   attempt=$((attempt + 1))
@@ -175,6 +187,7 @@ until docker exec "$primary" test -f "/var/lib/postgresql/wal_archive/$archived_
   fi
   sleep 0.25
 done
+rpo_seconds=$(($(date +%s) - rpo_started))
 
 docker run --rm --volume "$backup_volume:/backup" postgres:16-alpine sh -c '
   set -eu
@@ -263,8 +276,10 @@ docker run --rm --user root \
   '
 rm -f "$restore_conf"
 
+restore_started=$(date +%s)
 docker run --detach --name "$hold" \
   --network "$network" \
+  --publish 127.0.0.1::5432 \
   --volume "$hold_volume:/var/lib/postgresql/data" \
   --volume "$archive_volume:/var/lib/postgresql/wal_archive:ro" \
   postgres:16-alpine >/dev/null
@@ -553,4 +568,130 @@ case "$rebuilt" in
 esac
 
 echo "Isolated restore passed Recovery Visibility Proof"
+
+server_bin="$repository_root/target/release-package/storyos-server"
+web_root="$repository_root/target/release-package/web"
+if [ ! -x "$server_bin" ] || [ ! -d "$web_root" ]; then
+  echo "Release package is required for continued writing after restore" >&2
+  exit 1
+fi
+
+docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" \
+  -c "ALTER SYSTEM SET default_transaction_read_only = off" \
+  -c "ALTER DATABASE postgres SET default_transaction_read_only = off" \
+  -c "SELECT pg_reload_conf()" >/dev/null
+
+read_only=$(docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres -Atc \
+  "SHOW default_transaction_read_only")
+if [ "$read_only" != "off" ]; then
+  echo "Physical drill did not enable ordinary writes: $read_only" >&2
+  exit 1
+fi
+if ! docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres \
+  -c "SELECT set_config('storyos.owner_user_id', '$owner_a', false);
+      SELECT set_config('storyos.project_id', '$project_id', false);
+      UPDATE storyos.projects SET title = title WHERE project_id = '$project_id'" >/dev/null; then
+  echo "Visible restore still refused an ordinary write" >&2
+  exit 1
+fi
+
+hold_port=$(docker inspect -f '{{(index (index .NetworkSettings.Ports "5432/tcp") 0).HostPort}}' "$hold")
+if [ -z "$hold_port" ]; then
+  echo "Isolated restore did not publish a host port" >&2
+  exit 1
+fi
+
+unset STORYOS_STAGE1_AUTHORITY_ORACLE
+drill_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-server.XXXXXX")
+STORYOS_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$hold_port/postgres" \
+STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$owner_a\"}" \
+STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
+  "$server_bin" --bind 127.0.0.1:0 \
+  --web-root "$web_root" \
+  >"$drill_server_log" 2>&1 &
+drill_server_pid=$!
+attempt=0
+while ! grep -q '^STORYOS_SERVER_URL=http://' "$drill_server_log"; do
+  if ! kill -0 "$drill_server_pid" >/dev/null 2>&1; then
+    cat "$drill_server_log" >&2
+    echo "The StoryOS Server exited before continued writing" >&2
+    exit 1
+  fi
+  attempt=$((attempt + 1))
+  if [ "$attempt" -ge 100 ]; then
+    cat "$drill_server_log" >&2
+    echo "The StoryOS Server did not become ready for continued writing" >&2
+    exit 1
+  fi
+  sleep 0.05
+done
+STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$drill_server_log" | head -n 1)
+export STORYOS_DEV_SERVER
+export STORYOS_PHYSICAL_DRILL=1
+echo "Running exact-dist continued writing after restore"
+pnpm --dir apps/web exec vitest run --project browser-exact-dist
+kill "$drill_server_pid" >/dev/null 2>&1 || true
+wait "$drill_server_pid" >/dev/null 2>&1 || true
+drill_server_pid=""
+
+rto_seconds=$(($(date +%s) - restore_started))
+if [ "$rpo_seconds" -gt 900 ]; then
+  echo "Physical drill exceeded the 15-minute RPO: ${rpo_seconds}s" >&2
+  exit 1
+fi
+if [ "$rto_seconds" -gt 7200 ]; then
+  echo "Physical drill exceeded the two-hour RTO: ${rto_seconds}s" >&2
+  exit 1
+fi
+
+python3 - "$chain_sha256" "$hold" "$destination_kind" "$hold_port" \
+  "$recovery_copy_id" "$restore_proof_id" "$visibility_proof_id" \
+  "$rpo_seconds" "$rto_seconds" "$wal_marker" <<'PY'
+import hashlib, json, re, sys
+(
+    chain_sha256, isolated_target, destination_kind, hold_port,
+    recovery_copy_id, restore_proof_id, visibility_proof_id,
+    rpo_seconds, rto_seconds, wal_marker,
+) = sys.argv[1:]
+payload = {
+    "continued_writing": {
+        "isolation": "foreign_project_absent",
+        "non_revival": "stale_unattached_chapter_absent",
+        "reload": "settled",
+        "text": "chinese_and_english",
+        "title": wal_marker,
+    },
+    "evidence_class": "EV-PRD",
+    "hold_to_visible": {
+        "restore_state": "visible",
+        "runtime_login": True,
+        "writes_after_visibility_before_enable": "refused",
+        "writes_after_enable": "accepted",
+    },
+    "physical_input": {
+        "catalog_identity": "storyos.persistence.catalog.release-1.v3",
+        "chain_sha256": chain_sha256,
+        "destination_kind": destination_kind,
+        "isolated_target_identity": isolated_target,
+        "method": "pg_basebackup",
+        "recovery_copy_id": recovery_copy_id,
+        "restore_proof_id": restore_proof_id,
+        "visibility_proof_id": visibility_proof_id,
+    },
+    "rpo": {"bound_seconds": 900, "observed_seconds": int(rpo_seconds)},
+    "rto": {"bound_seconds": 7200, "observed_seconds": int(rto_seconds)},
+    "environment": {"hold_host_port": hold_port},
+}
+text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+if re.search(r"password|secret|pgpassword", text, re.I):
+    raise SystemExit("Recovery evidence contains credential material")
+sys.stdout.write(text)
+print("sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest())
+PY
+
+echo "Isolated restore continued writing after Recovery Visibility Proof"
 rm -f "$chain_manifest" "$evidence"

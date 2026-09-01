@@ -13,6 +13,7 @@ import { exactDistPlugin } from "./test/support/exact-dist-plugin";
 const webRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(webRoot, "../..");
 const proxy = storyOSApiProxy(process.env.STORYOS_DEV_SERVER);
+const physicalDrill = process.env.STORYOS_PHYSICAL_DRILL === "1";
 const serialTest = { fileParallelism: false, isolate: true, retry: 0 } as const;
 function browserTest() {
   return {
@@ -95,7 +96,12 @@ export default defineConfig({
         test: {
           ...browserTest(),
           globalSetup: ["./test/support/exact-dist-global-setup.ts"],
-          include: ["test/browser-exact-dist/**/*.test.ts"],
+          include: physicalDrill
+            ? ["test/browser-exact-dist/s2-physical-drill.integration.test.ts"]
+            : ["test/browser-exact-dist/**/*.test.ts"],
+          ...(physicalDrill
+            ? {}
+            : { exclude: ["test/browser-exact-dist/s2-physical-drill.integration.test.ts"] }),
           name: "browser-exact-dist",
           testTimeout: 120_000,
         },
