@@ -157,16 +157,6 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
   expect(root.querySelector("[data-export-sha256]")?.getAttribute("data-export-sha256")).toBe(
     firstSha,
   );
-  const download = [...root.querySelectorAll<HTMLButtonElement>(
-    "[data-readable-export] button",
-  )].find((candidate) => candidate.textContent === "下载");
-  if (download === undefined) throw new Error("the readable export download button is missing");
-  await expect.poll(() => download.disabled, { timeout: 10_000 }).toBe(false);
-  download.click();
-  await expect.poll(() =>
-    root.querySelector("[data-export-download-sha256]")?.getAttribute("data-export-download-sha256"),
-    { timeout: 10_000 },
-  ).toBe(firstSha);
   const secondChapter = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -190,5 +180,21 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
     appRoot(frame).querySelector("h2")?.textContent
   ).toBe("Chapter B");
   await typeIntoCurrent(frame, CHAPTER_B);
-  await requestExport(appRoot(frame), GOLDEN_TWO);
+  const afterRebuild = appRoot(frame);
+  await requestExport(afterRebuild, GOLDEN_TWO);
+  const rebuiltSha = afterRebuild.querySelector("[data-export-sha256]")
+    ?.getAttribute("data-export-sha256");
+  expect(rebuiltSha).toMatch(/^[0-9a-f]{64}$/);
+  expect(rebuiltSha).not.toBe(firstSha);
+  const download = [...afterRebuild.querySelectorAll<HTMLButtonElement>(
+    "[data-readable-export] button",
+  )].find((candidate) => candidate.textContent === "下载");
+  if (download === undefined) throw new Error("the readable export download button is missing");
+  await expect.poll(() => download.disabled, { timeout: 10_000 }).toBe(false);
+  download.click();
+  await expect.poll(() =>
+    afterRebuild.querySelector("[data-export-download-sha256]")
+      ?.getAttribute("data-export-download-sha256"),
+    { timeout: 10_000 },
+  ).toBe(rebuiltSha);
 });
