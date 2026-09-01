@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { flushSync } from "react-dom";
 
 import {
   getHumanReadableManuscriptExport,
@@ -65,14 +66,19 @@ export function ManuscriptReadableExportPanel({
         exportId: outcome.page.export_id,
         fetchImpl,
       });
+      flushSync(() => {
+        setOutcome({ kind: "ready", page, downloadSha256: page.content_sha256 });
+      });
       const blob = new Blob([page.manuscript_utf8], { type: "text/plain;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const anchor = document.createElement("a");
       anchor.href = url;
       anchor.download = "manuscript.txt";
+      anchor.rel = "noopener";
+      document.body.append(anchor);
       anchor.click();
+      anchor.remove();
       URL.revokeObjectURL(url);
-      setOutcome({ kind: "ready", page, downloadSha256: page.content_sha256 });
     } catch {
       setOutcome({ kind: "unavailable" });
     } finally {
