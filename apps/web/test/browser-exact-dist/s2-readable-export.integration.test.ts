@@ -183,6 +183,9 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
     'nav[aria-label="稿件目录"] button[data-chapter-id]',
   )].find((button) => button.textContent === "Chapter B")?.getAttribute("data-chapter-id");
   if (chapterBId === null || chapterBId === undefined) throw new Error("Chapter B is missing");
+  await expect.poll(() =>
+    appRoot(frame).querySelector(`[data-make-current-chapter="${chapterBId}"]`) !== null
+  ).toBe(true);
   appRoot(frame).querySelector<HTMLButtonElement>(
     `[data-make-current-chapter="${chapterBId}"]`,
   )?.click();
