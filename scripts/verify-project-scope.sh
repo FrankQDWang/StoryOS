@@ -163,7 +163,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0021_delete_chapter.sql \
   -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql \
   -f /tmp/storyos-release1-bootstrap/0023_export_human_readable_manuscript.sql \
-  -f /tmp/storyos-release1-bootstrap/0024_export_project_archive_admission.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0024_export_project_archive_admission.sql \
+  -f /tmp/storyos-release1-bootstrap/0025_export_project_archive_entries.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -200,7 +201,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0021_delete_chapter.sql \
   -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql \
   -f /tmp/storyos-release1-bootstrap/0023_export_human_readable_manuscript.sql \
-  -f /tmp/storyos-release1-bootstrap/0024_export_project_archive_admission.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0024_export_project_archive_admission.sql \
+  -f /tmp/storyos-release1-bootstrap/0025_export_project_archive_entries.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
@@ -284,6 +286,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP fenced-writer late-result tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/takeover-late-result-http.integration.test.ts
+echo "Running HTTP exportProjectArchive tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/project-export-admission-http.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
   "DO \$\$ DECLARE tbl text; BEGIN

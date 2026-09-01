@@ -132,7 +132,7 @@ async function postExport(
   return { challenge, admitted };
 }
 
-test("exportProjectArchive admits one inspectable operation without an immutable root", async () => {
+test("exportProjectArchive admits one inspectable operation with an immutable root", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
     const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000c01", "Empty Novel");
@@ -143,7 +143,10 @@ test("exportProjectArchive admits one inspectable operation without an immutable
       first.projectId,
       "018f0000-0000-7001-8000-000000000c21",
       request,
-    );
+    ).catch((error) => {
+      const protocol = requireStoryOSProtocolError(error);
+      throw new Error(`${protocol.status} ${protocol.responseBody}`);
+    });
     assert.equal(applied.admitted.schema_id, "storyos.command.export-project-archive.response.v1");
     assert.equal(applied.admitted.acknowledgement, "accepted");
     assert.equal(applied.admitted.receipt.command_kind, "exportProjectArchive");
@@ -167,7 +170,7 @@ test("exportProjectArchive admits one inspectable operation without an immutable
       fetchImpl: first.fetchImpl,
     });
     assert.equal(inspected.status, "in_progress");
-    assert.equal(inspected.immutable_root, null);
+    assert.match(inspected.immutable_root ?? "", /^sha256:[0-9a-f]{64}$/);
     assert.equal(inspected.export_id, applied.admitted.effect.export_id);
     assert.equal(inspected.archive_profile, "storyos.project-export.v1");
 
@@ -230,7 +233,7 @@ test("exportProjectArchive admits one inspectable operation without an immutable
       fetchImpl: first.fetchImpl,
     });
     assert.equal(stillVisible.status, "in_progress");
-    assert.equal(stillVisible.immutable_root, null);
+    assert.equal(stillVisible.immutable_root, inspected.immutable_root);
 
     await assert.rejects(
       postExport(

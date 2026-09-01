@@ -326,6 +326,24 @@ fn export_error(error: ExportProjectArchiveError) -> ApiError {
             "The Project Export Archive challenge is invalid.",
         ),
         ExportProjectArchiveError::MissingProject => resource_unavailable(),
+        ExportProjectArchiveError::ArchiveBuild(reason) => problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            match reason {
+                storyos_core::ProjectArchiveBuildRefusal::ForeignMaterial => "foreign_material",
+                storyos_core::ProjectArchiveBuildRefusal::CorruptDigest => "corrupt_digest",
+                storyos_core::ProjectArchiveBuildRefusal::MissingFamily => "missing_family",
+                storyos_core::ProjectArchiveBuildRefusal::IneligibleLifecycle => {
+                    "ineligible_lifecycle"
+                }
+                storyos_core::ProjectArchiveBuildRefusal::InvalidProvenance => "invalid_provenance",
+                storyos_core::ProjectArchiveBuildRefusal::Collision
+                | storyos_core::ProjectArchiveBuildRefusal::DirectoryPrefixCollision
+                | storyos_core::ProjectArchiveBuildRefusal::InvalidPath(_) => {
+                    "archive_path_refused"
+                }
+            },
+            "The Project Export Archive did not complete.",
+        ),
         ExportProjectArchiveError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
