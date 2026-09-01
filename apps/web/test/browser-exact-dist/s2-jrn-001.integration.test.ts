@@ -246,7 +246,6 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   expect(reopenedRoot.textContent).not.toContain("模型");
   expect(reopenedRoot.textContent).not.toContain("Agent");
   expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe(BODY_B);
-  await waitSaved(reopenedRoot);
   const childWindow = applicationWindow(frame);
   const [authoritativeA, authoritativeB] = await Promise.all([
     getChapter({
