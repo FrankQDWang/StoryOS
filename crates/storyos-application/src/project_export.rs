@@ -146,6 +146,7 @@ pub struct ExportOperationPage {
 pub enum GetExportOperation {
     Missing,
     Archived,
+    Expired,
     InProgress(Box<ExportOperationPage>),
 }
 

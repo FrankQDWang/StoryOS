@@ -173,7 +173,9 @@ async fn get_export_operation_does_not_report_success_without_an_immutable_root(
     assert_eq!(got, GetExportOperation::InProgress(Box::new(page.clone())));
     match got {
         GetExportOperation::InProgress(page) => assert_eq!(page.immutable_root, None),
-        GetExportOperation::Missing | GetExportOperation::Archived => {
+        GetExportOperation::Missing
+        | GetExportOperation::Archived
+        | GetExportOperation::Expired => {
             panic!("an admitted export must stay inspectable")
         }
     }

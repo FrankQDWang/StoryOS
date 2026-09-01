@@ -272,7 +272,8 @@
         "deleteVolume",
         "setCurrentChapter",
         "undoLatestAuthorAction",
-        "exportHumanReadableManuscript"
+        "exportHumanReadableManuscript",
+        "exportProjectArchive"
       ],
       "type": "string"
     },

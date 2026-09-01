@@ -158,6 +158,9 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "exportHumanReadableManuscript")]
     #[ts(rename = "exportHumanReadableManuscript")]
     ExportHumanReadableManuscript,
+    #[serde(rename = "exportProjectArchive")]
+    #[ts(rename = "exportProjectArchive")]
+    ExportProjectArchive,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

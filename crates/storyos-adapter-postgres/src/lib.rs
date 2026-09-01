@@ -70,6 +70,7 @@ mod list_projects;
 mod manuscript_block;
 mod manuscript_search;
 mod manuscript_tree;
+mod project_export;
 mod readable_export;
 mod set_current_chapter;
 mod snapshot;
