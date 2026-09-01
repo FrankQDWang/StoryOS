@@ -28,3 +28,4 @@ CREATE POLICY project_export_entries_exact_scope
   );
 
 GRANT SELECT, INSERT ON storyos.project_export_entries TO storyos_runtime;
+GRANT UPDATE ON storyos.project_export_manifests TO storyos_runtime;
