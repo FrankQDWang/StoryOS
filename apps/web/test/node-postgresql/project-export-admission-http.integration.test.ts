@@ -143,7 +143,10 @@ test("exportProjectArchive admits one inspectable operation without an immutable
       first.projectId,
       "018f0000-0000-7001-8000-000000000c21",
       request,
-    );
+    ).catch((error) => {
+      const protocol = requireStoryOSProtocolError(error);
+      throw new Error(`${protocol.status} ${protocol.responseBody}`);
+    });
     assert.equal(applied.admitted.schema_id, "storyos.command.export-project-archive.response.v1");
     assert.equal(applied.admitted.acknowledgement, "accepted");
     assert.equal(applied.admitted.receipt.command_kind, "exportProjectArchive");

@@ -139,7 +139,12 @@ pub(super) async fn persist_export_archive(
         &sources,
     )
     .map_err(archive_build_error)?;
-    for (source, descriptor) in sources.iter().zip(built.entries.iter()) {
+    for descriptor in &built.entries {
+        let Some(source) = sources.iter().find(|source| source.path == descriptor.path) else {
+            return Err(archive_build_error(
+                ProjectArchiveBuildRefusal::InvalidProvenance,
+            ));
+        };
         client
             .execute(
                 "INSERT INTO storyos.project_export_entries
@@ -160,7 +165,7 @@ pub(super) async fn persist_export_archive(
                 ],
             )
             .await
-            .map_err(archive_database_error)?;
+            .map_err(|error| archive_table_error("project_export_entries", error))?;
     }
     let immutable_root = format!("sha256:{}", built.root_digest_hex);
     client
@@ -177,7 +182,7 @@ pub(super) async fn persist_export_archive(
             ],
         )
         .await
-        .map_err(archive_database_error)?;
+        .map_err(|error| archive_table_error("project_export_manifests", error))?;
     Ok(immutable_root)
 }
 
@@ -187,30 +192,27 @@ async fn load_table_json(
     scope: &ProjectScope,
 ) -> Result<Vec<serde_json::Value>, ExportProjectArchiveError> {
     let sql = format!(
-        "SELECT COALESCE(json_agg(row_json ORDER BY row_json::text), '[]'::json)::text
-           FROM (
-             SELECT to_jsonb(source) AS row_json
-               FROM storyos.{table} AS source
-              WHERE source.owner_user_id = $1::text::uuid
-                AND source.project_id = $2::text::uuid
-           ) AS ordered"
+        "SELECT to_jsonb(source)::text
+           FROM storyos.{table} AS source
+          WHERE source.owner_user_id = $1::text::uuid
+            AND source.project_id = $2::text::uuid"
     );
-    let raw: String = client
-        .query_one(
+    let rows = client
+        .query(
             &sql,
             &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
         )
         .await
-        .map_err(archive_database_error)?
-        .get(0);
-    let value: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
-    match value {
-        serde_json::Value::Array(rows) => Ok(rows),
-        _ => Err(archive_build_error(
-            ProjectArchiveBuildRefusal::InvalidProvenance,
-        )),
+        .map_err(|error| archive_table_error(table, error))?;
+    let mut values = Vec::with_capacity(rows.len());
+    for row in rows {
+        let raw: String = row.get(0);
+        let value: serde_json::Value = serde_json::from_str(&raw)
+            .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+        values.push(value);
     }
+    values.sort_by_key(canonical_json);
+    Ok(values)
 }
 
 fn classify_rows(
@@ -251,6 +253,8 @@ fn archive_build_error(reason: ProjectArchiveBuildRefusal) -> ExportProjectArchi
     ExportProjectArchiveError::ArchiveBuild(reason)
 }
 
-fn archive_database_error(error: tokio_postgres::Error) -> ExportProjectArchiveError {
-    ExportProjectArchiveError::Unavailable(Box::new(error))
+fn archive_table_error(table: &str, error: tokio_postgres::Error) -> ExportProjectArchiveError {
+    ExportProjectArchiveError::Unavailable(Box::new(std::io::Error::other(format!(
+        "{table}: {error}"
+    ))))
 }
