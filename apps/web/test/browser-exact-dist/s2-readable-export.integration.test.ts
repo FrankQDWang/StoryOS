@@ -179,11 +179,13 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
     [...appRoot(frame).querySelectorAll('nav[aria-label="稿件目录"] button[data-chapter-id]')]
       .some((button) => button.textContent === "Chapter B")
   ).toBe(true);
-  const chapterB = [...appRoot(frame).querySelectorAll<HTMLButtonElement>(
+  const chapterBId = [...appRoot(frame).querySelectorAll<HTMLButtonElement>(
     'nav[aria-label="稿件目录"] button[data-chapter-id]',
-  )].find((button) => button.textContent === "Chapter B");
-  if (chapterB === undefined) throw new Error("Chapter B is missing");
-  chapterB.click();
+  )].find((button) => button.textContent === "Chapter B")?.getAttribute("data-chapter-id");
+  if (chapterBId === null || chapterBId === undefined) throw new Error("Chapter B is missing");
+  appRoot(frame).querySelector<HTMLButtonElement>(
+    `[data-make-current-chapter="${chapterBId}"]`,
+  )?.click();
   await expect.poll(() => {
     const nextRoot = appRoot(frame);
     const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
