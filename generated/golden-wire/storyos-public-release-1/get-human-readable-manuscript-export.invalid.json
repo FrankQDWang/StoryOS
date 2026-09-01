@@ -1,0 +1,13 @@
+{
+  "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "correlation_id": "018f0000-0000-7001-8000-000000000072",
+  "export_id": "018f0000-0000-7001-8000-000000000916",
+  "export_profile": "storyos.readable-export.utf8-lf.v1",
+  "manuscript_utf8": "# Volume A\n\n## Chapter A\n\nHello world\n",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "query_id": "018f0000-0000-7001-8000-000000000071",
+  "schema_id": "storyos.query.human-readable-manuscript-export.response.v1"
+}

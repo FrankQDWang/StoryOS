@@ -7,6 +7,8 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
+mod readable_export;
+mod readable_export_command;
 mod set_current_chapter;
 mod statistics_profile;
 mod undo_latest_author_action;
@@ -38,6 +40,14 @@ pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
     apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
+};
+pub use readable_export::{
+    READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,
+    ReadableExportVolume, render_readable_manuscript,
+};
+pub use readable_export_command::{
+    ExportHumanReadableManuscript, ExportHumanReadableManuscriptRefusal,
+    ExportHumanReadableManuscriptResult, export_human_readable_manuscript,
 };
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,

@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "ExportHumanReadableManuscriptInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.export-human-readable-manuscript.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.export-human-readable-manuscript.request.v1",
+      "type": "string"
+    },
+    "export_human_readable_manuscript_input": {
+      "$ref": "#/$defs/ExportHumanReadableManuscriptInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "export_human_readable_manuscript_input"
+  ],
+  "title": "StoryOS Export Human-Readable Manuscript Request",
+  "type": "object"
+}

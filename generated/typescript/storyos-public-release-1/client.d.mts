@@ -197,7 +197,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -261,6 +261,22 @@ export type ManuscriptTotals = { chapter_count: string, word_count: string, char
 
 export type GetStatisticsResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, source_snapshot: SnapshotDescriptor, projection_kind: string, projection_generation: string, projection_watermark: string, required_watermark: string | null, completeness: ManuscriptStatisticsCompleteness, lag: string, counting_profile: string, current_chapter: ChapterStatistics | null, manuscript: ManuscriptTotals, next_cursor: string | null, page_count: string, page_bytes: string, redaction_profile: string, limit_profile_revision: string, };
 
+export type ExportHumanReadableManuscriptInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type ExportHumanReadableManuscriptRequest = { command_schema: string, export_human_readable_manuscript_input: ExportHumanReadableManuscriptInput, };
+
+export type ExportHumanReadableManuscriptRefusalReason = "archived_project";
+
+export type ExportAcknowledgement = "accepted";
+
+export type HumanReadableManuscriptExportRef = { "kind": "human_readable_manuscript_export", export_id: string, };
+
+export type ExportHumanReadableManuscriptEffect = { "kind": "authoritative_applied", export_id: string, content_sha256: string, export_profile: string, project_activity_position: string, } | { "kind": "refused", reason: ExportHumanReadableManuscriptRefusalReason, };
+
+export type ExportHumanReadableManuscriptResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: HumanReadableManuscriptExportRef | null, receipt: DomainReceipt, project: ControlledProject, effect: ExportHumanReadableManuscriptEffect, };
+
+export type GetHumanReadableManuscriptExportResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, content_sha256: string, manuscript_utf8: string, source_snapshot: SnapshotDescriptor, };
+
 export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
 
 export type TakeoverCompareFailedReason = "writer_generation_advanced_after_admission" | "requester_became_current_after_admission";
@@ -319,5 +335,8 @@ export declare function activityStream(options: StoryOSQueryOptions & { projectI
 export declare function getManuscriptTree(options: StoryOSQueryOptions & { projectId: string }): Promise<GetManuscriptTreeResponse>;
 export declare function searchManuscript(options: StoryOSQueryOptions & { projectId: string; request: SearchManuscriptRequest }): Promise<SearchManuscriptResponse>;
 export declare function getStatistics(options: StoryOSQueryOptions & { projectId: string; requiredWatermark?: string | null }): Promise<GetStatisticsResponse>;
+export declare function digestExportHumanReadableManuscript(request: ExportHumanReadableManuscriptRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function exportHumanReadableManuscript(options: StoryOSQueryOptions & { projectId: string; request: ExportHumanReadableManuscriptRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportHumanReadableManuscriptResponse>;
+export declare function getHumanReadableManuscriptExport(options: StoryOSQueryOptions & { projectId: string; exportId: string }): Promise<GetHumanReadableManuscriptExportResponse>;
 export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;

@@ -1,0 +1,21 @@
+{
+  "$id": "storyos.query.human-readable-manuscript-export.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "export_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "export_id"
+  ],
+  "title": "StoryOS Human-Readable Manuscript Export Request",
+  "type": "object"
+}

@@ -43,6 +43,7 @@ mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
+mod readable_export;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
@@ -116,6 +117,16 @@ pub use manuscript_statistics::{
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use readable_export::{
+    ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,
+    ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptSettlementEffect,
+    ExportHumanReadableManuscriptStore, GetHumanReadableManuscriptExport,
+    HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
+    HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
+    HumanReadableManuscriptExportPage, HumanReadableManuscriptExportReader,
+    get_human_readable_manuscript_export, readable_volumes_from_canonical_facts,
+    render_readable_manuscript_from_facts, request_human_readable_manuscript_export,
 };
 pub use set_current_chapter::{
     SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,

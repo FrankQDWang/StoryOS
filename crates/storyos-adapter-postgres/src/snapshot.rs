@@ -53,11 +53,11 @@ pub(crate) async fn persist_canonical_snapshot(
     Ok(())
 }
 
-pub(super) async fn load_latest_canonical_snapshot(
-    transaction: &tokio_postgres::Transaction<'_>,
+pub(crate) async fn load_latest_canonical_snapshot(
+    client: &impl tokio_postgres::GenericClient,
     scope: &ProjectScope,
 ) -> Result<Option<CanonicalSnapshot>, ProjectReadError> {
-    let row = transaction
+    let row = client
         .query_opt(
             "SELECT snapshot.snapshot_id::text,
                     snapshot.project_activity_position::text,

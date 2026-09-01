@@ -84,7 +84,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND command_kind <> 'setCurrentChapter'
             AND command_kind <> 'undoLatestAuthorAction'
             AND command_kind <> 'deleteChapter'
-            AND command_kind <> 'deleteVolume')
+            AND command_kind <> 'deleteVolume'
+            AND command_kind <> 'exportHumanReadableManuscript')
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {

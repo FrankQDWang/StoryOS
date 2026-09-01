@@ -1,0 +1,29 @@
+{
+  "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "correlation_id": "018f0000-0000-7001-8000-000000000072",
+  "export_id": "018f0000-0000-7001-8000-000000000916",
+  "export_profile": "storyos.readable-export.utf8-lf.v1",
+  "manuscript_utf8": "\n",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "query_id": "018f0000-0000-7001-8000-000000000071",
+  "schema_id": "storyos.query.human-readable-manuscript-export.response.v1",
+  "source_snapshot": {
+    "created_at": "2026-08-31T12:00:00.000Z",
+    "expires_at": null,
+    "project_activity_position": "2",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "projection_generations": {},
+    "redaction_profile": "storyos.author.v1",
+    "replay_generation": "1",
+    "schema_profile": "storyos.public.release.1",
+    "snapshot_id": "018f0000-0000-7001-8000-000000000040",
+    "snapshot_kind": "canonical",
+    "source_watermarks": {}
+  }
+}
