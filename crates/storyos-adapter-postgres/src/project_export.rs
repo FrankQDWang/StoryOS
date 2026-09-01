@@ -168,6 +168,35 @@ impl ExportOperationReader for PostgresProjectReader {
             },
         )))
     }
+
+    async fn read_verified_export_archive(
+        &self,
+        scope: &ProjectScope,
+        export_id: &str,
+    ) -> Result<storyos_application::VerifiedExportArchive, ProjectReadError> {
+        match self.read_export_operation(scope, export_id).await? {
+            GetExportOperation::Missing => Ok(storyos_application::VerifiedExportArchive::Missing),
+            GetExportOperation::Archived => {
+                Ok(storyos_application::VerifiedExportArchive::Archived)
+            }
+            GetExportOperation::Expired => Ok(storyos_application::VerifiedExportArchive::Expired),
+            GetExportOperation::InProgress(page) => {
+                let mut client = self.connect().await?;
+                let transaction = client.transaction().await.map_err(read_error)?;
+                set_scope(&transaction, scope).await?;
+                let archive =
+                    crate::project_archive_build::package_stored_export(&transaction, scope, &page)
+                        .await;
+                match &archive {
+                    Ok(_) => transaction.commit().await.map_err(read_error)?,
+                    Err(_) => {
+                        let _rollback = transaction.rollback().await;
+                    }
+                }
+                archive
+            }
+        }
+    }
 }
 
 async fn persist_export(

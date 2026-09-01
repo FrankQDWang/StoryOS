@@ -41,6 +41,25 @@ impl ExportOperationReader for Reader {
         }
         Ok(GetExportOperation::InProgress(Box::new(self.page.clone())))
     }
+
+    async fn read_verified_export_archive(
+        &self,
+        scope: &ProjectScope,
+        export_id: &str,
+    ) -> Result<VerifiedExportArchive, ProjectReadError> {
+        match self.read_export_operation(scope, export_id).await? {
+            GetExportOperation::Missing => Ok(VerifiedExportArchive::Missing),
+            GetExportOperation::Archived => Ok(VerifiedExportArchive::Archived),
+            GetExportOperation::Expired => Ok(VerifiedExportArchive::Expired),
+            GetExportOperation::InProgress(page) => {
+                if page.immutable_root.is_none() {
+                    Ok(VerifiedExportArchive::Unsettled)
+                } else {
+                    Ok(VerifiedExportArchive::Ready(b"PK\x03\x04".to_vec()))
+                }
+            }
+        }
+    }
 }
 
 fn snapshot() -> CanonicalSnapshot {
@@ -179,4 +198,22 @@ async fn get_export_operation_does_not_report_success_without_an_immutable_root(
             panic!("an admitted export must stay inspectable")
         }
     }
+}
+
+#[tokio::test]
+async fn verified_archive_bytes_are_refused_without_an_immutable_root() {
+    let page = ExportOperationPage {
+        project_scope: owned_scope(),
+        export_id: "export".to_owned(),
+        archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
+        archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
+        source_snapshot: snapshot(),
+        immutable_root: None,
+    };
+    assert_eq!(
+        get_verified_export_archive(&Reader { page }, &owned_scope(), "export")
+            .await
+            .unwrap(),
+        VerifiedExportArchive::Unsettled
+    );
 }

@@ -2,6 +2,7 @@
 
 mod archive_path;
 mod archive_project;
+mod archive_zip;
 mod create_chapter;
 mod create_project;
 mod create_volume;
@@ -53,7 +54,7 @@ pub use project_archive::{
     ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
     PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectArchiveBuildRefusal, ProjectArchiveRootFacts,
     build_project_archive, canonical_json, classify_export_record, hex_sha256,
-    require_delivered_families, verify_entry_digest,
+    package_verified_project_archive_zip, require_delivered_families, verify_entry_digest,
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,

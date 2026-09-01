@@ -173,6 +173,27 @@ test("exportProjectArchive admits one inspectable operation with an immutable ro
     assert.match(inspected.immutable_root ?? "", /^sha256:[0-9a-f]{64}$/);
     assert.equal(inspected.export_id, applied.admitted.effect.export_id);
     assert.equal(inspected.archive_profile, "storyos.project-export.v1");
+    assert.equal(
+      inspected.archive_path_profile,
+      "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
+    );
+
+    const archiveMedia =
+      'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"';
+    const exportUrl = `${baseUrl}/api/v1/projects/${encodeURIComponent(first.projectId)}/exports/${encodeURIComponent(applied.admitted.effect.export_id)}`;
+    const zipResponse = await first.fetchImpl(exportUrl, { headers: { Accept: archiveMedia } });
+    if (zipResponse.status !== 200) {
+      throw new Error(`${zipResponse.status} ${await zipResponse.text()}`);
+    }
+    assert.equal(zipResponse.headers.get("content-type"), archiveMedia);
+    const zipBytes = new Uint8Array(await zipResponse.arrayBuffer());
+    assert.deepEqual(Array.from(zipBytes.slice(0, 4)), [0x50, 0x4b, 0x03, 0x04]);
+    const zipRepeatResponse = await first.fetchImpl(exportUrl, { headers: { Accept: archiveMedia } });
+    assert.equal(zipRepeatResponse.status, 200);
+    assert.deepEqual(
+      Array.from(new Uint8Array(await zipRepeatResponse.arrayBuffer())),
+      Array.from(zipBytes),
+    );
 
     const replay = await exportProjectArchive({
       baseUrl,
@@ -212,6 +233,9 @@ test("exportProjectArchive admits one inspectable operation with an immutable ro
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
     );
+    const foreignZip = await foreign.fetchImpl(exportUrl, { headers: { Accept: archiveMedia } });
+    assert.equal(foreignZip.status, 404);
+    assert.equal(String(await foreignZip.text()).includes(USER_A), false);
     await assert.rejects(
       postExport(
         baseUrl,
@@ -292,6 +316,8 @@ test("exportProjectArchive admits one inspectable operation with an immutable ro
       }),
       (error) => requireStoryOSProtocolError(error).status === 422,
     );
+    const archivedZip = await first.fetchImpl(exportUrl, { headers: { Accept: archiveMedia } });
+    assert.equal(archivedZip.status, 422);
   } finally {
     await stopRealServer(server);
   }

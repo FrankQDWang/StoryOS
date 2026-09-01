@@ -121,6 +121,33 @@ pub fn build_project_archive(
     })
 }
 
+/// Recompute every entry digest and the immutable root before ZIP STORE bytes.
+pub fn package_verified_project_archive_zip(
+    facts: &ProjectArchiveRootFacts,
+    sources: &[ArchiveEntrySource],
+    expected_root_hex: &str,
+) -> Result<Vec<u8>, ProjectArchiveBuildRefusal> {
+    let expected = expected_root_hex
+        .strip_prefix("sha256:")
+        .unwrap_or(expected_root_hex);
+    if expected.len() != 64 || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+    }
+    let built = build_project_archive(facts, sources)?;
+    if built.root_digest_hex != expected {
+        return Err(ProjectArchiveBuildRefusal::CorruptDigest);
+    }
+    let mut files = Vec::with_capacity(built.entries.len());
+    for descriptor in &built.entries {
+        let Some(source) = sources.iter().find(|source| source.path == descriptor.path) else {
+            return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+        };
+        verify_entry_digest(&source.bytes, &descriptor.digest_hex)?;
+        files.push((descriptor.path.as_str(), source.bytes.as_slice()));
+    }
+    crate::archive_zip::store_zip(&files)
+}
+
 /// Classify one supplied digest against the exact uncompressed entry bytes.
 pub fn verify_entry_digest(
     bytes: &[u8],

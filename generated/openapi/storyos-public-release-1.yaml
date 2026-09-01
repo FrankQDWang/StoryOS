@@ -1776,7 +1776,7 @@ paths:
   /api/v1/projects/{project_id}/exports/{export_id}:
     get:
       operationId: getExportOperation
-      summary: Inspect one admitted Project Export operation
+      summary: Inspect or download one settled Project Export Archive
       parameters:
         - name: project_id
           in: path
@@ -1797,6 +1797,10 @@ paths:
             application/json:
               schema:
                 $ref: '../json-schema/storyos-public-release-1/export-operation-response.schema.json'
+            application/vnd.storyos.project-archive+zip:
+              schema:
+                type: string
+                format: binary
         '400':
           description: Invalid request
         '401':
