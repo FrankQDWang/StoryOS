@@ -2,8 +2,8 @@
 set -eu
 
 # Isolated physical Recovery Copy drill. Archive and base-backup volumes are not
-# primary PGDATA. Ordinary StoryOS reads stay disabled: the restored copy remains
-# in recovery_hold without Recovery Visibility Proof.
+# primary PGDATA. Ordinary StoryOS reads stay disabled until Recovery Visibility
+# Proof passes; a missing proof keeps the restored copy in recovery_hold.
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
@@ -99,6 +99,20 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgr
   $psql_files >/dev/null
 docker exec -i "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "INSERT INTO storyos.manuscript_objects (
+        owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order
+      ) VALUES
+        ('018f0000-0000-7001-8000-000000000001', '018f0000-0000-7001-8000-000000000002',
+         '018f0000-0000-7001-8000-0000000000aa', 'volume', 'Volume A', 1),
+        ('018f0000-0000-7001-8000-000000000101', '018f0000-0000-7001-8000-000000000102',
+         '018f0000-0000-7001-8000-0000000001aa', 'volume', 'Volume B', 1);
+      UPDATE storyos.manuscript_objects
+         SET parent_volume_id = '018f0000-0000-7001-8000-0000000000aa'
+       WHERE manuscript_object_id = '018f0000-0000-7001-8000-000000000003';
+      UPDATE storyos.manuscript_objects
+         SET parent_volume_id = '018f0000-0000-7001-8000-0000000001aa'
+       WHERE manuscript_object_id = '018f0000-0000-7001-8000-000000000103';" >/dev/null
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT count(*) FROM pg_roles WHERE rolname IN ('storyos_backup', 'storyos_restore')")
@@ -358,4 +372,185 @@ print("sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest())
 PY
 
 echo "Isolated Recovery Copy restore remains in hold"
+
+chain_sha256=$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())" "$chain_manifest")
+recovery_copy_id="018f0000-0000-7001-8000-0000000000c1"
+restore_proof_id="018f0000-0000-7001-8000-0000000000c2"
+visibility_proof_id="018f0000-0000-7001-8000-0000000000c3"
+owner_a="018f0000-0000-7001-8000-000000000001"
+project_b="018f0000-0000-7001-8000-000000000102"
+live_chapter="018f0000-0000-7001-8000-000000000003"
+
+if docker exec "$hold" env PGPASSWORD=restore \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_restore -d postgres -Atc \
+  "SELECT storyos.pass_recovery_visibility_proof(
+     '$recovery_copy_id'::uuid, '$restore_proof_id'::uuid, '$visibility_proof_id'::uuid,
+     '$hold', '$chain_sha256', '$archived_wal', '$target_lsn',
+     'pg_basebackup', 'storyos.persistence.catalog.release-1.v3')" >/dev/null 2>&1; then
+  echo "Recovery Visibility Proof passed without Recovery Copy evidence" >&2
+  exit 1
+fi
+if docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres -c "SELECT 1" >/dev/null 2>&1; then
+  echo "Incomplete Recovery Visibility Proof made the restore visible" >&2
+  exit 1
+fi
+
+docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "UPDATE storyos.projects SET lifecycle_state = 'archived' WHERE project_id = '$project_id'" >/dev/null
+if docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+  "BEGIN;
+   INSERT INTO storyos.recovery_copies (
+     recovery_copy_id, method, chain_sha256, required_wal_member, recovery_target_lsn
+   ) VALUES (
+     '$recovery_copy_id', 'pg_basebackup', '$chain_sha256', '$archived_wal', '$target_lsn'
+   );
+   INSERT INTO storyos.backup_wal_evidence (recovery_copy_id, path, sha256)
+   VALUES ('$recovery_copy_id', 'chain_manifest', '$chain_sha256');
+   INSERT INTO storyos.restore_proofs (
+     restore_proof_id, recovery_copy_id, isolated_target_identity, recovery_target_lsn, state
+   ) VALUES (
+     '$restore_proof_id', '$recovery_copy_id', '$hold', '$target_lsn', 'recovery_hold'
+   );
+   SELECT storyos.pass_recovery_visibility_proof(
+     '$recovery_copy_id'::uuid, '$restore_proof_id'::uuid, '$visibility_proof_id'::uuid,
+     '$hold', '$chain_sha256', '$archived_wal', '$target_lsn',
+     'pg_basebackup', 'storyos.persistence.catalog.release-1.v3');
+   COMMIT" >/dev/null 2>&1; then
+  echo "A missing lifecycle range became visible" >&2
+  exit 1
+fi
+docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "UPDATE storyos.projects SET lifecycle_state = 'active' WHERE project_id = '$project_id'" >/dev/null
+
+hold_scope=$(docker exec "$hold" psql -qX -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SET ROLE storyos_runtime;
+   SELECT set_config('storyos.owner_user_id', '$owner_a', false);
+   SELECT set_config('storyos.project_id', '$project_id', false);
+   SELECT count(*)::text FROM storyos.projects" | tail -n 1)
+if [ "$hold_scope" != "1" ]; then
+  echo "Runtime SET ROLE probe did not stay inside exact Scope before visibility: $hold_scope" >&2
+  exit 1
+fi
+hold_foreign=$(docker exec "$hold" psql -qX -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SET ROLE storyos_runtime;
+   SELECT set_config('storyos.owner_user_id', '$owner_a', false);
+   SELECT set_config('storyos.project_id', '$project_id', false);
+   SELECT coalesce(
+     (SELECT title FROM storyos.projects WHERE project_id = '$project_b'),
+     ''
+   )" | tail -n 1)
+if [ -n "$hold_foreign" ]; then
+  echo "Runtime SET ROLE probe leaked a foreign Project before visibility: $hold_foreign" >&2
+  exit 1
+fi
+
+docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+  "INSERT INTO storyos.recovery_copies (
+     recovery_copy_id, method, chain_sha256, required_wal_member, recovery_target_lsn
+   ) VALUES (
+     '$recovery_copy_id', 'pg_basebackup', '$chain_sha256', '$archived_wal', '$target_lsn'
+   );
+   INSERT INTO storyos.backup_wal_evidence (recovery_copy_id, path, sha256)
+   VALUES ('$recovery_copy_id', 'chain_manifest', '$chain_sha256');
+   INSERT INTO storyos.restore_proofs (
+     restore_proof_id, recovery_copy_id, isolated_target_identity, recovery_target_lsn, state
+   ) VALUES (
+     '$restore_proof_id', '$recovery_copy_id', '$hold', '$target_lsn', 'recovery_hold'
+   )" >/dev/null
+pass_state=$(docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
+  psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT storyos.pass_recovery_visibility_proof(
+     '$recovery_copy_id'::uuid, '$restore_proof_id'::uuid, '$visibility_proof_id'::uuid,
+     '$hold', '$chain_sha256', '$archived_wal', '$target_lsn',
+     'pg_basebackup', 'storyos.persistence.catalog.release-1.v3')")
+if [ "$pass_state" != "visible" ]; then
+  echo "Complete Recovery Visibility Proof did not permit visibility: $pass_state" >&2
+  exit 1
+fi
+
+if ! docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres -c "SELECT 1" >/dev/null; then
+  echo "storyos_runtime cannot read after Recovery Visibility Proof" >&2
+  exit 1
+fi
+
+scoped_count=$(docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres -Atc \
+  "SELECT set_config('storyos.owner_user_id', '$owner_a', false);
+   SELECT set_config('storyos.project_id', '$project_id', false);
+   SELECT count(*)::text FROM storyos.projects" | tail -n 1)
+if [ "$scoped_count" != "1" ]; then
+  echo "Forced RLS did not keep the restored runtime inside exact Scope: $scoped_count" >&2
+  exit 1
+fi
+foreign_title=$(docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres -Atc \
+  "SELECT set_config('storyos.owner_user_id', '$owner_a', false);
+   SELECT set_config('storyos.project_id', '$project_id', false);
+   SELECT coalesce(
+     (SELECT title FROM storyos.projects WHERE project_id = '$project_b'),
+     ''
+   )" | tail -n 1)
+if [ -n "$foreign_title" ]; then
+  echo "Restored runtime leaked a foreign Project: $foreign_title" >&2
+  exit 1
+fi
+
+if docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres \
+  -c "INSERT INTO storyos.recovery_visibility_proofs (
+        visibility_proof_id, restore_proof_id, recovery_copy_id, isolated_target_identity,
+        catalog_identity, checks, search_rebuild, statistics_rebuild, lifecycle_range
+      ) VALUES (
+        '018f0000-0000-7001-8000-0000000000c4', '$restore_proof_id', '$recovery_copy_id',
+        '$hold', 'storyos.persistence.catalog.release-1.v3', '{}', '{}', '{}', '{}'
+      )" >/dev/null 2>&1; then
+  echo "storyos_runtime wrote Recovery Visibility Proof on the request path" >&2
+  exit 1
+fi
+
+read_only=$(docker exec "$hold" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SHOW default_transaction_read_only")
+if [ "$read_only" != "on" ]; then
+  echo "Recovery Visibility Proof enabled ordinary writes before the physical drill" >&2
+  exit 1
+fi
+if docker exec "$hold" env PGPASSWORD=runtime \
+  psql -X -v ON_ERROR_STOP=1 -U storyos_runtime -d postgres \
+  -c "SELECT set_config('storyos.owner_user_id', '$owner_a', false);
+      SELECT set_config('storyos.project_id', '$project_id', false);
+      UPDATE storyos.projects SET title = title WHERE project_id = '$project_id'" >/dev/null 2>&1; then
+  echo "Visible restore accepted an ordinary write" >&2
+  exit 1
+fi
+
+bound=$(docker exec "$hold" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT copy.chain_sha256 || '/' || proof.isolated_target_identity || '/' || restore.state
+     FROM storyos.recovery_visibility_proofs AS proof
+     JOIN storyos.restore_proofs AS restore USING (restore_proof_id)
+     JOIN storyos.recovery_copies AS copy
+       ON copy.recovery_copy_id = proof.recovery_copy_id
+    WHERE proof.visibility_proof_id = '$visibility_proof_id'")
+if [ "$bound" != "$chain_sha256/$hold/visible" ]; then
+  echo "Recovery Visibility Proof did not bind the Recovery Copy and isolated target: $bound" >&2
+  exit 1
+fi
+rebuilt=$(docker exec "$hold" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT search_rebuild::text
+     FROM storyos.recovery_visibility_proofs
+    WHERE visibility_proof_id = '$visibility_proof_id'")
+case "$rebuilt" in
+  *"$live_chapter"*"Authoritative A"*|*"Authoritative A"*"$live_chapter"*) ;;
+  *)
+    echo "Search and statistics rebuild did not follow canonical facts: $rebuilt" >&2
+    exit 1
+    ;;
+esac
+
+echo "Isolated restore passed Recovery Visibility Proof"
 rm -f "$chain_manifest" "$evidence"
