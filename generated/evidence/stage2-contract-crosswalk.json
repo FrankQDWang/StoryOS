@@ -1,0 +1,511 @@
+{
+  "schema_id": "storyos.evidence.stage2-contract-crosswalk.v1",
+  "claim_ceiling": "implementation-evidence-completeness; no EV-SR; no PASS-STAGE",
+  "evaluated_stage": "Stage 2",
+  "execution_contract": {
+    "issue": "https://github.com/FrankQDWang/StoryOS/issues/281",
+    "parent": "https://github.com/FrankQDWang/StoryOS/issues/241",
+    "revision": "product-ticket-mvp-boundary-2026-08-29-v2",
+    "baseline_commit": "6fed2a853f4479de1d6b8c17efe2135c315fc7ca",
+    "baseline_tree": "608da886c377af1bf2b291f60240af85f2c0149d"
+  },
+  "declarations": {
+    "bindings": [
+      {
+        "id": "REL-007",
+        "owners": [
+          "OWN-REL",
+          "OWN-DVG",
+          "OWN-GOV"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/62",
+          "https://github.com/FrankQDWang/StoryOS/issues/281"
+        ],
+        "evidence": "docs/foundation/product-delivery-proof-selection.md",
+        "evidence_class": "contract"
+      },
+      {
+        "id": "S2-REQ-001",
+        "owners": [
+          "OWN-REL",
+          "OWN-WEB",
+          "OWN-CORE",
+          "OWN-PG"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/280"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-002",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-CORE",
+          "OWN-PG",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/248",
+          "https://github.com/FrankQDWang/StoryOS/issues/250",
+          "https://github.com/FrankQDWang/StoryOS/issues/251"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-02-create-empty-project.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-003",
+        "owners": [
+          "OWN-WEB",
+          "OWN-PROTO",
+          "OWN-CORE",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/255",
+          "https://github.com/FrankQDWang/StoryOS/issues/258",
+          "https://github.com/FrankQDWang/StoryOS/issues/259"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-12-current-chapter.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-004",
+        "owners": [
+          "OWN-WEB",
+          "OWN-ADM",
+          "OWN-CORE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/261",
+          "https://github.com/FrankQDWang/StoryOS/issues/262",
+          "https://github.com/FrankQDWang/StoryOS/issues/264"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-005",
+        "owners": [
+          "OWN-WEB",
+          "OWN-PG",
+          "OWN-RET",
+          "OWN-ADM",
+          "OWN-CORE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/266",
+          "https://github.com/FrankQDWang/StoryOS/issues/276",
+          "https://github.com/FrankQDWang/StoryOS/issues/278"
+        ],
+        "evidence": "scripts/verify-recovery-hold.sh",
+        "evidence_class": "physical_recovery"
+      },
+      {
+        "id": "S2-REQ-006",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-CTX",
+          "OWN-CORE",
+          "OWN-PLAIN"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/269",
+          "https://github.com/FrankQDWang/StoryOS/issues/270"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-replace.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-007",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-PG",
+          "OWN-RET",
+          "OWN-TRUST"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/271",
+          "https://github.com/FrankQDWang/StoryOS/issues/272",
+          "https://github.com/FrankQDWang/StoryOS/issues/275"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-008",
+        "owners": [
+          "OWN-MEASURE",
+          "OWN-REL",
+          "OWN-WEB",
+          "OWN-PG",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/279"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-REQ-009",
+        "owners": [
+          "OWN-WEB",
+          "OWN-CORE",
+          "OWN-GOV"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/260",
+          "https://github.com/FrankQDWang/StoryOS/issues/372",
+          "https://github.com/FrankQDWang/StoryOS/issues/373"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-editor.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-001",
+        "owners": [
+          "OWN-REL",
+          "OWN-DVG"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/281"
+        ],
+        "evidence": "generated/evidence/stage2-contract-crosswalk.json",
+        "evidence_class": "contract"
+      },
+      {
+        "id": "S2-EVD-002",
+        "owners": [
+          "OWN-WEB",
+          "OWN-PROTO",
+          "OWN-CORE",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/248",
+          "https://github.com/FrankQDWang/StoryOS/issues/253",
+          "https://github.com/FrankQDWang/StoryOS/issues/254"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-09-navigate-reopen.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-003",
+        "owners": [
+          "OWN-WEB",
+          "OWN-MEASURE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/261",
+          "https://github.com/FrankQDWang/StoryOS/issues/264",
+          "https://github.com/FrankQDWang/StoryOS/issues/279"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-004",
+        "owners": [
+          "OWN-ADM",
+          "OWN-CORE",
+          "OWN-PG",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/265"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-005",
+        "owners": [
+          "OWN-PG",
+          "OWN-RET",
+          "OWN-TRUST"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/276",
+          "https://github.com/FrankQDWang/StoryOS/issues/277",
+          "https://github.com/FrankQDWang/StoryOS/issues/278"
+        ],
+        "evidence": "scripts/verify-recovery-hold.sh",
+        "evidence_class": "physical_recovery"
+      },
+      {
+        "id": "S2-EVD-006",
+        "owners": [
+          "OWN-CTX",
+          "OWN-CORE",
+          "OWN-PROTO"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/269",
+          "https://github.com/FrankQDWang/StoryOS/issues/270",
+          "https://github.com/FrankQDWang/StoryOS/issues/271"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-007",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-PG",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/272",
+          "https://github.com/FrankQDWang/StoryOS/issues/274",
+          "https://github.com/FrankQDWang/StoryOS/issues/275"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-008",
+        "owners": [
+          "OWN-MEASURE",
+          "OWN-PG",
+          "OWN-WEB"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/279"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-EVD-009",
+        "owners": [
+          "OWN-WEB",
+          "OWN-CORE",
+          "OWN-PG",
+          "OWN-GOV"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/260",
+          "https://github.com/FrankQDWang/StoryOS/issues/373"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-workspace.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001",
+        "owners": [
+          "OWN-REL",
+          "OWN-WEB",
+          "OWN-CORE",
+          "OWN-PG"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/280"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+        "evidence_class": "stage"
+      },
+      {
+        "id": "S2-JRN-001/1",
+        "owners": [
+          "OWN-REL",
+          "OWN-WEB",
+          "OWN-PG"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/247",
+          "https://github.com/FrankQDWang/StoryOS/issues/248"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-01-bootstrap-challenge.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/2",
+        "owners": [
+          "OWN-WEB",
+          "OWN-PROTO",
+          "OWN-CORE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/255",
+          "https://github.com/FrankQDWang/StoryOS/issues/280"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-jrn-001.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/3",
+        "owners": [
+          "OWN-WEB",
+          "OWN-ADM",
+          "OWN-CORE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/261"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-input.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/4",
+        "owners": [
+          "OWN-WEB",
+          "OWN-ADM",
+          "OWN-CORE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/265"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-save-truth.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/5",
+        "owners": [
+          "OWN-WEB",
+          "OWN-ADM",
+          "OWN-CORE",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/266"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-interruption.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/6",
+        "owners": [
+          "OWN-PG",
+          "OWN-RET",
+          "OWN-TRUST"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/278"
+        ],
+        "evidence": "scripts/verify-recovery-hold.sh",
+        "evidence_class": "physical_recovery"
+      },
+      {
+        "id": "S2-JRN-001/7",
+        "owners": [
+          "OWN-WEB",
+          "OWN-CORE",
+          "OWN-ADM"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/267"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/production-host.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/8",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-CTX",
+          "OWN-CORE"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/269",
+          "https://github.com/FrankQDWang/StoryOS/issues/270"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-search.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/9",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-WEB"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/271"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-statistics.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/10",
+        "owners": [
+          "OWN-RET",
+          "OWN-PROTO",
+          "OWN-WEB"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/268"
+        ],
+        "evidence": "apps/web/test/browser-source/activity-resync.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/11",
+        "owners": [
+          "OWN-PROTO",
+          "OWN-PG",
+          "OWN-RET"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/272",
+          "https://github.com/FrankQDWang/StoryOS/issues/275"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-readable-export.integration.test.ts",
+        "evidence_class": "integration"
+      },
+      {
+        "id": "S2-JRN-001/12",
+        "owners": [
+          "OWN-MEASURE",
+          "OWN-WEB",
+          "OWN-REL"
+        ],
+        "implementation_issues": [
+          "https://github.com/FrankQDWang/StoryOS/issues/279",
+          "https://github.com/FrankQDWang/StoryOS/issues/280"
+        ],
+        "evidence": "apps/web/test/browser-exact-dist/s2-long-session.integration.test.ts",
+        "evidence_class": "integration"
+      }
+    ]
+  },
+  "verifications": {
+    "baseline": {
+      "commit": "6fed2a853f4479de1d6b8c17efe2135c315fc7ca",
+      "tree": "608da886c377af1bf2b291f60240af85f2c0149d"
+    },
+    "sources": [
+      {
+        "path": "docs/foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md",
+        "sha256": "sha256:550d22270aed7fd2749a9e7d0c7f92fbb737d76e67d5955d46624b364b4ad211"
+      },
+      {
+        "path": "docs/foundation/deterministic-verification-and-failure-recovery-gates.md",
+        "sha256": "sha256:a9404e84e45dbcd75c3b1f42405bef0bca95d178b1d09d281255e01c88ad3fc4"
+      },
+      {
+        "path": "docs/foundation/product-delivery-proof-selection.md",
+        "sha256": "sha256:3bfca9181c018ad167e23c7a5dc5c74459282ff33edcade1c0a0c8eba95dbff7"
+      }
+    ],
+    "handoff_evidence": {
+      "hnd_003": {
+        "id": "HND-003",
+        "evaluated_stage": "Stage 2",
+        "mandatory_map": "SMAP-STAGE-2",
+        "disposition": "implementation-evidence-completeness; no EV-SR; no PASS-STAGE"
+      },
+      "hnd_004": {
+        "id": "HND-004",
+        "status": "not-emitted"
+      },
+      "emitted": [],
+      "forbidden_emissions": [
+        "EV-SR",
+        "PASS-STAGE",
+        "PASS-CLOUD"
+      ]
+    }
+  }
+}
