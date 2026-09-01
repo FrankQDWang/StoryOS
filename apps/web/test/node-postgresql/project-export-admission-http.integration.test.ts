@@ -132,7 +132,7 @@ async function postExport(
   return { challenge, admitted };
 }
 
-test("exportProjectArchive admits one inspectable operation without an immutable root", async () => {
+test("exportProjectArchive admits one inspectable operation with an immutable root", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
     const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000c01", "Empty Novel");
