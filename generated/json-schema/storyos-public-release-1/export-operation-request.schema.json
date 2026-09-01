@@ -1,0 +1,21 @@
+{
+  "$id": "storyos.query.export-operation.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "export_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "export_id"
+  ],
+  "title": "StoryOS Export Operation Request",
+  "type": "object"
+}

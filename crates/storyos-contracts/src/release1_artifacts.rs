@@ -52,6 +52,10 @@ use crate::release1_manuscript_statistics::GET_STATISTICS;
 use crate::release1_manuscript_statistics_artifacts as manuscript_statistics_artifacts;
 use crate::release1_manuscript_tree::GET_MANUSCRIPT_TREE;
 use crate::release1_manuscript_tree_artifacts as manuscript_tree_artifacts;
+use crate::release1_project_export::EXPORT_PROJECT_ARCHIVE;
+use crate::release1_project_export_artifacts as project_export_artifacts;
+use crate::release1_project_export_query::GET_EXPORT_OPERATION;
+use crate::release1_project_export_query_artifacts as project_export_query_artifacts;
 use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
@@ -141,7 +145,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:d6570c68b7d7a65e3be832caacab5830614302afdd8e2993c3bc4992cdbd068b";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:cfc88bb688576d2fc9990448cf15d7bb32682131f6804498a8a2c7c116d959c1";
+    "sha256:ad4c8d15ac8e933607a552c25b3ecc01777b3afe8b8430b839fc1b42b8b1b2bb";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -230,6 +234,12 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
         readable_export_query_artifacts::request_schema_bytes();
     let readable_export_query_response_schema =
         readable_export_query_artifacts::response_schema_bytes();
+    let project_export_request_schema = project_export_artifacts::request_schema_bytes();
+    let project_export_response_schema = project_export_artifacts::response_schema_bytes();
+    let project_export_query_request_schema =
+        project_export_query_artifacts::request_schema_bytes();
+    let project_export_query_response_schema =
+        project_export_query_artifacts::response_schema_bytes();
     let update_project_request_schema = update_project_artifacts::request_schema_bytes();
     let update_project_response_schema = update_project_artifacts::response_schema_bytes();
     let archive_project_request_schema = archive_project_artifacts::request_schema_bytes();
@@ -373,6 +383,26 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
             readable_export_query_artifacts::RESPONSE_SCHEMA_PATH,
             readable_export_query_response_schema,
+        ),
+        (
+            crate::EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
+            project_export_artifacts::REQUEST_SCHEMA_PATH,
+            project_export_request_schema,
+        ),
+        (
+            crate::EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID,
+            project_export_artifacts::RESPONSE_SCHEMA_PATH,
+            project_export_response_schema,
+        ),
+        (
+            crate::GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
+            project_export_query_artifacts::REQUEST_SCHEMA_PATH,
+            project_export_query_request_schema,
+        ),
+        (
+            crate::GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID,
+            project_export_query_artifacts::RESPONSE_SCHEMA_PATH,
+            project_export_query_response_schema,
         ),
         (
             crate::UPDATE_PROJECT_REQUEST_SCHEMA_ID,
@@ -768,6 +798,30 @@ fn generated_files() -> Vec<GeneratedFile> {
             readable_export_query_artifacts::boundary_fixture_bytes(),
         ),
         (
+            project_export_artifacts::FIXTURE_PATHS[0],
+            project_export_artifacts::fixture_bytes(),
+        ),
+        (
+            project_export_artifacts::FIXTURE_PATHS[1],
+            project_export_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            project_export_artifacts::FIXTURE_PATHS[2],
+            project_export_artifacts::boundary_fixture_bytes(),
+        ),
+        (
+            project_export_query_artifacts::FIXTURE_PATHS[0],
+            project_export_query_artifacts::fixture_bytes(),
+        ),
+        (
+            project_export_query_artifacts::FIXTURE_PATHS[1],
+            project_export_query_artifacts::invalid_fixture_bytes(),
+        ),
+        (
+            project_export_query_artifacts::FIXTURE_PATHS[2],
+            project_export_query_artifacts::boundary_fixture_bytes(),
+        ),
+        (
             update_project_artifacts::FIXTURE_PATHS[0],
             update_project_artifacts::fixture_bytes(),
         ),
@@ -1040,6 +1094,8 @@ fn contract_graph_bytes() -> Vec<u8> {
             operation_graph(&GET_STATISTICS, &["server_derived_project_scope", "canonical_snapshot_or_projection_watermark"]),
             command_operation_graph(&EXPORT_HUMAN_READABLE_MANUSCRIPT, &["server_derived_project_scope", "consistent_source_snapshot", "deterministic_volume_chapter_order", "unavailable_content_representation_profile"]),
             operation_graph(&GET_HUMAN_READABLE_MANUSCRIPT_EXPORT, &["server_derived_project_scope", "export_scope_join", "export_operation_visibility", "deterministic_order_profile", "unavailable_content_representation_profile"]),
+            command_operation_graph(&EXPORT_PROJECT_ARCHIVE, &["server_derived_project_scope", "consistent_source_snapshot", "archive_path_profile", "integrity_protection_before_completion"]),
+            operation_graph(&GET_EXPORT_OPERATION, &["export_scope_join", "export_operation_visibility", "redaction_profile"]),
             stream_operation_graph(&ACTIVITY_STREAM, &["server_derived_project_scope", "snapshot_binding_or_last_event_id", "activity_profile", "replay_generation", "filter_digest", "reauthorize_on_connect"]),
         ],
         "release": {
@@ -1156,6 +1212,8 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&manuscript_statistics_artifacts::openapi());
     paths.push_str(&readable_export_artifacts::openapi());
     paths.push_str(&readable_export_query_artifacts::openapi());
+    paths.push_str(&project_export_artifacts::openapi());
+    paths.push_str(&project_export_query_artifacts::openapi());
     paths.push_str(&snapshot_artifacts::activity_stream_openapi());
     paths.push_str(&takeover_artifacts::openapi());
     let implemented_slice = implemented_operation_ids().join(",");
@@ -1343,6 +1401,8 @@ fn implemented_operation_ids() -> Vec<&'static str> {
     operation_ids.push(GET_STATISTICS.operation_id);
     operation_ids.push(EXPORT_HUMAN_READABLE_MANUSCRIPT.operation_id);
     operation_ids.push(GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id);
+    operation_ids.push(EXPORT_PROJECT_ARCHIVE.operation_id);
+    operation_ids.push(GET_EXPORT_OPERATION.operation_id);
     operation_ids.push(ACTIVITY_STREAM.operation_id);
     operation_ids.push(TAKE_OVER_PROJECT_WRITER.operation_id);
     operation_ids.push(UNDO_LATEST_AUTHOR_ACTION.operation_id);
@@ -1431,7 +1491,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1475,6 +1535,8 @@ fn typescript_client_bytes() -> Vec<u8> {
         manuscript_statistics_artifacts::typescript_client_source(),
         readable_export_artifacts::typescript_client_source(),
         readable_export_query_artifacts::typescript_client_source(),
+        project_export_artifacts::typescript_client_source(),
+        project_export_query_artifacts::typescript_client_source(),
         takeover_artifacts::typescript_client_source(),
     ).into_bytes()
 }
@@ -1504,7 +1566,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     let editor_reason = EditorReadOnlyReason::decl(&config);
     let editor_snapshot = EditorBaseSnapshot::decl(&config);
     let mut declaration = format!(
-        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {block_kind}\n\nexport {manuscript_block}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
+        "// @generated by storyos-contracts; do not edit.\nexport {identity}\n\nexport {profile}\n\nexport {project_scope}\n\nexport {project_open}\n\nexport {controlled_project}\n\nexport {block_kind}\n\nexport {manuscript_block}\n\nexport {chapter_revision}\n\nexport {current_chapter}\n\nexport {project}\n\nexport {chapter}\n\nexport {digest_algorithm}\n\nexport {digest_value}\n\nexport {challenge_request}\n\nexport {challenge_response}\n\nexport {create_editor_request}\n\nexport {editor_reason}\n\nexport {editor_writer}\n\nexport {editor_binding}\n\nexport {editor_snapshot}\n\nexport {create_editor_response}\n\nexport {get_editor_response}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}\n\n{}",
         create_project_artifacts::typescript_type_declarations(),
         list_projects_artifacts::typescript_type_declarations(),
         update_project_artifacts::typescript_type_declarations(),
@@ -1525,6 +1587,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
         manuscript_statistics_artifacts::typescript_type_declarations(),
         readable_export_artifacts::typescript_type_declarations(),
         readable_export_query_artifacts::typescript_type_declarations(),
+        project_export_artifacts::typescript_type_declarations(),
+        project_export_query_artifacts::typescript_type_declarations(),
         takeover_artifacts::typescript_type_declarations(),
     );
     declaration.push_str("\n\n");
@@ -1562,6 +1626,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(manuscript_statistics_artifacts::typescript_declarations());
     declaration.push_str(readable_export_artifacts::typescript_declarations());
     declaration.push_str(readable_export_query_artifacts::typescript_declarations());
+    declaration.push_str(project_export_artifacts::typescript_declarations());
+    declaration.push_str(project_export_query_artifacts::typescript_declarations());
     declaration.push_str(takeover_artifacts::typescript_declarations());
     declaration.into_bytes()
 }
@@ -1597,6 +1663,8 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
                 manuscript_statistics_artifacts::FIXTURE_PATHS[0], manuscript_statistics_artifacts::FIXTURE_PATHS[1], manuscript_statistics_artifacts::FIXTURE_PATHS[2],
                 readable_export_artifacts::FIXTURE_PATHS[0], readable_export_artifacts::FIXTURE_PATHS[1], readable_export_artifacts::FIXTURE_PATHS[2],
                 readable_export_query_artifacts::FIXTURE_PATHS[0], readable_export_query_artifacts::FIXTURE_PATHS[1], readable_export_query_artifacts::FIXTURE_PATHS[2],
+                project_export_artifacts::FIXTURE_PATHS[0], project_export_artifacts::FIXTURE_PATHS[1], project_export_artifacts::FIXTURE_PATHS[2],
+                project_export_query_artifacts::FIXTURE_PATHS[0], project_export_query_artifacts::FIXTURE_PATHS[1], project_export_query_artifacts::FIXTURE_PATHS[2],
                 update_project_artifacts::FIXTURE_PATHS[0], update_project_artifacts::FIXTURE_PATHS[1], update_project_artifacts::FIXTURE_PATHS[2],
                 archive_project_artifacts::FIXTURE_PATHS[0], archive_project_artifacts::FIXTURE_PATHS[1], archive_project_artifacts::FIXTURE_PATHS[2],
                 create_volume_artifacts::FIXTURE_PATHS[0], create_volume_artifacts::FIXTURE_PATHS[1], create_volume_artifacts::FIXTURE_PATHS[2],
@@ -1656,6 +1724,12 @@ fn fixture_catalog_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
             {"fixture_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.fixtures[0], "classification": "positive", "operation_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id, "path": readable_export_query_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.fixtures[1], "classification": "invalid", "operation_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id, "path": readable_export_query_artifacts::FIXTURE_PATHS[1]},
             {"fixture_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.fixtures[2], "classification": "boundary", "operation_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.operation_id, "path": readable_export_query_artifacts::FIXTURE_PATHS[2]},
+            {"fixture_id": EXPORT_PROJECT_ARCHIVE.fixtures[0], "classification": "positive", "operation_id": EXPORT_PROJECT_ARCHIVE.operation_id, "path": project_export_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": EXPORT_PROJECT_ARCHIVE.fixtures[1], "classification": "invalid", "operation_id": EXPORT_PROJECT_ARCHIVE.operation_id, "path": project_export_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": EXPORT_PROJECT_ARCHIVE.fixtures[2], "classification": "boundary", "operation_id": EXPORT_PROJECT_ARCHIVE.operation_id, "path": project_export_artifacts::FIXTURE_PATHS[2]},
+            {"fixture_id": GET_EXPORT_OPERATION.fixtures[0], "classification": "positive", "operation_id": GET_EXPORT_OPERATION.operation_id, "path": project_export_query_artifacts::FIXTURE_PATHS[0]},
+            {"fixture_id": GET_EXPORT_OPERATION.fixtures[1], "classification": "invalid", "operation_id": GET_EXPORT_OPERATION.operation_id, "path": project_export_query_artifacts::FIXTURE_PATHS[1]},
+            {"fixture_id": GET_EXPORT_OPERATION.fixtures[2], "classification": "boundary", "operation_id": GET_EXPORT_OPERATION.operation_id, "path": project_export_query_artifacts::FIXTURE_PATHS[2]},
             {"fixture_id": UPDATE_PROJECT.fixtures[0], "classification": "positive", "operation_id": UPDATE_PROJECT.operation_id, "path": update_project_artifacts::FIXTURE_PATHS[0]},
             {"fixture_id": UPDATE_PROJECT.fixtures[1], "classification": "invalid", "operation_id": UPDATE_PROJECT.operation_id, "path": update_project_artifacts::FIXTURE_PATHS[1]},
             {"fixture_id": UPDATE_PROJECT.fixtures[2], "classification": "boundary", "operation_id": UPDATE_PROJECT.operation_id, "path": update_project_artifacts::FIXTURE_PATHS[2]},
@@ -1799,6 +1873,12 @@ fn fixture_corpus_bytes(profile: &Release1ProtocolProfile) -> Vec<u8> {
         readable_export_query_artifacts::fixture_bytes(),
         readable_export_query_artifacts::invalid_fixture_bytes(),
         readable_export_query_artifacts::boundary_fixture_bytes(),
+        project_export_artifacts::fixture_bytes(),
+        project_export_artifacts::invalid_fixture_bytes(),
+        project_export_artifacts::boundary_fixture_bytes(),
+        project_export_query_artifacts::fixture_bytes(),
+        project_export_query_artifacts::invalid_fixture_bytes(),
+        project_export_query_artifacts::boundary_fixture_bytes(),
         takeover_artifacts::fixture_bytes(),
         takeover_artifacts::invalid_fixture_bytes(),
         takeover_artifacts::boundary_fixture_bytes(),
@@ -1969,6 +2049,14 @@ mod readable_export_tests;
 #[cfg(test)]
 #[path = "release1_readable_export_query_artifacts_tests.rs"]
 mod readable_export_query_tests;
+
+#[cfg(test)]
+#[path = "release1_project_export_artifacts_tests.rs"]
+mod project_export_tests;
+
+#[cfg(test)]
+#[path = "release1_project_export_query_artifacts_tests.rs"]
+mod project_export_query_tests;
 
 #[cfg(test)]
 #[path = "release1_archive_project_artifacts_tests.rs"]

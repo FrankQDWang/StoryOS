@@ -20,99 +20,6 @@
       ],
       "type": "object"
     },
-    "CreateChapterConflictReason": {
-      "enum": [
-        "stale_tree_revision"
-      ],
-      "type": "string"
-    },
-    "CreateChapterEffect": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "chapter_id": {
-              "type": "string"
-            },
-            "current_chapter_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "authoritative_applied",
-              "type": "string"
-            },
-            "order": {
-              "type": "string"
-            },
-            "project_activity_position": {
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            },
-            "tree_revision": {
-              "type": "string"
-            },
-            "volume_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "volume_id",
-            "chapter_id",
-            "title",
-            "tree_revision",
-            "order",
-            "current_chapter_id",
-            "project_activity_position"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/CreateChapterConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "refused",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/CreateChapterRefusalReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "CreateChapterRefusalReason": {
-      "enum": [
-        "archived_project",
-        "invalid_title",
-        "invalid_volume_join"
-      ],
-      "type": "string"
-    },
     "DigestAlgorithm": {
       "enum": [
         "sha256"
@@ -285,6 +192,89 @@
       ],
       "type": "string"
     },
+    "ExportAcknowledgement": {
+      "enum": [
+        "accepted"
+      ],
+      "type": "string"
+    },
+    "ExportProjectArchiveEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "archive_path_profile": {
+              "type": "string"
+            },
+            "archive_profile": {
+              "type": "string"
+            },
+            "export_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "admitted",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "export_id",
+            "archive_profile",
+            "archive_path_profile",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/ExportProjectArchiveRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ExportProjectArchiveRefusalReason": {
+      "enum": [
+        "archived_project"
+      ],
+      "type": "string"
+    },
+    "ProjectExportRef": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "export_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "project_export",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "export_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ProjectOpenState": {
       "oneOf": [
         {
@@ -336,10 +326,13 @@
       "type": "object"
     }
   },
-  "$id": "storyos.command.create-chapter.response.v1",
+  "$id": "storyos.command.export-project-archive.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "acknowledgement": {
+      "$ref": "#/$defs/ExportAcknowledgement"
+    },
     "author_command_admission_id": {
       "format": "uuid",
       "type": "string"
@@ -353,7 +346,17 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/CreateChapterEffect"
+      "$ref": "#/$defs/ExportProjectArchiveEffect"
+    },
+    "operation_ref": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ProjectExportRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -365,7 +368,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.create-chapter.response.v1",
+      "const": "storyos.command.export-project-archive.response.v1",
       "type": "string"
     }
   },
@@ -375,10 +378,11 @@
     "project_scope",
     "command_id",
     "author_command_admission_id",
+    "acknowledgement",
     "receipt",
     "project",
     "effect"
   ],
-  "title": "StoryOS Create Chapter Response",
+  "title": "StoryOS Export Project Archive Response",
   "type": "object"
 }

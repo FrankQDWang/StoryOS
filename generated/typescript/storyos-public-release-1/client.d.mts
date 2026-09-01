@@ -197,7 +197,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -277,6 +277,22 @@ export type ExportHumanReadableManuscriptResponse = { schema_id: string, correla
 
 export type GetHumanReadableManuscriptExportResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, content_sha256: string, manuscript_utf8: string, source_snapshot: SnapshotDescriptor, };
 
+export type ExportProjectArchiveInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, archive_profile: string, archive_path_profile: string, };
+
+export type ExportProjectArchiveRequest = { command_schema: string, export_project_archive_input: ExportProjectArchiveInput, };
+
+export type ExportProjectArchiveRefusalReason = "archived_project";
+
+export type ProjectExportRef = { "kind": "project_export", export_id: string, };
+
+export type ExportProjectArchiveEffect = { "kind": "admitted", export_id: string, archive_profile: string, archive_path_profile: string, project_activity_position: string, } | { "kind": "refused", reason: ExportProjectArchiveRefusalReason, };
+
+export type ExportProjectArchiveResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: ProjectExportRef | null, receipt: DomainReceipt, project: ControlledProject, effect: ExportProjectArchiveEffect, };
+
+export type ExportOperationStatus = "in_progress";
+
+export type GetExportOperationResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, archive_profile: string, archive_path_profile: string, status: ExportOperationStatus, immutable_root: string | null, source_snapshot: SnapshotDescriptor, };
+
 export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
 
 export type TakeoverCompareFailedReason = "writer_generation_advanced_after_admission" | "requester_became_current_after_admission";
@@ -338,5 +354,8 @@ export declare function getStatistics(options: StoryOSQueryOptions & { projectId
 export declare function digestExportHumanReadableManuscript(request: ExportHumanReadableManuscriptRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function exportHumanReadableManuscript(options: StoryOSQueryOptions & { projectId: string; request: ExportHumanReadableManuscriptRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportHumanReadableManuscriptResponse>;
 export declare function getHumanReadableManuscriptExport(options: StoryOSQueryOptions & { projectId: string; exportId: string }): Promise<GetHumanReadableManuscriptExportResponse>;
+export declare function digestExportProjectArchive(request: ExportProjectArchiveRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function exportProjectArchive(options: StoryOSQueryOptions & { projectId: string; request: ExportProjectArchiveRequest; idempotencyKey: string; antiForgery: string }): Promise<ExportProjectArchiveResponse>;
+export declare function getExportOperation(options: StoryOSQueryOptions & { projectId: string; exportId: string }): Promise<GetExportOperationResponse>;
 export declare function digestTakeOverProjectWriter(request: TakeOverProjectWriterRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function takeOverProjectWriter(options: StoryOSQueryOptions & { projectId: string; editorSessionId: string; request: TakeOverProjectWriterRequest; idempotencyKey: string; antiForgery: string }): Promise<TakeOverProjectWriterResponse>;

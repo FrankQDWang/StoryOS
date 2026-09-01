@@ -32,6 +32,7 @@ mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
 mod project_command_challenge;
+mod project_export;
 mod readable_export;
 mod request_origin;
 mod set_current_chapter;
@@ -66,6 +67,7 @@ use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
 use manuscript_tree::get_manuscript_tree;
 use project_command_challenge::create_project_command_challenge;
+use project_export::{export_project_archive, get_export_operation_query};
 use readable_export::{
     export_human_readable_manuscript, get_human_readable_manuscript_export_query,
 };
@@ -192,6 +194,8 @@ pub fn router_with_config(config: ServerConfig) -> Router {
         method_filter(contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD);
     let get_human_readable_export_method =
         method_filter(contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_METHOD);
+    let export_project_archive_method = method_filter(contracts::EXPORT_PROJECT_ARCHIVE_METHOD);
+    let get_export_operation_method = method_filter(contracts::GET_EXPORT_OPERATION_METHOD);
     let search_manuscript_method = method_filter(contracts::SEARCH_MANUSCRIPT_METHOD);
     let activity_stream_method = method_filter(contracts::ACTIVITY_STREAM_METHOD);
     Router::new()
@@ -335,6 +339,14 @@ pub fn router_with_config(config: ServerConfig) -> Router {
                 get_human_readable_export_method,
                 get_human_readable_manuscript_export_query,
             ),
+        )
+        .route(
+            contracts::EXPORT_PROJECT_ARCHIVE_PATH,
+            routing::on(export_project_archive_method, export_project_archive),
+        )
+        .route(
+            contracts::GET_EXPORT_OPERATION_PATH,
+            routing::on(get_export_operation_method, get_export_operation_query),
         )
         .route(
             contracts::SEARCH_MANUSCRIPT_PATH,

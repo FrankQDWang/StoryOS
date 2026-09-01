@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ExportProjectArchiveInput": {
+      "additionalProperties": false,
+      "properties": {
+        "archive_path_profile": {
+          "type": "string"
+        },
+        "archive_profile": {
+          "type": "string"
+        },
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id",
+        "archive_profile",
+        "archive_path_profile"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.export-project-archive.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.export-project-archive.request.v1",
+      "type": "string"
+    },
+    "export_project_archive_input": {
+      "$ref": "#/$defs/ExportProjectArchiveInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "export_project_archive_input"
+  ],
+  "title": "StoryOS Export Project Archive Request",
+  "type": "object"
+}

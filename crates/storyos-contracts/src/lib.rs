@@ -30,6 +30,10 @@ mod release1_manuscript_statistics;
 mod release1_manuscript_statistics_artifacts;
 mod release1_manuscript_tree;
 mod release1_manuscript_tree_artifacts;
+mod release1_project_export;
+mod release1_project_export_artifacts;
+mod release1_project_export_query;
+mod release1_project_export_query_artifacts;
 mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
@@ -151,6 +155,18 @@ pub use release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
     GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
     ManuscriptVolumeNode,
+};
+pub use release1_project_export::{
+    EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE, EXPORT_PROJECT_ARCHIVE_METHOD,
+    EXPORT_PROJECT_ARCHIVE_PATH, EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID,
+    EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID, ExportProjectArchiveEffect,
+    ExportProjectArchiveInput, ExportProjectArchiveRefusalReason, ExportProjectArchiveRequest,
+    ExportProjectArchiveResponse, ProjectExportRef,
+};
+pub use release1_project_export_query::{
+    ExportOperationStatus, GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH,
+    GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID, GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID,
+    GetExportOperationResponse,
 };
 pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,

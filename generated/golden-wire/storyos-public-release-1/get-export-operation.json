@@ -1,0 +1,30 @@
+{
+  "archive_path_profile": "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
+  "archive_profile": "storyos.project-export.v1",
+  "correlation_id": "018f0000-0000-7001-8000-000000000082",
+  "export_id": "018f0000-0000-7001-8000-000000000926",
+  "immutable_root": null,
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "query_id": "018f0000-0000-7001-8000-000000000081",
+  "schema_id": "storyos.query.export-operation.response.v1",
+  "source_snapshot": {
+    "created_at": "2026-09-01T12:00:00.000Z",
+    "expires_at": null,
+    "project_activity_position": "2",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "projection_generations": {},
+    "redaction_profile": "storyos.author.v1",
+    "replay_generation": "1",
+    "schema_profile": "storyos.public.release.1",
+    "snapshot_id": "018f0000-0000-7001-8000-000000000040",
+    "snapshot_kind": "canonical",
+    "source_watermarks": {}
+  },
+  "status": "in_progress"
+}

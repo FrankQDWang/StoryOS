@@ -7,6 +7,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
+mod project_export;
 mod readable_export;
 mod readable_export_command;
 mod set_current_chapter;
@@ -40,6 +41,10 @@ pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
     apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
+};
+pub use project_export::{
+    ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
+    export_project_archive,
 };
 pub use readable_export::{
     READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,
