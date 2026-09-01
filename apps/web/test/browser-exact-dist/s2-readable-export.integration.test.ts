@@ -64,9 +64,11 @@ async function waitSaved(root: Element): Promise<void> {
 
 async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
   const root = appRoot(frame);
-  const editor = manuscriptEditor(root, applicationWindow(frame));
+  const realm = applicationWindow(frame);
+  realm.focus();
+  const editor = manuscriptEditor(root, realm);
   editor.focus();
-  focusManuscriptEnd(editor, applicationWindow(frame));
+  focusManuscriptEnd(editor, realm);
   await applyTrustedInput({ operation: "insert_text", text });
   await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(text);
   await expect.poll(() =>

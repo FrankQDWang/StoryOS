@@ -79,6 +79,7 @@ export function ManuscriptReadableExportPanel({
       anchor.click();
       anchor.remove();
       URL.revokeObjectURL(url);
+      window.focus();
     } catch {
       setOutcome({ kind: "unavailable" });
     } finally {
