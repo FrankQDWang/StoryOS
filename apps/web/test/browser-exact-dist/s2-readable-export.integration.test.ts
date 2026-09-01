@@ -5,6 +5,8 @@ import {
   focusManuscriptEnd,
   manuscriptBody,
   manuscriptEditor,
+  manuscriptIsEditable,
+  MANUSCRIPT_EDITOR_SELECTOR,
 } from "../support/manuscript-surface.ts";
 
 const CHAPTER_A = "Hello world";
@@ -63,10 +65,16 @@ async function waitSaved(root: Element): Promise<void> {
 }
 
 async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<void> {
+  await expect.poll(() => {
+    const root = frame.contentDocument?.querySelector("#app");
+    const editor = root?.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return editor !== null && editor !== undefined && manuscriptIsEditable(editor);
+  }, { timeout: 10_000 }).toBe(true);
   const root = appRoot(frame);
   const realm = applicationWindow(frame);
   realm.focus();
   const editor = manuscriptEditor(root, realm);
+  editor.click();
   editor.focus();
   focusManuscriptEnd(editor, realm);
   await applyTrustedInput({ operation: "insert_text", text });
@@ -176,9 +184,13 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
   )].find((button) => button.textContent === "Chapter B");
   if (chapterB === undefined) throw new Error("Chapter B is missing");
   chapterB.click();
-  await expect.poll(() =>
-    appRoot(frame).querySelector("h2")?.textContent
-  ).toBe("Chapter B");
+  await expect.poll(() => {
+    const nextRoot = appRoot(frame);
+    const editor = nextRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
+    return nextRoot.querySelector("h2")?.textContent === "Chapter B"
+      && editor !== null
+      && manuscriptIsEditable(editor);
+  }, { timeout: 15_000 }).toBe(true);
   await typeIntoCurrent(frame, CHAPTER_B);
   const afterRebuild = appRoot(frame);
   await requestExport(afterRebuild, GOLDEN_TWO);
