@@ -51,7 +51,8 @@ and operates under the ownership and deployment boundary in [ADR
 - Allowing a worker to perform external I/O before a durable dispatch claim was
   rejected because a crash could leave an actual disclosure with no Event. The
   claim persists the exact wire evidence and an OutcomeUnknown Disclosure Event
-  before destination I/O may cross the External Processing Boundary; later
+  before destination I/O may cross the StoryOS Controlled Processing
+  Boundary; later
   confirmation settles the Destination Attempt without rewriting that Event.
 - Treating one Provider request, transcript reconstruction, or prompt cache as
   the complete context receipt was rejected because logical context, wire
