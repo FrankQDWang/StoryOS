@@ -2,7 +2,8 @@
 
 use crate::{
     AuthorEditConflict, AuthorEditNoEffect, AuthorEditPrimitive, AuthorEditRefusal, AuthorEditUnit,
-    CurrentOwnershipFacts, UTF16_COORDINATE_PROFILE, utf16_offset_to_byte,
+    CurrentOwnershipFacts, UTF16_COORDINATE_PROFILE, replace_checked_utf16_range,
+    utf16_offset_to_byte,
 };
 
 pub const MANUSCRIPT_SCHEMA_VERSION: u32 = 1;
@@ -218,7 +219,7 @@ fn apply_primitive(
             else {
                 return Err(AuthorEditRefusal::InvalidSelection);
             };
-            replace_block_text(block, *from, *to, text)
+            replace_checked_utf16_range(&mut block.text, *from, *to, text)
         }
         AuthorEditPrimitive::SplitBlock {
             manuscript_block_id,
@@ -369,32 +370,5 @@ fn retype_block(
         return Err(AuthorEditRefusal::InvalidSelection);
     };
     block.block_kind = block_kind.clone();
-    Ok(())
-}
-
-fn replace_block_text(
-    block: &mut ManuscriptBlock,
-    from: u32,
-    to: u32,
-    text: &str,
-) -> Result<(), AuthorEditRefusal> {
-    let Some(from_byte) = utf16_offset_to_byte(&block.text, from) else {
-        return Err(AuthorEditRefusal::InvalidSelection);
-    };
-    let to_byte = if from == to {
-        from_byte
-    } else if let Some(to_byte) = utf16_offset_to_byte(&block.text, to) {
-        to_byte
-    } else {
-        return Err(AuthorEditRefusal::InvalidSelection);
-    };
-    if from_byte > to_byte {
-        return Err(AuthorEditRefusal::InvalidSelection);
-    }
-    block.text = format!(
-        "{}{text}{}",
-        &block.text[..from_byte],
-        &block.text[to_byte..]
-    );
     Ok(())
 }
