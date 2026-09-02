@@ -1,6 +1,6 @@
 use storyos_application::{
-    AppliedAuthorEditActivity, CanonicalSnapshot, ProjectReadError, ProjectScope, SnapshotLookup,
-    SnapshotReadError, SnapshotStore,
+    ActivityAggregateRef, CanonicalSnapshot, ProjectActivityEvent, ProjectActivityKind,
+    ProjectReadError, ProjectScope, SnapshotLookup, SnapshotReadError, SnapshotStore,
 };
 
 use super::*;
@@ -202,12 +202,12 @@ impl SnapshotStore for PostgresProjectReader {
             })
     }
 
-    async fn list_applied_author_edit_activity(
+    async fn list_project_activity(
         &self,
         lookup: &SnapshotLookup,
         after_position: u64,
-    ) -> Result<Vec<AppliedAuthorEditActivity>, SnapshotReadError> {
-        list_applied_author_edit_activity(self, lookup, after_position).await
+    ) -> Result<Vec<ProjectActivityEvent>, SnapshotReadError> {
+        list_project_activity(self, lookup, after_position).await
     }
 }
 
@@ -300,11 +300,11 @@ fn snapshot_unavailable(source: tokio_postgres::Error) -> SnapshotReadError {
     SnapshotReadError::Unavailable(Box::new(source))
 }
 
-async fn list_applied_author_edit_activity(
+async fn list_project_activity(
     store: &PostgresProjectReader,
     lookup: &SnapshotLookup,
     after_position: u64,
-) -> Result<Vec<AppliedAuthorEditActivity>, SnapshotReadError> {
+) -> Result<Vec<ProjectActivityEvent>, SnapshotReadError> {
     let mut client = store
         .connect()
         .await
@@ -316,29 +316,61 @@ async fn list_applied_author_edit_activity(
     let after = after_position.to_string();
     let rows = transaction
         .query(
-            "SELECT activity.project_activity_event_id::text,
-                    activity.project_activity_position::text,
-                    receipt.command_id::text,
-                    admission.correlation_id::text,
-                    activity.receipt_id::text,
-                    admission.chapter_object_id::text,
-                    activity.resulting_revision_id::text,
-                    activity.authoritative_commit_id::text,
-                    activity.author_action_sequence::text,
-                    to_char(activity.created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
-               FROM storyos.project_activity_events AS activity
-               JOIN storyos.domain_receipts AS receipt
-                 ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                    (activity.owner_user_id, activity.project_id, activity.receipt_id)
-               JOIN storyos.author_command_admissions AS admission
-                 ON (admission.owner_user_id, admission.project_id, admission.command_id) =
-                    (receipt.owner_user_id, receipt.project_id, receipt.command_id)
-              WHERE activity.owner_user_id = $1::text::uuid
-                AND activity.project_id = $2::text::uuid
-                AND activity.project_activity_position > $3::text::numeric
-                AND activity.event_kind = 'authoritative_author_edit_applied'
-              ORDER BY activity.project_activity_position",
+            "SELECT stream.event_id,
+                    stream.project_activity_position,
+                    stream.event_kind,
+                    stream.command_id,
+                    stream.correlation_id,
+                    stream.receipt_id,
+                    stream.occurred_at,
+                    stream.payload_json
+               FROM (
+                 SELECT activity.project_activity_event_id::text AS event_id,
+                        activity.project_activity_position::text AS project_activity_position,
+                        activity.event_kind,
+                        receipt.command_id::text AS command_id,
+                        admission.correlation_id::text AS correlation_id,
+                        activity.receipt_id::text AS receipt_id,
+                        to_char(activity.created_at AT TIME ZONE 'UTC',
+                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS occurred_at,
+                        jsonb_build_object(
+                          'chapter_id', admission.chapter_object_id::text,
+                          'authoritative_revision_id', activity.resulting_revision_id::text,
+                          'authoritative_commit_id', activity.authoritative_commit_id::text,
+                          'author_action_sequence', activity.author_action_sequence::text
+                        )::text AS payload_json
+                   FROM storyos.project_activity_events AS activity
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                        (activity.owner_user_id, activity.project_id, activity.receipt_id)
+                   JOIN storyos.author_command_admissions AS admission
+                     ON (admission.owner_user_id, admission.project_id, admission.command_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.command_id)
+                  WHERE activity.owner_user_id = $1::text::uuid
+                    AND activity.project_id = $2::text::uuid
+                    AND activity.project_activity_position > $3::text::numeric
+                 UNION ALL
+                 SELECT payload.project_activity_event_id::text,
+                        payload.project_activity_position::text,
+                        payload.event_kind,
+                        receipt.command_id::text,
+                        admission.correlation_id::text,
+                        payload.receipt_id::text,
+                        to_char(payload.created_at AT TIME ZONE 'UTC',
+                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+                        payload.payload::text
+                   FROM storyos.project_activity_event_payloads AS payload
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                        (payload.owner_user_id, payload.project_id, payload.receipt_id)
+                   JOIN storyos.author_command_admissions AS admission
+                     ON (admission.owner_user_id, admission.project_id, admission.command_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.command_id)
+                  WHERE payload.owner_user_id = $1::text::uuid
+                    AND payload.project_id = $2::text::uuid
+                    AND payload.project_activity_position > $3::text::numeric
+               ) AS stream
+              ORDER BY stream.project_activity_position::numeric",
             &[
                 &lookup.project_scope.owner_user_id.as_ref(),
                 &lookup.project_scope.project_id.as_ref(),
@@ -354,19 +386,82 @@ async fn list_applied_author_edit_activity(
                 .get::<_, String>(1)
                 .parse()
                 .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?;
-            Ok(AppliedAuthorEditActivity {
+            let kind = ProjectActivityKind::from_persisted(row.get::<_, String>(2).as_str())
+                .ok_or_else(|| {
+                    SnapshotReadError::Unavailable("persisted Activity kind is unprojected".into())
+                })?;
+            let payload_json: String = row.get(7);
+            let payload: serde_json::Value = serde_json::from_str(&payload_json)
+                .map_err(|error| SnapshotReadError::Unavailable(Box::new(error)))?;
+            Ok(ProjectActivityEvent {
                 event_id: row.get(0),
+                kind,
                 project_sequence,
                 stream_sequence: project_sequence,
-                command_id: row.get(2),
-                correlation_id: row.get(3),
-                receipt_id: row.get(4),
-                chapter_id: row.get(5),
-                authoritative_revision_id: row.get(6),
-                authoritative_commit_id: row.get(7),
-                author_action_sequence: row.get(8),
-                occurred_at: row.get(9),
+                command_id: row.get(3),
+                correlation_id: row.get(4),
+                receipt_id: row.get(5),
+                occurred_at: row.get(6),
+                aggregate: payload_aggregate(
+                    kind,
+                    &payload,
+                    lookup.project_scope.project_id.as_ref(),
+                )?,
+                payload_json,
             })
         })
         .collect()
+}
+
+fn payload_aggregate(
+    kind: ProjectActivityKind,
+    payload: &serde_json::Value,
+    project_id: &str,
+) -> Result<ActivityAggregateRef, SnapshotReadError> {
+    let field = |key: &str| {
+        payload
+            .get(key)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.is_empty())
+            .map(str::to_owned)
+            .ok_or_else(|| SnapshotReadError::Unavailable("activity payload is incomplete".into()))
+    };
+    Ok(match kind {
+        ProjectActivityKind::AuthoritativeAuthorEditApplied
+        | ProjectActivityKind::ChapterCreated
+        | ProjectActivityKind::ChapterUpdated
+        | ProjectActivityKind::ChapterDeleted => ActivityAggregateRef {
+            kind: "chapter".to_owned(),
+            id: field("chapter_id")?,
+        },
+        ProjectActivityKind::CurrentChapterSet => ActivityAggregateRef {
+            kind: "chapter".to_owned(),
+            id: field("current_chapter_id")?,
+        },
+        ProjectActivityKind::VolumeCreated
+        | ProjectActivityKind::VolumeUpdated
+        | ProjectActivityKind::VolumeDeleted => ActivityAggregateRef {
+            kind: "volume".to_owned(),
+            id: field("volume_id")?,
+        },
+        ProjectActivityKind::ProjectCreated
+        | ProjectActivityKind::ProjectUpdated
+        | ProjectActivityKind::ProjectArchivalChanged => ActivityAggregateRef {
+            kind: "project".to_owned(),
+            id: project_id.to_owned(),
+        },
+        ProjectActivityKind::WriterTakeoverApplied => ActivityAggregateRef {
+            kind: "editor_session".to_owned(),
+            id: field("resulting_editor_session_id")?,
+        },
+        ProjectActivityKind::WriterTakeoverCompareFailed => ActivityAggregateRef {
+            kind: "project".to_owned(),
+            id: project_id.to_owned(),
+        },
+        ProjectActivityKind::HumanReadableManuscriptExportSettled
+        | ProjectActivityKind::ProjectExportSettled => ActivityAggregateRef {
+            kind: "export".to_owned(),
+            id: field("export_id")?,
+        },
+    })
 }

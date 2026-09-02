@@ -43,6 +43,7 @@ mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
+mod project_activity;
 mod project_export;
 mod readable_export;
 mod set_current_chapter;
@@ -171,9 +172,10 @@ pub use takeover::{
     TakeOverProjectWriterSettlement, TakeOverProjectWriterStore, take_over_project_writer,
 };
 
+pub use project_activity::{ActivityAggregateRef, ProjectActivityEvent, ProjectActivityKind};
 pub use snapshot::{
-    AppliedAuthorEditActivity, CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore,
-    activity_stream_resume, get_snapshot,
+    CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore, activity_stream_resume,
+    get_snapshot,
 };
 
 pub const PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION: &str =

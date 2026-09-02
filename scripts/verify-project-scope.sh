@@ -241,6 +241,9 @@ pnpm --dir apps/web exec vitest run --project node-process-cut \
 echo "Running HTTP Activity Stream duplicate-resume tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/activity-stream-duplicate-http.integration.test.ts
+echo "Running HTTP Activity Stream cross-table tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/activity-stream-cross-table-http.integration.test.ts
 echo "Running HTTP Snapshot and Activity Stream tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/snapshot-replay-http.integration.test.ts

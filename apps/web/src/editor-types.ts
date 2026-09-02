@@ -300,19 +300,14 @@ export interface ProjectActivityEvent {
   agent_run_id: null;
   run_step_id: null;
   run_sequence: null;
-  aggregate_ref: { kind: "chapter"; id: string };
+  aggregate_ref: { kind: string; id: string };
   correlation_id: string;
   causation: { kind: "command"; id: string };
   command_id: string;
   receipt_ref: { kind: "domain_receipt"; id: string };
   occurred_at: string;
   recorded_at: string;
-  payload: {
-    chapter_id: string;
-    authoritative_revision_id: string;
-    authoritative_commit_id: string;
-    author_action_sequence: string;
-  };
+  payload: Record<string, unknown>;
   payload_digest: DigestValue;
   application_wire_record_ref: string;
   limit_profile_revision: string;
