@@ -91,34 +91,28 @@ impl PostgresProjectReader {
             .connect_challenge()
             .await
             .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+        client
+            .batch_execute("BEGIN")
+            .await
+            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
         set_challenge_scope_on_client(&client, &query.project_scope)
             .await
             .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
-        let row = client
-            .query_opt(
-                "SELECT reconfirmation.reconfirmation_reason,
-                        reconfirmation.recovery_draft_ref::text
-                   FROM storyos.author_command_admission_reconfirmations AS reconfirmation
-                  WHERE reconfirmation.owner_user_id = $1::text::uuid
-                    AND reconfirmation.project_id = $2::text::uuid
-                    AND reconfirmation.author_command_admission_id = $3::text::uuid",
-                &[
-                    &query.project_scope.owner_user_id.as_ref(),
-                    &query.project_scope.project_id.as_ref(),
-                    &author_command_admission_id,
-                ],
-            )
+        match load_requires_reconfirmation(&client, query, command_id, author_command_admission_id)
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?
-            .ok_or_else(outcome_unavailable)?;
-        Ok(ApplyAuthorEditOutcome::RequiresReconfirmation(
-            RequiresReconfirmationApplyAuthorEdit {
-                command_id: command_id.to_owned(),
-                author_command_admission_id: author_command_admission_id.to_owned(),
-                reconfirmation_reason: parse_reason(row.get(0)).ok_or_else(outcome_unavailable)?,
-                recovery_draft_ref: row.get(1),
-            },
-        ))
+        {
+            Ok(outcome) => {
+                client
+                    .batch_execute("COMMIT")
+                    .await
+                    .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+                Ok(outcome)
+            }
+            Err(error) => {
+                client.batch_execute("ROLLBACK").await.ok();
+                Err(error)
+            }
+        }
     }
 
     pub(super) async fn persist_requires_reconfirmation_in_tx(
@@ -134,31 +128,15 @@ impl PostgresProjectReader {
                 "INSERT INTO storyos.author_command_admission_reconfirmations
                    (owner_user_id, project_id, author_command_admission_id, command_id,
                     reconfirmation_reason)
-                 SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, admission.command_id, $4
-                   FROM storyos.command_idempotency AS idempotency
-                   JOIN storyos.author_command_admissions AS admission
-                     ON admission.owner_user_id = $1::text::uuid
-                    AND admission.project_id = $2::text::uuid
-                    AND admission.author_command_admission_id = $3::text::uuid
-                  WHERE idempotency.owner_user_id = $1::text::uuid
-                    AND idempotency.project_id = $2::text::uuid
-                    AND idempotency.command_kind = 'applyAuthorEdit'
-                    AND idempotency.idempotency_key = $5::text::uuid
-                    AND idempotency.outcome_kind = 'in_progress'
-                    AND NOT EXISTS (
-                      SELECT 1 FROM storyos.author_command_admission_settlements AS settlement
-                       WHERE settlement.owner_user_id = $1::text::uuid
-                         AND settlement.project_id = $2::text::uuid
-                         AND settlement.author_command_admission_id = $3::text::uuid
-                    )
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5)
                  ON CONFLICT (owner_user_id, project_id, author_command_admission_id)
                  DO NOTHING",
                 &[
                     &query.project_scope.owner_user_id.as_ref(),
                     &query.project_scope.project_id.as_ref(),
                     &admission.author_command_admission_id,
+                    &admission.command_id,
                     &reason_text,
-                    &query.idempotency_key,
                 ],
             )
             .await
@@ -194,31 +172,13 @@ impl PostgresProjectReader {
                 },
             ));
         }
-        let row = client
-            .query_opt(
-                "SELECT reconfirmation.reconfirmation_reason,
-                        reconfirmation.recovery_draft_ref::text
-                   FROM storyos.author_command_admission_reconfirmations AS reconfirmation
-                  WHERE reconfirmation.owner_user_id = $1::text::uuid
-                    AND reconfirmation.project_id = $2::text::uuid
-                    AND reconfirmation.author_command_admission_id = $3::text::uuid",
-                &[
-                    &query.project_scope.owner_user_id.as_ref(),
-                    &query.project_scope.project_id.as_ref(),
-                    &admission.author_command_admission_id,
-                ],
-            )
-            .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?
-            .ok_or_else(outcome_unavailable)?;
-        Ok(ApplyAuthorEditOutcome::RequiresReconfirmation(
-            RequiresReconfirmationApplyAuthorEdit {
-                command_id: admission.command_id.clone(),
-                author_command_admission_id: admission.author_command_admission_id.clone(),
-                reconfirmation_reason: parse_reason(row.get(0)).ok_or_else(outcome_unavailable)?,
-                recovery_draft_ref: row.get(1),
-            },
-        ))
+        load_requires_reconfirmation(
+            client,
+            query,
+            &admission.command_id,
+            &admission.author_command_admission_id,
+        )
+        .await
     }
 
     async fn persist_requires_reconfirmation(
@@ -413,6 +373,39 @@ fn string_array(value: &serde_json::Value) -> Option<Vec<String>> {
         .iter()
         .map(|item| item.as_str().map(ToOwned::to_owned))
         .collect()
+}
+
+pub(super) async fn load_requires_reconfirmation(
+    client: &tokio_postgres::Client,
+    query: &ReadApplyAuthorEditOutcome,
+    command_id: &str,
+    author_command_admission_id: &str,
+) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+    let row = client
+        .query_opt(
+            "SELECT reconfirmation.reconfirmation_reason,
+                    reconfirmation.recovery_draft_ref::text
+               FROM storyos.author_command_admission_reconfirmations AS reconfirmation
+              WHERE reconfirmation.owner_user_id = $1::text::uuid
+                AND reconfirmation.project_id = $2::text::uuid
+                AND reconfirmation.author_command_admission_id = $3::text::uuid",
+            &[
+                &query.project_scope.owner_user_id.as_ref(),
+                &query.project_scope.project_id.as_ref(),
+                &author_command_admission_id,
+            ],
+        )
+        .await
+        .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?
+        .ok_or_else(outcome_unavailable)?;
+    Ok(ApplyAuthorEditOutcome::RequiresReconfirmation(
+        RequiresReconfirmationApplyAuthorEdit {
+            command_id: command_id.to_owned(),
+            author_command_admission_id: author_command_admission_id.to_owned(),
+            reconfirmation_reason: parse_reason(row.get(0)).ok_or_else(outcome_unavailable)?,
+            recovery_draft_ref: row.get(1),
+        },
+    ))
 }
 
 fn reason_text(reason: &ApplyAuthorEditReconfirmationReason) -> &'static str {

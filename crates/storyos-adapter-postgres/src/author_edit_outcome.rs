@@ -25,7 +25,6 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
         set_challenge_scope_on_client(&client, &query.project_scope)
             .await
             .map_err(outcome_store_error)?;
-
         let arbiter = client
             .query_opt(
                 "SELECT challenge.client_session_binding_digest,
@@ -178,13 +177,18 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
             let author_command_admission_id = relation
                 .get::<_, Option<String>>(3)
                 .ok_or_else(outcome_unavailable)?;
+            let outcome = super::author_edit_admission_recovery::load_requires_reconfirmation(
+                &client,
+                query,
+                &command_id,
+                &author_command_admission_id,
+            )
+            .await?;
             client
                 .batch_execute("COMMIT")
                 .await
                 .map_err(outcome_database_error)?;
-            return self
-                .read_requires_reconfirmation(query, &command_id, &author_command_admission_id)
-                .await;
+            return Ok(outcome);
         } else if open_admission {
             let command_id = relation
                 .get::<_, Option<String>>(2)
@@ -208,10 +212,10 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
             if let Some(reason) =
                 super::author_edit_admission_recovery::reconfirmation_reason(&admission)
             {
-                let outcome = self
+                match self
                     .persist_requires_reconfirmation_in_tx(&client, query, &admission, reason)
-                    .await;
-                match outcome {
+                    .await
+                {
                     Ok(outcome) => {
                         client
                             .batch_execute("COMMIT")

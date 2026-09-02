@@ -1,12 +1,13 @@
 use storyos_application::{
     AppendAuthorCommandOutcomeUnknown, ApplyAuthorEditCommand, ApplyAuthorEditOutcome,
-    AuthorCommandAdmissionIds, AuthorCommandOutcomeUnknownBoundary,
-    AuthorCommandOutcomeUnknownError, AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit,
-    EditorClientBinding, EditorSessionId, EditorSessionLookup, EditorSessionSnapshot,
-    IssueProjectCommandChallenge, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, ReadApplyAuthorEditOutcome, UserId, append_author_command_outcome_unknown,
-    create_editor_session, get_apply_author_edit_outcome, get_editor_session,
-    issue_project_command_challenge,
+    ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
+    AuthorCommandOutcomeUnknownBoundary, AuthorCommandOutcomeUnknownError,
+    AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
+    EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    ReadApplyAuthorEditOutcome, RequiresReconfirmationApplyAuthorEdit, UserId,
+    append_author_command_outcome_unknown, create_editor_session, get_apply_author_edit_outcome,
+    get_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, ManuscriptBlock, ManuscriptBlockKind, SelectionSnapshot,
@@ -1582,6 +1583,227 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .execute(
             "DELETE FROM storyos.scope_counters
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup.commit().await.unwrap();
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() {
+    let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(&runtime_url);
+    let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
+    let session_key = "018f0000-0000-7001-8000-000000000801";
+    let session_nonce_digest = "sha256:session-reconfirm";
+    let session_binding = binding(
+        &scope,
+        "createEditorSession",
+        "/api/v1/projects/{project_id}/editor-sessions",
+        "storyos.command.create-editor-session.request.v1",
+        session_key,
+    );
+    issue_project_command_challenge(
+        &store,
+        &IssueProjectCommandChallenge {
+            binding: session_binding.clone(),
+            nonce: "session-nonce-reconfirm".to_owned(),
+            nonce_digest: session_nonce_digest.to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    let editor_session_id = "018f0000-0000-7001-8000-000000000802";
+    create_editor_session(
+        &store,
+        &OpenEditorSession {
+            project_scope: scope.clone(),
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            snapshot_id: "018f0000-0000-7001-8000-000000000803".to_owned(),
+            client_binding: EditorClientBinding {
+                binding_ref: "binding:author-edit".to_owned(),
+                session_generation: 1,
+                client_contract_revision: "storyos.web-client.release-1.v1".to_owned(),
+                security_policy_revision: "storyos.web-security-policy.release-1.v1".to_owned(),
+            },
+            challenge_binding: session_binding,
+            nonce_digest: session_nonce_digest.to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    let command = author_command(
+        &scope,
+        editor_session_id,
+        "018f0000-0000-7001-8000-000000000811",
+        "sha256:cut-reconfirm",
+        "81",
+    );
+    issue_project_command_challenge(
+        &store,
+        &IssueProjectCommandChallenge {
+            binding: command.challenge_binding.clone(),
+            nonce: "nonce-81".to_owned(),
+            nonce_digest: command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    store
+        .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
+        .await
+        .expect_err("the reconfirmation cut must stop before Core");
+    let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        let _ = connection.await;
+    });
+    admin
+        .execute(
+            "UPDATE storyos.author_command_admissions
+                SET command_payload = command_payload - 'author_edit_units'
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND author_command_admission_id = $3::text::uuid",
+            &[&USER, &PROJECT, &command.ids.author_command_admission_id],
+        )
+        .await
+        .unwrap();
+    assert!(
+        !admin
+            .query_one(
+                "SELECT command_payload ? 'author_edit_units'
+                   FROM storyos.author_command_admissions
+                  WHERE owner_user_id = $1::text::uuid
+                    AND project_id = $2::text::uuid
+                    AND author_command_admission_id = $3::text::uuid",
+                &[&USER, &PROJECT, &command.ids.author_command_admission_id],
+            )
+            .await
+            .unwrap()
+            .get::<_, bool>(0),
+        "the incomplete-payload fixture must strip author_edit_units"
+    );
+
+    let queried = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: command.client_binding.clone(),
+            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let expected =
+        ApplyAuthorEditOutcome::RequiresReconfirmation(RequiresReconfirmationApplyAuthorEdit {
+            command_id: command.ids.command_id.clone(),
+            author_command_admission_id: command.ids.author_command_admission_id.clone(),
+            reconfirmation_reason:
+                ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable,
+            recovery_draft_ref: None,
+        });
+    assert_eq!(queried, expected);
+    let repeated = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: command.client_binding.clone(),
+            limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
+            idempotency_key: command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(repeated, expected);
+
+    let cleanup = admin.transaction().await.unwrap();
+    cleanup
+        .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+        .await
+        .unwrap();
+    for table in [
+        "author_command_admission_outcome_unknown_observations",
+        "author_command_admission_reconfirmations",
+        "author_command_admission_settlements",
+        "domain_receipts",
+        "author_command_admissions",
+    ] {
+        cleanup
+            .execute(
+                &format!(
+                    "DELETE FROM storyos.{table}
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid"
+                ),
+                &[&USER, &PROJECT],
+            )
+            .await
+            .unwrap();
+    }
+    cleanup
+        .execute(
+            "DELETE FROM storyos.editor_session_base_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND editor_session_id = $3::text::uuid",
+            &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_writer_generations
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.editor_sessions
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND editor_session_id = $3::text::uuid",
+            &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_command_challenges
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.command_idempotency
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_command_challenge_rate_windows
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND client_session_generation = 1",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_command_challenge_rate_guards
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND client_session_generation = 1",
             &[&USER, &PROJECT],
         )
         .await
