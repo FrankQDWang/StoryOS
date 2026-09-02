@@ -8,7 +8,7 @@ export function VolumeTreeActions({
   title,
   order,
   volumeCount,
-  expectedVolumeRevision,
+  expectedTreeRevision,
   baseUrl,
   fetchImpl,
   cryptoImpl,
@@ -20,7 +20,7 @@ export function VolumeTreeActions({
   title: string;
   order: string;
   volumeCount: number;
-  expectedVolumeRevision: string;
+  expectedTreeRevision: string;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
@@ -39,7 +39,7 @@ export function VolumeTreeActions({
       volumeId,
       title: nextTitle,
       order: nextOrder,
-      expectedVolumeRevision,
+      expectedTreeRevision,
     }).then((updated) => {
       if (
         updated.effect.kind !== "authoritative_applied"

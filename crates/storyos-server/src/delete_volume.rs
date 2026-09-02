@@ -32,8 +32,8 @@ pub(super) async fn delete_volume(
     let body = serde_json::from_slice::<contracts::DeleteVolumeRequest>(&bytes)
         .map_err(|_| invalid_request_shape())?;
     let input = &body.delete_volume_input;
-    let Some(expected_volume_revision) = input
-        .expected_volume_revision
+    let Some(expected_tree_revision) = input
+        .expected_tree_revision
         .parse::<u64>()
         .ok()
         .filter(|revision| *revision >= 1)
@@ -105,7 +105,7 @@ pub(super) async fn delete_volume(
         canonical_command_bytes,
         correlation_id: input.correlation_id.clone(),
         volume_id: VolumeId::new(volume_id),
-        expected_volume_revision,
+        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
@@ -154,8 +154,8 @@ fn delete_volume_response(
             contracts::DomainReceiptResult::Conflicted,
             contracts::DeleteVolumeEffect::Conflicted {
                 reason: match reason {
-                    storyos_core::DeleteVolumeConflict::StaleVolumeRevision => {
-                        contracts::DeleteVolumeConflictReason::StaleVolumeRevision
+                    storyos_core::DeleteVolumeConflict::StaleTreeRevision => {
+                        contracts::DeleteVolumeConflictReason::StaleTreeRevision
                     }
                 },
             },

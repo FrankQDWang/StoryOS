@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-08-29-set-current-chapter-v1",
+  "contract_revision": "release1-wire-catalog-2026-09-02-tree-revision-names-v1",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",
@@ -1421,7 +1421,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "volume_scope_join",
-        "expected_volume_revision"
+        "expected_tree_revision"
       ],
       "settlement": {
         "mode": "sync",
@@ -1506,7 +1506,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "volume_scope_join",
-        "expected_volume_revision",
+        "expected_tree_revision",
         "child_chapter_policy"
       ],
       "settlement": {
@@ -1680,7 +1680,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "chapter_scope_join",
-        "expected_chapter_revision"
+        "expected_tree_revision"
       ],
       "settlement": {
         "mode": "sync",
@@ -1765,7 +1765,7 @@
       "preconditions": [
         "server_derived_project_scope",
         "chapter_scope_join",
-        "expected_chapter_revision"
+        "expected_tree_revision"
       ],
       "settlement": {
         "mode": "sync",

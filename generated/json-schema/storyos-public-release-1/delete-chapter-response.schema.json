@@ -22,7 +22,7 @@
     },
     "DeleteChapterConflictReason": {
       "enum": [
-        "stale_chapter_revision"
+        "stale_tree_revision"
       ],
       "type": "string"
     },

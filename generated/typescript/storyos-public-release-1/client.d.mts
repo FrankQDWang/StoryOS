@@ -95,13 +95,13 @@ export type CreateVolumeEffect = { "kind": "authoritative_applied", volume_id: s
 
 export type CreateVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CreateVolumeEffect, };
 
-export type UpdateVolumeInput = { title: string, order: string, expected_volume_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type UpdateVolumeInput = { title: string, order: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type UpdateVolumeRequest = { command_schema: string, update_volume_input: UpdateVolumeInput, };
 
 export type UpdateVolumeNoEffectReason = "unchanged";
 
-export type UpdateVolumeConflictReason = "stale_volume_revision";
+export type UpdateVolumeConflictReason = "stale_tree_revision";
 
 export type UpdateVolumeRefusalReason = "archived_project" | "invalid_title" | "invalid_order" | "invalid_volume_join";
 
@@ -109,13 +109,13 @@ export type UpdateVolumeEffect = { "kind": "authoritative_applied", volume_id: s
 
 export type UpdateVolumeResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateVolumeEffect, };
 
-export type DeleteVolumeInput = { expected_volume_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type DeleteVolumeInput = { expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type DeleteVolumeRequest = { command_schema: string, delete_volume_input: DeleteVolumeInput, };
 
 export type DeleteVolumeNoEffectReason = "already_removed";
 
-export type DeleteVolumeConflictReason = "stale_volume_revision";
+export type DeleteVolumeConflictReason = "stale_tree_revision";
 
 export type DeleteVolumeRefusalReason = "archived_project" | "invalid_volume_join" | "nonempty_volume";
 
@@ -135,13 +135,13 @@ export type CreateChapterEffect = { "kind": "authoritative_applied", volume_id: 
 
 export type CreateChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CreateChapterEffect, };
 
-export type UpdateChapterInput = { title: string, order: string, expected_chapter_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type UpdateChapterInput = { title: string, order: string, expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type UpdateChapterRequest = { command_schema: string, update_chapter_input: UpdateChapterInput, };
 
 export type UpdateChapterNoEffectReason = "unchanged";
 
-export type UpdateChapterConflictReason = "stale_chapter_revision";
+export type UpdateChapterConflictReason = "stale_tree_revision";
 
 export type UpdateChapterRefusalReason = "archived_project" | "invalid_title" | "invalid_order" | "invalid_chapter_join";
 
@@ -149,13 +149,13 @@ export type UpdateChapterEffect = { "kind": "authoritative_applied", chapter_id:
 
 export type UpdateChapterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UpdateChapterEffect, };
 
-export type DeleteChapterInput = { expected_chapter_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type DeleteChapterInput = { expected_tree_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type DeleteChapterRequest = { command_schema: string, delete_chapter_input: DeleteChapterInput, };
 
 export type DeleteChapterNoEffectReason = "already_removed";
 
-export type DeleteChapterConflictReason = "stale_chapter_revision";
+export type DeleteChapterConflictReason = "stale_tree_revision";
 
 export type DeleteChapterRefusalReason = "archived_project" | "invalid_chapter_join";
 

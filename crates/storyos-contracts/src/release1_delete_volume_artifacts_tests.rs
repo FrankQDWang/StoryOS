@@ -116,7 +116,7 @@ fn delete_volume_wire_is_generated_from_one_closed_contract() {
     for precondition in [
         "server_derived_project_scope",
         "volume_scope_join",
-        "expected_volume_revision",
+        "expected_tree_revision",
         "child_chapter_policy",
     ] {
         assert!(

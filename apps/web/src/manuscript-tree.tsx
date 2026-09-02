@@ -169,7 +169,7 @@ export function ManuscriptTree({
                   title={volume.title}
                   order={volume.order}
                   volumeCount={volumeCount}
-                  expectedVolumeRevision={tree.tree_revision}
+                  expectedTreeRevision={tree.tree_revision}
                   baseUrl={baseUrl}
                   fetchImpl={fetchImpl}
                   cryptoImpl={cryptoImpl}
@@ -186,7 +186,7 @@ export function ManuscriptTree({
                     title={chapter.title}
                     order={chapter.order}
                     chapterCount={volume.chapters.length}
-                    expectedChapterRevision={tree.tree_revision}
+                    expectedTreeRevision={tree.tree_revision}
                     selectedChapterId={selectedChapterId}
                     onSelectChapter={onSelectChapter}
                     currentChapterId={currentChapterId}

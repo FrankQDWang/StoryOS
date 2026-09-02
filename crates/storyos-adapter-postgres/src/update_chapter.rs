@@ -147,9 +147,9 @@ async fn read_update_chapter_settlement(
             ("no_effect", Some("unchanged")) => UpdateChapterSettlementEffect::NoEffect {
                 reason: storyos_core::UpdateChapterNoEffect::Unchanged,
             },
-            ("conflicted", Some("stale_chapter_revision")) => {
+            ("conflicted", Some("stale_tree_revision")) => {
                 UpdateChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::UpdateChapterConflict::StaleChapterRevision,
+                    reason: storyos_core::UpdateChapterConflict::StaleTreeRevision,
                 }
             }
             ("refused", Some("archived_project")) => UpdateChapterSettlementEffect::Refused {

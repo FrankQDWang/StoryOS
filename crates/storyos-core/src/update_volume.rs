@@ -6,8 +6,8 @@ use super::{ProjectLifecycle, ProjectPresence, VolumeJoin};
 pub struct UpdateVolume {
     pub presence: ProjectPresence,
     pub volume_join: VolumeJoin,
-    pub expected_volume_revision: u64,
-    pub current_volume_revision: u64,
+    pub expected_tree_revision: u64,
+    pub current_tree_revision: u64,
     pub current_lifecycle: ProjectLifecycle,
     pub title: String,
     pub current_title: String,
@@ -41,7 +41,7 @@ pub enum UpdateVolumeNoEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateVolumeConflict {
-    StaleVolumeRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -80,9 +80,9 @@ pub fn update_volume(command: &UpdateVolume) -> UpdateVolumeResult {
             reason: UpdateVolumeRefusal::ArchivedProject,
         };
     }
-    if command.expected_volume_revision != command.current_volume_revision {
+    if command.expected_tree_revision != command.current_tree_revision {
         return UpdateVolumeResult::Conflicted {
-            reason: UpdateVolumeConflict::StaleVolumeRevision,
+            reason: UpdateVolumeConflict::StaleTreeRevision,
         };
     }
     if command.title == command.current_title && command.order == command.current_order {
@@ -93,6 +93,6 @@ pub fn update_volume(command: &UpdateVolume) -> UpdateVolumeResult {
     UpdateVolumeResult::Applied {
         title: command.title.clone(),
         order: command.order,
-        tree_revision: command.current_volume_revision + 1,
+        tree_revision: command.current_tree_revision + 1,
     }
 }

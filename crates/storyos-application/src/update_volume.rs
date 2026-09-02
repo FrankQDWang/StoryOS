@@ -16,7 +16,7 @@ pub struct UpdateVolumeCommand {
     pub volume_id: VolumeId,
     pub title: String,
     pub order: u64,
-    pub expected_volume_revision: u64,
+    pub expected_tree_revision: u64,
     pub ids: AuthorCommandAdmissionIds,
 }
 
@@ -112,7 +112,7 @@ pub async fn update_volume(
         || command.title.is_empty()
         || command.title.len() > 1024
         || command.order < 1
-        || command.expected_volume_revision < 1
+        || command.expected_tree_revision < 1
     {
         return Err(UpdateVolumeError::BindingConflict);
     }

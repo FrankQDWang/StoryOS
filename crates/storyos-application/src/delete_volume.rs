@@ -14,7 +14,7 @@ pub struct DeleteVolumeCommand {
     pub canonical_command_bytes: Vec<u8>,
     pub correlation_id: String,
     pub volume_id: VolumeId,
-    pub expected_volume_revision: u64,
+    pub expected_tree_revision: u64,
     pub ids: AuthorCommandAdmissionIds,
 }
 
@@ -106,7 +106,7 @@ pub async fn delete_volume(
         || challenge.method != "DELETE"
         || challenge.route_template != "/api/v1/projects/{project_id}/volumes/{volume_id}"
         || challenge.command_schema != "storyos.command.delete-volume.request.v1"
-        || command.expected_volume_revision < 1
+        || command.expected_tree_revision < 1
     {
         return Err(DeleteVolumeError::BindingConflict);
     }

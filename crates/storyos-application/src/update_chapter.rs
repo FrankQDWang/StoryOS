@@ -16,7 +16,7 @@ pub struct UpdateChapterCommand {
     pub chapter_id: ChapterId,
     pub title: String,
     pub order: u64,
-    pub expected_chapter_revision: u64,
+    pub expected_tree_revision: u64,
     pub ids: AuthorCommandAdmissionIds,
 }
 
@@ -114,7 +114,7 @@ pub async fn update_chapter(
         || command.title.is_empty()
         || command.title.len() > 1024
         || command.order < 1
-        || command.expected_chapter_revision < 1
+        || command.expected_tree_revision < 1
     {
         return Err(UpdateChapterError::BindingConflict);
     }

@@ -47,7 +47,7 @@ pub(super) async fn persist_delete_chapter(
             )));
         }
     };
-    let current_chapter_revision = row
+    let current_tree_revision = row
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(delete_chapter_parse_error)?;
@@ -121,8 +121,8 @@ pub(super) async fn persist_delete_chapter(
         presence: ProjectPresence::Present,
         chapter_join,
         chapter_lifecycle,
-        expected_chapter_revision: command.expected_chapter_revision,
-        current_chapter_revision,
+        expected_tree_revision: command.expected_tree_revision,
+        current_tree_revision,
         current_lifecycle,
         chapter_id: command.chapter_id.as_ref().to_owned(),
         current_chapter_id,
@@ -158,7 +158,7 @@ pub(super) async fn persist_delete_chapter(
         }
         DeleteChapterSettlementEffect::Conflicted { .. } => (
             "conflicted",
-            r#"{"reason":"stale_chapter_revision"}"#.to_owned(),
+            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
         ),
         DeleteChapterSettlementEffect::Refused { reason } => {
             let refused = match reason {
@@ -366,7 +366,7 @@ async fn persist_removed_chapter(
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
                     &tree_revision.to_string(),
-                    &command.expected_chapter_revision.to_string(),
+                    &command.expected_tree_revision.to_string(),
                 ],
             )
             .await
@@ -381,7 +381,7 @@ async fn persist_removed_chapter(
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
                     &tree_revision.to_string(),
-                    &command.expected_chapter_revision.to_string(),
+                    &command.expected_tree_revision.to_string(),
                     &chapter_id,
                 ],
             )
@@ -397,7 +397,7 @@ async fn persist_removed_chapter(
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
                     &tree_revision.to_string(),
-                    &command.expected_chapter_revision.to_string(),
+                    &command.expected_tree_revision.to_string(),
                 ],
             )
             .await

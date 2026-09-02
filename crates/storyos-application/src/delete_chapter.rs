@@ -14,7 +14,7 @@ pub struct DeleteChapterCommand {
     pub canonical_command_bytes: Vec<u8>,
     pub correlation_id: String,
     pub chapter_id: ChapterId,
-    pub expected_chapter_revision: u64,
+    pub expected_tree_revision: u64,
     pub ids: AuthorCommandAdmissionIds,
 }
 
@@ -109,7 +109,7 @@ pub async fn delete_chapter(
         || challenge.method != "DELETE"
         || challenge.route_template != "/api/v1/projects/{project_id}/chapters/{chapter_id}"
         || challenge.command_schema != "storyos.command.delete-chapter.request.v1"
-        || command.expected_chapter_revision < 1
+        || command.expected_tree_revision < 1
     {
         return Err(DeleteChapterError::BindingConflict);
     }

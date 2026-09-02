@@ -32,8 +32,8 @@ pub(super) async fn update_chapter(
     let body = serde_json::from_slice::<contracts::UpdateChapterRequest>(&bytes)
         .map_err(|_| invalid_request_shape())?;
     let input = &body.update_chapter_input;
-    let Some(expected_chapter_revision) = input
-        .expected_chapter_revision
+    let Some(expected_tree_revision) = input
+        .expected_tree_revision
         .parse::<u64>()
         .ok()
         .filter(|revision| *revision >= 1)
@@ -112,7 +112,7 @@ pub(super) async fn update_chapter(
         chapter_id: ChapterId::new(chapter_id),
         title: input.title.clone(),
         order,
-        expected_chapter_revision,
+        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
@@ -164,8 +164,8 @@ fn update_chapter_response(
             contracts::DomainReceiptResult::Conflicted,
             contracts::UpdateChapterEffect::Conflicted {
                 reason: match reason {
-                    storyos_core::UpdateChapterConflict::StaleChapterRevision => {
-                        contracts::UpdateChapterConflictReason::StaleChapterRevision
+                    storyos_core::UpdateChapterConflict::StaleTreeRevision => {
+                        contracts::UpdateChapterConflictReason::StaleTreeRevision
                     }
                 },
             },

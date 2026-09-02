@@ -32,8 +32,8 @@ pub(super) async fn delete_chapter(
     let body = serde_json::from_slice::<contracts::DeleteChapterRequest>(&bytes)
         .map_err(|_| invalid_request_shape())?;
     let input = &body.delete_chapter_input;
-    let Some(expected_chapter_revision) = input
-        .expected_chapter_revision
+    let Some(expected_tree_revision) = input
+        .expected_tree_revision
         .parse::<u64>()
         .ok()
         .filter(|revision| *revision >= 1)
@@ -105,7 +105,7 @@ pub(super) async fn delete_chapter(
         canonical_command_bytes,
         correlation_id: input.correlation_id.clone(),
         chapter_id: ChapterId::new(chapter_id),
-        expected_chapter_revision,
+        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
@@ -156,8 +156,8 @@ fn delete_chapter_response(
             contracts::DomainReceiptResult::Conflicted,
             contracts::DeleteChapterEffect::Conflicted {
                 reason: match reason {
-                    storyos_core::DeleteChapterConflict::StaleChapterRevision => {
-                        contracts::DeleteChapterConflictReason::StaleChapterRevision
+                    storyos_core::DeleteChapterConflict::StaleTreeRevision => {
+                        contracts::DeleteChapterConflictReason::StaleTreeRevision
                     }
                 },
             },

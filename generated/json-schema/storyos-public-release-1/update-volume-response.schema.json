@@ -244,7 +244,7 @@
     },
     "UpdateVolumeConflictReason": {
       "enum": [
-        "stale_volume_revision"
+        "stale_tree_revision"
       ],
       "type": "string"
     },

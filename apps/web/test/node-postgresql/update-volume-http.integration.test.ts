@@ -66,7 +66,7 @@ function volumeRequest(title: string, expectedTreeRevision: string, correlationI
 function updateRequest(
   title: string,
   order: string,
-  expectedVolumeRevision: string,
+  expectedTreeRevision: string,
   correlationId: string,
 ): UpdateVolumeRequest {
   return {
@@ -74,7 +74,7 @@ function updateRequest(
     update_volume_input: {
       title,
       order,
-      expected_volume_revision: expectedVolumeRevision,
+      expected_tree_revision: expectedTreeRevision,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
       correlation_id: correlationId,
@@ -263,7 +263,7 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
     if (stale.updated.effect.kind !== "conflicted") {
       throw new Error("stale Update Volume must conflict");
     }
-    assert.equal(stale.updated.effect.reason, "stale_volume_revision");
+    assert.equal(stale.updated.effect.reason, "stale_tree_revision");
     const afterStale = await getManuscriptTree({
       baseUrl,
       projectId: first.projectId,

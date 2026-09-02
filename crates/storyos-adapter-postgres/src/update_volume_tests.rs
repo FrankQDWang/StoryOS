@@ -17,11 +17,11 @@ const VOLUME_A_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume 
 const VOLUME_A_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
 const VOLUME_B_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Volume B"}"#;
 const VOLUME_B_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:1093f06260a76658116fbc95ea1503ed34ef1b3a7bcc07cc187e1c89f4a6bea2";
-const UPDATE_BYTES: &[u8] = br#"{"expected_volume_revision":"3","order":"2","title":"Volume B"}"#;
-const UPDATE_DIGEST: &str = "sha256:storyos.command.updateVolume.jcs.v1:179d2c183c4474eb27766b7c4364ef9a4386696a87e6259947d8ed1c8909edce";
+const UPDATE_BYTES: &[u8] = br#"{"expected_tree_revision":"3","order":"2","title":"Volume B"}"#;
+const UPDATE_DIGEST: &str = "sha256:storyos.command.updateVolume.jcs.v1:577c976b262b0e8bf54e7adb4b30b4f98597b0bcfab3fd877ba65042fac9d28c";
 const INVALID_ORDER_BYTES: &[u8] =
-    br#"{"expected_volume_revision":"3","order":"3","title":"Volume B"}"#;
-const INVALID_ORDER_DIGEST: &str = "sha256:storyos.command.updateVolume.jcs.v1:102ae6cb8a2f5ecd902561ed249a75ef4caad50efa7ab0022d91e2279ec75649";
+    br#"{"expected_tree_revision":"3","order":"3","title":"Volume B"}"#;
+const INVALID_ORDER_DIGEST: &str = "sha256:storyos.command.updateVolume.jcs.v1:5a19077e90043813455d23f77e75e6361894998627ca4767b09879e9d75f6edb";
 const MISSING_VOLUME: &str = "018f0000-0000-7001-8000-00000000ffff";
 
 fn create_project_issue(
@@ -170,7 +170,7 @@ struct UpdateFixture<'a> {
     volume_id: &'a str,
     title: &'a str,
     order: u64,
-    expected_volume_revision: u64,
+    expected_tree_revision: u64,
     bytes: &'a [u8],
 }
 
@@ -195,7 +195,7 @@ fn update_command(
         volume_id: VolumeId::new(fixture.volume_id),
         title: fixture.title.to_owned(),
         order: fixture.order,
-        expected_volume_revision: fixture.expected_volume_revision,
+        expected_tree_revision: fixture.expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
             author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
@@ -209,7 +209,7 @@ fn applied_fixture(volume_id: &str) -> UpdateFixture<'_> {
         volume_id,
         title: "Volume B",
         order: 2,
-        expected_volume_revision: 3,
+        expected_tree_revision: 3,
         bytes: UPDATE_BYTES,
     }
 }
@@ -378,7 +378,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
     assert_eq!(
         stale.effect,
         UpdateVolumeSettlementEffect::Conflicted {
-            reason: storyos_core::UpdateVolumeConflict::StaleVolumeRevision,
+            reason: storyos_core::UpdateVolumeConflict::StaleTreeRevision,
         }
     );
 
@@ -418,7 +418,7 @@ async fn update_volume_is_atomic_replayable_and_scope_safe() {
                 volume_id: &first_volume_id,
                 title: "Volume B",
                 order: 3,
-                expected_volume_revision: 3,
+                expected_tree_revision: 3,
                 bytes: INVALID_ORDER_BYTES,
             },
         ),

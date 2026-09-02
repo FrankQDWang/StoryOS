@@ -14,7 +14,7 @@ impl DeleteChapterStore for Store {
         Ok(DeleteChapterSettlement {
             ids: command.ids.clone(),
             effect: DeleteChapterSettlementEffect::Applied {
-                tree_revision: command.expected_chapter_revision + 1,
+                tree_revision: command.expected_tree_revision + 1,
                 volume_id: "volume".to_owned(),
                 current: storyos_core::DeleteChapterCurrent::PreserveExisting,
             },
@@ -69,7 +69,7 @@ fn command() -> DeleteChapterCommand {
         canonical_command_bytes,
         correlation_id: "correlation".to_owned(),
         chapter_id: ChapterId::new("chapter"),
-        expected_chapter_revision: 4,
+        expected_tree_revision: 4,
         ids: AuthorCommandAdmissionIds {
             command_id: "command".to_owned(),
             author_command_admission_id: "admission".to_owned(),

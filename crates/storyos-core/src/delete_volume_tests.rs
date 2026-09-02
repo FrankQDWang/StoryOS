@@ -10,8 +10,8 @@ fn command() -> DeleteVolume {
         volume_join: VolumeJoin::ExactScope,
         volume_lifecycle: VolumeRemovalLifecycle::Active,
         child_chapters: VolumeChildPolicy::Empty,
-        expected_volume_revision: 4,
-        current_volume_revision: 4,
+        expected_tree_revision: 4,
+        current_tree_revision: 4,
         current_lifecycle: ProjectLifecycle::Active,
     }
 }
@@ -54,15 +54,15 @@ fn an_already_removed_volume_is_a_no_effect_retry() {
 }
 
 #[test]
-fn a_stale_volume_revision_is_conflicted_with_zero_authority_effect() {
+fn a_stale_tree_revision_is_conflicted_with_zero_authority_effect() {
     let stale = DeleteVolume {
-        expected_volume_revision: 3,
+        expected_tree_revision: 3,
         ..command()
     };
     assert_eq!(
         delete_volume(&stale),
         DeleteVolumeResult::Conflicted {
-            reason: DeleteVolumeConflict::StaleVolumeRevision,
+            reason: DeleteVolumeConflict::StaleTreeRevision,
         },
     );
 }

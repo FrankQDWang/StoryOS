@@ -78,11 +78,11 @@ function chapterRequest(title: string, expectedTreeRevision: string, correlation
   };
 }
 
-function deleteRequest(expectedVolumeRevision: string, correlationId: string): DeleteVolumeRequest {
+function deleteRequest(expectedTreeRevision: string, correlationId: string): DeleteVolumeRequest {
   return {
     command_schema: "storyos.command.delete-volume.request.v1",
     delete_volume_input: {
-      expected_volume_revision: expectedVolumeRevision,
+      expected_tree_revision: expectedTreeRevision,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
       correlation_id: correlationId,
