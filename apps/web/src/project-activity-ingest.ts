@@ -14,6 +14,23 @@ import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
+const PROJECT_ACTIVITY_KINDS = new Set([
+  "authoritative_author_edit_applied",
+  "writer_takeover_applied",
+  "writer_takeover_compare_failed",
+  "project_created",
+  "project_updated",
+  "project_archival_changed",
+  "volume_created",
+  "volume_updated",
+  "chapter_created",
+  "chapter_updated",
+  "current_chapter_set",
+  "chapter_deleted",
+  "volume_deleted",
+  "human_readable_manuscript_export_settled",
+  "project_export_settled",
+]);
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 const isoInstant = (value: unknown): value is string => typeof value === "string"
@@ -49,6 +66,18 @@ function emptyIngest(workspace: EditorWorkspace): ProjectActivityIngest {
   };
 }
 
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function activityEventSchema(kind: string): string {
+  return `storyos.event.${kind.replaceAll("_", "-")}.v1`;
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
 function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): ProjectActivityEvent {
   const frame = frameValue as {
     id?: unknown;
@@ -61,12 +90,28 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
   }
   const event = frame.data;
   const scope = workspace.partition.project_scope;
+  const kind = event?.event_kind ?? "";
   const payload = event?.payload;
+  const chapterId = stringField(payload?.chapter_id);
+  const appliedAuthorEdit = kind === "authoritative_author_edit_applied"
+    && event?.event_schema === activityEventSchema(kind)
+    && event.aggregate_ref?.kind === "chapter"
+    && event.aggregate_ref?.id === chapterId
+    && UUID.test(chapterId ?? "")
+    && UUID.test(stringField(payload?.authoritative_revision_id) ?? "")
+    && UUID.test(stringField(payload?.authoritative_commit_id) ?? "")
+    && boundedU64(stringField(payload?.author_action_sequence))
+    && stringField(payload?.author_action_sequence) !== "0";
+  const otherPersistedKind = kind !== "authoritative_author_edit_applied"
+    && PROJECT_ACTIVITY_KINDS.has(kind)
+    && event?.event_schema === activityEventSchema(kind)
+    && typeof event.aggregate_ref?.kind === "string"
+    && event.aggregate_ref.kind.length > 0
+    && UUID.test(event.aggregate_ref?.id ?? "");
   if (event?.envelope_version !== 1
     || event.activity_profile !== "storyos.project-activity.v1"
     || !UUID.test(event.event_id ?? "")
-    || event.event_schema !== "storyos.event.authoritative-author-edit-applied.v1"
-    || event.event_kind !== "authoritative_author_edit_applied"
+    || !PROJECT_ACTIVITY_KINDS.has(kind)
     || JSON.stringify(event.project_scope) !== JSON.stringify(scope)
     || event.requester_user_id !== scope.owner_user_id
     || event.actor?.kind !== "author"
@@ -76,8 +121,6 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     || event.agent_run_id !== null
     || event.run_step_id !== null
     || event.run_sequence !== null
-    || event.aggregate_ref?.kind !== "chapter"
-    || event.aggregate_ref?.id !== payload?.chapter_id
     || !UUID.test(event.correlation_id ?? "")
     || event.causation?.kind !== "command"
     || event.causation?.id !== event.command_id
@@ -86,15 +129,13 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     || !UUID.test(event.receipt_ref?.id ?? "")
     || !isoInstant(event.occurred_at)
     || event.recorded_at !== event.occurred_at
-    || !UUID.test(payload?.chapter_id ?? "")
-    || !UUID.test(payload?.authoritative_revision_id ?? "")
-    || !UUID.test(payload?.authoritative_commit_id ?? "")
-    || !boundedU64(payload?.author_action_sequence) || payload.author_action_sequence === "0"
+    || !isJsonObject(payload)
     || event.payload_digest?.algorithm !== "sha256"
     || event.payload_digest?.profile !== "storyos.event-payload.jcs.v1"
     || !/^[0-9a-f]{64}$/.test(event.payload_digest?.value_hex_lowercase ?? "")
     || event.application_wire_record_ref !== event.event_id
-    || event.limit_profile_revision !== workspace.partition.limit_profile_revision) {
+    || event.limit_profile_revision !== workspace.partition.limit_profile_revision
+    || !(appliedAuthorEdit || otherPersistedKind)) {
     throw new Error("Project Activity Event is invalid");
   }
   return event;

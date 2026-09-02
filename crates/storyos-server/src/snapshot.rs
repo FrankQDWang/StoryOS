@@ -2,9 +2,8 @@ use axum::extract::Query;
 use axum::http::HeaderValue;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
-use std::collections::BTreeMap;
 use storyos_application::{
-    AppliedAuthorEditActivity, CanonicalSnapshot, SnapshotLookup, SnapshotReadError, SnapshotStore,
+    CanonicalSnapshot, ProjectActivityEvent, SnapshotLookup, SnapshotReadError, SnapshotStore,
 };
 
 use super::project_command_challenge::{hex_bytes, secret_digest};
@@ -81,7 +80,7 @@ pub(super) async fn activity_stream(
         None => snapshot.project_activity_position,
     };
     let events = store
-        .list_applied_author_edit_activity(&lookup, after_position)
+        .list_project_activity(&lookup, after_position)
         .await
         .map_err(snapshot_read_error)?;
     let mut body = String::new();
@@ -147,31 +146,18 @@ fn format_activity_frame(
     secret: &[u8],
     scope: &ApplicationScope,
     snapshot: &CanonicalSnapshot,
-    event: &AppliedAuthorEditActivity,
+    event: &ProjectActivityEvent,
 ) -> Result<String, ApiError> {
-    let payload = BTreeMap::from([
-        (
-            "author_action_sequence",
-            event.author_action_sequence.as_str(),
-        ),
-        (
-            "authoritative_commit_id",
-            event.authoritative_commit_id.as_str(),
-        ),
-        (
-            "authoritative_revision_id",
-            event.authoritative_revision_id.as_str(),
-        ),
-        ("chapter_id", event.chapter_id.as_str()),
-    ]);
+    let payload: serde_json::Value =
+        serde_json::from_str(&event.payload_json).map_err(|_| resource_unavailable())?;
     let payload_bytes = serde_json::to_vec(&payload).map_err(|_| resource_unavailable())?;
     let payload_digest = hex_bytes(&Sha256::digest(payload_bytes));
     let data = serde_json::json!({
         "envelope_version": 1,
         "activity_profile": ACTIVITY_PROFILE,
         "event_id": event.event_id,
-        "event_schema": "storyos.event.authoritative-author-edit-applied.v1",
-        "event_kind": "authoritative_author_edit_applied",
+        "event_schema": event.kind.event_schema(),
+        "event_kind": event.kind.as_str(),
         "project_scope": {
             "owner_user_id": scope.owner_user_id.as_ref(),
             "project_id": scope.project_id.as_ref(),
@@ -187,15 +173,15 @@ fn format_activity_frame(
         "run_step_id": serde_json::Value::Null,
         "run_sequence": serde_json::Value::Null,
         "aggregate_ref": {
-            "kind": "chapter",
-            "id": event.chapter_id,
+            "kind": event.aggregate.kind.as_str(),
+            "id": event.aggregate.id.as_str(),
         },
         "correlation_id": event.correlation_id,
         "causation": {
             "kind": "command",
-            "id": event.command_id,
+            "id": event.command_id.as_str(),
         },
-        "command_id": event.command_id,
+        "command_id": event.command_id.as_str(),
         "receipt_ref": {
             "kind": "domain_receipt",
             "id": event.receipt_id,
