@@ -1,8 +1,17 @@
 import { Editor } from "@tiptap/core";
 import { afterEach, expect, it } from "vitest";
 
-import { manuscriptBlocksJson, manuscriptJson, paragraphUtf16 } from "../../src/manuscript-doc.ts";
-import { storyosManuscriptExtensions } from "../../src/manuscript-tiptap-adapter.ts";
+import {
+  type CapturedManuscriptEdit,
+  manuscriptBlocksJson,
+  manuscriptJson,
+  paragraphUtf16,
+} from "../../src/manuscript-doc.ts";
+import {
+  capturedManuscriptEditFromTransaction,
+  isStoryosHydrateTransaction,
+  storyosManuscriptExtensions,
+} from "../../src/manuscript-tiptap-adapter.ts";
 
 const BLOCK_ID = "11111111-1111-4111-8111-111111111111";
 const RIGHT_ID = "22222222-2222-4222-8222-222222222222";
@@ -112,4 +121,31 @@ it("joins adjacent paragraphs on Backspace at the start of the following paragra
   expect(editor.state.doc.childCount).toBe(1);
   expect(editor.state.doc.firstChild?.attrs.id).toBe(BLOCK_ID);
   expect(editor.state.doc.firstChild?.textContent).toBe("HelloWorld");
+});
+
+it("carries the validated replacement on an accepted document transaction", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  let carried: CapturedManuscriptEdit | undefined;
+  editor = new Editor({
+    element: host,
+    extensions: storyosManuscriptExtensions(BLOCK_ID),
+    content: manuscriptJson(BLOCK_ID, "Hello"),
+    injectCSS: false,
+    onTransaction({ transaction }) {
+      if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) return;
+      carried = capturedManuscriptEditFromTransaction(transaction);
+    },
+  });
+  editor.commands.setTextSelection(6);
+  editor.view.dispatch(editor.state.tr.insertText("!"));
+  expect(paragraphUtf16(editor.state.doc)).toBe("Hello!");
+  expect(carried?.kind).toBe("replace_block_selection");
+  expect(carried?.resultingBody).toBe("Hello!");
+  if (carried?.kind === "replace_block_selection") {
+    expect(carried.manuscript_block_id).toBe(BLOCK_ID);
+    expect(carried.from).toBe(5);
+    expect(carried.to).toBe(5);
+    expect(carried.text).toBe("!");
+  }
 });

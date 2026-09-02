@@ -11,6 +11,7 @@ import type { InputOrigin } from "./editor-types.ts";
 import { createJournalUuid } from "./local-edit-journal.ts";
 import {
   captureManuscriptChange,
+  type CapturedManuscriptEdit,
   type ManuscriptParagraph,
   manuscriptBlocksJson,
   manuscriptJson,
@@ -21,6 +22,27 @@ import {
 
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
+const STORYOS_CAPTURED_EDIT = "storyos.capturedEdit";
+
+export function capturedManuscriptEditFromTransaction(
+  transaction: { getMeta: (key: string) => unknown },
+): CapturedManuscriptEdit | undefined {
+  const value = transaction.getMeta(STORYOS_CAPTURED_EDIT);
+  if (value === null || typeof value !== "object" || !("kind" in value)) {
+    return undefined;
+  }
+  switch (value.kind) {
+    case "replace_block_selection":
+    case "split_block":
+    case "join_blocks":
+    case "contiguous_replacement":
+    case "move_block":
+    case "retype_block":
+      return value as CapturedManuscriptEdit;
+    default:
+      return undefined;
+  }
+}
 
 export function isStoryosHydrateTransaction(transaction: { getMeta: (key: string) => unknown }): boolean {
   return transaction.getMeta(STORYOS_HYDRATE) === true;
@@ -176,8 +198,12 @@ export function storyosManuscriptExtensions(
                   && next.length === 1
                   && next[0]?.manuscript_block_id === blockId;
               }
-              return captureManuscriptChange(previous, next) !== undefined
-                || paragraphsEqual(previous, next);
+              const edit = captureManuscriptChange(previous, next);
+              if (edit !== undefined) {
+                transaction.setMeta(STORYOS_CAPTURED_EDIT, edit);
+                return true;
+              }
+              return paragraphsEqual(previous, next);
             },
           }),
         ];

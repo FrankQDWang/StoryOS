@@ -16,6 +16,7 @@ import {
   readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 import {
+  capturedManuscriptEditFromTransaction,
   hydrateManuscriptBlocks,
   isStoryosHydrateTransaction,
   originFromTransaction,
@@ -145,7 +146,7 @@ export function ManuscriptEditor({
         return;
       }
       if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
-      const edit = captureManuscriptChange(observedBlocksRef.current, nextBlocks);
+      const edit = capturedManuscriptEditFromTransaction(transaction);
       observedBlocksRef.current = nextBlocks;
       if (edit === undefined) {
         idleRef.current?.fail(new Error("Manuscript replacement is not a supported Block edit"));
