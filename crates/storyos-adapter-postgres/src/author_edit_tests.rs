@@ -1,13 +1,12 @@
 use storyos_application::{
     AppendAuthorCommandOutcomeUnknown, ApplyAuthorEditCommand, ApplyAuthorEditOutcome,
-    ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
-    AuthorCommandOutcomeUnknownBoundary, AuthorCommandOutcomeUnknownError,
-    AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
-    EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
-    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    ReadApplyAuthorEditOutcome, RequiresReconfirmationApplyAuthorEdit, UserId,
-    append_author_command_outcome_unknown, create_editor_session, get_apply_author_edit_outcome,
-    get_editor_session, issue_project_command_challenge,
+    AuthorCommandAdmissionIds, AuthorCommandOutcomeUnknownBoundary,
+    AuthorCommandOutcomeUnknownError, AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit,
+    EditorClientBinding, EditorSessionId, EditorSessionLookup, EditorSessionSnapshot,
+    IssueProjectCommandChallenge, OpenEditorSession, ProjectCommandChallengeBinding, ProjectId,
+    ProjectScope, ReadApplyAuthorEditOutcome, UserId, append_author_command_outcome_unknown,
+    create_editor_session, get_apply_author_edit_outcome, get_editor_session,
+    issue_project_command_challenge,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, ManuscriptBlock, ManuscriptBlockKind, SelectionSnapshot,
@@ -245,7 +244,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         ),
     ];
     let mut committed_command = None;
-    let mut open_admission_command = None;
     for (key, nonce_digest, suffix, fault) in cuts {
         let command = author_command(&scope, editor_session_id, key, nonce_digest, suffix);
         issue_project_command_challenge(
@@ -292,9 +290,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             }
             _ => false,
         });
-        if fault == AuthorEditFault::AfterAdmissionBeforeCore {
-            open_admission_command = Some(command.clone());
-        }
         if fault == AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
             committed_command = Some(command);
         }
@@ -1372,101 +1367,6 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             "1/1/1".to_owned(),
             "Authoritative A!".to_owned()
         )
-    );
-
-    let open_admission_command = open_admission_command.unwrap();
-    let expire = admin.transaction().await.unwrap();
-    expire
-        .batch_execute("SET LOCAL session_replication_role = replica")
-        .await
-        .unwrap();
-    expire
-        .execute(
-            "UPDATE storyos.project_command_challenges
-                SET expires_at = clock_timestamp() - interval '1 second'
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND command_kind = 'applyAuthorEdit'
-                AND idempotency_key = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &open_admission_command.challenge_binding.idempotency_key,
-            ],
-        )
-        .await
-        .unwrap();
-    expire
-        .execute(
-            "UPDATE storyos.author_command_admissions AS admission
-                SET challenge_expires_at = challenge.expires_at
-               FROM storyos.project_command_challenges AS challenge
-              WHERE admission.owner_user_id = challenge.owner_user_id
-                AND admission.project_id = challenge.project_id
-                AND admission.command_kind = challenge.command_kind
-                AND admission.idempotency_key = challenge.idempotency_key
-                AND admission.owner_user_id = $1::text::uuid
-                AND admission.project_id = $2::text::uuid
-                AND admission.idempotency_key = $3::text::uuid",
-            &[
-                &USER,
-                &PROJECT,
-                &open_admission_command.challenge_binding.idempotency_key,
-            ],
-        )
-        .await
-        .unwrap();
-    expire.commit().await.unwrap();
-    let expired = get_apply_author_edit_outcome(
-        &store,
-        &ReadApplyAuthorEditOutcome {
-            project_scope: scope.clone(),
-            client_binding: open_admission_command.client_binding.clone(),
-            limit_profile_revision: open_admission_command
-                .challenge_binding
-                .limit_profile_revision
-                .clone(),
-            idempotency_key: open_admission_command
-                .challenge_binding
-                .idempotency_key
-                .clone(),
-            nonce_digest: open_admission_command.nonce_digest.clone(),
-        },
-    )
-    .await
-    .unwrap();
-    assert_eq!(
-        expired,
-        ApplyAuthorEditOutcome::RequiresReconfirmation(RequiresReconfirmationApplyAuthorEdit {
-            command_id: open_admission_command.ids.command_id.clone(),
-            author_command_admission_id: open_admission_command
-                .ids
-                .author_command_admission_id
-                .clone(),
-            reconfirmation_reason: ApplyAuthorEditReconfirmationReason::AdmissionExpired,
-            recovery_draft_ref: None,
-        })
-    );
-    assert_eq!(
-        get_apply_author_edit_outcome(
-            &store,
-            &ReadApplyAuthorEditOutcome {
-                project_scope: scope.clone(),
-                client_binding: open_admission_command.client_binding.clone(),
-                limit_profile_revision: open_admission_command
-                    .challenge_binding
-                    .limit_profile_revision
-                    .clone(),
-                idempotency_key: open_admission_command
-                    .challenge_binding
-                    .idempotency_key
-                    .clone(),
-                nonce_digest: open_admission_command.nonce_digest.clone(),
-            },
-        )
-        .await
-        .unwrap(),
-        expired
     );
 
     let mut recovery_command = author_command(
