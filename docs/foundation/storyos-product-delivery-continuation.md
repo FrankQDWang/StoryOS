@@ -137,7 +137,7 @@ confirm that no Tool effect is repeated and the editor is unchanged.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S9-REQ-001 | Support adaptive plans and bounded long work through durable Steps, leases, holds, waits, steering, cancellation, and finalization. Keep the layered Run timeline inspectable without displacing normal conversation. | AgentRun owner |
+| S9-REQ-001 | Support optional RunPlans for nontrivial work, with RunPlan Revisions and PlanSteps as intended work items. Support bounded long work through durable RunSteps, leases, holds, waits, steering, cancellation, and finalization. Keep the layered Run timeline inspectable without displacing normal conversation. | AgentRun owner |
 | S9-REQ-002 | Create hierarchical Subruns with explicit parent, narrowed context/capabilities, budget reservation, independent execution records, and typed results. A Subrun cannot expand its parent's authority or become an orphan runtime. | Subrun and AgentRun owners |
 | S9-REQ-003 | Deliver mailbox messages, follow-up tasks, interrupts, Required or Advisory joins, backpressure, seals, and late results through their exact durable semantics. Recovery preserves parent/child disposition and does not infer success from process exit. | Subrun and retention owners |
 | S9-REQ-004 | Run only explicitly enabled proactive event or schedule work within its recorded scope, grants, budget, and misfire rules. Repeated or late triggers do not create duplicate effects or broaden an author instruction. | AgentRun owner |
@@ -152,7 +152,7 @@ explicit model-policy decision; verify the editor remains independently usable.
 
 | ID | Mandatory evidence |
 | --- | --- |
-| S9-EVD-001 | Plan, Step, lease, wait/hold, steering, interruption, finalization, and layered-observability evidence. |
+| S9-EVD-001 | RunPlan, RunPlan Revision, and PlanStep planning evidence; RunStep, lease, wait/hold, steering, interruption, finalization, and layered-observability evidence. |
 | S9-EVD-002 | Subrun scope, reservation, mailbox, join, seal, late-result, cancellation, and durable recovery evidence. |
 | S9-EVD-003 | Authorized proactive triggers, misfire/deduplication, multidimensional guardrails, explicit model routing, and editor-regression evidence. |
 
