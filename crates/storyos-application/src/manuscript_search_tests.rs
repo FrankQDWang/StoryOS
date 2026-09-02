@@ -335,3 +335,96 @@ async fn a_bounded_page_stops_at_the_absolute_item_limit() {
         other => panic!("expected ready search, got {other:?}"),
     }
 }
+
+#[tokio::test]
+async fn astral_unicode_before_and_inside_matches_keeps_exact_utf16_ranges() {
+    let scope = owned_scope();
+    let facts = facts(vec![chapter(
+        "chapter-a",
+        /*volume_order*/ 1,
+        /*chapter_order*/ 1,
+        "block-a",
+        "😀ax😀b😀cx😀d",
+    )]);
+    let snapshot = facts.snapshot.clone();
+    let reader = FixtureReader { read: ready(facts) };
+
+    let result = search_manuscript(&reader, &scope, &manuscript_request("x😀"))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        result,
+        SearchManuscript::Ready(ManuscriptSearchPage {
+            project_scope: scope,
+            source_snapshot: snapshot,
+            projection_kind: MANUSCRIPT_SEARCH_PROJECTION_KIND.to_owned(),
+            projection_generation: 4,
+            projection_watermark: 4,
+            required_watermark: None,
+            completeness: ManuscriptSearchCompleteness::Complete,
+            lag: 0,
+            items: vec![
+                ManuscriptSearchMatch {
+                    chapter_id: ChapterId::new("chapter-a"),
+                    manuscript_block_id: "block-a".to_owned(),
+                    start: 3,
+                    end: 6,
+                },
+                ManuscriptSearchMatch {
+                    chapter_id: ChapterId::new("chapter-a"),
+                    manuscript_block_id: "block-a".to_owned(),
+                    start: 10,
+                    end: 13,
+                },
+            ],
+            page_count: 2,
+        })
+    );
+}
+
+#[tokio::test]
+async fn dense_ascii_page_decodes_each_utf16_unit_once() {
+    const BLOCK_LEN: usize = 1_000_001;
+    const MATCH_STRIDE: usize = 2_000;
+    const TARGET_UTF16_UNITS: u64 = 997_502;
+    let mut text = vec![b'a'; BLOCK_LEN];
+    for offset in (0..=1_000_000).step_by(MATCH_STRIDE) {
+        text[offset] = b'x';
+    }
+    let text = String::from_utf8(text).expect("ascii block");
+    let scope = owned_scope();
+    let reader = FixtureReader {
+        read: ready(facts(vec![chapter(
+            "chapter-a",
+            /*volume_order*/ 1,
+            /*chapter_order*/ 1,
+            "block-a",
+            &text,
+        )])),
+    };
+
+    super::utf16_decode_count::reset();
+    let result = search_manuscript(&reader, &scope, &manuscript_request("x"))
+        .await
+        .unwrap();
+
+    match result {
+        SearchManuscript::Ready(page) => {
+            assert_eq!(page.items.len(), MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT);
+            assert_eq!(page.completeness, ManuscriptSearchCompleteness::Truncated);
+            assert_eq!(page.items[0].start, 0);
+            assert_eq!(page.items[0].end, 1);
+            assert_eq!(
+                page.items[MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT - 1].start,
+                998_000
+            );
+            assert_eq!(
+                page.items[MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT - 1].end,
+                998_001
+            );
+        }
+        other => panic!("expected ready search, got {other:?}"),
+    }
+    assert_eq!(super::utf16_decode_count::take(), TARGET_UTF16_UNITS);
+}

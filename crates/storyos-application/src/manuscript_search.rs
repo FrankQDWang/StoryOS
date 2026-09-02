@@ -154,23 +154,26 @@ fn evaluate_search(
     let mut items = Vec::new();
     let mut truncated = false;
     if !request.query_text.is_empty() {
+        let query_utf16 = utf16_len(&request.query_text);
         for chapter in chapters {
             for block in &chapter.blocks {
                 let mut byte = 0;
+                let mut utf16 = 0;
                 while let Some(found) = block.text[byte..].find(&request.query_text) {
                     if items.len() == MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT {
                         truncated = true;
                         break;
                     }
                     let start_byte = byte + found;
-                    let start = utf16_len(&block.text[..start_byte]);
+                    utf16 += utf16_len(&block.text[byte..start_byte]);
                     items.push(ManuscriptSearchMatch {
                         chapter_id: chapter.chapter_id.clone(),
                         manuscript_block_id: block.manuscript_block_id.clone(),
-                        start,
-                        end: start + utf16_len(&request.query_text),
+                        start: utf16,
+                        end: utf16 + query_utf16,
                     });
                     byte = start_byte + request.query_text.len();
+                    utf16 += query_utf16;
                 }
                 if truncated {
                     break;
@@ -200,8 +203,32 @@ fn evaluate_search(
     })
 }
 
+#[cfg(test)]
+mod utf16_decode_count {
+    use std::cell::Cell;
+
+    thread_local! {
+        static COUNT: Cell<u64> = const { Cell::new(0) };
+    }
+
+    pub fn reset() {
+        COUNT.with(|count| count.set(0));
+    }
+
+    pub fn add(units: u64) {
+        COUNT.with(|count| count.set(count.get() + units));
+    }
+
+    pub fn take() -> u64 {
+        COUNT.with(|count| count.replace(0))
+    }
+}
+
 fn utf16_len(text: &str) -> u64 {
-    u64::try_from(text.encode_utf16().count()).unwrap_or(u64::MAX)
+    let count = u64::try_from(text.encode_utf16().count()).unwrap_or(u64::MAX);
+    #[cfg(test)]
+    utf16_decode_count::add(count);
+    count
 }
 
 #[cfg(test)]
