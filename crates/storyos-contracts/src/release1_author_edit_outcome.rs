@@ -105,6 +105,14 @@ pub enum ApplyAuthorEditUnknownObservation {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ApplyAuthorEditReconfirmationReason {
+    AdmissionExpired,
+    BindingChanged,
+    DirectEditIntentUnrecoverable,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "outcome_kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ApplyAuthorEditOutcome {
     Committed {
@@ -112,6 +120,12 @@ pub enum ApplyAuthorEditOutcome {
     },
     Rejected {
         reason: ApplyAuthorEditRejectionReason,
+    },
+    RequiresReconfirmation {
+        command_id: String,
+        author_command_admission_id: String,
+        reconfirmation_reason: ApplyAuthorEditReconfirmationReason,
+        recovery_draft_ref: Option<String>,
     },
     StillUnknown {
         observation: ApplyAuthorEditUnknownObservation,

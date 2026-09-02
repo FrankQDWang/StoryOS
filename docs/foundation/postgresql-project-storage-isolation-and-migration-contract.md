@@ -121,12 +121,13 @@ The persistence catalog records one named read relation for
 `operational-receipts-actions`, `operational-admission-editor`, and
 `operational-project-activity`. A `Committed` projection uses the existing
 Receipt-first exact replay and validates applied-only Activity. The closed
-public result remains `Committed | Rejected | StillUnknown`.
+public result is `Committed | Rejected | RequiresReconfirmation | StillUnknown`.
 
-This relation has read capability only. It does not consume the nonce, invoke
-Core, append lifecycle evidence, read the durable `outcome_unknown` table, or
-expose an observation row. The public Query remains the protocol owner's
-read-only observation. Storage adds no public route, DTO, Problem, Event, or
+This relation does not consume the nonce, create a new Admission, or read the
+durable `outcome_unknown` table. When it observes one clean open Admission, it
+may complete the already-admitted `direct_editor_action` or append terminal
+`RequiresReconfirmation`. The public Query remains the protocol owner's
+settlement observation. Storage adds no public route, DTO, Problem, Event, or
 TypeScript operation.
 
 The tracked bootstrap creates the runtime role without a password or other

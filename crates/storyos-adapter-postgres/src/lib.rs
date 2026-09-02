@@ -55,6 +55,7 @@ mod set_current_chapter_tests;
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
+mod author_edit_admission_recovery;
 mod author_edit_outcome;
 mod author_edit_replay;
 mod author_edit_settlement;

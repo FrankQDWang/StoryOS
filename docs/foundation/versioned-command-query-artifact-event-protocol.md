@@ -411,7 +411,7 @@ start another admission. Another method, target, body, scope, command kind, key,
 or record conflicts. A cookie or nonce is one validated input to the Server-created
 Author Command Admission.
 
-The sole read-only exception is `getApplyAuthorEditOutcome`:
+The sole protected exception is `getApplyAuthorEditOutcome`:
 
 ```text
 GET /api/v1/projects/{project_id}/manuscript/author-edit-outcomes/{idempotency_key}
@@ -426,19 +426,24 @@ Server derives Scope and the current Client Session, hashes the nonce, and
 matches every stored challenge binding for the one fixed method, route, schema,
 command kind, digest, key, session generation, and contract revisions. A
 committed result also passes the existing Receipt-first settlement validation.
-The Query does not consume the nonce or create an Admission, Command, Receipt,
-Activity, refusal record, lifecycle observation, or Core invocation. It never
-puts the nonce in a URL, log, response, or unrelated Query. Every success and
-Problem response uses `Cache-Control: no-store`.
+The Query does not consume the nonce or create a new Admission, Command,
+idempotency record, or nonce. When it observes one clean open Admission, the
+Server may complete the already-admitted `direct_editor_action` or append
+terminal `RequiresReconfirmation`. It never puts the nonce in a URL, log,
+response, or unrelated Query. Every success and Problem response uses
+`Cache-Control: no-store`.
 
-The result is the closed `Committed | Rejected | StillUnknown` union.
+The result is the closed
+`Committed | Rejected | RequiresReconfirmation | StillUnknown` union.
 `Committed` contains the exact `ApplyAuthorEditResponse` v2. `Rejected` is
 possible only when a lock-serialized read proves that the exact challenge is
 expired, unconsumed, and pending, with no Admission or Receipt.
+`RequiresReconfirmation` is the terminal no-Receipt settlement for an
+expired, binding-changed, or unrecoverable open Admission.
 `StillUnknown.ChallengeIssued` preserves an unexpired challenge that may still
-be consumed. `StillUnknown.AdmissionCommitted` exposes only the authorized
-Command and Admission identities and requires reconciliation. Neither unknown
-branch permits invocation, retry, or success. `StillUnknown` is a read
+be consumed. `StillUnknown.AdmissionCommitted` is returned only when storage
+cannot yet prove Receipt presence or absence. Neither unknown branch permits
+client POST retry or invented success. `StillUnknown` is a read
 observation, not the durable Admission `outcome_unknown` condition. The Web
 Editor Session contract owns when a Local Edit Journal group calls this Query
 and how it records the result.

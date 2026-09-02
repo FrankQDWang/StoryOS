@@ -168,7 +168,7 @@ pub(super) async fn persist_author_edit_settlement(
             ],
         )
         .await
-        .map_err(author_edit_database_error)?;
+        .map_err(persist_conflict_or_unavailable)?;
     let receipt_created_at = receipt_row.get::<_, String>(0);
 
     let effect = match prepared {
@@ -293,7 +293,7 @@ pub(super) async fn persist_author_edit_settlement(
             ],
         )
         .await
-        .map_err(author_edit_database_error)?;
+        .map_err(persist_conflict_or_unavailable)?;
     if settlement_inserts != 1 {
         return Err(AuthorEditError::BindingConflict);
     }
@@ -302,7 +302,8 @@ pub(super) async fn persist_author_edit_settlement(
             "UPDATE storyos.command_idempotency
                 SET outcome_kind = 'settled', result_reference = $3
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'applyAuthorEdit' AND idempotency_key = $4::text::uuid",
+                AND command_kind = 'applyAuthorEdit' AND idempotency_key = $4::text::uuid
+                AND outcome_kind = 'in_progress'",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -497,5 +498,15 @@ fn refusal_reason(reason: &AuthorEditRefusal) -> &'static str {
         AuthorEditRefusal::UnsupportedIntentShape => "unsupported_intent_shape",
         AuthorEditRefusal::InvalidSelection => "invalid_selection",
         AuthorEditRefusal::TargetMismatch => "target_mismatch",
+    }
+}
+
+fn persist_conflict_or_unavailable(error: tokio_postgres::Error) -> AuthorEditError {
+    if error.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION)
+        || error.code() == Some(&tokio_postgres::error::SqlState::CHECK_VIOLATION)
+    {
+        AuthorEditError::BindingConflict
+    } else {
+        author_edit_database_error(error)
     }
 }

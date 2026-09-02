@@ -4,8 +4,9 @@ use ts_rs::{Config, TS};
 
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_author_edit_outcome::{
-    ApplyAuthorEditOutcome, ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
-    GET_APPLY_AUTHOR_EDIT_OUTCOME, GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
+    ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
+    ApplyAuthorEditUnknownObservation, GET_APPLY_AUTHOR_EDIT_OUTCOME,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
     GetApplyAuthorEditOutcomeResponse,
 };
@@ -58,9 +59,10 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         GetApplyAuthorEditOutcomeRequest::decl(&config),
         ApplyAuthorEditRejectionReason::decl(&config),
+        ApplyAuthorEditReconfirmationReason::decl(&config),
         ApplyAuthorEditUnknownObservation::decl(&config),
         ApplyAuthorEditOutcome::decl(&config),
         GetApplyAuthorEditOutcomeResponse::decl(&config),

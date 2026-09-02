@@ -1,13 +1,13 @@
 use storyos_application::{
     AppendAuthorCommandOutcomeUnknown, ApplyAuthorEditCommand, ApplyAuthorEditOutcome,
-    ApplyAuthorEditUnknownObservation, AuthorCommandAdmissionIds,
+    ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
     AuthorCommandOutcomeUnknownBoundary, AuthorCommandOutcomeUnknownError,
     AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
     EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
     OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    ReadApplyAuthorEditOutcome, UserId, append_author_command_outcome_unknown,
-    create_editor_session, get_apply_author_edit_outcome, get_editor_session,
-    issue_project_command_challenge,
+    ReadApplyAuthorEditOutcome, RequiresReconfirmationApplyAuthorEdit, UserId,
+    append_author_command_outcome_unknown, create_editor_session, get_apply_author_edit_outcome,
+    get_editor_session, issue_project_command_challenge,
 };
 use storyos_core::{
     AuthorEditPrimitive, AuthorEditUnit, ManuscriptBlock, ManuscriptBlockKind, SelectionSnapshot,
@@ -245,6 +245,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         ),
     ];
     let mut committed_command = None;
+    let mut open_admission_command = None;
     for (key, nonce_digest, suffix, fault) in cuts {
         let command = author_command(&scope, editor_session_id, key, nonce_digest, suffix);
         issue_project_command_challenge(
@@ -291,34 +292,8 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             }
             _ => false,
         });
-        if fault != AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
-            let outcome = get_apply_author_edit_outcome(
-                &store,
-                &ReadApplyAuthorEditOutcome {
-                    project_scope: scope.clone(),
-                    client_binding: command.client_binding.clone(),
-                    limit_profile_revision: command
-                        .challenge_binding
-                        .limit_profile_revision
-                        .clone(),
-                    idempotency_key: command.challenge_binding.idempotency_key.clone(),
-                    nonce_digest: command.nonce_digest.clone(),
-                },
-            )
-            .await
-            .unwrap();
-            assert_eq!(
-                outcome,
-                ApplyAuthorEditOutcome::StillUnknown {
-                    observation: ApplyAuthorEditUnknownObservation::AdmissionCommitted {
-                        command_id: command.ids.command_id.clone(),
-                        author_command_admission_id: command
-                            .ids
-                            .author_command_admission_id
-                            .clone(),
-                    },
-                }
-            );
+        if fault == AuthorEditFault::AfterAdmissionBeforeCore {
+            open_admission_command = Some(command.clone());
         }
         if fault == AuthorEditFault::CoreAfterCommitBeforeAcknowledgement {
             committed_command = Some(command);
@@ -1399,6 +1374,151 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
     );
 
+    let open_admission_command = open_admission_command.unwrap();
+    admin
+        .execute(
+            "UPDATE storyos.project_command_challenges
+                SET expires_at = clock_timestamp() - interval '1 second'
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND command_kind = 'applyAuthorEdit'
+                AND idempotency_key = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &open_admission_command.challenge_binding.idempotency_key,
+            ],
+        )
+        .await
+        .unwrap();
+    let expired = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: open_admission_command.client_binding.clone(),
+            limit_profile_revision: open_admission_command
+                .challenge_binding
+                .limit_profile_revision
+                .clone(),
+            idempotency_key: open_admission_command
+                .challenge_binding
+                .idempotency_key
+                .clone(),
+            nonce_digest: open_admission_command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        expired,
+        ApplyAuthorEditOutcome::RequiresReconfirmation(RequiresReconfirmationApplyAuthorEdit {
+            command_id: open_admission_command.ids.command_id.clone(),
+            author_command_admission_id: open_admission_command
+                .ids
+                .author_command_admission_id
+                .clone(),
+            reconfirmation_reason: ApplyAuthorEditReconfirmationReason::AdmissionExpired,
+            recovery_draft_ref: None,
+        })
+    );
+    assert_eq!(
+        get_apply_author_edit_outcome(
+            &store,
+            &ReadApplyAuthorEditOutcome {
+                project_scope: scope.clone(),
+                client_binding: open_admission_command.client_binding.clone(),
+                limit_profile_revision: open_admission_command
+                    .challenge_binding
+                    .limit_profile_revision
+                    .clone(),
+                idempotency_key: open_admission_command
+                    .challenge_binding
+                    .idempotency_key
+                    .clone(),
+                nonce_digest: open_admission_command.nonce_digest.clone(),
+            },
+        )
+        .await
+        .unwrap(),
+        expired
+    );
+
+    let mut recovery_command = author_command(
+        &scope,
+        editor_session_id,
+        "018f0000-0000-7001-8000-000000000771",
+        "sha256:cut-recovery",
+        "77",
+    );
+    recovery_command.expected_authoritative_revision_id = replay_applied_ids.revision_id.clone();
+    bind_canonical_payload(&mut recovery_command);
+    issue_project_command_challenge(
+        &store,
+        &IssueProjectCommandChallenge {
+            binding: recovery_command.challenge_binding.clone(),
+            nonce: "nonce-77".to_owned(),
+            nonce_digest: recovery_command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    store
+        .apply_author_edit_with_fault(&recovery_command, AuthorEditFault::AfterAdmissionBeforeCore)
+        .await
+        .expect_err("the recovery cut must stop before Core");
+    let recovered = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: recovery_command.client_binding.clone(),
+            limit_profile_revision: recovery_command
+                .challenge_binding
+                .limit_profile_revision
+                .clone(),
+            idempotency_key: recovery_command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: recovery_command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    let ApplyAuthorEditOutcome::Committed(recovered) = recovered else {
+        panic!("an open Admission must complete through the outcome Query: {recovered:?}");
+    };
+    assert_eq!(recovered.correlation_id, recovery_command.correlation_id);
+    assert_eq!(
+        recovered.canonical_command_digest,
+        recovery_command.challenge_binding.canonical_command_digest
+    );
+    assert_eq!(
+        recovered.idempotency_key,
+        recovery_command.challenge_binding.idempotency_key
+    );
+    let recovery_applied_ids = match &recovered.settlement.effect {
+        storyos_application::AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => {
+            ids.clone()
+        }
+        other => panic!("an open Admission must complete as Applied: {other:?}"),
+    };
+    let repeated = get_apply_author_edit_outcome(
+        &store,
+        &ReadApplyAuthorEditOutcome {
+            project_scope: scope.clone(),
+            client_binding: recovery_command.client_binding.clone(),
+            limit_profile_revision: recovery_command
+                .challenge_binding
+                .limit_profile_revision
+                .clone(),
+            idempotency_key: recovery_command.challenge_binding.idempotency_key.clone(),
+            nonce_digest: recovery_command.nonce_digest.clone(),
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        repeated,
+        ApplyAuthorEditOutcome::Committed(recovered.clone())
+    );
+
     let cleanup = admin.transaction().await.unwrap();
     cleanup
         .batch_execute("SET CONSTRAINTS ALL DEFERRED")
@@ -1417,6 +1537,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         "project_activity_events",
         "author_action_entries",
         "author_command_admission_outcome_unknown_observations",
+        "author_command_admission_reconfirmations",
         "author_command_admission_settlements",
         "domain_receipts",
         "authoritative_commits",
@@ -1443,33 +1564,43 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.manuscript_revision_members
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND revision_id = $3::text::uuid",
-            &[&USER, &PROJECT, &replay_applied_ids.revision_id],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.authoritative_revisions
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND revision_id = $3::text::uuid",
-            &[&USER, &PROJECT, &replay_applied_ids.revision_id],
-        )
-        .await
-        .unwrap();
-    cleanup
-        .execute(
-            "DELETE FROM storyos.authoritative_payloads
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND payload_id = $3::text::uuid",
-            &[&USER, &PROJECT, &replay_applied_ids.payload_id],
-        )
-        .await
-        .unwrap();
+    for revision_id in [
+        &replay_applied_ids.revision_id,
+        &recovery_applied_ids.revision_id,
+    ] {
+        cleanup
+            .execute(
+                "DELETE FROM storyos.manuscript_revision_members
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND revision_id = $3::text::uuid",
+                &[&USER, &PROJECT, revision_id],
+            )
+            .await
+            .unwrap();
+        cleanup
+            .execute(
+                "DELETE FROM storyos.authoritative_revisions
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND revision_id = $3::text::uuid",
+                &[&USER, &PROJECT, revision_id],
+            )
+            .await
+            .unwrap();
+    }
+    for payload_id in [
+        &replay_applied_ids.payload_id,
+        &recovery_applied_ids.payload_id,
+    ] {
+        cleanup
+            .execute(
+                "DELETE FROM storyos.authoritative_payloads
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND payload_id = $3::text::uuid",
+                &[&USER, &PROJECT, payload_id],
+            )
+            .await
+            .unwrap();
+    }
     cleanup
         .execute(
             "DELETE FROM storyos.project_writer_generations
