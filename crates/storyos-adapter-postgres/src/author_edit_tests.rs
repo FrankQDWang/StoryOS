@@ -1375,7 +1375,12 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     );
 
     let open_admission_command = open_admission_command.unwrap();
-    admin
+    let expire = admin.transaction().await.unwrap();
+    expire
+        .batch_execute("SET LOCAL session_replication_role = replica")
+        .await
+        .unwrap();
+    expire
         .execute(
             "UPDATE storyos.project_command_challenges
                 SET expires_at = clock_timestamp() - interval '1 second'
@@ -1391,6 +1396,27 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         )
         .await
         .unwrap();
+    expire
+        .execute(
+            "UPDATE storyos.author_command_admissions AS admission
+                SET challenge_expires_at = challenge.expires_at
+               FROM storyos.project_command_challenges AS challenge
+              WHERE admission.owner_user_id = challenge.owner_user_id
+                AND admission.project_id = challenge.project_id
+                AND admission.command_kind = challenge.command_kind
+                AND admission.idempotency_key = challenge.idempotency_key
+                AND admission.owner_user_id = $1::text::uuid
+                AND admission.project_id = $2::text::uuid
+                AND admission.idempotency_key = $3::text::uuid",
+            &[
+                &USER,
+                &PROJECT,
+                &open_admission_command.challenge_binding.idempotency_key,
+            ],
+        )
+        .await
+        .unwrap();
+    expire.commit().await.unwrap();
     let expired = get_apply_author_edit_outcome(
         &store,
         &ReadApplyAuthorEditOutcome {
