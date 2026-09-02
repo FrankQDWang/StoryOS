@@ -235,6 +235,37 @@ pub(crate) async fn copy_or_upgrade_revision_members(
     Ok(0)
 }
 
+#[cfg(test)]
+mod membership_sql_statement_count {
+    use std::cell::Cell;
+
+    thread_local! {
+        static COUNT: Cell<u64> = const { Cell::new(0) };
+    }
+
+    pub fn reset() {
+        COUNT.with(|count| count.set(0));
+    }
+
+    pub fn increment() {
+        COUNT.with(|count| count.set(count.get() + 1));
+    }
+
+    pub fn take() -> u64 {
+        COUNT.with(|count| count.replace(0))
+    }
+}
+
+async fn execute_membership_sql(
+    client: &impl GenericClient,
+    sql: &str,
+    params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+) -> Result<u64, tokio_postgres::Error> {
+    #[cfg(test)]
+    membership_sql_statement_count::increment();
+    client.execute(sql, params).await
+}
+
 pub(crate) async fn persist_revision_members_from_blocks(
     client: &impl GenericClient,
     owner_user_id: &str,
@@ -243,42 +274,41 @@ pub(crate) async fn persist_revision_members_from_blocks(
     revision_id: &str,
     blocks: &[ManuscriptBlock],
 ) -> Result<u64, tokio_postgres::Error> {
-    let mut inserted = 0_u64;
-    for (index, block) in blocks.iter().enumerate() {
-        client
-            .execute(
-                "INSERT INTO storyos.manuscript_blocks
-                   (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'paragraph')
-                 ON CONFLICT (owner_user_id, project_id, manuscript_block_id) DO NOTHING",
-                &[
-                    &owner_user_id,
-                    &project_id,
-                    &block.manuscript_block_id,
-                    &chapter_id,
-                ],
-            )
-            .await?;
-        let order = (index + 1).to_string();
-        inserted += client
-            .execute(
-                "INSERT INTO storyos.manuscript_revision_members
-                   (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id,
-                    block_order)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid,
-                         $6::text::numeric)",
-                &[
-                    &owner_user_id,
-                    &project_id,
-                    &chapter_id,
-                    &revision_id,
-                    &block.manuscript_block_id,
-                    &order,
-                ],
-            )
-            .await?;
+    if blocks.is_empty() {
+        return Ok(0);
     }
-    Ok(inserted)
+    let block_ids: Vec<&str> = blocks
+        .iter()
+        .map(|block| block.manuscript_block_id.as_str())
+        .collect();
+    // One identity insert and one membership insert, not two inserts per Block.
+    execute_membership_sql(
+        client,
+        "INSERT INTO storyos.manuscript_blocks
+           (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+         SELECT $1::text::uuid, $2::text::uuid, block_id::uuid, $4::text::uuid, 'paragraph'
+           FROM unnest($3::text[]) AS block_id
+         ON CONFLICT (owner_user_id, project_id, manuscript_block_id) DO NOTHING",
+        &[&owner_user_id, &project_id, &block_ids, &chapter_id],
+    )
+    .await?;
+    execute_membership_sql(
+        client,
+        "INSERT INTO storyos.manuscript_revision_members
+           (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id,
+            block_order)
+         SELECT $1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                block_id::uuid, block_order
+           FROM unnest($5::text[]) WITH ORDINALITY AS members(block_id, block_order)",
+        &[
+            &owner_user_id,
+            &project_id,
+            &chapter_id,
+            &revision_id,
+            &block_ids,
+        ],
+    )
+    .await
 }
 
 #[cfg(test)]
