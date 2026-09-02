@@ -1200,8 +1200,11 @@ not as event-log forks.
 
 Compaction or archival creates a new `replay_generation`, publishes an
 authorized Snapshot and replay floor, and preserves the last old-generation
-position in the compaction evidence. Old cursors either map through an exact
-verified handoff or return `activity_cursor_too_old`; they are never guessed.
+position in the compaction evidence. An old-generation cursor returns
+`activity_cursor_too_old`. The client obtains a fresh authorized Snapshot and
+resumes after the Snapshot Activity position. Handoff evidence preserves the
+old closing position, new generation, new floor, and Snapshot identity. That
+evidence is not an executable cursor map. Old cursors are never guessed.
 The retention/archival ticket owns durations, storage tiers, compaction
 mechanics, and historical payload removal. This protocol owns the generation,
 Snapshot, cursor-too-old, reauthorization, and no-silent-gap semantics.
@@ -2086,7 +2089,8 @@ Breaking or upgrade-gated:
 - accepting an unknown Command field and guessing its intent;
 - treating an unknown Approval or Attempt state as success;
 - changing an Artifact digest profile without a new schema/profile;
-- reinterpreting an SSE cursor across compaction without a verified handoff;
+- mapping or reinterpreting an SSE cursor across a Replay Generation
+  boundary;
 - widening a Capability, destination, Credential binding, Tool effect, or
   disclosure because an external server changed version;
 - making a previously inline payload become silently truncated.
