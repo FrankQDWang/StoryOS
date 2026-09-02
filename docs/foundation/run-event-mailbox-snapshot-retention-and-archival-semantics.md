@@ -276,14 +276,13 @@ replacement for unavailable bytes or proof that a destination used them.
 
 ### 2.8 Compaction eligibility and decision transaction
 
-The following predicate is deliberately stricter than “old enough”. A payload
-is eligible only when every applicable clause is true:
+The following predicate is deliberately stricter than “old enough”. A
+Compactable Operational Payload is eligible for Operational History Compaction
+only when every applicable clause is true:
 
 1. its exact User, Project Scope, logical class, source closure, and current
    Profile revision are known;
-2. the owning Run and Subrun are terminal and finalized, or the payload is an
-   independently disposable diagnostic/projection record whose own contract
-   permits cleanup without weakening an active Run’s recovery;
+2. the owning Run and Subrun are terminal and finalized;
 3. for a Run-associated payload, the root Mailbox Seal is committed, its
    directional high-watermarks are frozen, and a Seal Deduplication Fence can
    reject every delayed or repeated Message ID in the closed generation;
@@ -316,6 +315,18 @@ Fence, and handoff describe the unavailable payload. Repeating cleanup with
 the same operation identity is a no-op; a new Decision cannot reinterpret a
 previous gap as a retained payload. This is the semantic boundary that later
 deterministic verification must exercise; it is not an implementation here.
+
+### 2.9 Disposable Projection cleanup
+
+A Disposable Projection follows its owning contract. Invalidation or removal
+of that projection is not Operational History Compaction. It does not make
+canonical payload unavailable and does not create a historical availability
+gap. Source facts remain eligible and sufficient for a rebuild.
+
+Disposable Projection invalidation or removal does not require a terminal or
+root-sealed Run. It must not weaken an active Run's recovery. It does not use
+the compaction eligibility predicate or Retention Decision transaction in
+section 2.8.
 
 ## 3. Bounded replay generations and Snapshot resync
 
