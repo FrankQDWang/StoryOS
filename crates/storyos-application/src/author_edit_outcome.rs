@@ -37,11 +37,27 @@ pub enum ApplyAuthorEditUnknownObservation {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ApplyAuthorEditReconfirmationReason {
+    AdmissionExpired,
+    BindingChanged,
+    DirectEditIntentUnrecoverable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RequiresReconfirmationApplyAuthorEdit {
+    pub command_id: String,
+    pub author_command_admission_id: String,
+    pub reconfirmation_reason: ApplyAuthorEditReconfirmationReason,
+    pub recovery_draft_ref: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ApplyAuthorEditOutcome {
     Committed(Box<CommittedApplyAuthorEdit>),
     Rejected {
         reason: ApplyAuthorEditRejectionReason,
     },
+    RequiresReconfirmation(RequiresReconfirmationApplyAuthorEdit),
     StillUnknown {
         observation: ApplyAuthorEditUnknownObservation,
     },
@@ -72,7 +88,7 @@ impl std::error::Error for ApplyAuthorEditOutcomeReadError {
     }
 }
 
-/// Reads one durable Apply Author Edit outcome without invoking or retrying the command.
+/// Reads one durable Apply Author Edit outcome and may complete same-Admission recovery.
 pub trait ApplyAuthorEditOutcomeReader: Sync {
     fn read_apply_author_edit_outcome(
         &self,

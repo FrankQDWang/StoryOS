@@ -862,6 +862,10 @@ test("one current writer settles one Author Edit and exact retries return one re
           'author_command_admission_id', '${unknownAdmission}', 'command_id', '${unknownCommand}',
           'idempotency_key', '${unknownKey}', 'challenge_consumed_at', challenge.consumed_at,
           'challenge_expires_at', challenge.expires_at))).* FROM source, challenge, progress`);
+    await queryPostgres(`UPDATE storyos.author_command_admissions
+      SET command_payload = command_payload - 'author_edit_units'
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+        AND author_command_admission_id = '${unknownAdmission}'::uuid`);
     const unknownOptions = {
       baseUrl, projectId: PROJECT_A, idempotencyKey: unknownKey,
       antiForgery: unknownChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
@@ -871,21 +875,23 @@ test("one current writer settles one Author Edit and exact retries return one re
       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
         AND author_command_admission_id = '${unknownAdmission}'::uuid`);
     assert.equal(await unknownObservationCount(), "0");
-    const unknownBefore = await getApplyAuthorEditOutcome(unknownOptions);
-    assert.deepEqual(unknownBefore.outcome, { outcome_kind: "still_unknown", observation: {
-      observation_kind: "admission_committed", command_id: unknownCommand,
-      author_command_admission_id: unknownAdmission, reconciliation_required: true,
-    } });
-    assert.equal(await unknownObservationCount(), "0");
-    const authorityBeforeObservation = await projectAuthoritySnapshot();
     await queryPostgres(`INSERT INTO storyos.author_command_admission_outcome_unknown_observations
       (owner_user_id, project_id, observation_id, author_command_admission_id, last_provable_boundary, reason)
       VALUES ('${USER_A}'::uuid, '${PROJECT_A}'::uuid, '018f0000-0000-7001-8000-000000000067'::uuid, '${unknownAdmission}'::uuid,
        'admission_committed', 'acknowledgement_missing')`);
     assert.equal(await unknownObservationCount(), "1");
+    const authorityBeforeObservation = await projectAuthoritySnapshot();
+    const unknownBefore = await getApplyAuthorEditOutcome(unknownOptions);
+    assert.deepEqual(unknownBefore.outcome, {
+      outcome_kind: "requires_reconfirmation",
+      command_id: unknownCommand,
+      author_command_admission_id: unknownAdmission,
+      reconfirmation_reason: "direct_edit_intent_unrecoverable",
+      recovery_draft_ref: null,
+    });
+    assert.equal(await unknownObservationCount(), "1");
     const unknownAfter = await getApplyAuthorEditOutcome(unknownOptions);
     assert.deepEqual(unknownAfter.outcome, unknownBefore.outcome);
-    assert.equal(await unknownObservationCount(), "1");
     assert.deepEqual(await projectAuthoritySnapshot(), authorityBeforeObservation);
 
     const staleSession = sessions.find((session) => session.writer.kind === "read_only");

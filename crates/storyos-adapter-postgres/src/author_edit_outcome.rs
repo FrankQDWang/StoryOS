@@ -5,6 +5,7 @@ use storyos_application::{
 };
 
 use super::author_edit::sha256_hex;
+use super::author_edit_admission_recovery::OpenAdmission;
 use super::author_edit_replay::AuthorEditReplayIdentity;
 use super::*;
 
@@ -24,7 +25,6 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
         set_challenge_scope_on_client(&client, &query.project_scope)
             .await
             .map_err(outcome_store_error)?;
-
         let arbiter = client
             .query_opt(
                 "SELECT challenge.client_session_binding_digest,
@@ -97,17 +97,20 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
             && result_reference.is_none()
             && admission_count == 0
             && receipt_count == 0;
-        let clean_open_admission = consumed
+        let open_admission = consumed
             && idempotency_outcome == "in_progress"
             && result_reference.is_none()
             && admission_count == 1
-            && receipt_count == 0
-            && relation.get::<_, Option<bool>>(10) == Some(true)
-            && relation.get::<_, Option<bool>>(11) == Some(true)
-            && payload_digest_exact;
+            && receipt_count == 0;
+        let reconfirmed = consumed
+            && idempotency_outcome == "settled"
+            && result_reference.as_deref() == Some("requires_reconfirmation")
+            && admission_count == 1
+            && receipt_count == 0;
         let clean_settlement = consumed
             && idempotency_outcome == "settled"
             && result_reference.is_some()
+            && result_reference.as_deref() != Some("requires_reconfirmation")
             && admission_count == 1
             && receipt_count == 1
             && relation.get::<_, Option<bool>>(10) == Some(true)
@@ -167,7 +170,76 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
             ApplyAuthorEditOutcome::Rejected {
                 reason: ApplyAuthorEditRejectionReason::ChallengeExpiredUnconsumed,
             }
-        } else if clean_open_admission {
+        } else if reconfirmed {
+            let command_id = relation
+                .get::<_, Option<String>>(2)
+                .ok_or_else(outcome_unavailable)?;
+            let author_command_admission_id = relation
+                .get::<_, Option<String>>(3)
+                .ok_or_else(outcome_unavailable)?;
+            let outcome = super::author_edit_admission_recovery::load_requires_reconfirmation(
+                &client,
+                query,
+                &command_id,
+                &author_command_admission_id,
+            )
+            .await?;
+            client
+                .batch_execute("COMMIT")
+                .await
+                .map_err(outcome_database_error)?;
+            return Ok(outcome);
+        } else if open_admission {
+            let command_id = relation
+                .get::<_, Option<String>>(2)
+                .ok_or_else(outcome_unavailable)?;
+            let author_command_admission_id = relation
+                .get::<_, Option<String>>(3)
+                .ok_or_else(outcome_unavailable)?;
+            let admission = OpenAdmission {
+                command_id,
+                author_command_admission_id,
+                canonical_command_digest: arbiter.get(9),
+                method: arbiter.get(6),
+                route_template: arbiter.get(7),
+                command_schema: arbiter.get(8),
+                payload: relation.get::<_, Option<String>>(12).unwrap_or_default(),
+                payload_complete: relation.get::<_, Option<bool>>(11) == Some(true)
+                    && payload_digest_exact,
+                bindings_match: relation.get::<_, Option<bool>>(10) == Some(true),
+                unexpired,
+            };
+            if let Some(reason) =
+                super::author_edit_admission_recovery::reconfirmation_reason(&admission)
+            {
+                match self
+                    .persist_requires_reconfirmation_in_tx(&client, query, &admission, reason)
+                    .await
+                {
+                    Ok(outcome) => {
+                        client
+                            .batch_execute("COMMIT")
+                            .await
+                            .map_err(outcome_database_error)?;
+                        return Ok(outcome);
+                    }
+                    Err(error) => {
+                        client.batch_execute("ROLLBACK").await.ok();
+                        return Err(error);
+                    }
+                }
+            }
+            client
+                .batch_execute("COMMIT")
+                .await
+                .map_err(outcome_database_error)?;
+            return self
+                .reconcile_open_apply_author_edit(query, admission)
+                .await;
+        } else if consumed
+            && admission_count == 1
+            && (idempotency_outcome == "in_progress" || receipt_count != 1)
+        {
             ApplyAuthorEditOutcome::StillUnknown {
                 observation: ApplyAuthorEditUnknownObservation::AdmissionCommitted {
                     command_id: relation

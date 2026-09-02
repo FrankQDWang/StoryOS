@@ -18,7 +18,7 @@ pub(crate) struct ClassifiedAuthorEdit {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum AuthorEditFault {
+pub(crate) enum AuthorEditFault {
     None,
     AfterAdmissionBeforeCore,
     CoreBeforeCommit,
@@ -50,11 +50,25 @@ impl PostgresProjectReader {
         if fault == AuthorEditFault::AfterAdmissionBeforeCore {
             return Err(fault_error("CFP-ADMISSION-BEFORE-CORE"));
         }
+        self.complete_admitted_author_edit(command, fault).await
+    }
 
+    pub(crate) async fn complete_admitted_author_edit(
+        &self,
+        command: &ApplyAuthorEditCommand,
+        fault: AuthorEditFault,
+    ) -> Result<AuthorEditSettlement, AuthorEditError> {
         let transaction = self
             .begin_serializable_project_command_transaction(&command.project_scope)
             .await
             .map_err(author_edit_challenge_error)?;
+        if let Some(receipt_id) = existing_receipt_id(&transaction.client, command).await? {
+            transaction
+                .rollback()
+                .await
+                .map_err(author_edit_challenge_error)?;
+            return self.read_author_edit_settlement(command, &receipt_id).await;
+        }
         let row = transaction
             .client
             .query_opt(
@@ -116,10 +130,14 @@ impl PostgresProjectReader {
                 .await
                 .map_err(author_edit_database_error)?
                 .get::<_, bool>(0);
+            let settled = existing_receipt_id(&transaction.client, command).await?;
             transaction
                 .rollback()
                 .await
                 .map_err(author_edit_challenge_error)?;
+            if let Some(receipt_id) = settled {
+                return self.read_author_edit_settlement(command, &receipt_id).await;
+            }
             return Err(if expired {
                 AuthorEditError::AdmissionExpired
             } else {
@@ -149,6 +167,16 @@ impl PostgresProjectReader {
                     .rollback()
                     .await
                     .map_err(author_edit_challenge_error)?;
+                let client = self
+                    .connect_challenge()
+                    .await
+                    .map_err(author_edit_challenge_error)?;
+                set_challenge_scope_on_client(&client, &command.project_scope)
+                    .await
+                    .map_err(author_edit_challenge_error)?;
+                if let Some(receipt_id) = existing_receipt_id(&client, command).await? {
+                    return self.read_author_edit_settlement(command, &receipt_id).await;
+                }
                 return Err(error);
             }
         };
@@ -187,6 +215,9 @@ impl PostgresProjectReader {
                     .rollback()
                     .await
                     .map_err(author_edit_challenge_error)?;
+                if result_reference == "requires_reconfirmation" {
+                    return Err(AuthorEditError::BindingConflict);
+                }
                 Ok(AdmissionUse::ExistingSettlement(result_reference))
             }
             ProjectCommandChallengeUse::ExactRetryInProgress => {
@@ -351,6 +382,29 @@ impl PostgresProjectReader {
 enum AdmissionUse {
     Created,
     ExistingSettlement(String),
+}
+
+async fn existing_receipt_id(
+    client: &tokio_postgres::Client,
+    command: &ApplyAuthorEditCommand,
+) -> Result<Option<String>, AuthorEditError> {
+    client
+        .query_opt(
+            "SELECT settlement.receipt_id::text
+               FROM storyos.author_command_admission_settlements AS settlement
+              WHERE settlement.owner_user_id = $1::text::uuid
+                AND settlement.project_id = $2::text::uuid
+                AND settlement.author_command_admission_id = $3::text::uuid
+                AND settlement.settlement_kind = 'receipt_settled'",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.ids.author_command_admission_id,
+            ],
+        )
+        .await
+        .map_err(author_edit_database_error)
+        .map(|row| row.map(|row| row.get(0)))
 }
 
 pub(super) fn sha256_hex(bytes: &[u8]) -> String {

@@ -29,6 +29,16 @@ interface GroupEvidenceView {
 type ClosedOutcome =
   | { kind: "committed"; response: unknown }
   | { kind: "rejected"; reason: "challenge_expired_unconsumed" }
+  | {
+      kind: "requires_reconfirmation";
+      command_id: string;
+      author_command_admission_id: string;
+      reconfirmation_reason:
+        | "admission_expired"
+        | "binding_changed"
+        | "direct_edit_intent_unrecoverable";
+      recovery_draft_ref: string | null;
+    }
   | { kind: "still_unknown"; strongest: Exclude<ReconciliationEvidence,
       { kind: "no_outcome_observed" }> };
 
@@ -78,7 +88,8 @@ export function groupEvidenceRank(group: GroupEvidenceView | undefined): number 
   const settlement = group?.settlement?.kind;
   if (settlement === "applied_receipt_settled"
     || settlement === "zero_authority_receipt_settled"
-    || settlement === "outcome_query_rejected_no_admission") {
+    || settlement === "outcome_query_rejected_no_admission"
+    || settlement === "outcome_query_requires_reconfirmation") {
     return 4;
   }
   const strongest = group?.reconciliation?.strongest?.kind;
@@ -102,7 +113,8 @@ export function sameTerminalIdentity(
       === rightSettlement?.author_command_admission_id
     && leftReceipt?.receipt_id === rightReceipt?.receipt_id
     && leftReceipt?.result === rightReceipt?.result
-    && leftSettlement?.reason === rightSettlement?.reason;
+    && leftSettlement?.reason === rightSettlement?.reason
+    && leftSettlement?.reconfirmation_reason === rightSettlement?.reconfirmation_reason;
 }
 
 function decideStrongerGroup(
@@ -264,7 +276,15 @@ export async function commitOutcomeQueryWithGroup(
       ? { kind: "committed", exact_apply_author_edit_response_v2: closed.response }
       : closed.kind === "rejected"
         ? { kind: "rejected_no_admission", reason: "challenge_expired_unconsumed" }
-        : { kind: "still_unknown", observation: closed.strongest },
+        : closed.kind === "requires_reconfirmation"
+          ? {
+              kind: "requires_reconfirmation",
+              command_id: closed.command_id,
+              author_command_admission_id: closed.author_command_admission_id,
+              reconfirmation_reason: closed.reconfirmation_reason,
+              recovery_draft_ref: closed.recovery_draft_ref,
+            }
+          : { kind: "still_unknown", observation: closed.strongest },
   };
   const transaction = workspace.database.transaction([
     "metadata",
@@ -325,6 +345,10 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
       outcome_kind?: unknown;
       response?: { schema_id?: unknown };
       reason?: unknown;
+      command_id?: unknown;
+      author_command_admission_id?: unknown;
+      reconfirmation_reason?: unknown;
+      recovery_draft_ref?: unknown;
       observation?: {
         observation_kind?: unknown;
         expires_at?: unknown;
@@ -348,6 +372,22 @@ function closedOutcome(payload: unknown): ClosedOutcome | null {
   if (outcome.outcome_kind === "rejected"
     && outcome.reason === "challenge_expired_unconsumed") {
     return { kind: "rejected", reason: "challenge_expired_unconsumed" };
+  }
+  if (outcome.outcome_kind === "requires_reconfirmation"
+    && UUID.test((outcome.command_id ?? "") as string)
+    && UUID.test((outcome.author_command_admission_id ?? "") as string)
+    && (outcome.reconfirmation_reason === "admission_expired"
+      || outcome.reconfirmation_reason === "binding_changed"
+      || outcome.reconfirmation_reason === "direct_edit_intent_unrecoverable")
+    && (outcome.recovery_draft_ref === null
+      || typeof outcome.recovery_draft_ref === "string")) {
+    return {
+      kind: "requires_reconfirmation",
+      command_id: outcome.command_id as string,
+      author_command_admission_id: outcome.author_command_admission_id as string,
+      reconfirmation_reason: outcome.reconfirmation_reason,
+      recovery_draft_ref: outcome.recovery_draft_ref as string | null,
+    };
   }
   if (outcome.outcome_kind === "still_unknown"
     && outcome.observation?.observation_kind === "challenge_issued"
@@ -487,6 +527,23 @@ export async function reconcileLostAcknowledgement({
         settlement: {
           kind: "outcome_query_rejected_no_admission",
           reason: "challenge_expired_unconsumed",
+        },
+      },
+    });
+  }
+  if (closed.kind === "requires_reconfirmation") {
+    const rest = { ...group };
+    delete rest.reconciliation;
+    return commitOutcomeQueryWithGroup(workspace, {
+      ...durableQuery,
+      next: {
+        ...rest,
+        settlement: {
+          kind: "outcome_query_requires_reconfirmation",
+          command_id: closed.command_id,
+          author_command_admission_id: closed.author_command_admission_id,
+          reconfirmation_reason: closed.reconfirmation_reason,
+          recovery_draft_ref: closed.recovery_draft_ref,
         },
       },
     });

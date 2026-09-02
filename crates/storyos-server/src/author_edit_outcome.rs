@@ -126,6 +126,24 @@ fn contract_outcome(
                 }
             },
         },
+        ApplicationOutcome::RequiresReconfirmation(reconfirmation) => {
+            contracts::ApplyAuthorEditOutcome::RequiresReconfirmation {
+                command_id: reconfirmation.command_id,
+                author_command_admission_id: reconfirmation.author_command_admission_id,
+                reconfirmation_reason: match reconfirmation.reconfirmation_reason {
+                    storyos_application::ApplyAuthorEditReconfirmationReason::AdmissionExpired => {
+                        contracts::ApplyAuthorEditReconfirmationReason::AdmissionExpired
+                    }
+                    storyos_application::ApplyAuthorEditReconfirmationReason::BindingChanged => {
+                        contracts::ApplyAuthorEditReconfirmationReason::BindingChanged
+                    }
+                    storyos_application::ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable => {
+                        contracts::ApplyAuthorEditReconfirmationReason::DirectEditIntentUnrecoverable
+                    }
+                },
+                recovery_draft_ref: reconfirmation.recovery_draft_ref,
+            }
+        },
         ApplicationOutcome::StillUnknown { observation } => {
             contracts::ApplyAuthorEditOutcome::StillUnknown {
                 observation: match observation {

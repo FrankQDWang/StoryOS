@@ -129,6 +129,37 @@
         {
           "additionalProperties": false,
           "properties": {
+            "author_command_admission_id": {
+              "type": "string"
+            },
+            "command_id": {
+              "type": "string"
+            },
+            "outcome_kind": {
+              "const": "requires_reconfirmation",
+              "type": "string"
+            },
+            "reconfirmation_reason": {
+              "$ref": "#/$defs/ApplyAuthorEditReconfirmationReason"
+            },
+            "recovery_draft_ref": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "outcome_kind",
+            "command_id",
+            "author_command_admission_id",
+            "reconfirmation_reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
             "observation": {
               "$ref": "#/$defs/ApplyAuthorEditUnknownObservation"
             },
@@ -144,6 +175,14 @@
           "type": "object"
         }
       ]
+    },
+    "ApplyAuthorEditReconfirmationReason": {
+      "enum": [
+        "admission_expired",
+        "binding_changed",
+        "direct_edit_intent_unrecoverable"
+      ],
+      "type": "string"
     },
     "ApplyAuthorEditRejectionReason": {
       "enum": [

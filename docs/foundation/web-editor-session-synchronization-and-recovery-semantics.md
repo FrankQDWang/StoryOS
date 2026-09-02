@@ -872,14 +872,23 @@ ApplyAuthorEditOutcomeQueryObservation =
                 reconciliation_required: true
               }
         }
+      | RequiresReconfirmation {
+          command_id
+          author_command_admission_id
+          reconfirmation_reason:
+            admission_expired
+            | binding_changed
+            | direct_edit_intent_unrecoverable
+          recovery_draft_ref | null
+        }
   }
 
 OutcomeQueryReducer =
-  NoOutcomeObserved -> ChallengeIssued | AdmissionCommitted | Rejected | Committed
-  ChallengeIssued(exact same expires_at) -> ChallengeIssued | AdmissionCommitted | Rejected | Committed
-  AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)
+  NoOutcomeObserved -> ChallengeIssued | AdmissionCommitted | Rejected | RequiresReconfirmation | Committed
+  ChallengeIssued(exact same expires_at) -> ChallengeIssued | AdmissionCommitted | Rejected | RequiresReconfirmation | Committed
+  AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | RequiresReconfirmation | Committed(same identities)
   QueryUnavailable -> preserve strongest_valid_observation
-  Rejected | Committed -> terminal immutable
+  Rejected | Committed | RequiresReconfirmation -> terminal immutable
   late original POST acknowledgement + GET Committed -> one exact settlement
 ```
 
@@ -1232,7 +1241,8 @@ Action Sequence, and Project Activity that an owning result actually creates.
 | another editor-command attempt `DeliveryUnknown`, exact capsule and Client Session still valid | no claim whether Admission or Receipt exists | retain `TransportOrAdmissionUnknown` and that command class's byte-identical exact-replay rule |
 | outcome Query transport failure, malformed response, or canonical non-200 Problem | no new command-outcome evidence | append `QueryUnavailable`; preserve the strongest valid observation and remain `Unsettled` |
 | outcome Query `StillUnknown { ChallengeIssued }` | exact original challenge remains durable at the returned expiry; no Admission or rejection proof | retain `OutcomeQueryUnresolved`; accept only the same `expires_at`; keep queue, capsule, and payload blocked |
-| outcome Query `StillUnknown { AdmissionCommitted }` | exact Command and Admission exist and reconciliation remains required; no Receipt or Activity is named | advance the strongest observation to the exact admitted identity; keep queue, capsule, and payload blocked; never invoke or replay |
+| outcome Query `StillUnknown { AdmissionCommitted }` | exact Command and Admission exist and reconciliation remains required; no Receipt or Activity is named | advance the strongest observation to the exact admitted identity; keep queue, capsule, and payload blocked; never invoke or replay; repeat only the protected GET |
+| outcome Query `RequiresReconfirmation` | terminal Admission settlement with no Receipt or Core effect | enter the exact no-Receipt terminal settlement; show the closed reason; never invoke the old command |
 | outcome Query `Rejected { challenge_expired_unconsumed }` | positive proof that this identity created no Admission, Receipt, Activity, or authority | enter the exact query-rejected terminal reconciliation, settlement, and visible-author branch; do not fabricate a Problem or resend permission |
 | outcome Query `Committed` | exact nested `ApplyAuthorEditResponse` v2 | use the existing applied Receipt-plus-Activity or zero-authority Receipt-only settlement; exact-deduplicate any late POST acknowledgement |
 | pre-admission Problem | exact safe `PreAdmissionProblemObservation`; no Admission or Receipt for the proven attempt | retain complete payload; either terminally show the typed refusal or, only when the exact Problem permits and the frozen request remains equal, enter `ProvenNoAdmission` before a fresh challenge |
@@ -1291,6 +1301,7 @@ state, missing HTTP, or Event arrival is never an effect oracle.
 | outcome Query returns `Rejected { challenge_expired_unconsumed }` | append `RejectedNoAdmission`; enter `OutcomeQueryRejectedNoAdmission` and `OutcomeQueryRejectedVisible` through the same query observation identity; retain the author payload and never resend automatically |
 | outcome Query returns `StillUnknown { ChallengeIssued }` | preserve `OutcomeQueryUnresolved`, exact same expiry, `Unsettled`, queue block, capsule, and payload; no success, rejection, or retry permission |
 | outcome Query returns `StillUnknown { AdmissionCommitted }` | preserve the exact Command and Admission as the strongest valid observation, remain `Unsettled`, and never invoke or replay the admitted command |
+| outcome Query returns `RequiresReconfirmation` | append that exact observation, enter the terminal no-Receipt settlement, and never invoke the old command |
 | outcome Query transport or Problem handling is unavailable | append only `QueryUnavailable`; preserve the strongest valid observation and remain unresolved |
 | late original POST acknowledgement and outcome Query `Committed` both arrive | require the same Scope, key, digest, Command, Admission, Receipt, nested command correlation, and result; append both channel observations but create one settlement and one author-facing effect |
 | exact replay or settlement Query returns another editor `Committed` result | append `OtherEditorCommittedObservation`, enter `OtherEditorReceiptSettled`, retain its existing Activity/Snapshot convergence contract, and never invoke again |

@@ -124,11 +124,11 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
             "operational-project-activity",
         ],
         "committed_projection": "receipt_first_exact_replay",
-        "outcomes": ["committed", "rejected", "still_unknown"],
+        "outcomes": ["committed", "rejected", "requires_reconfirmation", "still_unknown"],
         "capabilities": ["read"],
         "nonce_consumption": "none",
-        "core_invocation": "none",
-        "lifecycle_append": "none",
+        "core_invocation": "already_admitted_direct_editor_action",
+        "lifecycle_append": "same_admission_receipt_or_reconfirmation",
         "outcome_unknown_table_access": "none",
     }
     if catalog.get("author_edit_outcome_query_read") != expected_outcome_read_relation:

@@ -83,7 +83,7 @@ fn apply_author_edit_outcome_query_is_one_protected_exact_get() {
     let outcomes = response["$defs"]["ApplyAuthorEditOutcome"]["oneOf"]
         .as_array()
         .expect("outcome must be a closed union");
-    assert_eq!(outcomes.len(), 3);
+    assert_eq!(outcomes.len(), 4);
     assert_eq!(
         outcomes
             .iter()
@@ -91,7 +91,12 @@ fn apply_author_edit_outcome_query_is_one_protected_exact_get() {
                 .as_str()
                 .expect("outcome discriminator must be a string"))
             .collect::<Vec<_>>(),
-        ["committed", "rejected", "still_unknown"]
+        [
+            "committed",
+            "rejected",
+            "requires_reconfirmation",
+            "still_unknown"
+        ]
     );
     assert!(
         response.to_string().contains("ApplyAuthorEditResponse"),

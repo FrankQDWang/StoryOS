@@ -70,8 +70,9 @@ pub use author_edit::{
 };
 pub use author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError, ApplyAuthorEditOutcomeReader,
-    ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit,
-    ReadApplyAuthorEditOutcome, get_apply_author_edit_outcome,
+    ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
+    ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit, ReadApplyAuthorEditOutcome,
+    RequiresReconfirmationApplyAuthorEdit, get_apply_author_edit_outcome,
 };
 
 pub use archive_project::{

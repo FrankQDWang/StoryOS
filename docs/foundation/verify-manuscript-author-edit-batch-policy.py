@@ -161,6 +161,7 @@ ACK_LOSS_GATE_PROFILE = {
             "rejected": "PASS-REFUSAL",
             "still_unknown_challenge_issued": "PASS-HOLD",
             "still_unknown_admission_committed": "PASS-HOLD",
+            "requires_reconfirmation": "PASS-REFUSAL",
             "query_transport_unavailable_or_malformed": "PASS-HOLD",
             "canonical_security_or_input_problem_gate": "PASS-REFUSAL",
             "canonical_security_or_input_problem_journal": "QueryUnavailable",
@@ -186,7 +187,7 @@ ACK_LOSS_GATE_PROFILE = {
             "nonce": "header_only_not_url_log_or_response",
             "cache_control": "no-store_on_success_and_problem",
             "failure": "uniform_non_oracular",
-            "read_effects": "zero_nonce_consumption_core_receipt_activity_authority",
+            "read_effects": "zero_nonce_consumption_same_admission_recovery_permitted",
         },
     },
     "stage1_handoff": {
@@ -233,9 +234,9 @@ ACK_LOSS_ROW_SHA256 = {
     "CFP-EDITOR-AFTER-OUTCOME-RESPONSE-BEFORE-JOURNAL":
         "1b9647400c92a5bba11fe3e7f00f5571426c271ffaa6b7bfa527a46e61c2593a",
     "SCH-UNKNOWN": "3c762c82fb2c46527211e9f4477684034d85c3a25549a96cd4667d8ba66cc2a1",
-    "DVG-08": "1fd599932d12e0fabf57440215e14b21baf7841e09ea9eb13e6b6788c3e66579",
+    "DVG-08": "fd6ed5e72a640e2f967a5c5f7deed8b1c598171c84d401e50a9154337b6fa5ca",
     "ORC-OUTCOME-UNKNOWN":
-        "2cf2ec76df8c930a6764695c6b8ea055107f576b1d6c8203c2cd51bddac2ce97",
+        "dfd0601fa74a55cdb24e8c03f826a341ba7ba569d14355fa296b85c5957738c2",
 }
 
 
@@ -355,6 +356,7 @@ def dvg_ack_loss_errors(dvg_projection: str) -> list[str]:
             "Author Command acknowledgement loss",
             "`Committed` is `PASS-POS`",
             "`Rejected` is `PASS-REFUSAL`",
+            "`RequiresReconfirmation` is `PASS-REFUSAL`",
             "`StillUnknown` and Query failure are `PASS-HOLD`",
         ),
     }
@@ -519,7 +521,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "5965ebbffd51d3326f1c478293a3959d32901c0b3285e6183571b942a6a6e645":
+    ).encode()).hexdigest() != "9483fa548bb6d871d5cae6c6685d1f4eb0b7bf8c771c0e079ee4c5a478c76a20":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
@@ -541,6 +543,19 @@ def apply_author_edit_outcome_contract_errors(
     expected_outcomes = {
         "committed": {"outcome_kind", "response"},
         "rejected": {"outcome_kind", "reason"},
+        "requires_reconfirmation": {
+            "outcome_kind", "command_id", "author_command_admission_id",
+            "reconfirmation_reason", "recovery_draft_ref",
+        },
+        "still_unknown": {"outcome_kind", "observation"},
+    }
+    expected_required = {
+        "committed": {"outcome_kind", "response"},
+        "rejected": {"outcome_kind", "reason"},
+        "requires_reconfirmation": {
+            "outcome_kind", "command_id", "author_command_admission_id",
+            "reconfirmation_reason",
+        },
         "still_unknown": {"outcome_kind", "observation"},
     }
     if set(tagged_outcomes) != set(expected_outcomes) or len(tagged_outcomes) != len(outcome_variants):
@@ -551,12 +566,13 @@ def apply_author_edit_outcome_contract_errors(
                 or variant.get("properties", {}).get("outcome_kind")
                 != {"const": kind, "type": "string"}
                 or set(variant.get("properties", {})) != expected_fields
-                or set(variant.get("required", [])) != expected_fields
+                or set(variant.get("required", [])) != expected_required[kind]
                 or variant.get("additionalProperties") is not False):
             errors.append(f"outcome Query {kind} branch drifted")
     for kind, field, target in (
         ("committed", "response", "ApplyAuthorEditResponse"),
         ("rejected", "reason", "ApplyAuthorEditRejectionReason"),
+        ("requires_reconfirmation", "reconfirmation_reason", "ApplyAuthorEditReconfirmationReason"),
         ("still_unknown", "observation", "ApplyAuthorEditUnknownObservation"),
     ):
         if tagged_outcomes.get(kind, {}).get("properties", {}).get(field) != {
@@ -602,6 +618,15 @@ def apply_author_edit_outcome_contract_errors(
         "enum": ["challenge_expired_unconsumed"], "type": "string"
     }:
         errors.append("outcome Query rejection reason drifted")
+    if definitions.get("ApplyAuthorEditReconfirmationReason") != {
+        "enum": [
+            "admission_expired",
+            "binding_changed",
+            "direct_edit_intent_unrecoverable",
+        ],
+        "type": "string",
+    }:
+        errors.append("outcome Query reconfirmation reason drifted")
     response_root = {
         key: response_schema.get(key)
         for key in ("type", "additionalProperties", "properties", "required")
@@ -620,11 +645,14 @@ def apply_author_edit_outcome_contract_errors(
         errors.append("outcome Query route identity drifted")
     elif hashlib.sha256(json.dumps(
             routes[0], sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "683b155b07142e25ffe370fa1b10e533351b5aa42bcba88315afd623d33f3878":
+    ).encode()).hexdigest() != "fffab8a342d2c5dca324a09d40c71dae228a850f2cc342d0646905702bd07b0c":
         errors.append("outcome Query route proof drifted")
     for alias, expected_client_shape in (
         ("ApplyAuthorEditRejectionReason",
          'export type ApplyAuthorEditRejectionReason = "challenge_expired_unconsumed";'),
+        ("ApplyAuthorEditReconfirmationReason",
+         'export type ApplyAuthorEditReconfirmationReason = "admission_expired" | '
+         '"binding_changed" | "direct_edit_intent_unrecoverable";'),
         ("ApplyAuthorEditUnknownObservation",
          'export type ApplyAuthorEditUnknownObservation = { "observation_kind": '
          '"challenge_issued", expires_at: string, } | { "observation_kind": '
@@ -633,7 +661,10 @@ def apply_author_edit_outcome_contract_errors(
         ("ApplyAuthorEditOutcome",
          'export type ApplyAuthorEditOutcome = { "outcome_kind": "committed", response: '
          'ApplyAuthorEditResponse, } | { "outcome_kind": "rejected", reason: '
-         'ApplyAuthorEditRejectionReason, } | { "outcome_kind": "still_unknown", observation: '
+         'ApplyAuthorEditRejectionReason, } | { "outcome_kind": "requires_reconfirmation", '
+         'command_id: string, author_command_admission_id: string, reconfirmation_reason: '
+         'ApplyAuthorEditReconfirmationReason, recovery_draft_ref: string | null, } | '
+         '{ "outcome_kind": "still_unknown", observation: '
          'ApplyAuthorEditUnknownObservation, };'),
         ("GetApplyAuthorEditOutcomeResponse",
          "export type GetApplyAuthorEditOutcomeResponse = { schema_id: string, correlation_id: "
@@ -702,7 +733,7 @@ def apply_author_edit_outcome_contract_errors(
          "ApplyAuthorEditOutcomeQueryObservation =",
          "e02c80e55ce08c985c2af6a461787c0d13a59fe9cf3dec706b598a72367d7773"),
         ("observation", "ApplyAuthorEditOutcomeQueryObservation =", "OutcomeQueryReducer =",
-         "191508ba651a7c632a67385193afb5dbffdfaafb8bcc21f6b00c5412a6cee22f"),
+         "cd84dea55893f42811ff80b03e8122dce5f7d002b4d256c749ccbbdbb84a394e"),
     ):
         block = re.search(
             rf"{re.escape(start)}.*?(?=\n\n{re.escape(end)})",
@@ -714,11 +745,11 @@ def apply_author_edit_outcome_contract_errors(
             errors.append(f"Web outcome Query {label} shape drifted")
     reducer = re.search(r"OutcomeQueryReducer =.*?(?=\n```)", visible_web, flags=re.DOTALL)
     expected_reducer = """OutcomeQueryReducer =
-  NoOutcomeObserved -> ChallengeIssued | AdmissionCommitted | Rejected | Committed
-  ChallengeIssued(exact same expires_at) -> ChallengeIssued | AdmissionCommitted | Rejected | Committed
-  AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)
+  NoOutcomeObserved -> ChallengeIssued | AdmissionCommitted | Rejected | RequiresReconfirmation | Committed
+  ChallengeIssued(exact same expires_at) -> ChallengeIssued | AdmissionCommitted | Rejected | RequiresReconfirmation | Committed
+  AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | RequiresReconfirmation | Committed(same identities)
   QueryUnavailable -> preserve strongest_valid_observation
-  Rejected | Committed -> terminal immutable
+  Rejected | Committed | RequiresReconfirmation -> terminal immutable
   late original POST acknowledgement + GET Committed -> one exact settlement"""
     if not reducer or reducer.group(0) != expected_reducer:
         errors.append("Web outcome Query reducer variants drifted")
@@ -1317,11 +1348,11 @@ def self_test() -> None:
          "QueryUnavailable -> NoOutcomeObserved", "outcome Query reducer variants drifted"),
         ("ChallengeIssued(exact same expires_at)", "ChallengeIssued(changed expires_at)",
          "outcome Query reducer variants drifted"),
-        ("AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)",
-         "AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | Committed(same identities)\n"
+        ("AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | RequiresReconfirmation | Committed(same identities)",
+         "AdmissionCommitted(same Command and Admission) -> AdmissionCommitted | RequiresReconfirmation | Committed(same identities)\n"
          "  AdmissionCommitted -> Rejected", "outcome Query reducer variants drifted"),
-        ("Rejected | Committed -> terminal immutable",
-         "Rejected | Committed -> may regress", "outcome Query reducer variants drifted"),
+        ("Rejected | Committed | RequiresReconfirmation -> terminal immutable",
+         "Rejected | Committed | RequiresReconfirmation -> may regress", "outcome Query reducer variants drifted"),
         ("All three records\nname the same exact query observation",
          "The records\nmay use different observations", "outcome Query closed meaning drifted"),
         ("does not consume the nonce", "consumes the nonce",

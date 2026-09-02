@@ -136,6 +136,16 @@ export type SubmissionSettlement =
   | (Record<string, unknown> & {
       kind: "outcome_query_rejected_no_admission";
       reason: "challenge_expired_unconsumed";
+    })
+  | (Record<string, unknown> & {
+      kind: "outcome_query_requires_reconfirmation";
+      command_id: string;
+      author_command_admission_id: string;
+      reconfirmation_reason:
+        | "admission_expired"
+        | "binding_changed"
+        | "direct_edit_intent_unrecoverable";
+      recovery_draft_ref: string | null;
     });
 
 export interface JournalSubmissionGroup extends Record<string, unknown> {

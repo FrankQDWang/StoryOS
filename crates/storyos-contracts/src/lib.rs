@@ -99,9 +99,9 @@ pub use release1_author_edit::{
     DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
 };
 pub use release1_author_edit_outcome::{
-    ApplyAuthorEditOutcome, ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
-    GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD, GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH,
-    GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
+    ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
+    ApplyAuthorEditUnknownObservation, GET_APPLY_AUTHOR_EDIT_OUTCOME_METHOD,
+    GET_APPLY_AUTHOR_EDIT_OUTCOME_PATH, GET_APPLY_AUTHOR_EDIT_OUTCOME_REQUEST_SCHEMA_ID,
     GET_APPLY_AUTHOR_EDIT_OUTCOME_RESPONSE_SCHEMA_ID, GetApplyAuthorEditOutcomeRequest,
     GetApplyAuthorEditOutcomeResponse, ReconciliationRequired,
 };

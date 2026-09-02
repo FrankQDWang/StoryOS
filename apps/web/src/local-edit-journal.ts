@@ -528,7 +528,8 @@ async function validateCoverage(
     if (group.journal_partition_id !== workspace.partition.journal_partition_id
       || group.batch_policy_revision !== AUTHOR_EDIT_BATCH_POLICY_REVISION
       || !["unsettled", "applied_receipt_settled", "zero_authority_receipt_settled",
-        "outcome_query_rejected_no_admission"].includes(group.settlement?.kind)
+        "outcome_query_rejected_no_admission",
+        "outcome_query_requires_reconfirmation"].includes(group.settlement?.kind)
       || !closedReconciliation(group)
       || !Number.isSafeInteger(first)
       || !Number.isSafeInteger(last)

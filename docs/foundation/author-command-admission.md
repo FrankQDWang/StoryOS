@@ -204,10 +204,11 @@ nonce-consumption record.
 
 The only automatic recovery invocation is an unsettled
 `direct_editor_action` whose same admission is unexpired, whose every binding
-still matches, and whose complete Local Edit Journal intent remains visibly
-recoverable. It invokes the exact already-admitted command under the same
-Command, Admission, idempotency, and nonce-consumption evidence. It does not
-mint or upgrade authority and is not a new Author Action.
+still matches, and whose complete persisted Admission `command_payload`
+remains recoverable. It invokes the exact already-admitted command under the
+same Command, Admission, idempotency, and nonce-consumption evidence. It does not
+mint or upgrade authority and is not a new Author Action. The Local Edit
+Journal is not Server proof of recoverability.
 
 After validated storage proves that no Receipt exists, recovery must append
 `RequiresReconfirmation` instead of invoking Core when:
@@ -216,8 +217,8 @@ After validated storage proves that no Receipt exists, recovery must append
 - the action class is `explicit_editor_command` or
   `explicit_project_command`;
 - any binding is changed, stale, missing, or unverifiable; or
-- the complete direct-edit intent cannot be proven from the owning Web Editor
-  Session boundary.
+- the complete direct-edit intent cannot be proven from the persisted Admission
+  `command_payload`.
 
 Visible reconfirmation preserves the complete direct-edit intent as a Recovery
 Draft when applicable. The Web Editor Session owner defines journal,
