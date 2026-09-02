@@ -1,6 +1,7 @@
 use std::fs;
 use std::io;
 use std::path::Path;
+use std::sync::LazyLock;
 
 use schemars::schema_for;
 use serde_json::{Value, json};
@@ -611,7 +612,9 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
 
 /// Build the one active Release 1 protocol profile from the Rust contract source.
 pub fn release1_protocol_profile() -> Release1ProtocolProfile {
-    release1_artifact_assembly().profile
+    static PROFILE: LazyLock<Release1ProtocolProfile> =
+        LazyLock::new(|| release1_artifact_assembly().profile);
+    PROFILE.clone()
 }
 
 /// Write all checked-in artifacts for the implemented Release 1 profile route.
