@@ -862,6 +862,10 @@ test("one current writer settles one Author Edit and exact retries return one re
           'author_command_admission_id', '${unknownAdmission}', 'command_id', '${unknownCommand}',
           'idempotency_key', '${unknownKey}', 'challenge_consumed_at', challenge.consumed_at,
           'challenge_expires_at', challenge.expires_at))).* FROM source, challenge, progress`);
+    await queryPostgres(`UPDATE storyos.author_command_admissions
+      SET command_payload = command_payload - 'author_edit_units'
+      WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${PROJECT_A}'::uuid
+        AND author_command_admission_id = '${unknownAdmission}'::uuid`);
     const unknownOptions = {
       baseUrl, projectId: PROJECT_A, idempotencyKey: unknownKey,
       antiForgery: unknownChallenge.nonce, fetchImpl: browserFetch(baseUrl, "session-a"),
