@@ -55,12 +55,27 @@ pub(crate) async fn read_live_chapter_blocks(
     client: &impl GenericClient,
     scope: &ProjectScope,
 ) -> Result<Vec<ManuscriptSearchChapterFact>, ProjectReadError> {
+    #[cfg(test)]
+    crate::manuscript_block::revision_member_read_sql_statement_count::increment();
     let rows = client
         .query(
             "SELECT volume.manuscript_object_id::text,
                     chapter.manuscript_object_id::text,
-                    revision.revision_id::text,
-                    convert_from(payload.canonical_bytes, 'UTF8')
+                    convert_from(payload.canonical_bytes, 'UTF8'),
+                    COALESCE(
+                      (
+                        SELECT array_agg(block.manuscript_block_id::text ORDER BY member.block_order)
+                          FROM storyos.manuscript_revision_members AS member
+                          JOIN storyos.manuscript_blocks AS block
+                            ON (block.owner_user_id, block.project_id, block.manuscript_block_id) =
+                               (member.owner_user_id, member.project_id, member.manuscript_block_id)
+                         WHERE member.owner_user_id = chapter.owner_user_id
+                           AND member.project_id = chapter.project_id
+                           AND member.manuscript_object_id = chapter.manuscript_object_id
+                           AND member.revision_id = revision.revision_id
+                      ),
+                      ARRAY[]::text[]
+                    )
                FROM storyos.manuscript_objects AS chapter
                JOIN storyos.manuscript_objects AS volume
                  ON (volume.owner_user_id, volume.project_id, volume.manuscript_object_id) =
@@ -111,18 +126,9 @@ pub(crate) async fn read_live_chapter_blocks(
         }
         chapter_order += 1;
         let chapter_id = row.get::<_, String>(1);
-        let revision_id = row.get::<_, String>(2);
-        let stored: String = row.get(3);
-        let blocks = crate::manuscript_block::load_revision_blocks(
-            client,
-            scope.owner_user_id.as_ref(),
-            scope.project_id.as_ref(),
-            &chapter_id,
-            &revision_id,
-            &stored,
-        )
-        .await
-        .map_err(read_error)?;
+        let stored: String = row.get(2);
+        let member_ids: Vec<String> = row.get(3);
+        let blocks = crate::manuscript_block::blocks_from_stored_payload(&stored, &member_ids);
         chapters.push(ManuscriptSearchChapterFact {
             project_scope: scope.clone(),
             chapter_id: ChapterId::new(chapter_id),

@@ -1,10 +1,11 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
+    AuthorCommandAdmissionIds, ChapterId, CreateProjectChallengeBinding, CreateProjectCommand,
     EditorClientBinding, IssueCreateProjectChallenge, ManuscriptSearchCompleteness,
     ManuscriptSearchRequest, ManuscriptSearchSelection, ProjectId, ProjectScope, SearchManuscript,
     UserId, create_project, issue_create_project_challenge, search_manuscript,
 };
+use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
@@ -189,4 +190,246 @@ async fn search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_
             .unwrap(),
         SearchManuscript::Missing
     );
+}
+
+const FIXTURE_USER: &str = "018f0000-0000-7001-8000-000000000001";
+const FIXTURE_PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
+const SEARCH_VOLUME: &str = "018f0000-0000-7001-8000-000000000e10";
+const MATCH_CHAPTER: &str = "018f0000-0000-7001-8000-000000000e11";
+const MISMATCH_CHAPTER: &str = "018f0000-0000-7001-8000-000000000e12";
+const LEGACY_CHAPTER: &str = "018f0000-0000-7001-8000-000000000e13";
+const MATCH_PAYLOAD: &str = "018f0000-0000-7001-8000-000000000e14";
+const MISMATCH_PAYLOAD: &str = "018f0000-0000-7001-8000-000000000e15";
+const LEGACY_PAYLOAD: &str = "018f0000-0000-7001-8000-000000000e16";
+const MATCH_REVISION: &str = "018f0000-0000-7001-8000-000000000e17";
+const MISMATCH_REVISION: &str = "018f0000-0000-7001-8000-000000000e18";
+const LEGACY_REVISION: &str = "018f0000-0000-7001-8000-000000000e19";
+const BLOCK_A: &str = "018f0000-0000-7001-8000-000000000e21";
+const BLOCK_B: &str = "018f0000-0000-7001-8000-000000000e22";
+const BLOCK_C: &str = "018f0000-0000-7001-8000-000000000e23";
+const BLOCK_D: &str = "018f0000-0000-7001-8000-000000000e24";
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn several_live_chapters_load_membership_in_one_statement() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
+    tokio::spawn(async move { connection.await.unwrap() });
+    let transaction = runtime.transaction().await.unwrap();
+    transaction
+        .batch_execute(
+            "SET LOCAL storyos.owner_user_id = '018f0000-0000-7001-8000-000000000001';
+             SET LOCAL storyos.project_id = '018f0000-0000-7001-8000-000000000002';",
+        )
+        .await
+        .unwrap();
+    let matched = vec![
+        ManuscriptBlock {
+            manuscript_block_id: BLOCK_A.to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: "Alpha".to_owned(),
+        },
+        ManuscriptBlock {
+            manuscript_block_id: BLOCK_B.to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: "Beta".to_owned(),
+        },
+    ];
+    let mismatched = vec![
+        ManuscriptBlock {
+            manuscript_block_id: BLOCK_C.to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: "Gamma".to_owned(),
+        },
+        ManuscriptBlock {
+            manuscript_block_id: BLOCK_D.to_owned(),
+            block_kind: ManuscriptBlockKind::Paragraph,
+            text: "Delta".to_owned(),
+        },
+    ];
+    let matched_payload = crate::manuscript_block::persist_canonical_bytes(&matched);
+    let mismatched_payload = crate::manuscript_block::persist_canonical_bytes(&mismatched);
+    transaction
+        .execute(
+            "INSERT INTO storyos.manuscript_objects
+               (owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'volume', 'Search Volume', 50)",
+            &[&FIXTURE_USER, &FIXTURE_PROJECT, &SEARCH_VOLUME],
+        )
+        .await
+        .unwrap();
+    for (chapter_id, title, order) in [
+        (MATCH_CHAPTER, "Match Chapter", "1"),
+        (MISMATCH_CHAPTER, "Mismatch Chapter", "2"),
+        (LEGACY_CHAPTER, "Legacy Chapter", "3"),
+    ] {
+        transaction
+            .execute(
+                "INSERT INTO storyos.manuscript_objects
+                   (owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order,
+                    parent_volume_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'chapter', $4, $5::text::bigint,
+                         $6::text::uuid)",
+                &[
+                    &FIXTURE_USER,
+                    &FIXTURE_PROJECT,
+                    &chapter_id,
+                    &title,
+                    &order,
+                    &SEARCH_VOLUME,
+                ],
+            )
+            .await
+            .unwrap();
+    }
+    transaction
+        .execute(
+            "INSERT INTO storyos.authoritative_payloads
+               (owner_user_id, project_id, payload_id, canonical_bytes)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, convert_to($4, 'UTF8')),
+                    ($1::text::uuid, $2::text::uuid, $5::text::uuid, convert_to($6, 'UTF8')),
+                    ($1::text::uuid, $2::text::uuid, $7::text::uuid, convert_to('Gamma', 'UTF8'))",
+            &[
+                &FIXTURE_USER,
+                &FIXTURE_PROJECT,
+                &MATCH_PAYLOAD,
+                &matched_payload,
+                &MISMATCH_PAYLOAD,
+                &mismatched_payload,
+                &LEGACY_PAYLOAD,
+            ],
+        )
+        .await
+        .unwrap();
+    transaction
+        .execute(
+            "INSERT INTO storyos.authoritative_revisions
+               (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid),
+                    ($1::text::uuid, $2::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid),
+                    ($1::text::uuid, $2::text::uuid, $9::text::uuid, $10::text::uuid, $11::text::uuid)",
+            &[
+                &FIXTURE_USER,
+                &FIXTURE_PROJECT,
+                &MATCH_CHAPTER,
+                &MATCH_REVISION,
+                &MATCH_PAYLOAD,
+                &MISMATCH_CHAPTER,
+                &MISMATCH_REVISION,
+                &MISMATCH_PAYLOAD,
+                &LEGACY_CHAPTER,
+                &LEGACY_REVISION,
+                &LEGACY_PAYLOAD,
+            ],
+        )
+        .await
+        .unwrap();
+    transaction
+        .execute(
+            "INSERT INTO storyos.authoritative_heads
+               (owner_user_id, project_id, manuscript_object_id, current_revision_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid),
+                    ($1::text::uuid, $2::text::uuid, $5::text::uuid, $6::text::uuid),
+                    ($1::text::uuid, $2::text::uuid, $7::text::uuid, $8::text::uuid)",
+            &[
+                &FIXTURE_USER,
+                &FIXTURE_PROJECT,
+                &MATCH_CHAPTER,
+                &MATCH_REVISION,
+                &MISMATCH_CHAPTER,
+                &MISMATCH_REVISION,
+                &LEGACY_CHAPTER,
+                &LEGACY_REVISION,
+            ],
+        )
+        .await
+        .unwrap();
+    transaction
+        .execute(
+            "INSERT INTO storyos.manuscript_blocks
+               (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'paragraph'),
+                    ($1::text::uuid, $2::text::uuid, $5::text::uuid, $4::text::uuid, 'paragraph'),
+                    ($1::text::uuid, $2::text::uuid, $6::text::uuid, $7::text::uuid, 'paragraph'),
+                    ($1::text::uuid, $2::text::uuid, $8::text::uuid, $7::text::uuid, 'paragraph')",
+            &[
+                &FIXTURE_USER,
+                &FIXTURE_PROJECT,
+                &BLOCK_A,
+                &MATCH_CHAPTER,
+                &BLOCK_B,
+                &BLOCK_C,
+                &MISMATCH_CHAPTER,
+                &BLOCK_D,
+            ],
+        )
+        .await
+        .unwrap();
+    transaction
+        .execute(
+            "INSERT INTO storyos.manuscript_revision_members
+               (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id,
+                block_order)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid, 1),
+                    ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $6::text::uuid, 2),
+                    ($1::text::uuid, $2::text::uuid, $7::text::uuid, $8::text::uuid, $9::text::uuid, 1),
+                    ($1::text::uuid, $2::text::uuid, $7::text::uuid, $8::text::uuid, $10::text::uuid, 2)",
+            &[
+                &FIXTURE_USER,
+                &FIXTURE_PROJECT,
+                &MATCH_CHAPTER,
+                &MATCH_REVISION,
+                &BLOCK_A,
+                &BLOCK_B,
+                &MISMATCH_CHAPTER,
+                &MISMATCH_REVISION,
+                &BLOCK_D,
+                &BLOCK_C,
+            ],
+        )
+        .await
+        .unwrap();
+    let scope = ProjectScope::new(UserId::new(FIXTURE_USER), ProjectId::new(FIXTURE_PROJECT));
+    crate::manuscript_block::revision_member_read_sql_statement_count::reset();
+    let chapters = super::read_live_chapter_blocks(&transaction, &scope)
+        .await
+        .unwrap();
+    assert_eq!(
+        crate::manuscript_block::revision_member_read_sql_statement_count::take(),
+        1
+    );
+    let match_chapter = chapters
+        .iter()
+        .find(|chapter| chapter.chapter_id == ChapterId::new(MATCH_CHAPTER))
+        .expect("matched Chapter");
+    let mismatch_chapter = chapters
+        .iter()
+        .find(|chapter| chapter.chapter_id == ChapterId::new(MISMATCH_CHAPTER))
+        .expect("mismatched Chapter");
+    let legacy_chapter = chapters
+        .iter()
+        .find(|chapter| chapter.chapter_id == ChapterId::new(LEGACY_CHAPTER))
+        .expect("legacy Chapter");
+    assert_eq!(
+        match_chapter.blocks,
+        vec![
+            super::ManuscriptSearchBlockFact {
+                manuscript_block_id: BLOCK_A.to_owned(),
+                text: "Alpha".to_owned(),
+            },
+            super::ManuscriptSearchBlockFact {
+                manuscript_block_id: BLOCK_B.to_owned(),
+                text: "Beta".to_owned(),
+            },
+        ]
+    );
+    assert_eq!(mismatch_chapter.blocks, Vec::new());
+    assert_eq!(legacy_chapter.blocks, Vec::new());
+    assert!(match_chapter.chapter_order < mismatch_chapter.chapter_order);
+    assert!(mismatch_chapter.chapter_order < legacy_chapter.chapter_order);
+    transaction.rollback().await.unwrap();
 }

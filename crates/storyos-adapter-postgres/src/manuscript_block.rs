@@ -117,6 +117,8 @@ pub(crate) async fn load_revision_blocks(
     revision_id: &str,
     body: &str,
 ) -> Result<Vec<ManuscriptBlock>, tokio_postgres::Error> {
+    #[cfg(test)]
+    revision_member_read_sql_statement_count::increment();
     let rows = client
         .query(
             "SELECT block.manuscript_block_id::text
@@ -133,23 +135,27 @@ pub(crate) async fn load_revision_blocks(
         )
         .await?;
     let ids: Vec<String> = rows.iter().map(|row| row.get::<_, String>(0)).collect();
+    Ok(blocks_from_stored_payload(body, &ids))
+}
+
+pub(crate) fn blocks_from_stored_payload(body: &str, ids: &[String]) -> Vec<ManuscriptBlock> {
     if let Some(parsed) = parse_versioned_payload(body) {
         if parsed
             .iter()
             .map(|block| block.manuscript_block_id.as_str())
             .eq(ids.iter().map(String::as_str))
         {
-            return Ok(parsed);
+            return parsed;
         }
-        return Ok(Vec::new());
+        return Vec::new();
     }
     let Some(manuscript_block_id) = ids.first() else {
-        return Ok(Vec::new());
+        return Vec::new();
     };
     if ids.len() != 1 {
-        return Ok(Vec::new());
+        return Vec::new();
     }
-    Ok(upgrade_legacy_manuscript(body, manuscript_block_id).blocks)
+    upgrade_legacy_manuscript(body, manuscript_block_id).blocks
 }
 
 pub(crate) async fn load_or_upgrade_blocks(
@@ -233,6 +239,27 @@ pub(crate) async fn copy_or_upgrade_revision_members(
         .await?;
     }
     Ok(0)
+}
+
+#[cfg(test)]
+pub(crate) mod revision_member_read_sql_statement_count {
+    use std::cell::Cell;
+
+    thread_local! {
+        static COUNT: Cell<u64> = const { Cell::new(0) };
+    }
+
+    pub fn reset() {
+        COUNT.with(|count| count.set(0));
+    }
+
+    pub fn increment() {
+        COUNT.with(|count| count.set(count.get() + 1));
+    }
+
+    pub fn take() -> u64 {
+        COUNT.with(|count| count.replace(0))
+    }
 }
 
 #[cfg(test)]
