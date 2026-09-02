@@ -22,7 +22,7 @@ membership, or guardrail. It is not a new release acceptance.
 | Accepted source | UTF-8/LF SHA-256 |
 | --- | --- |
 | [Editor-first release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) | `550d22270aed7fd2749a9e7d0c7f92fbb737d76e67d5955d46624b364b4ad211` |
-| [Product continuation](storyos-product-delivery-continuation.md) | `2380ed5413541e9c16398d5843337252cb1851a9a72b0ec22721441d20f757b5` |
+| [Product continuation](storyos-product-delivery-continuation.md) | `314fa1586436cae901ad16dbea72ec5d3845ab7f8f67f334a3019e4f68844f1b` |
 
 The continuation source owns the exact 71-source disposition inventory:
 original Issues 2 through 65, 67 through 70, and 75 through 77. Its additional
@@ -64,7 +64,7 @@ boundary and in authoritative storage.
 | `FX-PRODUCT-6` | Instruction-only and Tool/script Skills, installation scopes, selection and name conflict, immutable package snapshots, progressive resources, precedence/composition, optional extensions, outcome obligations, creation/update/revocation. | `ORC-PRODUCT-6` | The selected exact package and declared outcomes remain inspectable; loading and composition grant no authority; an active Run never switches snapshots after an update or revocation. |
 | `FX-PRODUCT-7` | One Project Agent across threads; fiction assertions and scopes; explicit and inferred preferences; optional Project Instruction binding; Memory candidate/admission/suppression; context inspection/include/pin/exclude; retrieval, embedding, compaction/cache/Provider continuity. | `ORC-PRODUCT-7` | Only eligible exact sources enter context; author truth, inference, Working Context, and Memory stay distinct; old Run bindings stay fixed; rebuild, cache, and continuity cannot revive suppressed or unavailable data. |
 | `FX-PRODUCT-8` | Character, relationship, timeline, and research views; immutable resources/View revisions; disposable sandbox Instances; negotiation/limits/revocation; Prepared Receipt and terminal fallback; admitted persisted actions and same-Instance responses. | `ORC-PRODUCT-8` | Opening/replaying a view never repeats a ToolCall; semantic actions have fresh applicable Admission; the sandbox cannot grant authority, call Tools directly, or send a response to another Instance. |
-| `FX-PRODUCT-9` | Durable Plan/Step/wait/steering/cancellation; bounded Subruns with narrowed inputs and budget reservations; Mailbox/follow-up/interrupt/join/backpressure/Seal; parent-child recovery; proactive grants/misfires; guardrails and explicit model policy. | `ORC-PRODUCT-9` | Reservation, child creation, effects, and settlement follow the owner transaction; duplicates/late results never reopen work; proactive work needs its recorded grant; configured routing does not imply a second Provider. |
+| `FX-PRODUCT-9` | Optional RunPlan with RunPlan Revisions and PlanSteps; durable RunStep, wait, steering, and cancellation; bounded Subruns with narrowed inputs and budget reservations; Mailbox/follow-up/interrupt/join/backpressure/Seal; parent-child recovery; proactive grants/misfires; guardrails and explicit model policy. | `ORC-PRODUCT-9` | Reservation, child creation, effects, and settlement follow the owner transaction; duplicates/late results never reopen work; proactive work needs its recorded grant; configured routing does not imply a second Provider. |
 
 The production editor and old-Journal cases explicitly reuse the complete
 `ACK_LOSS_AUTHOR_COMMAND_PROFILE` in the parent, including both the admitted
@@ -195,13 +195,13 @@ Every row uses `BLOCK-ALL` for missing, failed, stale, or unreplayable evidence.
 | `S8-EVD-001` | Four production views, sandbox/resource binding, lifecycle/negotiation/limits/revocation. `OWN-APP`, `OWN-TRUST`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
 | `S8-EVD-002` | Fallback, non-executing replay, persisted action routing, instance-scoped response, and editor regression. `OWN-APP`, `OWN-RET`, `OWN-WEB`. | `SMAP-STAGE-8` | `BLOCK-ALL`. |
 | `S8-JRN-001` | Execute every step of the accepted Stage 8 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-8` | `BLOCK-ALL`; every journey step is mandatory. |
-| `S9-REQ-001` | Adaptive Plan, durable Step, lease, hold/wait, steering/cancellation/finalization, and layered timeline. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-REQ-001` | Optional RunPlan, RunPlan Revision, PlanStep, durable RunStep, lease, hold/wait, steering/cancellation/finalization, and layered timeline. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-REQ-002` | Hierarchical child, narrowed scope/context/Capability, budget reservation, execution record, and typed result. `OWN-SUBRUN`, `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-REQ-003` | Mailbox/follow-up/interrupt, Required/Advisory join, backpressure, Seal, late result, and parent-child recovery. `OWN-SUBRUN`, `OWN-RET`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-REQ-004` | Explicit proactive event/schedule enablement, grants, bounds, misfire, and duplicate-effect refusal. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-REQ-005` | Resource/safety holds, budgets, usage classification, and exact settlement across each delivered operation. `OWN-AGENT`, `OWN-TOOL`, `OWN-SKILL`, `OWN-MODEL`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-REQ-006` | Configured model policy and visible route/fallback decisions without hidden destination or Agent identity change. `OWN-MODEL`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
-| `S9-EVD-001` | Plan/Step/lease/wait/hold/steering/interruption/finalization/timeline proof. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
+| `S9-EVD-001` | RunPlan, RunPlan Revision, and PlanStep planning evidence; RunStep, lease, wait/hold, steering, interruption, finalization, and timeline proof. `OWN-AGENT`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-EVD-002` | Child scope/reservation/Mailbox/join/Seal/late-result/cancellation/recovery proof. `OWN-SUBRUN`, `OWN-RET`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-EVD-003` | Authorized proactive work, misfire/deduplication, guardrails/model policy, and editor regression. `OWN-AGENT`, `OWN-MODEL`, `OWN-WEB`. | `SMAP-STAGE-9` | `BLOCK-ALL`. |
 | `S9-JRN-001` | Execute every step of the accepted Stage 9 author journey on one exact released candidate, including the complete AI-disabled regression; `OWN-REL` and the stage's named owners. | `SMAP-STAGE-9` | `BLOCK-ALL`; every journey step is mandatory. |
