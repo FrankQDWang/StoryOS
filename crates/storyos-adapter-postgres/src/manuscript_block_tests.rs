@@ -2,8 +2,8 @@ use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 use tokio_postgres::NoTls;
 
 use super::{
-    display_body_from_stored, parse_versioned_payload, persist_canonical_bytes,
-    persist_revision_members_from_blocks,
+    blocks_from_stored_payload, display_body_from_stored, parse_versioned_payload,
+    persist_canonical_bytes, persist_revision_members_from_blocks,
 };
 
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
@@ -46,6 +46,78 @@ fn one_heading_roundtrips_through_versioned_payload_bytes() {
     let parsed = parse_versioned_payload(&stored).expect("versioned payload");
     assert_eq!(parsed, blocks);
     assert_eq!(display_body_from_stored(&stored, &parsed), "Hello");
+}
+
+fn paragraph(id: &str, text: &str) -> ManuscriptBlock {
+    ManuscriptBlock {
+        manuscript_block_id: id.to_owned(),
+        block_kind: ManuscriptBlockKind::Paragraph,
+        text: text.to_owned(),
+    }
+}
+
+#[test]
+fn ordered_versioned_ids_decode_the_complete_payload() {
+    let blocks = vec![
+        paragraph("018f0000-0000-7001-8000-0000000000b1", "Alpha"),
+        paragraph("018f0000-0000-7001-8000-0000000000b2", "Beta"),
+    ];
+    let stored = persist_canonical_bytes(&blocks);
+    let ids = vec![
+        "018f0000-0000-7001-8000-0000000000b1".to_owned(),
+        "018f0000-0000-7001-8000-0000000000b2".to_owned(),
+    ];
+    assert_eq!(blocks_from_stored_payload(&stored, &ids), blocks);
+}
+
+#[test]
+fn versioned_id_mismatch_decodes_no_blocks() {
+    let blocks = vec![
+        paragraph("018f0000-0000-7001-8000-0000000000b1", "Alpha"),
+        paragraph("018f0000-0000-7001-8000-0000000000b2", "Beta"),
+    ];
+    let stored = persist_canonical_bytes(&blocks);
+    let reversed = vec![
+        "018f0000-0000-7001-8000-0000000000b2".to_owned(),
+        "018f0000-0000-7001-8000-0000000000b1".to_owned(),
+    ];
+    assert_eq!(
+        blocks_from_stored_payload(&stored, &reversed),
+        Vec::<ManuscriptBlock>::new()
+    );
+}
+
+#[test]
+fn legacy_payload_with_zero_members_decodes_no_blocks() {
+    assert_eq!(
+        blocks_from_stored_payload("Hello", &[]),
+        Vec::<ManuscriptBlock>::new()
+    );
+}
+
+#[test]
+fn legacy_payload_with_one_member_upgrades_that_block() {
+    assert_eq!(
+        blocks_from_stored_payload(
+            "Hello",
+            &["018f0000-0000-7001-8000-0000000000b1".to_owned()]
+        ),
+        vec![paragraph("018f0000-0000-7001-8000-0000000000b1", "Hello")]
+    );
+}
+
+#[test]
+fn legacy_payload_with_more_than_one_member_decodes_no_blocks() {
+    assert_eq!(
+        blocks_from_stored_payload(
+            "Hello",
+            &[
+                "018f0000-0000-7001-8000-0000000000b1".to_owned(),
+                "018f0000-0000-7001-8000-0000000000b2".to_owned()
+            ]
+        ),
+        Vec::<ManuscriptBlock>::new()
+    );
 }
 
 #[derive(Debug, Eq, PartialEq)]
