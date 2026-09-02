@@ -4701,7 +4701,7 @@
         "success": [],
         "no_effect": [],
         "pre_admission": "none",
-        "visibility": "read-only current durable outcome; this Query allocates no Event or authority"
+        "visibility": "returns the current durable outcome; completing an already-admitted command may append that command's Receipt and Activity; this Query allocates no new command identity"
       },
       "fixtures": {
         "positive": "storyos.golden.getApplyAuthorEditOutcome.positive.v1",
@@ -4722,7 +4722,7 @@
         "typescript_client": true,
         "golden_wire_corpus": true
       },
-      "notes": "The protected Web Client may call this exact named GET after the first applyAuthorEdit acknowledgement is absent. It uses the client-first idempotency key plus the original challenge nonce only as a protected header, never as a URL or response value. Committed reuses the exact Receipt-backed response-v2 settlement; Rejected requires an expired unconsumed challenge under the arbiter locks; StillUnknown grants no retry or success and is not the durable Admission outcome_unknown condition. The route is not applyAuthorEdit.settlement_query and creates no Admission, Receipt, Activity, or Core invocation."
+      "notes": "The protected Web Client may call this exact named GET after the first applyAuthorEdit acknowledgement is absent. It uses the client-first idempotency key plus the original challenge nonce only as a protected header, never as a URL or response value. Committed reuses the exact Receipt-backed response-v2 settlement; Rejected requires an expired unconsumed challenge under the arbiter locks; RequiresReconfirmation is the terminal no-Receipt settlement for an expired, binding-changed, or unrecoverable open Admission; StillUnknown grants no retry or success and is not the durable Admission outcome_unknown condition. The route is not applyAuthorEdit.settlement_query and creates no Admission, Command, idempotency record, or nonce. When the Query observes a clean open Admission, the Server may complete the already-admitted direct_editor_action or append RequiresReconfirmation."
     },
     {
       "operation_id": "getCommand",

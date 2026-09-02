@@ -645,7 +645,7 @@ def apply_author_edit_outcome_contract_errors(
         errors.append("outcome Query route identity drifted")
     elif hashlib.sha256(json.dumps(
             routes[0], sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "683b155b07142e25ffe370fa1b10e533351b5aa42bcba88315afd623d33f3878":
+    ).encode()).hexdigest() != "fffab8a342d2c5dca324a09d40c71dae228a850f2cc342d0646905702bd07b0c":
         errors.append("outcome Query route proof drifted")
     for alias, expected_client_shape in (
         ("ApplyAuthorEditRejectionReason",
