@@ -648,12 +648,13 @@ or a source-line fault hook.
   manifest, Attempt/fence/admission, wire digest, quarantine/result facts, and
   disclosure; direct Core shortcuts, hidden SDK retries, missing assembly,
   and drift reuse fail.
-- **`DVG-06` Run/Mailbox corpus.** Generate parent/child Run and Subrun traces
-  with duplicate, reordered, lost, and restarted messages; direct-child
-  delivery; waits/holds; finalization intent; terminal result and Seal; late
-  message; parent recovery; cancellation; stale lease/fence; and resource/
-  budget accounting. The oracle checks directional high-watermarks,
-  deduplication, terminal sealing, one final result, and no reopened success.
+- **`DVG-06` Run/Mailbox corpus.** Generate one root AgentRun and hierarchical
+  parent/child Subrun traces with duplicate, reordered, lost, and restarted
+  messages; direct-child delivery; waits/holds; finalization intent; terminal
+  result and Seal; late message; parent recovery; cancellation; stale
+  lease/fence; and resource/budget accounting. The oracle checks directional
+  high-watermarks, deduplication, terminal sealing, one final result, and no
+  reopened success.
 - **`DVG-07` atomic recovery corpus.** Take every applicable Contract Fault
   Point for Core transitions, outbox claims, dispatch claims, lease recovery,
   and stale-result delivery. Compare before/after durable facts to the
