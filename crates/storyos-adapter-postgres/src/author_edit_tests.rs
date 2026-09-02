@@ -1600,7 +1600,7 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(&runtime_url);
     let scope = ProjectScope::new(UserId::new(USER), ProjectId::new(PROJECT));
-    let session_key = "018f0000-0000-7001-8000-000000000801";
+    let session_key = "018f0000-0000-7001-8000-000000000951";
     let session_nonce_digest = "sha256:session-reconfirm";
     let session_binding = binding(
         &scope,
@@ -1619,13 +1619,14 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
     )
     .await
     .unwrap();
-    let editor_session_id = "018f0000-0000-7001-8000-000000000802";
+    let editor_session_id = "018f0000-0000-7001-8000-000000000952";
+    let snapshot_id = "018f0000-0000-7001-8000-000000000953";
     create_editor_session(
         &store,
         &OpenEditorSession {
             project_scope: scope.clone(),
             editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: "018f0000-0000-7001-8000-000000000803".to_owned(),
+            snapshot_id: snapshot_id.to_owned(),
             client_binding: EditorClientBinding {
                 binding_ref: "binding:author-edit".to_owned(),
                 session_generation: 1,
@@ -1641,15 +1642,15 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
     let command = author_command(
         &scope,
         editor_session_id,
-        "018f0000-0000-7001-8000-000000000811",
+        "018f0000-0000-7001-8000-000000000971",
         "sha256:cut-reconfirm",
-        "81",
+        "96",
     );
     issue_project_command_challenge(
         &store,
         &IssueProjectCommandChallenge {
             binding: command.challenge_binding.clone(),
-            nonce: "nonce-81".to_owned(),
+            nonce: "nonce-96".to_owned(),
             nonce_digest: command.nonce_digest.clone(),
         },
     )
@@ -1771,6 +1772,15 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND editor_session_id = $3::text::uuid",
             &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND snapshot_id = $3::text::uuid",
+            &[&USER, &PROJECT, &snapshot_id],
         )
         .await
         .unwrap();
