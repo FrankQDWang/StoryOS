@@ -205,6 +205,26 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
                 bindings_match: relation.get::<_, Option<bool>>(10) == Some(true),
                 unexpired,
             };
+            if let Some(reason) =
+                super::author_edit_admission_recovery::reconfirmation_reason(&admission)
+            {
+                let outcome = self
+                    .persist_requires_reconfirmation_in_tx(&client, query, &admission, reason)
+                    .await;
+                match outcome {
+                    Ok(outcome) => {
+                        client
+                            .batch_execute("COMMIT")
+                            .await
+                            .map_err(outcome_database_error)?;
+                        return Ok(outcome);
+                    }
+                    Err(error) => {
+                        client.batch_execute("ROLLBACK").await.ok();
+                        return Err(error);
+                    }
+                }
+            }
             client
                 .batch_execute("COMMIT")
                 .await
