@@ -248,26 +248,9 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
                 reason: AuthorEditRefusal::InvalidSelection,
             };
         }
-        let Some(from_byte) = utf16_offset_to_byte(&body, *from) else {
-            return ApplyAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection,
-            };
-        };
-        let to_byte = if from == to {
-            from_byte
-        } else if let Some(to_byte) = utf16_offset_to_byte(&body, *to) {
-            to_byte
-        } else {
-            return ApplyAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection,
-            };
-        };
-        if from_byte > to_byte {
-            return ApplyAuthorEditResult::Refused {
-                reason: AuthorEditRefusal::InvalidSelection,
-            };
+        if let Err(reason) = replace_checked_utf16_range(&mut body, *from, *to, text) {
+            return ApplyAuthorEditResult::Refused { reason };
         }
-        body = format!("{}{text}{}", &body[..from_byte], &body[to_byte..]);
     }
     if body == command.current_body {
         ApplyAuthorEditResult::NoEffect {
@@ -276,6 +259,33 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
     } else {
         ApplyAuthorEditResult::AuthoritativeApplied { body }
     }
+}
+
+pub(crate) fn replace_checked_utf16_range(
+    body: &mut String,
+    from: u32,
+    to: u32,
+    text: &str,
+) -> Result<(), AuthorEditRefusal> {
+    let Some(from_byte) = utf16_offset_to_byte(body, from) else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    let to_byte = if from == to {
+        from_byte
+    } else if let Some(to_byte) = utf16_offset_to_byte(body, to) {
+        to_byte
+    } else {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    };
+    if from_byte > to_byte {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
+    let removed = to_byte - from_byte;
+    if text.len() > removed {
+        body.reserve(text.len() - removed);
+    }
+    body.replace_range(from_byte..to_byte, text);
+    Ok(())
 }
 
 pub(crate) fn utf16_offset_to_byte(value: &str, wanted: u32) -> Option<usize> {
