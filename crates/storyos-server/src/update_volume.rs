@@ -32,8 +32,8 @@ pub(super) async fn update_volume(
     let body = serde_json::from_slice::<contracts::UpdateVolumeRequest>(&bytes)
         .map_err(|_| invalid_request_shape())?;
     let input = &body.update_volume_input;
-    let Some(expected_volume_revision) = input
-        .expected_volume_revision
+    let Some(expected_tree_revision) = input
+        .expected_tree_revision
         .parse::<u64>()
         .ok()
         .filter(|revision| *revision >= 1)
@@ -112,7 +112,7 @@ pub(super) async fn update_volume(
         volume_id: VolumeId::new(volume_id),
         title: input.title.clone(),
         order,
-        expected_volume_revision,
+        expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: Uuid::now_v7().to_string(),
             author_command_admission_id: Uuid::now_v7().to_string(),
@@ -164,8 +164,8 @@ fn update_volume_response(
             contracts::DomainReceiptResult::Conflicted,
             contracts::UpdateVolumeEffect::Conflicted {
                 reason: match reason {
-                    storyos_core::UpdateVolumeConflict::StaleVolumeRevision => {
-                        contracts::UpdateVolumeConflictReason::StaleVolumeRevision
+                    storyos_core::UpdateVolumeConflict::StaleTreeRevision => {
+                        contracts::UpdateVolumeConflictReason::StaleTreeRevision
                     }
                 },
             },

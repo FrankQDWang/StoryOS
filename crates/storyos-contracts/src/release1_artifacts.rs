@@ -144,9 +144,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:2cd7c62eb6cd9c04a0b26c467e1ec2934669225c15cd8e0ad3d0418968f6547d";
+    "sha256:390ee121088aff014cf4990201a83b630bc1d11934d120d570e222e7dd43c7ed";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:ba33e039309f00969a96770c01a7420da38e74ea260bde4f5d70655748039dab";
+    "sha256:0f9caab1dc0f5b799804b2d952e1dec226364c331f63439669c0ba6ded46cef5";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -1075,11 +1075,11 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&UPDATE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_active"]),
             command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
             command_operation_graph(&CREATE_VOLUME, &["server_derived_project_scope", "project_active", "expected_tree_revision"]),
-            command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_volume_revision"]),
-            command_operation_graph(&DELETE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_volume_revision", "child_chapter_policy"]),
+            command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision"]),
+            command_operation_graph(&DELETE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision", "child_chapter_policy"]),
             command_operation_graph(&CREATE_CHAPTER, &["server_derived_project_scope", "volume_scope_join", "project_active", "expected_tree_revision"]),
-            command_operation_graph(&UPDATE_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "expected_chapter_revision"]),
-            command_operation_graph(&DELETE_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "expected_chapter_revision"]),
+            command_operation_graph(&UPDATE_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "expected_tree_revision"]),
+            command_operation_graph(&DELETE_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "expected_tree_revision"]),
             command_operation_graph(&SET_CURRENT_CHAPTER, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "expected_current_chapter", "expected_authoritative_head"]),
             command_operation_graph(&UNDO_LATEST_AUTHOR_ACTION, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "author_undo_frontier_exact", "expected_authoritative_head"]),
             operation_graph(&GET_CHAPTER, &["server_derived_project_scope", "chapter_scope_join", "canonical_snapshot"]),

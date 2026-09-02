@@ -38,7 +38,7 @@ pub(super) async fn persist_delete_volume(
             )));
         }
     };
-    let current_volume_revision = row
+    let current_tree_revision = row
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(delete_volume_parse_error)?;
@@ -112,8 +112,8 @@ pub(super) async fn persist_delete_volume(
         volume_join,
         volume_lifecycle,
         child_chapters,
-        expected_volume_revision: command.expected_volume_revision,
-        current_volume_revision,
+        expected_tree_revision: command.expected_tree_revision,
+        current_tree_revision,
         current_lifecycle,
     });
     let effect = match classified {
@@ -140,7 +140,7 @@ pub(super) async fn persist_delete_volume(
         }
         DeleteVolumeSettlementEffect::Conflicted { .. } => (
             "conflicted",
-            r#"{"reason":"stale_volume_revision"}"#.to_owned(),
+            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
         ),
         DeleteVolumeSettlementEffect::Refused { reason } => {
             let refused = match reason {
@@ -326,7 +326,7 @@ async fn persist_removed_volume(
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &tree_revision.to_string(),
-                &command.expected_volume_revision.to_string(),
+                &command.expected_tree_revision.to_string(),
             ],
         )
         .await

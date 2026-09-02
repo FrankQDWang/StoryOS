@@ -117,7 +117,7 @@ fn update_chapter_wire_is_generated_from_one_closed_contract() {
     for precondition in [
         "server_derived_project_scope",
         "chapter_scope_join",
-        "expected_chapter_revision",
+        "expected_tree_revision",
     ] {
         assert!(
             graph_operation["preconditions"]

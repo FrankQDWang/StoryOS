@@ -21,9 +21,9 @@ function updateChapterIdentity(options: {
   chapterId: string;
   title: string;
   order: string;
-  expectedChapterRevision: string;
+  expectedTreeRevision: string;
 }): string {
-  return `${options.projectId}\n${options.chapterId}\n${options.expectedChapterRevision}\n${options.order}\n${options.title}`;
+  return `${options.projectId}\n${options.chapterId}\n${options.expectedTreeRevision}\n${options.order}\n${options.title}`;
 }
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
@@ -46,7 +46,7 @@ export async function updateOwnedChapter(options: {
   chapterId: string;
   title: string;
   order: string;
-  expectedChapterRevision: string;
+  expectedTreeRevision: string;
 }): Promise<UpdateChapterResponse> {
   const identity = updateChapterIdentity(options);
   let flight = inFlightUpdates.get(identity);
@@ -77,7 +77,7 @@ async function submitUpdateChapter(
     chapterId: string;
     title: string;
     order: string;
-    expectedChapterRevision: string;
+    expectedTreeRevision: string;
   },
   flight: InFlightUpdateChapter,
 ): Promise<UpdateChapterResponse> {
@@ -86,7 +86,7 @@ async function submitUpdateChapter(
     update_chapter_input: {
       title: options.title,
       order: options.order,
-      expected_chapter_revision: options.expectedChapterRevision,
+      expected_tree_revision: options.expectedTreeRevision,
       client_contract_revision:
         RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: SECURITY_POLICY_REVISION,

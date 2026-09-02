@@ -21,9 +21,9 @@ function updateVolumeIdentity(options: {
   volumeId: string;
   title: string;
   order: string;
-  expectedVolumeRevision: string;
+  expectedTreeRevision: string;
 }): string {
-  return `${options.projectId}\n${options.volumeId}\n${options.expectedVolumeRevision}\n${options.order}\n${options.title}`;
+  return `${options.projectId}\n${options.volumeId}\n${options.expectedTreeRevision}\n${options.order}\n${options.title}`;
 }
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
@@ -46,7 +46,7 @@ export async function updateOwnedVolume(options: {
   volumeId: string;
   title: string;
   order: string;
-  expectedVolumeRevision: string;
+  expectedTreeRevision: string;
 }): Promise<UpdateVolumeResponse> {
   const identity = updateVolumeIdentity(options);
   let flight = inFlightUpdates.get(identity);
@@ -77,7 +77,7 @@ async function submitUpdateVolume(
     volumeId: string;
     title: string;
     order: string;
-    expectedVolumeRevision: string;
+    expectedTreeRevision: string;
   },
   flight: InFlightUpdateVolume,
 ): Promise<UpdateVolumeResponse> {
@@ -86,7 +86,7 @@ async function submitUpdateVolume(
     update_volume_input: {
       title: options.title,
       order: options.order,
-      expected_volume_revision: options.expectedVolumeRevision,
+      expected_tree_revision: options.expectedTreeRevision,
       client_contract_revision:
         RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: SECURITY_POLICY_REVISION,

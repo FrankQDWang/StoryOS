@@ -83,7 +83,7 @@ function chapterRequest(title: string, expectedTreeRevision: string, correlation
 function updateRequest(
   title: string,
   order: string,
-  expectedChapterRevision: string,
+  expectedTreeRevision: string,
   correlationId: string,
 ): UpdateChapterRequest {
   return {
@@ -91,7 +91,7 @@ function updateRequest(
     update_chapter_input: {
       title,
       order,
-      expected_chapter_revision: expectedChapterRevision,
+      expected_tree_revision: expectedTreeRevision,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
       correlation_id: correlationId,
@@ -350,7 +350,7 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
     if (stale.updated.effect.kind !== "conflicted") {
       throw new Error("stale Update Chapter must conflict");
     }
-    assert.equal(stale.updated.effect.reason, "stale_chapter_revision");
+    assert.equal(stale.updated.effect.reason, "stale_tree_revision");
     const afterStale = await getManuscriptTree({
       baseUrl,
       projectId: first.projectId,

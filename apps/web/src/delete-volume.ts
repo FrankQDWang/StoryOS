@@ -20,9 +20,9 @@ const inFlightDeletes = new Map<string, InFlightDeleteVolume>();
 function deleteVolumeIdentity(options: {
   projectId: string;
   volumeId: string;
-  expectedVolumeRevision: string;
+  expectedTreeRevision: string;
 }): string {
-  return `${options.projectId}\n${options.volumeId}\n${options.expectedVolumeRevision}`;
+  return `${options.projectId}\n${options.volumeId}\n${options.expectedTreeRevision}`;
 }
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
@@ -43,7 +43,7 @@ export async function deleteOwnedVolume(options: {
   cryptoImpl: Crypto;
   projectId: string;
   volumeId: string;
-  expectedVolumeRevision: string;
+  expectedTreeRevision: string;
 }): Promise<DeleteVolumeResponse> {
   const identity = deleteVolumeIdentity(options);
   let flight = inFlightDeletes.get(identity);
@@ -78,14 +78,14 @@ async function submitDeleteVolume(
     cryptoImpl: Crypto;
     projectId: string;
     volumeId: string;
-    expectedVolumeRevision: string;
+    expectedTreeRevision: string;
   },
   flight: InFlightDeleteVolume,
 ): Promise<DeleteVolumeResponse> {
   const request = {
     command_schema: "storyos.command.delete-volume.request.v1",
     delete_volume_input: {
-      expected_volume_revision: options.expectedVolumeRevision,
+      expected_tree_revision: options.expectedTreeRevision,
       client_contract_revision:
         RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: SECURITY_POLICY_REVISION,

@@ -22,7 +22,7 @@ pub(super) const DELETE_CHAPTER: QueryOperation = QueryOperation {
         (403, "Request origin refused"),
         (404, "Resource unavailable"),
         (405, "Method not allowed"),
-        (409, "Idempotency or Chapter revision conflict"),
+        (409, "Idempotency or tree revision conflict"),
         (412, "Session binding refused"),
         (413, "Request too large"),
         (415, "Unsupported content type"),
@@ -44,7 +44,7 @@ pub const DELETE_CHAPTER_METHOD: &str = DELETE_CHAPTER.method;
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DeleteChapterInput {
-    pub expected_chapter_revision: String,
+    pub expected_tree_revision: String,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,
@@ -66,7 +66,7 @@ pub enum DeleteChapterNoEffectReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DeleteChapterConflictReason {
-    StaleChapterRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -29,7 +29,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema["properties"]["command_schema"]["const"] = json!(DELETE_VOLUME_REQUEST_SCHEMA_ID);
     let input = &mut schema["$defs"]["DeleteVolumeInput"]["properties"];
     input["correlation_id"]["format"] = json!("uuid");
-    input["expected_volume_revision"] = json!({"type": "string", "pattern": U64_WIRE});
+    input["expected_tree_revision"] = json!({"type": "string", "pattern": U64_WIRE});
     json_bytes(&schema)
 }
 

@@ -14,7 +14,7 @@ impl DeleteVolumeStore for Store {
         Ok(DeleteVolumeSettlement {
             ids: command.ids.clone(),
             effect: DeleteVolumeSettlementEffect::Applied {
-                tree_revision: command.expected_volume_revision + 1,
+                tree_revision: command.expected_tree_revision + 1,
                 volume_id: command.volume_id.as_ref().to_owned(),
             },
             receipt_created_at: "2026-08-27T00:00:00.000Z".to_owned(),
@@ -68,7 +68,7 @@ fn command() -> DeleteVolumeCommand {
         canonical_command_bytes,
         correlation_id: "correlation".to_owned(),
         volume_id: VolumeId::new("volume"),
-        expected_volume_revision: 4,
+        expected_tree_revision: 4,
         ids: AuthorCommandAdmissionIds {
             command_id: "command".to_owned(),
             author_command_admission_id: "admission".to_owned(),

@@ -20,8 +20,8 @@ pub struct DeleteChapter {
     pub presence: ProjectPresence,
     pub chapter_join: ChapterJoin,
     pub chapter_lifecycle: ChapterRemovalLifecycle,
-    pub expected_chapter_revision: u64,
-    pub current_chapter_revision: u64,
+    pub expected_tree_revision: u64,
+    pub current_tree_revision: u64,
     pub current_lifecycle: ProjectLifecycle,
     pub chapter_id: String,
     pub current_chapter_id: Option<String>,
@@ -52,7 +52,7 @@ pub enum DeleteChapterNoEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeleteChapterConflict {
-    StaleChapterRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -79,9 +79,9 @@ pub fn delete_chapter(command: &DeleteChapter) -> DeleteChapterResult {
             reason: DeleteChapterRefusal::ArchivedProject,
         };
     }
-    if command.expected_chapter_revision != command.current_chapter_revision {
+    if command.expected_tree_revision != command.current_tree_revision {
         return DeleteChapterResult::Conflicted {
-            reason: DeleteChapterConflict::StaleChapterRevision,
+            reason: DeleteChapterConflict::StaleTreeRevision,
         };
     }
     if command.chapter_lifecycle == ChapterRemovalLifecycle::Removed {
@@ -90,7 +90,7 @@ pub fn delete_chapter(command: &DeleteChapter) -> DeleteChapterResult {
         };
     }
     DeleteChapterResult::Applied {
-        tree_revision: command.current_chapter_revision + 1,
+        tree_revision: command.current_tree_revision + 1,
         current: successor(command),
     }
 }

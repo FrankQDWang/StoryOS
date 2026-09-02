@@ -20,8 +20,8 @@ pub struct DeleteVolume {
     pub volume_join: VolumeJoin,
     pub volume_lifecycle: VolumeRemovalLifecycle,
     pub child_chapters: VolumeChildPolicy,
-    pub expected_volume_revision: u64,
-    pub current_volume_revision: u64,
+    pub expected_tree_revision: u64,
+    pub current_tree_revision: u64,
     pub current_lifecycle: ProjectLifecycle,
 }
 
@@ -40,7 +40,7 @@ pub enum DeleteVolumeNoEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DeleteVolumeConflict {
-    StaleVolumeRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,9 +68,9 @@ pub fn delete_volume(command: &DeleteVolume) -> DeleteVolumeResult {
             reason: DeleteVolumeRefusal::ArchivedProject,
         };
     }
-    if command.expected_volume_revision != command.current_volume_revision {
+    if command.expected_tree_revision != command.current_tree_revision {
         return DeleteVolumeResult::Conflicted {
-            reason: DeleteVolumeConflict::StaleVolumeRevision,
+            reason: DeleteVolumeConflict::StaleTreeRevision,
         };
     }
     if command.volume_lifecycle == VolumeRemovalLifecycle::Removed {
@@ -84,7 +84,7 @@ pub fn delete_volume(command: &DeleteVolume) -> DeleteVolumeResult {
         };
     }
     DeleteVolumeResult::Applied {
-        tree_revision: command.current_volume_revision + 1,
+        tree_revision: command.current_tree_revision + 1,
     }
 }
 

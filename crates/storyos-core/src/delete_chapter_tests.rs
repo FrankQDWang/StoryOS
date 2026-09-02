@@ -9,8 +9,8 @@ fn command() -> DeleteChapter {
         presence: ProjectPresence::Present,
         chapter_join: ChapterJoin::ExactScope,
         chapter_lifecycle: ChapterRemovalLifecycle::Active,
-        expected_chapter_revision: 4,
-        current_chapter_revision: 4,
+        expected_tree_revision: 4,
+        current_tree_revision: 4,
         current_lifecycle: ProjectLifecycle::Active,
         chapter_id: "b".to_owned(),
         current_chapter_id: Some("a".to_owned()),
@@ -92,13 +92,13 @@ fn an_already_removed_chapter_classifies_as_no_effect() {
 }
 
 #[test]
-fn a_stale_chapter_revision_classifies_as_conflicted_with_zero_authority_effect() {
+fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     let mut stale = command();
-    stale.expected_chapter_revision = 3;
+    stale.expected_tree_revision = 3;
     assert_eq!(
         delete_chapter(&stale),
         DeleteChapterResult::Conflicted {
-            reason: DeleteChapterConflict::StaleChapterRevision,
+            reason: DeleteChapterConflict::StaleTreeRevision,
         }
     );
 }

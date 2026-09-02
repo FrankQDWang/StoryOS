@@ -146,9 +146,9 @@ async fn read_delete_chapter_settlement(
             ("no_effect", Some("already_removed")) => DeleteChapterSettlementEffect::NoEffect {
                 reason: storyos_core::DeleteChapterNoEffect::AlreadyRemoved,
             },
-            ("conflicted", Some("stale_chapter_revision")) => {
+            ("conflicted", Some("stale_tree_revision")) => {
                 DeleteChapterSettlementEffect::Conflicted {
-                    reason: storyos_core::DeleteChapterConflict::StaleChapterRevision,
+                    reason: storyos_core::DeleteChapterConflict::StaleTreeRevision,
                 }
             }
             ("refused", Some("archived_project")) => DeleteChapterSettlementEffect::Refused {

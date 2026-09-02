@@ -139,9 +139,9 @@ async fn read_delete_volume_settlement(
             ("no_effect", Some("already_removed")) => DeleteVolumeSettlementEffect::NoEffect {
                 reason: storyos_core::DeleteVolumeNoEffect::AlreadyRemoved,
             },
-            ("conflicted", Some("stale_volume_revision")) => {
+            ("conflicted", Some("stale_tree_revision")) => {
                 DeleteVolumeSettlementEffect::Conflicted {
-                    reason: storyos_core::DeleteVolumeConflict::StaleVolumeRevision,
+                    reason: storyos_core::DeleteVolumeConflict::StaleTreeRevision,
                 }
             }
             ("refused", Some("archived_project")) => DeleteVolumeSettlementEffect::Refused {

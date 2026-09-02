@@ -7,8 +7,8 @@ fn command() -> UpdateVolume {
     UpdateVolume {
         presence: ProjectPresence::Present,
         volume_join: VolumeJoin::ExactScope,
-        expected_volume_revision: 2,
-        current_volume_revision: 2,
+        expected_tree_revision: 2,
+        current_tree_revision: 2,
         current_lifecycle: ProjectLifecycle::Active,
         title: "Volume B".to_owned(),
         current_title: "Volume A".to_owned(),
@@ -31,13 +31,13 @@ fn a_matching_revision_rename_and_reorder_classifies_as_applied() {
 }
 
 #[test]
-fn a_stale_volume_revision_classifies_as_conflicted_with_zero_authority_effect() {
+fn a_stale_tree_revision_classifies_as_conflicted_with_zero_authority_effect() {
     let mut stale = command();
-    stale.current_volume_revision = 3;
+    stale.current_tree_revision = 3;
     assert_eq!(
         update_volume(&stale),
         UpdateVolumeResult::Conflicted {
-            reason: UpdateVolumeConflict::StaleVolumeRevision,
+            reason: UpdateVolumeConflict::StaleTreeRevision,
         }
     );
 }

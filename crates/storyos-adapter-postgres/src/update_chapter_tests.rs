@@ -22,11 +22,11 @@ const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapte
 const CHAPTER_A_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:fdee6f3020b94d08f6e75dfab8be7caf86d1a8c84c521254b03e6a45153a1de2";
 const CHAPTER_B_BYTES: &[u8] = br#"{"expected_tree_revision":"3","title":"Chapter B"}"#;
 const CHAPTER_B_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:23a99998cce1f35b113794d41235dae8fae7d8ae9f234ba67161a2f9e8e86e65";
-const UPDATE_BYTES: &[u8] = br#"{"expected_chapter_revision":"4","order":"2","title":"Chapter B"}"#;
-const UPDATE_DIGEST: &str = "sha256:storyos.command.updateChapter.jcs.v1:7e5935287ca887f4a10196ad538dab2b920f5c9f7667be61b7137c5016704e97";
+const UPDATE_BYTES: &[u8] = br#"{"expected_tree_revision":"4","order":"2","title":"Chapter B"}"#;
+const UPDATE_DIGEST: &str = "sha256:storyos.command.updateChapter.jcs.v1:90b4ef5e863b6db8d2e14f1d5b513b329605aced7d0cc7713b041398bcd766fd";
 const INVALID_ORDER_BYTES: &[u8] =
-    br#"{"expected_chapter_revision":"4","order":"3","title":"Chapter B"}"#;
-const INVALID_ORDER_DIGEST: &str = "sha256:storyos.command.updateChapter.jcs.v1:1a149134a94f3218f8a11e0e98c2fed2009d802f7cf5e234938b45a675e65496";
+    br#"{"expected_tree_revision":"4","order":"3","title":"Chapter B"}"#;
+const INVALID_ORDER_DIGEST: &str = "sha256:storyos.command.updateChapter.jcs.v1:2088399d6b9bb10ca203eb34d71e4601c0d971814928af59fcbbb3c0fb2dee99";
 const MISSING_CHAPTER: &str = "018f0000-0000-7001-8000-00000000ffff";
 
 fn create_project_issue(
@@ -227,7 +227,7 @@ struct UpdateFixture<'a> {
     chapter_id: &'a str,
     title: &'a str,
     order: u64,
-    expected_chapter_revision: u64,
+    expected_tree_revision: u64,
     bytes: &'a [u8],
 }
 
@@ -252,7 +252,7 @@ fn update_command(
         chapter_id: ChapterId::new(fixture.chapter_id),
         title: fixture.title.to_owned(),
         order: fixture.order,
-        expected_chapter_revision: fixture.expected_chapter_revision,
+        expected_tree_revision: fixture.expected_tree_revision,
         ids: AuthorCommandAdmissionIds {
             command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
             author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
@@ -266,7 +266,7 @@ fn applied_fixture(chapter_id: &str) -> UpdateFixture<'_> {
         chapter_id,
         title: "Chapter B",
         order: 2,
-        expected_chapter_revision: 4,
+        expected_tree_revision: 4,
         bytes: UPDATE_BYTES,
     }
 }
@@ -512,7 +512,7 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     assert_eq!(
         stale.effect,
         UpdateChapterSettlementEffect::Conflicted {
-            reason: storyos_core::UpdateChapterConflict::StaleChapterRevision,
+            reason: storyos_core::UpdateChapterConflict::StaleTreeRevision,
         }
     );
 
@@ -552,7 +552,7 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
                 chapter_id: &first_chapter_id,
                 title: "Chapter B",
                 order: 3,
-                expected_chapter_revision: 4,
+                expected_tree_revision: 4,
                 bytes: INVALID_ORDER_BYTES,
             },
         ),

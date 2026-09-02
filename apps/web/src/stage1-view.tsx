@@ -288,7 +288,7 @@ function ProjectReadyView({
           cryptoImpl,
           projectId: state.project.project.project_id,
           chapterId,
-          expectedChapterRevision: latestTree.tree_revision,
+          expectedTreeRevision: latestTree.tree_revision,
         });
         if (generation !== switchGenerationRef.current) return;
         if (
@@ -358,7 +358,7 @@ function ProjectReadyView({
           cryptoImpl,
           projectId: state.project.project.project_id,
           volumeId,
-          expectedVolumeRevision: latestTree.tree_revision,
+          expectedTreeRevision: latestTree.tree_revision,
         });
         if (generation !== switchGenerationRef.current) return;
         if (
@@ -719,7 +719,7 @@ function EmptyProjectReadyView({
                 cryptoImpl,
                 projectId: project.project.project_id,
                 chapterId,
-                expectedChapterRevision: tree.tree_revision,
+                expectedTreeRevision: tree.tree_revision,
               }).then((removed) => {
                 if (
                   removed.effect.kind !== "authoritative_applied"
@@ -737,7 +737,7 @@ function EmptyProjectReadyView({
                 cryptoImpl,
                 projectId: project.project.project_id,
                 volumeId,
-                expectedVolumeRevision: tree.tree_revision,
+                expectedTreeRevision: tree.tree_revision,
               }).then((removed) => {
                 if (
                   removed.effect.kind !== "authoritative_applied"

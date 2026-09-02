@@ -22,7 +22,7 @@ pub(super) const UPDATE_CHAPTER: QueryOperation = QueryOperation {
         (403, "Request origin refused"),
         (404, "Resource unavailable"),
         (405, "Method not allowed"),
-        (409, "Idempotency or Chapter revision conflict"),
+        (409, "Idempotency or tree revision conflict"),
         (412, "Session binding refused"),
         (413, "Request too large"),
         (415, "Unsupported content type"),
@@ -46,7 +46,7 @@ pub const UPDATE_CHAPTER_METHOD: &str = UPDATE_CHAPTER.method;
 pub struct UpdateChapterInput {
     pub title: String,
     pub order: String,
-    pub expected_chapter_revision: String,
+    pub expected_tree_revision: String,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,
@@ -68,7 +68,7 @@ pub enum UpdateChapterNoEffectReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum UpdateChapterConflictReason {
-    StaleChapterRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

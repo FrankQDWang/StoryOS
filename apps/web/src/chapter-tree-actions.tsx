@@ -7,7 +7,7 @@ export function ChapterTreeActions({
   title,
   order,
   chapterCount,
-  expectedChapterRevision,
+  expectedTreeRevision,
   selectedChapterId,
   onSelectChapter,
   currentChapterId,
@@ -25,7 +25,7 @@ export function ChapterTreeActions({
   title: string;
   order: string;
   chapterCount: number;
-  expectedChapterRevision: string;
+  expectedTreeRevision: string;
   selectedChapterId?: string | undefined;
   onSelectChapter?: ((chapterId: string) => void) | undefined;
   currentChapterId?: string | undefined;
@@ -50,7 +50,7 @@ export function ChapterTreeActions({
       chapterId,
       title: nextTitle,
       order: nextOrder,
-      expectedChapterRevision,
+      expectedTreeRevision,
     }).then((updated) => {
       if (
         updated.effect.kind !== "authoritative_applied"

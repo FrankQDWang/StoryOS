@@ -22,7 +22,7 @@ pub(super) const DELETE_VOLUME: QueryOperation = QueryOperation {
         (403, "Request origin refused"),
         (404, "Resource unavailable"),
         (405, "Method not allowed"),
-        (409, "Idempotency or Volume revision conflict"),
+        (409, "Idempotency or tree revision conflict"),
         (412, "Session binding refused"),
         (413, "Request too large"),
         (415, "Unsupported content type"),
@@ -44,7 +44,7 @@ pub const DELETE_VOLUME_METHOD: &str = DELETE_VOLUME.method;
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct DeleteVolumeInput {
-    pub expected_volume_revision: String,
+    pub expected_tree_revision: String,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,
@@ -66,7 +66,7 @@ pub enum DeleteVolumeNoEffectReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DeleteVolumeConflictReason {
-    StaleVolumeRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

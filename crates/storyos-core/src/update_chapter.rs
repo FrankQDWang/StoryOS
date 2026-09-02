@@ -12,8 +12,8 @@ pub enum ChapterJoin {
 pub struct UpdateChapter {
     pub presence: ProjectPresence,
     pub chapter_join: ChapterJoin,
-    pub expected_chapter_revision: u64,
-    pub current_chapter_revision: u64,
+    pub expected_tree_revision: u64,
+    pub current_tree_revision: u64,
     pub current_lifecycle: ProjectLifecycle,
     pub title: String,
     pub current_title: String,
@@ -47,7 +47,7 @@ pub enum UpdateChapterNoEffect {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UpdateChapterConflict {
-    StaleChapterRevision,
+    StaleTreeRevision,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -86,9 +86,9 @@ pub fn update_chapter(command: &UpdateChapter) -> UpdateChapterResult {
             reason: UpdateChapterRefusal::ArchivedProject,
         };
     }
-    if command.expected_chapter_revision != command.current_chapter_revision {
+    if command.expected_tree_revision != command.current_tree_revision {
         return UpdateChapterResult::Conflicted {
-            reason: UpdateChapterConflict::StaleChapterRevision,
+            reason: UpdateChapterConflict::StaleTreeRevision,
         };
     }
     if command.title == command.current_title && command.order == command.current_order {
@@ -99,7 +99,7 @@ pub fn update_chapter(command: &UpdateChapter) -> UpdateChapterResult {
     UpdateChapterResult::Applied {
         title: command.title.clone(),
         order: command.order,
-        tree_revision: command.current_chapter_revision + 1,
+        tree_revision: command.current_tree_revision + 1,
     }
 }
 

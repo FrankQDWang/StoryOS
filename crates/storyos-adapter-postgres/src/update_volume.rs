@@ -147,9 +147,9 @@ async fn read_update_volume_settlement(
             ("no_effect", Some("unchanged")) => UpdateVolumeSettlementEffect::NoEffect {
                 reason: storyos_core::UpdateVolumeNoEffect::Unchanged,
             },
-            ("conflicted", Some("stale_volume_revision")) => {
+            ("conflicted", Some("stale_tree_revision")) => {
                 UpdateVolumeSettlementEffect::Conflicted {
-                    reason: storyos_core::UpdateVolumeConflict::StaleVolumeRevision,
+                    reason: storyos_core::UpdateVolumeConflict::StaleTreeRevision,
                 }
             }
             ("refused", Some("archived_project")) => UpdateVolumeSettlementEffect::Refused {

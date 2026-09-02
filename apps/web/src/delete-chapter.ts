@@ -20,9 +20,9 @@ const inFlightDeletes = new Map<string, InFlightDeleteChapter>();
 function deleteChapterIdentity(options: {
   projectId: string;
   chapterId: string;
-  expectedChapterRevision: string;
+  expectedTreeRevision: string;
 }): string {
-  return `${options.projectId}\n${options.chapterId}\n${options.expectedChapterRevision}`;
+  return `${options.projectId}\n${options.chapterId}\n${options.expectedTreeRevision}`;
 }
 
 function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
@@ -43,7 +43,7 @@ export async function deleteOwnedChapter(options: {
   cryptoImpl: Crypto;
   projectId: string;
   chapterId: string;
-  expectedChapterRevision: string;
+  expectedTreeRevision: string;
 }): Promise<DeleteChapterResponse> {
   const identity = deleteChapterIdentity(options);
   let flight = inFlightDeletes.get(identity);
@@ -78,14 +78,14 @@ async function submitDeleteChapter(
     cryptoImpl: Crypto;
     projectId: string;
     chapterId: string;
-    expectedChapterRevision: string;
+    expectedTreeRevision: string;
   },
   flight: InFlightDeleteChapter,
 ): Promise<DeleteChapterResponse> {
   const request = {
     command_schema: "storyos.command.delete-chapter.request.v1",
     delete_chapter_input: {
-      expected_chapter_revision: options.expectedChapterRevision,
+      expected_tree_revision: options.expectedTreeRevision,
       client_contract_revision:
         RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: SECURITY_POLICY_REVISION,

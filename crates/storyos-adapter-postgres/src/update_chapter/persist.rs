@@ -43,7 +43,7 @@ pub(super) async fn persist_update_chapter(
             )));
         }
     };
-    let current_chapter_revision = row
+    let current_tree_revision = row
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(update_chapter_parse_error)?;
@@ -105,8 +105,8 @@ pub(super) async fn persist_update_chapter(
     let classified = classify_update_chapter(&CoreUpdateChapter {
         presence: ProjectPresence::Present,
         chapter_join,
-        expected_chapter_revision: command.expected_chapter_revision,
-        current_chapter_revision,
+        expected_tree_revision: command.expected_tree_revision,
+        current_tree_revision,
         current_lifecycle,
         title: command.title.clone(),
         current_title,
@@ -145,7 +145,7 @@ pub(super) async fn persist_update_chapter(
         }
         UpdateChapterSettlementEffect::Conflicted { .. } => (
             "conflicted",
-            r#"{"reason":"stale_chapter_revision"}"#.to_owned(),
+            r#"{"reason":"stale_tree_revision"}"#.to_owned(),
         ),
         UpdateChapterSettlementEffect::Refused { reason } => {
             let refused = match reason {
@@ -374,7 +374,7 @@ async fn apply_chapter_tree(
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &tree_revision.to_string(),
-                &command.expected_chapter_revision.to_string(),
+                &command.expected_tree_revision.to_string(),
             ],
         )
         .await
