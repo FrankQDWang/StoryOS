@@ -245,6 +245,36 @@ pub(super) async fn get_human_readable_manuscript_export_query(
                 },
             ))
         }
+        GetHumanReadableManuscriptExport::Failed(progress) => {
+            let progress = *progress;
+            Ok(Json(
+                contracts::GetHumanReadableManuscriptExportResponse::Failed {
+                    schema_id: contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID
+                        .to_owned(),
+                    query_id: Uuid::now_v7().to_string(),
+                    correlation_id: Uuid::now_v7().to_string(),
+                    project_scope: contract_scope(&scope),
+                    export_id: progress.export_id,
+                    export_profile: progress.export_profile,
+                    source_snapshot: snapshot_descriptor(&scope, &progress.source_snapshot),
+                },
+            ))
+        }
+        GetHumanReadableManuscriptExport::OutcomeUnknown(progress) => {
+            let progress = *progress;
+            Ok(Json(
+                contracts::GetHumanReadableManuscriptExportResponse::OutcomeUnknown {
+                    schema_id: contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID
+                        .to_owned(),
+                    query_id: Uuid::now_v7().to_string(),
+                    correlation_id: Uuid::now_v7().to_string(),
+                    project_scope: contract_scope(&scope),
+                    export_id: progress.export_id,
+                    export_profile: progress.export_profile,
+                    source_snapshot: snapshot_descriptor(&scope, &progress.source_snapshot),
+                },
+            ))
+        }
     }
 }
 

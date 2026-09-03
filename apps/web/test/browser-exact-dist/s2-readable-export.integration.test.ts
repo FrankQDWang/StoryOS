@@ -96,18 +96,17 @@ async function requestExport(root: Element): Promise<void> {
     const panel = root.querySelector("[data-readable-export]");
     const exportId = root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";
     if (
-      panel?.getAttribute("data-export-outcome") !== "in_progress"
+      panel?.getAttribute("data-export-outcome") !== "ready"
       || exportId.length === 0
       || exportId === previousId
     ) {
       return "";
     }
     return exportId;
-  }, { timeout: 10_000 }).not.toBe("");
-  expect(root.querySelector("[data-readable-export-bytes]")).toBeNull();
+  }, { timeout: 15_000 }).not.toBe("");
 }
 
-it("admits a durable human-readable export and does not treat the first inspect as ready", { timeout: 120_000 }, async () => {
+it("exports a durable human-readable manuscript through the Worker", { timeout: 120_000 }, async () => {
   await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
@@ -159,9 +158,11 @@ it("admits a durable human-readable export and does not treat the first inspect 
   const root = appRoot(frame);
   await requestExport(root);
   expect(root.querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"))
-    .toBe("in_progress");
-  await requestExport(root);
-  expect(root.querySelector("[data-readable-export-bytes]")).toBeNull();
+    .toBe("ready");
+  expect(root.querySelector("[data-readable-export-bytes]")?.textContent)
+    .toBe("# Volume A\n\n## Chapter A\n\nHello world\n");
+  expect(root.querySelector("[data-readable-export-bytes]")?.textContent)
+    .not.toContain("Chapter B");
   const secondChapter = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -197,10 +198,11 @@ it("admits a durable human-readable export and does not treat the first inspect 
   const afterRebuild = appRoot(frame);
   await requestExport(afterRebuild);
   expect(afterRebuild.querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"))
-    .toBe("in_progress");
-  expect(afterRebuild.querySelector("[data-readable-export-bytes]")).toBeNull();
+    .toBe("ready");
+  expect(afterRebuild.querySelector("[data-readable-export-bytes]")?.textContent)
+    .toBe(`# Volume A\n\n## Chapter A\n\n${CHAPTER_A}\n\n## Chapter B\n\n${CHAPTER_B}\n`);
   expect(
     [...afterRebuild.querySelectorAll<HTMLButtonElement>("[data-readable-export] button")]
       .some((candidate) => candidate.textContent === "下载"),
-  ).toBe(false);
+  ).toBe(true);
 });

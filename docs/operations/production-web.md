@@ -9,7 +9,7 @@ make release-package
 make verify
 ```
 
-The package is `target/release-package/`. It contains `storyos-server` and `web/`, including the generated `manifest.json`. Transfer that directory as one unit. The manifest records the source commit and tree, client-contract and security-policy identities, and resource metadata and digests. The binary contains the matching manifest digest. Build outputs are not tracked source files.
+The package is `target/release-package/`. It contains `storyos-server`, `storyos-worker`, and `web/`, including the generated `manifest.json`. Transfer that directory as one unit. The default Server process runs the Worker loop. Operators may start `storyos-worker` alone. The manifest records the source commit and tree, client-contract and security-policy identities, and resource metadata and digests. The binary contains the matching manifest digest. Build outputs are not tracked source files.
 
 `make verify` builds one matching package, retains the source and exact-dist checks, and runs the real production Chrome journey through the existing Browser Mode provider. It records the installed Google Chrome Stable version. The journey checks direct production pages and API calls, Trusted Types, blocked embedding, Project creation and opening, manual save, reload recovery, old-writer fencing, and a new writer's save. Its PostgreSQL oracle checks exact receipts and final authority. It does not claim a Takeover UI or later Stage 2 acceptance.
 

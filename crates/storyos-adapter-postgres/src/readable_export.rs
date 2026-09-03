@@ -79,10 +79,7 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(GetHumanReadableManuscriptExport::Missing);
         };
-        if project.get::<_, String>(0) == "archived" {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(GetHumanReadableManuscriptExport::Archived);
-        }
+        let archived = project.get::<_, String>(0) == "archived";
         let ready = transaction
             .query_opt(
                 "SELECT export.export_id::text,
@@ -151,7 +148,11 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
             .query_opt(
                 "SELECT operation.export_id::text,
                         operation.export_profile,
-                        operation.source_snapshot_id::text
+                        operation.source_snapshot_id::text,
+                        operation.claim_generation,
+                        operation.settled_result,
+                        operation.lease_expires_at IS NOT NULL
+                          AND operation.lease_expires_at <= clock_timestamp()
                    FROM storyos.human_readable_manuscript_export_operations AS operation
                   WHERE operation.owner_user_id = $1::text::uuid
                     AND operation.project_id = $2::text::uuid
@@ -166,7 +167,11 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
             .map_err(read_error)?
         else {
             transaction.commit().await.map_err(read_error)?;
-            return Ok(GetHumanReadableManuscriptExport::Missing);
+            return Ok(if archived {
+                GetHumanReadableManuscriptExport::Archived
+            } else {
+                GetHumanReadableManuscriptExport::Missing
+            });
         };
         let snapshot_id = operation.get::<_, String>(2);
         let source_snapshot =
@@ -177,15 +182,29 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
                         "pinned Snapshot is required for an admitted human-readable export",
                     ))
                 })?;
+        let progress = HumanReadableManuscriptExportProgress {
+            project_scope: scope.clone(),
+            export_id: operation.get(0),
+            export_profile: operation.get(1),
+            source_snapshot,
+        };
+        let settled_result = operation.get::<_, Option<String>>(4);
+        let claim_generation: i64 = operation.get(3);
+        let lease_expired: bool = operation.get(5);
+        let status = match (settled_result.as_deref(), claim_generation, lease_expired) {
+            (Some("failed"), _, _) => GetHumanReadableManuscriptExport::Failed(Box::new(progress)),
+            (None, generation, true) if generation > 0 => {
+                GetHumanReadableManuscriptExport::OutcomeUnknown(Box::new(progress))
+            }
+            (None, _, _) => GetHumanReadableManuscriptExport::InProgress(Box::new(progress)),
+            (Some(_), _, _) => {
+                return Err(ProjectReadError::unavailable(std::io::Error::other(
+                    "unsupported human-readable export settled_result",
+                )));
+            }
+        };
         transaction.commit().await.map_err(read_error)?;
-        Ok(GetHumanReadableManuscriptExport::InProgress(Box::new(
-            HumanReadableManuscriptExportProgress {
-                project_scope: scope.clone(),
-                export_id: operation.get(0),
-                export_profile: operation.get(1),
-                source_snapshot,
-            },
-        )))
+        Ok(status)
     }
 }
 
@@ -429,7 +448,9 @@ async fn read_settled_admission(
                         receipt.result_kind,
                         receipt.result_payload->>'reason',
                         export.export_id::text,
-                        export.source_snapshot_id
+                        export.source_snapshot_id,
+                        operation.export_id::text,
+                        operation.source_snapshot_id::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -445,6 +466,11 @@ async fn read_settled_admission(
               LEFT JOIN storyos.human_readable_manuscript_exports AS export
                      ON (export.owner_user_id, export.project_id, export.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.human_readable_manuscript_export_operations AS operation
+                     ON (operation.owner_user_id, operation.project_id,
+                         operation.author_command_admission_id) =
+                        (receipt.owner_user_id, receipt.project_id,
+                         receipt.author_command_admission_id)
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -465,29 +491,30 @@ async fn read_settled_admission(
             .map_err(export_database_error)?
             .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
         let result_kind = row.get::<_, String>(3);
-        let reason = row.get::<_, Option<String>>(4);
-        let source_snapshot = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => {
-                let snapshot_id = row
-                    .get::<_, Option<String>>(6)
-                    .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
-                crate::snapshot::load_canonical_snapshot_by_id(
-                    &client,
-                    &command.project_scope,
-                    &snapshot_id,
-                )
-                .await
-                .map_err(export_read_error)?
-                .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?
-            }
-            ("refused", Some("archived_project")) => {
-                return Err(ExportHumanReadableManuscriptError::ArchivedProject);
-            }
-            _ => return Err(ExportHumanReadableManuscriptError::BindingConflict),
-        };
-        let export_id = row
-            .get::<_, Option<String>>(5)
-            .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
+        let source_snapshot_id = match result_kind.as_str() {
+            "authoritative_applied" => row
+                .get::<_, Option<String>>(6)
+                .or_else(|| row.get::<_, Option<String>>(8)),
+            "refused" => row.get::<_, Option<String>>(8),
+            _ => None,
+        }
+        .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
+        let export_id = match result_kind.as_str() {
+            "authoritative_applied" => row
+                .get::<_, Option<String>>(5)
+                .or_else(|| row.get::<_, Option<String>>(7)),
+            "refused" => row.get::<_, Option<String>>(7),
+            _ => None,
+        }
+        .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
+        let source_snapshot = crate::snapshot::load_canonical_snapshot_by_id(
+            &client,
+            &command.project_scope,
+            &source_snapshot_id,
+        )
+        .await
+        .map_err(export_read_error)?
+        .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
         Ok(ExportHumanReadableManuscriptSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),

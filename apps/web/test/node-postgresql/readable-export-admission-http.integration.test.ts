@@ -23,6 +23,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/sto
 import {
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
+  runStoryOSWorker,
   sessionFetch as browserFetch,
   startStoryOSServer,
   stopStoryOSServer as stopRealServer,
@@ -31,6 +32,7 @@ import {
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
+const workerBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-worker.exe" : "storyos-worker");
 const USER_A = "018f0000-0000-7001-8000-000000000001";
 const USER_B = "018f0000-0000-7001-8000-000000000101";
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -80,6 +82,16 @@ async function startRealServer() {
     repositoryRoot,
     serverBinary,
     sessions: { "session-a": USER_A, "session-b": USER_B },
+    extraEnv: { STORYOS_WORKER: "0" },
+  });
+}
+
+async function startWorkerServer() {
+  return startStoryOSServer({
+    repositoryRoot,
+    serverBinary,
+    sessions: { "session-a": USER_A, "session-b": USER_B },
+    extraEnv: { STORYOS_WORKER: "1" },
   });
 }
 
@@ -317,6 +329,14 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
       fetchImpl: first.fetchImpl,
     });
     assert.equal(stillVisible.status, "in_progress");
+    const admittedActivity = await queryPostgres(`
+      SELECT count(*)::text
+        FROM storyos.project_activity_event_payloads
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${first.projectId}'::uuid
+         AND event_kind = 'human_readable_manuscript_export_settled';
+    `);
+    assert.match(admittedActivity, /0$/);
 
     const historical = await postExport(
       baseUrl,
@@ -410,15 +430,232 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
       (error) => requireStoryOSProtocolError(error).status === 422,
     );
 
-    await assert.rejects(
-      getHumanReadableManuscriptExport({
-        baseUrl,
-        projectId: first.projectId,
-        exportId: applied.admitted.effect.export_id,
-        fetchImpl: first.fetchImpl,
-      }),
-      (error) => requireStoryOSProtocolError(error).status === 422,
+    const afterArchive = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(afterArchive.status, "in_progress");
+    assert.equal("manuscript_utf8" in afterArchive, false);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+async function waitForExportStatus(
+  baseUrl: string,
+  projectId: string,
+  exportId: string,
+  fetchImpl: typeof fetch,
+  status: "ready" | "failed" | "outcome_unknown",
+) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const page = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId,
+      exportId,
+      fetchImpl,
+    });
+    if (page.status === status) {
+      return page;
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 50);
+    });
+  }
+  throw new Error(`human-readable export did not become ${status}`);
+}
+
+test("the in-process Worker settles an admitted human-readable export to ready", async () => {
+  const { baseUrl, server } = await startWorkerServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000b001", "Worker Novel");
+    const request = exportRequest("018f0000-0000-7001-8000-00000000b011");
+    const applied = await postExport(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-00000000b021",
+      request,
     );
+    assert.equal(applied.admitted.acknowledgement, "accepted");
+    if (applied.admitted.effect.kind !== "admitted") {
+      throw new Error("Human-readable export must admit");
+    }
+    const ready = await waitForExportStatus(
+      baseUrl,
+      first.projectId,
+      applied.admitted.effect.export_id,
+      first.fetchImpl,
+      "ready",
+    );
+    assert.equal(ready.status, "ready");
+    if (ready.status !== "ready") {
+      throw new Error("the Worker must settle the human-readable export");
+    }
+    assert.equal(ready.manuscript_utf8, EMPTY_MANUSCRIPT);
+    assert.equal(ready.content_sha256, EMPTY_MANUSCRIPT_SHA256);
+
+    const replay = await exportHumanReadableManuscript({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000b021",
+      antiForgery: applied.challenge.nonce,
+      request,
+    });
+    assert.equal(replay.acknowledgement, "accepted");
+    if (replay.effect.kind !== "admitted" || applied.admitted.effect.kind !== "admitted") {
+      throw new Error("retry after settlement must return the same admitted operation");
+    }
+    assert.equal(replay.effect.export_id, applied.admitted.effect.export_id);
+    const stillReady = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(stillReady.status, "ready");
+
+    const activityCount = await queryPostgres(`
+      SELECT count(*)::text
+        FROM storyos.project_activity_event_payloads
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${first.projectId}'::uuid
+         AND event_kind = 'human_readable_manuscript_export_settled';
+    `);
+    assert.match(activityCount, /1$/);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("the Worker settles failed when the Project is archived after admission", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000b002", "Archive After");
+    const applied = await postExport(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-00000000b022",
+      exportRequest("018f0000-0000-7001-8000-00000000b012"),
+    );
+    if (applied.admitted.effect.kind !== "admitted") {
+      throw new Error("Human-readable export must admit");
+    }
+    const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000b016"));
+    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "PUT",
+        route_template: "/api/v1/projects/{project_id}/archival",
+        command_schema: "storyos.command.archive-project.request.v1",
+        canonical_command_digest: archiveDigest,
+        idempotency_key: "018f0000-0000-7001-8000-00000000b026",
+      },
+    }));
+    await archiveProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000b026",
+      antiForgery: archiveChallenge.nonce,
+      request: archiveRequest("1", "018f0000-0000-7001-8000-00000000b016"),
+    });
+    const waiting = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(waiting.status, "in_progress");
+    await runStoryOSWorker({
+      repositoryRoot,
+      workerBinary,
+      args: ["--once"],
+    });
+    const failed = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(failed.status, "failed");
+    assert.equal("manuscript_utf8" in failed, false);
+
+    const replay = await exportHumanReadableManuscript({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000b022",
+      antiForgery: applied.challenge.nonce,
+      request: exportRequest("018f0000-0000-7001-8000-00000000b012"),
+    });
+    assert.equal(replay.acknowledgement, "accepted");
+    if (replay.effect.kind !== "admitted") {
+      throw new Error("retry after failed settlement must return the same admitted operation");
+    }
+    assert.equal(replay.effect.export_id, applied.admitted.effect.export_id);
+    const stillFailed = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(stillFailed.status, "failed");
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("the Worker settles failed when the pinned Snapshot is unavailable before output exists", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000b003", "Expired Snapshot");
+    const applied = await postExport(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-00000000b023",
+      exportRequest("018f0000-0000-7001-8000-00000000b013"),
+    );
+    if (applied.admitted.effect.kind !== "admitted") {
+      throw new Error("Human-readable export must admit");
+    }
+    const expire = await queryPostgres(`
+      UPDATE storyos.project_snapshots
+         SET expires_at = clock_timestamp() - interval '1 second'
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${first.projectId}'::uuid
+         AND snapshot_id = '${applied.admitted.effect.source_snapshot.snapshot_id}'::uuid;
+      SELECT 'ok';
+    `);
+    assert.match(expire, /ok$/);
+    const waiting = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(waiting.status, "in_progress");
+    assert.equal("manuscript_utf8" in waiting, false);
+    await runStoryOSWorker({
+      repositoryRoot,
+      workerBinary,
+      args: ["--once"],
+    });
+    const failed = await getHumanReadableManuscriptExport({
+      baseUrl,
+      projectId: first.projectId,
+      exportId: applied.admitted.effect.export_id,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(failed.status, "failed");
+    assert.equal("manuscript_utf8" in failed, false);
   } finally {
     await stopRealServer(server);
   }

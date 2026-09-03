@@ -238,9 +238,10 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   exportButton.click();
   await expect.poll(() =>
     appRoot(frame).querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
-    { timeout: 10_000 },
-  ).toBe("in_progress");
-  expect(appRoot(frame).querySelector("[data-readable-export-bytes]")).toBeNull();
+    { timeout: 15_000 },
+  ).toBe("ready");
+  expect(appRoot(frame).querySelector("[data-readable-export-bytes]")?.textContent)
+    .toContain(BODY_A);
 
   await reloadProject(frame, projectId);
   const reopenedRoot = appRoot(frame);

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::*;
 use storyos_application::{UserId, issue_project_command_challenge};
 
@@ -10,6 +12,7 @@ fn fixed_clock_store(database_url: String, unix_seconds: i64) -> PostgresProject
     PostgresProjectReader {
         database_url,
         challenge_rate_clock_unix_seconds: Some(unix_seconds),
+        readable_export_lease_ttl: Duration::from_secs(30),
     }
 }
 
