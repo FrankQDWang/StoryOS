@@ -169,7 +169,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0027_author_command_admission_reconfirmations.sql \
   -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql \
   -f /tmp/storyos-release1-bootstrap/0029_human_readable_manuscript_export_operations.sql \
-  -f /tmp/storyos-release1-bootstrap/0030_human_readable_export_worker_claim.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0030_human_readable_export_worker_claim.sql \
+  -f /tmp/storyos-release1-bootstrap/0031_project_export_operations.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -212,7 +213,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0027_author_command_admission_reconfirmations.sql \
   -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql \
   -f /tmp/storyos-release1-bootstrap/0029_human_readable_manuscript_export_operations.sql \
-  -f /tmp/storyos-release1-bootstrap/0030_human_readable_export_worker_claim.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0030_human_readable_export_worker_claim.sql \
+  -f /tmp/storyos-release1-bootstrap/0031_project_export_operations.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
@@ -316,6 +318,17 @@ docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/readable-export-admission-process-cut.integration.test.ts
+echo "Running HTTP Project Export Archive process-cut tests"
+docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+  "DO \$\$ DECLARE tbl text; BEGIN
+     FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'storyos' LOOP
+       EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
+     END LOOP;
+   END \$\$;" >/dev/null
+docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+pnpm --dir apps/web exec vitest run --project node-process-cut \
+  test/node-process-cut/project-export-admission-process-cut.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
   "DO \$\$ DECLARE tbl text; BEGIN

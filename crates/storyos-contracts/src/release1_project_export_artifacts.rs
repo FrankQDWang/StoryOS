@@ -2,6 +2,7 @@ use schemars::schema_for;
 use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
+use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_project_export::{
     EXPORT_PROJECT_ARCHIVE, EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE,
     EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID, EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID,
@@ -152,34 +153,6 @@ fn command_fixture(created_at: &str) -> Value {
             "kind": "project_export",
             "export_id": "018f0000-0000-7001-8000-000000000926"
         },
-        "receipt": {
-            "receipt_id": "018f0000-0000-7001-8000-000000000923",
-            "project_scope": {
-                "owner_user_id": "018f0000-0000-7001-8000-000000000001",
-                "project_id": "018f0000-0000-7001-8000-000000000201"
-            },
-            "command_kind": "exportProjectArchive",
-            "command_digest": {
-                "algorithm": "sha256",
-                "profile": EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE,
-                "value_hex_lowercase": "c".repeat(64)
-            },
-            "idempotency_key": "018f0000-0000-7001-8000-000000000924",
-            "producer_cause": "author_command_admission",
-            "author_command_admission_id": "018f0000-0000-7001-8000-000000000922",
-            "expected_heads": [],
-            "prior_heads": [],
-            "resulting_heads": [],
-            "authoritative_revision_ids": [],
-            "proposal_revision_ids": [],
-            "authoritative_commit_ids": [],
-            "author_action_sequence": null,
-            "draft_artifact_refs": [],
-            "artifact_lifecycle_event_refs": [],
-            "condition_refs": [],
-            "result": "authoritative_applied",
-            "created_at": created_at
-        },
         "project": {
             "project_id": "018f0000-0000-7001-8000-000000000201",
             "title": "Empty Novel",
@@ -190,7 +163,22 @@ fn command_fixture(created_at: &str) -> Value {
             "export_id": "018f0000-0000-7001-8000-000000000926",
             "archive_profile": "storyos.project-export.v1",
             "archive_path_profile": "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
-            "project_activity_position": "2"
+            "source_snapshot": {
+                "snapshot_id": "018f0000-0000-7001-8000-000000000040",
+                "project_scope": {
+                    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+                    "project_id": "018f0000-0000-7001-8000-000000000201"
+                },
+                "snapshot_kind": "canonical",
+                "project_activity_position": "2",
+                "source_watermarks": {},
+                "projection_generations": {},
+                "redaction_profile": "storyos.author.v1",
+                "schema_profile": PUBLIC_PROTOCOL_RELEASE,
+                "replay_generation": "1",
+                "created_at": created_at,
+                "expires_at": null
+            }
         }
     })
 }

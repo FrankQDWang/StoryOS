@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::release1::{ControlledProject, QueryOperation};
-use crate::release1_author_edit::DomainReceipt;
 use crate::release1_readable_export::ExportAcknowledgement;
+use crate::release1_snapshot::SnapshotDescriptor;
 
 pub const EXPORT_PROJECT_ARCHIVE_REQUEST_SCHEMA_ID: &str =
     "storyos.command.export-project-archive.request.v1";
@@ -80,7 +80,8 @@ pub enum ExportProjectArchiveEffect {
         export_id: String,
         archive_profile: String,
         archive_path_profile: String,
-        project_activity_position: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: Box<SnapshotDescriptor>,
     },
     Refused {
         reason: ExportProjectArchiveRefusalReason,
@@ -97,7 +98,6 @@ pub struct ExportProjectArchiveResponse {
     pub author_command_admission_id: String,
     pub acknowledgement: ExportAcknowledgement,
     pub operation_ref: Option<ProjectExportRef>,
-    pub receipt: DomainReceipt,
     pub project: ControlledProject,
     pub effect: ExportProjectArchiveEffect,
 }

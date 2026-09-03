@@ -1,12 +1,13 @@
 use storyos_application::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds,
-    CanonicalSnapshot, EditorClientBinding, EditorSessionId, ExportProjectArchiveCommand,
+    EditorClientBinding, EditorSessionId, ExportProjectArchiveCommand,
     IssueProjectCommandChallenge, OpenEditorSession, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
     PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
     PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding, ProjectId,
     ProjectScope, ReadApplyAuthorEditOutcome, RequiresReconfirmationApplyAuthorEdit, UserId,
-    VerifiedExportArchive, create_editor_session, get_apply_author_edit_outcome,
-    get_verified_export_archive, issue_project_command_challenge, request_export_project_archive,
+    VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
+    create_editor_session, get_apply_author_edit_outcome, get_verified_export_archive,
+    issue_project_command_challenge, request_export_project_archive,
 };
 use tokio_postgres::NoTls;
 
@@ -92,16 +93,6 @@ fn export_command(scope: &ProjectScope) -> ExportProjectArchiveCommand {
         export_id: "018f0000-0000-7001-8000-0000000009e6".to_owned(),
         archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
         archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
-        source_snapshot: CanonicalSnapshot {
-            snapshot_id: "018f0000-0000-7001-8000-0000000000a0".to_owned(),
-            project_activity_position: 0,
-            replay_generation: 1,
-            floor_position: 0,
-            redaction_profile: "storyos.author.v1".to_owned(),
-            schema_profile: "storyos.public.release.1".to_owned(),
-            created_at: "2026-09-01T00:00:00.000Z".to_owned(),
-            expires_at: None,
-        },
     }
 }
 
@@ -227,6 +218,11 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     request_export_project_archive(&store, &export)
         .await
         .unwrap();
+    let claimed = claim_next_archive_export(&store)
+        .await
+        .unwrap()
+        .expect("the admitted archive must be claimable");
+    complete_archive_export(&store, &claimed).await.unwrap();
     let VerifiedExportArchive::Ready(zip_bytes) =
         get_verified_export_archive(&store, &scope, &export.export_id)
             .await
@@ -304,6 +300,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     for table in [
         "project_export_entries",
         "project_export_manifests",
+        "project_export_operations",
         "project_activity_events",
         "project_activity_event_payloads",
         "author_command_admission_outcome_unknown_observations",

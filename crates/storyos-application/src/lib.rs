@@ -45,6 +45,7 @@ mod manuscript_statistics;
 mod manuscript_tree;
 mod project_activity;
 mod project_export;
+mod project_export_work;
 mod readable_export;
 mod readable_export_work;
 mod set_current_chapter;
@@ -123,13 +124,17 @@ pub use manuscript_tree::{
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
 pub use project_export::{
-    ExportOperationPage, ExportOperationReader, ExportProjectArchiveCommand,
-    ExportProjectArchiveError, ExportProjectArchiveRefusal, ExportProjectArchiveSettlement,
+    ExportOperationPage, ExportOperationProgress, ExportOperationReader,
+    ExportProjectArchiveCommand, ExportProjectArchiveError, ExportProjectArchiveSettlement,
     ExportProjectArchiveSettlementEffect, ExportProjectArchiveStore, GetExportOperation,
     PROJECT_ARCHIVE_ZIP_MEDIA_TYPE, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
     PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
     PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, VerifiedExportArchive,
     get_export_operation, get_verified_export_archive, request_export_project_archive,
+};
+pub use project_export_work::{
+    ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
+    CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
 };
 pub use readable_export::{
     ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,

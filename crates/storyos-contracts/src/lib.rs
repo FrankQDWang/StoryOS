@@ -165,9 +165,8 @@ pub use release1_project_export::{
     ExportProjectArchiveResponse, ProjectExportRef,
 };
 pub use release1_project_export_query::{
-    ExportOperationStatus, GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH,
-    GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID, GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID,
-    GetExportOperationResponse,
+    GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
+    GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
 };
 pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,

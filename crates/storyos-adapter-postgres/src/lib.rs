@@ -73,6 +73,7 @@ mod manuscript_search;
 mod manuscript_tree;
 mod project_archive_build;
 mod project_export;
+mod project_export_work;
 mod readable_export;
 mod readable_export_work;
 mod set_current_chapter;

@@ -1,6 +1,6 @@
 use storyos_application::{
-    CanonicalSnapshot, ExportOperationPage, ExportProjectArchiveCommand, ExportProjectArchiveError,
-    ProjectReadError, ProjectScope, VerifiedExportArchive,
+    CanonicalSnapshot, ExportOperationPage, ExportProjectArchiveError, ProjectReadError,
+    ProjectScope, VerifiedExportArchive,
 };
 use storyos_core::{
     ARCHIVE_PATH_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
@@ -85,6 +85,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "project_archival_decisions",
         "canonical/project_archival_decisions.json",
     ),
+    (
+        "project_export_operations",
+        "canonical/project_export_operations.json",
+    ),
     ("project_snapshots", "canonical/project_snapshots.json"),
     (
         "project_writer_generations",
@@ -102,11 +106,11 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
 
 pub(super) async fn persist_export_archive(
     client: &tokio_postgres::Client,
-    command: &ExportProjectArchiveCommand,
+    scope: &ProjectScope,
+    export_id: &str,
     snapshot: &CanonicalSnapshot,
     created_at: &str,
 ) -> Result<String, ExportProjectArchiveError> {
-    let scope = &command.project_scope;
     let mut sources = Vec::with_capacity(EXPORT_TABLES.len());
     let mut present = Vec::with_capacity(EXPORT_TABLES.len());
     let mut counts = Vec::with_capacity(EXPORT_TABLES.len());
@@ -149,13 +153,7 @@ pub(super) async fn persist_export_archive(
     let required_refs: Vec<&str> = required.iter().map(String::as_str).collect();
     require_delivered_families(&present, &required_refs).map_err(archive_build_error)?;
     let built = build_project_archive(
-        &archive_root_facts(
-            command.export_id.as_str(),
-            scope,
-            snapshot,
-            counts,
-            created_at,
-        ),
+        &archive_root_facts(export_id, scope, snapshot, counts, created_at),
         &sources,
     )
     .map_err(archive_build_error)?;
@@ -175,7 +173,7 @@ pub(super) async fn persist_export_archive(
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
-                    &command.export_id,
+                    &export_id,
                     &descriptor.path,
                     &descriptor.media_type,
                     &descriptor.payload_schema,
@@ -197,7 +195,7 @@ pub(super) async fn persist_export_archive(
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
-                &command.export_id,
+                &export_id,
                 &immutable_root,
             ],
         )
@@ -216,9 +214,7 @@ pub(super) async fn package_stored_export(
     scope: &ProjectScope,
     page: &ExportOperationPage,
 ) -> Result<VerifiedExportArchive, ProjectReadError> {
-    let Some(immutable_root) = page.immutable_root.as_deref() else {
-        return Ok(VerifiedExportArchive::Unsettled);
-    };
+    let immutable_root = page.immutable_root.as_str();
     let created_at = client
         .query_opt(
             "SELECT to_char(receipt.created_at AT TIME ZONE 'UTC',

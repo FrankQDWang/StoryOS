@@ -4,7 +4,7 @@ use ts_rs::{Config, TS};
 
 use crate::release1::PUBLIC_PROTOCOL_RELEASE;
 use crate::release1_project_export_query::{
-    ExportOperationStatus, GET_EXPORT_OPERATION, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
+    GET_EXPORT_OPERATION, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
 };
 
@@ -38,11 +38,6 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
         .expect("export operation response schema serializes");
     schema["$id"] = json!(GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID);
     schema["title"] = json!("StoryOS Export Operation Response");
-    schema["additionalProperties"] = json!(false);
-    schema["properties"]["schema_id"]["const"] = json!(GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID);
-    schema["properties"]["query_id"]["format"] = json!("uuid");
-    schema["properties"]["correlation_id"]["format"] = json!("uuid");
-    schema["properties"]["export_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }
 
@@ -77,11 +72,7 @@ pub(super) fn openapi() -> String {
 
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
-    format!(
-        "export {}\n\nexport {}",
-        ExportOperationStatus::decl(&config),
-        GetExportOperationResponse::decl(&config),
-    )
+    format!("export {}", GetExportOperationResponse::decl(&config),)
 }
 
 pub(super) fn typescript_client_source() -> String {
@@ -123,6 +114,7 @@ pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
 
 fn export_fixture() -> Value {
     json!({
+        "status": "ready",
         "schema_id": GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID,
         "query_id": "018f0000-0000-7001-8000-000000000081",
         "correlation_id": "018f0000-0000-7001-8000-000000000082",
@@ -133,8 +125,7 @@ fn export_fixture() -> Value {
         "export_id": "018f0000-0000-7001-8000-000000000926",
         "archive_profile": "storyos.project-export.v1",
         "archive_path_profile": "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
-        "status": "in_progress",
-        "immutable_root": null,
+        "immutable_root": format!("sha256:{}", "b".repeat(64)),
         "source_snapshot": {
             "snapshot_id": "018f0000-0000-7001-8000-000000000040",
             "project_scope": {

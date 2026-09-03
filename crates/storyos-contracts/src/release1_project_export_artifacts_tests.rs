@@ -132,4 +132,5 @@ fn export_project_archive_wire_is_generated_from_one_closed_contract() {
     .expect("positive export fixture must be JSON");
     assert_eq!(positive["acknowledgement"], "accepted");
     assert_eq!(positive["effect"]["kind"], "admitted");
+    assert!(positive.get("receipt").is_none());
 }

@@ -1,6 +1,6 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, ExportOperationPage, ExportOperationReader,
-    ExportProjectArchiveCommand, ExportProjectArchiveError, ExportProjectArchiveRefusal,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, ExportOperationPage, ExportOperationProgress,
+    ExportOperationReader, ExportProjectArchiveCommand, ExportProjectArchiveError,
     ExportProjectArchiveSettlement, ExportProjectArchiveSettlementEffect,
     ExportProjectArchiveStore, GetExportOperation, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
     PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectCommandChallengeError, ProjectCommandChallengeUse,
@@ -10,7 +10,6 @@ use storyos_core::{
     ExportProjectArchive as CoreExport, ExportProjectArchiveResult, ProjectLifecycle,
     ProjectPresence, export_project_archive as classify_export,
 };
-use uuid::Uuid;
 
 use super::*;
 
@@ -33,14 +32,14 @@ impl ExportProjectArchiveStore for PostgresProjectReader {
                     .rollback()
                     .await
                     .map_err(export_challenge_error)?;
-                read_export_settlement(self, command, &result_reference).await
+                read_settled_admission(self, command, &result_reference).await
             }
             ProjectCommandChallengeUse::ExactRetryInProgress => {
                 transaction
                     .rollback()
                     .await
                     .map_err(export_challenge_error)?;
-                Err(ExportProjectArchiveError::BindingConflict)
+                read_admitted_operation(self, command).await
             }
             ProjectCommandChallengeUse::FirstUse => {
                 match persist_export(&transaction.client, command).await {
@@ -79,11 +78,8 @@ impl ExportOperationReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(GetExportOperation::Missing);
         };
-        if project.get::<_, String>(0) == "archived" {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(GetExportOperation::Archived);
-        }
-        let Some(row) = transaction
+        let archived = project.get::<_, String>(0) == "archived";
+        let ready = transaction
             .query_opt(
                 "SELECT export.export_id::text,
                         export.archive_profile,
@@ -121,7 +117,45 @@ impl ExportOperationReader for PostgresProjectReader {
                          current_generation.replay_generation)
                   WHERE export.owner_user_id = $1::text::uuid
                     AND export.project_id = $2::text::uuid
-                    AND export.export_id = $3::text::uuid",
+                    AND export.export_id = $3::text::uuid
+                    AND export.immutable_root IS NOT NULL",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &export_id,
+                ],
+            )
+            .await
+            .map_err(read_error)?;
+        if let Some(row) = ready {
+            if row.get::<_, bool>(12) {
+                transaction.commit().await.map_err(read_error)?;
+                return Ok(GetExportOperation::Expired);
+            }
+            transaction.commit().await.map_err(read_error)?;
+            return Ok(GetExportOperation::Ready(Box::new(ExportOperationPage {
+                project_scope: scope.clone(),
+                export_id: row.get(0),
+                archive_profile: row.get(1),
+                archive_path_profile: row.get(2),
+                immutable_root: row.get(3),
+                source_snapshot: snapshot_from_joined_row(&row, /*start*/ 4)?,
+            })));
+        }
+        let Some(operation) = transaction
+            .query_opt(
+                "SELECT operation.export_id::text,
+                        operation.archive_profile,
+                        operation.archive_path_profile,
+                        operation.source_snapshot_id::text,
+                        operation.claim_generation,
+                        operation.settled_result,
+                        operation.lease_expires_at IS NOT NULL
+                          AND operation.lease_expires_at <= clock_timestamp()
+                   FROM storyos.project_export_operations AS operation
+                  WHERE operation.owner_user_id = $1::text::uuid
+                    AND operation.project_id = $2::text::uuid
+                    AND operation.export_id = $3::text::uuid",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
@@ -132,41 +166,45 @@ impl ExportOperationReader for PostgresProjectReader {
             .map_err(read_error)?
         else {
             transaction.commit().await.map_err(read_error)?;
-            return Ok(GetExportOperation::Missing);
+            return Ok(if archived {
+                GetExportOperation::Archived
+            } else {
+                GetExportOperation::Missing
+            });
         };
-        if row.get::<_, bool>(12) {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(GetExportOperation::Expired);
-        }
+        let snapshot_id = operation.get::<_, String>(3);
+        let source_snapshot =
+            crate::snapshot::load_canonical_snapshot_by_id(&transaction, scope, &snapshot_id)
+                .await?
+                .ok_or_else(|| {
+                    ProjectReadError::unavailable(std::io::Error::other(
+                        "pinned Snapshot is required for an admitted Project Export",
+                    ))
+                })?;
+        let progress = ExportOperationProgress {
+            project_scope: scope.clone(),
+            export_id: operation.get(0),
+            archive_profile: operation.get(1),
+            archive_path_profile: operation.get(2),
+            source_snapshot,
+        };
+        let settled_result = operation.get::<_, Option<String>>(5);
+        let claim_generation: i64 = operation.get(4);
+        let lease_expired: bool = operation.get(6);
+        let status = match (settled_result.as_deref(), claim_generation, lease_expired) {
+            (Some("failed"), _, _) => GetExportOperation::Failed(Box::new(progress)),
+            (None, generation, true) if generation > 0 => {
+                GetExportOperation::OutcomeUnknown(Box::new(progress))
+            }
+            (None, _, _) => GetExportOperation::InProgress(Box::new(progress)),
+            (Some(_), _, _) => {
+                return Err(ProjectReadError::unavailable(std::io::Error::other(
+                    "unsupported Project Export settled_result",
+                )));
+            }
+        };
         transaction.commit().await.map_err(read_error)?;
-        Ok(GetExportOperation::InProgress(Box::new(
-            ExportOperationPage {
-                project_scope: scope.clone(),
-                export_id: row.get(0),
-                archive_profile: row.get(1),
-                archive_path_profile: row.get(2),
-                immutable_root: row.get(3),
-                source_snapshot: CanonicalSnapshot {
-                    snapshot_id: row.get(4),
-                    project_activity_position: row
-                        .get::<_, String>(5)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                    replay_generation: row
-                        .get::<_, String>(6)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                    redaction_profile: row.get(7),
-                    schema_profile: row.get(8),
-                    created_at: row.get(9),
-                    expires_at: row.get(10),
-                    floor_position: row
-                        .get::<_, String>(11)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                },
-            },
-        )))
+        Ok(status)
     }
 
     async fn read_verified_export_archive(
@@ -180,7 +218,12 @@ impl ExportOperationReader for PostgresProjectReader {
                 Ok(storyos_application::VerifiedExportArchive::Archived)
             }
             GetExportOperation::Expired => Ok(storyos_application::VerifiedExportArchive::Expired),
-            GetExportOperation::InProgress(page) => {
+            GetExportOperation::InProgress(_)
+            | GetExportOperation::Failed(_)
+            | GetExportOperation::OutcomeUnknown(_) => {
+                Ok(storyos_application::VerifiedExportArchive::Unsettled)
+            }
+            GetExportOperation::Ready(page) => {
                 let mut client = self.connect().await?;
                 let transaction = client.transaction().await.map_err(read_error)?;
                 set_scope(&transaction, scope).await?;
@@ -227,212 +270,36 @@ async fn persist_export(
             )));
         }
     };
-    let classified = classify_export(&CoreExport {
+    match classify_export(&CoreExport {
         presence: ProjectPresence::Present,
         current_lifecycle,
-    });
-    let effect = match classified {
-        ExportProjectArchiveResult::Admitted => {
-            let snapshot =
-                crate::snapshot::load_latest_canonical_snapshot(client, &command.project_scope)
-                    .await
-                    .map_err(export_read_error)?
-                    .ok_or_else(|| {
-                        ExportProjectArchiveError::Unavailable(Box::new(std::io::Error::other(
-                            "canonical snapshot is required for Project Export admission",
-                        )))
-                    })?;
-            ExportProjectArchiveSettlementEffect::Admitted {
-                archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
-                archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
-                source_snapshot: snapshot,
-            }
-        }
+    }) {
+        ExportProjectArchiveResult::Admitted => {}
         ExportProjectArchiveResult::Refused {
             reason: storyos_core::ExportProjectArchiveRefusal::MissingProject,
         } => return Err(ExportProjectArchiveError::MissingProject),
-        ExportProjectArchiveResult::Refused { reason } => {
-            ExportProjectArchiveSettlementEffect::Refused {
-                reason: match reason {
-                    storyos_core::ExportProjectArchiveRefusal::ArchivedProject => {
-                        ExportProjectArchiveRefusal::ArchivedProject
-                    }
-                    storyos_core::ExportProjectArchiveRefusal::MissingProject => {
-                        ExportProjectArchiveRefusal::MissingProject
-                    }
-                },
-            }
-        }
-    };
+        ExportProjectArchiveResult::Refused {
+            reason: storyos_core::ExportProjectArchiveRefusal::ArchivedProject,
+        } => return Err(ExportProjectArchiveError::ArchivedProject),
+    }
+    let snapshot = crate::snapshot::load_latest_canonical_snapshot(client, &command.project_scope)
+        .await
+        .map_err(export_read_error)?
+        .ok_or_else(|| {
+            ExportProjectArchiveError::Unavailable(Box::new(std::io::Error::other(
+                "canonical snapshot is required for Project Export admission",
+            )))
+        })?;
     insert_export_admission(client, command).await?;
-    let (result_kind, result_payload) = match &effect {
-        ExportProjectArchiveSettlementEffect::Admitted { .. } => {
-            ("authoritative_applied", "{}".to_owned())
-        }
-        ExportProjectArchiveSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                ExportProjectArchiveRefusal::ArchivedProject => "archived_project",
-                ExportProjectArchiveRefusal::MissingProject => {
-                    return Err(ExportProjectArchiveError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
-    };
-    let receipt_created_at = client
-        .query_one(
-            "INSERT INTO storyos.domain_receipts
-               (owner_user_id, project_id, receipt_id, author_command_admission_id,
-                command_id, command_kind, command_digest, idempotency_key, producer_cause,
-                expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
-                proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'exportProjectArchive', $6, $7::text::uuid,
-                     'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], $8, $9::text::jsonb)
-          RETURNING to_char(created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
-            ],
-        )
-        .await
-        .map_err(export_database_error)?
-        .get::<_, String>(0);
-    client
-        .execute(
-            "INSERT INTO storyos.author_command_admission_settlements
-               (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     'receipt_settled', $4::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(export_database_error)?;
-    let mut project_activity_position = 0;
-    let mut project_activity_event_id = String::new();
-    if let ExportProjectArchiveSettlementEffect::Admitted {
-        archive_profile,
-        archive_path_profile,
-        source_snapshot,
-    } = &effect
-    {
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(export_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(export_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
-        let payload = serde_json::json!({
-            "kind": "project_export_settled",
-            "export_id": command.export_id,
-            "archive_profile": archive_profile,
-            "archive_path_profile": archive_path_profile,
-        })
-        .to_string();
-        client
-            .execute(
-                "INSERT INTO storyos.project_activity_event_payloads
-                   (owner_user_id, project_id, project_activity_position, project_activity_event_id,
-                    event_kind, receipt_id, receipt_result_kind, payload)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                         'project_export_settled', $5::text::uuid,
-                         'authoritative_applied', $6::text::jsonb)",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &project_activity_position.to_string(),
-                    &project_activity_event_id,
-                    &command.ids.receipt_id,
-                    &payload,
-                ],
-            )
-            .await
-            .map_err(export_database_error)?;
-        client
-            .execute(
-                "INSERT INTO storyos.project_export_manifests
-                   (owner_user_id, project_id, export_id, receipt_id, source_snapshot_id,
-                    source_activity_position, archive_profile, archive_path_profile)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5,
-                         $6::text::bigint, $7, $8)",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &command.export_id,
-                    &command.ids.receipt_id,
-                    &source_snapshot.snapshot_id,
-                    &source_snapshot.project_activity_position.to_string(),
-                    archive_profile,
-                    archive_path_profile,
-                ],
-            )
-            .await
-            .map_err(export_database_error)?;
-    }
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'exportProjectArchive' AND idempotency_key = $4::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.challenge_binding.idempotency_key,
-            ],
-        )
-        .await
-        .map_err(export_database_error)?;
-    if let ExportProjectArchiveSettlementEffect::Admitted {
-        source_snapshot, ..
-    } = &effect
-    {
-        crate::project_archive_build::persist_export_archive(
-            client,
-            command,
-            source_snapshot,
-            &receipt_created_at,
-        )
-        .await?;
-    }
+    insert_export_operation(client, command, &snapshot).await?;
     Ok(ExportProjectArchiveSettlement {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),
-        effect,
-        receipt_created_at,
-        project_activity_position,
-        project_activity_event_id,
+        effect: ExportProjectArchiveSettlementEffect::Admitted {
+            archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
+            archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
+            source_snapshot: Box::new(snapshot),
+        },
     })
 }
 
@@ -490,7 +357,112 @@ async fn insert_export_admission(
     Ok(())
 }
 
-async fn read_export_settlement(
+async fn insert_export_operation(
+    client: &tokio_postgres::Client,
+    command: &ExportProjectArchiveCommand,
+    snapshot: &CanonicalSnapshot,
+) -> Result<(), ExportProjectArchiveError> {
+    let source_activity_position = snapshot.project_activity_position.to_string();
+    client
+        .execute(
+            "INSERT INTO storyos.project_export_operations
+               (owner_user_id, project_id, export_id, author_command_admission_id, command_id,
+                command_kind, idempotency_key, source_snapshot_id, source_activity_position,
+                archive_profile, archive_path_profile)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid,
+                     'exportProjectArchive', $6::text::uuid, $7::text::uuid,
+                     $8::text::bigint, $9, $10)",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.export_id,
+                &command.ids.author_command_admission_id,
+                &command.ids.command_id,
+                &command.challenge_binding.idempotency_key,
+                &snapshot.snapshot_id,
+                &source_activity_position,
+                &PROJECT_EXPORT_ARCHIVE_PROFILE,
+                &PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
+            ],
+        )
+        .await
+        .map_err(export_database_error)?;
+    Ok(())
+}
+
+async fn read_admitted_operation(
+    store: &PostgresProjectReader,
+    command: &ExportProjectArchiveCommand,
+) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+    let client = store
+        .connect_challenge()
+        .await
+        .map_err(export_challenge_error)?;
+    client
+        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(export_database_error)?;
+    let result = async {
+        set_challenge_scope_on_client(&client, &command.project_scope)
+            .await
+            .map_err(export_challenge_error)?;
+        let row = client
+            .query_opt(
+                "SELECT operation.export_id::text,
+                        operation.command_id::text,
+                        operation.author_command_admission_id::text,
+                        operation.source_snapshot_id::text
+                   FROM storyos.project_export_operations AS operation
+                   JOIN storyos.command_idempotency AS idempotency
+                     ON (idempotency.owner_user_id, idempotency.project_id,
+                         idempotency.command_kind, idempotency.idempotency_key) =
+                        (operation.owner_user_id, operation.project_id,
+                         operation.command_kind, operation.idempotency_key)
+                  WHERE operation.owner_user_id = $1::text::uuid
+                    AND operation.project_id = $2::text::uuid
+                    AND operation.command_kind = 'exportProjectArchive'
+                    AND operation.idempotency_key = $3::text::uuid
+                    AND idempotency.outcome_kind = 'in_progress'
+                    AND idempotency.canonical_command_digest = $4",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.challenge_binding.idempotency_key,
+                    &command.challenge_binding.canonical_command_digest,
+                ],
+            )
+            .await
+            .map_err(export_database_error)?
+            .ok_or(ExportProjectArchiveError::BindingConflict)?;
+        let snapshot_id = row.get::<_, String>(3);
+        let source_snapshot = crate::snapshot::load_canonical_snapshot_by_id(
+            &client,
+            &command.project_scope,
+            &snapshot_id,
+        )
+        .await
+        .map_err(export_read_error)?
+        .ok_or(ExportProjectArchiveError::BindingConflict)?;
+        Ok(ExportProjectArchiveSettlement {
+            ids: AuthorCommandAdmissionIds {
+                command_id: row.get(1),
+                author_command_admission_id: row.get(2),
+                receipt_id: command.ids.receipt_id.clone(),
+            },
+            export_id: row.get(0),
+            effect: ExportProjectArchiveSettlementEffect::Admitted {
+                archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
+                archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
+                source_snapshot: Box::new(source_snapshot),
+            },
+        })
+    }
+    .await;
+    finish_readonly(&client, &result).await?;
+    result
+}
+
+async fn read_settled_admission(
     store: &PostgresProjectReader,
     command: &ExportProjectArchiveCommand,
     receipt_id: &str,
@@ -512,27 +484,12 @@ async fn read_export_settlement(
                 "SELECT receipt.command_id::text,
                         receipt.author_command_admission_id::text,
                         receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
                         receipt.result_kind,
                         receipt.result_payload->>'reason',
-                        payload.payload->>'export_id',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        export.archive_profile,
-                        export.archive_path_profile,
+                        export.export_id::text,
                         export.source_snapshot_id,
-                        snapshot.project_activity_position::text,
-                        snapshot.replay_generation::text,
-                        snapshot.redaction_profile,
-                        snapshot.schema_profile,
-                        to_char(snapshot.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        CASE WHEN snapshot.expires_at IS NULL THEN NULL
-                             ELSE to_char(snapshot.expires_at AT TIME ZONE 'UTC',
-                                          'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
-                        END,
-                        current_floor.floor_position::text
+                        operation.export_id::text,
+                        operation.source_snapshot_id::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -545,27 +502,14 @@ async fn read_export_settlement(
                          idempotency.result_reference) =
                         (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
                          receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
               LEFT JOIN storyos.project_export_manifests AS export
                      ON (export.owner_user_id, export.project_id, export.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.project_snapshots AS snapshot
-                     ON snapshot.owner_user_id = export.owner_user_id
-                    AND snapshot.project_id = export.project_id
-                    AND snapshot.snapshot_id::text = export.source_snapshot_id
-              LEFT JOIN LATERAL (
-                     SELECT replay_generation FROM storyos.replay_generations
-                      WHERE owner_user_id = snapshot.owner_user_id
-                        AND project_id = snapshot.project_id
-                      ORDER BY replay_generation DESC LIMIT 1
-                   ) AS current_generation ON snapshot.snapshot_id IS NOT NULL
-              LEFT JOIN storyos.replay_floors AS current_floor
-                     ON (current_floor.owner_user_id, current_floor.project_id,
-                         current_floor.replay_generation) =
-                        (snapshot.owner_user_id, snapshot.project_id,
-                         current_generation.replay_generation)
+              LEFT JOIN storyos.project_export_operations AS operation
+                     ON (operation.owner_user_id, operation.project_id,
+                         operation.author_command_admission_id) =
+                        (receipt.owner_user_id, receipt.project_id,
+                         receipt.author_command_admission_id)
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -585,87 +529,89 @@ async fn read_export_settlement(
             .await
             .map_err(export_database_error)?
             .ok_or(ExportProjectArchiveError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
-            ("authoritative_applied", None) => ExportProjectArchiveSettlementEffect::Admitted {
-                archive_profile: row
-                    .get::<_, Option<String>>(9)
-                    .ok_or(ExportProjectArchiveError::BindingConflict)?,
-                archive_path_profile: row
-                    .get::<_, Option<String>>(10)
-                    .ok_or(ExportProjectArchiveError::BindingConflict)?,
-                source_snapshot: CanonicalSnapshot {
-                    snapshot_id: row
-                        .get::<_, Option<String>>(11)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?,
-                    project_activity_position: row
-                        .get::<_, Option<String>>(12)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?
-                        .parse()
-                        .map_err(export_parse_error)?,
-                    replay_generation: row
-                        .get::<_, Option<String>>(13)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?
-                        .parse()
-                        .map_err(export_parse_error)?,
-                    redaction_profile: row
-                        .get::<_, Option<String>>(14)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?,
-                    schema_profile: row
-                        .get::<_, Option<String>>(15)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?,
-                    created_at: row
-                        .get::<_, Option<String>>(16)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?,
-                    expires_at: row.get(17),
-                    floor_position: row
-                        .get::<_, Option<String>>(18)
-                        .ok_or(ExportProjectArchiveError::BindingConflict)?
-                        .parse()
-                        .map_err(export_parse_error)?,
-                },
-            },
-            ("refused", Some("archived_project")) => {
-                ExportProjectArchiveSettlementEffect::Refused {
-                    reason: ExportProjectArchiveRefusal::ArchivedProject,
-                }
-            }
-            _ => return Err(ExportProjectArchiveError::BindingConflict),
-        };
-        let export_id = row.get::<_, Option<String>>(6).unwrap_or_default();
+        let result_kind = row.get::<_, String>(3);
+        let source_snapshot_id = match result_kind.as_str() {
+            "authoritative_applied" => row
+                .get::<_, Option<String>>(6)
+                .or_else(|| row.get::<_, Option<String>>(8)),
+            "refused" => row.get::<_, Option<String>>(8),
+            _ => None,
+        }
+        .ok_or(ExportProjectArchiveError::BindingConflict)?;
+        let export_id = match result_kind.as_str() {
+            "authoritative_applied" => row
+                .get::<_, Option<String>>(5)
+                .or_else(|| row.get::<_, Option<String>>(7)),
+            "refused" => row.get::<_, Option<String>>(7),
+            _ => None,
+        }
+        .ok_or(ExportProjectArchiveError::BindingConflict)?;
+        let source_snapshot = crate::snapshot::load_canonical_snapshot_by_id(
+            &client,
+            &command.project_scope,
+            &source_snapshot_id,
+        )
+        .await
+        .map_err(export_read_error)?
+        .ok_or(ExportProjectArchiveError::BindingConflict)?;
         Ok(ExportProjectArchiveSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
                 author_command_admission_id: row.get(1),
                 receipt_id: row.get(2),
             },
-            export_id: if export_id.is_empty() {
-                command.export_id.clone()
-            } else {
-                export_id
+            export_id,
+            effect: ExportProjectArchiveSettlementEffect::Admitted {
+                archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
+                archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
+                source_snapshot: Box::new(source_snapshot),
             },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(7)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(export_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(8).unwrap_or_default(),
         })
     }
     .await;
-    match &result {
+    finish_readonly(&client, &result).await?;
+    result
+}
+
+async fn finish_readonly(
+    client: &tokio_postgres::Client,
+    result: &Result<ExportProjectArchiveSettlement, ExportProjectArchiveError>,
+) -> Result<(), ExportProjectArchiveError> {
+    match result {
         Ok(_) => client
             .batch_execute("COMMIT")
             .await
-            .map_err(export_database_error)?,
+            .map_err(export_database_error),
         Err(_) => {
             let _rollback = client.batch_execute("ROLLBACK").await;
+            Ok(())
         }
     }
-    result
+}
+
+fn snapshot_from_joined_row(
+    row: &tokio_postgres::Row,
+    start: usize,
+) -> Result<CanonicalSnapshot, ProjectReadError> {
+    Ok(CanonicalSnapshot {
+        snapshot_id: row.get(start),
+        project_activity_position: row
+            .get::<_, String>(start + 1)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        replay_generation: row
+            .get::<_, String>(start + 2)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        redaction_profile: row.get(start + 3),
+        schema_profile: row.get(start + 4),
+        created_at: row.get(start + 5),
+        expires_at: row.get(start + 6),
+        floor_position: row
+            .get::<_, String>(start + 7)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+    })
 }
 
 fn export_challenge_error(error: ProjectCommandChallengeError) -> ExportProjectArchiveError {
@@ -682,12 +628,6 @@ fn export_challenge_error(error: ProjectCommandChallengeError) -> ExportProjectA
 }
 
 fn export_database_error(error: tokio_postgres::Error) -> ExportProjectArchiveError {
-    ExportProjectArchiveError::Unavailable(Box::new(error))
-}
-
-fn export_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> ExportProjectArchiveError {
     ExportProjectArchiveError::Unavailable(Box::new(error))
 }
 

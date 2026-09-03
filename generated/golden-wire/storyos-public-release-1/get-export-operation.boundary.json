@@ -3,7 +3,7 @@
   "archive_profile": "storyos.project-export.v1",
   "correlation_id": "018f0000-0000-7001-8000-000000000082",
   "export_id": "018f0000-0000-7001-8000-000000000926",
-  "immutable_root": null,
+  "immutable_root": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
   "project_scope": {
     "owner_user_id": "018f0000-0000-7001-8000-000000000001",
     "project_id": "018f0000-0000-7001-8000-000000000201"
@@ -26,5 +26,5 @@
     "snapshot_kind": "canonical",
     "source_watermarks": {}
   },
-  "status": "in_progress"
+  "status": "ready"
 }
