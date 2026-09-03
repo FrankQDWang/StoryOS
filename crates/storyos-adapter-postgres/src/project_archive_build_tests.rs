@@ -175,7 +175,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         .apply_author_edit_with_fault(&command, AuthorEditFault::AfterAdmissionBeforeCore)
         .await
         .expect_err("the reconfirmation cut must stop before Core");
-    let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let (mut admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
         let _ = connection.await;
     });
