@@ -9,5 +9,6 @@
     "project_id": "018f0000-0000-7001-8000-000000000201"
   },
   "query_id": "018f0000-0000-7001-8000-000000000071",
-  "schema_id": "storyos.query.human-readable-manuscript-export.response.v1"
+  "schema_id": "storyos.query.human-readable-manuscript-export.response.v1",
+  "status": "ready"
 }

@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:dce534fc9c9ba52ad9cacccc934b66c9e71ec9a8fe46aacd7d54fb14be733630"
+    "digest": "sha256:37fd79eb6f7bc62350ba9d9135d65a24e6952520312fa1f91af57c4ebc951517"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:0d57379d6ca2f3b308bc921826a68e1cb6beb37bb85d7525e366984e734a72b8",
+    "migration_chain_digest": "sha256:a6e1a12dbc21e2753cb8e16d9a33fe70649920eee76426fb76eb9ff6cf830b78",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:00f8a54778c3432ff6d91e463f34a9bf183df281c7e1ebe2c1248a1e7bdf503c",
+      "manifest_sha256": "sha256:52d04b921a428ee3fdbc418874d6209bc8f59251a6b8ae576d8235c7801dedde",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -347,6 +347,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0028_tree_revision_conflict_names.sql",
           "lf_sha256": "sha256:b1efca0f20d9b31cd44b88b5451d9eb0fc37287f031bc1b4064ca2fa154fa3d2"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0029_human_readable_manuscript_export_operations.sql",
+          "lf_sha256": "sha256:d233a5bdd0e5c2f03ca95258ca1c7449ef7ce3416d14190958273bb8f3bb5574"
         }
       ]
     },
@@ -508,7 +512,7 @@
     },
     {
       "family_id": "operational-admission-editor",
-      "table_families": ["anti_forgery_challenges", "author_command_admissions", "author_command_admission_settlements", "author_command_admission_reconfirmations", "author_command_admission_outcome_unknown_observations", "editor_sessions", "project_writer_generations", "editor_session_base_snapshots", "editor_input_fences", "proposal_pause_fences"],
+      "table_families": ["anti_forgery_challenges", "author_command_admissions", "author_command_admission_settlements", "author_command_admission_reconfirmations", "author_command_admission_outcome_unknown_observations", "human_readable_manuscript_export_operations", "editor_sessions", "project_writer_generations", "editor_session_base_snapshots", "editor_input_fences", "proposal_pause_fences"],
       "owner": "admission",
       "authority_class": "operational",
       "durability_class": "append_only_with_current_generation",

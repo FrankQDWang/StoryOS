@@ -285,7 +285,8 @@ fn expected_provenance_evidence() -> Value {
                 "crates/storyos-application",
                 "crates/storyos-contracts",
                 "crates/storyos-core",
-                "crates/storyos-server"
+                "crates/storyos-server",
+                "crates/storyos-worker"
             ],
             "excluded_trees": ["prototypes/**", ".reference/**"]
         },

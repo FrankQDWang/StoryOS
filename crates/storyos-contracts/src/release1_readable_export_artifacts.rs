@@ -68,7 +68,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Export one deterministic human-readable manuscript\n",
+            "  {}:\n    post:\n      operationId: {}\n      summary: Admit one durable human-readable manuscript export\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
             "        - name: Idempotency-Key\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
@@ -158,45 +158,31 @@ fn command_fixture(created_at: &str) -> Value {
             "kind": "human_readable_manuscript_export",
             "export_id": "018f0000-0000-7001-8000-000000000916"
         },
-        "receipt": {
-            "receipt_id": "018f0000-0000-7001-8000-000000000913",
-            "project_scope": {
-                "owner_user_id": "018f0000-0000-7001-8000-000000000001",
-                "project_id": "018f0000-0000-7001-8000-000000000201"
-            },
-            "command_kind": "exportHumanReadableManuscript",
-            "command_digest": {
-                "algorithm": "sha256",
-                "profile": EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE,
-                "value_hex_lowercase": "c".repeat(64)
-            },
-            "idempotency_key": "018f0000-0000-7001-8000-000000000914",
-            "producer_cause": "author_command_admission",
-            "author_command_admission_id": "018f0000-0000-7001-8000-000000000912",
-            "expected_heads": [],
-            "prior_heads": [],
-            "resulting_heads": [],
-            "authoritative_revision_ids": [],
-            "proposal_revision_ids": [],
-            "authoritative_commit_ids": [],
-            "author_action_sequence": null,
-            "draft_artifact_refs": [],
-            "artifact_lifecycle_event_refs": [],
-            "condition_refs": [],
-            "result": "authoritative_applied",
-            "created_at": created_at
-        },
         "project": {
             "project_id": "018f0000-0000-7001-8000-000000000201",
             "title": "Empty Novel",
             "open": {"kind": "empty"}
         },
         "effect": {
-            "kind": "authoritative_applied",
+            "kind": "admitted",
             "export_id": "018f0000-0000-7001-8000-000000000916",
-            "content_sha256": "a".repeat(64),
             "export_profile": "storyos.readable-export.utf8-lf.v1",
-            "project_activity_position": "2"
+            "source_snapshot": {
+                "snapshot_id": "018f0000-0000-7001-8000-000000000040",
+                "project_scope": {
+                    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+                    "project_id": "018f0000-0000-7001-8000-000000000201"
+                },
+                "snapshot_kind": "canonical",
+                "project_activity_position": "2",
+                "source_watermarks": {},
+                "projection_generations": {},
+                "redaction_profile": "storyos.author.v1",
+                "schema_profile": crate::release1::PUBLIC_PROTOCOL_RELEASE,
+                "replay_generation": "1",
+                "created_at": created_at,
+                "expires_at": null
+            }
         }
     })
 }

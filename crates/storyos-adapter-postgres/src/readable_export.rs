@@ -1,22 +1,18 @@
-use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, CanonicalTreeFacts, ChapterFact,
-    ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,
-    ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptSettlementEffect,
-    ExportHumanReadableManuscriptStore, GetHumanReadableManuscriptExport,
-    HumanReadableManuscriptExportPage, HumanReadableManuscriptExportReader,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, ExportHumanReadableManuscriptCommand,
+    ExportHumanReadableManuscriptError, ExportHumanReadableManuscriptSettlement,
+    ExportHumanReadableManuscriptSettlementEffect, ExportHumanReadableManuscriptStore,
+    GetHumanReadableManuscriptExport, HumanReadableManuscriptExportPage,
+    HumanReadableManuscriptExportProgress, HumanReadableManuscriptExportReader,
     ProjectCommandChallengeError, ProjectCommandChallengeUse, ProjectReadError, ProjectScope,
-    VolumeFact, VolumeId, render_readable_manuscript_from_facts,
 };
 use storyos_core::{
     ExportHumanReadableManuscript as CoreExport, ExportHumanReadableManuscriptResult,
     ProjectLifecycle, ProjectPresence, READABLE_EXPORT_PROFILE,
     export_human_readable_manuscript as classify_export,
 };
-use uuid::Uuid;
 
 use super::*;
-use crate::manuscript_search::read_live_chapter_blocks;
 
 impl ExportHumanReadableManuscriptStore for PostgresProjectReader {
     async fn export_human_readable_manuscript(
@@ -37,14 +33,14 @@ impl ExportHumanReadableManuscriptStore for PostgresProjectReader {
                     .rollback()
                     .await
                     .map_err(export_challenge_error)?;
-                read_export_settlement(self, command, &result_reference).await
+                read_settled_admission(self, command, &result_reference).await
             }
             ProjectCommandChallengeUse::ExactRetryInProgress => {
                 transaction
                     .rollback()
                     .await
                     .map_err(export_challenge_error)?;
-                Err(ExportHumanReadableManuscriptError::BindingConflict)
+                read_admitted_operation(self, command).await
             }
             ProjectCommandChallengeUse::FirstUse => {
                 match persist_export(&transaction.client, command).await {
@@ -87,7 +83,7 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(GetHumanReadableManuscriptExport::Archived);
         }
-        let Some(row) = transaction
+        let ready = transaction
             .query_opt(
                 "SELECT export.export_id::text,
                         export.export_profile,
@@ -133,42 +129,61 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
                 ],
             )
             .await
+            .map_err(read_error)?;
+        if let Some(row) = ready {
+            if row.get::<_, bool>(12) {
+                transaction.commit().await.map_err(read_error)?;
+                return Ok(GetHumanReadableManuscriptExport::Expired);
+            }
+            transaction.commit().await.map_err(read_error)?;
+            return Ok(GetHumanReadableManuscriptExport::Ready(Box::new(
+                HumanReadableManuscriptExportPage {
+                    project_scope: scope.clone(),
+                    export_id: row.get(0),
+                    export_profile: row.get(1),
+                    content_sha256: row.get(2),
+                    manuscript_utf8: row.get(3),
+                    source_snapshot: snapshot_from_joined_row(&row, /*start*/ 4)?,
+                },
+            )));
+        }
+        let Some(operation) = transaction
+            .query_opt(
+                "SELECT operation.export_id::text,
+                        operation.export_profile,
+                        operation.source_snapshot_id::text
+                   FROM storyos.human_readable_manuscript_export_operations AS operation
+                  WHERE operation.owner_user_id = $1::text::uuid
+                    AND operation.project_id = $2::text::uuid
+                    AND operation.export_id = $3::text::uuid",
+                &[
+                    &scope.owner_user_id.as_ref(),
+                    &scope.project_id.as_ref(),
+                    &export_id,
+                ],
+            )
+            .await
             .map_err(read_error)?
         else {
             transaction.commit().await.map_err(read_error)?;
             return Ok(GetHumanReadableManuscriptExport::Missing);
         };
-        if row.get::<_, bool>(12) {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(GetHumanReadableManuscriptExport::Expired);
-        }
+        let snapshot_id = operation.get::<_, String>(2);
+        let source_snapshot =
+            crate::snapshot::load_canonical_snapshot_by_id(&transaction, scope, &snapshot_id)
+                .await?
+                .ok_or_else(|| {
+                    ProjectReadError::unavailable(std::io::Error::other(
+                        "pinned Snapshot is required for an admitted human-readable export",
+                    ))
+                })?;
         transaction.commit().await.map_err(read_error)?;
-        Ok(GetHumanReadableManuscriptExport::Ready(Box::new(
-            HumanReadableManuscriptExportPage {
+        Ok(GetHumanReadableManuscriptExport::InProgress(Box::new(
+            HumanReadableManuscriptExportProgress {
                 project_scope: scope.clone(),
-                export_id: row.get(0),
-                export_profile: row.get(1),
-                content_sha256: row.get(2),
-                manuscript_utf8: row.get(3),
-                source_snapshot: CanonicalSnapshot {
-                    snapshot_id: row.get(4),
-                    project_activity_position: row
-                        .get::<_, String>(5)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                    replay_generation: row
-                        .get::<_, String>(6)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                    redaction_profile: row.get(7),
-                    schema_profile: row.get(8),
-                    created_at: row.get(9),
-                    expires_at: row.get(10),
-                    floor_position: row
-                        .get::<_, String>(11)
-                        .parse()
-                        .map_err(ProjectReadError::unavailable)?,
-                },
+                export_id: operation.get(0),
+                export_profile: operation.get(1),
+                source_snapshot,
             },
         )))
     }
@@ -202,293 +217,34 @@ async fn persist_export(
             )));
         }
     };
-    let classified = classify_export(&CoreExport {
+    match classify_export(&CoreExport {
         presence: ProjectPresence::Present,
         current_lifecycle,
-    });
-    let effect = match classified {
-        ExportHumanReadableManuscriptResult::Applied => {
-            let snapshot =
-                crate::snapshot::load_latest_canonical_snapshot(client, &command.project_scope)
-                    .await
-                    .map_err(export_read_error)?
-                    .ok_or_else(|| {
-                        ExportHumanReadableManuscriptError::Unavailable(Box::new(
-                            std::io::Error::other(
-                                "canonical snapshot is required for human-readable export",
-                            ),
-                        ))
-                    })?;
-            let tree = load_tree_facts(client, &command.project_scope, snapshot.clone()).await?;
-            let chapters = read_live_chapter_blocks(client, &command.project_scope)
-                .await
-                .map_err(export_read_error)?;
-            let manuscript_utf8 = render_readable_manuscript_from_facts(&tree, &chapters);
-            let content_sha256 = Sha256::digest(manuscript_utf8.as_bytes()).iter().fold(
-                String::with_capacity(64),
-                |mut value, byte| {
-                    use std::fmt::Write as _;
-                    write!(value, "{byte:02x}").expect("writing to String cannot fail");
-                    value
-                },
-            );
-            ExportHumanReadableManuscriptSettlementEffect::Applied {
-                content_sha256,
-                manuscript_utf8,
-                source_snapshot: snapshot,
-            }
-        }
+    }) {
+        ExportHumanReadableManuscriptResult::Applied => {}
         ExportHumanReadableManuscriptResult::Refused {
             reason: storyos_core::ExportHumanReadableManuscriptRefusal::MissingProject,
         } => return Err(ExportHumanReadableManuscriptError::MissingProject),
-        ExportHumanReadableManuscriptResult::Refused { reason } => {
-            ExportHumanReadableManuscriptSettlementEffect::Refused { reason }
-        }
-    };
-    insert_export_admission(client, command).await?;
-    let (result_kind, result_payload) = match &effect {
-        ExportHumanReadableManuscriptSettlementEffect::Applied { .. } => {
-            ("authoritative_applied", "{}".to_owned())
-        }
-        ExportHumanReadableManuscriptSettlementEffect::Refused { reason } => {
-            let refused = match reason {
-                storyos_core::ExportHumanReadableManuscriptRefusal::ArchivedProject => {
-                    "archived_project"
-                }
-                storyos_core::ExportHumanReadableManuscriptRefusal::MissingProject => {
-                    return Err(ExportHumanReadableManuscriptError::MissingProject);
-                }
-            };
-            ("refused", format!(r#"{{"reason":"{refused}"}}"#))
-        }
-    };
-    let receipt_created_at = client
-        .query_one(
-            "INSERT INTO storyos.domain_receipts
-               (owner_user_id, project_id, receipt_id, author_command_admission_id,
-                command_id, command_kind, command_digest, idempotency_key, producer_cause,
-                expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
-                proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'exportHumanReadableManuscript', $6, $7::text::uuid,
-                     'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
-                     '{}'::text[], $8, $9::text::jsonb)
-          RETURNING to_char(created_at AT TIME ZONE 'UTC',
-                            'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.ids.author_command_admission_id,
-                &command.ids.command_id,
-                &command.challenge_binding.canonical_command_digest,
-                &command.challenge_binding.idempotency_key,
-                &result_kind,
-                &result_payload,
-            ],
-        )
-        .await
-        .map_err(export_database_error)?
-        .get::<_, String>(0);
-    client
-        .execute(
-            "INSERT INTO storyos.author_command_admission_settlements
-               (owner_user_id, project_id, author_command_admission_id, settlement_kind, receipt_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
-                     'receipt_settled', $4::text::uuid)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.author_command_admission_id,
-                &command.ids.receipt_id,
-            ],
-        )
-        .await
-        .map_err(export_database_error)?;
-    let mut project_activity_position = 0;
-    let mut project_activity_event_id = String::new();
-    if let ExportHumanReadableManuscriptSettlementEffect::Applied {
-        content_sha256,
-        manuscript_utf8,
-        source_snapshot,
-    } = &effect
-    {
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(export_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(export_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
-        let payload = serde_json::json!({
-            "kind": "human_readable_manuscript_export_settled",
-            "export_id": command.export_id,
-            "content_sha256": content_sha256,
-        })
-        .to_string();
-        client
-            .execute(
-                "INSERT INTO storyos.project_activity_event_payloads
-                   (owner_user_id, project_id, project_activity_position, project_activity_event_id,
-                    event_kind, receipt_id, receipt_result_kind, payload)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, $4::text::uuid,
-                         'human_readable_manuscript_export_settled', $5::text::uuid,
-                         'authoritative_applied', $6::text::jsonb)",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &project_activity_position.to_string(),
-                    &project_activity_event_id,
-                    &command.ids.receipt_id,
-                    &payload,
-                ],
-            )
-            .await
-            .map_err(export_database_error)?;
-        client
-            .execute(
-                "INSERT INTO storyos.human_readable_manuscript_exports
-                   (owner_user_id, project_id, export_id, receipt_id, source_snapshot_id,
-                    source_activity_position, export_profile, manuscript_utf8, content_sha256)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5,
-                         $6::text::bigint, $7, $8, $9)",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &command.export_id,
-                    &command.ids.receipt_id,
-                    &source_snapshot.snapshot_id,
-                    &source_snapshot.project_activity_position.to_string(),
-                    &READABLE_EXPORT_PROFILE,
-                    manuscript_utf8,
-                    content_sha256,
-                ],
-            )
-            .await
-            .map_err(export_database_error)?;
+        ExportHumanReadableManuscriptResult::Refused {
+            reason: storyos_core::ExportHumanReadableManuscriptRefusal::ArchivedProject,
+        } => return Err(ExportHumanReadableManuscriptError::ArchivedProject),
     }
-    client
-        .execute(
-            "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND command_kind = 'exportHumanReadableManuscript' AND idempotency_key = $4::text::uuid",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &command.ids.receipt_id,
-                &command.challenge_binding.idempotency_key,
-            ],
-        )
+    let snapshot = crate::snapshot::load_latest_canonical_snapshot(client, &command.project_scope)
         .await
-        .map_err(export_database_error)?;
+        .map_err(export_read_error)?
+        .ok_or_else(|| {
+            ExportHumanReadableManuscriptError::Unavailable(Box::new(std::io::Error::other(
+                "canonical snapshot is required for human-readable export",
+            )))
+        })?;
+    insert_export_admission(client, command).await?;
+    insert_export_operation(client, command, &snapshot).await?;
     Ok(ExportHumanReadableManuscriptSettlement {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),
-        effect,
-        receipt_created_at,
-        project_activity_position,
-        project_activity_event_id,
-    })
-}
-
-async fn load_tree_facts(
-    client: &tokio_postgres::Client,
-    scope: &ProjectScope,
-    snapshot: CanonicalSnapshot,
-) -> Result<CanonicalTreeFacts, ExportHumanReadableManuscriptError> {
-    let tree_revision = client
-        .query_one(
-            "SELECT tree_revision::text FROM storyos.projects
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .map_err(export_database_error)?
-        .get::<_, String>(0)
-        .parse::<u64>()
-        .map_err(export_parse_error)?;
-    let volume_rows = client
-        .query(
-            "SELECT manuscript_object_id::text, title
-               FROM storyos.manuscript_objects AS volume
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND object_kind = 'volume'
-                AND NOT EXISTS (
-                  SELECT 1 FROM storyos.volume_removal_decisions AS removal
-                   WHERE removal.owner_user_id = volume.owner_user_id
-                     AND removal.project_id = volume.project_id
-                     AND removal.volume_id = volume.manuscript_object_id
-                )
-              ORDER BY tree_order",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .map_err(export_database_error)?;
-    let chapter_rows = client
-        .query(
-            "SELECT parent_volume_id::text, manuscript_object_id::text, title
-               FROM storyos.manuscript_objects AS chapter
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND object_kind = 'chapter'
-                AND parent_volume_id IS NOT NULL
-                AND NOT EXISTS (
-                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
-                   WHERE removal.owner_user_id = chapter.owner_user_id
-                     AND removal.project_id = chapter.project_id
-                     AND removal.chapter_id = chapter.manuscript_object_id
-                )
-              ORDER BY parent_volume_id, tree_order",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .map_err(export_database_error)?;
-    let mut chapters_by_volume = std::collections::BTreeMap::<String, Vec<ChapterFact>>::new();
-    for chapter in chapter_rows {
-        let volume_id = chapter.get::<_, String>(0);
-        let chapters = chapters_by_volume.entry(volume_id).or_default();
-        let next_order = chapters.len() as u64 + 1;
-        chapters.push(ChapterFact {
-            project_scope: scope.clone(),
-            chapter_id: storyos_application::ChapterId::new(chapter.get::<_, String>(1)),
-            title: chapter.get(2),
-            order: next_order,
-        });
-    }
-    let mut volumes = Vec::with_capacity(volume_rows.len());
-    for volume in volume_rows {
-        let volume_id = volume.get::<_, String>(0);
-        let next_order = volumes.len() as u64 + 1;
-        volumes.push(VolumeFact {
-            project_scope: scope.clone(),
-            chapters: chapters_by_volume.remove(&volume_id).unwrap_or_default(),
-            volume_id: VolumeId::new(volume_id),
-            title: volume.get(1),
-            order: next_order,
-        });
-    }
-    Ok(CanonicalTreeFacts {
-        project_scope: scope.clone(),
-        snapshot,
-        tree_revision,
-        volumes,
+        effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+            source_snapshot: Box::new(snapshot),
+        },
     })
 }
 
@@ -546,7 +302,109 @@ async fn insert_export_admission(
     Ok(())
 }
 
-async fn read_export_settlement(
+async fn insert_export_operation(
+    client: &tokio_postgres::Client,
+    command: &ExportHumanReadableManuscriptCommand,
+    snapshot: &CanonicalSnapshot,
+) -> Result<(), ExportHumanReadableManuscriptError> {
+    let source_activity_position = snapshot.project_activity_position.to_string();
+    client
+        .execute(
+            "INSERT INTO storyos.human_readable_manuscript_export_operations
+               (owner_user_id, project_id, export_id, author_command_admission_id, command_id,
+                command_kind, idempotency_key, source_snapshot_id, source_activity_position,
+                export_profile)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid,
+                     'exportHumanReadableManuscript', $6::text::uuid, $7::text::uuid,
+                     $8::text::bigint, $9)",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.export_id,
+                &command.ids.author_command_admission_id,
+                &command.ids.command_id,
+                &command.challenge_binding.idempotency_key,
+                &snapshot.snapshot_id,
+                &source_activity_position,
+                &READABLE_EXPORT_PROFILE,
+            ],
+        )
+        .await
+        .map_err(export_database_error)?;
+    Ok(())
+}
+
+async fn read_admitted_operation(
+    store: &PostgresProjectReader,
+    command: &ExportHumanReadableManuscriptCommand,
+) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+    let client = store
+        .connect_challenge()
+        .await
+        .map_err(export_challenge_error)?;
+    client
+        .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
+        .await
+        .map_err(export_database_error)?;
+    let result = async {
+        set_challenge_scope_on_client(&client, &command.project_scope)
+            .await
+            .map_err(export_challenge_error)?;
+        let row = client
+            .query_opt(
+                "SELECT operation.export_id::text,
+                        operation.command_id::text,
+                        operation.author_command_admission_id::text,
+                        operation.source_snapshot_id::text
+                   FROM storyos.human_readable_manuscript_export_operations AS operation
+                   JOIN storyos.command_idempotency AS idempotency
+                     ON (idempotency.owner_user_id, idempotency.project_id,
+                         idempotency.command_kind, idempotency.idempotency_key) =
+                        (operation.owner_user_id, operation.project_id,
+                         operation.command_kind, operation.idempotency_key)
+                  WHERE operation.owner_user_id = $1::text::uuid
+                    AND operation.project_id = $2::text::uuid
+                    AND operation.command_kind = 'exportHumanReadableManuscript'
+                    AND operation.idempotency_key = $3::text::uuid
+                    AND idempotency.outcome_kind = 'in_progress'
+                    AND idempotency.canonical_command_digest = $4",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.challenge_binding.idempotency_key,
+                    &command.challenge_binding.canonical_command_digest,
+                ],
+            )
+            .await
+            .map_err(export_database_error)?
+            .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
+        let snapshot_id = row.get::<_, String>(3);
+        let source_snapshot = crate::snapshot::load_canonical_snapshot_by_id(
+            &client,
+            &command.project_scope,
+            &snapshot_id,
+        )
+        .await
+        .map_err(export_read_error)?
+        .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
+        Ok(ExportHumanReadableManuscriptSettlement {
+            ids: AuthorCommandAdmissionIds {
+                command_id: row.get(1),
+                author_command_admission_id: row.get(2),
+                receipt_id: command.ids.receipt_id.clone(),
+            },
+            export_id: row.get(0),
+            effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+                source_snapshot: Box::new(source_snapshot),
+            },
+        })
+    }
+    .await;
+    finish_readonly(&client, &result).await?;
+    result
+}
+
+async fn read_settled_admission(
     store: &PostgresProjectReader,
     command: &ExportHumanReadableManuscriptCommand,
     receipt_id: &str,
@@ -568,15 +426,9 @@ async fn read_export_settlement(
                 "SELECT receipt.command_id::text,
                         receipt.author_command_admission_id::text,
                         receipt.receipt_id::text,
-                        to_char(receipt.created_at AT TIME ZONE 'UTC',
-                                'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
                         receipt.result_kind,
                         receipt.result_payload->>'reason',
-                        payload.payload->>'export_id',
-                        payload.payload->>'content_sha256',
-                        payload.project_activity_position::text,
-                        payload.project_activity_event_id::text,
-                        export.manuscript_utf8,
+                        export.export_id::text,
                         export.source_snapshot_id
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
@@ -590,9 +442,6 @@ async fn read_export_settlement(
                          idempotency.result_reference) =
                         (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
                          receipt.idempotency_key, receipt.receipt_id::text)
-              LEFT JOIN storyos.project_activity_event_payloads AS payload
-                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
               LEFT JOIN storyos.human_readable_manuscript_exports AS export
                      ON (export.owner_user_id, export.project_id, export.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
@@ -615,71 +464,86 @@ async fn read_export_settlement(
             .await
             .map_err(export_database_error)?
             .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
-        let result_kind = row.get::<_, String>(4);
-        let reason = row.get::<_, Option<String>>(5);
-        let effect = match (result_kind.as_str(), reason.as_deref()) {
+        let result_kind = row.get::<_, String>(3);
+        let reason = row.get::<_, Option<String>>(4);
+        let source_snapshot = match (result_kind.as_str(), reason.as_deref()) {
             ("authoritative_applied", None) => {
-                ExportHumanReadableManuscriptSettlementEffect::Applied {
-                    content_sha256: row
-                        .get::<_, Option<String>>(7)
-                        .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?,
-                    manuscript_utf8: row
-                        .get::<_, Option<String>>(10)
-                        .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?,
-                    source_snapshot: CanonicalSnapshot {
-                        snapshot_id: row
-                            .get::<_, Option<String>>(11)
-                            .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?,
-                        project_activity_position: 0,
-                        replay_generation: 1,
-                        floor_position: 0,
-                        redaction_profile: "storyos.author.v1".to_owned(),
-                        schema_profile: "storyos.public.release.1".to_owned(),
-                        created_at: row.get(3),
-                        expires_at: None,
-                    },
-                }
+                let snapshot_id = row
+                    .get::<_, Option<String>>(6)
+                    .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
+                crate::snapshot::load_canonical_snapshot_by_id(
+                    &client,
+                    &command.project_scope,
+                    &snapshot_id,
+                )
+                .await
+                .map_err(export_read_error)?
+                .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?
             }
             ("refused", Some("archived_project")) => {
-                ExportHumanReadableManuscriptSettlementEffect::Refused {
-                    reason: storyos_core::ExportHumanReadableManuscriptRefusal::ArchivedProject,
-                }
+                return Err(ExportHumanReadableManuscriptError::ArchivedProject);
             }
             _ => return Err(ExportHumanReadableManuscriptError::BindingConflict),
         };
-        let export_id = row.get::<_, Option<String>>(6).unwrap_or_default();
+        let export_id = row
+            .get::<_, Option<String>>(5)
+            .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
         Ok(ExportHumanReadableManuscriptSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
                 author_command_admission_id: row.get(1),
                 receipt_id: row.get(2),
             },
-            export_id: if export_id.is_empty() {
-                command.export_id.clone()
-            } else {
-                export_id
+            export_id,
+            effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+                source_snapshot: Box::new(source_snapshot),
             },
-            receipt_created_at: row.get(3),
-            effect,
-            project_activity_position: row
-                .get::<_, Option<String>>(8)
-                .unwrap_or_else(|| "0".to_owned())
-                .parse::<u64>()
-                .map_err(export_parse_error)?,
-            project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
         })
     }
     .await;
-    match &result {
+    finish_readonly(&client, &result).await?;
+    result
+}
+
+async fn finish_readonly(
+    client: &tokio_postgres::Client,
+    result: &Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError>,
+) -> Result<(), ExportHumanReadableManuscriptError> {
+    match result {
         Ok(_) => client
             .batch_execute("COMMIT")
             .await
-            .map_err(export_database_error)?,
+            .map_err(export_database_error),
         Err(_) => {
             let _rollback = client.batch_execute("ROLLBACK").await;
+            Ok(())
         }
     }
-    result
+}
+
+fn snapshot_from_joined_row(
+    row: &tokio_postgres::Row,
+    start: usize,
+) -> Result<CanonicalSnapshot, ProjectReadError> {
+    Ok(CanonicalSnapshot {
+        snapshot_id: row.get(start),
+        project_activity_position: row
+            .get::<_, String>(start + 1)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        replay_generation: row
+            .get::<_, String>(start + 2)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        redaction_profile: row.get(start + 3),
+        schema_profile: row.get(start + 4),
+        created_at: row.get(start + 5),
+        expires_at: row.get(start + 6),
+        floor_position: row
+            .get::<_, String>(start + 7)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+    })
 }
 
 fn export_challenge_error(
@@ -700,12 +564,6 @@ fn export_challenge_error(
 }
 
 fn export_database_error(error: tokio_postgres::Error) -> ExportHumanReadableManuscriptError {
-    ExportHumanReadableManuscriptError::Unavailable(Box::new(error))
-}
-
-fn export_parse_error(
-    error: impl std::error::Error + Send + Sync + 'static,
-) -> ExportHumanReadableManuscriptError {
     ExportHumanReadableManuscriptError::Unavailable(Box::new(error))
 }
 

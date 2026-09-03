@@ -100,6 +100,7 @@ fn get_human_readable_manuscript_export_wire_is_generated_from_one_closed_contra
         positive["export_profile"],
         "storyos.readable-export.utf8-lf.v1"
     );
+    assert_eq!(positive["status"], "ready");
     assert!(
         positive["manuscript_utf8"]
             .as_str()

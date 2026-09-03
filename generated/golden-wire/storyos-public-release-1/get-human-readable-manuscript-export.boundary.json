@@ -25,5 +25,6 @@
     "snapshot_id": "018f0000-0000-7001-8000-000000000040",
     "snapshot_kind": "canonical",
     "source_watermarks": {}
-  }
+  },
+  "status": "ready"
 }

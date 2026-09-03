@@ -1347,10 +1347,18 @@ dependencies = [
  "storyos-application",
  "storyos-contracts",
  "storyos-core",
+ "storyos-worker",
  "tokio",
  "tower",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "storyos-worker"
+version = "0.1.0"
+dependencies = [
+ "tokio",
 ]
 
 [[package]]

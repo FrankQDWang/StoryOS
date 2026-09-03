@@ -31,17 +31,12 @@ pub struct ExportHumanReadableManuscriptSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub export_id: String,
     pub effect: ExportHumanReadableManuscriptSettlementEffect,
-    pub receipt_created_at: String,
-    pub project_activity_position: u64,
-    pub project_activity_event_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExportHumanReadableManuscriptSettlementEffect {
-    Applied {
-        content_sha256: String,
-        manuscript_utf8: String,
-        source_snapshot: CanonicalSnapshot,
+    Admitted {
+        source_snapshot: Box<CanonicalSnapshot>,
     },
     Refused {
         reason: storyos_core::ExportHumanReadableManuscriptRefusal,
@@ -53,6 +48,7 @@ pub enum ExportHumanReadableManuscriptError {
     BindingConflict,
     InvalidChallenge,
     MissingProject,
+    ArchivedProject,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
 
@@ -66,6 +62,7 @@ impl std::fmt::Display for ExportHumanReadableManuscriptError {
                 formatter.write_str("The human-readable export challenge is invalid")
             }
             Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
+            Self::ArchivedProject => formatter.write_str("The Project is archived"),
             Self::Unavailable(_) => {
                 formatter.write_str("The human-readable export store is unavailable")
             }
@@ -77,7 +74,10 @@ impl std::error::Error for ExportHumanReadableManuscriptError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge | Self::MissingProject => None,
+            Self::BindingConflict
+            | Self::InvalidChallenge
+            | Self::MissingProject
+            | Self::ArchivedProject => None,
         }
     }
 }
@@ -165,6 +165,14 @@ pub fn render_readable_manuscript_from_facts(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HumanReadableManuscriptExportProgress {
+    pub project_scope: ProjectScope,
+    pub export_id: String,
+    pub export_profile: String,
+    pub source_snapshot: CanonicalSnapshot,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HumanReadableManuscriptExportPage {
     pub project_scope: ProjectScope,
     pub export_id: String,
@@ -179,10 +187,11 @@ pub enum GetHumanReadableManuscriptExport {
     Missing,
     Archived,
     Expired,
+    InProgress(Box<HumanReadableManuscriptExportProgress>),
     Ready(Box<HumanReadableManuscriptExportPage>),
 }
 
-/// Reads one settled human-readable export under already authenticated exact Scope.
+/// Reads one human-readable export under already authenticated exact Scope.
 pub trait HumanReadableManuscriptExportReader: Sync {
     fn read_human_readable_manuscript_export(
         &self,

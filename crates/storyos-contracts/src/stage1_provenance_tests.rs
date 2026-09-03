@@ -61,7 +61,7 @@ fn reference_workspace_member_is_rejected() {
 #[test]
 fn missing_production_journey_is_rejected() {
     let dir = temp_workspace(
-        "  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-server\",\n",
+        "  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-server\",\n  \"crates/storyos-worker\",\n",
     );
     let evidence = provenance_evidence(repository_root()).expect("complete evidence");
     let error = verify_provenance_evidence(&dir, &evidence)
@@ -84,7 +84,7 @@ fn windows_prototype_workspace_member_is_rejected() {
 #[test]
 fn journey_missing_postgresql_marker_is_rejected() {
     let dir = temp_workspace(
-        "  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-server\",\n",
+        "  \"crates/storyos-adapter-postgres\",\n  \"crates/storyos-application\",\n  \"crates/storyos-contracts\",\n  \"crates/storyos-core\",\n  \"crates/storyos-server\",\n  \"crates/storyos-worker\",\n",
     );
     let journey = dir.join("apps/web/test/browser-exact-dist/s1-jrn-001.integration.test.ts");
     fs::create_dir_all(journey.parent().expect("journey parent")).expect("journey dir");

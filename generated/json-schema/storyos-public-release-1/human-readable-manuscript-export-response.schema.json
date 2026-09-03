@@ -85,51 +85,179 @@
   },
   "$id": "storyos.query.human-readable-manuscript-export.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "content_sha256": {
-      "type": "string"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "export_profile": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "in_progress",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "export_profile",
+        "source_snapshot"
+      ],
+      "type": "object"
     },
-    "correlation_id": {
-      "format": "uuid",
-      "type": "string"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "export_profile": {
+          "type": "string"
+        },
+        "manuscript_utf8": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "ready",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "export_profile",
+        "content_sha256",
+        "manuscript_utf8",
+        "source_snapshot"
+      ],
+      "type": "object"
     },
-    "export_id": {
-      "format": "uuid",
-      "type": "string"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "export_profile": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "failed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "export_profile",
+        "source_snapshot"
+      ],
+      "type": "object"
     },
-    "export_profile": {
-      "type": "string"
-    },
-    "manuscript_utf8": {
-      "type": "string"
-    },
-    "project_scope": {
-      "$ref": "#/$defs/ProjectScope"
-    },
-    "query_id": {
-      "format": "uuid",
-      "type": "string"
-    },
-    "schema_id": {
-      "const": "storyos.query.human-readable-manuscript-export.response.v1",
-      "type": "string"
-    },
-    "source_snapshot": {
-      "$ref": "#/$defs/SnapshotDescriptor"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "export_profile": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "outcome_unknown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "export_profile",
+        "source_snapshot"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "schema_id",
-    "query_id",
-    "correlation_id",
-    "project_scope",
-    "export_id",
-    "export_profile",
-    "content_sha256",
-    "manuscript_utf8",
-    "source_snapshot"
   ],
-  "title": "StoryOS Human-Readable Manuscript Export Response",
-  "type": "object"
+  "title": "StoryOS Human-Readable Manuscript Export Response"
 }

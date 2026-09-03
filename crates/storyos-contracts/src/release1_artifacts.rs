@@ -146,7 +146,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:390ee121088aff014cf4990201a83b630bc1d11934d120d570e222e7dd43c7ed";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:0f9caab1dc0f5b799804b2d952e1dec226364c331f63439669c0ba6ded46cef5";
+    "sha256:f6fbb69fdc5e5049c375a953dca67b0ebee6ea2cf2876f1821097101a01670f5";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 

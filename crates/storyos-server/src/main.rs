@@ -68,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("STORYOS_SERVER_URL=http://{address}");
     io::stdout().flush()?;
+    let _worker = tokio::spawn(storyos_worker::run());
     axum::serve(listener, storyos_server::router_with_web(config, assets)).await?;
     Ok(())
 }

@@ -1584,7 +1584,7 @@ paths:
   /api/v1/projects/{project_id}/manuscript/exports:
     post:
       operationId: exportHumanReadableManuscript
-      summary: Export one deterministic human-readable manuscript
+      summary: Admit one durable human-readable manuscript export
       parameters:
         - name: project_id
           in: path
@@ -1618,7 +1618,7 @@ paths:
               $ref: '../json-schema/storyos-public-release-1/export-human-readable-manuscript-request.schema.json'
       responses:
         '202':
-          description: Human-readable manuscript export accepted
+          description: Human-readable manuscript export admitted
           content:
             application/json:
               schema:
@@ -1657,7 +1657,7 @@ paths:
   /api/v1/projects/{project_id}/manuscript/exports/{export_id}:
     get:
       operationId: getHumanReadableManuscriptExport
-      summary: Inspect one settled human-readable manuscript export
+      summary: Inspect one human-readable manuscript export
       parameters:
         - name: project_id
           in: path
@@ -1673,7 +1673,7 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Settled human-readable manuscript export
+          description: Human-readable manuscript export status
           content:
             application/json:
               schema:

@@ -37,12 +37,6 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
         .expect("human-readable export response schema serializes");
     schema["$id"] = json!(GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID);
     schema["title"] = json!("StoryOS Human-Readable Manuscript Export Response");
-    schema["additionalProperties"] = json!(false);
-    schema["properties"]["schema_id"]["const"] =
-        json!(GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID);
-    schema["properties"]["query_id"]["format"] = json!("uuid");
-    schema["properties"]["correlation_id"]["format"] = json!("uuid");
-    schema["properties"]["export_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }
 
@@ -66,7 +60,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one settled human-readable manuscript export\n",
+            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one human-readable manuscript export\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: export_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
@@ -126,6 +120,7 @@ pub(super) fn boundary_fixture_bytes() -> Vec<u8> {
 
 fn export_fixture() -> Value {
     json!({
+        "status": "ready",
         "schema_id": GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
         "query_id": "018f0000-0000-7001-8000-000000000071",
         "correlation_id": "018f0000-0000-7001-8000-000000000072",

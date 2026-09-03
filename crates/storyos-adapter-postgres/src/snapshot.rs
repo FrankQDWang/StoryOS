@@ -89,28 +89,72 @@ pub(crate) async fn load_latest_canonical_snapshot(
         )
         .await
         .map_err(read_error)?;
-    row.map(|row| {
-        Ok(CanonicalSnapshot {
-            snapshot_id: row.get(0),
-            project_activity_position: row
-                .get::<_, String>(1)
-                .parse()
-                .map_err(ProjectReadError::unavailable)?,
-            replay_generation: row
-                .get::<_, String>(2)
-                .parse()
-                .map_err(ProjectReadError::unavailable)?,
-            floor_position: row
-                .get::<_, String>(7)
-                .parse()
-                .map_err(ProjectReadError::unavailable)?,
-            redaction_profile: row.get(3),
-            schema_profile: row.get(4),
-            created_at: row.get(5),
-            expires_at: row.get(6),
-        })
+    row.map(canonical_snapshot_from_row).transpose()
+}
+
+pub(crate) async fn load_canonical_snapshot_by_id(
+    client: &impl tokio_postgres::GenericClient,
+    scope: &ProjectScope,
+    snapshot_id: &str,
+) -> Result<Option<CanonicalSnapshot>, ProjectReadError> {
+    let row = client
+        .query_opt(
+            "SELECT snapshot.snapshot_id::text,
+                    snapshot.project_activity_position::text,
+                    snapshot.replay_generation::text,
+                    snapshot.redaction_profile,
+                    snapshot.schema_profile,
+                    to_char(snapshot.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
+                    CASE WHEN snapshot.expires_at IS NULL THEN NULL
+                         ELSE to_char(snapshot.expires_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                    END,
+                    current_floor.floor_position::text
+               FROM storyos.project_snapshots AS snapshot
+               JOIN LATERAL (
+                 SELECT replay_generation FROM storyos.replay_generations
+                  WHERE owner_user_id = snapshot.owner_user_id AND project_id = snapshot.project_id
+                  ORDER BY replay_generation DESC LIMIT 1
+               ) AS current_generation ON true
+               JOIN storyos.replay_floors AS current_floor
+                 ON (current_floor.owner_user_id, current_floor.project_id,
+                     current_floor.replay_generation) =
+                    (snapshot.owner_user_id, snapshot.project_id, current_generation.replay_generation)
+              WHERE snapshot.owner_user_id = $1::text::uuid
+                AND snapshot.project_id = $2::text::uuid
+                AND snapshot.snapshot_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &snapshot_id,
+            ],
+        )
+        .await
+        .map_err(read_error)?;
+    row.map(canonical_snapshot_from_row).transpose()
+}
+
+fn canonical_snapshot_from_row(
+    row: tokio_postgres::Row,
+) -> Result<CanonicalSnapshot, ProjectReadError> {
+    Ok(CanonicalSnapshot {
+        snapshot_id: row.get(0),
+        project_activity_position: row
+            .get::<_, String>(1)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        replay_generation: row
+            .get::<_, String>(2)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        floor_position: row
+            .get::<_, String>(7)
+            .parse()
+            .map_err(ProjectReadError::unavailable)?,
+        redaction_profile: row.get(3),
+        schema_profile: row.get(4),
+        created_at: row.get(5),
+        expires_at: row.get(6),
     })
-    .transpose()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -162,25 +206,9 @@ pub(super) async fn load_latest_canonical_snapshot_query(
     if row.get::<_, bool>(8) {
         return Ok(CanonicalSnapshotQuery::Expired);
     }
-    Ok(CanonicalSnapshotQuery::Available(CanonicalSnapshot {
-        snapshot_id: row.get(0),
-        project_activity_position: row
-            .get::<_, String>(1)
-            .parse()
-            .map_err(ProjectReadError::unavailable)?,
-        replay_generation: row
-            .get::<_, String>(2)
-            .parse()
-            .map_err(ProjectReadError::unavailable)?,
-        floor_position: row
-            .get::<_, String>(7)
-            .parse()
-            .map_err(ProjectReadError::unavailable)?,
-        redaction_profile: row.get(3),
-        schema_profile: row.get(4),
-        created_at: row.get(5),
-        expires_at: row.get(6),
-    }))
+    Ok(CanonicalSnapshotQuery::Available(
+        canonical_snapshot_from_row(row)?,
+    ))
 }
 
 impl SnapshotStore for PostgresProjectReader {

@@ -236,10 +236,11 @@ it("runs the AI-disabled production journey without losing Chapter work", {
   )].find((candidate) => candidate.textContent === "导出可读稿件");
   if (exportButton === undefined) throw new Error("the readable export request button is missing");
   exportButton.click();
-  await expect.poll(() => {
-    const bytes = appRoot(frame).querySelector("[data-readable-export-bytes]")?.textContent ?? "";
-    return bytes.includes(BODY_A) && bytes.includes(BODY_B);
-  }, { timeout: 10_000 }).toBe(true);
+  await expect.poll(() =>
+    appRoot(frame).querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"),
+    { timeout: 10_000 },
+  ).toBe("in_progress");
+  expect(appRoot(frame).querySelector("[data-readable-export-bytes]")).toBeNull();
 
   await reloadProject(frame, projectId);
   const reopenedRoot = appRoot(frame);
