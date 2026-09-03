@@ -46,7 +46,7 @@ function createChallengeRequest(idempotencyKey: string, title: string): CreatePr
       title,
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
-      correlation_id: "018f0000-0000-7001-8000-000000000c10",
+      correlation_id: "018f0000-0000-7001-8000-00000000ae10",
     },
     idempotency_key: idempotencyKey,
   };
@@ -215,13 +215,13 @@ async function insertHistoricalReady(options: {
 test("exportHumanReadableManuscript admits one inspectable in-progress operation", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000c01", "Empty Novel");
-    const request = exportRequest("018f0000-0000-7001-8000-000000000c11");
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000ae01", "Empty Novel");
+    const request = exportRequest("018f0000-0000-7001-8000-00000000ae11");
     const applied = await postExport(
       baseUrl,
       first.fetchImpl,
       first.projectId,
-      "018f0000-0000-7001-8000-000000000c21",
+      "018f0000-0000-7001-8000-00000000ae21",
       request,
     ).catch((error) => {
       const protocol = requireStoryOSProtocolError(error);
@@ -262,7 +262,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000c21",
+      idempotencyKey: "018f0000-0000-7001-8000-00000000ae21",
       antiForgery: applied.challenge.nonce,
       request,
     });
@@ -277,13 +277,13 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
       getHumanReadableManuscriptExport({
         baseUrl,
         projectId: first.projectId,
-        exportId: "018f0000-0000-7001-8000-000000000c99",
+        exportId: "018f0000-0000-7001-8000-00000000ae99",
         fetchImpl: first.fetchImpl,
       }),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
 
-    const foreign = await createEmpty(baseUrl, "session-b", "018f0000-0000-7001-8000-000000000c02", "Other Novel");
+    const foreign = await createEmpty(baseUrl, "session-b", "018f0000-0000-7001-8000-00000000ae02", "Other Novel");
     await assert.rejects(
       getHumanReadableManuscriptExport({
         baseUrl,
@@ -301,8 +301,8 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
         baseUrl,
         foreign.fetchImpl,
         first.projectId,
-        "018f0000-0000-7001-8000-000000000c23",
-        exportRequest("018f0000-0000-7001-8000-000000000c13"),
+        "018f0000-0000-7001-8000-00000000ae23",
+        exportRequest("018f0000-0000-7001-8000-00000000ae13"),
       ),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
@@ -322,8 +322,8 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
       baseUrl,
       first.fetchImpl,
       first.projectId,
-      "018f0000-0000-7001-8000-000000000c28",
-      exportRequest("018f0000-0000-7001-8000-000000000c18"),
+      "018f0000-0000-7001-8000-00000000ae28",
+      exportRequest("018f0000-0000-7001-8000-00000000ae18"),
     );
     if (historical.admitted.effect.kind !== "admitted") {
       throw new Error("the historical export must first admit");
@@ -350,7 +350,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
     assert.equal(ready.content_sha256, EMPTY_MANUSCRIPT_SHA256);
     assert.equal(ready.export_id, historical.admitted.effect.export_id);
 
-    const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-000000000c16"));
+    const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000ae16"));
     const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
       baseUrl,
       projectId: first.projectId,
@@ -360,20 +360,20 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
         route_template: "/api/v1/projects/{project_id}/archival",
         command_schema: "storyos.command.archive-project.request.v1",
         canonical_command_digest: archiveDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000c26",
+        idempotency_key: "018f0000-0000-7001-8000-00000000ae26",
       },
     }));
     const archived = await archiveProject({
       baseUrl,
       projectId: first.projectId,
       fetchImpl: first.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000c26",
+      idempotencyKey: "018f0000-0000-7001-8000-00000000ae26",
       antiForgery: archiveChallenge.nonce,
-      request: archiveRequest("1", "018f0000-0000-7001-8000-000000000c16"),
+      request: archiveRequest("1", "018f0000-0000-7001-8000-00000000ae16"),
     });
     assert.equal(archived.effect.kind, "authoritative_applied");
 
-    const refusedRequest = exportRequest("018f0000-0000-7001-8000-000000000c17");
+    const refusedRequest = exportRequest("018f0000-0000-7001-8000-00000000ae17");
     const refusedDigest = await digestExportHumanReadableManuscript(refusedRequest);
     const refusedChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
       baseUrl,
@@ -384,7 +384,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
         route_template: "/api/v1/projects/{project_id}/manuscript/exports",
         command_schema: "storyos.command.export-human-readable-manuscript.request.v1",
         canonical_command_digest: refusedDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000c27",
+        idempotency_key: "018f0000-0000-7001-8000-00000000ae27",
       },
     }));
     await assert.rejects(
@@ -392,7 +392,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
         baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000c27",
+        idempotencyKey: "018f0000-0000-7001-8000-00000000ae27",
         antiForgery: refusedChallenge.nonce,
         request: refusedRequest,
       }),
@@ -403,7 +403,7 @@ test("exportHumanReadableManuscript admits one inspectable in-progress operation
         baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000c27",
+        idempotencyKey: "018f0000-0000-7001-8000-00000000ae27",
         antiForgery: refusedChallenge.nonce,
         request: refusedRequest,
       }),
