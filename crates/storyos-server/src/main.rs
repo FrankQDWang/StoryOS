@@ -4,6 +4,7 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::UserId;
 use tokio::net::TcpListener;
 use uuid::Uuid;
@@ -68,7 +69,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     println!("STORYOS_SERVER_URL=http://{address}");
     io::stdout().flush()?;
-    let _worker = tokio::spawn(storyos_worker::run());
+    if storyos_worker::in_process_loop_enabled()
+        && let Some(database_url) = config.database_url.clone()
+    {
+        let store = PostgresProjectReader::new(database_url)
+            .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
+        let _worker = tokio::spawn(storyos_worker::run(store));
+    }
     axum::serve(listener, storyos_server::router_with_web(config, assets)).await?;
     Ok(())
 }

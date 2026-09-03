@@ -46,6 +46,7 @@ mod manuscript_tree;
 mod project_activity;
 mod project_export;
 mod readable_export;
+mod readable_export_work;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
@@ -140,6 +141,10 @@ pub use readable_export::{
     HumanReadableManuscriptExportReader, get_human_readable_manuscript_export,
     readable_volumes_from_canonical_facts, render_readable_manuscript_from_facts,
     request_human_readable_manuscript_export,
+};
+pub use readable_export_work::{
+    ClaimedReadableExport, CompleteReadableExport, CompleteReadableExportError,
+    ReadableExportWorkStore, claim_next_readable_export, complete_readable_export,
 };
 pub use set_current_chapter::{
     SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,

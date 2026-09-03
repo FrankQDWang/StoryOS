@@ -31,10 +31,11 @@ export async function startStoryOSServer(options: {
   readonly serverBinary: string;
   readonly webRoot?: string;
   readonly sessions?: Readonly<Record<string, string>>;
+  readonly extraEnv?: Readonly<Record<string, string>>;
 }): Promise<StoryOSServer> {
   const { bind = "127.0.0.1:0", repositoryRoot, serverBinary, sessions } = options;
   const webRoot = options.webRoot ?? join(dirname(serverBinary), "web");
-  const env = { ...process.env };
+  const env: NodeJS.ProcessEnv = { ...process.env, STORYOS_WORKER: "0", ...options.extraEnv };
   if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
     env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
   }
@@ -83,6 +84,24 @@ export async function stopStoryOSServer(server: ChildProcess): Promise<void> {
   const exited = once(server, "exit");
   server.kill("SIGTERM");
   await exited;
+}
+
+export async function runStoryOSWorker(options: {
+  readonly repositoryRoot: string;
+  readonly workerBinary: string;
+  readonly args: readonly string[];
+  readonly extraEnv?: Readonly<Record<string, string>>;
+}): Promise<void> {
+  const env = { ...process.env, ...options.extraEnv };
+  if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
+    env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
+  }
+  await execFileAsync(options.workerBinary, [...options.args], {
+    cwd: options.repositoryRoot,
+    env,
+    timeout: 15_000,
+    killSignal: "SIGKILL",
+  });
 }
 
 export async function queryStoryOSPostgres(query: string): Promise<string> {

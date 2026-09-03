@@ -12,6 +12,8 @@ type ReadyExportPage = Extract<GetHumanReadableManuscriptExportResponse, { statu
 type ExportOutcome =
   | { kind: "in_progress"; exportId: string; exportProfile: string }
   | { kind: "ready"; page: ReadyExportPage; downloadSha256: string }
+  | { kind: "failed" }
+  | { kind: "outcome_unknown" }
   | { kind: "unavailable" };
 
 export function ManuscriptReadableExportPanel({
@@ -91,6 +93,14 @@ export function ManuscriptReadableExportPanel({
         });
         continue;
       }
+      if (page.status === "failed") {
+        setOutcome({ kind: "failed" });
+        return;
+      }
+      if (page.status === "outcome_unknown") {
+        setOutcome({ kind: "outcome_unknown" });
+        return;
+      }
       setOutcome({ kind: "unavailable" });
       return;
     }
@@ -137,6 +147,8 @@ export function ManuscriptReadableExportPanel({
         导出可读稿件
       </button>
       {outcome?.kind === "unavailable" ? <p>无法导出可读稿件。</p> : null}
+      {outcome?.kind === "failed" ? <p>可读稿件导出失败。</p> : null}
+      {outcome?.kind === "outcome_unknown" ? <p>可读稿件导出结果未知。</p> : null}
       {outcome?.kind === "in_progress" ? (
         <p data-export-id={outcome.exportId} data-export-profile={outcome.exportProfile}>
           可读稿件正在导出。

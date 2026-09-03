@@ -2,6 +2,7 @@ use storyos_application::{
     CanonicalTreeFacts, ChapterFact, ChapterId, ManuscriptTreeReader, ProjectReadError,
     ProjectScope, VolumeFact, VolumeId,
 };
+use tokio_postgres::GenericClient;
 
 use super::{PostgresProjectReader, read_error, set_scope};
 
@@ -13,7 +14,7 @@ impl ManuscriptTreeReader for PostgresProjectReader {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
-        let Some(tree_revision) = transaction
+        let Some(_) = transaction
             .query_opt(
                 "SELECT tree_revision::text
                    FROM storyos.projects
@@ -33,78 +34,95 @@ impl ManuscriptTreeReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(None);
         };
-        let volume_rows = transaction
-            .query(
-                "SELECT manuscript_object_id::text, title, tree_order::text
-                   FROM storyos.manuscript_objects AS volume
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND object_kind = 'volume'
-                    AND NOT EXISTS (
-                      SELECT 1 FROM storyos.volume_removal_decisions AS removal
-                       WHERE removal.owner_user_id = volume.owner_user_id
-                         AND removal.project_id = volume.project_id
-                         AND removal.volume_id = volume.manuscript_object_id
-                    )
-                  ORDER BY tree_order",
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .map_err(read_error)?;
-        let chapter_rows = transaction
-            .query(
-                "SELECT parent_volume_id::text, manuscript_object_id::text, title, tree_order::text
-                   FROM storyos.manuscript_objects AS chapter
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND object_kind = 'chapter'
-                    AND parent_volume_id IS NOT NULL
-                    AND NOT EXISTS (
-                      SELECT 1 FROM storyos.chapter_removal_decisions AS removal
-                       WHERE removal.owner_user_id = chapter.owner_user_id
-                         AND removal.project_id = chapter.project_id
-                         AND removal.chapter_id = chapter.manuscript_object_id
-                    )
-                  ORDER BY parent_volume_id, tree_order",
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
-            .await
-            .map_err(read_error)?;
+        let facts = load_live_tree_facts(&transaction, scope, snapshot).await?;
         transaction.commit().await.map_err(read_error)?;
-        let mut chapters_by_volume = std::collections::BTreeMap::<String, Vec<ChapterFact>>::new();
-        for chapter in chapter_rows {
-            let volume_id = chapter.get::<_, String>(0);
-            let chapters = chapters_by_volume.entry(volume_id).or_default();
-            let next_order = chapters.len() as u64 + 1;
-            chapters.push(ChapterFact {
-                project_scope: scope.clone(),
-                chapter_id: ChapterId::new(chapter.get::<_, String>(1)),
-                title: chapter.get(2),
-                order: next_order,
-            });
-        }
-        let mut volumes = Vec::with_capacity(volume_rows.len());
-        for volume in volume_rows {
-            let volume_id = volume.get::<_, String>(0);
-            let next_order = volumes.len() as u64 + 1;
-            volumes.push(VolumeFact {
-                project_scope: scope.clone(),
-                chapters: chapters_by_volume.remove(&volume_id).unwrap_or_default(),
-                volume_id: VolumeId::new(volume_id),
-                title: volume.get(1),
-                order: next_order,
-            });
-        }
-        Ok(Some(CanonicalTreeFacts {
-            project_scope: scope.clone(),
-            snapshot,
-            tree_revision: tree_revision
-                .get::<_, String>(0)
-                .parse()
-                .map_err(ProjectReadError::unavailable)?,
-            volumes,
-        }))
+        Ok(Some(facts))
     }
+}
+
+pub(crate) async fn load_live_tree_facts(
+    client: &impl GenericClient,
+    scope: &ProjectScope,
+    snapshot: storyos_application::CanonicalSnapshot,
+) -> Result<CanonicalTreeFacts, ProjectReadError> {
+    let tree_revision = client
+        .query_one(
+            "SELECT tree_revision::text FROM storyos.projects
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?
+        .get::<_, String>(0)
+        .parse()
+        .map_err(ProjectReadError::unavailable)?;
+    let volume_rows = client
+        .query(
+            "SELECT manuscript_object_id::text, title, tree_order::text
+               FROM storyos.manuscript_objects AS volume
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND object_kind = 'volume'
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                   WHERE removal.owner_user_id = volume.owner_user_id
+                     AND removal.project_id = volume.project_id
+                     AND removal.volume_id = volume.manuscript_object_id
+                )
+              ORDER BY tree_order",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?;
+    let chapter_rows = client
+        .query(
+            "SELECT parent_volume_id::text, manuscript_object_id::text, title, tree_order::text
+               FROM storyos.manuscript_objects AS chapter
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND object_kind = 'chapter'
+                AND parent_volume_id IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                   WHERE removal.owner_user_id = chapter.owner_user_id
+                     AND removal.project_id = chapter.project_id
+                     AND removal.chapter_id = chapter.manuscript_object_id
+                )
+              ORDER BY parent_volume_id, tree_order",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .map_err(read_error)?;
+    let mut chapters_by_volume = std::collections::BTreeMap::<String, Vec<ChapterFact>>::new();
+    for chapter in chapter_rows {
+        let volume_id = chapter.get::<_, String>(0);
+        let chapters = chapters_by_volume.entry(volume_id).or_default();
+        let next_order = chapters.len() as u64 + 1;
+        chapters.push(ChapterFact {
+            project_scope: scope.clone(),
+            chapter_id: ChapterId::new(chapter.get::<_, String>(1)),
+            title: chapter.get(2),
+            order: next_order,
+        });
+    }
+    let mut volumes = Vec::with_capacity(volume_rows.len());
+    for volume in volume_rows {
+        let volume_id = volume.get::<_, String>(0);
+        let next_order = volumes.len() as u64 + 1;
+        volumes.push(VolumeFact {
+            project_scope: scope.clone(),
+            chapters: chapters_by_volume.remove(&volume_id).unwrap_or_default(),
+            volume_id: VolumeId::new(volume_id),
+            title: volume.get(1),
+            order: next_order,
+        });
+    }
+    Ok(CanonicalTreeFacts {
+        project_scope: scope.clone(),
+        snapshot,
+        tree_revision,
+        volumes,
+    })
 }
 
 #[cfg(test)]

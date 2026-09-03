@@ -189,6 +189,8 @@ pub enum GetHumanReadableManuscriptExport {
     Expired,
     InProgress(Box<HumanReadableManuscriptExportProgress>),
     Ready(Box<HumanReadableManuscriptExportPage>),
+    Failed(Box<HumanReadableManuscriptExportProgress>),
+    OutcomeUnknown(Box<HumanReadableManuscriptExportProgress>),
 }
 
 /// Reads one human-readable export under already authenticated exact Scope.

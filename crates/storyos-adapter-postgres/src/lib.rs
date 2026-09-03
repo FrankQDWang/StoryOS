@@ -74,6 +74,7 @@ mod manuscript_tree;
 mod project_archive_build;
 mod project_export;
 mod readable_export;
+mod readable_export_work;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
@@ -81,6 +82,8 @@ mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
 mod update_volume;
+
+use std::time::Duration;
 
 use storyos_application::{
     Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,
@@ -95,6 +98,7 @@ use tokio_postgres::NoTls;
 pub struct PostgresProjectReader {
     database_url: String,
     challenge_rate_clock_unix_seconds: Option<i64>,
+    readable_export_lease_ttl: Duration,
 }
 
 impl ProjectCommandChallengeStore for PostgresProjectReader {
@@ -544,7 +548,13 @@ impl PostgresProjectReader {
         Self {
             database_url: database_url.into(),
             challenge_rate_clock_unix_seconds: None,
+            readable_export_lease_ttl: Duration::from_secs(30),
         }
+    }
+
+    pub fn with_readable_export_lease_ttl(mut self, ttl: Duration) -> Self {
+        self.readable_export_lease_ttl = ttl;
+        self
     }
 
     pub(crate) async fn connect(&self) -> Result<tokio_postgres::Client, ProjectReadError> {
