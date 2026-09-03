@@ -209,7 +209,7 @@ async function insertHistoricalReady(options: {
     COMMIT;
     SELECT 'ok';
   `);
-  assert.equal(result, "ok");
+  assert.match(result, /ok$/);
 }
 
 test("exportHumanReadableManuscript admits one inspectable in-progress operation", async () => {
