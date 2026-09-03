@@ -48,7 +48,7 @@ function createChallengeRequest(idempotencyKey: string): CreateProjectChallengeR
       title: "Readable Export Cut",
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
-      correlation_id: "018f0000-0000-7001-8000-00000000d10",
+      correlation_id: "018f0000-0000-7001-8000-000000000d10",
     },
     idempotency_key: idempotencyKey,
   };
@@ -60,7 +60,7 @@ function exportRequest(): ExportHumanReadableManuscriptRequest {
     export_human_readable_manuscript_input: {
       client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
       security_policy_revision: "storyos.web-security-policy.release-1.v1",
-      correlation_id: "018f0000-0000-7001-8000-00000000d11",
+      correlation_id: "018f0000-0000-7001-8000-000000000d11",
     },
   };
 }
@@ -87,7 +87,7 @@ test("an admitted human-readable export stays in progress across a Server proces
   const first = await startRealServer();
   try {
     const fetchImpl = browserFetch(first.baseUrl, SESSION_HANDLE);
-    const createRequest = createChallengeRequest("018f0000-0000-7001-8000-00000000d01");
+    const createRequest = createChallengeRequest("018f0000-0000-7001-8000-000000000d01");
     const created = await createProjectChallenge({
       baseUrl: first.baseUrl,
       request: createRequest,
@@ -96,7 +96,7 @@ test("an admitted human-readable export stays in progress across a Server proces
     await createProject({
       baseUrl: first.baseUrl,
       fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000d01",
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d01",
       antiForgery: created.nonce,
       request: {
         command_schema: createRequest.command_schema,
@@ -115,14 +115,14 @@ test("an admitted human-readable export stays in progress across a Server proces
         route_template: "/api/v1/projects/{project_id}/manuscript/exports",
         command_schema: "storyos.command.export-human-readable-manuscript.request.v1",
         canonical_command_digest: digest,
-        idempotency_key: "018f0000-0000-7001-8000-00000000d21",
+        idempotency_key: "018f0000-0000-7001-8000-000000000d21",
       },
     }));
     const admitted = await exportHumanReadableManuscript({
       baseUrl: first.baseUrl,
       projectId: created.prospective_project_id,
       fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000d21",
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d21",
       antiForgery: challenge.nonce,
       request,
     });
