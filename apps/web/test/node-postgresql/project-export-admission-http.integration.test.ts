@@ -188,6 +188,14 @@ test("exportProjectArchive admits one inspectable operation with an immutable ro
     assert.equal(zipResponse.headers.get("content-type"), archiveMedia);
     const zipBytes = new Uint8Array(await zipResponse.arrayBuffer());
     assert.deepEqual(Array.from(zipBytes.slice(0, 4)), [0x50, 0x4b, 0x03, 0x04]);
+    const zipFiles = zipStoreFiles(zipBytes);
+    const reconfirmation = zipFiles.get("canonical/author_command_admission_reconfirmations.json");
+    if (reconfirmation === undefined) {
+      throw new Error("the archive must pack Reconfirmation evidence");
+    }
+    assert.equal(new TextDecoder().decode(reconfirmation), "[]");
+    assert.equal(zipFiles.has("canonical/project_command_challenges.json"), false);
+    assert.equal(zipFiles.has("canonical/create_project_challenges.json"), false);
     const zipRepeatResponse = await first.fetchImpl(exportUrl, { headers: { Accept: archiveMedia } });
     assert.equal(zipRepeatResponse.status, 200);
     assert.deepEqual(
@@ -322,3 +330,24 @@ test("exportProjectArchive admits one inspectable operation with an immutable ro
     await stopRealServer(server);
   }
 });
+
+/** StoryOS Project Export ZIP files use STORE only. */
+function zipStoreFiles(bytes: Uint8Array): Map<string, Uint8Array> {
+  const files = new Map<string, Uint8Array>();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  while (offset + 30 <= bytes.length) {
+    if (view.getUint32(offset, true) !== 0x04034b50) {
+      break;
+    }
+    const size = view.getUint32(offset + 18, true);
+    const nameLen = view.getUint16(offset + 26, true);
+    const extraLen = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLen));
+    const dataStart = nameStart + nameLen + extraLen;
+    files.set(name, bytes.subarray(dataStart, dataStart + size));
+    offset = dataStart + size;
+  }
+  return files;
+}

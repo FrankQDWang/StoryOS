@@ -163,6 +163,62 @@ fn foreign_missing_lifecycle_and_provenance_are_typed_failures() {
     );
 }
 
+#[test]
+fn catalog_include_names_ignore_other_export_policies() {
+    let catalog = serde_json::json!({
+        "families": [
+            {
+                "table_families": ["projects", "anti_forgery_challenges"],
+                "portability": {"project_export": "include"}
+            },
+            {
+                "table_families": ["project_command_challenges"],
+                "portability": {"project_export": "exclude"}
+            },
+            {
+                "table_families": ["project_snapshots"],
+                "portability": {
+                    "project_export": "include_if_required_for_historical_evidence"
+                }
+            }
+        ]
+    });
+    assert_eq!(
+        catalog_include_table_names(&catalog),
+        vec!["anti_forgery_challenges".to_owned(), "projects".to_owned(),]
+    );
+}
+
+#[test]
+fn required_export_tables_are_live_catalog_include_names() {
+    let required = required_export_tables(
+        &[
+            "projects",
+            "author_command_admission_reconfirmations",
+            "anti_forgery_challenges",
+            "agent_runs",
+        ],
+        &[
+            "projects",
+            "author_command_admission_reconfirmations",
+            "project_command_challenges",
+        ],
+    );
+    assert_eq!(
+        required,
+        vec![
+            "author_command_admission_reconfirmations".to_owned(),
+            "projects".to_owned(),
+        ]
+    );
+    let present = ["projects"];
+    let required_refs: Vec<&str> = required.iter().map(String::as_str).collect();
+    assert_eq!(
+        require_delivered_families(&present, &required_refs),
+        Err(ProjectArchiveBuildRefusal::MissingFamily)
+    );
+}
+
 fn protocol_source() -> ArchiveEntrySource {
     ArchiveEntrySource {
         path: "canonical/project.json".to_owned(),

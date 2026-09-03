@@ -53,8 +53,9 @@ pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
     ArchiveEntryDescriptor, ArchiveEntrySource, BuiltProjectArchive,
     PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectArchiveBuildRefusal, ProjectArchiveRootFacts,
-    build_project_archive, canonical_json, classify_export_record, hex_sha256,
-    package_verified_project_archive_zip, require_delivered_families, verify_entry_digest,
+    build_project_archive, canonical_json, catalog_include_table_names, classify_export_record,
+    hex_sha256, package_verified_project_archive_zip, require_delivered_families,
+    required_export_tables, verify_entry_digest,
 };
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,

@@ -36,7 +36,7 @@ impl AuthorEditStore for PostgresProjectReader {
 }
 
 impl PostgresProjectReader {
-    async fn apply_author_edit_with_fault(
+    pub(crate) async fn apply_author_edit_with_fault(
         &self,
         command: &ApplyAuthorEditCommand,
         fault: AuthorEditFault,
