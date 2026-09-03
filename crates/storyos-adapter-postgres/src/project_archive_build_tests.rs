@@ -135,12 +135,13 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     .await
     .unwrap();
     let editor_session_id = "018f0000-0000-7001-8000-000000000982";
+    let snapshot_id = "018f0000-0000-7001-8000-000000000983";
     create_editor_session(
         &store,
         &OpenEditorSession {
             project_scope: scope.clone(),
             editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: "018f0000-0000-7001-8000-000000000983".to_owned(),
+            snapshot_id: snapshot_id.to_owned(),
             client_binding: EditorClientBinding {
                 binding_ref: "binding:author-edit".to_owned(),
                 session_generation: 1,
@@ -294,4 +295,101 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     .await
     .unwrap();
     assert_eq!(reloaded, expected);
+
+    let cleanup = admin.transaction().await.unwrap();
+    cleanup
+        .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+        .await
+        .unwrap();
+    for table in [
+        "project_export_entries",
+        "project_export_manifests",
+        "project_activity_event_payloads",
+        "author_command_admission_outcome_unknown_observations",
+        "author_command_admission_reconfirmations",
+        "author_command_admission_settlements",
+        "domain_receipts",
+        "author_command_admissions",
+    ] {
+        cleanup
+            .execute(
+                &format!(
+                    "DELETE FROM storyos.{table}
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid"
+                ),
+                &[&USER, &PROJECT],
+            )
+            .await
+            .unwrap();
+    }
+    cleanup
+        .execute(
+            "DELETE FROM storyos.editor_session_base_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND editor_session_id = $3::text::uuid",
+            &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_writer_generations
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.editor_sessions
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND editor_session_id = $3::text::uuid",
+            &[&USER, &PROJECT, &editor_session_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_snapshots
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND snapshot_id = $3::text::uuid",
+            &[&USER, &PROJECT, &snapshot_id],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_command_challenges
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.command_idempotency
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_command_challenge_rate_windows
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND client_session_generation = 1",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.project_command_challenge_rate_guards
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND client_session_generation = 1",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup.commit().await.unwrap();
 }
