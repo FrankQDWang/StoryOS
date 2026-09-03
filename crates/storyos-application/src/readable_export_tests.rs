@@ -19,14 +19,9 @@ impl ExportHumanReadableManuscriptStore for Store {
         Ok(ExportHumanReadableManuscriptSettlement {
             ids: command.ids.clone(),
             export_id: command.export_id.clone(),
-            effect: ExportHumanReadableManuscriptSettlementEffect::Applied {
-                content_sha256: "a".repeat(64),
-                manuscript_utf8: "\n".to_owned(),
-                source_snapshot: snapshot(),
+            effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+                source_snapshot: Box::new(snapshot()),
             },
-            receipt_created_at: "2026-08-31T00:00:00.000Z".to_owned(),
-            project_activity_position: 3,
-            project_activity_event_id: "event".to_owned(),
         })
     }
 }

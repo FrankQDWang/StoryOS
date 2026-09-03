@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::release1::{ControlledProject, QueryOperation};
-use crate::release1_author_edit::DomainReceipt;
+use crate::release1_snapshot::SnapshotDescriptor;
 
 pub const EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID: &str =
     "storyos.command.export-human-readable-manuscript.request.v1";
@@ -19,7 +19,7 @@ pub(super) const EXPORT_HUMAN_READABLE_MANUSCRIPT: QueryOperation = QueryOperati
     request_schema: EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID,
     response_schema: EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID,
     responses: &[
-        (202, "Human-readable manuscript export accepted"),
+        (202, "Human-readable manuscript export admitted"),
         (400, "Invalid request"),
         (401, "Authentication required"),
         (403, "Request origin refused"),
@@ -79,11 +79,11 @@ pub enum HumanReadableManuscriptExportRef {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExportHumanReadableManuscriptEffect {
-    AuthoritativeApplied {
+    Admitted {
         export_id: String,
-        content_sha256: String,
         export_profile: String,
-        project_activity_position: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: Box<SnapshotDescriptor>,
     },
     Refused {
         reason: ExportHumanReadableManuscriptRefusalReason,
@@ -100,7 +100,6 @@ pub struct ExportHumanReadableManuscriptResponse {
     pub author_command_admission_id: String,
     pub acknowledgement: ExportAcknowledgement,
     pub operation_ref: Option<HumanReadableManuscriptExportRef>,
-    pub receipt: DomainReceipt,
     pub project: ControlledProject,
     pub effect: ExportHumanReadableManuscriptEffect,
 }

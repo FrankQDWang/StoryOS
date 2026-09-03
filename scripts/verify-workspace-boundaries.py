@@ -13,6 +13,7 @@ expected = [
     root / "crates/storyos-contracts/Cargo.toml",
     root / "crates/storyos-core/Cargo.toml",
     root / "crates/storyos-server/Cargo.toml",
+    root / "crates/storyos-worker/Cargo.toml",
 ]
 forbidden = [
     path for path in manifests if "/prototypes/" in str(path) or "/.reference/" in str(path)

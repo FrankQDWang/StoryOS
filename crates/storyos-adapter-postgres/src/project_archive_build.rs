@@ -60,6 +60,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
     ("editor_sessions", "canonical/editor_sessions.json"),
     (
+        "human_readable_manuscript_export_operations",
+        "canonical/human_readable_manuscript_export_operations.json",
+    ),
+    (
         "human_readable_manuscript_exports",
         "canonical/human_readable_manuscript_exports.json",
     ),

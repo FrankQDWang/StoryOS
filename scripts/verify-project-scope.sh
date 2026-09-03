@@ -167,7 +167,8 @@ if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U p
   -f /tmp/storyos-release1-bootstrap/0025_export_project_archive_entries.sql \
   -f /tmp/storyos-release1-bootstrap/0026_recovery_visibility_proof.sql \
   -f /tmp/storyos-release1-bootstrap/0027_author_command_admission_reconfirmations.sql \
-  -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql >/dev/null 2>&1; then
+  -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql \
+  -f /tmp/storyos-release1-bootstrap/0029_human_readable_manuscript_export_operations.sql >/dev/null 2>&1; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
@@ -208,7 +209,8 @@ docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U post
   -f /tmp/storyos-release1-bootstrap/0025_export_project_archive_entries.sql \
   -f /tmp/storyos-release1-bootstrap/0026_recovery_visibility_proof.sql \
   -f /tmp/storyos-release1-bootstrap/0027_author_command_admission_reconfirmations.sql \
-  -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql >/dev/null
+  -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql \
+  -f /tmp/storyos-release1-bootstrap/0029_human_readable_manuscript_export_operations.sql >/dev/null
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
@@ -298,6 +300,12 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP exportProjectArchive tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/project-export-admission-http.integration.test.ts
+echo "Running HTTP exportHumanReadableManuscript admission tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/readable-export-admission-http.integration.test.ts
+echo "Running HTTP human-readable export process-cut tests"
+pnpm --dir apps/web exec vitest run --project node-process-cut \
+  test/node-process-cut/readable-export-admission-process-cut.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
   "DO \$\$ DECLARE tbl text; BEGIN

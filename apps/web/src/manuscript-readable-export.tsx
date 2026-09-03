@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 import {
@@ -7,8 +7,11 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requestOwnedHumanReadableExport } from "./export-human-readable.ts";
 
+type ReadyExportPage = Extract<GetHumanReadableManuscriptExportResponse, { status: "ready" }>;
+
 type ExportOutcome =
-  | { kind: "ready"; page: GetHumanReadableManuscriptExportResponse; downloadSha256: string }
+  | { kind: "in_progress"; exportId: string; exportProfile: string }
+  | { kind: "ready"; page: ReadyExportPage; downloadSha256: string }
   | { kind: "unavailable" };
 
 export function ManuscriptReadableExportPanel({
@@ -24,8 +27,17 @@ export function ManuscriptReadableExportPanel({
 }) {
   const [busy, setBusy] = useState(false);
   const [outcome, setOutcome] = useState<ExportOutcome | undefined>(undefined);
+  const pollGeneration = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      pollGeneration.current += 1;
+    };
+  }, []);
 
   async function requestExport(): Promise<void> {
+    const generation = pollGeneration.current + 1;
+    pollGeneration.current = generation;
     setBusy(true);
     try {
       const accepted = await requestOwnedHumanReadableExport({
@@ -42,17 +54,45 @@ export function ManuscriptReadableExportPanel({
         setOutcome({ kind: "unavailable" });
         return;
       }
+      setBusy(false);
+      await pollExport(exportId, generation);
+    } catch {
+      setOutcome({ kind: "unavailable" });
+    } finally {
+      if (pollGeneration.current === generation) {
+        setBusy(false);
+      }
+    }
+  }
+
+  async function pollExport(exportId: string, generation: number): Promise<void> {
+    while (pollGeneration.current === generation) {
       const page = await getHumanReadableManuscriptExport({
         baseUrl,
         projectId,
         exportId,
         fetchImpl,
       });
-      setOutcome({ kind: "ready", page, downloadSha256: "" });
-    } catch {
+      if (pollGeneration.current !== generation) {
+        return;
+      }
+      if (page.status === "ready") {
+        setOutcome({ kind: "ready", page, downloadSha256: "" });
+        return;
+      }
+      if (page.status === "in_progress") {
+        setOutcome({
+          kind: "in_progress",
+          exportId: page.export_id,
+          exportProfile: page.export_profile,
+        });
+        await new Promise<void>((resolve) => {
+          window.setTimeout(resolve, 250);
+        });
+        continue;
+      }
       setOutcome({ kind: "unavailable" });
-    } finally {
-      setBusy(false);
+      return;
     }
   }
 
@@ -66,6 +106,10 @@ export function ManuscriptReadableExportPanel({
         exportId: outcome.page.export_id,
         fetchImpl,
       });
+      if (page.status !== "ready") {
+        setOutcome({ kind: "unavailable" });
+        return;
+      }
       flushSync(() => {
         setOutcome({ kind: "ready", page, downloadSha256: page.content_sha256 });
       });
@@ -93,6 +137,11 @@ export function ManuscriptReadableExportPanel({
         导出可读稿件
       </button>
       {outcome?.kind === "unavailable" ? <p>无法导出可读稿件。</p> : null}
+      {outcome?.kind === "in_progress" ? (
+        <p data-export-id={outcome.exportId} data-export-profile={outcome.exportProfile}>
+          可读稿件正在导出。
+        </p>
+      ) : null}
       {outcome?.kind === "ready" ? (
         <>
           <pre data-readable-export-bytes="">{outcome.page.manuscript_utf8}</pre>

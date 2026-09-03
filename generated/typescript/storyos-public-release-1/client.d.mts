@@ -273,11 +273,11 @@ export type ExportAcknowledgement = "accepted";
 
 export type HumanReadableManuscriptExportRef = { "kind": "human_readable_manuscript_export", export_id: string, };
 
-export type ExportHumanReadableManuscriptEffect = { "kind": "authoritative_applied", export_id: string, content_sha256: string, export_profile: string, project_activity_position: string, } | { "kind": "refused", reason: ExportHumanReadableManuscriptRefusalReason, };
+export type ExportHumanReadableManuscriptEffect = { "kind": "admitted", export_id: string, export_profile: string, source_snapshot: SnapshotDescriptor, } | { "kind": "refused", reason: ExportHumanReadableManuscriptRefusalReason, };
 
-export type ExportHumanReadableManuscriptResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: HumanReadableManuscriptExportRef | null, receipt: DomainReceipt, project: ControlledProject, effect: ExportHumanReadableManuscriptEffect, };
+export type ExportHumanReadableManuscriptResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: HumanReadableManuscriptExportRef | null, project: ControlledProject, effect: ExportHumanReadableManuscriptEffect, };
 
-export type GetHumanReadableManuscriptExportResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, content_sha256: string, manuscript_utf8: string, source_snapshot: SnapshotDescriptor, };
+export type GetHumanReadableManuscriptExportResponse = { "status": "in_progress", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, source_snapshot: SnapshotDescriptor, } | { "status": "ready", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, content_sha256: string, manuscript_utf8: string, source_snapshot: SnapshotDescriptor, } | { "status": "failed", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, source_snapshot: SnapshotDescriptor, } | { "status": "outcome_unknown", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, export_profile: string, source_snapshot: SnapshotDescriptor, };
 
 export type ExportProjectArchiveInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, archive_profile: string, archive_path_profile: string, };
 

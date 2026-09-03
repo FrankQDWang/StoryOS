@@ -32,12 +32,15 @@ with tempfile.TemporaryDirectory(prefix="release-package-", dir=target) as tempo
                     "web-manifest", str(package / "web"), *source)
     build_target = target / "web-release"
     subprocess.run(["cargo", "build", "--locked", "--release", "--target-dir", str(build_target),
-                    "-p", "storyos-server"], cwd=root,
+                    "-p", "storyos-server", "-p", "storyos-worker"], cwd=root,
                    env={**os.environ, "STORYOS_WEB_MANIFEST_SHA256": digest}, check=True)
     executable = "storyos-server.exe" if os.name == "nt" else "storyos-server"
+    worker = "storyos-worker.exe" if os.name == "nt" else "storyos-worker"
     shutil.copy2(build_target / "release" / executable, package / executable)
+    shutil.copy2(build_target / "release" / worker, package / worker)
     subprocess.run([str(package / executable), "--check-web-root", str(package / "web")],
                    cwd=root, check=True)
+    subprocess.run([str(package / worker), "--check"], cwd=root, check=True)
     if source_identity() != source:
         raise SystemExit("The Git source changed during release packaging")
     destination = target / "release-package"

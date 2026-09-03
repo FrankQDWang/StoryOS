@@ -5,6 +5,7 @@ members = [
   "crates/storyos-contracts",
   "crates/storyos-core",
   "crates/storyos-server",
+  "crates/storyos-worker",
 ]
 resolver = "3"
 [workspace.package]

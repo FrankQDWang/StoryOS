@@ -1,10 +1,11 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, ExportHumanReadableManuscriptCommand,
-    ExportHumanReadableManuscriptError, ExportHumanReadableManuscriptSettlementEffect,
-    GetHumanReadableManuscriptExport, ProjectCommandChallengeBinding,
-    get_human_readable_manuscript_export, request_human_readable_manuscript_export,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding,
+    ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,
+    ExportHumanReadableManuscriptSettlementEffect, GetHumanReadableManuscriptExport,
+    ProjectCommandChallengeBinding, get_human_readable_manuscript_export,
+    request_human_readable_manuscript_export,
 };
 use storyos_core::READABLE_EXPORT_PROFILE;
 
@@ -120,21 +121,12 @@ pub(super) async fn export_human_readable_manuscript(
         .await
         .map_err(service_unavailable)?
         .ok_or_else(resource_unavailable)?;
-    export_response(
-        &scope,
-        &input.correlation_id,
-        &digest_hex,
-        idempotency_key,
-        project,
-        settlement,
-    )
+    export_response(&scope, &input.correlation_id, project, settlement)
 }
 
 fn export_response(
     scope: &ApplicationScope,
     correlation_id: &str,
-    digest_hex: &str,
-    idempotency_key: &str,
     project: storyos_application::Project,
     settlement: storyos_application::ExportHumanReadableManuscriptSettlement,
 ) -> Result<
@@ -144,14 +136,12 @@ fn export_response(
     ),
     ApiError,
 > {
-    let (receipt_result, effect, operation_ref) = match settlement.effect {
-        ExportHumanReadableManuscriptSettlementEffect::Applied { content_sha256, .. } => (
-            contracts::DomainReceiptResult::AuthoritativeApplied,
-            contracts::ExportHumanReadableManuscriptEffect::AuthoritativeApplied {
+    let (effect, operation_ref) = match settlement.effect {
+        ExportHumanReadableManuscriptSettlementEffect::Admitted { source_snapshot } => (
+            contracts::ExportHumanReadableManuscriptEffect::Admitted {
                 export_id: settlement.export_id.clone(),
-                content_sha256,
                 export_profile: READABLE_EXPORT_PROFILE.to_owned(),
-                project_activity_position: settlement.project_activity_position.to_string(),
+                source_snapshot: Box::new(snapshot_descriptor(scope, &source_snapshot)),
             },
             Some(
                 contracts::HumanReadableManuscriptExportRef::HumanReadableManuscriptExport {
@@ -159,59 +149,27 @@ fn export_response(
                 },
             ),
         ),
-        ExportHumanReadableManuscriptSettlementEffect::Refused { reason } => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::ExportHumanReadableManuscriptEffect::Refused {
-                reason: match reason {
-                    storyos_core::ExportHumanReadableManuscriptRefusal::ArchivedProject => {
-                        contracts::ExportHumanReadableManuscriptRefusalReason::ArchivedProject
-                    }
-                    storyos_core::ExportHumanReadableManuscriptRefusal::MissingProject => {
-                        return Err(export_error(
-                            ExportHumanReadableManuscriptError::MissingProject,
-                        ));
-                    }
-                },
-            },
-            None,
-        ),
+        ExportHumanReadableManuscriptSettlementEffect::Refused { reason } => {
+            return Err(export_error(match reason {
+                storyos_core::ExportHumanReadableManuscriptRefusal::ArchivedProject => {
+                    ExportHumanReadableManuscriptError::ArchivedProject
+                }
+                storyos_core::ExportHumanReadableManuscriptRefusal::MissingProject => {
+                    ExportHumanReadableManuscriptError::MissingProject
+                }
+            }));
+        }
     };
-    let contract_project_scope = contract_scope(scope);
     Ok((
         StatusCode::ACCEPTED,
         Json(contracts::ExportHumanReadableManuscriptResponse {
             schema_id: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID.to_owned(),
             correlation_id: correlation_id.to_owned(),
-            project_scope: contract_project_scope.clone(),
+            project_scope: contract_scope(scope),
             command_id: settlement.ids.command_id,
-            author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
+            author_command_admission_id: settlement.ids.author_command_admission_id,
             acknowledgement: contracts::ExportAcknowledgement::Accepted,
             operation_ref,
-            receipt: contracts::DomainReceipt {
-                receipt_id: settlement.ids.receipt_id.clone(),
-                project_scope: contract_project_scope,
-                command_kind: contracts::DomainReceiptCommandKind::ExportHumanReadableManuscript,
-                command_digest: contracts::DigestValue {
-                    algorithm: contracts::DigestAlgorithm::Sha256,
-                    profile: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE.to_owned(),
-                    value_hex_lowercase: digest_hex.to_owned(),
-                },
-                idempotency_key: idempotency_key.to_owned(),
-                producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
-                author_command_admission_id: settlement.ids.author_command_admission_id,
-                expected_heads: Vec::new(),
-                prior_heads: Vec::new(),
-                resulting_heads: Vec::new(),
-                authoritative_revision_ids: Vec::new(),
-                proposal_revision_ids: Vec::new(),
-                authoritative_commit_ids: Vec::new(),
-                author_action_sequence: None,
-                draft_artifact_refs: Vec::new(),
-                artifact_lifecycle_event_refs: Vec::new(),
-                condition_refs: Vec::new(),
-                result: receipt_result,
-                created_at: settlement.receipt_created_at,
-            },
             project: contracts::ControlledProject {
                 project_id: project.project_id.as_ref().to_owned(),
                 title: project.title,
@@ -255,37 +213,57 @@ pub(super) async fn get_human_readable_manuscript_export_query(
             "snapshot_expired",
             "The Snapshot is no longer available.",
         )),
+        GetHumanReadableManuscriptExport::InProgress(progress) => {
+            let progress = *progress;
+            Ok(Json(
+                contracts::GetHumanReadableManuscriptExportResponse::InProgress {
+                    schema_id: contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID
+                        .to_owned(),
+                    query_id: Uuid::now_v7().to_string(),
+                    correlation_id: Uuid::now_v7().to_string(),
+                    project_scope: contract_scope(&scope),
+                    export_id: progress.export_id,
+                    export_profile: progress.export_profile,
+                    source_snapshot: snapshot_descriptor(&scope, &progress.source_snapshot),
+                },
+            ))
+        }
         GetHumanReadableManuscriptExport::Ready(page) => {
             let page = *page;
-            let project_scope = contract_scope(&scope);
-            Ok(Json(contracts::GetHumanReadableManuscriptExportResponse {
-                schema_id: contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID
-                    .to_owned(),
-                query_id: Uuid::now_v7().to_string(),
-                correlation_id: Uuid::now_v7().to_string(),
-                project_scope: project_scope.clone(),
-                export_id: page.export_id,
-                export_profile: page.export_profile,
-                content_sha256: page.content_sha256,
-                manuscript_utf8: page.manuscript_utf8,
-                source_snapshot: contracts::SnapshotDescriptor {
-                    snapshot_id: page.source_snapshot.snapshot_id,
-                    project_scope,
-                    snapshot_kind: contracts::SnapshotKind::Canonical,
-                    project_activity_position: page
-                        .source_snapshot
-                        .project_activity_position
-                        .to_string(),
-                    source_watermarks: contracts::CanonicalSnapshotMaps {},
-                    projection_generations: contracts::CanonicalSnapshotMaps {},
-                    redaction_profile: page.source_snapshot.redaction_profile,
-                    schema_profile: page.source_snapshot.schema_profile,
-                    replay_generation: page.source_snapshot.replay_generation.to_string(),
-                    created_at: page.source_snapshot.created_at,
-                    expires_at: page.source_snapshot.expires_at,
+            Ok(Json(
+                contracts::GetHumanReadableManuscriptExportResponse::Ready {
+                    schema_id: contracts::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID
+                        .to_owned(),
+                    query_id: Uuid::now_v7().to_string(),
+                    correlation_id: Uuid::now_v7().to_string(),
+                    project_scope: contract_scope(&scope),
+                    export_id: page.export_id,
+                    export_profile: page.export_profile,
+                    content_sha256: page.content_sha256,
+                    manuscript_utf8: page.manuscript_utf8,
+                    source_snapshot: snapshot_descriptor(&scope, &page.source_snapshot),
                 },
-            }))
+            ))
         }
+    }
+}
+
+fn snapshot_descriptor(
+    scope: &ApplicationScope,
+    snapshot: &CanonicalSnapshot,
+) -> contracts::SnapshotDescriptor {
+    contracts::SnapshotDescriptor {
+        snapshot_id: snapshot.snapshot_id.clone(),
+        project_scope: contract_scope(scope),
+        snapshot_kind: contracts::SnapshotKind::Canonical,
+        project_activity_position: snapshot.project_activity_position.to_string(),
+        source_watermarks: contracts::CanonicalSnapshotMaps {},
+        projection_generations: contracts::CanonicalSnapshotMaps {},
+        redaction_profile: snapshot.redaction_profile.clone(),
+        schema_profile: snapshot.schema_profile.clone(),
+        replay_generation: snapshot.replay_generation.to_string(),
+        created_at: snapshot.created_at.clone(),
+        expires_at: snapshot.expires_at.clone(),
     }
 }
 
@@ -325,6 +303,11 @@ fn export_error(error: ExportHumanReadableManuscriptError) -> ApiError {
             "The human-readable export challenge is invalid.",
         ),
         ExportHumanReadableManuscriptError::MissingProject => resource_unavailable(),
+        ExportHumanReadableManuscriptError::ArchivedProject => problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "archived_project",
+            "The Project is archived.",
+        ),
         ExportHumanReadableManuscriptError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",

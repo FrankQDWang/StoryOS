@@ -16,7 +16,7 @@ pub(super) const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT: QueryOperation = QueryOpe
     request_schema: GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
     response_schema: GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
     responses: &[
-        (200, "Settled human-readable manuscript export"),
+        (200, "Human-readable manuscript export status"),
         (400, "Invalid request"),
         (401, "Authentication required"),
         (403, "Request origin refused"),
@@ -42,17 +42,52 @@ pub const GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_METHOD: &str =
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT.method;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct GetHumanReadableManuscriptExportResponse {
-    pub schema_id: String,
-    pub query_id: String,
-    pub correlation_id: String,
-    #[ts(type = "ProjectScope")]
-    pub project_scope: ProjectScope,
-    pub export_id: String,
-    pub export_profile: String,
-    pub content_sha256: String,
-    pub manuscript_utf8: String,
-    #[ts(type = "SnapshotDescriptor")]
-    pub source_snapshot: SnapshotDescriptor,
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GetHumanReadableManuscriptExportResponse {
+    InProgress {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        export_profile: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
+    Ready {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        export_profile: String,
+        content_sha256: String,
+        manuscript_utf8: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
+    Failed {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        export_profile: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
+    OutcomeUnknown {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        export_profile: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
 }

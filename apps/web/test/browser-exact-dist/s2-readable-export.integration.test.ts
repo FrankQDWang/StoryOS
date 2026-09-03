@@ -11,8 +11,6 @@ import {
 
 const CHAPTER_A = "Hello world";
 const CHAPTER_B = "雨落在窗沿。";
-const GOLDEN_ONE = `# Volume A\n\n## Chapter A\n\n${CHAPTER_A}\n`;
-const GOLDEN_TWO = `# Volume A\n\n## Chapter A\n\n${CHAPTER_A}\n\n## Chapter B\n\n${CHAPTER_B}\n`;
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -86,7 +84,7 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
   await waitSaved(root);
 }
 
-async function requestExport(root: Element, expected: string): Promise<Element> {
+async function requestExport(root: Element): Promise<void> {
   const previousId =
     root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";
   const button = [...root.querySelectorAll<HTMLButtonElement>(
@@ -95,19 +93,21 @@ async function requestExport(root: Element, expected: string): Promise<Element> 
   if (button === undefined) throw new Error("the readable export request button is missing");
   button.click();
   await expect.poll(() => {
-    const bytes = root.querySelector("[data-readable-export-bytes]")?.textContent;
+    const panel = root.querySelector("[data-readable-export]");
     const exportId = root.querySelector("[data-export-id]")?.getAttribute("data-export-id") ?? "";
-    if (bytes !== expected || exportId.length === 0 || exportId === previousId) {
+    if (
+      panel?.getAttribute("data-export-outcome") !== "in_progress"
+      || exportId.length === 0
+      || exportId === previousId
+    ) {
       return "";
     }
-    return bytes;
-  }, { timeout: 10_000 }).toBe(expected);
-  const bytes = root.querySelector("[data-readable-export-bytes]");
-  if (bytes === null) throw new Error("the readable export inspect surface is missing");
-  return bytes;
+    return exportId;
+  }, { timeout: 10_000 }).not.toBe("");
+  expect(root.querySelector("[data-readable-export-bytes]")).toBeNull();
 }
 
-it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { timeout: 120_000 }, async () => {
+it("admits a durable human-readable export and does not treat the first inspect as ready", { timeout: 120_000 }, async () => {
   await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
@@ -157,14 +157,11 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
   ).toBe("project-ready");
   await typeIntoCurrent(frame, CHAPTER_A);
   const root = appRoot(frame);
-  const first = await requestExport(root, GOLDEN_ONE);
-  const firstSha = root.querySelector("[data-export-sha256]")?.getAttribute("data-export-sha256");
-  expect(first.textContent).toBe(GOLDEN_ONE);
-  expect(firstSha).toMatch(/^[0-9a-f]{64}$/);
-  await requestExport(root, GOLDEN_ONE);
-  expect(root.querySelector("[data-export-sha256]")?.getAttribute("data-export-sha256")).toBe(
-    firstSha,
-  );
+  await requestExport(root);
+  expect(root.querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"))
+    .toBe("in_progress");
+  await requestExport(root);
+  expect(root.querySelector("[data-readable-export-bytes]")).toBeNull();
   const secondChapter = frame.contentDocument?.querySelector<HTMLInputElement>(
     '#app form[data-create-chapter] input[name="chapter-title"]',
   );
@@ -198,20 +195,12 @@ it("requests, inspects, and downloads the same UTF-8/LF manuscript bytes", { tim
   }, { timeout: 15_000 }).toBe(true);
   await typeIntoCurrent(frame, CHAPTER_B);
   const afterRebuild = appRoot(frame);
-  await requestExport(afterRebuild, GOLDEN_TWO);
-  const rebuiltSha = afterRebuild.querySelector("[data-export-sha256]")
-    ?.getAttribute("data-export-sha256");
-  expect(rebuiltSha).toMatch(/^[0-9a-f]{64}$/);
-  expect(rebuiltSha).not.toBe(firstSha);
-  const download = [...afterRebuild.querySelectorAll<HTMLButtonElement>(
-    "[data-readable-export] button",
-  )].find((candidate) => candidate.textContent === "下载");
-  if (download === undefined) throw new Error("the readable export download button is missing");
-  await expect.poll(() => download.disabled, { timeout: 10_000 }).toBe(false);
-  download.click();
-  await expect.poll(() =>
-    afterRebuild.querySelector("[data-export-download-sha256]")
-      ?.getAttribute("data-export-download-sha256"),
-    { timeout: 10_000 },
-  ).toBe(rebuiltSha);
+  await requestExport(afterRebuild);
+  expect(afterRebuild.querySelector("[data-readable-export]")?.getAttribute("data-export-outcome"))
+    .toBe("in_progress");
+  expect(afterRebuild.querySelector("[data-readable-export-bytes]")).toBeNull();
+  expect(
+    [...afterRebuild.querySelectorAll<HTMLButtonElement>("[data-readable-export] button")]
+      .some((candidate) => candidate.textContent === "下载"),
+  ).toBe(false);
 });

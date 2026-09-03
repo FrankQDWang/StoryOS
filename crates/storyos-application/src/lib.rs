@@ -136,9 +136,10 @@ pub use readable_export::{
     ExportHumanReadableManuscriptStore, GetHumanReadableManuscriptExport,
     HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
     HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,
-    HumanReadableManuscriptExportPage, HumanReadableManuscriptExportReader,
-    get_human_readable_manuscript_export, readable_volumes_from_canonical_facts,
-    render_readable_manuscript_from_facts, request_human_readable_manuscript_export,
+    HumanReadableManuscriptExportPage, HumanReadableManuscriptExportProgress,
+    HumanReadableManuscriptExportReader, get_human_readable_manuscript_export,
+    readable_volumes_from_canonical_facts, render_readable_manuscript_from_facts,
+    request_human_readable_manuscript_export,
 };
 pub use set_current_chapter::{
     SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,
