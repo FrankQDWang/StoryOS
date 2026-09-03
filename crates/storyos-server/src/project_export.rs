@@ -1,9 +1,9 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, ExportProjectArchiveCommand,
-    ExportProjectArchiveError, ExportProjectArchiveRefusal, ExportProjectArchiveSettlementEffect,
-    GetExportOperation, PROJECT_ARCHIVE_ZIP_MEDIA_TYPE, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
+    AuthorCommandAdmissionIds, EditorClientBinding, ExportProjectArchiveCommand,
+    ExportProjectArchiveError, ExportProjectArchiveSettlementEffect, GetExportOperation,
+    PROJECT_ARCHIVE_ZIP_MEDIA_TYPE, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
     PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectCommandChallengeBinding, VerifiedExportArchive,
     get_export_operation, get_verified_export_archive, request_export_project_archive,
 };
@@ -110,16 +110,6 @@ pub(super) async fn export_project_archive(
             export_id: Uuid::now_v7().to_string(),
             archive_profile: input.archive_profile.clone(),
             archive_path_profile: input.archive_path_profile.clone(),
-            source_snapshot: CanonicalSnapshot {
-                snapshot_id: String::new(),
-                project_activity_position: 0,
-                replay_generation: 1,
-                floor_position: 0,
-                redaction_profile: "storyos.author.v1".to_owned(),
-                schema_profile: contracts::PUBLIC_PROTOCOL_RELEASE.to_owned(),
-                created_at: String::new(),
-                expires_at: None,
-            },
         },
     )
     .await
@@ -128,92 +118,32 @@ pub(super) async fn export_project_archive(
         .await
         .map_err(service_unavailable)?
         .ok_or_else(resource_unavailable)?;
-    export_response(
-        &scope,
-        &input.correlation_id,
-        &digest_hex,
-        idempotency_key,
-        project,
-        settlement,
-    )
+    export_response(&scope, &input.correlation_id, project, settlement)
 }
 
 fn export_response(
     scope: &ApplicationScope,
     correlation_id: &str,
-    digest_hex: &str,
-    idempotency_key: &str,
     project: storyos_application::Project,
     settlement: storyos_application::ExportProjectArchiveSettlement,
 ) -> Result<(StatusCode, Json<contracts::ExportProjectArchiveResponse>), ApiError> {
-    let (receipt_result, effect, operation_ref) = match settlement.effect {
-        ExportProjectArchiveSettlementEffect::Admitted {
-            archive_profile,
-            archive_path_profile,
-            ..
-        } => (
-            contracts::DomainReceiptResult::AuthoritativeApplied,
-            contracts::ExportProjectArchiveEffect::Admitted {
-                export_id: settlement.export_id.clone(),
-                archive_profile,
-                archive_path_profile,
-                project_activity_position: settlement.project_activity_position.to_string(),
-            },
-            Some(contracts::ProjectExportRef::ProjectExport {
-                export_id: settlement.export_id.clone(),
-            }),
-        ),
-        ExportProjectArchiveSettlementEffect::Refused { reason } => (
-            contracts::DomainReceiptResult::Refused,
-            contracts::ExportProjectArchiveEffect::Refused {
-                reason: match reason {
-                    ExportProjectArchiveRefusal::ArchivedProject => {
-                        contracts::ExportProjectArchiveRefusalReason::ArchivedProject
-                    }
-                    ExportProjectArchiveRefusal::MissingProject => {
-                        return Err(export_error(ExportProjectArchiveError::MissingProject));
-                    }
-                },
-            },
-            None,
-        ),
-    };
-    let contract_project_scope = contract_scope(scope);
+    let ExportProjectArchiveSettlementEffect::Admitted {
+        archive_profile,
+        archive_path_profile,
+        source_snapshot,
+    } = settlement.effect;
     Ok((
         StatusCode::ACCEPTED,
         Json(contracts::ExportProjectArchiveResponse {
             schema_id: contracts::EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID.to_owned(),
             correlation_id: correlation_id.to_owned(),
-            project_scope: contract_project_scope.clone(),
+            project_scope: contract_scope(scope),
             command_id: settlement.ids.command_id,
-            author_command_admission_id: settlement.ids.author_command_admission_id.clone(),
+            author_command_admission_id: settlement.ids.author_command_admission_id,
             acknowledgement: contracts::ExportAcknowledgement::Accepted,
-            operation_ref,
-            receipt: contracts::DomainReceipt {
-                receipt_id: settlement.ids.receipt_id.clone(),
-                project_scope: contract_project_scope,
-                command_kind: contracts::DomainReceiptCommandKind::ExportProjectArchive,
-                command_digest: contracts::DigestValue {
-                    algorithm: contracts::DigestAlgorithm::Sha256,
-                    profile: contracts::EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE.to_owned(),
-                    value_hex_lowercase: digest_hex.to_owned(),
-                },
-                idempotency_key: idempotency_key.to_owned(),
-                producer_cause: contracts::DomainReceiptProducerCause::AuthorCommandAdmission,
-                author_command_admission_id: settlement.ids.author_command_admission_id,
-                expected_heads: Vec::new(),
-                prior_heads: Vec::new(),
-                resulting_heads: Vec::new(),
-                authoritative_revision_ids: Vec::new(),
-                proposal_revision_ids: Vec::new(),
-                authoritative_commit_ids: Vec::new(),
-                author_action_sequence: None,
-                draft_artifact_refs: Vec::new(),
-                artifact_lifecycle_event_refs: Vec::new(),
-                condition_refs: Vec::new(),
-                result: receipt_result,
-                created_at: settlement.receipt_created_at,
-            },
+            operation_ref: Some(contracts::ProjectExportRef::ProjectExport {
+                export_id: settlement.export_id.clone(),
+            }),
             project: contracts::ControlledProject {
                 project_id: project.project_id.as_ref().to_owned(),
                 title: project.title,
@@ -224,7 +154,12 @@ fn export_response(
                     None => contracts::ProjectOpenState::Empty,
                 },
             },
-            effect,
+            effect: contracts::ExportProjectArchiveEffect::Admitted {
+                export_id: settlement.export_id,
+                archive_profile,
+                archive_path_profile,
+                source_snapshot: Box::new(snapshot_descriptor(scope, &source_snapshot)),
+            },
         }),
     ))
 }
@@ -293,35 +228,60 @@ pub(super) async fn get_export_operation_query(
             "snapshot_expired",
             "The Snapshot is no longer available.",
         )),
-        GetExportOperation::InProgress(page) => {
-            let page = *page;
-            let project_scope = contract_scope(&scope);
-            Ok(Json(contracts::GetExportOperationResponse {
+        GetExportOperation::InProgress(progress) => {
+            let progress = *progress;
+            Ok(Json(contracts::GetExportOperationResponse::InProgress {
                 schema_id: contracts::GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID.to_owned(),
                 query_id: Uuid::now_v7().to_string(),
                 correlation_id: Uuid::now_v7().to_string(),
-                project_scope: project_scope.clone(),
+                project_scope: contract_scope(&scope),
+                export_id: progress.export_id,
+                archive_profile: progress.archive_profile,
+                archive_path_profile: progress.archive_path_profile,
+                source_snapshot: snapshot_descriptor(&scope, &progress.source_snapshot),
+            })
+            .into_response())
+        }
+        GetExportOperation::Ready(page) => {
+            let page = *page;
+            Ok(Json(contracts::GetExportOperationResponse::Ready {
+                schema_id: contracts::GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID.to_owned(),
+                query_id: Uuid::now_v7().to_string(),
+                correlation_id: Uuid::now_v7().to_string(),
+                project_scope: contract_scope(&scope),
                 export_id: page.export_id,
                 archive_profile: page.archive_profile,
                 archive_path_profile: page.archive_path_profile,
-                status: contracts::ExportOperationStatus::InProgress,
                 immutable_root: page.immutable_root,
-                source_snapshot: contracts::SnapshotDescriptor {
-                    snapshot_id: page.source_snapshot.snapshot_id,
-                    project_scope,
-                    snapshot_kind: contracts::SnapshotKind::Canonical,
-                    project_activity_position: page
-                        .source_snapshot
-                        .project_activity_position
-                        .to_string(),
-                    source_watermarks: contracts::CanonicalSnapshotMaps {},
-                    projection_generations: contracts::CanonicalSnapshotMaps {},
-                    redaction_profile: page.source_snapshot.redaction_profile,
-                    schema_profile: page.source_snapshot.schema_profile,
-                    replay_generation: page.source_snapshot.replay_generation.to_string(),
-                    created_at: page.source_snapshot.created_at,
-                    expires_at: page.source_snapshot.expires_at,
-                },
+                source_snapshot: snapshot_descriptor(&scope, &page.source_snapshot),
+            })
+            .into_response())
+        }
+        GetExportOperation::Failed(progress) => {
+            let progress = *progress;
+            Ok(Json(contracts::GetExportOperationResponse::Failed {
+                schema_id: contracts::GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID.to_owned(),
+                query_id: Uuid::now_v7().to_string(),
+                correlation_id: Uuid::now_v7().to_string(),
+                project_scope: contract_scope(&scope),
+                export_id: progress.export_id,
+                archive_profile: progress.archive_profile,
+                archive_path_profile: progress.archive_path_profile,
+                source_snapshot: snapshot_descriptor(&scope, &progress.source_snapshot),
+            })
+            .into_response())
+        }
+        GetExportOperation::OutcomeUnknown(progress) => {
+            let progress = *progress;
+            Ok(Json(contracts::GetExportOperationResponse::OutcomeUnknown {
+                schema_id: contracts::GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID.to_owned(),
+                query_id: Uuid::now_v7().to_string(),
+                correlation_id: Uuid::now_v7().to_string(),
+                project_scope: contract_scope(&scope),
+                export_id: progress.export_id,
+                archive_profile: progress.archive_profile,
+                archive_path_profile: progress.archive_path_profile,
+                source_snapshot: snapshot_descriptor(&scope, &progress.source_snapshot),
             })
             .into_response())
         }
@@ -333,6 +293,25 @@ fn wants_project_archive_zip(headers: &HeaderMap) -> bool {
         .get(header::ACCEPT)
         .and_then(|value| value.to_str().ok())
         .is_some_and(|accept| accept.contains("application/vnd.storyos.project-archive+zip"))
+}
+
+fn snapshot_descriptor(
+    scope: &ApplicationScope,
+    snapshot: &storyos_application::CanonicalSnapshot,
+) -> contracts::SnapshotDescriptor {
+    contracts::SnapshotDescriptor {
+        snapshot_id: snapshot.snapshot_id.clone(),
+        project_scope: contract_scope(scope),
+        snapshot_kind: contracts::SnapshotKind::Canonical,
+        project_activity_position: snapshot.project_activity_position.to_string(),
+        source_watermarks: contracts::CanonicalSnapshotMaps {},
+        projection_generations: contracts::CanonicalSnapshotMaps {},
+        redaction_profile: snapshot.redaction_profile.clone(),
+        schema_profile: snapshot.schema_profile.clone(),
+        replay_generation: snapshot.replay_generation.to_string(),
+        created_at: snapshot.created_at.clone(),
+        expires_at: snapshot.expires_at.clone(),
+    }
 }
 
 fn canonical_body_bytes(
@@ -371,6 +350,11 @@ fn export_error(error: ExportProjectArchiveError) -> ApiError {
             "The Project Export Archive challenge is invalid.",
         ),
         ExportProjectArchiveError::MissingProject => resource_unavailable(),
+        ExportProjectArchiveError::ArchivedProject => problem(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "archived_project",
+            "The Project is archived.",
+        ),
         ExportProjectArchiveError::ArchiveBuild(reason) => archive_build_problem(reason),
         ExportProjectArchiveError::Unavailable(_) => problem(
             StatusCode::SERVICE_UNAVAILABLE,

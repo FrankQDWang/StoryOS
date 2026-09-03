@@ -1,5 +1,10 @@
 {
   "$defs": {
+    "CanonicalSnapshotMaps": {
+      "additionalProperties": false,
+      "description": "Closed empty maps for Stage 1 `canonical` SnapshotDescriptor watermarks.",
+      "type": "object"
+    },
     "ControlledProject": {
       "additionalProperties": false,
       "properties": {
@@ -19,178 +24,6 @@
         "open"
       ],
       "type": "object"
-    },
-    "DigestAlgorithm": {
-      "enum": [
-        "sha256"
-      ],
-      "type": "string"
-    },
-    "DigestValue": {
-      "additionalProperties": false,
-      "properties": {
-        "algorithm": {
-          "$ref": "#/$defs/DigestAlgorithm"
-        },
-        "profile": {
-          "type": "string"
-        },
-        "value_hex_lowercase": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "algorithm",
-        "profile",
-        "value_hex_lowercase"
-      ],
-      "type": "object"
-    },
-    "DomainReceipt": {
-      "additionalProperties": false,
-      "properties": {
-        "artifact_lifecycle_event_refs": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "author_action_sequence": {
-          "type": "string"
-        },
-        "author_command_admission_id": {
-          "type": "string"
-        },
-        "authoritative_commit_ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "authoritative_revision_ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "command_digest": {
-          "$ref": "#/$defs/DigestValue"
-        },
-        "command_kind": {
-          "$ref": "#/$defs/DomainReceiptCommandKind"
-        },
-        "condition_refs": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "created_at": {
-          "type": "string"
-        },
-        "draft_artifact_refs": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "expected_heads": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "idempotency_key": {
-          "type": "string"
-        },
-        "prior_heads": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "producer_cause": {
-          "$ref": "#/$defs/DomainReceiptProducerCause"
-        },
-        "project_scope": {
-          "$ref": "#/$defs/ProjectScope"
-        },
-        "proposal_revision_ids": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "receipt_id": {
-          "type": "string"
-        },
-        "result": {
-          "$ref": "#/$defs/DomainReceiptResult"
-        },
-        "resulting_heads": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "receipt_id",
-        "project_scope",
-        "command_kind",
-        "command_digest",
-        "idempotency_key",
-        "producer_cause",
-        "author_command_admission_id",
-        "expected_heads",
-        "prior_heads",
-        "resulting_heads",
-        "authoritative_revision_ids",
-        "proposal_revision_ids",
-        "authoritative_commit_ids",
-        "author_action_sequence",
-        "draft_artifact_refs",
-        "artifact_lifecycle_event_refs",
-        "condition_refs",
-        "result",
-        "created_at"
-      ],
-      "type": "object"
-    },
-    "DomainReceiptCommandKind": {
-      "enum": [
-        "applyAuthorEdit",
-        "takeOverProjectWriter",
-        "createProject",
-        "updateProject",
-        "archiveProject",
-        "createVolume",
-        "createChapter",
-        "updateVolume",
-        "updateChapter",
-        "deleteChapter",
-        "deleteVolume",
-        "setCurrentChapter",
-        "undoLatestAuthorAction",
-        "exportHumanReadableManuscript",
-        "exportProjectArchive"
-      ],
-      "type": "string"
-    },
-    "DomainReceiptProducerCause": {
-      "enum": [
-        "author_command_admission"
-      ],
-      "type": "string"
-    },
-    "DomainReceiptResult": {
-      "enum": [
-        "authoritative_applied",
-        "no_effect",
-        "conflicted",
-        "refused"
-      ],
-      "type": "string"
     },
     "ExportAcknowledgement": {
       "enum": [
@@ -216,8 +49,8 @@
               "const": "admitted",
               "type": "string"
             },
-            "project_activity_position": {
-              "type": "string"
+            "source_snapshot": {
+              "$ref": "#/$defs/SnapshotDescriptor"
             }
           },
           "required": [
@@ -225,7 +58,7 @@
             "export_id",
             "archive_profile",
             "archive_path_profile",
-            "project_activity_position"
+            "source_snapshot"
           ],
           "type": "object"
         },
@@ -324,6 +157,67 @@
         "project_id"
       ],
       "type": "object"
+    },
+    "SnapshotDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "created_at": {
+          "type": "string"
+        },
+        "expires_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "project_activity_position": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "projection_generations": {
+          "$ref": "#/$defs/CanonicalSnapshotMaps"
+        },
+        "redaction_profile": {
+          "type": "string"
+        },
+        "replay_generation": {
+          "type": "string"
+        },
+        "schema_profile": {
+          "type": "string"
+        },
+        "snapshot_id": {
+          "type": "string"
+        },
+        "snapshot_kind": {
+          "$ref": "#/$defs/SnapshotKind"
+        },
+        "source_watermarks": {
+          "$ref": "#/$defs/CanonicalSnapshotMaps"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "project_scope",
+        "snapshot_kind",
+        "project_activity_position",
+        "source_watermarks",
+        "projection_generations",
+        "redaction_profile",
+        "schema_profile",
+        "replay_generation",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "SnapshotKind": {
+      "description": "Closed `snapshot_kind` selected by the protocol SnapshotDescriptor.",
+      "enum": [
+        "canonical"
+      ],
+      "type": "string"
     }
   },
   "$id": "storyos.command.export-project-archive.response.v1",
@@ -364,9 +258,6 @@
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
     },
-    "receipt": {
-      "$ref": "#/$defs/DomainReceipt"
-    },
     "schema_id": {
       "const": "storyos.command.export-project-archive.response.v1",
       "type": "string"
@@ -379,7 +270,6 @@
     "command_id",
     "author_command_admission_id",
     "acknowledgement",
-    "receipt",
     "project",
     "effect"
   ],

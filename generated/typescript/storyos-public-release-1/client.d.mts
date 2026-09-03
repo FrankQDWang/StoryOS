@@ -287,13 +287,11 @@ export type ExportProjectArchiveRefusalReason = "archived_project";
 
 export type ProjectExportRef = { "kind": "project_export", export_id: string, };
 
-export type ExportProjectArchiveEffect = { "kind": "admitted", export_id: string, archive_profile: string, archive_path_profile: string, project_activity_position: string, } | { "kind": "refused", reason: ExportProjectArchiveRefusalReason, };
+export type ExportProjectArchiveEffect = { "kind": "admitted", export_id: string, archive_profile: string, archive_path_profile: string, source_snapshot: SnapshotDescriptor, } | { "kind": "refused", reason: ExportProjectArchiveRefusalReason, };
 
-export type ExportProjectArchiveResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: ProjectExportRef | null, receipt: DomainReceipt, project: ControlledProject, effect: ExportProjectArchiveEffect, };
+export type ExportProjectArchiveResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: ProjectExportRef | null, project: ControlledProject, effect: ExportProjectArchiveEffect, };
 
-export type ExportOperationStatus = "in_progress";
-
-export type GetExportOperationResponse = { schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, archive_profile: string, archive_path_profile: string, status: ExportOperationStatus, immutable_root: string | null, source_snapshot: SnapshotDescriptor, };
+export type GetExportOperationResponse = { "status": "in_progress", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, archive_profile: string, archive_path_profile: string, source_snapshot: SnapshotDescriptor, } | { "status": "ready", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, archive_profile: string, archive_path_profile: string, immutable_root: string, source_snapshot: SnapshotDescriptor, } | { "status": "failed", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, archive_profile: string, archive_path_profile: string, source_snapshot: SnapshotDescriptor, } | { "status": "outcome_unknown", schema_id: string, query_id: string, correlation_id: string, project_scope: ProjectScope, export_id: string, archive_profile: string, archive_path_profile: string, source_snapshot: SnapshotDescriptor, };
 
 export type TakeOverProjectWriterRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, observed_writer_generation: string, editor_contract_revision: string, };
 

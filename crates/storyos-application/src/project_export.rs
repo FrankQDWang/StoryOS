@@ -29,7 +29,6 @@ pub struct ExportProjectArchiveCommand {
     pub export_id: String,
     pub archive_profile: String,
     pub archive_path_profile: String,
-    pub source_snapshot: CanonicalSnapshot,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -37,9 +36,6 @@ pub struct ExportProjectArchiveSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub export_id: String,
     pub effect: ExportProjectArchiveSettlementEffect,
-    pub receipt_created_at: String,
-    pub project_activity_position: u64,
-    pub project_activity_event_id: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -47,17 +43,8 @@ pub enum ExportProjectArchiveSettlementEffect {
     Admitted {
         archive_profile: String,
         archive_path_profile: String,
-        source_snapshot: CanonicalSnapshot,
+        source_snapshot: Box<CanonicalSnapshot>,
     },
-    Refused {
-        reason: ExportProjectArchiveRefusal,
-    },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum ExportProjectArchiveRefusal {
-    MissingProject,
-    ArchivedProject,
 }
 
 #[derive(Debug)]
@@ -65,6 +52,7 @@ pub enum ExportProjectArchiveError {
     BindingConflict,
     InvalidChallenge,
     MissingProject,
+    ArchivedProject,
     ArchiveBuild(ProjectArchiveBuildRefusal),
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -79,6 +67,7 @@ impl std::fmt::Display for ExportProjectArchiveError {
                 formatter.write_str("The Project Export Archive challenge is invalid")
             }
             Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
+            Self::ArchivedProject => formatter.write_str("The Project is archived"),
             Self::ArchiveBuild(_) => {
                 formatter.write_str("The Project Export Archive did not complete")
             }
@@ -96,12 +85,13 @@ impl std::error::Error for ExportProjectArchiveError {
             Self::BindingConflict
             | Self::InvalidChallenge
             | Self::MissingProject
+            | Self::ArchivedProject
             | Self::ArchiveBuild(_) => None,
         }
     }
 }
 
-/// Owns one admitted Project Export Archive operation and its atomic settlement.
+/// Owns one admitted Project Export Archive operation.
 pub trait ExportProjectArchiveStore: Sync {
     fn export_project_archive(
         &self,
@@ -144,13 +134,22 @@ pub async fn request_export_project_archive(
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExportOperationProgress {
+    pub project_scope: ProjectScope,
+    pub export_id: String,
+    pub archive_profile: String,
+    pub archive_path_profile: String,
+    pub source_snapshot: CanonicalSnapshot,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ExportOperationPage {
     pub project_scope: ProjectScope,
     pub export_id: String,
     pub archive_profile: String,
     pub archive_path_profile: String,
     pub source_snapshot: CanonicalSnapshot,
-    pub immutable_root: Option<String>,
+    pub immutable_root: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -158,7 +157,10 @@ pub enum GetExportOperation {
     Missing,
     Archived,
     Expired,
-    InProgress(Box<ExportOperationPage>),
+    InProgress(Box<ExportOperationProgress>),
+    Ready(Box<ExportOperationPage>),
+    Failed(Box<ExportOperationProgress>),
+    OutcomeUnknown(Box<ExportOperationProgress>),
 }
 
 /// Reads one admitted Project Export operation under already authenticated exact Scope.

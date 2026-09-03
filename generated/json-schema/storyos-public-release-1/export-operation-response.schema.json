@@ -5,12 +5,6 @@
       "description": "Closed empty maps for Stage 1 `canonical` SnapshotDescriptor watermarks.",
       "type": "object"
     },
-    "ExportOperationStatus": {
-      "enum": [
-        "in_progress"
-      ],
-      "type": "string"
-    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -91,55 +85,191 @@
   },
   "$id": "storyos.query.export-operation.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "additionalProperties": false,
-  "properties": {
-    "archive_path_profile": {
-      "type": "string"
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "archive_path_profile": {
+          "type": "string"
+        },
+        "archive_profile": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "in_progress",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "archive_profile",
+        "archive_path_profile",
+        "source_snapshot"
+      ],
+      "type": "object"
     },
-    "archive_profile": {
-      "type": "string"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "archive_path_profile": {
+          "type": "string"
+        },
+        "archive_profile": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "immutable_root": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "ready",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "archive_profile",
+        "archive_path_profile",
+        "immutable_root",
+        "source_snapshot"
+      ],
+      "type": "object"
     },
-    "correlation_id": {
-      "format": "uuid",
-      "type": "string"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "archive_path_profile": {
+          "type": "string"
+        },
+        "archive_profile": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "failed",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "archive_profile",
+        "archive_path_profile",
+        "source_snapshot"
+      ],
+      "type": "object"
     },
-    "export_id": {
-      "format": "uuid",
-      "type": "string"
-    },
-    "immutable_root": {
-      "type": "string"
-    },
-    "project_scope": {
-      "$ref": "#/$defs/ProjectScope"
-    },
-    "query_id": {
-      "format": "uuid",
-      "type": "string"
-    },
-    "schema_id": {
-      "const": "storyos.query.export-operation.response.v1",
-      "type": "string"
-    },
-    "source_snapshot": {
-      "$ref": "#/$defs/SnapshotDescriptor"
-    },
-    "status": {
-      "$ref": "#/$defs/ExportOperationStatus"
+    {
+      "additionalProperties": false,
+      "properties": {
+        "archive_path_profile": {
+          "type": "string"
+        },
+        "archive_profile": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "type": "string"
+        },
+        "export_id": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "query_id": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_snapshot": {
+          "$ref": "#/$defs/SnapshotDescriptor"
+        },
+        "status": {
+          "const": "outcome_unknown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "schema_id",
+        "query_id",
+        "correlation_id",
+        "project_scope",
+        "export_id",
+        "archive_profile",
+        "archive_path_profile",
+        "source_snapshot"
+      ],
+      "type": "object"
     }
-  },
-  "required": [
-    "schema_id",
-    "query_id",
-    "correlation_id",
-    "project_scope",
-    "export_id",
-    "archive_profile",
-    "archive_path_profile",
-    "status",
-    "immutable_root",
-    "source_snapshot"
   ],
-  "title": "StoryOS Export Operation Response",
-  "type": "object"
+  "title": "StoryOS Export Operation Response"
 }

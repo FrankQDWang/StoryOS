@@ -96,7 +96,10 @@ fn get_export_operation_wire_is_generated_from_one_closed_contract() {
         &generated[crate::release1_project_export_query_artifacts::FIXTURE_PATHS[0]],
     )
     .expect("positive export query fixture must be JSON");
-    assert_eq!(positive["status"], "in_progress");
-    assert_eq!(positive["immutable_root"], serde_json::Value::Null);
+    assert_eq!(positive["status"], "ready");
+    assert_eq!(
+        positive["immutable_root"],
+        format!("sha256:{}", "b".repeat(64))
+    );
     assert_eq!(positive["archive_profile"], "storyos.project-export.v1");
 }

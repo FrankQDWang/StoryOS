@@ -40,25 +40,55 @@ pub const GET_EXPORT_OPERATION_PATH: &str = GET_EXPORT_OPERATION.path;
 pub const GET_EXPORT_OPERATION_METHOD: &str = GET_EXPORT_OPERATION.method;
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum ExportOperationStatus {
-    InProgress,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(deny_unknown_fields)]
-pub struct GetExportOperationResponse {
-    pub schema_id: String,
-    pub query_id: String,
-    pub correlation_id: String,
-    #[ts(type = "ProjectScope")]
-    pub project_scope: ProjectScope,
-    pub export_id: String,
-    pub archive_profile: String,
-    pub archive_path_profile: String,
-    pub status: ExportOperationStatus,
-    #[schemars(required)]
-    pub immutable_root: Option<String>,
-    #[ts(type = "SnapshotDescriptor")]
-    pub source_snapshot: SnapshotDescriptor,
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+pub enum GetExportOperationResponse {
+    InProgress {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        archive_profile: String,
+        archive_path_profile: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
+    Ready {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        archive_profile: String,
+        archive_path_profile: String,
+        immutable_root: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
+    Failed {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        archive_profile: String,
+        archive_path_profile: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
+    OutcomeUnknown {
+        schema_id: String,
+        query_id: String,
+        correlation_id: String,
+        #[ts(type = "ProjectScope")]
+        project_scope: ProjectScope,
+        export_id: String,
+        archive_profile: String,
+        archive_path_profile: String,
+        #[ts(type = "SnapshotDescriptor")]
+        source_snapshot: SnapshotDescriptor,
+    },
 }
