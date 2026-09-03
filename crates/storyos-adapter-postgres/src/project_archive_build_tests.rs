@@ -304,6 +304,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
     for table in [
         "project_export_entries",
         "project_export_manifests",
+        "project_activity_events",
         "project_activity_event_payloads",
         "author_command_admission_outcome_unknown_observations",
         "author_command_admission_reconfirmations",
@@ -387,6 +388,14 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
             "DELETE FROM storyos.project_command_challenge_rate_guards
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND client_session_generation = 1",
+            &[&USER, &PROJECT],
+        )
+        .await
+        .unwrap();
+    cleanup
+        .execute(
+            "DELETE FROM storyos.scope_counters
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
             &[&USER, &PROJECT],
         )
         .await
