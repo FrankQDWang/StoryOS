@@ -5,8 +5,9 @@ use storyos_application::{
 use storyos_core::{
     ARCHIVE_PATH_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
     ArchiveEntrySource, PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectArchiveBuildRefusal,
-    ProjectArchiveRootFacts, build_project_archive, canonical_json, classify_export_record,
-    package_verified_project_archive_zip, require_delivered_families,
+    ProjectArchiveRootFacts, build_project_archive, canonical_json, catalog_include_table_names,
+    classify_export_record, package_verified_project_archive_zip, require_delivered_families,
+    required_export_tables,
 };
 
 const EXPORT_TABLES: &[(&str, &str)] = &[
@@ -17,6 +18,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     (
         "author_command_admission_outcome_unknown_observations",
         "canonical/author_command_admission_outcome_unknown_observations.json",
+    ),
+    (
+        "author_command_admission_reconfirmations",
+        "canonical/author_command_admission_reconfirmations.json",
     ),
     (
         "author_command_admission_settlements",
@@ -114,8 +119,31 @@ pub(super) async fn persist_export_archive(
             bytes,
         });
     }
-    let required: Vec<&str> = EXPORT_TABLES.iter().map(|(table, _)| *table).collect();
-    require_delivered_families(&present, &required).map_err(archive_build_error)?;
+    let catalog: serde_json::Value = serde_json::from_str(PERSISTENCE_CATALOG)
+        .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
+    if catalog
+        .get("families")
+        .and_then(serde_json::Value::as_array)
+        .is_none()
+    {
+        return Err(archive_build_error(
+            ProjectArchiveBuildRefusal::InvalidProvenance,
+        ));
+    }
+    let include_names = catalog_include_table_names(&catalog);
+    let live_rows = client
+        .query(
+            "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'storyos'",
+            &[],
+        )
+        .await
+        .map_err(|error| archive_table_error("pg_tables", error))?;
+    let live_tables: Vec<String> = live_rows.iter().map(|row| row.get(0)).collect();
+    let include_refs: Vec<&str> = include_names.iter().map(String::as_str).collect();
+    let live_refs: Vec<&str> = live_tables.iter().map(String::as_str).collect();
+    let required = required_export_tables(&include_refs, &live_refs);
+    let required_refs: Vec<&str> = required.iter().map(String::as_str).collect();
+    require_delivered_families(&present, &required_refs).map_err(archive_build_error)?;
     let built = build_project_archive(
         &archive_root_facts(
             command.export_id.as_str(),
@@ -372,6 +400,11 @@ fn classify_rows(
     Ok(())
 }
 
+const PERSISTENCE_CATALOG: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../docs/foundation/postgresql-release-1-persistence-catalog.json"
+));
+
 fn archive_build_error(reason: ProjectArchiveBuildRefusal) -> ExportProjectArchiveError {
     ExportProjectArchiveError::ArchiveBuild(reason)
 }
@@ -381,3 +414,7 @@ fn archive_table_error(table: &str, error: tokio_postgres::Error) -> ExportProje
         "{table}: {error}"
     ))))
 }
+
+#[cfg(test)]
+#[path = "project_archive_build_tests.rs"]
+mod tests;

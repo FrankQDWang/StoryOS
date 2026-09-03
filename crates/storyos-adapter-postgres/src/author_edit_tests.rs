@@ -31,7 +31,7 @@ fn payload_digest_is_lowercase_sha256() {
     );
 }
 
-pub(super) fn binding(
+pub(crate) fn binding(
     scope: &ProjectScope,
     kind: &str,
     path: &str,
@@ -56,7 +56,7 @@ pub(super) fn binding(
     }
 }
 
-pub(super) fn author_command(
+pub(crate) fn author_command(
     scope: &ProjectScope,
     editor_session_id: &str,
     key: &str,

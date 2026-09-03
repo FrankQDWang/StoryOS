@@ -195,6 +195,50 @@ pub fn require_delivered_families(
     Ok(())
 }
 
+/// Table names in catalog families whose `project_export` policy is exactly `include`.
+pub fn catalog_include_table_names(catalog: &serde_json::Value) -> Vec<String> {
+    let Some(families) = catalog
+        .get("families")
+        .and_then(serde_json::Value::as_array)
+    else {
+        return Vec::new();
+    };
+    let mut names = std::collections::BTreeSet::new();
+    for family in families {
+        let policy = family
+            .pointer("/portability/project_export")
+            .and_then(serde_json::Value::as_str);
+        if policy != Some("include") {
+            continue;
+        }
+        let Some(tables) = family
+            .get("table_families")
+            .and_then(serde_json::Value::as_array)
+        else {
+            continue;
+        };
+        for table in tables {
+            if let Some(name) = table.as_str() {
+                names.insert(name.to_owned());
+            }
+        }
+    }
+    names.into_iter().collect()
+}
+
+/// Live tables that a catalog `include` family currently names.
+pub fn required_export_tables(include_names: &[&str], live_tables: &[&str]) -> Vec<String> {
+    let live: std::collections::BTreeSet<&str> = live_tables.iter().copied().collect();
+    include_names
+        .iter()
+        .copied()
+        .filter(|name| live.contains(name))
+        .map(str::to_owned)
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect()
+}
+
 pub fn hex_sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
