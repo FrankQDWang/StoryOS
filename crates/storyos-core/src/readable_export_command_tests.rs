@@ -16,12 +16,12 @@ fn archived_project_is_refused() {
 }
 
 #[test]
-fn active_project_is_applied() {
+fn active_project_is_admitted() {
     assert_eq!(
         export_human_readable_manuscript(&ExportHumanReadableManuscript {
             presence: ProjectPresence::Present,
             current_lifecycle: ProjectLifecycle::Active,
         }),
-        ExportHumanReadableManuscriptResult::Applied
+        ExportHumanReadableManuscriptResult::Admitted
     );
 }

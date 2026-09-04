@@ -14,12 +14,12 @@ impl ExportHumanReadableManuscriptStore for Store {
     async fn export_human_readable_manuscript(
         &self,
         command: &ExportHumanReadableManuscriptCommand,
-    ) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+    ) -> Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError> {
         *self.0.lock().unwrap() += 1;
-        Ok(ExportHumanReadableManuscriptSettlement {
+        Ok(ExportHumanReadableManuscriptAdmission {
             ids: command.ids.clone(),
             export_id: command.export_id.clone(),
-            effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+            effect: ExportHumanReadableManuscriptAdmissionEffect::Admitted {
                 source_snapshot: Box::new(snapshot()),
             },
         })
@@ -136,11 +136,11 @@ fn search_chapter(id: &str, text: &str) -> ManuscriptSearchChapterFact {
 #[tokio::test]
 async fn an_exact_export_binding_reaches_the_store() {
     let store = Store(Mutex::new(0));
-    let settlement = request_human_readable_manuscript_export(&store, &command())
+    let admission = request_human_readable_manuscript_export(&store, &command())
         .await
         .unwrap();
     assert_eq!(*store.0.lock().unwrap(), 1);
-    assert_eq!(settlement.export_id, "export");
+    assert_eq!(admission.export_id, "export");
 }
 
 #[tokio::test]

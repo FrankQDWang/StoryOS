@@ -1,7 +1,7 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, ExportHumanReadableManuscriptCommand,
-    ExportHumanReadableManuscriptError, ExportHumanReadableManuscriptSettlement,
-    ExportHumanReadableManuscriptSettlementEffect, ExportHumanReadableManuscriptStore,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, ExportHumanReadableManuscriptAdmission,
+    ExportHumanReadableManuscriptAdmissionEffect, ExportHumanReadableManuscriptCommand,
+    ExportHumanReadableManuscriptError, ExportHumanReadableManuscriptStore,
     GetHumanReadableManuscriptExport, HumanReadableManuscriptExportPage,
     HumanReadableManuscriptExportProgress, HumanReadableManuscriptExportReader,
     ProjectCommandChallengeError, ProjectCommandChallengeUse, ProjectReadError, ProjectScope,
@@ -18,7 +18,7 @@ impl ExportHumanReadableManuscriptStore for PostgresProjectReader {
     async fn export_human_readable_manuscript(
         &self,
         command: &ExportHumanReadableManuscriptCommand,
-    ) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+    ) -> Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError> {
         let mut transaction = self
             .begin_serializable_project_command_transaction(&command.project_scope)
             .await
@@ -44,9 +44,9 @@ impl ExportHumanReadableManuscriptStore for PostgresProjectReader {
             }
             ProjectCommandChallengeUse::FirstUse => {
                 match persist_export(&transaction.client, command).await {
-                    Ok(settlement) => {
+                    Ok(admission) => {
                         transaction.commit().await.map_err(export_challenge_error)?;
-                        Ok(settlement)
+                        Ok(admission)
                     }
                     Err(error) => {
                         let _rollback = transaction.rollback().await;
@@ -211,7 +211,7 @@ impl HumanReadableManuscriptExportReader for PostgresProjectReader {
 async fn persist_export(
     client: &tokio_postgres::Client,
     command: &ExportHumanReadableManuscriptCommand,
-) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+) -> Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError> {
     let row = client
         .query_opt(
             "SELECT lifecycle_state FROM storyos.projects
@@ -240,7 +240,7 @@ async fn persist_export(
         presence: ProjectPresence::Present,
         current_lifecycle,
     }) {
-        ExportHumanReadableManuscriptResult::Applied => {}
+        ExportHumanReadableManuscriptResult::Admitted => {}
         ExportHumanReadableManuscriptResult::Refused {
             reason: storyos_core::ExportHumanReadableManuscriptRefusal::MissingProject,
         } => return Err(ExportHumanReadableManuscriptError::MissingProject),
@@ -258,10 +258,10 @@ async fn persist_export(
         })?;
     insert_export_admission(client, command).await?;
     insert_export_operation(client, command, &snapshot).await?;
-    Ok(ExportHumanReadableManuscriptSettlement {
+    Ok(ExportHumanReadableManuscriptAdmission {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),
-        effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+        effect: ExportHumanReadableManuscriptAdmissionEffect::Admitted {
             source_snapshot: Box::new(snapshot),
         },
     })
@@ -356,7 +356,7 @@ async fn insert_export_operation(
 async fn read_admitted_operation(
     store: &PostgresProjectReader,
     command: &ExportHumanReadableManuscriptCommand,
-) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+) -> Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError> {
     let client = store
         .connect_challenge()
         .await
@@ -406,14 +406,14 @@ async fn read_admitted_operation(
         .await
         .map_err(export_read_error)?
         .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
-        Ok(ExportHumanReadableManuscriptSettlement {
+        Ok(ExportHumanReadableManuscriptAdmission {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(1),
                 author_command_admission_id: row.get(2),
                 receipt_id: command.ids.receipt_id.clone(),
             },
             export_id: row.get(0),
-            effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+            effect: ExportHumanReadableManuscriptAdmissionEffect::Admitted {
                 source_snapshot: Box::new(source_snapshot),
             },
         })
@@ -427,7 +427,7 @@ async fn read_settled_admission(
     store: &PostgresProjectReader,
     command: &ExportHumanReadableManuscriptCommand,
     receipt_id: &str,
-) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+) -> Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError> {
     let client = store
         .connect_challenge()
         .await
@@ -515,14 +515,14 @@ async fn read_settled_admission(
         .await
         .map_err(export_read_error)?
         .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
-        Ok(ExportHumanReadableManuscriptSettlement {
+        Ok(ExportHumanReadableManuscriptAdmission {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
                 author_command_admission_id: row.get(1),
                 receipt_id: row.get(2),
             },
             export_id,
-            effect: ExportHumanReadableManuscriptSettlementEffect::Admitted {
+            effect: ExportHumanReadableManuscriptAdmissionEffect::Admitted {
                 source_snapshot: Box::new(source_snapshot),
             },
         })
@@ -534,7 +534,7 @@ async fn read_settled_admission(
 
 async fn finish_readonly(
     client: &tokio_postgres::Client,
-    result: &Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError>,
+    result: &Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError>,
 ) -> Result<(), ExportHumanReadableManuscriptError> {
     match result {
         Ok(_) => client

@@ -1,4 +1,4 @@
-//! Pure Core classification for human-readable manuscript export.
+//! Pure Core classification for human-readable manuscript export admission.
 
 use super::{ProjectLifecycle, ProjectPresence};
 
@@ -10,7 +10,7 @@ pub struct ExportHumanReadableManuscript {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ExportHumanReadableManuscriptResult {
-    Applied,
+    Admitted,
     Refused {
         reason: ExportHumanReadableManuscriptRefusal,
     },
@@ -22,7 +22,7 @@ pub enum ExportHumanReadableManuscriptRefusal {
     ArchivedProject,
 }
 
-/// Classify one human-readable export against exact Scope presence and lifecycle.
+/// Classify one human-readable export admission against exact Scope presence and lifecycle.
 pub fn export_human_readable_manuscript(
     command: &ExportHumanReadableManuscript,
 ) -> ExportHumanReadableManuscriptResult {
@@ -36,7 +36,7 @@ pub fn export_human_readable_manuscript(
             reason: ExportHumanReadableManuscriptRefusal::ArchivedProject,
         };
     }
-    ExportHumanReadableManuscriptResult::Applied
+    ExportHumanReadableManuscriptResult::Admitted
 }
 
 #[cfg(test)]
