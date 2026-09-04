@@ -139,7 +139,6 @@ async function readBody(
 it("replaces one visible match and refuses a broader replace without authority", {
   timeout: 90_000,
 }, async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist manuscript replace";

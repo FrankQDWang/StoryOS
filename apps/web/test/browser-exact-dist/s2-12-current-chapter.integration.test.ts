@@ -81,7 +81,6 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
 }
 
 it("writes in two Chapters, switches current Chapter, and reopens the current Chapter", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist current Chapter";

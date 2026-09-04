@@ -264,6 +264,7 @@ The browser handle is carried in an `HttpOnly`, `SameSite=Strict` cookie;
 controlled-cloud transport additionally requires TLS and `Secure`. The local
 profile binds only the configured loopback listener and exact first-party
 Origin. No bearer token appears in a URL, SSE query, log, Artifact, or export.
+Foundation-local issuance is the printed-origin HTML document GET.
 
 Before it admits protected traffic, the Server parses and holds the configured
 allowed Origin as a WHATWG tuple origin. The value must be one strict absolute

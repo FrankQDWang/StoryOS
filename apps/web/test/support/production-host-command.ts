@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
-import type { BrowserContext, Page } from "playwright";
+import type { BrowserContext, Cookie, Page } from "playwright";
 
 import { getEditorSession }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -86,6 +86,34 @@ async function manuscriptBody(page: Page): Promise<string> {
   return value;
 }
 
+async function clientSessionCookie(
+  context: BrowserContext, origin: string,
+): Promise<Cookie | undefined> {
+  const matches = (await context.cookies(`${origin}/`))
+    .filter((cookie) => cookie.name === "storyos_session");
+  assert.ok(matches.length <= 1, "the browser holds at most one storyos_session cookie");
+  return matches[0];
+}
+
+function assertIssuedSessionCookie(cookie: Cookie | undefined): void {
+  assert.ok(cookie, "the printed-origin HTML GET must issue storyos_session");
+  assert.deepEqual({
+    httpOnly: cookie.httpOnly,
+    name: cookie.name,
+    path: cookie.path,
+    sameSite: cookie.sameSite,
+    secure: cookie.secure,
+    value: cookie.value,
+  }, {
+    httpOnly: true,
+    name: "storyos_session",
+    path: "/",
+    sameSite: "Strict",
+    secure: false,
+    value: "session-a",
+  });
+}
+
 async function replaceAndSave(page: Page, text: string): Promise<void> {
   const settled = page.waitForResponse((response) =>
     response.url().endsWith("/manuscript/author-edits") && response.request().method() === "POST");
@@ -109,10 +137,6 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
   const pages: Page[] = [];
   let releaseWriterEdits = (): void => {};
   try {
-    await context.addCookies([{
-      name: "storyos_session", value: "session-a", url: `${origin}/`,
-      httpOnly: true, sameSite: "Strict", secure: false,
-    }]);
     for (let index = 0; index < 3; index += 1) pages.push(await context.newPage());
     const [writer, observer, embedding] = pages;
     assert.ok(writer && observer && embedding);
@@ -123,7 +147,9 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
       page.on("pageerror", (error) => errors.push(error.message));
       page.on("request", (request) => requests.push(new URL(request.url())));
     }
+    assert.equal(await clientSessionCookie(context, origin), undefined);
     assert.equal((await writer.goto(`${origin}/`))?.status(), 200);
+    assertIssuedSessionCookie(await clientSessionCookie(context, origin));
     await writer.locator('#app[data-boot-state="protected-ready"]').waitFor();
     assert.equal(await writer.evaluate(() => {
       try { document.createElement("div").innerHTML = "<p>blocked</p>"; return false; }

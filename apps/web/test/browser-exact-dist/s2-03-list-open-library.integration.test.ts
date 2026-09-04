@@ -32,7 +32,6 @@ afterEach(async () => {
 });
 
 it("the current User library lists owned Projects and opens an empty Project from getProject", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const created = document.createElement("iframe");
   applicationFrame = created;
   created.title = "StoryOS exact-dist create for library";

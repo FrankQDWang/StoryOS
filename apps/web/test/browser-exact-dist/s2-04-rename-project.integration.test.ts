@@ -43,7 +43,6 @@ afterEach(async () => {
 });
 
 it("the author renames one exact Project and the library plus opened title converge", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const created = await loadApplication("StoryOS exact-dist create for rename");
   await expect.poll(() =>
     created.contentDocument?.querySelector('#app input[name="title"]')?.tagName

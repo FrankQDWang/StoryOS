@@ -87,7 +87,6 @@ async function waitSaved(root: Element, previousRevisionId?: string): Promise<vo
 }
 
 it("writes Chinese and English after restore, settles, reloads, and keeps isolation", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist restored Project";

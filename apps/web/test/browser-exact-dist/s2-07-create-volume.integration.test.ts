@@ -32,7 +32,6 @@ afterEach(async () => {
 });
 
 it("the author creates one named Volume from the empty manuscript workspace", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Create Volume";

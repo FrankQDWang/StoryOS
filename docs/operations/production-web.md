@@ -25,7 +25,7 @@ Supply these existing environment values through the trusted local deployment se
 | `STORYOS_BOOTSTRAP_SESSIONS` | JSON object that maps opaque session handles to existing User UUIDs. |
 | `STORYOS_CHALLENGE_SECRET` | Secret for the existing command-challenge boundary; at least 32 bytes. |
 
-The trusted bootstrap must also install the matching `storyos_session` browser cookie with HttpOnly and SameSite protection for the exact local origin. The Server does not create a login flow or issue that cookie. Serving a page does not grant Project access. Existing Host, Origin/Referer, session, generation, lifetime, Project Scope, and nonce checks still apply. The current executable binds local sessions for eight hours. Use the printed origin exactly; `localhost` and `127.0.0.1` are not interchangeable bindings.
+The packaged Server issues the matching `storyos_session` cookie on the printed-origin HTML GET. The cookie uses HttpOnly and SameSite=Strict protection for the exact local origin. There is no login product. Serving a page does not grant Project access. Existing Host, Origin/Referer, session, generation, lifetime, Project Scope, and nonce checks still apply. The current executable binds local sessions for eight hours. Use the printed origin exactly; `localhost` and `127.0.0.1` are not interchangeable bindings.
 
 ## Start
 
@@ -39,7 +39,7 @@ package_dir="$PWD/target/release-package"
 
 The offline check exits without opening a listener or accessing PostgreSQL. Normal startup requires `--web-root`; the default bind address is `127.0.0.1:3000`. It validates all Web resources before binding the listener and printing `STORYOS_SERVER_URL`. Missing, extra, changed, mixed, illegal, duplicate, or symbolic-link resources fail startup. Readiness confirms resource and configuration acceptance, not a completed database or author journey.
 
-Open the printed origin in Google Chrome after the trusted bootstrap has supplied the session cookie. Existing Project links use `/projects/<ProjectId>`. Runtime needs no Node, pnpm, or Vite. This contract covers the controlled local HTTP deployment. It does not specify a public network, TLS proxy, cloud, or CDN deployment.
+Open the printed origin in Google Chrome. The packaged Server issues the session cookie on that HTML GET. Existing Project links use `/projects/<ProjectId>`. Runtime needs no Node, pnpm, or Vite. This contract covers the controlled local HTTP deployment. It does not specify a public network, TLS proxy, cloud, or CDN deployment.
 
 ## Upgrade and roll back
 

@@ -74,7 +74,6 @@ async function waitSaved(root: Element): Promise<void> {
 }
 
 it("shows pending, saving, and saved without calling local input saved, across Chapters", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist save truth";

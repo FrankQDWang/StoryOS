@@ -32,7 +32,6 @@ afterEach(async () => {
 });
 
 it("the protected browser creates one empty workspace without a starter Chapter", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist empty Project";

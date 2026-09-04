@@ -107,7 +107,6 @@ async function requestExport(root: Element): Promise<void> {
 }
 
 it("exports a durable human-readable manuscript through the Worker", { timeout: 120_000 }, async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist readable export";

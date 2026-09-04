@@ -62,7 +62,6 @@ function workspace(frame: HTMLIFrameElement): HTMLElement {
 }
 
 it("the production page uses the approved workspace without losing writing state", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist writing workspace";

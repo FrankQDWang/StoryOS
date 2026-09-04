@@ -61,7 +61,6 @@ afterEach(async () => {
 });
 
 it("the author renames and reorders Volumes from the canonical tree and they survive reopen", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const created = await loadApplication("StoryOS exact-dist create for volume update");
   await expect.poll(() =>
     created.contentDocument?.querySelector('#app input[name="title"]')?.tagName

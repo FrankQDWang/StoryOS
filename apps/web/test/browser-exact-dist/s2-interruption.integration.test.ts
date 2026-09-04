@@ -92,7 +92,6 @@ async function reloadProject(
 }
 
 it("recovers Local Edit Journal text after reload without a second Author Edit", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Local Edit Journal recovery";

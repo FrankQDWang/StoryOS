@@ -92,7 +92,6 @@ async function openChapterEditor(): Promise<{
   projectId: string;
   chapterId: string;
 }> {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Chinese and English input";
