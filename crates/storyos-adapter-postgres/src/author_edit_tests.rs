@@ -5,7 +5,7 @@ use storyos_application::{
     AuthorCommandOutcomeUnknownReason, CommittedApplyAuthorEdit, EditorClientBinding,
     EditorSessionId, EditorSessionLookup, EditorSessionSnapshot, IssueProjectCommandChallenge,
     OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
-    ReadApplyAuthorEditOutcome, RequiresReconfirmationApplyAuthorEdit, UserId,
+    RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome, UserId,
     append_author_command_outcome_unknown, create_editor_session, get_apply_author_edit_outcome,
     get_editor_session, issue_project_command_challenge,
 };
@@ -298,7 +298,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     let command = committed_command.unwrap();
     let committed_outcome = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: command.client_binding.clone(),
             limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
@@ -436,7 +436,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
             .unwrap();
         let queried_outcome = get_apply_author_edit_outcome(
             &store,
-            &ReadApplyAuthorEditOutcome {
+            &ResolveApplyAuthorEditOutcome {
                 project_scope: scope.clone(),
                 client_binding: outcome_command.client_binding.clone(),
                 limit_profile_revision: outcome_command
@@ -586,7 +586,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .unwrap();
     let payload_error = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: payload_command.client_binding.clone(),
             limit_profile_revision: payload_command
@@ -601,7 +601,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     .expect_err("a changed stored command payload must fail its durable digest");
     assert_eq!(
         payload_error.to_string(),
-        "Apply Author Edit outcome read is unavailable"
+        "Apply Author Edit outcome resolution is unavailable"
     );
     admin
         .execute(
@@ -1188,7 +1188,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     ));
     let corrupt_outcome_error = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: command.client_binding.clone(),
             limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
@@ -1200,7 +1200,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     .expect_err("a corrupt Receipt-first relation must not produce Committed");
     assert_eq!(
         corrupt_outcome_error.to_string(),
-        "Apply Author Edit outcome read is unavailable"
+        "Apply Author Edit outcome resolution is unavailable"
     );
     let prior_restoration = admin.transaction().await.unwrap();
     prior_restoration
@@ -1395,7 +1395,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
         .expect_err("the recovery cut must stop before Core");
     let recovered = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: recovery_command.client_binding.clone(),
             limit_profile_revision: recovery_command
@@ -1428,7 +1428,7 @@ async fn three_author_edit_fault_cuts_have_complete_negative_evidence() {
     };
     let repeated = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: recovery_command.client_binding.clone(),
             limit_profile_revision: recovery_command
@@ -1693,7 +1693,7 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
 
     let queried = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: command.client_binding.clone(),
             limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
@@ -1714,7 +1714,7 @@ async fn an_open_admission_with_an_incomplete_payload_requires_reconfirmation() 
     assert_eq!(queried, expected);
     let repeated = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: command.client_binding.clone(),
             limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),

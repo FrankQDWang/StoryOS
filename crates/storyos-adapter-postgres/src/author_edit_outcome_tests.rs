@@ -1,7 +1,7 @@
 use storyos_application::{
     ApplyAuthorEditOutcome, ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation,
     EditorClientBinding, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
-    ProjectCommandChallengeUse, ProjectId, ProjectScope, ReadApplyAuthorEditOutcome, UserId,
+    ProjectCommandChallengeUse, ProjectId, ProjectScope, ResolveApplyAuthorEditOutcome, UserId,
     consume_project_command_challenge, get_apply_author_edit_outcome,
     issue_project_command_challenge,
 };
@@ -39,8 +39,8 @@ fn challenge_binding(idempotency_key: &str) -> ProjectCommandChallengeBinding {
 fn outcome_query(
     binding: &ProjectCommandChallengeBinding,
     nonce_digest: &str,
-) -> ReadApplyAuthorEditOutcome {
-    ReadApplyAuthorEditOutcome {
+) -> ResolveApplyAuthorEditOutcome {
+    ResolveApplyAuthorEditOutcome {
         project_scope: binding.project_scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: binding.client_session_binding_digest.clone(),
@@ -210,14 +210,14 @@ async fn missing_foreign_and_changed_proof_bindings_share_one_unavailable_oracle
             .expect_err("changed or invisible proof must fail closed");
         assert_eq!(
             error.to_string(),
-            "Apply Author Edit outcome read is unavailable"
+            "Apply Author Edit outcome resolution is unavailable"
         );
     }
 }
 
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
-async fn outcome_read_waits_for_consume_and_cannot_report_a_false_rejection() {
+async fn outcome_resolution_waits_for_consume_and_cannot_report_a_false_rejection() {
     let database_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(&database_url);
@@ -296,13 +296,13 @@ async fn outcome_read_waits_for_consume_and_cannot_report_a_false_rejection() {
             }
             assert!(
                 !read.is_finished(),
-                "the outcome read completed before reaching the command arbiter lock"
+                "the outcome resolution completed before reaching the command arbiter lock"
             );
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
         }
     })
     .await
-    .expect("the outcome read must observably wait on the command arbiter rows");
+    .expect("the outcome resolution must observably wait on the command arbiter rows");
 
     command_transaction.rollback().await.unwrap();
     assert_eq!(

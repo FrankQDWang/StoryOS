@@ -3,7 +3,7 @@ use storyos_application::{
     ApplyAuthorEditOutcome as ApplicationOutcome,
     ApplyAuthorEditRejectionReason as ApplicationRejectionReason,
     ApplyAuthorEditUnknownObservation as ApplicationUnknownObservation, EditorClientBinding,
-    ReadApplyAuthorEditOutcome,
+    ResolveApplyAuthorEditOutcome,
 };
 
 use super::author_edit::{AuthorEditResponseIdentity, author_edit_response};
@@ -22,7 +22,7 @@ pub(super) async fn get_apply_author_edit_outcome(
     ),
     ApiError,
 > {
-    match read_outcome_response(&state, &headers, &project_id, &idempotency_key).await {
+    match resolve_outcome_response(&state, &headers, &project_id, &idempotency_key).await {
         Ok(response) => {
             let mut response_headers = HeaderMap::new();
             response_headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -41,7 +41,7 @@ pub(super) async fn apply_author_edit_outcome_method_not_allowed() -> ApiError {
     .with_no_store()
 }
 
-async fn read_outcome_response(
+async fn resolve_outcome_response(
     state: &ServerState,
     headers: &HeaderMap,
     project_id: &str,
@@ -75,7 +75,7 @@ async fn read_outcome_response(
     let store = project_reader(state)?;
     let outcome = storyos_application::get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: EditorClientBinding {
                 binding_ref: session_binding_ref(secret, session_handle),

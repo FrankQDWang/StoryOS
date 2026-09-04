@@ -440,7 +440,7 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
         if not sql_errors:
             errors.append(f"negative self-test did not reject {name} outcome_unknown SQL drift")
 
-    outcome_read_mutations = [
+    outcome_relation_mutations = [
         (
             "missing-family",
             lambda relation: relation["family_ids"].remove("project-canonical"),
@@ -462,12 +462,12 @@ def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, An
             lambda relation: relation.__setitem__("outcome_unknown_table_access", "read"),
         ),
     ]
-    for name, mutate in outcome_read_mutations:
-        read_probe = copy.deepcopy(catalog)
-        mutate(read_probe["author_edit_outcome_query_read"])
-        read_errors: list[str] = []
-        validate_catalog(read_probe, route_catalog, read_errors, check_digests=False)
-        if not any("named read relation" in error for error in read_errors):
+    for name, mutate in outcome_relation_mutations:
+        relation_probe = copy.deepcopy(catalog)
+        mutate(relation_probe["author_edit_outcome_query_read"])
+        relation_errors: list[str] = []
+        validate_catalog(relation_probe, route_catalog, relation_errors, check_digests=False)
+        if not any("named outcome relation" in error for error in relation_errors):
             errors.append(f"negative self-test did not reject {name} outcome Query drift")
 
 
@@ -517,7 +517,7 @@ def main() -> int:
         print("OK: bootstrap-credential negative self-test rejected a bad catalog")
         print("OK: outcome-Query-family negative self-test rejected a bad catalog")
         print("OK: outcome_unknown negative self-tests rejected seven bad catalogs and twelve bad SQL shapes")
-        print("OK: named-outcome-read negative self-tests rejected five bad catalogs")
+        print("OK: named-outcome-relation negative self-tests rejected five bad catalogs")
     return 0
 
 

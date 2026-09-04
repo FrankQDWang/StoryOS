@@ -4,7 +4,7 @@ use storyos_application::{
     IssueProjectCommandChallenge, OpenEditorSession, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
     PROJECT_EXPORT_ARCHIVE_PROFILE, PROJECT_EXPORT_COMMAND_KIND, PROJECT_EXPORT_DIGEST_PROFILE,
     PROJECT_EXPORT_REQUEST_SCHEMA, PROJECT_EXPORT_ROUTE, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, ReadApplyAuthorEditOutcome, RequiresReconfirmationApplyAuthorEdit, UserId,
+    ProjectScope, RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome, UserId,
     VerifiedExportArchive, claim_next_archive_export, complete_archive_export,
     create_editor_session, get_apply_author_edit_outcome, get_verified_export_archive,
     issue_project_command_challenge, request_export_project_archive,
@@ -184,7 +184,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
 
     let queried = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope.clone(),
             client_binding: command.client_binding.clone(),
             limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),
@@ -280,7 +280,7 @@ async fn project_export_packs_and_reloads_requires_reconfirmation() {
         .unwrap();
     let reloaded = get_apply_author_edit_outcome(
         &store,
-        &ReadApplyAuthorEditOutcome {
+        &ResolveApplyAuthorEditOutcome {
             project_scope: scope,
             client_binding: command.client_binding.clone(),
             limit_profile_revision: command.challenge_binding.limit_profile_revision.clone(),

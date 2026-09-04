@@ -917,12 +917,16 @@ name the same exact query observation. This branch is not a Problem observation,
 Receipt, Activity, or saved result. It keeps `AuthorAttention.Required` until
 the preserved local work has an explicit author disposition.
 
-The safe outcome Query does not consume the nonce, append Server lifecycle
-state, invoke Core, create a Receipt or Activity, or change authority. A query
-transport failure, malformed response, or canonical non-200 Problem remains
-unresolved and records only the exact local evidence that is available. No
-`Rejected` or `StillUnknown` branch releases the dependent queue, collects the
-capsule or payload, invokes or replays the command, or silently succeeds.
+The safe outcome Query does not consume the nonce or create a new Admission,
+Command, nonce, or idempotency record. When it observes one clean open
+Admission, the Server may complete the already-admitted `direct_editor_action`
+or append terminal `RequiresReconfirmation`. That restricted same-Admission
+recovery may invoke Core, create a Receipt or Activity, or change authority
+for the original identity. A query transport failure, malformed response, or
+canonical non-200 Problem remains unresolved and records only the exact local
+evidence that is available. No `Rejected` or `StillUnknown` branch releases
+the dependent queue, collects the capsule or payload, invokes or replays the
+command, or silently succeeds.
 This client-first bootstrap applies only to `ApplyAuthorEdit`. It does not add
 the outcome route to takeover or another command lifecycle.
 

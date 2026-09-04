@@ -1,9 +1,9 @@
 use storyos_application::{
-    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError,
+    ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError,
     ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds, AuthorEditError,
     AuthorEditSettlement, CommittedApplyAuthorEdit, EditorSessionId,
-    ProjectCommandChallengeBinding, ReadApplyAuthorEditOutcome,
-    RequiresReconfirmationApplyAuthorEdit,
+    ProjectCommandChallengeBinding, RequiresReconfirmationApplyAuthorEdit,
+    ResolveApplyAuthorEditOutcome,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use uuid::Uuid;
@@ -27,9 +27,9 @@ pub(super) struct OpenAdmission {
 impl PostgresProjectReader {
     pub(super) async fn reconcile_open_apply_author_edit(
         &self,
-        query: &ReadApplyAuthorEditOutcome,
+        query: &ResolveApplyAuthorEditOutcome,
         admission: OpenAdmission,
-    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
         if let Some(reason) = reconfirmation_reason(&admission) {
             return self
                 .persist_requires_reconfirmation(query, &admission, reason)
@@ -76,28 +76,28 @@ impl PostgresProjectReader {
                 .await
             }
             Err(error @ (AuthorEditError::InvalidChallenge | AuthorEditError::Unavailable(_))) => {
-                Err(ApplyAuthorEditOutcomeReadError::unavailable(error))
+                Err(ApplyAuthorEditOutcomeResolveError::unavailable(error))
             }
         }
     }
 
     pub(super) async fn read_requires_reconfirmation(
         &self,
-        query: &ReadApplyAuthorEditOutcome,
+        query: &ResolveApplyAuthorEditOutcome,
         command_id: &str,
         author_command_admission_id: &str,
-    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
         let client = self
             .connect_challenge()
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         client
             .batch_execute("BEGIN")
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         set_challenge_scope_on_client(&client, &query.project_scope)
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         match load_requires_reconfirmation(&client, query, command_id, author_command_admission_id)
             .await
         {
@@ -105,7 +105,7 @@ impl PostgresProjectReader {
                 client
                     .batch_execute("COMMIT")
                     .await
-                    .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+                    .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
                 Ok(outcome)
             }
             Err(error) => {
@@ -118,10 +118,10 @@ impl PostgresProjectReader {
     pub(super) async fn persist_requires_reconfirmation_in_tx(
         &self,
         client: &tokio_postgres::Client,
-        query: &ReadApplyAuthorEditOutcome,
+        query: &ResolveApplyAuthorEditOutcome,
         admission: &OpenAdmission,
         reason: ApplyAuthorEditReconfirmationReason,
-    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
         let reason_text = reason_text(&reason);
         let inserted = client
             .execute(
@@ -140,7 +140,7 @@ impl PostgresProjectReader {
                 ],
             )
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         if inserted == 1 {
             let updated = client
                 .execute(
@@ -159,7 +159,7 @@ impl PostgresProjectReader {
                     ],
                 )
                 .await
-                .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+                .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
             if updated != 1 {
                 return Err(outcome_unavailable());
             }
@@ -183,21 +183,21 @@ impl PostgresProjectReader {
 
     async fn persist_requires_reconfirmation(
         &self,
-        query: &ReadApplyAuthorEditOutcome,
+        query: &ResolveApplyAuthorEditOutcome,
         admission: &OpenAdmission,
         reason: ApplyAuthorEditReconfirmationReason,
-    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
         let client = self
             .connect_challenge()
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         client
             .batch_execute("BEGIN")
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         set_challenge_scope_on_client(&client, &query.project_scope)
             .await
-            .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+            .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
         match self
             .persist_requires_reconfirmation_in_tx(&client, query, admission, reason)
             .await
@@ -206,7 +206,7 @@ impl PostgresProjectReader {
                 client
                     .batch_execute("COMMIT")
                     .await
-                    .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?;
+                    .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?;
                 Ok(outcome)
             }
             Err(error) => {
@@ -233,7 +233,7 @@ pub(super) fn reconfirmation_reason(
 }
 
 fn reconstruct_command(
-    query: &ReadApplyAuthorEditOutcome,
+    query: &ResolveApplyAuthorEditOutcome,
     admission: &OpenAdmission,
 ) -> Option<ApplyAuthorEditCommand> {
     let payload: serde_json::Value = serde_json::from_str(&admission.payload).ok()?;
@@ -377,10 +377,10 @@ fn string_array(value: &serde_json::Value) -> Option<Vec<String>> {
 
 pub(super) async fn load_requires_reconfirmation(
     client: &tokio_postgres::Client,
-    query: &ReadApplyAuthorEditOutcome,
+    query: &ResolveApplyAuthorEditOutcome,
     command_id: &str,
     author_command_admission_id: &str,
-) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
     let row = client
         .query_opt(
             "SELECT reconfirmation.reconfirmation_reason,
@@ -396,7 +396,7 @@ pub(super) async fn load_requires_reconfirmation(
             ],
         )
         .await
-        .map_err(ApplyAuthorEditOutcomeReadError::unavailable)?
+        .map_err(ApplyAuthorEditOutcomeResolveError::unavailable)?
         .ok_or_else(outcome_unavailable)?;
     Ok(ApplyAuthorEditOutcome::RequiresReconfirmation(
         RequiresReconfirmationApplyAuthorEdit {
@@ -429,8 +429,8 @@ fn parse_reason(value: String) -> Option<ApplyAuthorEditReconfirmationReason> {
     }
 }
 
-fn outcome_unavailable() -> ApplyAuthorEditOutcomeReadError {
-    ApplyAuthorEditOutcomeReadError::unavailable(std::io::Error::other(
+fn outcome_unavailable() -> ApplyAuthorEditOutcomeResolveError {
+    ApplyAuthorEditOutcomeResolveError::unavailable(std::io::Error::other(
         "Apply Author Edit outcome relation is unavailable",
     ))
 }

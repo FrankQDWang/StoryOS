@@ -758,8 +758,12 @@ def apply_author_edit_outcome_contract_errors(
         "OutcomeQueryRejectedNoAdmission { outcome_query_observation_id",
         "OutcomeQueryRejectedVisible { outcome_query_observation_id",
         "All three records name the same exact query observation",
-        "The safe outcome Query does not consume the nonce, append Server lifecycle state, "
-        "invoke Core, create a Receipt or Activity, or change authority",
+        "The safe outcome Query does not consume the nonce or create a new Admission, "
+        "Command, nonce, or idempotency record",
+        "When it observes one clean open Admission, the Server may complete the "
+        "already-admitted `direct_editor_action` or append terminal `RequiresReconfirmation`",
+        "That restricted same-Admission recovery may invoke Core, create a Receipt or "
+        "Activity, or change authority for the original identity",
         "A query transport failure, malformed response, or canonical non-200 Problem remains "
         "unresolved",
         "No `Rejected` or `StillUnknown` branch releases the dependent queue, collects the "
@@ -1357,8 +1361,17 @@ def self_test() -> None:
          "The records\nmay use different observations", "outcome Query closed meaning drifted"),
         ("does not consume the nonce", "consumes the nonce",
          "outcome Query closed meaning drifted"),
-        ("No\n`Rejected` or `StillUnknown` branch releases the dependent queue",
-         "A\n`StillUnknown` branch releases the dependent queue",
+        ("or create a new Admission,\nCommand, nonce, or idempotency record",
+         ", append Server lifecycle\nstate, invoke Core, create a Receipt or Activity, or "
+         "change authority",
+         "outcome Query closed meaning drifted"),
+        ("That restricted same-Admission\nrecovery may invoke Core, create a Receipt or "
+         "Activity, or change authority",
+         "The outcome Query does not invoke Core, create a Receipt or Activity, or change "
+         "authority",
+         "outcome Query closed meaning drifted"),
+        ("No `Rejected` or `StillUnknown` branch releases\nthe dependent queue",
+         "A `StillUnknown` branch releases\nthe dependent queue",
          "outcome Query closed meaning drifted"),
         ("does not display saved, rejected, or settled",
          "displays saved before the Journal commit", "outcome Query closed meaning drifted"),

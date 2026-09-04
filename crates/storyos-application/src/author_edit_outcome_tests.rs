@@ -3,15 +3,15 @@ use std::sync::Mutex;
 use super::*;
 use crate::{ProjectId, UserId};
 
-struct Reader {
-    calls: Mutex<Vec<ReadApplyAuthorEditOutcome>>,
+struct Resolver {
+    calls: Mutex<Vec<ResolveApplyAuthorEditOutcome>>,
 }
 
-impl ApplyAuthorEditOutcomeReader for Reader {
-    async fn read_apply_author_edit_outcome(
+impl ApplyAuthorEditOutcomeResolver for Resolver {
+    async fn resolve_apply_author_edit_outcome(
         &self,
-        query: &ReadApplyAuthorEditOutcome,
-    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+        query: &ResolveApplyAuthorEditOutcome,
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
         self.calls.lock().unwrap().push(query.clone());
         Ok(ApplyAuthorEditOutcome::StillUnknown {
             observation: ApplyAuthorEditUnknownObservation::AdmissionCommitted {
@@ -22,8 +22,8 @@ impl ApplyAuthorEditOutcomeReader for Reader {
     }
 }
 
-fn query() -> ReadApplyAuthorEditOutcome {
-    ReadApplyAuthorEditOutcome {
+fn query() -> ResolveApplyAuthorEditOutcome {
+    ResolveApplyAuthorEditOutcome {
         project_scope: ProjectScope::new(UserId::new("user"), ProjectId::new("project")),
         client_binding: EditorClientBinding {
             binding_ref: "binding".to_owned(),
@@ -38,13 +38,13 @@ fn query() -> ReadApplyAuthorEditOutcome {
 }
 
 #[tokio::test]
-async fn outcome_query_reads_once_without_invoking_or_retrying_a_command() {
-    let reader = Reader {
+async fn outcome_query_resolves_once_without_retrying_a_command() {
+    let resolver = Resolver {
         calls: Mutex::new(Vec::new()),
     };
     let query = query();
 
-    let outcome = get_apply_author_edit_outcome(&reader, &query)
+    let outcome = get_apply_author_edit_outcome(&resolver, &query)
         .await
         .unwrap();
 
@@ -57,5 +57,5 @@ async fn outcome_query_reads_once_without_invoking_or_retrying_a_command() {
             },
         }
     );
-    assert_eq!(*reader.calls.lock().unwrap(), vec![query]);
+    assert_eq!(*resolver.calls.lock().unwrap(), vec![query]);
 }
