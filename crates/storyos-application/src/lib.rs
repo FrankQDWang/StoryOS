@@ -72,10 +72,11 @@ pub use author_edit::{
     AuthorEditSettlementEffect, AuthorEditStore, AuthoritativeAppliedIds, apply_author_edit,
 };
 pub use author_edit_outcome::{
-    ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError, ApplyAuthorEditOutcomeReader,
+    ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,
     ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
-    ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit, ReadApplyAuthorEditOutcome,
-    RequiresReconfirmationApplyAuthorEdit, get_apply_author_edit_outcome,
+    ApplyAuthorEditUnknownObservation, CommittedApplyAuthorEdit,
+    RequiresReconfirmationApplyAuthorEdit, ResolveApplyAuthorEditOutcome,
+    get_apply_author_edit_outcome,
 };
 
 pub use archive_project::{

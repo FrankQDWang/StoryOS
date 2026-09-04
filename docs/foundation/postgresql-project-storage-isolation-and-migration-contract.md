@@ -114,9 +114,9 @@ Appending or reading a row cannot update idempotency, consume a challenge,
 invoke Core, create a Receipt or settlement, create Activity or authority,
 grant retry permission, or report success or rejection.
 
-### 0.2 Named `getApplyAuthorEditOutcome` read relation
+### 0.2 Named `getApplyAuthorEditOutcome` outcome relation
 
-The persistence catalog records one named read relation for
+The persistence catalog records one named outcome relation for
 `getApplyAuthorEditOutcome`. It covers exactly `project-canonical`,
 `operational-receipts-actions`, `operational-admission-editor`, and
 `operational-project-activity`. A `Committed` projection uses the existing

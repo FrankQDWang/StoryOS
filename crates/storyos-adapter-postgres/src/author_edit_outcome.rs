@@ -1,7 +1,7 @@
 use storyos_application::{
-    ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError, ApplyAuthorEditOutcomeReader,
+    ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError, ApplyAuthorEditOutcomeResolver,
     ApplyAuthorEditRejectionReason, ApplyAuthorEditUnknownObservation, AuthorEditError,
-    CommittedApplyAuthorEdit, ReadApplyAuthorEditOutcome,
+    CommittedApplyAuthorEdit, ResolveApplyAuthorEditOutcome,
 };
 
 use super::author_edit::sha256_hex;
@@ -9,11 +9,11 @@ use super::author_edit_admission_recovery::OpenAdmission;
 use super::author_edit_replay::AuthorEditReplayIdentity;
 use super::*;
 
-impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
-    async fn read_apply_author_edit_outcome(
+impl ApplyAuthorEditOutcomeResolver for PostgresProjectReader {
+    async fn resolve_apply_author_edit_outcome(
         &self,
-        query: &ReadApplyAuthorEditOutcome,
-    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
+        query: &ResolveApplyAuthorEditOutcome,
+    ) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
         let client = self
             .connect_challenge()
             .await
@@ -81,7 +81,7 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
             return Err(outcome_unavailable());
         }
 
-        let relation = read_outcome_relation(&client, query).await?;
+        let relation = load_outcome_relation(&client, query).await?;
         let unexpired = arbiter.get::<_, bool>(12);
         let consumed = arbiter.get::<_, bool>(13);
         let idempotency_outcome = arbiter.get::<_, String>(15);
@@ -261,10 +261,10 @@ impl ApplyAuthorEditOutcomeReader for PostgresProjectReader {
     }
 }
 
-async fn read_outcome_relation(
+async fn load_outcome_relation(
     client: &tokio_postgres::Client,
-    query: &ReadApplyAuthorEditOutcome,
-) -> Result<tokio_postgres::Row, ApplyAuthorEditOutcomeReadError> {
+    query: &ResolveApplyAuthorEditOutcome,
+) -> Result<tokio_postgres::Row, ApplyAuthorEditOutcomeResolveError> {
     client
         .query_one(
             "SELECT (SELECT count(*)
@@ -382,20 +382,20 @@ fn canonical_command_digest(payload: &str) -> Option<String> {
 
 fn outcome_store_error(
     error: storyos_application::ProjectCommandChallengeError,
-) -> ApplyAuthorEditOutcomeReadError {
-    ApplyAuthorEditOutcomeReadError::unavailable(error)
+) -> ApplyAuthorEditOutcomeResolveError {
+    ApplyAuthorEditOutcomeResolveError::unavailable(error)
 }
 
-fn outcome_database_error(error: tokio_postgres::Error) -> ApplyAuthorEditOutcomeReadError {
-    ApplyAuthorEditOutcomeReadError::unavailable(error)
+fn outcome_database_error(error: tokio_postgres::Error) -> ApplyAuthorEditOutcomeResolveError {
+    ApplyAuthorEditOutcomeResolveError::unavailable(error)
 }
 
-fn outcome_settlement_error(error: AuthorEditError) -> ApplyAuthorEditOutcomeReadError {
-    ApplyAuthorEditOutcomeReadError::unavailable(error)
+fn outcome_settlement_error(error: AuthorEditError) -> ApplyAuthorEditOutcomeResolveError {
+    ApplyAuthorEditOutcomeResolveError::unavailable(error)
 }
 
-fn outcome_unavailable() -> ApplyAuthorEditOutcomeReadError {
-    ApplyAuthorEditOutcomeReadError::unavailable(std::io::Error::other(
+fn outcome_unavailable() -> ApplyAuthorEditOutcomeResolveError {
+    ApplyAuthorEditOutcomeResolveError::unavailable(std::io::Error::other(
         "Apply Author Edit outcome relation is unavailable",
     ))
 }

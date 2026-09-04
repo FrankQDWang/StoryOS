@@ -3,7 +3,7 @@ use std::future::Future;
 use crate::{AuthorEditSettlement, EditorClientBinding, ProjectScope};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ReadApplyAuthorEditOutcome {
+pub struct ResolveApplyAuthorEditOutcome {
     pub project_scope: ProjectScope,
     pub client_binding: EditorClientBinding,
     pub limit_profile_revision: String,
@@ -64,11 +64,11 @@ pub enum ApplyAuthorEditOutcome {
 }
 
 #[derive(Debug)]
-pub struct ApplyAuthorEditOutcomeReadError {
+pub struct ApplyAuthorEditOutcomeResolveError {
     source: Box<dyn std::error::Error + Send + Sync>,
 }
 
-impl ApplyAuthorEditOutcomeReadError {
+impl ApplyAuthorEditOutcomeResolveError {
     pub fn unavailable(source: impl std::error::Error + Send + Sync + 'static) -> Self {
         Self {
             source: Box::new(source),
@@ -76,31 +76,31 @@ impl ApplyAuthorEditOutcomeReadError {
     }
 }
 
-impl std::fmt::Display for ApplyAuthorEditOutcomeReadError {
+impl std::fmt::Display for ApplyAuthorEditOutcomeResolveError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter.write_str("Apply Author Edit outcome read is unavailable")
+        formatter.write_str("Apply Author Edit outcome resolution is unavailable")
     }
 }
 
-impl std::error::Error for ApplyAuthorEditOutcomeReadError {
+impl std::error::Error for ApplyAuthorEditOutcomeResolveError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         Some(self.source.as_ref())
     }
 }
 
-/// Reads one durable Apply Author Edit outcome and may complete same-Admission recovery.
-pub trait ApplyAuthorEditOutcomeReader: Sync {
-    fn read_apply_author_edit_outcome(
+/// Resolves one durable Apply Author Edit outcome and may complete same-Admission recovery.
+pub trait ApplyAuthorEditOutcomeResolver: Sync {
+    fn resolve_apply_author_edit_outcome(
         &self,
-        query: &ReadApplyAuthorEditOutcome,
-    ) -> impl Future<Output = Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError>> + Send;
+        query: &ResolveApplyAuthorEditOutcome,
+    ) -> impl Future<Output = Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError>> + Send;
 }
 
 pub async fn get_apply_author_edit_outcome(
-    reader: &impl ApplyAuthorEditOutcomeReader,
-    query: &ReadApplyAuthorEditOutcome,
-) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeReadError> {
-    reader.read_apply_author_edit_outcome(query).await
+    resolver: &impl ApplyAuthorEditOutcomeResolver,
+    query: &ResolveApplyAuthorEditOutcome,
+) -> Result<ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError> {
+    resolver.resolve_apply_author_edit_outcome(query).await
 }
 
 #[cfg(test)]
