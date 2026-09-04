@@ -2,8 +2,8 @@ use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding,
-    ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,
-    ExportHumanReadableManuscriptSettlementEffect, GetHumanReadableManuscriptExport,
+    ExportHumanReadableManuscriptAdmissionEffect, ExportHumanReadableManuscriptCommand,
+    ExportHumanReadableManuscriptError, GetHumanReadableManuscriptExport,
     ProjectCommandChallengeBinding, get_human_readable_manuscript_export,
     request_human_readable_manuscript_export,
 };
@@ -76,7 +76,7 @@ pub(super) async fn export_human_readable_manuscript(
         contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE
     );
     let store = project_reader(&state)?;
-    let settlement = request_human_readable_manuscript_export(
+    let admission = request_human_readable_manuscript_export(
         &store,
         &ExportHumanReadableManuscriptCommand {
             project_scope: scope.clone(),
@@ -119,14 +119,14 @@ pub(super) async fn export_human_readable_manuscript(
         .await
         .map_err(service_unavailable)?
         .ok_or_else(resource_unavailable)?;
-    export_response(&scope, &input.correlation_id, project, settlement)
+    export_response(&scope, &input.correlation_id, project, admission)
 }
 
 fn export_response(
     scope: &ApplicationScope,
     correlation_id: &str,
     project: storyos_application::Project,
-    settlement: storyos_application::ExportHumanReadableManuscriptSettlement,
+    admission: storyos_application::ExportHumanReadableManuscriptAdmission,
 ) -> Result<
     (
         StatusCode,
@@ -134,20 +134,20 @@ fn export_response(
     ),
     ApiError,
 > {
-    let (effect, operation_ref) = match settlement.effect {
-        ExportHumanReadableManuscriptSettlementEffect::Admitted { source_snapshot } => (
+    let (effect, operation_ref) = match admission.effect {
+        ExportHumanReadableManuscriptAdmissionEffect::Admitted { source_snapshot } => (
             contracts::ExportHumanReadableManuscriptEffect::Admitted {
-                export_id: settlement.export_id.clone(),
+                export_id: admission.export_id.clone(),
                 export_profile: READABLE_EXPORT_PROFILE.to_owned(),
                 source_snapshot: Box::new(snapshot_descriptor(scope, &source_snapshot)),
             },
             Some(
                 contracts::HumanReadableManuscriptExportRef::HumanReadableManuscriptExport {
-                    export_id: settlement.export_id.clone(),
+                    export_id: admission.export_id.clone(),
                 },
             ),
         ),
-        ExportHumanReadableManuscriptSettlementEffect::Refused { reason } => {
+        ExportHumanReadableManuscriptAdmissionEffect::Refused { reason } => {
             return Err(export_error(match reason {
                 storyos_core::ExportHumanReadableManuscriptRefusal::ArchivedProject => {
                     ExportHumanReadableManuscriptError::ArchivedProject
@@ -164,8 +164,8 @@ fn export_response(
             schema_id: contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_RESPONSE_SCHEMA_ID.to_owned(),
             correlation_id: correlation_id.to_owned(),
             project_scope: contract_scope(scope),
-            command_id: settlement.ids.command_id,
-            author_command_admission_id: settlement.ids.author_command_admission_id,
+            command_id: admission.ids.command_id,
+            author_command_admission_id: admission.ids.author_command_admission_id,
             acknowledgement: contracts::ExportAcknowledgement::Accepted,
             operation_ref,
             project: contracts::ControlledProject {

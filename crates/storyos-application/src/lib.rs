@@ -137,8 +137,8 @@ pub use project_export_work::{
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
 };
 pub use readable_export::{
+    ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptAdmissionEffect,
     ExportHumanReadableManuscriptCommand, ExportHumanReadableManuscriptError,
-    ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptSettlementEffect,
     ExportHumanReadableManuscriptStore, GetHumanReadableManuscriptExport,
     HUMAN_READABLE_EXPORT_COMMAND_KIND, HUMAN_READABLE_EXPORT_DIGEST_PROFILE,
     HUMAN_READABLE_EXPORT_REQUEST_SCHEMA, HUMAN_READABLE_EXPORT_ROUTE,

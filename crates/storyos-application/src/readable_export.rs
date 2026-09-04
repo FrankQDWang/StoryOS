@@ -27,14 +27,14 @@ pub struct ExportHumanReadableManuscriptCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExportHumanReadableManuscriptSettlement {
+pub struct ExportHumanReadableManuscriptAdmission {
     pub ids: AuthorCommandAdmissionIds,
     pub export_id: String,
-    pub effect: ExportHumanReadableManuscriptSettlementEffect,
+    pub effect: ExportHumanReadableManuscriptAdmissionEffect,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ExportHumanReadableManuscriptSettlementEffect {
+pub enum ExportHumanReadableManuscriptAdmissionEffect {
     Admitted {
         source_snapshot: Box<CanonicalSnapshot>,
     },
@@ -82,23 +82,20 @@ impl std::error::Error for ExportHumanReadableManuscriptError {
     }
 }
 
-/// Owns one admitted human-readable export and its atomic Core settlement.
+/// Owns durable admission of one later asynchronous human-readable export.
 pub trait ExportHumanReadableManuscriptStore: Sync {
     fn export_human_readable_manuscript(
         &self,
         command: &ExportHumanReadableManuscriptCommand,
     ) -> impl Future<
-        Output = Result<
-            ExportHumanReadableManuscriptSettlement,
-            ExportHumanReadableManuscriptError,
-        >,
+        Output = Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError>,
     > + Send;
 }
 
 pub async fn request_human_readable_manuscript_export(
     store: &impl ExportHumanReadableManuscriptStore,
     command: &ExportHumanReadableManuscriptCommand,
-) -> Result<ExportHumanReadableManuscriptSettlement, ExportHumanReadableManuscriptError> {
+) -> Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError> {
     let challenge = &command.challenge_binding;
     let command_digest = {
         use sha2::{Digest as _, Sha256};
