@@ -302,7 +302,7 @@ foreign identity, raw transport capture, or Provider telemetry.
 | `FX-RECOVERY-EDITOR` | Settled and unsettled editor commands across reload, client crash, Server restart, PostgreSQL restart, writer takeover, Recovery Draft, and reconfirmation. |
 | `FX-REPLAY-RETENTION` | Mailbox/Event/Activity facts with Seal, Fence, high-watermarks, compacted payload, replay generations, Snapshot, cursor floor, gaps, archival, redaction, and unavailable content. |
 | `FX-RESTORE-LIFECYCLE` | Isolated Recovery Copy/PITR restore with roles/RLS, projection rebuild, lifecycle/deletion facts, Recovery Visibility Proof, continued writing, export, and non-revival assertions. |
-| `FX-CONTEXT-DISCLOSURE` | Bounded current request, Host/Scope, source eligibility, selection/projection, Context Assembly Manifest, Disclosure Manifest, destination identity, Attempt, usage, and digest facts. |
+| `FX-CONTEXT-DISCLOSURE` | Bounded current request, Host/Scope, source eligibility, selection/projection, Context Assembly Manifest, Destination Context Manifest, additional Outbound Disclosure Manifest for an External Processing Destination, destination identity, Attempt, usage, and digest facts. |
 | `FX-FAKE-MODEL` | Contract-faithful fake model through the normal Host/assembly/manifest/Attempt/fence/Proposal/Receipt path, including refusal and unknown outcomes. |
 | `FX-REAL-MODEL-ADVISORY` | One registered Provider-neutral real model destination with synthetic prompt/result and no claim about Provider internals or quality. |
 | `FX-ABSENT-EXECUTION` | Requests attempting bounded Tool, MCP, research, embedding, Memory, Skill, or Subrun execution in Stages 3/4; expected refusal/no effect. |
@@ -338,8 +338,8 @@ least one point from this registry.
 | `CFP-UNDO-BEFORE-SETTLEMENT` | Undo request is admitted but not settled; no compensating authority effect may be assumed. |
 | `CFP-OUTBOX-BEFORE-CLAIM` | Durable outbox record exists but no delivery claim; replay may claim once under the owner fence. |
 | `CFP-OUTBOX-AFTER-CLAIM-BEFORE-ACK` | Delivery claim exists before consumer acknowledgement; duplicate/replay must be idempotent and observable. |
-| `CFP-MANIFEST-BEFORE-COMMIT` | Required Context/Disclosure Manifest is not committed; external IO is forbidden. |
-| `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS` | Manifest is committed before bytes leave StoryOS; the wire must match the manifest and scope. |
+| `CFP-MANIFEST-BEFORE-COMMIT` | Required Destination Context Manifest is not committed; an External Processing Destination also requires its Outbound Disclosure Manifest; external IO is forbidden. |
+| `CFP-MANIFEST-AFTER-COMMIT-BEFORE-EGRESS` | Destination Context Manifest is committed before bytes leave StoryOS; an External Processing Destination also requires its committed Outbound Disclosure Manifest; the wire must match the committed manifests and scope. |
 | `CFP-DISPATCH-BEFORE-CLAIM` | No external dispatch claim exists; no external bytes or attempt success may be reported. |
 | `CFP-DISPATCH-AFTER-CLAIM-BEFORE-IO` | Dispatch claim/Attempt exists before IO; a crash yields a durable unknown boundary, not a failure guess or blind resend. |
 | `CFP-DISPATCH-AFTER-IO-BEFORE-CONFIRMATION` | Bytes may have left but confirmation is absent; the Attempt remains `OutcomeUnknown` until normal reconciliation. |
