@@ -43,7 +43,6 @@ afterEach(async () => {
 });
 
 it("the author archives one exact Project and the library fails closed on open and write", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const created = await loadApplication("StoryOS exact-dist create for archive");
   await expect.poll(() =>
     created.contentDocument?.querySelector('#app input[name="title"]')?.tagName

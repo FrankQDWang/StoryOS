@@ -172,7 +172,6 @@ async function createThreeChapters(frame: HTMLIFrameElement): Promise<void> {
 }
 
 it("the author confirms Chapter removal, keeps the next current Chapter, then opens empty", { timeout: 90_000 }, async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Delete Chapter";

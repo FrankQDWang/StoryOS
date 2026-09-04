@@ -128,7 +128,6 @@ async function reloadProject(frame: HTMLIFrameElement, projectId: string): Promi
 it("runs the AI-disabled production journey without losing Chapter work", {
   timeout: 90_000,
 }, async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Stage 2 journey";

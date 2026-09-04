@@ -305,7 +305,6 @@ afterEach(async () => {
 });
 
 it("S1-JRN-001 uses the Vite production page, storyos-server, Application, Core, and PostgreSQL", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   await updateClipboardPermission({ action: "grant" });
 
   const frame = document.createElement("iframe");

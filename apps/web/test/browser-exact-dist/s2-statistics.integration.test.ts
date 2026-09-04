@@ -117,7 +117,6 @@ async function waitStatistics(
 }
 
 it("rebuilds Chapter and manuscript statistics after edit, switch, and deletion", { timeout: 120_000 }, async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist manuscript statistics";

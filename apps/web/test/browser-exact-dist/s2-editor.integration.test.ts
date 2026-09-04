@@ -74,7 +74,6 @@ async function readChapter(frame: HTMLIFrameElement, projectId: string, chapterI
 }
 
 it("hydrates production Tiptap for one paragraph Block without a textarea write path", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Tiptap Block replacement";

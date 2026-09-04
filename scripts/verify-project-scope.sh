@@ -66,6 +66,16 @@ verify_web_migration_guards() {
     exit 1
   fi
 
+  injected_session_matches=$(rg -n \
+    'addCookies\(|updateClientSessionCookie\(\{ action: "set"' \
+    apps/web/test/browser-exact-dist \
+    apps/web/test/support/production-host-command.ts || true)
+  if [ -n "$injected_session_matches" ]; then
+    echo "A single-User exact-dist journey still injects a test storyos_session cookie:" >&2
+    printf '%s\n' "$injected_session_matches" >&2
+    exit 1
+  fi
+
   type_escape_matches=$(rg -n \
     '\bany\b|@ts-(ignore|nocheck)|declare module|\bas unknown as\b|\bas [A-Za-z0-9_.$<>\[\] |]+ as\b' \
     apps/web --glob '*.ts' --glob '*.tsx' --glob '!dist/**' --glob '!node_modules/**' || true)

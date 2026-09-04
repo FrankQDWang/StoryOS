@@ -117,7 +117,6 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   timeout: 90_000,
 }, async () => {
   const started = performance.now();
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist long session";

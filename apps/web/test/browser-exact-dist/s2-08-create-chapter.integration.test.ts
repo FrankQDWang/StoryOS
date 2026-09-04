@@ -39,7 +39,6 @@ function chapterTitles(root: Element | null | undefined): string[] {
 }
 
 it("the author creates three named Chapters and keeps the first current Chapter", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Create Chapter";

@@ -46,7 +46,6 @@ afterEach(async () => {
 });
 
 it("a new local browser session reaches protected-ready without AI and acquires createProjectChallenge", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist local bootstrap";

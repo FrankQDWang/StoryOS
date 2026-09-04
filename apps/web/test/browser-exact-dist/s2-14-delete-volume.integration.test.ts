@@ -60,7 +60,6 @@ async function confirmDeleteVolume(frame: HTMLIFrameElement, title: string): Pro
 }
 
 it("the author cannot remove a nonempty Volume, then removes an empty Volume", { timeout: 90_000 }, async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Delete Volume";

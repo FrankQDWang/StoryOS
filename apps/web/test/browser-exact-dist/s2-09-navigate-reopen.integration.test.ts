@@ -89,7 +89,6 @@ async function createThreeChapterProject(frame: HTMLIFrameElement): Promise<void
 }
 
 it("the author opens each Chapter from the tree and reopens the current Chapter", async () => {
-  await updateClientSessionCookie({ action: "set", value: "session-a" });
   const frame = document.createElement("iframe");
   applicationFrame = frame;
   frame.title = "StoryOS exact-dist Chapter navigation";
