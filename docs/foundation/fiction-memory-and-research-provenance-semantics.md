@@ -78,11 +78,13 @@ settled Proposal outcome, a terminal AgentRun or ToolCall outcome, and complete
 author feedback that has been sent and persisted.
 
 Settlement outcomes retain their owning distinctions. AgentRun outcomes must
-not flatten success, exhausted failure, cancellation, supersession, and partial
-completion. ToolCall outcomes must not flatten success, retryable failure,
-terminal failure, cancellation, and timeout. A retry that later succeeds does
-not become a lasting failure lesson, and author cancellation does not become
-evidence about Tool capability.
+not flatten Succeeded, PartiallySucceeded, Failed, and Cancelled. Budget
+exhaustion is a typed Failed reason, not a top-level AgentRun outcome. If an
+output Artifact is later superseded, that fact is separate Artifact provenance
+and is not an AgentRun outcome. ToolCall outcomes must not flatten success,
+retryable failure, terminal failure, cancellation, and timeout. A retry that
+later succeeds does not become a lasting failure lesson, and author cancellation
+does not become evidence about Tool capability.
 
 ### 3.2 Extraction is asynchronous, typed, and idempotent
 
