@@ -34,9 +34,7 @@ pub(super) async fn undo_latest_author_action(
     let input = &body.undo_latest_author_action_input;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     let Some(expected_frontier) = input
         .expected_author_undo_frontier_sequence

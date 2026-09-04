@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::env;
 use std::io::{self, Write as _};
 use std::path::Path;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use storyos_adapter_postgres::PostgresProjectReader;
 use storyos_application::UserId;
@@ -19,18 +19,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let (bind_address, web_root) = server_options(&arguments)?;
+    let multiple_mapping_allowance =
+        if env::var(storyos_server::TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS).as_deref() == Ok("1") {
+            storyos_server::MultipleMappingAllowance::IsolationTestsDisableIssuance
+        } else {
+            storyos_server::MultipleMappingAllowance::Refuse
+        };
+    let (session_users, trusted_local_session_bootstrap) =
+        storyos_server::packaged_session_mappings(
+            env::var("STORYOS_BOOTSTRAP_SESSIONS").ok().as_deref(),
+            multiple_mapping_allowance,
+        )?;
     let assets = storyos_server::WebAssetSet::load(web_root)?;
     let listener = TcpListener::bind(bind_address).await?;
     let address = listener.local_addr()?;
     let host = address.to_string();
-    let session_users = env::var("STORYOS_BOOTSTRAP_SESSIONS")
-        .ok()
-        .map(|value| serde_json::from_str::<HashMap<String, String>>(&value))
-        .transpose()?
-        .unwrap_or_default();
     let issued_at_unix_seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let expires_at_unix_seconds = issued_at_unix_seconds
-        .checked_add(Duration::from_secs(8 * 60 * 60).as_secs())
+        .checked_add(storyos_server::CLIENT_SESSION_BINDING_LIFETIME_SECS)
         .ok_or("Client Session Binding lifetime overflow")?;
     let current_session_generation = 1;
     let client_contract_revision = storyos_contracts::release1_protocol_profile()
@@ -66,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         project_command_challenge_secret: env::var("STORYOS_CHALLENGE_SECRET")
             .ok()
             .map(String::into_bytes),
+        trusted_local_session_bootstrap,
     };
     println!("STORYOS_SERVER_URL=http://{address}");
     io::stdout().flush()?;

@@ -16,6 +16,10 @@ _Avoid_: Any browser page, browser as author, trusted human gesture, local edito
 The opaque server-held request-authentication binding established by a trusted local bootstrap or a future identity flow for one server-derived User, exact allowed Host and first-party Origin, current session generation, accepted Protected Web Client contract and security-policy identities, bounded lifetime, and browser session handle. Every state-changing request also consumes a non-reusable anti-forgery nonce bound to that Binding, exact Project Scope, method, command kind, idempotency record, and canonical command digest; the Binding is an authenticated input to Author Command Admission.
 _Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
+**Trusted Local Session Bootstrap**:
+The Foundation-local issuance of one Client Session Binding for the single configured local User, performed by the packaged Server when the author opens the printed Protected Web origin, without a login product, operator cookie injection, or test cookie injection as the product path.
+_Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user local identity picker
+
 **Project Author**:
 The one User who owns a Project and may exercise its author-only intents, settings, Acceptance, and other creative-authority commands. `Author` names this project-scoped role rather than a second durable person identity; shared ownership, collaborators, ownership transfer, and multi-author editing require a separate later contract.
 _Avoid_: Separate AuthorId, display byline, collaborator, global author singleton

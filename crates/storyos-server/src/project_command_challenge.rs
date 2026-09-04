@@ -57,9 +57,7 @@ pub(super) async fn create_project_command_challenge(
         .map_err(|_| invalid_request_shape())?;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let binding = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     let command_kind = contracts::project_command_kind(
         &request.method,

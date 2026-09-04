@@ -64,9 +64,7 @@ async fn read_outcome_response(
     }
     let session_handle = session_cookie(headers).ok_or_else(authentication_required)?;
     let session_binding = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     let secret = state
         .config
