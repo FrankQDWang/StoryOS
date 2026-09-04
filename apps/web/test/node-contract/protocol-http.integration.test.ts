@@ -17,6 +17,21 @@ import {
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
 const webRoot = join(repositoryRoot, "target/release-package/web");
+const LOCAL_USER = "018f0000-0000-7001-8000-000000000001";
+const FOREIGN_USER = "018f0000-0000-7001-8000-000000000101";
+
+function packagedStartupEnv(sessions?: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: "/__storyos_no_external_tools__",
+    STORYOS_WORKER: "0",
+  };
+  delete env.STORYOS_BOOTSTRAP_SESSIONS;
+  delete env.STORYOS_TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS;
+  if (sessions !== undefined) env.STORYOS_BOOTSTRAP_SESSIONS = sessions;
+  return env;
+}
+
 const CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'";
 const execFileAsync = promisify(execFile);
 
@@ -75,6 +90,79 @@ test("production startup refuses an absent root or invalid resource set before r
     } finally {
       rmSync(temporary, { recursive: true, force: true });
     }
+  }
+});
+
+test("packaged production startup refuses session mappings that are not exactly one handle", async () => {
+  const refuses = async (sessions?: string, extra: NodeJS.ProcessEnv = {}) => {
+    await assert.rejects(execFileAsync(serverBinary, ["--web-root", webRoot, "--bind", "127.0.0.1:0"], {
+      cwd: repositoryRoot, timeout: 4_000,
+      env: { ...packagedStartupEnv(sessions), ...extra },
+    }), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(Reflect.get(error, "code"), 1, error.message);
+      assert.doesNotMatch(String(Reflect.get(error, "stdout")), /STORYOS_SERVER_URL=/);
+      return true;
+    });
+  };
+  await refuses();
+  await refuses("{}");
+  await refuses(`{"session-a":"${LOCAL_USER}","session-b":"${FOREIGN_USER}"}`);
+  await refuses("{");
+  await refuses(`{"":"${LOCAL_USER}"}`);
+  await refuses('{"session-a":"not-a-user"}');
+  await refuses(`{"session a":"${LOCAL_USER}"}`);
+});
+
+test("offline web-root check does not require session mappings", async () => {
+  const env = packagedStartupEnv();
+  await execFileAsync(serverBinary, ["--check-web-root", webRoot], {
+    cwd: repositoryRoot, timeout: 4_000, env,
+  });
+});
+
+test("printed origin HTML GET issues the configured session cookie", async () => {
+  const { baseUrl, server } = await startStoryOSServer({
+    repositoryRoot, serverBinary, sessions: { "session-a": LOCAL_USER },
+  });
+  try {
+    const response = await fetch(`${baseUrl}/`);
+    assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get("set-cookie"),
+      "storyos_session=session-a; HttpOnly; SameSite=Strict; Path=/; Max-Age=28800",
+    );
+    const html = await response.text();
+    assert.doesNotMatch(html, /session-a/);
+    const protocol = await fetch(`${baseUrl}/api/v1/protocol`);
+    assert.equal(protocol.status, 200);
+    assert.equal(protocol.headers.get("set-cookie"), null);
+    const mismatchedProtocol = await fetch(`${baseUrl}/api/v1/protocol`, {
+      headers: { cookie: "storyos_session=other" },
+    });
+    assert.equal(mismatchedProtocol.status, 200);
+    assert.equal(mismatchedProtocol.headers.get("set-cookie"), null);
+    const mismatchedHtml = await fetch(`${baseUrl}/`, {
+      headers: { cookie: "storyos_session=other" },
+    });
+    assert.equal(mismatchedHtml.status, 200);
+    assert.equal(mismatchedHtml.headers.get("set-cookie"), null);
+  } finally {
+    await stopStoryOSServer(server);
+  }
+});
+
+test("two-User isolation mappings start without issuing a cookie", async () => {
+  const { baseUrl, server } = await startStoryOSServer({
+    repositoryRoot, serverBinary,
+    sessions: { "session-a": LOCAL_USER, "session-b": FOREIGN_USER },
+  });
+  try {
+    const response = await fetch(`${baseUrl}/`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get("set-cookie"), null);
+  } finally {
+    await stopStoryOSServer(server);
   }
 });
 

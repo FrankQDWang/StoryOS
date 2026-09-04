@@ -19,11 +19,9 @@ pub(super) async fn create_project(
         validate_request_site(&state, &headers, RequestOriginPolicy::StateChanging)?;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
-    validate_session_binding(&state, session_handle, session, &headers, &request_origin)?;
+    validate_session_binding(&state, session_handle, &session, &headers, &request_origin)?;
     validate_json_content_type(&headers)?;
     let bytes = to_bytes(body_stream, contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES)
         .await

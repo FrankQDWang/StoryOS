@@ -46,9 +46,7 @@ pub(super) async fn create_editor_session(
     }
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session_binding = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     if body.client_contract_revision != session_binding.client_contract_revision
         || body.security_policy_revision != session_binding.security_policy_revision
@@ -148,9 +146,7 @@ pub(super) async fn get_editor_session(
     valid_uuid(&editor_session_id)?;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session_binding = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     let secret = state
         .config

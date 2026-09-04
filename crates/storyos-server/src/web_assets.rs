@@ -21,7 +21,7 @@ impl WebAssetSet {
         Self::load_bound(root, digest)
     }
 
-    fn load_bound(root: &Path, digest: &str) -> io::Result<Self> {
+    pub(crate) fn load_bound(root: &Path, digest: &str) -> io::Result<Self> {
         let actual_paths = web_resource_paths(root)?;
         let manifest_bytes = fs::read(root.join(WEB_ASSET_MANIFEST))?;
         if web_asset_digest(&manifest_bytes) != digest {

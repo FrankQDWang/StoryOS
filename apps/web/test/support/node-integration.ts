@@ -43,6 +43,13 @@ export async function startStoryOSServer(options: {
     env.STORYOS_BOOTSTRAP_SESSIONS = JSON.stringify(sessions);
     env.STORYOS_CHALLENGE_SECRET =
       "test-only-challenge-secret-that-is-at-least-thirty-two-bytes";
+    if (Object.keys(sessions).length !== 1) {
+      env.STORYOS_TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS = "1";
+    }
+  } else if (env.STORYOS_BOOTSTRAP_SESSIONS === undefined) {
+    env.STORYOS_BOOTSTRAP_SESSIONS = JSON.stringify({
+      "session-a": "018f0000-0000-7001-8000-000000000001",
+    });
   }
   return new Promise((resolve, reject) => {
     const server = spawn(serverBinary, ["--bind", bind, "--web-root", webRoot], {

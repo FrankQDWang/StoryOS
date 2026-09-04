@@ -43,9 +43,7 @@ pub(super) async fn export_human_readable_manuscript(
     let input = &body.export_human_readable_manuscript_input;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     if body.command_schema != contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_REQUEST_SCHEMA_ID
         || input.client_contract_revision != session.client_contract_revision

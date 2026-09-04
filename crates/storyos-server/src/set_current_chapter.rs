@@ -34,9 +34,7 @@ pub(super) async fn set_current_chapter(
     let input = &body.set_current_chapter_input;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     if body.command_schema != contracts::SET_CURRENT_CHAPTER_REQUEST_SCHEMA_ID
         || input.client_contract_revision != session.client_contract_revision

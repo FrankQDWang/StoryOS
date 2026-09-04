@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::extract::{Path, Request, State};
@@ -35,6 +35,7 @@ mod project_command_challenge;
 mod project_export;
 mod readable_export;
 mod request_origin;
+mod session_bootstrap;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
@@ -45,6 +46,11 @@ mod update_volume;
 mod web_assets;
 mod web_host;
 
+pub use session_bootstrap::{
+    CLIENT_SESSION_BINDING_LIFETIME_SECS, MultipleMappingAllowance, PackagedSessionBootstrapError,
+    TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS, TrustedLocalSessionBootstrap,
+    packaged_session_mappings,
+};
 pub use storyos_contracts::RELEASE_1_SECURITY_POLICY_REVISION;
 pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
@@ -102,6 +108,7 @@ pub struct ServerConfig {
     pub allowed_host: Option<String>,
     pub allowed_origin: Option<String>,
     pub project_command_challenge_secret: Option<Vec<u8>>,
+    pub trusted_local_session_bootstrap: TrustedLocalSessionBootstrap,
 }
 
 impl fmt::Debug for ServerConfig {
@@ -124,6 +131,7 @@ struct ServerState {
     config: ServerConfig,
     allowed_origin: Option<TupleOrigin>,
     session_allowed_origins: HashMap<String, TupleOrigin>,
+    live_session_bindings: Arc<Mutex<HashMap<String, ClientSessionBinding>>>,
 }
 
 impl ServerState {
@@ -140,11 +148,40 @@ impl ServerState {
                     .map(|origin| (handle.clone(), origin))
             })
             .collect();
+        let live_session_bindings = Arc::new(Mutex::new(config.session_bindings.clone()));
         Self {
             config,
             allowed_origin,
             session_allowed_origins,
+            live_session_bindings,
         }
+    }
+
+    fn client_session_binding(&self, handle: &str) -> Option<ClientSessionBinding> {
+        self.live_session_bindings.lock().ok()?.get(handle).cloned()
+    }
+
+    fn refresh_client_session_binding(&self, handle: &str) -> bool {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .ok();
+        let Some(now) = now else {
+            return false;
+        };
+        let Ok(mut bindings) = self.live_session_bindings.lock() else {
+            return false;
+        };
+        let Some(binding) = bindings.get_mut(handle) else {
+            return false;
+        };
+        let Some(expires_at_unix_seconds) = now.checked_add(CLIENT_SESSION_BINDING_LIFETIME_SECS)
+        else {
+            return false;
+        };
+        binding.issued_at_unix_seconds = now;
+        binding.expires_at_unix_seconds = expires_at_unix_seconds;
+        true
     }
 }
 
@@ -177,6 +214,10 @@ pub fn router() -> Router {
 
 /// Build the API router used by the production Web host and boundary tests.
 pub fn router_with_config(config: ServerConfig) -> Router {
+    api_router(Arc::new(ServerState::new(config)))
+}
+
+pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
     let protocol_method = method_filter(contracts::GET_PROTOCOL_PROFILE_METHOD);
     let project_method = method_filter(contracts::GET_PROJECT_METHOD);
     let chapter_method = method_filter(contracts::GET_CHAPTER_METHOD);
@@ -357,7 +398,7 @@ pub fn router_with_config(config: ServerConfig) -> Router {
             routing::on(activity_stream_method, activity_stream)
                 .fallback(snapshot_method_not_allowed),
         )
-        .with_state(Arc::new(ServerState::new(config)))
+        .with_state(state)
 }
 
 fn method_filter(method: &str) -> routing::MethodFilter {
@@ -414,11 +455,9 @@ fn authenticate_scope(
     let request_origin = validate_request_site(state, headers, origin_policy)?;
     let session_handle = session_cookie(headers).ok_or_else(authentication_required)?;
     let binding = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
-    validate_session_binding(state, session_handle, binding, headers, &request_origin)?;
+    validate_session_binding(state, session_handle, &binding, headers, &request_origin)?;
     Ok(ApplicationScope::new(
         binding.owner_user_id.clone(),
         ProjectId::new(project_id),
@@ -444,22 +483,44 @@ fn validate_request_site(
     Ok(origin)
 }
 
-fn session_cookie(headers: &HeaderMap) -> Option<&str> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PresentedSessionCookie<'a> {
+    Absent,
+    Invalid,
+    Handle(&'a str),
+}
+
+pub(crate) fn presented_session_cookie(headers: &HeaderMap) -> PresentedSessionCookie<'_> {
     let mut cookie_headers = headers.get_all("cookie").iter();
-    let cookie = cookie_headers.next()?.to_str().ok()?;
+    let Some(cookie) = cookie_headers.next() else {
+        return PresentedSessionCookie::Absent;
+    };
     if cookie_headers.next().is_some() {
-        return None;
+        return PresentedSessionCookie::Invalid;
     }
+    let Ok(cookie) = cookie.to_str() else {
+        return PresentedSessionCookie::Invalid;
+    };
 
     let mut session_handle = None;
     for part in cookie.split(';') {
         if let Some(value) = part.trim().strip_prefix("storyos_session=")
             && (value.is_empty() || session_handle.replace(value).is_some())
         {
-            return None;
+            return PresentedSessionCookie::Invalid;
         }
     }
-    session_handle
+    match session_handle {
+        Some(handle) => PresentedSessionCookie::Handle(handle),
+        None => PresentedSessionCookie::Absent,
+    }
+}
+
+fn session_cookie(headers: &HeaderMap) -> Option<&str> {
+    match presented_session_cookie(headers) {
+        PresentedSessionCookie::Handle(handle) => Some(handle),
+        PresentedSessionCookie::Absent | PresentedSessionCookie::Invalid => None,
+    }
 }
 
 fn validate_session_binding(

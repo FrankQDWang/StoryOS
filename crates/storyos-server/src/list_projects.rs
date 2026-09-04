@@ -13,11 +13,9 @@ pub(super) async fn list_projects(
     )?;
     let session_handle = session_cookie(&headers).ok_or_else(authentication_required)?;
     let session = state
-        .config
-        .session_bindings
-        .get(session_handle)
+        .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
-    validate_session_binding(&state, session_handle, session, &headers, &request_origin)?;
+    validate_session_binding(&state, session_handle, &session, &headers, &request_origin)?;
     let reader = project_reader(&state)?;
     let projects = list_owned_projects(&reader, &session.owner_user_id)
         .await
