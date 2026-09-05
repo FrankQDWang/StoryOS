@@ -395,9 +395,13 @@ async fn several_live_chapters_load_membership_in_one_statement() {
         .unwrap();
     let scope = ProjectScope::new(UserId::new(FIXTURE_USER), ProjectId::new(FIXTURE_PROJECT));
     crate::manuscript_block::revision_member_read_sql_statement_count::reset();
-    let chapters = super::read_live_chapter_blocks(&transaction, &scope)
-        .await
-        .unwrap();
+    let chapters = super::read_live_chapter_blocks(
+        &transaction,
+        &scope,
+        super::LiveChapterReadExtent::AllChapters,
+    )
+    .await
+    .unwrap();
     assert_eq!(
         crate::manuscript_block::revision_member_read_sql_statement_count::take(),
         1
@@ -431,5 +435,32 @@ async fn several_live_chapters_load_membership_in_one_statement() {
     assert_eq!(legacy_chapter.blocks, Vec::new());
     assert!(match_chapter.chapter_order < mismatch_chapter.chapter_order);
     assert!(mismatch_chapter.chapter_order < legacy_chapter.chapter_order);
+
+    let current_chapter_id = ChapterId::new(MATCH_CHAPTER);
+    crate::manuscript_block::revision_member_read_sql_statement_count::reset();
+    let current_chapters = super::read_live_chapter_blocks(
+        &transaction,
+        &scope,
+        super::LiveChapterReadExtent::OneChapter {
+            chapter_id: &current_chapter_id,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        crate::manuscript_block::revision_member_read_sql_statement_count::take(),
+        1
+    );
+    assert_eq!(chapters.len(), 3);
+    assert_eq!(
+        current_chapters.len(),
+        1,
+        "CurrentChapter must return one Chapter row, not the full live manuscript"
+    );
+    assert_eq!(
+        current_chapters[0].chapter_id,
+        ChapterId::new(MATCH_CHAPTER)
+    );
+    assert_eq!(current_chapters[0].blocks, match_chapter.blocks);
     transaction.rollback().await.unwrap();
 }

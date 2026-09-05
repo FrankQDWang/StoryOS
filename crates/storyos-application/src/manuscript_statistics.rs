@@ -2,7 +2,10 @@ use storyos_core::{STATISTICS_COUNTING_PROFILE, count_stored_texts};
 
 use crate::{
     CanonicalSnapshot, ChapterId, ProjectReadError, ProjectScope,
-    manuscript_search::{ManuscriptSearchFacts, ManuscriptSearchRead, ManuscriptSearchReader},
+    manuscript_search::{
+        ManuscriptSearchFactExtent, ManuscriptSearchFacts, ManuscriptSearchRead,
+        ManuscriptSearchReader,
+    },
 };
 
 pub const MANUSCRIPT_STATISTICS_PROJECTION_KIND: &str = "manuscript_statistics";
@@ -58,7 +61,10 @@ pub async fn get_manuscript_statistics(
     scope: &ProjectScope,
     request: &ManuscriptStatisticsRequest,
 ) -> Result<GetManuscriptStatistics, ProjectReadError> {
-    match reader.read_search_facts(scope).await? {
+    match reader
+        .read_search_facts(scope, ManuscriptSearchFactExtent::AllChapters)
+        .await?
+    {
         ManuscriptSearchRead::Missing => Ok(GetManuscriptStatistics::Missing),
         ManuscriptSearchRead::SnapshotExpired => Ok(GetManuscriptStatistics::SnapshotExpired),
         ManuscriptSearchRead::Ready(facts)

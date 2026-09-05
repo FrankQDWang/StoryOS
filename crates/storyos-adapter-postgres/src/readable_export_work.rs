@@ -10,7 +10,7 @@ use storyos_core::{ProjectLifecycle, READABLE_EXPORT_PROFILE};
 use uuid::Uuid;
 
 use super::*;
-use crate::manuscript_search::read_live_chapter_blocks;
+use crate::manuscript_search::{LiveChapterReadExtent, read_live_chapter_blocks};
 use crate::manuscript_tree::load_live_tree_facts;
 use crate::snapshot::PinnedSnapshot;
 
@@ -200,9 +200,13 @@ async fn complete_claimed_export(
             let tree = load_live_tree_facts(client, &claim.project_scope, snapshot.clone())
                 .await
                 .map_err(complete_read_error)?;
-            let chapters = read_live_chapter_blocks(client, &claim.project_scope)
-                .await
-                .map_err(complete_read_error)?;
+            let chapters = read_live_chapter_blocks(
+                client,
+                &claim.project_scope,
+                LiveChapterReadExtent::AllChapters,
+            )
+            .await
+            .map_err(complete_read_error)?;
             let manuscript_utf8 = render_readable_manuscript_from_facts(&tree, &chapters);
             persist_ready_export(
                 client,

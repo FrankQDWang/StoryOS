@@ -4,8 +4,8 @@ use super::{
     get_manuscript_statistics,
 };
 use crate::manuscript_search::{
-    ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchFacts,
-    ManuscriptSearchRead, ManuscriptSearchReader,
+    ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchFactExtent,
+    ManuscriptSearchFacts, ManuscriptSearchRead, ManuscriptSearchReader,
 };
 use crate::{CanonicalSnapshot, ChapterId, ProjectId, ProjectReadError, ProjectScope, UserId};
 
@@ -17,6 +17,7 @@ impl ManuscriptSearchReader for FixtureReader {
     async fn read_search_facts(
         &self,
         _scope: &ProjectScope,
+        _fact_extent: ManuscriptSearchFactExtent,
     ) -> Result<ManuscriptSearchRead, ProjectReadError> {
         Ok(self.read.clone())
     }
