@@ -59,13 +59,41 @@ fn main() {
         let mut streaming_count =
             || count_stored_texts(black_box(&chapter).iter().map(String::as_str));
         let mut joined_count = || joined_reference(black_box(&chapter));
-        // Alternate the two paths and keep each path's fastest sample so a
-        // one-sided warmup or scheduler pause does not bias the comparison.
-        let (mut best_streaming, streaming) = measure(ROUNDS, &mut streaming_count);
-        let (mut best_joined, joined) = measure(ROUNDS, &mut joined_count);
-        for _ in 1..SAMPLES {
-            best_streaming = best_streaming.min(measure(ROUNDS, &mut streaming_count).0);
-            best_joined = best_joined.min(measure(ROUNDS, &mut joined_count).0);
+        let mut best_streaming = Duration::MAX;
+        let mut best_joined = Duration::MAX;
+        let mut streaming = TextStatistics {
+            word_count: 0,
+            character_count: 0,
+        };
+        let mut joined = streaming;
+        // Alternate path order on each sample and keep each path's fastest
+        // sample so a one-sided warmup or scheduler pause does not bias the
+        // comparison.
+        for sample in 0..SAMPLES {
+            let (streaming_elapsed, streaming_result, joined_elapsed, joined_result) =
+                if sample % 2 == 0 {
+                    let streaming_sample = measure(ROUNDS, &mut streaming_count);
+                    let joined_sample = measure(ROUNDS, &mut joined_count);
+                    (
+                        streaming_sample.0,
+                        streaming_sample.1,
+                        joined_sample.0,
+                        joined_sample.1,
+                    )
+                } else {
+                    let joined_sample = measure(ROUNDS, &mut joined_count);
+                    let streaming_sample = measure(ROUNDS, &mut streaming_count);
+                    (
+                        streaming_sample.0,
+                        streaming_sample.1,
+                        joined_sample.0,
+                        joined_sample.1,
+                    )
+                };
+            best_streaming = best_streaming.min(streaming_elapsed);
+            best_joined = best_joined.min(joined_elapsed);
+            streaming = streaming_result;
+            joined = joined_result;
         }
         assert_eq!(
             streaming, joined,
