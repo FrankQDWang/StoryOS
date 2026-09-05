@@ -77,7 +77,7 @@ impl ProjectActivityKind {
             Self::ProjectArchivalChanged => "storyos.event.project-archival-changed.v1",
             Self::VolumeCreated => VOLUME_CREATED_EVENT_SCHEMA_V1,
             Self::VolumeUpdated => "storyos.event.volume-updated.v1",
-            Self::ChapterCreated => "storyos.event.chapter-created.v1",
+            Self::ChapterCreated => CHAPTER_CREATED_EVENT_SCHEMA_V1,
             Self::ChapterUpdated => "storyos.event.chapter-updated.v1",
             Self::CurrentChapterSet => "storyos.event.current-chapter-set.v1",
             Self::ChapterDeleted => "storyos.event.chapter-deleted.v1",
@@ -90,16 +90,22 @@ impl ProjectActivityKind {
     }
 
     pub fn event_schema_for_create_receipt(self, receipt_order: Option<&str>) -> &'static str {
-        if self == Self::VolumeCreated && receipt_order.is_some_and(|order| !order.is_empty()) {
-            VOLUME_CREATED_EVENT_SCHEMA_V2
-        } else {
-            self.event_schema()
+        if receipt_order.is_some_and(|order| !order.is_empty()) {
+            if self == Self::VolumeCreated {
+                return VOLUME_CREATED_EVENT_SCHEMA_V2;
+            }
+            if self == Self::ChapterCreated {
+                return CHAPTER_CREATED_EVENT_SCHEMA_V2;
+            }
         }
+        self.event_schema()
     }
 }
 
 const VOLUME_CREATED_EVENT_SCHEMA_V1: &str = "storyos.event.volume-created.v1";
 const VOLUME_CREATED_EVENT_SCHEMA_V2: &str = "storyos.event.volume-created.v2";
+const CHAPTER_CREATED_EVENT_SCHEMA_V1: &str = "storyos.event.chapter-created.v1";
+const CHAPTER_CREATED_EVENT_SCHEMA_V2: &str = "storyos.event.chapter-created.v2";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActivityAggregateRef {

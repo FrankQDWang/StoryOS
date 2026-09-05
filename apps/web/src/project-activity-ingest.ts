@@ -74,6 +74,9 @@ function activityEventSchemas(kind: string): readonly string[] {
   if (kind === "volume_created") {
     return ["storyos.event.volume-created.v1", "storyos.event.volume-created.v2"];
   }
+  if (kind === "chapter_created") {
+    return ["storyos.event.chapter-created.v1", "storyos.event.chapter-created.v2"];
+  }
   return [`storyos.event.${kind.replaceAll("_", "-")}.v1`];
 }
 

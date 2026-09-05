@@ -1,7 +1,7 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateChapterCommand, CreateChapterError,
+    AuthorCommandAdmissionIds, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
     CreateChapterSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
 };
 
@@ -149,7 +149,12 @@ fn create_chapter_response(
                     chapter_id,
                     title: command.title.clone(),
                     tree_revision: tree_revision.to_string(),
-                    order: order.to_string(),
+                    order: match order {
+                        CreateChapterPublicOrder::CanonicalSiblingOrder(order)
+                        | CreateChapterPublicOrder::HistoricalCreateChapterAck(order) => {
+                            order.to_string()
+                        }
+                    },
                     current_chapter_id,
                     project_activity_position: settlement.project_activity_position.to_string(),
                 },

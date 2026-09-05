@@ -27,15 +27,13 @@ pub(super) async fn next_chapter_order(
         .map_err(create_chapter_parse_error)
 }
 
-pub(super) async fn persist_created_chapter(
+pub(super) async fn insert_created_chapter_object(
     client: &tokio_postgres::Client,
     command: &CreateChapterCommand,
-    tree_revision: &u64,
     chapter_id: &str,
-    current: &CreateChapterCurrent,
-    order: u64,
+    tree_order: u64,
 ) -> Result<(), CreateChapterError> {
-    let tree_order = order.to_string();
+    let tree_order_text = tree_order.to_string();
     client
         .execute(
             "INSERT INTO storyos.manuscript_objects
@@ -48,12 +46,22 @@ pub(super) async fn persist_created_chapter(
                 &command.project_scope.project_id.as_ref(),
                 &chapter_id,
                 &command.title,
-                &tree_order,
+                &tree_order_text,
                 &command.volume_id,
             ],
         )
         .await
         .map_err(create_chapter_database_error)?;
+    Ok(())
+}
+
+pub(super) async fn persist_created_chapter(
+    client: &tokio_postgres::Client,
+    command: &CreateChapterCommand,
+    tree_revision: &u64,
+    chapter_id: &str,
+    current: &CreateChapterCurrent,
+) -> Result<(), CreateChapterError> {
     let payload_id = Uuid::now_v7().to_string();
     let revision_id = Uuid::now_v7().to_string();
     let empty: &[u8] = &[];

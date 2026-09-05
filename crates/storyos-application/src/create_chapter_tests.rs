@@ -17,7 +17,7 @@ impl CreateChapterStore for Store {
                 tree_revision: 3,
                 chapter_id: "chapter".to_owned(),
                 current: storyos_core::CreateChapterCurrent::SelectCreated,
-                order: 1,
+                order: CreateChapterPublicOrder::CanonicalSiblingOrder(1),
             },
             receipt_created_at: "2026-08-27T00:00:00.000Z".to_owned(),
             project_activity_position: 3,
@@ -77,7 +77,7 @@ async fn an_exact_create_chapter_binding_reaches_the_store() {
             tree_revision: 3,
             chapter_id: "chapter".to_owned(),
             current: storyos_core::CreateChapterCurrent::SelectCreated,
-            order: 1,
+            order: CreateChapterPublicOrder::CanonicalSiblingOrder(1),
         }
     );
 }
