@@ -1,7 +1,7 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateVolumeCommand, CreateVolumeError,
+    AuthorCommandAdmissionIds, CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder,
     CreateVolumeSettlementEffect, EditorClientBinding, ProjectCommandChallengeBinding,
 };
 
@@ -144,13 +144,17 @@ fn create_volume_response(
         CreateVolumeSettlementEffect::Applied {
             tree_revision,
             volume_id,
+            order,
         } => (
             contracts::DomainReceiptResult::AuthoritativeApplied,
             contracts::CreateVolumeEffect::AuthoritativeApplied {
                 volume_id,
                 title: title.to_owned(),
                 tree_revision: tree_revision.to_string(),
-                order: "1".to_owned(),
+                order: match order {
+                    CreateVolumePublicOrder::CanonicalSiblingOrder(rank) => rank.to_string(),
+                    CreateVolumePublicOrder::HistoricalCreateVolumeAck => "1".to_owned(),
+                },
                 project_activity_position: settlement.project_activity_position.to_string(),
             },
         ),

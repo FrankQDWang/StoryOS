@@ -1,10 +1,11 @@
 use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
-    ProjectId, ProjectScope, UserId, VolumeId, VolumeNode, create_project, create_volume,
-    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    CreateVolumeCommand, CreateVolumePublicOrder, CreateVolumeSettlementEffect,
+    EditorClientBinding, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, VolumeId, VolumeNode,
+    create_project, create_volume, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge,
 };
 use tokio_postgres::NoTls;
 
@@ -15,6 +16,9 @@ const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const TITLE: &str = "Volume A";
 const COMMAND_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const COMMAND_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
+const VOLUME_B_TITLE: &str = "Volume B";
+const VOLUME_B_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Volume B"}"#;
+const VOLUME_B_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:1093f06260a76658116fbc95ea1503ed34ef1b3a7bcc07cc187e1c89f4a6bea2";
 
 fn create_project_issue(
     idempotency_key: &str,
@@ -125,6 +129,20 @@ fn command(
     }
 }
 
+fn titled_command(
+    binding: ProjectCommandChallengeBinding,
+    nonce_digest: &str,
+    ids_suffix: &str,
+    title: &str,
+    bytes: &[u8],
+    expected_tree_revision: u64,
+) -> CreateVolumeCommand {
+    let mut created = command(binding, nonce_digest, ids_suffix, expected_tree_revision);
+    created.title = title.to_owned();
+    created.canonical_command_bytes = bytes.to_vec();
+    created
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn create_volume_is_atomic_replayable_and_scope_safe() {
@@ -172,11 +190,13 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     let CreateVolumeSettlementEffect::Applied {
         tree_revision,
         volume_id,
+        order,
     } = first.effect.clone()
     else {
         panic!("Create Volume on an empty active Project must apply");
     };
     assert_eq!(tree_revision, 2);
+    assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(1));
     let replay = create_volume(
         &store,
         &command(
@@ -305,4 +325,164 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
         .unwrap()
         .get::<_, i64>(0);
     assert_eq!(volumes_after_refuse, 1);
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let issue = create_project_issue("018f0000-0000-7001-8000-000000000720", "0720");
+    let issued = issue_create_project_challenge(&store, &issue)
+        .await
+        .unwrap();
+    let mut project_binding = issue.binding.clone();
+    project_binding.prospective_project_id = issued.prospective_project_id.clone();
+    project_binding.canonical_command_digest = issued.canonical_command_digest.clone();
+    create_project(
+        &store,
+        &create_project_command(project_binding.clone(), &issue.nonce_digest, "0721"),
+    )
+    .await
+    .unwrap();
+    let scope = ProjectScope::new(
+        project_binding.owner_user_id.clone(),
+        project_binding.prospective_project_id.clone(),
+    );
+
+    let first_issue = issue_request(&scope, "0722");
+    issue_project_command_challenge(&store, &first_issue)
+        .await
+        .unwrap();
+    let first = create_volume(
+        &store,
+        &command(
+            first_issue.binding.clone(),
+            &first_issue.nonce_digest,
+            "0723",
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let CreateVolumeSettlementEffect::Applied {
+        order: first_order, ..
+    } = first.effect.clone()
+    else {
+        panic!("the first Create Volume must apply");
+    };
+    assert_eq!(
+        first_order,
+        CreateVolumePublicOrder::CanonicalSiblingOrder(1)
+    );
+
+    let mut second_issue = issue_request(&scope, "0724");
+    second_issue.binding.canonical_command_digest = VOLUME_B_DIGEST.to_owned();
+    issue_project_command_challenge(&store, &second_issue)
+        .await
+        .unwrap();
+    let second = create_volume(
+        &store,
+        &titled_command(
+            second_issue.binding.clone(),
+            &second_issue.nonce_digest,
+            "0725",
+            VOLUME_B_TITLE,
+            VOLUME_B_BYTES,
+            2,
+        ),
+    )
+    .await
+    .unwrap();
+    let CreateVolumeSettlementEffect::Applied {
+        tree_revision,
+        volume_id,
+        order,
+    } = second.effect.clone()
+    else {
+        panic!("the second Create Volume must apply");
+    };
+    assert_eq!(tree_revision, 3);
+    assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(2));
+    let replay = create_volume(
+        &store,
+        &titled_command(
+            second_issue.binding.clone(),
+            &second_issue.nonce_digest,
+            "0798",
+            VOLUME_B_TITLE,
+            VOLUME_B_BYTES,
+            2,
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(replay, second);
+
+    let tree = get_manuscript_tree(&store, &scope)
+        .await
+        .unwrap()
+        .expect("the Project still has a Canonical Query");
+    assert_eq!(tree.tree_revision, 3);
+    assert_eq!(tree.volumes[1].order, 2);
+    assert_eq!(tree.volumes[1].volume_id, VolumeId::new(volume_id.clone()));
+
+    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        admin_connection.await.unwrap();
+    });
+    let stored = admin
+        .query_one(
+            "SELECT receipt.result_payload::text,
+                    payload.payload->>'order'
+               FROM storyos.domain_receipts AS receipt
+               JOIN storyos.project_activity_event_payloads AS payload
+                 ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
+                    (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              WHERE receipt.receipt_id = $1::text::uuid",
+            &[&second.ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    let stored_receipt: serde_json::Value =
+        serde_json::from_str(&stored.get::<_, String>(0)).unwrap();
+    assert_eq!(stored_receipt, serde_json::json!({"order": "2"}));
+    assert_eq!(stored.get::<_, String>(1), "2");
+
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET result_payload = '{}'::jsonb
+              WHERE receipt_id = $1::text::uuid",
+            &[&second.ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    let historical = create_volume(
+        &store,
+        &titled_command(
+            second_issue.binding.clone(),
+            &second_issue.nonce_digest,
+            "0797",
+            VOLUME_B_TITLE,
+            VOLUME_B_BYTES,
+            2,
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        historical.effect,
+        CreateVolumeSettlementEffect::Applied {
+            tree_revision,
+            volume_id,
+            order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
+        }
+    );
 }

@@ -156,7 +156,7 @@ fn format_activity_frame(
         "envelope_version": 1,
         "activity_profile": ACTIVITY_PROFILE,
         "event_id": event.event_id,
-        "event_schema": event.kind.event_schema(),
+        "event_schema": event.event_schema,
         "event_kind": event.kind.as_str(),
         "project_scope": {
             "owner_user_id": scope.owner_user_id.as_ref(),

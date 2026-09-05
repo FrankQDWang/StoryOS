@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
-  x-storyos-contract-revision: release1-wire-catalog-2026-09-02-tree-revision-names-v1
+  x-storyos-contract-revision: release1-wire-catalog-2026-09-05-volume-created-order-v2
   x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction
 paths:
   /api/v1/protocol:

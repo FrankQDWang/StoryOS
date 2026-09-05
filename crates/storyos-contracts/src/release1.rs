@@ -12,7 +12,7 @@ pub const LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
 const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
 pub(super) const CONTRACT_REVISION: &str =
-    "release1-wire-catalog-2026-09-02-tree-revision-names-v1";
+    "release1-wire-catalog-2026-09-05-volume-created-order-v2";
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
 pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v3";
 pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v3";

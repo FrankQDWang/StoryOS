@@ -36,6 +36,10 @@ _Avoid_: Tenant inferred from session, project path, unscoped global ID, client-
 The author-approved current truth of a novel project, including prose, established fictional-world truth, characters, relationships, timeline, and manuscript structure. Authority is a binary boundary reached only through an explicit author-authorized domain action; lifecycle, confidence, and lock status do not form authority levels.
 _Avoid_: Canon (too narrow), accepted artifact, Agent memory
 
+**Canonical Sibling Order**:
+The 1-based rank of one live Volume among the Project's live Volumes, or of one live Chapter among the live Chapters of its parent Volume, in current Authoritative manuscript structure. A successful create acknowledgement, a new create Activity event, and exact replay of that acknowledgement report this same rank for that node. A historical create Activity that stored a storage key in the same field is not this rank.
+_Avoid_: Storage key, physical row order, browser-owned order, tombstone-inclusive sequence
+
 **Discovery Writing**:
 The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
 

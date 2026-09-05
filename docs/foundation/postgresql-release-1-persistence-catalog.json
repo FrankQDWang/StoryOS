@@ -19,15 +19,15 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:1de2df4f674bf29121713b3c7b2591ee8a9553493c922e66c5ca9d8ee103ff5e",
+    "migration_chain_digest": "sha256:c404235ee1f2657cdba65903234cdd2b56b3f6024c6ab1da703017b870d99622",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-02-tree-revision-names-v1",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-05-volume-created-order-v2",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:390ee121088aff014cf4990201a83b630bc1d11934d120d570e222e7dd43c7ed",
+      "route_catalog_sha256": "sha256:4bd045d6acda2a077a16c4cdb3a7435343aed061a8dbc6f9138a73010a29ac52",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:4bbfffc40ce81d68b2575bb4d68a0bd23f9f4b2ccd74a26f418a3577baead723",
+      "manifest_sha256": "sha256:3f39b4d5ff2a34864c29341862b980a927dc0301169115cea9150c9c4fe2f1ad",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -359,6 +359,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0031_project_export_operations.sql",
           "lf_sha256": "sha256:b9ecbab6aaa95039654ed0f817827dcb3bfe822771f00e57c526228ff3c4964c"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0032_create_volume_canonical_sibling_order.sql",
+          "lf_sha256": "sha256:a4f38b72ffb51763dac58ea717356aef089334bbf44f84baa14f522d86acb1f7"
         }
       ]
     },

@@ -1,7 +1,7 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateVolumeCommand, CreateVolumeError, CreateVolumeSettlement,
-    CreateVolumeSettlementEffect, CreateVolumeStore, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    AuthorCommandAdmissionIds, CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder,
+    CreateVolumeSettlement, CreateVolumeSettlementEffect, CreateVolumeStore,
+    ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateVolume as CoreCreateVolume, CreateVolumeResult, ProjectLifecycle, ProjectPresence,
@@ -98,10 +98,65 @@ async fn persist_create_volume(
         title: command.title.clone(),
     });
     let effect = match classified {
-        CreateVolumeResult::Applied { tree_revision } => CreateVolumeSettlementEffect::Applied {
-            tree_revision,
-            volume_id: Uuid::now_v7().to_string(),
-        },
+        CreateVolumeResult::Applied { tree_revision } => {
+            let volume_id = Uuid::now_v7().to_string();
+            let tree_order = client
+                .query_one(
+                    "SELECT (COALESCE(MAX(tree_order), 0) + 1)::text
+                       FROM storyos.manuscript_objects
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND object_kind = 'volume'",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                    ],
+                )
+                .await
+                .map_err(create_volume_database_error)?
+                .get::<_, String>(0);
+            client
+                .execute(
+                    "INSERT INTO storyos.manuscript_objects
+                       (owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order)
+                     VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'volume', $4, $5::text::bigint)",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &volume_id,
+                        &command.title,
+                        &tree_order,
+                    ],
+                )
+                .await
+                .map_err(create_volume_database_error)?;
+            let canonical_sibling_order = client
+                .query_one(
+                    "SELECT count(*)::text
+                       FROM storyos.manuscript_objects AS volume
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND object_kind = 'volume'
+                        AND NOT EXISTS (
+                          SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                           WHERE removal.owner_user_id = volume.owner_user_id
+                             AND removal.project_id = volume.project_id
+                             AND removal.volume_id = volume.manuscript_object_id
+                        )",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                    ],
+                )
+                .await
+                .map_err(create_volume_database_error)?
+                .get::<_, String>(0)
+                .parse::<u64>()
+                .map_err(create_volume_parse_error)?;
+            CreateVolumeSettlementEffect::Applied {
+                tree_revision,
+                volume_id,
+                order: CreateVolumePublicOrder::CanonicalSiblingOrder(canonical_sibling_order),
+            }
+        }
         CreateVolumeResult::Conflicted { reason } => {
             CreateVolumeSettlementEffect::Conflicted { reason }
         }
@@ -112,7 +167,18 @@ async fn persist_create_volume(
     };
     insert_create_volume_admission(client, command).await?;
     let (result_kind, result_payload) = match &effect {
-        CreateVolumeSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
+        CreateVolumeSettlementEffect::Applied {
+            order: CreateVolumePublicOrder::CanonicalSiblingOrder(order),
+            ..
+        } => ("authoritative_applied", format!(r#"{{"order":"{order}"}}"#)),
+        CreateVolumeSettlementEffect::Applied {
+            order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
+            ..
+        } => {
+            return Err(CreateVolumeError::Unavailable(Box::new(
+                std::io::Error::other("Create Volume first use cannot replay a historical ack"),
+            )));
+        }
         CreateVolumeSettlementEffect::Conflicted { .. } => (
             "conflicted",
             r#"{"reason":"stale_tree_revision"}"#.to_owned(),
@@ -178,37 +244,9 @@ async fn persist_create_volume(
     if let CreateVolumeSettlementEffect::Applied {
         tree_revision,
         volume_id,
+        order: CreateVolumePublicOrder::CanonicalSiblingOrder(order),
     } = &effect
     {
-        let tree_order = client
-            .query_one(
-                "SELECT (COALESCE(MAX(tree_order), 0) + 1)::text
-                   FROM storyos.manuscript_objects
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND object_kind = 'volume'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(create_volume_database_error)?
-            .get::<_, String>(0);
-        client
-            .execute(
-                "INSERT INTO storyos.manuscript_objects
-                   (owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order)
-                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'volume', $4, $5::text::bigint)",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    volume_id,
-                    &command.title,
-                    &tree_order,
-                ],
-            )
-            .await
-            .map_err(create_volume_database_error)?;
         let updated = client
             .execute(
                 "UPDATE storyos.projects
@@ -254,7 +292,7 @@ async fn persist_create_volume(
             "volume_id": volume_id,
             "title": command.title,
             "tree_revision": tree_revision.to_string(),
-            "order": tree_order,
+            "order": order.to_string(),
         })
         .to_string();
         client
@@ -384,7 +422,8 @@ async fn read_create_volume_settlement(
                         payload.payload->>'tree_revision',
                         payload.payload->>'volume_id',
                         payload.project_activity_position::text,
-                        payload.project_activity_event_id::text
+                        payload.project_activity_event_id::text,
+                        receipt.result_payload->>'order'
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -431,9 +470,20 @@ async fn read_create_volume_settlement(
                 let volume_id = row
                     .get::<_, Option<String>>(7)
                     .ok_or(CreateVolumeError::BindingConflict)?;
+                let order = match row.get::<_, Option<String>>(10).as_deref() {
+                    Some(order) => {
+                        let rank = order.parse::<u64>().map_err(create_volume_parse_error)?;
+                        if rank < 1 {
+                            return Err(CreateVolumeError::BindingConflict);
+                        }
+                        CreateVolumePublicOrder::CanonicalSiblingOrder(rank)
+                    }
+                    None => CreateVolumePublicOrder::HistoricalCreateVolumeAck,
+                };
                 CreateVolumeSettlementEffect::Applied {
                     tree_revision,
                     volume_id,
+                    order,
                 }
             }
             ("conflicted", Some("stale_tree_revision")) => {
