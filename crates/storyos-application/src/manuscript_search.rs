@@ -12,6 +12,16 @@ pub enum ManuscriptSearchSelection {
     Manuscript,
 }
 
+/// Live Chapter facts one manuscript-search or statistics read may load.
+///
+/// `CurrentChapter` loads at most the current Chapter of the scoped Project.
+/// `AllChapters` loads every live Chapter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ManuscriptSearchFactExtent {
+    AllChapters,
+    CurrentChapter,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ManuscriptSearchRequest {
     pub query_text: String,
@@ -53,11 +63,13 @@ pub enum ManuscriptSearchRead {
 /// authenticated exact Project Scope.
 ///
 /// Implementations rebuild from live canonical Heads. They must omit removed and
-/// foreign-Scope material and must not write.
+/// foreign-Scope material and must not write. [`ManuscriptSearchFactExtent::CurrentChapter`]
+/// must load at most the current Chapter observed in the same read.
 pub trait ManuscriptSearchReader: Sync {
     fn read_search_facts(
         &self,
         scope: &ProjectScope,
+        fact_extent: ManuscriptSearchFactExtent,
     ) -> impl Future<Output = Result<ManuscriptSearchRead, ProjectReadError>> + Send;
 }
 
@@ -106,7 +118,11 @@ pub async fn search_manuscript(
     scope: &ProjectScope,
     request: &ManuscriptSearchRequest,
 ) -> Result<SearchManuscript, ProjectReadError> {
-    match reader.read_search_facts(scope).await? {
+    let fact_extent = match request.selection {
+        ManuscriptSearchSelection::CurrentChapter => ManuscriptSearchFactExtent::CurrentChapter,
+        ManuscriptSearchSelection::Manuscript => ManuscriptSearchFactExtent::AllChapters,
+    };
+    match reader.read_search_facts(scope, fact_extent).await? {
         ManuscriptSearchRead::Missing => Ok(SearchManuscript::Missing),
         ManuscriptSearchRead::SnapshotExpired => Ok(SearchManuscript::SnapshotExpired),
         ManuscriptSearchRead::Ready(facts)

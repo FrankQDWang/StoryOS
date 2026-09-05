@@ -1,6 +1,7 @@
 use storyos_application::{
-    ChapterId, ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchFacts,
-    ManuscriptSearchRead, ManuscriptSearchReader, ProjectReadError, ProjectScope,
+    ChapterId, ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchFactExtent,
+    ManuscriptSearchFacts, ManuscriptSearchRead, ManuscriptSearchReader, ProjectReadError,
+    ProjectScope,
 };
 use tokio_postgres::GenericClient;
 
@@ -11,6 +12,7 @@ impl ManuscriptSearchReader for PostgresProjectReader {
     async fn read_search_facts(
         &self,
         scope: &ProjectScope,
+        fact_extent: ManuscriptSearchFactExtent,
     ) -> Result<ManuscriptSearchRead, ProjectReadError> {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
@@ -30,14 +32,36 @@ impl ManuscriptSearchReader for PostgresProjectReader {
             transaction.commit().await.map_err(read_error)?;
             return Ok(ManuscriptSearchRead::Missing);
         };
+        let current_chapter_id = project.get::<_, Option<String>>(0).map(ChapterId::new);
         let snapshot =
             crate::snapshot::load_latest_canonical_snapshot_query(&transaction, scope).await?;
         let opened = match snapshot {
             CanonicalSnapshotQuery::Missing => ManuscriptSearchRead::Missing,
             CanonicalSnapshotQuery::Expired => ManuscriptSearchRead::SnapshotExpired,
             CanonicalSnapshotQuery::Available(snapshot) => {
-                let chapters = read_live_chapter_blocks(&transaction, scope).await?;
-                let current_chapter_id = project.get::<_, Option<String>>(0).map(ChapterId::new);
+                let chapters = match fact_extent {
+                    ManuscriptSearchFactExtent::AllChapters => {
+                        read_live_chapter_blocks(
+                            &transaction,
+                            scope,
+                            LiveChapterReadExtent::AllChapters,
+                        )
+                        .await?
+                    }
+                    ManuscriptSearchFactExtent::CurrentChapter => {
+                        match current_chapter_id.as_ref() {
+                            Some(chapter_id) => {
+                                read_live_chapter_blocks(
+                                    &transaction,
+                                    scope,
+                                    LiveChapterReadExtent::CurrentChapter { chapter_id },
+                                )
+                                .await?
+                            }
+                            None => Vec::new(),
+                        }
+                    }
+                };
                 ManuscriptSearchRead::Ready(Box::new(ManuscriptSearchFacts {
                     project_scope: scope.clone(),
                     snapshot,
@@ -51,15 +75,12 @@ impl ManuscriptSearchReader for PostgresProjectReader {
     }
 }
 
-pub(crate) async fn read_live_chapter_blocks(
-    client: &impl GenericClient,
-    scope: &ProjectScope,
-) -> Result<Vec<ManuscriptSearchChapterFact>, ProjectReadError> {
-    #[cfg(test)]
-    crate::manuscript_block::revision_member_read_sql_statement_count::increment();
-    let rows = client
-        .query(
-            "SELECT volume.manuscript_object_id::text,
+pub(crate) enum LiveChapterReadExtent<'a> {
+    AllChapters,
+    CurrentChapter { chapter_id: &'a ChapterId },
+}
+
+const LIVE_CHAPTER_BLOCKS_SELECT_FROM_WHERE: &str = "SELECT volume.manuscript_object_id::text,
                     chapter.manuscript_object_id::text,
                     convert_from(payload.canonical_bytes, 'UTF8'),
                     COALESCE(
@@ -107,12 +128,44 @@ pub(crate) async fn read_live_chapter_blocks(
                    WHERE removal.owner_user_id = volume.owner_user_id
                      AND removal.project_id = volume.project_id
                      AND removal.volume_id = volume.manuscript_object_id
+                )";
+
+pub(crate) async fn read_live_chapter_blocks(
+    client: &impl GenericClient,
+    scope: &ProjectScope,
+    extent: LiveChapterReadExtent<'_>,
+) -> Result<Vec<ManuscriptSearchChapterFact>, ProjectReadError> {
+    #[cfg(test)]
+    crate::manuscript_block::revision_member_read_sql_statement_count::increment();
+    let rows = match extent {
+        LiveChapterReadExtent::AllChapters => {
+            let sql = format!(
+                "{LIVE_CHAPTER_BLOCKS_SELECT_FROM_WHERE}\n              ORDER BY volume.tree_order, chapter.tree_order"
+            );
+            client
+                .query(
+                    sql.as_str(),
+                    &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
                 )
-              ORDER BY volume.tree_order, chapter.tree_order",
-            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-        )
-        .await
-        .map_err(read_error)?;
+                .await
+        }
+        LiveChapterReadExtent::CurrentChapter { chapter_id } => {
+            let sql = format!(
+                "{LIVE_CHAPTER_BLOCKS_SELECT_FROM_WHERE}\n                AND chapter.manuscript_object_id = $3::text::uuid\n              ORDER BY volume.tree_order, chapter.tree_order"
+            );
+            client
+                .query(
+                    sql.as_str(),
+                    &[
+                        &scope.owner_user_id.as_ref(),
+                        &scope.project_id.as_ref(),
+                        &chapter_id.as_ref(),
+                    ],
+                )
+                .await
+        }
+    }
+    .map_err(read_error)?;
     let mut chapters = Vec::with_capacity(rows.len());
     let mut last_volume = None;
     let mut volume_order = 0_u64;

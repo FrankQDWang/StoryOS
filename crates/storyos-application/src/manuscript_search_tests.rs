@@ -1,9 +1,9 @@
 use super::{
     MANUSCRIPT_SEARCH_PAGE_ITEM_LIMIT, MANUSCRIPT_SEARCH_PROJECTION_KIND,
     ManuscriptSearchBlockFact, ManuscriptSearchChapterFact, ManuscriptSearchCompleteness,
-    ManuscriptSearchFacts, ManuscriptSearchMatch, ManuscriptSearchPage, ManuscriptSearchRead,
-    ManuscriptSearchReader, ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript,
-    search_manuscript,
+    ManuscriptSearchFactExtent, ManuscriptSearchFacts, ManuscriptSearchMatch, ManuscriptSearchPage,
+    ManuscriptSearchRead, ManuscriptSearchReader, ManuscriptSearchRequest,
+    ManuscriptSearchSelection, SearchManuscript, search_manuscript,
 };
 use crate::{CanonicalSnapshot, ChapterId, ProjectId, ProjectReadError, ProjectScope, UserId};
 
@@ -15,6 +15,7 @@ impl ManuscriptSearchReader for FixtureReader {
     async fn read_search_facts(
         &self,
         _scope: &ProjectScope,
+        _fact_extent: ManuscriptSearchFactExtent,
     ) -> Result<ManuscriptSearchRead, ProjectReadError> {
         Ok(self.read.clone())
     }

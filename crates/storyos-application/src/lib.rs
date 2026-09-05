@@ -111,9 +111,10 @@ pub use delete_volume::{
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
 pub use manuscript_search::{
     MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION, ManuscriptSearchBlockFact,
-    ManuscriptSearchChapterFact, ManuscriptSearchCompleteness, ManuscriptSearchFacts,
-    ManuscriptSearchMatch, ManuscriptSearchPage, ManuscriptSearchRead, ManuscriptSearchReader,
-    ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript, search_manuscript,
+    ManuscriptSearchChapterFact, ManuscriptSearchCompleteness, ManuscriptSearchFactExtent,
+    ManuscriptSearchFacts, ManuscriptSearchMatch, ManuscriptSearchPage, ManuscriptSearchRead,
+    ManuscriptSearchReader, ManuscriptSearchRequest, ManuscriptSearchSelection, SearchManuscript,
+    search_manuscript,
 };
 pub use manuscript_statistics::{
     ChapterStatistics, GetManuscriptStatistics, MANUSCRIPT_STATISTICS_LIMIT_PROFILE_REVISION,
