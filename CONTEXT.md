@@ -76,8 +76,12 @@ The fail-closed StoryOS boundary that prevents Authoritative State, Artifacts, O
 _Avoid_: UI-only filtering, global vector namespace, shared prompt cache, caller-supplied project scope
 
 **Project Export Archive**:
-A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret currently exportable canonical record and immutable payload, plus lifecycle, redaction, retention, and provenance facts for any known gap, required to restore that Project without consulting a disposable projection or external runtime. Every entry name is admitted under the manifest's exact versioned Archive Path Profile before sorting or digest coverage, so platform path rules, Unicode normalization, or case behavior cannot reinterpret archive identity. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
-_Avoid_: Selected-table dump, backup, cache snapshot, credential bundle, project copy
+A versioned, self-describing, integrity-protected portable archive of one exact Project Scope, produced from one transactionally consistent boundary and containing every non-secret canonical record and immutable payload exportable at its Pinned Export Source, plus lifecycle, redaction, retention, and provenance facts for any known gap, required to restore that Project without consulting a disposable projection or external runtime. Every entry name is admitted under the manifest's exact versioned Archive Path Profile before sorting or digest coverage, so platform path rules, Unicode normalization, or case behavior cannot reinterpret archive identity. It preserves original User, Project, and object identities; excludes caches, retrieval and embedding projections, secret material, and Provider-held state; and grants neither destination access nor ownership transfer.
+_Avoid_: Selected-table dump, backup, cache snapshot, credential bundle, project copy, Worker-time live Project state as archive input
+
+**Pinned Export Source**:
+The immutable, Project Scope-bound copy of the exportable canonical facts required by one admitted export operation: manuscript facts for a human-readable export, or the complete exportable families for a Project Export Archive. It is created at admission, bound to that operation's source Snapshot locator, unavailable when that Snapshot is missing or expired, and discarded after settlement; both export Workers read only this source and never live Project state.
+_Avoid_: Canonical Query Snapshot as frozen export input, live Project rows, Activity-position reconstruction, Worker-time current state, settled manuscript or ZIP as the source, second Snapshot authority, nested copy of the packing operation's own source
 
 **Project Restore**:
 The validating import of one Project Export Archive as the same Project Scope into a target that is authorized for the same durable User identity and does not already contain that Scope. Restore stages and verifies the complete archive, schema compatibility, digests, referential closure, scope, and known lifecycle/redaction gaps before making the Project atomically visible, then deterministically rebuilds disposable projections; any identity conflict, partial archive, unsupported schema, or divergent existing Project fails closed without merge, overwrite, identity remapping, or resurrection of unavailable payload. Unresolvable Credential References remain explicitly Unbound. Creating a copy, fork, new Project identity, or ownership transfer requires a separate future domain contract.
@@ -561,7 +565,7 @@ _Avoid_: Cursor translation, silent reset, empty history
 
 **Canonical Query Snapshot**:
 An authorized, time-bounded stable reading boundary over Project Scope-bound durable facts, binding its Activity position, query/view inputs, redaction, schema, and replay generation. It may expire and be reissued, but is neither a Run Checkpoint, a backup, nor a permanent second copy of history.
-_Avoid_: Run Checkpoint, backup, permanent query result, live process view
+_Avoid_: Run Checkpoint, backup, permanent query result, live process view, Pinned Export Source
 
 **Canonical Query**:
 A public read of exact Authoritative State, Artifact, Receipt, Approval, Run, or other canonical facts at one committed Project Scope-bound Snapshot. It supports read-your-acknowledgement against a required Project Activity Stream position, and every page remains bound to the same Snapshot and stable order or fails with an explicit resync outcome.
