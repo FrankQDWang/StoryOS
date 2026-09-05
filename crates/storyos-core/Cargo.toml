@@ -9,3 +9,7 @@ workspace = true
 [dependencies]
 serde_json.workspace = true
 sha2.workspace = true
+
+[[bench]]
+name = "statistics_profile_bench"
+harness = false
