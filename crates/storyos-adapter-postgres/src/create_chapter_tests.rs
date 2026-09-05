@@ -1,8 +1,8 @@
 use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
-    CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, EditorClientBinding, IssueCreateProjectChallenge,
+    CreateChapterPublicOrder, CreateChapterSettlementEffect, CreateProjectChallengeBinding,
+    CreateProjectCommand, CreateVolumeCommand, EditorClientBinding, IssueCreateProjectChallenge,
     IssueProjectCommandChallenge, OpenChapter, ProjectCommandChallengeBinding, ProjectId,
     ProjectScope, UserId, VolumeId, VolumeNode, create_chapter, create_project, create_volume,
     get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
@@ -264,13 +264,14 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         chapter_id,
         current,
         order,
+        ..
     } = first.effect.clone()
     else {
         panic!("the first Chapter on an empty active Project must apply");
     };
     assert_eq!(tree_revision, 3);
     assert_eq!(current, storyos_core::CreateChapterCurrent::SelectCreated);
-    assert_eq!(order, 1);
+    assert_eq!(order, CreateChapterPublicOrder::CanonicalSiblingOrder(1));
     let replay = create_chapter(
         &store,
         &chapter_command(
@@ -326,6 +327,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         chapter_id: chapter_b,
         current: second_current,
         order: second_order,
+        ..
     } = second.effect.clone()
     else {
         panic!("a later Chapter on the same Volume must apply");
@@ -335,7 +337,10 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         second_current,
         storyos_core::CreateChapterCurrent::PreserveExisting
     );
-    assert_eq!(second_order, 2);
+    assert_eq!(
+        second_order,
+        CreateChapterPublicOrder::CanonicalSiblingOrder(2)
+    );
     assert_eq!(
         create_chapter(
             &store,
@@ -377,6 +382,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         chapter_id: chapter_c,
         current: third_current,
         order: third_order,
+        ..
     } = third.effect.clone()
     else {
         panic!("the third Chapter on the same Volume must apply");
@@ -386,7 +392,10 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         third_current,
         storyos_core::CreateChapterCurrent::PreserveExisting
     );
-    assert_eq!(third_order, 3);
+    assert_eq!(
+        third_order,
+        CreateChapterPublicOrder::CanonicalSiblingOrder(3)
+    );
 
     let tree = get_manuscript_tree(&store, &scope)
         .await
@@ -630,5 +639,199 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             .await
             .unwrap(),
         OpenChapter::SnapshotExpired
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_acks() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let issue = create_project_issue("018f0000-0000-7001-8000-000000000c10", "0c10");
+    let issued = issue_create_project_challenge(&store, &issue)
+        .await
+        .unwrap();
+    let mut project_binding = issue.binding.clone();
+    project_binding.prospective_project_id = issued.prospective_project_id.clone();
+    project_binding.canonical_command_digest = issued.canonical_command_digest.clone();
+    create_project(
+        &store,
+        &create_project_command(project_binding.clone(), &issue.nonce_digest, "0c11"),
+    )
+    .await
+    .unwrap();
+    let scope = ProjectScope::new(
+        project_binding.owner_user_id.clone(),
+        project_binding.prospective_project_id.clone(),
+    );
+
+    let volume_issue = volume_issue(&scope, "0c12");
+    issue_project_command_challenge(&store, &volume_issue)
+        .await
+        .unwrap();
+    let volume = create_volume(
+        &store,
+        &volume_command(
+            volume_issue.binding.clone(),
+            &volume_issue.nonce_digest,
+            "0c13",
+        ),
+    )
+    .await
+    .unwrap();
+    let storyos_application::CreateVolumeSettlementEffect::Applied { volume_id, .. } =
+        volume.effect
+    else {
+        panic!("Create Volume must apply");
+    };
+
+    let first_issue = chapter_issue(&scope, "0c14", CHAPTER_A_DIGEST);
+    issue_project_command_challenge(&store, &first_issue)
+        .await
+        .unwrap();
+    let first = create_chapter(
+        &store,
+        &chapter_command(
+            first_issue.binding.clone(),
+            &first_issue.nonce_digest,
+            "0c15",
+            &volume_id,
+            "Chapter A",
+            2,
+            CHAPTER_A_BYTES,
+        ),
+    )
+    .await
+    .unwrap();
+    let CreateChapterSettlementEffect::Applied {
+        order: first_order, ..
+    } = first.effect.clone()
+    else {
+        panic!("the first Create Chapter must apply");
+    };
+    assert_eq!(
+        first_order,
+        CreateChapterPublicOrder::CanonicalSiblingOrder(1)
+    );
+
+    let second_issue = chapter_issue(&scope, "0c16", CHAPTER_B_DIGEST);
+    issue_project_command_challenge(&store, &second_issue)
+        .await
+        .unwrap();
+    let second = create_chapter(
+        &store,
+        &chapter_command(
+            second_issue.binding.clone(),
+            &second_issue.nonce_digest,
+            "0c17",
+            &volume_id,
+            "Chapter B",
+            3,
+            CHAPTER_B_BYTES,
+        ),
+    )
+    .await
+    .unwrap();
+    let CreateChapterSettlementEffect::Applied {
+        tree_revision,
+        chapter_id,
+        current,
+        order,
+    } = second.effect.clone()
+    else {
+        panic!("the second Create Chapter must apply");
+    };
+    assert_eq!(tree_revision, 4);
+    assert_eq!(
+        current,
+        storyos_core::CreateChapterCurrent::PreserveExisting
+    );
+    assert_eq!(order, CreateChapterPublicOrder::CanonicalSiblingOrder(2));
+    let replay = create_chapter(
+        &store,
+        &chapter_command(
+            second_issue.binding.clone(),
+            &second_issue.nonce_digest,
+            "0c98",
+            &volume_id,
+            "Chapter B",
+            3,
+            CHAPTER_B_BYTES,
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(replay, second);
+
+    let tree = get_manuscript_tree(&store, &scope)
+        .await
+        .unwrap()
+        .expect("the Project still has a Canonical Query");
+    assert_eq!(tree.tree_revision, 4);
+    assert_eq!(tree.volumes[0].chapters[1].order, 2);
+    assert_eq!(
+        tree.volumes[0].chapters[1].chapter_id,
+        ChapterId::new(chapter_id.clone())
+    );
+
+    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        admin_connection.await.unwrap();
+    });
+    let stored = admin
+        .query_one(
+            "SELECT receipt.result_payload::text,
+                    payload.payload->>'order'
+               FROM storyos.domain_receipts AS receipt
+               JOIN storyos.project_activity_event_payloads AS payload
+                 ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
+                    (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              WHERE receipt.receipt_id = $1::text::uuid",
+            &[&second.ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    let stored_receipt: serde_json::Value =
+        serde_json::from_str(&stored.get::<_, String>(0)).unwrap();
+    assert_eq!(stored_receipt, serde_json::json!({"order": "2"}));
+    assert_eq!(stored.get::<_, String>(1), "2");
+
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET result_payload = '{}'::jsonb
+              WHERE receipt_id = $1::text::uuid",
+            &[&second.ids.receipt_id],
+        )
+        .await
+        .unwrap();
+    let historical = create_chapter(
+        &store,
+        &chapter_command(
+            second_issue.binding.clone(),
+            &second_issue.nonce_digest,
+            "0c97",
+            &volume_id,
+            "Chapter B",
+            3,
+            CHAPTER_B_BYTES,
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        historical.effect,
+        CreateChapterSettlementEffect::Applied {
+            tree_revision,
+            chapter_id,
+            current,
+            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(2),
+        }
     );
 }

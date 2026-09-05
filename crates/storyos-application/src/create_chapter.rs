@@ -27,13 +27,19 @@ pub struct CreateChapterSettlement {
     pub project_activity_event_id: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CreateChapterPublicOrder {
+    CanonicalSiblingOrder(u64),
+    HistoricalCreateChapterAck(u64),
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreateChapterSettlementEffect {
     Applied {
         tree_revision: u64,
         chapter_id: String,
         current: storyos_core::CreateChapterCurrent,
-        order: u64,
+        order: CreateChapterPublicOrder,
     },
     Conflicted {
         reason: storyos_core::CreateChapterConflict,

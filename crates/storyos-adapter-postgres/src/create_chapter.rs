@@ -1,7 +1,7 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateChapterCommand, CreateChapterError, CreateChapterSettlement,
-    CreateChapterSettlementEffect, CreateChapterStore, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    AuthorCommandAdmissionIds, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
+    CreateChapterSettlement, CreateChapterSettlementEffect, CreateChapterStore,
+    ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateChapter as CoreCreateChapter, CreateChapterCurrent, CreateChapterOpen,
@@ -13,7 +13,10 @@ use uuid::Uuid;
 use super::*;
 
 mod persist;
-use persist::{insert_create_chapter_admission, next_chapter_order, persist_created_chapter};
+use persist::{
+    insert_create_chapter_admission, insert_created_chapter_object, next_chapter_order,
+    persist_created_chapter,
+};
 
 impl CreateChapterStore for PostgresProjectReader {
     async fn create_chapter(
@@ -138,12 +141,40 @@ async fn persist_create_chapter(
         CreateChapterResult::Applied {
             tree_revision,
             current,
-        } => CreateChapterSettlementEffect::Applied {
-            tree_revision,
-            chapter_id: Uuid::now_v7().to_string(),
-            current,
-            order: next_chapter_order(client, command).await?,
-        },
+        } => {
+            let tree_order = next_chapter_order(client, command).await?;
+            let chapter_id = Uuid::now_v7().to_string();
+            insert_created_chapter_object(client, command, &chapter_id, tree_order).await?;
+            let canonical_sibling_order = client
+                .query_one(
+                    "SELECT count(*)::text
+                       FROM storyos.manuscript_objects AS chapter
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid
+                        AND NOT EXISTS (
+                          SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                           WHERE removal.owner_user_id = chapter.owner_user_id
+                             AND removal.project_id = chapter.project_id
+                             AND removal.chapter_id = chapter.manuscript_object_id
+                        )",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &command.volume_id,
+                    ],
+                )
+                .await
+                .map_err(create_chapter_database_error)?
+                .get::<_, String>(0)
+                .parse::<u64>()
+                .map_err(create_chapter_parse_error)?;
+            CreateChapterSettlementEffect::Applied {
+                tree_revision,
+                chapter_id,
+                current,
+                order: CreateChapterPublicOrder::CanonicalSiblingOrder(canonical_sibling_order),
+            }
+        }
         CreateChapterResult::Conflicted { reason } => {
             CreateChapterSettlementEffect::Conflicted { reason }
         }
@@ -156,7 +187,18 @@ async fn persist_create_chapter(
     };
     insert_create_chapter_admission(client, command).await?;
     let (result_kind, result_payload) = match &effect {
-        CreateChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
+        CreateChapterSettlementEffect::Applied {
+            order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
+            ..
+        } => ("authoritative_applied", format!(r#"{{"order":"{order}"}}"#)),
+        CreateChapterSettlementEffect::Applied {
+            order: CreateChapterPublicOrder::HistoricalCreateChapterAck(_),
+            ..
+        } => {
+            return Err(CreateChapterError::Unavailable(Box::new(
+                std::io::Error::other("Create Chapter first use cannot replay a historical ack"),
+            )));
+        }
         CreateChapterSettlementEffect::Conflicted { .. } => (
             "conflicted",
             r#"{"reason":"stale_tree_revision"}"#.to_owned(),
@@ -224,11 +266,11 @@ async fn persist_create_chapter(
         tree_revision,
         chapter_id,
         current,
-        order,
+        order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
+        ..
     } = &effect
     {
-        persist_created_chapter(client, command, tree_revision, chapter_id, current, *order)
-            .await?;
+        persist_created_chapter(client, command, tree_revision, chapter_id, current).await?;
         project_activity_position = client
             .query_one(
                 "INSERT INTO storyos.scope_counters AS counters
@@ -346,7 +388,8 @@ async fn read_create_chapter_settlement(
                         payload.payload->>'current_chapter_id',
                         payload.payload->>'order',
                         payload.project_activity_position::text,
-                        payload.project_activity_event_id::text
+                        payload.project_activity_event_id::text,
+                        receipt.result_payload->>'order'
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -396,11 +439,21 @@ async fn read_create_chapter_settlement(
                 let resulting_current = row
                     .get::<_, Option<String>>(8)
                     .ok_or(CreateChapterError::BindingConflict)?;
-                let order = row
+                let activity_order = row
                     .get::<_, Option<String>>(9)
                     .ok_or(CreateChapterError::BindingConflict)?
                     .parse::<u64>()
                     .map_err(create_chapter_parse_error)?;
+                let order = match row.get::<_, Option<String>>(12).as_deref() {
+                    Some(order) => {
+                        let rank = order.parse::<u64>().map_err(create_chapter_parse_error)?;
+                        if rank < 1 {
+                            return Err(CreateChapterError::BindingConflict);
+                        }
+                        CreateChapterPublicOrder::CanonicalSiblingOrder(rank)
+                    }
+                    None => CreateChapterPublicOrder::HistoricalCreateChapterAck(activity_order),
+                };
                 CreateChapterSettlementEffect::Applied {
                     tree_revision,
                     current: if resulting_current == chapter_id {

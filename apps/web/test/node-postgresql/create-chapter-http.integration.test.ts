@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
+  activityStream,
   archiveProject,
   createChapter,
   createEditorSession,
@@ -11,21 +12,28 @@ import {
   createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
+  deleteChapter,
   digestArchiveProject,
   digestCreateChapter,
   digestCreateEditorSession,
   digestCreateVolume,
+  digestDeleteChapter,
+  digestUpdateChapter,
   getChapter,
   getEditorSession,
   getManuscriptTree,
   getSnapshot,
+  updateChapter,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
   CreateChapterRequest,
+  CreateChapterResponse,
   CreateEditorSessionRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
+  DeleteChapterRequest,
+  UpdateChapterRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -569,6 +577,316 @@ test("createChapter creates three named Chapters, keeps the first current, and f
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+function deleteRequest(expectedTreeRevision: string, correlationId: string): DeleteChapterRequest {
+  return {
+    command_schema: "storyos.command.delete-chapter.request.v1",
+    delete_chapter_input: {
+      expected_tree_revision: expectedTreeRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+function updateRequest(
+  title: string,
+  order: string,
+  expectedTreeRevision: string,
+  correlationId: string,
+): UpdateChapterRequest {
+  return {
+    command_schema: "storyos.command.update-chapter.request.v1",
+    update_chapter_input: {
+      title,
+      order,
+      expected_tree_revision: expectedTreeRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+function appliedChapter(created: CreateChapterResponse) {
+  if (created.effect.kind !== "authoritative_applied") {
+    throw new Error("Create Chapter must apply");
+  }
+  return created.effect;
+}
+
+async function deleteOwned(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  chapterId: string,
+  idempotencyKey: string,
+  request: DeleteChapterRequest,
+) {
+  const digest = await digestDeleteChapter(request);
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "DELETE",
+      route_template: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+      command_schema: "storyos.command.delete-chapter.request.v1",
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  return deleteChapter({
+    baseUrl,
+    projectId,
+    chapterId,
+    fetchImpl,
+    idempotencyKey,
+    antiForgery: challenge.nonce,
+    request,
+  });
+}
+
+async function patchChapter(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  chapterId: string,
+  idempotencyKey: string,
+  request: UpdateChapterRequest,
+) {
+  const digest = await digestUpdateChapter(request);
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "PATCH",
+      route_template: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+      command_schema: "storyos.command.update-chapter.request.v1",
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  return updateChapter({
+    baseUrl,
+    projectId,
+    chapterId,
+    fetchImpl,
+    idempotencyKey,
+    antiForgery: challenge.nonce,
+    request,
+  });
+}
+
+test("createChapter reports Canonical Sibling Order through removal, replay, and historical acks", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-000000000b31",
+      "Order Novel",
+      "018f0000-0000-7001-8000-000000000b30",
+    );
+    const volume = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000b51",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000b41"),
+    );
+    if (volume.created.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const volumeId = volume.created.effect.volume_id;
+    const chapterA = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000b52",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-000000000b42"),
+    );
+    const chapterB = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000b53",
+      chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-000000000b43"),
+    );
+    const chapterC = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000b54",
+      chapterRequest("Chapter C", "4", "018f0000-0000-7001-8000-000000000b44"),
+    );
+    assert.equal(appliedChapter(chapterA.created).order, "1");
+    assert.equal(appliedChapter(chapterB.created).order, "2");
+    assert.equal(appliedChapter(chapterC.created).order, "3");
+    const treeAfterC = await getManuscriptTree({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    const snapshotAfterC = treeAfterC.snapshot.snapshot_id;
+    assert.equal(treeAfterC.snapshot.replay_generation, "1");
+    const replayB = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000b53",
+      antiForgery: chapterB.challenge.nonce,
+      request: chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-000000000b43"),
+    });
+    assert.equal(replayB.command_id, chapterB.created.command_id);
+    assert.equal(appliedChapter(replayB).order, "2");
+
+    const chapterBId = appliedChapter(chapterB.created).chapter_id;
+    const removedB = await deleteOwned(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      chapterBId,
+      "018f0000-0000-7001-8000-000000000b56",
+      deleteRequest("5", "018f0000-0000-7001-8000-000000000b46"),
+    );
+    assert.equal(removedB.effect.kind, "authoritative_applied");
+
+    const chapterD = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000b55",
+      chapterRequest("Chapter D", "6", "018f0000-0000-7001-8000-000000000b45"),
+    );
+    const createdD = appliedChapter(chapterD.created);
+    assert.equal(createdD.order, "3");
+    const replayD = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000b55",
+      antiForgery: chapterD.challenge.nonce,
+      request: chapterRequest("Chapter D", "6", "018f0000-0000-7001-8000-000000000b45"),
+    });
+    assert.equal(replayD.command_id, chapterD.created.command_id);
+    assert.equal(appliedChapter(replayD).order, "3");
+
+    const tree = await getManuscriptTree({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(tree.tree_revision, "7");
+    assert.equal(tree.snapshot.replay_generation, "1");
+    assert.deepEqual(
+      tree.volumes[0]?.chapters.map((chapter) => ({
+        title: chapter.title,
+        order: chapter.order,
+        chapter_id: chapter.chapter_id,
+      })),
+      [
+        { title: "Chapter A", order: "1", chapter_id: appliedChapter(chapterA.created).chapter_id },
+        { title: "Chapter C", order: "2", chapter_id: appliedChapter(chapterC.created).chapter_id },
+        { title: "Chapter D", order: "3", chapter_id: createdD.chapter_id },
+      ],
+    );
+
+    const createdDActivity = (await activityStream({
+      baseUrl,
+      projectId: first.projectId,
+      snapshotId: snapshotAfterC,
+      protocolRelease: "storyos.public.release.1",
+      fetchImpl: first.fetchImpl,
+    })).split("\n\n").map((block) => {
+      const data = block.split("\n").find((line) => line.startsWith("data:"));
+      return data === undefined ? undefined : JSON.parse(data.slice(5).trim()) as {
+        event_kind?: string;
+        event_schema?: string;
+        payload?: { chapter_id?: string; order?: string };
+      };
+    }).find((event) => event?.event_kind === "chapter_created"
+      && event.payload?.chapter_id === createdD.chapter_id);
+    assert.equal(createdDActivity?.event_schema, "storyos.event.chapter-created.v2");
+    assert.equal(createdDActivity?.payload?.order, "3");
+
+    const durable = JSON.parse(await queryPostgres(`SELECT json_build_object(
+      'receipt_order', receipt.result_payload->>'order',
+      'activity_order', payload.payload->>'order'
+    )::text
+      FROM storyos.domain_receipts AS receipt
+      JOIN storyos.project_activity_event_payloads AS payload
+        ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
+           (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+     WHERE receipt.receipt_id = '${chapterD.created.receipt.receipt_id}'::uuid`));
+    assert.equal(durable.receipt_order, "3");
+    assert.equal(durable.activity_order, "3");
+
+    await patchChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      createdD.chapter_id,
+      "018f0000-0000-7001-8000-000000000b58",
+      updateRequest("Chapter D", "1", "7", "018f0000-0000-7001-8000-000000000b48"),
+    );
+    const replayAfterReorder = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000b55",
+      antiForgery: chapterD.challenge.nonce,
+      request: chapterRequest("Chapter D", "6", "018f0000-0000-7001-8000-000000000b45"),
+    });
+    assert.equal(appliedChapter(replayAfterReorder).order, "3");
+
+    const removedC = await deleteOwned(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      appliedChapter(chapterC.created).chapter_id,
+      "018f0000-0000-7001-8000-000000000b57",
+      deleteRequest("8", "018f0000-0000-7001-8000-000000000b47"),
+    );
+    assert.equal(removedC.effect.kind, "authoritative_applied");
+    const replayAfterDelete = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000b55",
+      antiForgery: chapterD.challenge.nonce,
+      request: chapterRequest("Chapter D", "6", "018f0000-0000-7001-8000-000000000b45"),
+    });
+    assert.equal(appliedChapter(replayAfterDelete).order, "3");
+
+    await queryPostgres(`UPDATE storyos.domain_receipts
+        SET result_payload = '{}'::jsonb
+      WHERE receipt_id = '${chapterB.created.receipt.receipt_id}'::uuid`);
+    const historicalB = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000b53",
+      antiForgery: chapterB.challenge.nonce,
+      request: chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-000000000b43"),
+    });
+    assert.equal(appliedChapter(historicalB).order, "2");
+    assert.equal(historicalB.receipt.receipt_id, chapterB.created.receipt.receipt_id);
   } finally {
     await stopRealServer(server);
   }

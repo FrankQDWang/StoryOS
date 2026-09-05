@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-09-05-volume-created-order-v2",
+  "contract_revision": "release1-wire-catalog-2026-09-05-chapter-created-order-v2",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",
@@ -1626,7 +1626,8 @@
       "activity": {
         "success": [
           "storyos.event.domain-receipt-settled.v1",
-          "storyos.event.chapter-created.v1"
+          "storyos.event.chapter-created.v1",
+          "storyos.event.chapter-created.v2"
         ],
         "no_effect": [
           "storyos.event.domain-receipt-settled.v1"
@@ -5601,9 +5602,18 @@
       "event_kind": "chapter_created",
       "semantic_owner": "release",
       "wire_profile": "storyos.project-activity.v1",
-      "description": "",
+      "description": "Historical create Activity. The order field is the stored storage key.",
       "positive_fixture": "storyos.golden.storyos.event.chapter-created.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.chapter-created.v1.negative.v1"
+    },
+    {
+      "schema_id": "storyos.event.chapter-created.v2",
+      "event_kind": "chapter_created",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1",
+      "description": "New create Activity. The order field is Canonical Sibling Order.",
+      "positive_fixture": "storyos.golden.storyos.event.chapter-created.v2.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.chapter-created.v2.negative.v1"
     },
     {
       "schema_id": "storyos.event.chapter-updated.v1",

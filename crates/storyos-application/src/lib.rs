@@ -85,7 +85,7 @@ pub use archive_project::{
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
 pub use create_chapter::{
-    CreateChapterCommand, CreateChapterError, CreateChapterSettlement,
+    CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder, CreateChapterSettlement,
     CreateChapterSettlementEffect, CreateChapterStore, create_chapter,
 };
 pub use create_project::{

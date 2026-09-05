@@ -2,7 +2,7 @@
   "activity_profile": "storyos.project-activity.v1",
   "api_major": 1,
   "compatibility_profile": "storyos.public.same-release.v1",
-  "contract_revision": "release1-wire-catalog-2026-09-05-volume-created-order-v2",
+  "contract_revision": "release1-wire-catalog-2026-09-05-chapter-created-order-v2",
   "envelope_version": 1,
   "limit_profile_revision": "storyos.foundation.absolute.v1",
   "max_json_string_utf8_bytes": 1048576,

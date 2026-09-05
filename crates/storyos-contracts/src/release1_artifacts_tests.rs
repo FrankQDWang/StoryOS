@@ -556,7 +556,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let profile = release1_protocol_profile();
     assert_eq!(
         profile.contract_revision,
-        "release1-wire-catalog-2026-09-05-volume-created-order-v2"
+        "release1-wire-catalog-2026-09-05-chapter-created-order-v2"
     );
     assert_eq!(
         profile.release_identity.web_client_contract_revision,
