@@ -7,6 +7,7 @@ import type {
   EditorBaseSnapshot,
   ManuscriptBlock,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
 import type {
   EditorWorkspace,
   InputOrigin,
@@ -226,95 +227,13 @@ function cloneBlocks(blocks: readonly ManuscriptBlock[]): ManuscriptBlock[] {
   return blocks.map((block) => ({ ...block }));
 }
 
-function replaceOnText(body: string, from: number, to: number, text: string): string {
-  if (!Number.isSafeInteger(from)
-    || !Number.isSafeInteger(to)
-    || from < 0
-    || to < from
-    || to > body.length
-    || typeof text !== "string") {
-    throw new Error("Local Edit Journal reconstruction failed");
-  }
-  return `${body.slice(0, from)}${text}${body.slice(to)}`;
-}
-
-function applyAuthorEditPrimitive(
+function applyAuthorEditPrimitiveOnCopy(
   blocks: readonly ManuscriptBlock[],
   primitive: AuthorEditPrimitive,
 ): ManuscriptBlock[] {
-  const next = cloneBlocks(blocks);
-  if (primitive.kind === "replace_selection") {
-    if (next.length !== 1 || next[0] === undefined) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    next[0].text = replaceOnText(next[0].text, primitive.from, primitive.to, primitive.text);
-    return next;
-  }
-  if (primitive.kind === "replace_block_selection") {
-    const block = next.find((item) => item.manuscript_block_id === primitive.manuscript_block_id);
-    if (block === undefined) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    block.text = replaceOnText(block.text, primitive.from, primitive.to, primitive.text);
-    return next;
-  }
-  if (primitive.kind === "split_block") {
-    const index = next.findIndex((item) => item.manuscript_block_id === primitive.manuscript_block_id);
-    if (index < 0
-      || next.some((item) => item.manuscript_block_id === primitive.new_manuscript_block_id)) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    const block = next[index]!;
-    if (primitive.offset < 0 || primitive.offset > block.text.length) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    const right = block.text.slice(primitive.offset);
-    block.text = block.text.slice(0, primitive.offset);
-    next.splice(index + 1, 0, {
-      manuscript_block_id: primitive.new_manuscript_block_id,
-      block_kind: "paragraph",
-      text: right,
-    });
-    return next;
-  }
-  if (primitive.kind === "join_blocks") {
-    const leftIndex = next.findIndex((item) =>
-      item.manuscript_block_id === primitive.left_manuscript_block_id);
-    const rightIndex = next.findIndex((item) =>
-      item.manuscript_block_id === primitive.right_manuscript_block_id);
-    if (leftIndex < 0 || rightIndex !== leftIndex + 1) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    const left = next[leftIndex]!;
-    const right = next[rightIndex]!;
-    left.text += right.text;
-    next.splice(rightIndex, 1);
-    return next;
-  }
-  if (primitive.kind === "move_block") {
-    if (primitive.to_index < 0 || primitive.to_index >= next.length) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    const fromIndex = next.findIndex((item) => item.manuscript_block_id === primitive.manuscript_block_id);
-    if (fromIndex < 0) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    const [block] = next.splice(fromIndex, 1);
-    if (block === undefined) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    next.splice(primitive.to_index, 0, block);
-    return next;
-  }
-  if (primitive.kind === "retype_block") {
-    const block = next.find((item) => item.manuscript_block_id === primitive.manuscript_block_id);
-    if (block === undefined) {
-      throw new Error("Local Edit Journal reconstruction failed");
-    }
-    block.block_kind = primitive.block_kind;
-    return next;
-  }
-  throw new Error("Local Edit Journal reconstruction failed");
+  const owned = cloneBlocks(blocks);
+  applyAuthorEditPrimitive(owned, primitive);
+  return owned;
 }
 
 function isLegacyReplaceSelectionPrimitive(value: unknown) {
@@ -496,7 +415,7 @@ async function validatePayloadChains(
         throw new Error("Local Edit Journal is corrupt");
       }
       for (const primitive of primitives) {
-        blocks = applyAuthorEditPrimitive(blocks, primitive);
+        applyAuthorEditPrimitive(blocks, primitive);
       }
       const body = flattenChapterBody(blocks);
       if (new TextEncoder().encode(body).byteLength > workspace.maxJsonStringUtf8Bytes
@@ -740,7 +659,7 @@ export async function persistReplaceSelection(
     to: edit.to,
     text: edit.text,
   };
-  const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
   return persistAuthorEditUnit(workspace, {
     snapshot,
     projection,
@@ -784,7 +703,7 @@ export async function persistSplitBlock(
     offset: edit.offset,
     new_manuscript_block_id: edit.new_manuscript_block_id,
   };
-  const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
   if (edit.resultingBlocks !== undefined
     && JSON.stringify(expectedBlocks.map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
@@ -837,7 +756,7 @@ export async function persistJoinBlocks(
     left_manuscript_block_id: edit.left_manuscript_block_id,
     right_manuscript_block_id: edit.right_manuscript_block_id,
   };
-  const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
   if (edit.resultingBlocks !== undefined
     && JSON.stringify(expectedBlocks.map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
@@ -893,7 +812,7 @@ export async function persistMoveBlock(
     manuscript_block_id: edit.manuscript_block_id,
     to_index: edit.to_index,
   };
-  const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
   if (edit.resultingBlocks !== undefined
     && JSON.stringify(expectedBlocks.map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
@@ -951,7 +870,7 @@ export async function persistRetypeBlock(
     manuscript_block_id: edit.manuscript_block_id,
     block_kind: edit.block_kind,
   };
-  const expectedBlocks = applyAuthorEditPrimitive(projection.blocks, primitive);
+  const expectedBlocks = applyAuthorEditPrimitiveOnCopy(projection.blocks, primitive);
   if (edit.resultingBlocks !== undefined
     && JSON.stringify(expectedBlocks.map((block) => ({
       manuscript_block_id: block.manuscript_block_id,
@@ -1005,9 +924,9 @@ export async function persistContiguousReplacement(
   if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
     throw new Error("Local Edit Journal limit failed");
   }
-  let expectedBlocks = cloneBlocks(projection.blocks);
+  const expectedBlocks = cloneBlocks(projection.blocks);
   for (const primitive of primitives) {
-    expectedBlocks = applyAuthorEditPrimitive(expectedBlocks, primitive);
+    applyAuthorEditPrimitive(expectedBlocks, primitive);
   }
   if (edit.resultingBlocks !== undefined
     && JSON.stringify(expectedBlocks.map((block) => ({
