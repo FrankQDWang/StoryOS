@@ -16,6 +16,7 @@ impl CreateVolumeStore for Store {
             effect: CreateVolumeSettlementEffect::Applied {
                 tree_revision: 2,
                 volume_id: "volume".to_owned(),
+                order: CreateVolumePublicOrder::CanonicalSiblingOrder(1),
             },
             receipt_created_at: "2026-08-26T00:00:00.000Z".to_owned(),
             project_activity_position: 2,
@@ -73,6 +74,7 @@ async fn an_exact_create_volume_binding_reaches_the_store() {
         CreateVolumeSettlementEffect::Applied {
             tree_revision: 2,
             volume_id: "volume".to_owned(),
+            order: CreateVolumePublicOrder::CanonicalSiblingOrder(1),
         }
     );
 }

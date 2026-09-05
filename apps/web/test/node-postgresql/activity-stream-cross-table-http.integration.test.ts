@@ -265,7 +265,7 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       envelope_version: 1,
       activity_profile: "storyos.project-activity.v1",
       event_id: volumeDurable.event_id,
-      event_schema: "storyos.event.volume-created.v1",
+      event_schema: "storyos.event.volume-created.v2",
       event_kind: "volume_created",
       project_scope: { owner_user_id: USER_A, project_id: PROJECT_A },
       requester_user_id: USER_A,

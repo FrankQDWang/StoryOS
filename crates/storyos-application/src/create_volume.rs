@@ -26,11 +26,18 @@ pub struct CreateVolumeSettlement {
     pub project_activity_event_id: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CreateVolumePublicOrder {
+    CanonicalSiblingOrder(u64),
+    HistoricalCreateVolumeAck,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CreateVolumeSettlementEffect {
     Applied {
         tree_revision: u64,
         volume_id: String,
+        order: CreateVolumePublicOrder,
     },
     Conflicted {
         reason: storyos_core::CreateVolumeConflict,

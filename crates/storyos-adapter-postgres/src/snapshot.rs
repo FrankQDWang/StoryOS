@@ -405,7 +405,8 @@ async fn list_project_activity(
                     stream.correlation_id,
                     stream.receipt_id,
                     stream.occurred_at,
-                    stream.payload_json
+                    stream.payload_json,
+                    stream.receipt_order
                FROM (
                  SELECT activity.project_activity_event_id::text AS event_id,
                         activity.project_activity_position::text AS project_activity_position,
@@ -420,7 +421,8 @@ async fn list_project_activity(
                           'authoritative_revision_id', activity.resulting_revision_id::text,
                           'authoritative_commit_id', activity.authoritative_commit_id::text,
                           'author_action_sequence', activity.author_action_sequence::text
-                        )::text AS payload_json
+                        )::text AS payload_json,
+                        receipt.result_payload->>'order' AS receipt_order
                    FROM storyos.project_activity_events AS activity
                    JOIN storyos.domain_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -440,7 +442,8 @@ async fn list_project_activity(
                         payload.receipt_id::text,
                         to_char(payload.created_at AT TIME ZONE 'UTC',
                                 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        payload.payload::text
+                        payload.payload::text,
+                        receipt.result_payload->>'order'
                    FROM storyos.project_activity_event_payloads AS payload
                    JOIN storyos.domain_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
@@ -478,6 +481,9 @@ async fn list_project_activity(
             Ok(ProjectActivityEvent {
                 event_id: row.get(0),
                 kind,
+                event_schema: kind
+                    .event_schema_for_create_receipt(row.get::<_, Option<String>>(8).as_deref())
+                    .to_owned(),
                 project_sequence,
                 stream_sequence: project_sequence,
                 command_id: row.get(3),

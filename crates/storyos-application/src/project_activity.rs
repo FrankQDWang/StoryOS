@@ -75,7 +75,7 @@ impl ProjectActivityKind {
             Self::ProjectCreated => "storyos.event.project-created.v1",
             Self::ProjectUpdated => "storyos.event.project-updated.v1",
             Self::ProjectArchivalChanged => "storyos.event.project-archival-changed.v1",
-            Self::VolumeCreated => "storyos.event.volume-created.v1",
+            Self::VolumeCreated => VOLUME_CREATED_EVENT_SCHEMA_V1,
             Self::VolumeUpdated => "storyos.event.volume-updated.v1",
             Self::ChapterCreated => "storyos.event.chapter-created.v1",
             Self::ChapterUpdated => "storyos.event.chapter-updated.v1",
@@ -88,7 +88,18 @@ impl ProjectActivityKind {
             Self::ProjectExportSettled => "storyos.event.project-export-settled.v1",
         }
     }
+
+    pub fn event_schema_for_create_receipt(self, receipt_order: Option<&str>) -> &'static str {
+        if self == Self::VolumeCreated && receipt_order.is_some_and(|order| !order.is_empty()) {
+            VOLUME_CREATED_EVENT_SCHEMA_V2
+        } else {
+            self.event_schema()
+        }
+    }
 }
+
+const VOLUME_CREATED_EVENT_SCHEMA_V1: &str = "storyos.event.volume-created.v1";
+const VOLUME_CREATED_EVENT_SCHEMA_V2: &str = "storyos.event.volume-created.v2";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ActivityAggregateRef {
@@ -100,6 +111,7 @@ pub struct ActivityAggregateRef {
 pub struct ProjectActivityEvent {
     pub event_id: String,
     pub kind: ProjectActivityKind,
+    pub event_schema: String,
     pub project_sequence: u64,
     pub stream_sequence: u64,
     pub command_id: String,

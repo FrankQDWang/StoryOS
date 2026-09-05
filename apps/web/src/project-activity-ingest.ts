@@ -70,8 +70,11 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function activityEventSchema(kind: string): string {
-  return `storyos.event.${kind.replaceAll("_", "-")}.v1`;
+function activityEventSchemas(kind: string): readonly string[] {
+  if (kind === "volume_created") {
+    return ["storyos.event.volume-created.v1", "storyos.event.volume-created.v2"];
+  }
+  return [`storyos.event.${kind.replaceAll("_", "-")}.v1`];
 }
 
 function stringField(value: unknown): string | undefined {
@@ -94,7 +97,8 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
   const payload = event?.payload;
   const chapterId = stringField(payload?.chapter_id);
   const appliedAuthorEdit = kind === "authoritative_author_edit_applied"
-    && event?.event_schema === activityEventSchema(kind)
+    && event != null
+    && activityEventSchemas(kind).includes(event.event_schema)
     && event.aggregate_ref?.kind === "chapter"
     && event.aggregate_ref?.id === chapterId
     && UUID.test(chapterId ?? "")
@@ -104,7 +108,8 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     && stringField(payload?.author_action_sequence) !== "0";
   const otherPersistedKind = kind !== "authoritative_author_edit_applied"
     && PROJECT_ACTIVITY_KINDS.has(kind)
-    && event?.event_schema === activityEventSchema(kind)
+    && event != null
+    && activityEventSchemas(kind).includes(event.event_schema)
     && typeof event.aggregate_ref?.kind === "string"
     && event.aggregate_ref.kind.length > 0
     && UUID.test(event.aggregate_ref?.id ?? "");

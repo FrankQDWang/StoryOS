@@ -40,6 +40,15 @@ def fail(message: str, errors: list[str]) -> None:
     errors.append(message)
 
 
+def event_schema_family(schema_id: str, event_kind: str) -> str | None:
+    dashed = event_kind.replace("_", "-")
+    prefix = f"storyos.event.{dashed}.v"
+    suffix = schema_id[len(prefix):] if schema_id.startswith(prefix) else ""
+    if suffix.isdigit():
+        return prefix
+    return None
+
+
 def source_path(source: str) -> Path:
     return ROOT / source.split("#", 1)[0]
 
@@ -402,7 +411,18 @@ def main() -> int:
         if not isinstance(event_kind, str) or not event_kind:
             fail(f"Event {event_id} has no stable event_kind", errors)
         elif event_kind in event_kinds:
-            fail(f"duplicate Event event_kind {event_kind} ({event_kinds[event_kind]} and {event_id})", errors)
+            existing_id = event_kinds[event_kind]
+            existing_family = event_schema_family(existing_id, event_kind)
+            new_family = event_schema_family(event_id, event_kind)
+            if (
+                existing_family is None
+                or new_family is None
+                or existing_family != new_family
+            ):
+                fail(
+                    f"duplicate Event event_kind {event_kind} ({existing_id} and {event_id})",
+                    errors,
+                )
         else:
             event_kinds[event_kind] = event_id
         if event.get("wire_profile") != "storyos.project-activity.v1":

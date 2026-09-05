@@ -4,22 +4,31 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
+  activityStream,
   archiveProject,
   createProject,
   createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
+  deleteVolume,
   digestArchiveProject,
   digestCreateVolume,
+  digestDeleteVolume,
+  digestUpdateVolume,
   getManuscriptTree,
+  updateVolume,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
+  CreateVolumeResponse,
+  DeleteVolumeRequest,
+  UpdateVolumeRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -259,6 +268,289 @@ test("createVolume creates one named Volume, replays, and fails closed", async (
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+function deleteRequest(expectedTreeRevision: string, correlationId: string): DeleteVolumeRequest {
+  return {
+    command_schema: "storyos.command.delete-volume.request.v1",
+    delete_volume_input: {
+      expected_tree_revision: expectedTreeRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+function updateRequest(
+  title: string,
+  order: string,
+  expectedTreeRevision: string,
+  correlationId: string,
+): UpdateVolumeRequest {
+  return {
+    command_schema: "storyos.command.update-volume.request.v1",
+    update_volume_input: {
+      title,
+      order,
+      expected_tree_revision: expectedTreeRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+async function deleteOwned(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  volumeId: string,
+  idempotencyKey: string,
+  request: DeleteVolumeRequest,
+) {
+  const digest = await digestDeleteVolume(request);
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "DELETE",
+      route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}",
+      command_schema: "storyos.command.delete-volume.request.v1",
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  return deleteVolume({
+    baseUrl,
+    projectId,
+    volumeId,
+    fetchImpl,
+    idempotencyKey,
+    antiForgery: challenge.nonce,
+    request,
+  });
+}
+
+async function patchVolume(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  volumeId: string,
+  idempotencyKey: string,
+  request: UpdateVolumeRequest,
+) {
+  const digest = await digestUpdateVolume(request);
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "PATCH",
+      route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}",
+      command_schema: "storyos.command.update-volume.request.v1",
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  return {
+    challenge,
+    updated: await updateVolume({
+      baseUrl,
+      projectId,
+      volumeId,
+      fetchImpl,
+      idempotencyKey,
+      antiForgery: challenge.nonce,
+      request,
+    }),
+  };
+}
+
+function appliedVolume(created: CreateVolumeResponse) {
+  if (created.effect.kind !== "authoritative_applied") {
+    throw new Error("Create Volume must apply");
+  }
+  return created.effect;
+}
+
+test("createVolume reports Canonical Sibling Order through removal, replay, and historical acks", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000861", "Order Novel");
+    const volumeA = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000871",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000881"),
+    );
+    const volumeB = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000872",
+      volumeRequest("Volume B", "2", "018f0000-0000-7001-8000-000000000882"),
+    );
+    const volumeC = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000873",
+      volumeRequest("Volume C", "3", "018f0000-0000-7001-8000-000000000883"),
+    );
+    assert.equal(appliedVolume(volumeA.created).order, "1");
+    assert.equal(appliedVolume(volumeB.created).order, "2");
+    assert.equal(appliedVolume(volumeC.created).order, "3");
+    const treeAfterC = await getManuscriptTree({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    const snapshotAfterC = treeAfterC.snapshot.snapshot_id;
+    assert.equal(treeAfterC.snapshot.replay_generation, "1");
+    const replayB = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000872",
+      antiForgery: volumeB.challenge.nonce,
+      request: volumeRequest("Volume B", "2", "018f0000-0000-7001-8000-000000000882"),
+    });
+    assert.equal(replayB.command_id, volumeB.created.command_id);
+    assert.equal(appliedVolume(replayB).order, "2");
+
+    const volumeBId = appliedVolume(volumeB.created).volume_id;
+    const removedB = await deleteOwned(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volumeBId,
+      "018f0000-0000-7001-8000-000000000874",
+      deleteRequest("4", "018f0000-0000-7001-8000-000000000884"),
+    );
+    assert.equal(removedB.effect.kind, "authoritative_applied");
+
+    const volumeD = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000875",
+      volumeRequest("Volume D", "5", "018f0000-0000-7001-8000-000000000885"),
+    );
+    const createdD = appliedVolume(volumeD.created);
+    assert.equal(createdD.order, "3");
+    const replayD = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000875",
+      antiForgery: volumeD.challenge.nonce,
+      request: volumeRequest("Volume D", "5", "018f0000-0000-7001-8000-000000000885"),
+    });
+    assert.equal(replayD.command_id, volumeD.created.command_id);
+    assert.equal(appliedVolume(replayD).order, "3");
+
+    const tree = await getManuscriptTree({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(tree.tree_revision, "6");
+    assert.equal(tree.snapshot.replay_generation, "1");
+    assert.deepEqual(
+      tree.volumes.map((volume) => ({ title: volume.title, order: volume.order, volume_id: volume.volume_id })),
+      [
+        { title: "Volume A", order: "1", volume_id: appliedVolume(volumeA.created).volume_id },
+        { title: "Volume C", order: "2", volume_id: appliedVolume(volumeC.created).volume_id },
+        { title: "Volume D", order: "3", volume_id: createdD.volume_id },
+      ],
+    );
+
+    const createdDActivity = (await activityStream({
+      baseUrl,
+      projectId: first.projectId,
+      snapshotId: snapshotAfterC,
+      protocolRelease: "storyos.public.release.1",
+      fetchImpl: first.fetchImpl,
+    })).split("\n\n").map((block) => {
+      const data = block.split("\n").find((line) => line.startsWith("data:"));
+      return data === undefined ? undefined : JSON.parse(data.slice(5).trim()) as {
+        event_kind?: string;
+        event_schema?: string;
+        payload?: { volume_id?: string; order?: string };
+      };
+    }).find((event) => event?.event_kind === "volume_created"
+      && event.payload?.volume_id === createdD.volume_id);
+    assert.equal(createdDActivity?.event_schema, "storyos.event.volume-created.v2");
+    assert.equal(createdDActivity?.payload?.order, "3");
+
+    const durable = JSON.parse(await queryPostgres(`SELECT json_build_object(
+      'receipt_order', receipt.result_payload->>'order',
+      'activity_order', payload.payload->>'order'
+    )::text
+      FROM storyos.domain_receipts AS receipt
+      JOIN storyos.project_activity_event_payloads AS payload
+        ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
+           (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+     WHERE receipt.receipt_id = '${volumeD.created.receipt.receipt_id}'::uuid`));
+    assert.equal(durable.receipt_order, "3");
+    assert.equal(durable.activity_order, "3");
+
+    await patchVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      createdD.volume_id,
+      "018f0000-0000-7001-8000-000000000876",
+      updateRequest("Volume D", "1", "6", "018f0000-0000-7001-8000-000000000886"),
+    );
+    const replayAfterReorder = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000875",
+      antiForgery: volumeD.challenge.nonce,
+      request: volumeRequest("Volume D", "5", "018f0000-0000-7001-8000-000000000885"),
+    });
+    assert.equal(appliedVolume(replayAfterReorder).order, "3");
+
+    const removedC = await deleteOwned(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      appliedVolume(volumeC.created).volume_id,
+      "018f0000-0000-7001-8000-000000000877",
+      deleteRequest("7", "018f0000-0000-7001-8000-000000000887"),
+    );
+    assert.equal(removedC.effect.kind, "authoritative_applied");
+    const replayAfterDelete = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000875",
+      antiForgery: volumeD.challenge.nonce,
+      request: volumeRequest("Volume D", "5", "018f0000-0000-7001-8000-000000000885"),
+    });
+    assert.equal(appliedVolume(replayAfterDelete).order, "3");
+
+    await queryPostgres(`UPDATE storyos.domain_receipts
+        SET result_payload = '{}'::jsonb
+      WHERE receipt_id = '${volumeB.created.receipt.receipt_id}'::uuid`);
+    const historicalB = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000872",
+      antiForgery: volumeB.challenge.nonce,
+      request: volumeRequest("Volume B", "2", "018f0000-0000-7001-8000-000000000882"),
+    });
+    assert.equal(appliedVolume(historicalB).order, "1");
+    assert.equal(historicalB.receipt.receipt_id, volumeB.created.receipt.receipt_id);
   } finally {
     await stopRealServer(server);
   }
