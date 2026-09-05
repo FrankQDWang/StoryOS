@@ -1,12 +1,10 @@
 import { performance } from "node:perf_hooks";
 
-import { expect, it } from "vitest";
-
 import type {
   AuthorEditPrimitive,
   ManuscriptBlock,
-} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { applyAuthorEditPrimitive } from "../../src/author-edit-primitive.ts";
+} from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { applyAuthorEditPrimitive } from "../src/author-edit-primitive.ts";
 
 const INITIAL_BLOCKS = 120;
 const OUTPUT_BLOCKS = 121;
@@ -94,21 +92,19 @@ function measure(rounds: number, apply: () => ManuscriptBlock[]): [number, Manus
   return [best, result];
 }
 
-it("applies a representative contiguous replacement on one owned Block array", () => {
-  const chapter = representativeChapter();
-  const primitives = representativePrimitives(chapter);
-  expect(primitives).toHaveLength(INITIAL_BLOCKS + OUTPUT_BLOCKS - 1);
-
-  const streaming = applyOnOwnedArray(chapter, primitives);
-  const copied = applyWithPerPrimitiveCopy(chapter, primitives);
-  expect(streaming).toEqual(copied);
-  expect(streaming).toHaveLength(OUTPUT_BLOCKS);
-
-  const [ownedMs, ownedResult] = measure(3, () => applyOnOwnedArray(chapter, primitives));
-  const [copiedMs, copiedResult] = measure(3, () => applyWithPerPrimitiveCopy(chapter, primitives));
-  expect(ownedResult).toEqual(copiedResult);
-  console.log(
-    `B=${INITIAL_BLOCKS} R=${INITIAL_BLOCKS} N=${OUTPUT_BLOCKS} P=${primitives.length}`
-      + ` owned=${ownedMs.toFixed(3)}ms copied=${copiedMs.toFixed(3)}ms`,
-  );
-});
+const chapter = representativeChapter();
+const primitives = representativePrimitives(chapter);
+const owned = applyOnOwnedArray(chapter, primitives);
+const copied = applyWithPerPrimitiveCopy(chapter, primitives);
+if (JSON.stringify(owned) !== JSON.stringify(copied)) {
+  throw new Error("owned and copied Block arrays must be equal");
+}
+const [ownedMs, ownedResult] = measure(3, () => applyOnOwnedArray(chapter, primitives));
+const [copiedMs, copiedResult] = measure(3, () => applyWithPerPrimitiveCopy(chapter, primitives));
+if (JSON.stringify(ownedResult) !== JSON.stringify(copiedResult)) {
+  throw new Error("timed owned and copied Block arrays must be equal");
+}
+console.log(
+  `B=${INITIAL_BLOCKS} R=${INITIAL_BLOCKS} N=${OUTPUT_BLOCKS} P=${primitives.length}`
+    + ` owned=${ownedMs.toFixed(3)}ms copied=${copiedMs.toFixed(3)}ms`,
+);

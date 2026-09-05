@@ -16,7 +16,6 @@
     "test/support/exact-dist-global-setup.ts",
     "test/support/exact-dist-plugin.ts",
     "test/support/node-integration.ts",
-    "test/support/statistics-unicode-profile.ts",
-    "src/author-edit-primitive.ts"
+    "test/support/statistics-unicode-profile.ts"
   ]
 }
