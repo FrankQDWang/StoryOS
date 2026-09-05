@@ -12,11 +12,10 @@ pub enum ManuscriptSearchSelection {
     Manuscript,
 }
 
-/// Internal live-Chapter fact extent for one search or statistics rebuild.
+/// Live Chapter facts one manuscript-search or statistics read may load.
 ///
-/// This is not a public request field. Application maps
-/// [`ManuscriptSearchSelection::CurrentChapter`] to [`Self::CurrentChapter`]
-/// and maps manuscript search plus writing statistics to [`Self::AllChapters`].
+/// `CurrentChapter` loads at most the current Chapter of the scoped Project.
+/// `AllChapters` loads every live Chapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ManuscriptSearchFactExtent {
     AllChapters,

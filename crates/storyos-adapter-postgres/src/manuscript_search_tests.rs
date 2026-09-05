@@ -435,14 +435,97 @@ async fn several_live_chapters_load_membership_in_one_statement() {
     assert_eq!(legacy_chapter.blocks, Vec::new());
     assert!(match_chapter.chapter_order < mismatch_chapter.chapter_order);
     assert!(mismatch_chapter.chapter_order < legacy_chapter.chapter_order);
+    let expected_current = match_chapter.clone();
 
-    let current_chapter_id = ChapterId::new(MATCH_CHAPTER);
+    const REPRESENTATIVE_LIVE_CHAPTERS: usize = 32;
+    for index in 0..(REPRESENTATIVE_LIVE_CHAPTERS - 3) {
+        let chapter_id = format!("018f0000-0000-7001-8000-00000000{:04x}", 0xf000 + index);
+        let revision_id = format!("018f0000-0000-7001-8000-00000000{:04x}", 0xf200 + index);
+        let tree_order = (100 + index).to_string();
+        transaction
+            .execute(
+                "INSERT INTO storyos.manuscript_objects
+                   (owner_user_id, project_id, manuscript_object_id, object_kind, title, tree_order,
+                    parent_volume_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 'chapter', $4, $5::text::bigint,
+                         $6::text::uuid)",
+                &[
+                    &FIXTURE_USER,
+                    &FIXTURE_PROJECT,
+                    &chapter_id,
+                    &format!("Extra {index}"),
+                    &tree_order,
+                    &SEARCH_VOLUME,
+                ],
+            )
+            .await
+            .unwrap();
+        transaction
+            .execute(
+                "INSERT INTO storyos.authoritative_revisions
+                   (owner_user_id, project_id, manuscript_object_id, revision_id, payload_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, $5::text::uuid)",
+                &[
+                    &FIXTURE_USER,
+                    &FIXTURE_PROJECT,
+                    &chapter_id,
+                    &revision_id,
+                    &LEGACY_PAYLOAD,
+                ],
+            )
+            .await
+            .unwrap();
+        transaction
+            .execute(
+                "INSERT INTO storyos.authoritative_heads
+                   (owner_user_id, project_id, manuscript_object_id, current_revision_id)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)",
+                &[&FIXTURE_USER, &FIXTURE_PROJECT, &chapter_id, &revision_id],
+            )
+            .await
+            .unwrap();
+    }
+    transaction
+        .execute(
+            "UPDATE storyos.projects
+                SET current_chapter_id = $3::text::uuid
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid",
+            &[&FIXTURE_USER, &FIXTURE_PROJECT, &MATCH_CHAPTER],
+        )
+        .await
+        .unwrap();
+    let selected_current = ChapterId::new(
+        transaction
+            .query_one(
+                "SELECT current_chapter_id::text
+                   FROM storyos.projects
+                  WHERE owner_user_id = $1::text::uuid
+                    AND project_id = $2::text::uuid",
+                &[&FIXTURE_USER, &FIXTURE_PROJECT],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    );
+    crate::manuscript_block::revision_member_read_sql_statement_count::reset();
+    let representative_chapters = super::read_live_chapter_blocks(
+        &transaction,
+        &scope,
+        super::LiveChapterReadExtent::AllChapters,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        crate::manuscript_block::revision_member_read_sql_statement_count::take(),
+        1
+    );
     crate::manuscript_block::revision_member_read_sql_statement_count::reset();
     let current_chapters = super::read_live_chapter_blocks(
         &transaction,
         &scope,
-        super::LiveChapterReadExtent::OneChapter {
-            chapter_id: &current_chapter_id,
+        super::LiveChapterReadExtent::CurrentChapter {
+            chapter_id: &selected_current,
         },
     )
     .await
@@ -451,16 +534,7 @@ async fn several_live_chapters_load_membership_in_one_statement() {
         crate::manuscript_block::revision_member_read_sql_statement_count::take(),
         1
     );
-    assert_eq!(chapters.len(), 3);
-    assert_eq!(
-        current_chapters.len(),
-        1,
-        "CurrentChapter must return one Chapter row, not the full live manuscript"
-    );
-    assert_eq!(
-        current_chapters[0].chapter_id,
-        ChapterId::new(MATCH_CHAPTER)
-    );
-    assert_eq!(current_chapters[0].blocks, match_chapter.blocks);
+    assert_eq!(representative_chapters.len(), REPRESENTATIVE_LIVE_CHAPTERS);
+    assert_eq!(current_chapters, vec![expected_current]);
     transaction.rollback().await.unwrap();
 }

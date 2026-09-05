@@ -39,8 +39,8 @@ impl ManuscriptSearchReader for PostgresProjectReader {
             CanonicalSnapshotQuery::Missing => ManuscriptSearchRead::Missing,
             CanonicalSnapshotQuery::Expired => ManuscriptSearchRead::SnapshotExpired,
             CanonicalSnapshotQuery::Available(snapshot) => {
-                let chapters = match (fact_extent, current_chapter_id.as_ref()) {
-                    (ManuscriptSearchFactExtent::AllChapters, _) => {
+                let chapters = match fact_extent {
+                    ManuscriptSearchFactExtent::AllChapters => {
                         read_live_chapter_blocks(
                             &transaction,
                             scope,
@@ -48,15 +48,19 @@ impl ManuscriptSearchReader for PostgresProjectReader {
                         )
                         .await?
                     }
-                    (ManuscriptSearchFactExtent::CurrentChapter, Some(chapter_id)) => {
-                        read_live_chapter_blocks(
-                            &transaction,
-                            scope,
-                            LiveChapterReadExtent::OneChapter { chapter_id },
-                        )
-                        .await?
+                    ManuscriptSearchFactExtent::CurrentChapter => {
+                        match current_chapter_id.as_ref() {
+                            Some(chapter_id) => {
+                                read_live_chapter_blocks(
+                                    &transaction,
+                                    scope,
+                                    LiveChapterReadExtent::CurrentChapter { chapter_id },
+                                )
+                                .await?
+                            }
+                            None => Vec::new(),
+                        }
                     }
-                    (ManuscriptSearchFactExtent::CurrentChapter, None) => Vec::new(),
                 };
                 ManuscriptSearchRead::Ready(Box::new(ManuscriptSearchFacts {
                     project_scope: scope.clone(),
@@ -73,7 +77,7 @@ impl ManuscriptSearchReader for PostgresProjectReader {
 
 pub(crate) enum LiveChapterReadExtent<'a> {
     AllChapters,
-    OneChapter { chapter_id: &'a ChapterId },
+    CurrentChapter { chapter_id: &'a ChapterId },
 }
 
 const LIVE_CHAPTER_BLOCKS_SELECT_FROM_WHERE: &str = "SELECT volume.manuscript_object_id::text,
@@ -145,7 +149,7 @@ pub(crate) async fn read_live_chapter_blocks(
                 )
                 .await
         }
-        LiveChapterReadExtent::OneChapter { chapter_id } => {
+        LiveChapterReadExtent::CurrentChapter { chapter_id } => {
             let sql = format!(
                 "{LIVE_CHAPTER_BLOCKS_SELECT_FROM_WHERE}\n                AND chapter.manuscript_object_id = $3::text::uuid\n              ORDER BY volume.tree_order, chapter.tree_order"
             );
