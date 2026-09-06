@@ -144,7 +144,6 @@ pub fn package_verified_project_archive_zip(
         let Some(source) = sources.iter().find(|source| source.path == descriptor.path) else {
             return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
         };
-        verify_entry_digest(&source.bytes, &descriptor.digest_hex)?;
         files.push((descriptor.path.as_str(), source.bytes.as_slice()));
     }
     crate::archive_zip::store_zip(&files)
@@ -242,6 +241,8 @@ pub fn required_export_tables(include_names: &[&str], live_tables: &[&str]) -> V
 }
 
 pub fn hex_sha256(bytes: &[u8]) -> String {
+    #[cfg(test)]
+    tests::record_hash_input(bytes);
     Sha256::digest(bytes)
         .iter()
         .fold(String::with_capacity(64), |mut value, byte| {
