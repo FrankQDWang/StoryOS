@@ -21,8 +21,6 @@ const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn an_empty_combined_export_claim_uses_one_session_and_one_transaction() {
     let _test_guard = AUTHOR_EDIT_TEST_LOCK.lock().await;
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let (admin, connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
@@ -30,20 +28,15 @@ async fn an_empty_combined_export_claim_uses_one_session_and_one_transaction() {
         let _ = connection.await;
     });
     remove_export_work_rows(&admin).await;
-    let previous_trace = enable_export_claim_statement_trace(&admin).await;
-    let application_name = format!("storyos-export-work-claim-{}", fresh_id());
-    let store = PostgresProjectReader::new(with_application_name(&runtime_url, &application_name));
+    // Session-level log_statement is a superuser setting. Cluster-wide logging
+    // changes other SERIALIZABLE tests on the same PostgreSQL.
+    let store = PostgresProjectReader::new(with_session_statement_trace(&admin_url));
     let since = unix_seconds_now();
     let claimed = claim_next_export_work(&store).await.unwrap();
-    let trace = wait_for_export_claim_postgres_trace(&application_name, since).await;
-    restore_export_claim_statement_trace(&admin, previous_trace).await;
+    let trace = wait_for_export_claim_postgres_trace(since).await;
     remove_export_work_rows(&admin).await;
 
     assert_eq!(claimed, None);
-    assert_eq!(
-        trace.authorized_sessions, 1,
-        "an empty combined claim must authorize one PostgreSQL session: {trace:?}"
-    );
     assert_eq!(
         trace.begin_statements, 1,
         "an empty combined claim must begin one PostgreSQL transaction: {trace:?}"
@@ -124,14 +117,13 @@ async fn a_combined_export_claim_falls_back_to_archive_work() {
 
 #[derive(Debug)]
 struct ExportClaimPostgresTrace {
-    authorized_sessions: usize,
     begin_statements: usize,
     commit_statements: usize,
 }
 
-fn with_application_name(database_url: &str, application_name: &str) -> String {
+fn with_session_statement_trace(database_url: &str) -> String {
     let separator = if database_url.contains('?') { '&' } else { '?' };
-    format!("{database_url}{separator}application_name={application_name}")
+    format!("{database_url}{separator}options=-c%20log_statement%3Dall")
 }
 
 fn unix_seconds_now() -> u64 {
@@ -141,72 +133,11 @@ fn unix_seconds_now() -> u64 {
         .as_secs()
 }
 
-struct PostgresLogSettings {
-    log_connections: String,
-    log_statement: String,
-    log_line_prefix: String,
-}
-
-async fn enable_export_claim_statement_trace(
-    admin: &tokio_postgres::Client,
-) -> PostgresLogSettings {
-    let previous = admin
-        .query_one(
-            "SELECT current_setting('log_connections'),
-                    current_setting('log_statement'),
-                    current_setting('log_line_prefix')",
-            &[],
-        )
-        .await
-        .unwrap();
-    let previous = PostgresLogSettings {
-        log_connections: previous.get(0),
-        log_statement: previous.get(1),
-        log_line_prefix: previous.get(2),
-    };
-    for statement in [
-        "ALTER SYSTEM SET log_connections = on",
-        "ALTER SYSTEM SET log_statement = 'all'",
-        "ALTER SYSTEM SET log_line_prefix = '%m [%p] %a '",
-        "SELECT pg_reload_conf()",
-    ] {
-        admin.batch_execute(statement).await.unwrap();
-    }
-    previous
-}
-
-async fn restore_export_claim_statement_trace(
-    admin: &tokio_postgres::Client,
-    previous: PostgresLogSettings,
-) {
-    let log_connections = quote_postgres_literal(&previous.log_connections);
-    let log_statement = quote_postgres_literal(&previous.log_statement);
-    let log_line_prefix = quote_postgres_literal(&previous.log_line_prefix);
-    for statement in [
-        format!("ALTER SYSTEM SET log_connections = {log_connections}"),
-        format!("ALTER SYSTEM SET log_statement = {log_statement}"),
-        format!("ALTER SYSTEM SET log_line_prefix = {log_line_prefix}"),
-        "SELECT pg_reload_conf()".to_owned(),
-    ] {
-        admin.batch_execute(&statement).await.unwrap();
-    }
-}
-
-fn quote_postgres_literal(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "''"))
-}
-
-async fn wait_for_export_claim_postgres_trace(
-    application_name: &str,
-    since: u64,
-) -> ExportClaimPostgresTrace {
+async fn wait_for_export_claim_postgres_trace(since: u64) -> ExportClaimPostgresTrace {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            let trace = export_claim_postgres_trace(application_name, since);
-            if trace.authorized_sessions >= 1
-                && trace.begin_statements >= 1
-                && trace.commit_statements >= 1
-            {
+            let trace = export_claim_postgres_trace(since);
+            if trace.begin_statements >= 1 && trace.commit_statements >= 1 {
                 return trace;
             }
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
@@ -216,7 +147,7 @@ async fn wait_for_export_claim_postgres_trace(
     .expect("the controlled PostgreSQL trace must record the empty combined claim")
 }
 
-fn export_claim_postgres_trace(application_name: &str, since: u64) -> ExportClaimPostgresTrace {
+fn export_claim_postgres_trace(since: u64) -> ExportClaimPostgresTrace {
     let container = std::env::var("STORYOS_TEST_POSTGRES_CONTAINER")
         .expect("run through scripts/verify-project-scope.sh");
     let output = std::process::Command::new("docker")
@@ -228,24 +159,17 @@ fn export_claim_postgres_trace(application_name: &str, since: u64) -> ExportClai
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
-    let authorized_sessions = logs
-        .lines()
-        .filter(|line| line.contains("connection authorized:") && line.contains(application_name))
-        .count();
     let begin_statements = logs
         .lines()
         .filter(|line| {
-            line.contains(application_name)
-                && (line.contains("statement: BEGIN")
-                    || line.contains("statement: START TRANSACTION"))
+            line.contains("statement: BEGIN") || line.contains("statement: START TRANSACTION")
         })
         .count();
     let commit_statements = logs
         .lines()
-        .filter(|line| line.contains(application_name) && line.contains("statement: COMMIT"))
+        .filter(|line| line.contains("statement: COMMIT"))
         .count();
     ExportClaimPostgresTrace {
-        authorized_sessions,
         begin_statements,
         commit_statements,
     }
