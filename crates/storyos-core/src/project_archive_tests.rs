@@ -98,6 +98,85 @@ fn file_path_that_equals_a_directory_prefix_is_refused() {
     );
 }
 
+const NESTED_CANONICAL: &str = "{\"empty_array\":[],\"empty_object\":{},\"nested\":[{\"ok\":true},null],\"note\":\"quote\\\"and\\\\slash\\nand\\ttab稿\",\"z\":\"\"}";
+const NESTED_CANONICAL_DIGEST: &str =
+    "401bc49a7e445ca401402cbf28bed8f2eec190ef769caeb25a454aec90da1dc2";
+const REPRESENTATIVE_TEXT: &str = "manuscript-payload";
+const REPRESENTATIVE_CANONICAL: &str = r#"[{"text":"manuscript-payload"}]"#;
+const REPRESENTATIVE_ENCODED_SCALAR: &str = r#""manuscript-payload""#;
+const PREVIOUS_SUBTREE_STRING_PAYLOAD_COPIES: usize = 6;
+
+#[test]
+fn nested_archive_records_keep_escaped_empty_and_sorted_bytes() {
+    let nested = serde_json::json!({
+        "z": "",
+        "note": "quote\"and\\slash\nand\ttab稿",
+        "empty_array": [],
+        "empty_object": {},
+        "nested": [{"ok": true}, null]
+    });
+    let encoded = canonical_json(&nested);
+    assert_eq!(encoded, NESTED_CANONICAL);
+    assert_eq!(
+        hex_sha256(NESTED_CANONICAL.as_bytes()),
+        NESTED_CANONICAL_DIGEST
+    );
+    assert_eq!(hex_sha256(encoded.as_bytes()), NESTED_CANONICAL_DIGEST);
+
+    let escaped_key = serde_json::json!({
+        "b": 2,
+        "a\"k": 1
+    });
+    assert_eq!(canonical_json(&escaped_key), "{\"a\\\"k\":1,\"b\":2}");
+}
+
+#[test]
+fn archive_row_sort_keys_follow_canonical_object_bytes() {
+    let later = serde_json::json!({"z": "1", "m": []});
+    let earlier = serde_json::json!({"a": "1"});
+    let mut rows = vec![later.clone(), earlier.clone()];
+    rows.sort_by_key(canonical_json);
+    assert_eq!(rows, vec![earlier, later]);
+}
+
+#[test]
+fn representative_row_array_appends_payload_once_into_one_buffer() {
+    let value = serde_json::json!([{ "text": REPRESENTATIVE_TEXT }]);
+    assert_eq!(canonical_json(&value), REPRESENTATIVE_CANONICAL);
+
+    let mut record = PayloadWriteRecord {
+        payload: REPRESENTATIVE_ENCODED_SCALAR,
+        payload_write_bytes: 0,
+        sink: String::new(),
+    };
+    append_canonical_json(&mut record, &value).expect("the public encoder writes into one buffer");
+    assert_eq!(record.sink, REPRESENTATIVE_CANONICAL);
+    assert_eq!(
+        record.payload_write_bytes,
+        REPRESENTATIVE_ENCODED_SCALAR.len()
+    );
+    assert!(
+        record.payload_write_bytes
+            < PREVIOUS_SUBTREE_STRING_PAYLOAD_COPIES * REPRESENTATIVE_ENCODED_SCALAR.len()
+    );
+}
+
+struct PayloadWriteRecord<'a> {
+    payload: &'a str,
+    payload_write_bytes: usize,
+    sink: String,
+}
+
+impl std::fmt::Write for PayloadWriteRecord<'_> {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        if text == self.payload {
+            self.payload_write_bytes += text.len();
+        }
+        self.sink.push_str(text);
+        Ok(())
+    }
+}
+
 #[test]
 fn unsigned_byte_order_is_the_sort_key() {
     let later = ArchiveEntrySource {
