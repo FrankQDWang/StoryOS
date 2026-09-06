@@ -42,7 +42,6 @@ function syncManuscriptSurface(
   blocks: readonly ManuscriptParagraph[],
 ): void {
   const first = blocks[0];
-  dom.setAttribute("data-manuscript-body", flattenChapterBody(blocks));
   if (first !== undefined) {
     dom.setAttribute("data-manuscript-block-id", first.manuscript_block_id);
   }

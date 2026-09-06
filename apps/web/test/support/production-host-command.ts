@@ -4,6 +4,7 @@ import type { BrowserContext, Cookie, Page } from "playwright";
 
 import { getEditorSession }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { manuscriptBody as visibleChapterBody } from "./manuscript-surface.ts";
 import { queryStoryOSPostgres as queryPostgres } from "./node-integration";
 
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -81,9 +82,7 @@ function takeoverFetch(page: Page, origin: string, projectId: string,
 }
 
 async function manuscriptBody(page: Page): Promise<string> {
-  const value = await page.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body");
-  assert.ok(value !== null, "the production manuscript body must be present");
-  return value;
+  return page.locator(MANUSCRIPT_EDITOR).evaluate(visibleChapterBody);
 }
 
 async function clientSessionCookie(
@@ -272,12 +271,10 @@ export async function verifyProductionHostJourney(context: BrowserContext): Prom
     assert.equal(await sessionId(observer, projectId), observerId);
     const newJournal = await readJournal(observer, projectId);
     assertPreservedJournal(oldJournal, newJournal);
-    assert.equal(await observer.locator(MANUSCRIPT_EDITOR).getAttribute("data-manuscript-body"),
-      "Saved after replay generation two.");
+    assert.equal(await manuscriptBody(observer), "Saved after replay generation two.");
     await replaceAndSave(observer, "Saved by the new production writer.");
     assertPreservedJournal(oldJournal, await readJournal(observer, projectId));
-    assert.equal(await writer.locator(MANUSCRIPT_READONLY).getAttribute("data-manuscript-body"),
-      "Unsettled before takeover.");
+    assert.equal(await manuscriptBody(writer), "Unsettled before takeover.");
     assert.deepEqual(errors, []);
     assert.ok(requests.length > 0 && requests.every((url) => url.origin === origin));
     assert.ok(requests.some((url) => url.pathname.startsWith("/assets/")));
