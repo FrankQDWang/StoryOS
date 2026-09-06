@@ -39,6 +39,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod editor_session;
+mod export_work;
 mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
@@ -108,6 +109,7 @@ pub use delete_volume::{
     DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement, DeleteVolumeSettlementEffect,
     DeleteVolumeStore, delete_volume,
 };
+pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
 pub use manuscript_search::{
     MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION, ManuscriptSearchBlockFact,
