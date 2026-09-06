@@ -82,7 +82,7 @@ canonical owners.
 The following never create a Prose Change Request:
 
 - vague discomfort, emotion, hesitation, silence, or lack of objection;
-- a prior request to edit, a prior accepted Proposal, or repeated collaboration;
+- a prior request to edit, a prior explicit Acceptance, or repeated collaboration;
 - the Agent’s belief that prose would improve if changed;
 - a rejection, a choice among abstract creative directions, or local feedback
   that does not itself request exact prose for an exact target;

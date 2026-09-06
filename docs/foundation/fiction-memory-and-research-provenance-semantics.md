@@ -106,11 +106,13 @@ never edits the old candidate in place.
 
 ### 3.3 Source meaning constrains extraction
 
-- An accepted Proposal may create Authoritative State through the existing
-  Acceptance contract. Memory indexes the resulting authoritative revision; it
-  does not derive a second authoritative fact.
-- A rejected Proposal is rejection evidence and may source a bounded Inferred
-  Preference. Rejection alone does not establish a general preference.
+- An Acceptance with Acceptance Result Applied, and its selected applied
+  Operations, may create Authoritative State through the existing Acceptance
+  contract. Memory indexes the resulting Authoritative Revision; it does not
+  derive a second authoritative fact.
+- A Proposal Rejection and its selected rejected Operations are rejection
+  evidence and may source a bounded Inferred Preference. Rejection alone does
+  not establish a general preference.
 - A withdrawn Proposal records withdrawal and ordinarily supports no preference
   inference.
 - One terminal ToolCall proves that one execution had that outcome. A reusable
