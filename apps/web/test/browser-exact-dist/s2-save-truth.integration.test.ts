@@ -130,8 +130,8 @@ it("shows pending, saving, and saved without calling local input saved, across C
 
   const root = appRoot(frame);
   expect(root.querySelector("h2")?.textContent).toBe("Chapter A");
-  expect(saveNode(root)?.getAttribute("data-save-state")).toBe("clean");
-  expect(saveNode(root)?.textContent).not.toContain("已保存");
+  expect(saveNode(root)?.getAttribute("data-save-state")).toBe("saved");
+  expect(saveNode(root)?.textContent).toContain("已保存");
   expect(saveNode(root)?.textContent).not.toContain("需要处理");
 
   const editor = manuscriptEditor(root, applicationWindow(frame));
@@ -147,7 +147,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
     return manuscriptBody(editor);
   }, { timeout: 10_000 }).toBe("Alpha prose");
   expect(seenWhileLocal.includes("saved")).toBe(false);
-  expect(seenWhileLocal.some((state) => state === "clean" || state === "saving")).toBe(true);
+  expect(seenWhileLocal.some((state) => state === "pending" || state === "saving")).toBe(true);
   await waitSaved(root);
   expect(saveNode(root)?.textContent).toContain("已保存");
 
@@ -173,7 +173,7 @@ it("shows pending, saving, and saved without calling local input saved, across C
   const switchedRoot = appRoot(frame);
   const switchedEditor = manuscriptEditor(switchedRoot, applicationWindow(frame));
   expect(manuscriptBody(switchedEditor)).toBe("");
-  expect(saveNode(switchedRoot)?.getAttribute("data-save-state")).toBe("clean");
+  expect(saveNode(switchedRoot)?.getAttribute("data-save-state")).toBe("saved");
 
   switchedEditor.focus();
   focusManuscriptEnd(switchedEditor, applicationWindow(frame));

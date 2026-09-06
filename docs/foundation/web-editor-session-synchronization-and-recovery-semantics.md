@@ -1170,7 +1170,7 @@ The author-facing save state is derived:
 | State | Exact meaning |
 | --- | --- |
 | `saving` | complete intent/command is durably journaled, but settlement or its applicable convergence branch remains pending |
-| `saved` | `AuthoritativeApplied` has converged through its exact Activity/Snapshot position, or `NoEffect` has resolved against the already-installed exact durable base without advancing that base; the resulting current surface requires no attention |
+| `saved` | an installed authorized Server base has no unsettled journal work and needs no attention, including a newly installed base with no local records, `AuthoritativeApplied` that has converged through its exact Activity/Snapshot position, or `NoEffect` that has resolved against the already-installed exact durable base without advancing that base |
 | `needs_attention` | a visible zero-authority `Refused` or `Conflicted` result, outcome Query rejection with preserved local work, a converged reconfirmation, Draft, or other typed result requires an author decision, or current evidence cannot safely reconstruct the surface |
 
 `Accepted` HTTP acknowledgement, an exact replay that remains in progress, a
@@ -1178,8 +1178,8 @@ Receipt without its applicable result visibility or convergence proof, and an
 Event without matching settlement remain `saving` or `needs_attention`; none
 is `saved`. A zero-authority Receipt never waits for a nonexistent Activity.
 
-Selection, Decorations, NodeViews, editor history, and cursor position are
-presentation state. The exact `AuthorEditUnit.selection_snapshot` and
+Selection, Decorations, NodeViews, editor history, cursor position, and a
+local DOM change that has not entered the Journal are presentation state. The exact `AuthorEditUnit.selection_snapshot` and
 undo-group binding retained by an intent record are command/recovery evidence,
 but restoring them does not make DOM state durable truth. A
 `PreAdmissionRefusalConverged`, `OutcomeQueryRejectedVisible`, or

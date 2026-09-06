@@ -33,7 +33,7 @@ export interface ManuscriptEditorProps {
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
   controllerRef: { current: ManualInputController | null };
-  onProjection: (projection: PendingEditProjection) => void;
+  onProjection: (projection: PendingEditProjection, source?: "local") => void;
   onFailure: (error: unknown) => void;
 }
 
@@ -84,7 +84,6 @@ function projectLocalPending(
       block_kind: block.block_kind === "heading" ? "heading" as const : "paragraph" as const,
       text: block.text,
     })),
-    save_state: workspace.pending.save_state === "saving" ? "saving" : "clean",
   };
 }
 
@@ -142,7 +141,7 @@ export function ManuscriptEditor({
         const local = workspace === undefined
           ? undefined
           : projectLocalPending(workspace, nextBlocks);
-        if (local !== undefined) onProjectionRef.current(local);
+        if (local !== undefined) onProjectionRef.current(local, "local");
         return;
       }
       if (paragraphsEqual(nextBlocks, observedBlocksRef.current)) return;
@@ -155,7 +154,7 @@ export function ManuscriptEditor({
       const createdAt = new Date().toISOString();
       const workspace = persistWorkspaceRef.current;
       const local = workspace === undefined ? undefined : projectLocalPending(workspace, nextBlocks);
-      if (local !== undefined) onProjectionRef.current(local);
+      if (local !== undefined) onProjectionRef.current(local, "local");
       const origin = edit.kind === "split_block"
         || edit.kind === "join_blocks"
         || edit.kind === "move_block"
@@ -354,7 +353,7 @@ export function ManuscriptEditor({
       }
       const workspace = persistWorkspaceRef.current;
       const local = workspace === undefined ? undefined : projectLocalPending(workspace, nextBlocks);
-      if (local !== undefined) onProjectionRef.current(local);
+      if (local !== undefined) onProjectionRef.current(local, "local");
       void idle.persist(edit, "composition_confirmation", new Date().toISOString());
     };
     dom.addEventListener("compositionstart", onCompositionStart);

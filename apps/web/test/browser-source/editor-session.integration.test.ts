@@ -552,7 +552,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       resultingBody: "Base!",
     })).rejects.toThrow(/partition is incompatible/);
     expect(await intentCount(workspace.database)).toBe(0);
-    expect((await rebuildPendingProjection(workspace)).save_state).toBe("clean");
+    expect((await rebuildPendingProjection(workspace)).save_state).toBe("saved");
 
     workspace.database.close();
     state = await openEditorWorkspace({

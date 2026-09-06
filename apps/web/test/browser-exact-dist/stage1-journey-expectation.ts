@@ -527,7 +527,7 @@ export function expectedStage1Journey() {
     id: "S1-JRN-001",
     open: {
       ...page,
-      pending: pendingProjection(OPEN_BODY, "clean", 0, INITIAL_REVISION),
+      pending: pendingProjection(OPEN_BODY, "saved", 0, INITIAL_REVISION),
     },
     input: pendingProjection(AFTER_TYPE, "saving", 1, INITIAL_REVISION),
     afterType: pendingProjection(AFTER_TYPE, "saved", 0, "revision-1"),

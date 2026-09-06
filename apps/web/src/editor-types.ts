@@ -192,7 +192,7 @@ export interface ValidatedJournalSnapshot extends JournalSnapshot {
 export interface PendingEditProjection {
   body: string;
   blocks: EditorBaseSnapshot["materialized_revision"]["blocks"];
-  save_state: "clean" | "saving" | "saved" | "needs_attention";
+  save_state: "saving" | "saved" | "needs_attention";
   unsettled_intent_count: number;
   authoritative_revision_id: string;
   author_undo_frontier_sequence?: string;
