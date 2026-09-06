@@ -1,5 +1,7 @@
 //! Build one Project Export Archive manifest coverage and immutable root.
 
+use std::fmt::{self, Write};
+
 use sha2::{Digest, Sha256};
 
 use crate::archive_path::{AdmittedArchivePath, ArchivePathRefusal, admit_archive_path};
@@ -250,37 +252,45 @@ pub fn hex_sha256(bytes: &[u8]) -> String {
 }
 
 pub fn canonical_json(value: &serde_json::Value) -> String {
+    let mut output = String::new();
+    append_canonical_json(&mut output, value).expect("writing to String cannot fail");
+    output
+}
+
+fn append_canonical_json(output: &mut impl Write, value: &serde_json::Value) -> fmt::Result {
     match value {
-        serde_json::Value::Null => "null".to_owned(),
-        serde_json::Value::Bool(true) => "true".to_owned(),
-        serde_json::Value::Bool(false) => "false".to_owned(),
-        serde_json::Value::Number(number) => number.to_string(),
+        serde_json::Value::Null => output.write_str("null"),
+        serde_json::Value::Bool(true) => output.write_str("true"),
+        serde_json::Value::Bool(false) => output.write_str("false"),
+        serde_json::Value::Number(number) => output.write_str(&number.to_string()),
         serde_json::Value::String(text) => {
-            serde_json::to_string(text).expect("a JSON string is serializable")
+            output.write_str(&serde_json::to_string(text).expect("a JSON string is serializable"))
         }
         serde_json::Value::Array(values) => {
-            let body = values
-                .iter()
-                .map(canonical_json)
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("[{body}]")
+            output.write_char('[')?;
+            for (index, child) in values.iter().enumerate() {
+                if index > 0 {
+                    output.write_char(',')?;
+                }
+                append_canonical_json(output, child)?;
+            }
+            output.write_char(']')
         }
         serde_json::Value::Object(fields) => {
             let mut keys: Vec<&String> = fields.keys().collect();
             keys.sort();
-            let body = keys
-                .into_iter()
-                .map(|key| {
-                    format!(
-                        "{}:{}",
-                        serde_json::to_string(key).expect("a JSON object key is serializable"),
-                        canonical_json(&fields[key])
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            format!("{{{body}}}")
+            output.write_char('{')?;
+            for (index, key) in keys.into_iter().enumerate() {
+                if index > 0 {
+                    output.write_char(',')?;
+                }
+                output.write_str(
+                    &serde_json::to_string(key).expect("a JSON object key is serializable"),
+                )?;
+                output.write_char(':')?;
+                append_canonical_json(output, &fields[key])?;
+            }
+            output.write_char('}')
         }
     }
 }
