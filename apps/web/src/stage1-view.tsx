@@ -500,8 +500,8 @@ function ProjectReadyView({
               (state.editor as EditorReadyState).pending = projection;
               if (selectedChapterIdRef.current !== currentChapterId) return;
               if (source === "local") {
-                // Keep the pre-Journal copy off the projection save-state
-                // attribute before the next paint.
+                // Paint the pre-Journal copy before the next poll so saved
+                // waiters do not treat unsettled local input as settled.
                 flushSync(() => {
                   setPending(projection);
                   setSaveState(projection.save_state === "saving" ? "saving" : "pending");
@@ -521,8 +521,7 @@ function ProjectReadyView({
             }}
           />
           <small
-            data-save-state={saveState === "pending" ? "saved" : saveState}
-            data-save-presentation={saveState === "pending" ? "pending" : undefined}
+            data-save-state={saveState}
             data-editor-failure={editorFailure ?? ""}
             data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
             data-authoritative-revision-id={

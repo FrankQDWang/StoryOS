@@ -131,7 +131,6 @@ it("shows pending, saving, and saved without calling local input saved, across C
   const root = appRoot(frame);
   expect(root.querySelector("h2")?.textContent).toBe("Chapter A");
   expect(saveNode(root)?.getAttribute("data-save-state")).toBe("saved");
-  expect(saveNode(root)?.getAttribute("data-save-presentation")).toBeNull();
   expect(saveNode(root)?.textContent).toContain("已保存");
   expect(saveNode(root)?.textContent).not.toContain("需要处理");
 
@@ -139,21 +138,16 @@ it("shows pending, saving, and saved without calling local input saved, across C
   editor.focus();
   focusManuscriptEnd(editor, applicationWindow(frame));
   const seenWhileLocal: string[] = [];
-  const seenCopyWhileLocal: string[] = [];
   await applyTrustedInput({ operation: "insert_text", text: "Alpha prose" });
   await expect.poll(() => {
-    const node = saveNode(root);
-    const save = node?.getAttribute("data-save-state");
+    const save = saveNode(root)?.getAttribute("data-save-state");
     if (manuscriptBody(editor) === "Alpha prose" && save !== null && save !== undefined) {
       seenWhileLocal.push(save);
-      seenCopyWhileLocal.push(node?.textContent ?? "");
     }
     return manuscriptBody(editor);
   }, { timeout: 10_000 }).toBe("Alpha prose");
-  expect(seenWhileLocal.every((state) => state === "saved" || state === "saving")).toBe(true);
-  expect(seenCopyWhileLocal.some((text) => text.includes("已保存"))).toBe(false);
-  expect(seenCopyWhileLocal.some((text) =>
-    text.includes("未保存") || text.includes("保存中"))).toBe(true);
+  expect(seenWhileLocal.includes("saved")).toBe(false);
+  expect(seenWhileLocal.some((state) => state === "pending" || state === "saving")).toBe(true);
   await waitSaved(root);
   expect(saveNode(root)?.textContent).toContain("已保存");
 
