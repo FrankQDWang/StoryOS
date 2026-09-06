@@ -358,3 +358,39 @@ fn verified_archive_zip_repeats_and_contains_uncompressed_entry_bytes() {
             .any(|window| { window == b"canonical/project.json" })
     );
 }
+
+const PREVIOUS_PER_ENTRY_HASH_PASSES: usize = 2;
+
+thread_local! {
+    static WATCHED_HASH_PAYLOAD: std::cell::Cell<Option<&'static [u8]>> =
+        const { std::cell::Cell::new(None) };
+    static WATCHED_HASH_INPUT_BYTES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+pub(super) fn record_hash_input(bytes: &[u8]) {
+    if WATCHED_HASH_PAYLOAD
+        .get()
+        .is_some_and(|payload| payload == bytes)
+    {
+        WATCHED_HASH_INPUT_BYTES.set(WATCHED_HASH_INPUT_BYTES.get() + bytes.len());
+    }
+}
+
+#[test]
+fn representative_payload_is_hashed_once_during_verified_packaging() {
+    let source = protocol_source();
+    let built =
+        build_project_archive(&protocol_facts(), std::slice::from_ref(&source)).expect("built");
+    WATCHED_HASH_PAYLOAD.set(Some(PROTOCOL_ENTRY_BYTES.as_bytes()));
+    WATCHED_HASH_INPUT_BYTES.set(0);
+    let zip = package_verified_project_archive_zip(
+        &protocol_facts(),
+        std::slice::from_ref(&source),
+        &built.root_digest_hex,
+    );
+    let payload_hash_input_bytes = WATCHED_HASH_INPUT_BYTES.get();
+    WATCHED_HASH_PAYLOAD.set(None);
+    zip.expect("verified zip");
+    assert_eq!(payload_hash_input_bytes, PROTOCOL_ENTRY_BYTES.len());
+    assert!(payload_hash_input_bytes < PREVIOUS_PER_ENTRY_HASH_PASSES * PROTOCOL_ENTRY_BYTES.len());
+}
