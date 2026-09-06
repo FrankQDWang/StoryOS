@@ -164,18 +164,27 @@ function applyFrames(
     throw new Error("Project Activity replay generation mismatch");
   }
   const known = [...next.events, ...next.held];
+  const knownByEventId = new Map<string, ProjectActivityEvent>();
+  const knownByStreamSequence = new Map<string, ProjectActivityEvent>();
+  // Keep the first Event for each key so Map lookup matches Array.find.
+  for (const event of known) {
+    if (!knownByEventId.has(event.event_id)) {
+      knownByEventId.set(event.event_id, event);
+    }
+    if (!knownByStreamSequence.has(event.stream_sequence)) {
+      knownByStreamSequence.set(event.stream_sequence, event);
+    }
+  }
   for (const frame of frames) {
     const event = validatedEvent(frame, workspace);
-    const knownById = known.find((candidate) => candidate.event_id === event.event_id);
+    const knownById = knownByEventId.get(event.event_id);
     if (knownById) {
       if (JSON.stringify(knownById) !== JSON.stringify(event)) {
         throw new Error("Project Activity Event conflict");
       }
       continue;
     }
-    const knownBySequence = known.find(
-      (candidate) => candidate.stream_sequence === event.stream_sequence,
-    );
+    const knownBySequence = knownByStreamSequence.get(event.stream_sequence);
     if (knownBySequence) {
       throw new Error("Project Activity Event conflict");
     }
@@ -184,6 +193,8 @@ function applyFrames(
     }
     next.held.push(event);
     known.push(event);
+    knownByEventId.set(event.event_id, event);
+    knownByStreamSequence.set(event.stream_sequence, event);
   }
   next.held.sort((left, right) => {
     const delta = BigInt(left.stream_sequence) - BigInt(right.stream_sequence);
