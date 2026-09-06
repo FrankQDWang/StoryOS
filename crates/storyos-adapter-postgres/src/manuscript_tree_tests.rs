@@ -70,6 +70,9 @@ fn command(
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")

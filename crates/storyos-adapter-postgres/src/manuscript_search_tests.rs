@@ -80,6 +80,9 @@ fn manuscript_query(query_text: &str) -> ManuscriptSearchRequest {
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn search_rebuilds_from_canonical_facts_without_a_write_and_separates_not_ready_from_zero() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
