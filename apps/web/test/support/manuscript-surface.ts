@@ -12,7 +12,9 @@ export function manuscriptEditor(
 }
 
 export function manuscriptBody(editor: Element): string {
-  return editor.getAttribute("data-manuscript-body") ?? "";
+  return [...editor.querySelectorAll(":scope > p, :scope > h1")]
+    .map((block) => block.textContent ?? "")
+    .join("\n");
 }
 
 export function manuscriptIsEditable(editor: Element): boolean {
