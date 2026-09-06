@@ -1,10 +1,9 @@
 use storyos_application::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, ExportOperationPage, ExportOperationProgress,
-    ExportOperationReader, ExportProjectArchiveCommand, ExportProjectArchiveError,
-    ExportProjectArchiveSettlement, ExportProjectArchiveSettlementEffect,
-    ExportProjectArchiveStore, GetExportOperation, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
-    PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    ProjectReadError, ProjectScope,
+    ExportOperationReader, ExportProjectArchiveAdmission, ExportProjectArchiveAdmissionEffect,
+    ExportProjectArchiveCommand, ExportProjectArchiveError, ExportProjectArchiveStore,
+    GetExportOperation, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
+    ProjectCommandChallengeError, ProjectCommandChallengeUse, ProjectReadError, ProjectScope,
 };
 use storyos_core::{
     ExportProjectArchive as CoreExport, ExportProjectArchiveResult, ProjectLifecycle,
@@ -17,7 +16,7 @@ impl ExportProjectArchiveStore for PostgresProjectReader {
     async fn export_project_archive(
         &self,
         command: &ExportProjectArchiveCommand,
-    ) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+    ) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
         let mut transaction = self
             .begin_serializable_project_command_transaction(&command.project_scope)
             .await
@@ -43,9 +42,9 @@ impl ExportProjectArchiveStore for PostgresProjectReader {
             }
             ProjectCommandChallengeUse::FirstUse => {
                 match persist_export(&transaction.client, command).await {
-                    Ok(settlement) => {
+                    Ok(admission) => {
                         transaction.commit().await.map_err(export_challenge_error)?;
-                        Ok(settlement)
+                        Ok(admission)
                     }
                     Err(error) => {
                         let _rollback = transaction.rollback().await;
@@ -245,7 +244,7 @@ impl ExportOperationReader for PostgresProjectReader {
 async fn persist_export(
     client: &tokio_postgres::Client,
     command: &ExportProjectArchiveCommand,
-) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
     let row = client
         .query_opt(
             "SELECT lifecycle_state FROM storyos.projects
@@ -292,10 +291,10 @@ async fn persist_export(
         })?;
     insert_export_admission(client, command).await?;
     insert_export_operation(client, command, &snapshot).await?;
-    Ok(ExportProjectArchiveSettlement {
+    Ok(ExportProjectArchiveAdmission {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),
-        effect: ExportProjectArchiveSettlementEffect::Admitted {
+        effect: ExportProjectArchiveAdmissionEffect::Admitted {
             archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
             archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
             source_snapshot: Box::new(snapshot),
@@ -393,7 +392,7 @@ async fn insert_export_operation(
 async fn read_admitted_operation(
     store: &PostgresProjectReader,
     command: &ExportProjectArchiveCommand,
-) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
     let client = store
         .connect_challenge()
         .await
@@ -443,14 +442,14 @@ async fn read_admitted_operation(
         .await
         .map_err(export_read_error)?
         .ok_or(ExportProjectArchiveError::BindingConflict)?;
-        Ok(ExportProjectArchiveSettlement {
+        Ok(ExportProjectArchiveAdmission {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(1),
                 author_command_admission_id: row.get(2),
                 receipt_id: command.ids.receipt_id.clone(),
             },
             export_id: row.get(0),
-            effect: ExportProjectArchiveSettlementEffect::Admitted {
+            effect: ExportProjectArchiveAdmissionEffect::Admitted {
                 archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
                 archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
                 source_snapshot: Box::new(source_snapshot),
@@ -466,7 +465,7 @@ async fn read_settled_admission(
     store: &PostgresProjectReader,
     command: &ExportProjectArchiveCommand,
     receipt_id: &str,
-) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
     let client = store
         .connect_challenge()
         .await
@@ -554,14 +553,14 @@ async fn read_settled_admission(
         .await
         .map_err(export_read_error)?
         .ok_or(ExportProjectArchiveError::BindingConflict)?;
-        Ok(ExportProjectArchiveSettlement {
+        Ok(ExportProjectArchiveAdmission {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
                 author_command_admission_id: row.get(1),
                 receipt_id: row.get(2),
             },
             export_id,
-            effect: ExportProjectArchiveSettlementEffect::Admitted {
+            effect: ExportProjectArchiveAdmissionEffect::Admitted {
                 archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
                 archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
                 source_snapshot: Box::new(source_snapshot),
@@ -575,7 +574,7 @@ async fn read_settled_admission(
 
 async fn finish_readonly(
     client: &tokio_postgres::Client,
-    result: &Result<ExportProjectArchiveSettlement, ExportProjectArchiveError>,
+    result: &Result<ExportProjectArchiveAdmission, ExportProjectArchiveError>,
 ) -> Result<(), ExportProjectArchiveError> {
     match result {
         Ok(_) => client

@@ -1,8 +1,8 @@
 use axum::body::to_bytes;
 use sha2::{Digest, Sha256};
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorClientBinding, ExportProjectArchiveCommand,
-    ExportProjectArchiveError, ExportProjectArchiveSettlementEffect, GetExportOperation,
+    AuthorCommandAdmissionIds, EditorClientBinding, ExportProjectArchiveAdmissionEffect,
+    ExportProjectArchiveCommand, ExportProjectArchiveError, GetExportOperation,
     PROJECT_ARCHIVE_ZIP_MEDIA_TYPE, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
     PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectCommandChallengeBinding, VerifiedExportArchive,
     get_export_operation, get_verified_export_archive, request_export_project_archive,
@@ -71,7 +71,7 @@ pub(super) async fn export_project_archive(
         contracts::EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE
     );
     let store = project_reader(&state)?;
-    let settlement = request_export_project_archive(
+    let admission = request_export_project_archive(
         &store,
         &ExportProjectArchiveCommand {
             project_scope: scope.clone(),
@@ -116,31 +116,31 @@ pub(super) async fn export_project_archive(
         .await
         .map_err(service_unavailable)?
         .ok_or_else(resource_unavailable)?;
-    export_response(&scope, &input.correlation_id, project, settlement)
+    export_response(&scope, &input.correlation_id, project, admission)
 }
 
 fn export_response(
     scope: &ApplicationScope,
     correlation_id: &str,
     project: storyos_application::Project,
-    settlement: storyos_application::ExportProjectArchiveSettlement,
+    admission: storyos_application::ExportProjectArchiveAdmission,
 ) -> Result<(StatusCode, Json<contracts::ExportProjectArchiveResponse>), ApiError> {
-    let ExportProjectArchiveSettlementEffect::Admitted {
+    let ExportProjectArchiveAdmissionEffect::Admitted {
         archive_profile,
         archive_path_profile,
         source_snapshot,
-    } = settlement.effect;
+    } = admission.effect;
     Ok((
         StatusCode::ACCEPTED,
         Json(contracts::ExportProjectArchiveResponse {
             schema_id: contracts::EXPORT_PROJECT_ARCHIVE_RESPONSE_SCHEMA_ID.to_owned(),
             correlation_id: correlation_id.to_owned(),
             project_scope: contract_scope(scope),
-            command_id: settlement.ids.command_id,
-            author_command_admission_id: settlement.ids.author_command_admission_id,
+            command_id: admission.ids.command_id,
+            author_command_admission_id: admission.ids.author_command_admission_id,
             acknowledgement: contracts::ExportAcknowledgement::Accepted,
             operation_ref: Some(contracts::ProjectExportRef::ProjectExport {
-                export_id: settlement.export_id.clone(),
+                export_id: admission.export_id.clone(),
             }),
             project: contracts::ControlledProject {
                 project_id: project.project_id.as_ref().to_owned(),
@@ -153,7 +153,7 @@ fn export_response(
                 },
             },
             effect: contracts::ExportProjectArchiveEffect::Admitted {
-                export_id: settlement.export_id,
+                export_id: admission.export_id,
                 archive_profile,
                 archive_path_profile,
                 source_snapshot: Box::new(snapshot_descriptor(scope, &source_snapshot)),
