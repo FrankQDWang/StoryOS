@@ -67,6 +67,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod editor_session;
+mod export_work;
 mod list_projects;
 mod manuscript_block;
 mod manuscript_search;

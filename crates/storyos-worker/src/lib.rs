@@ -3,9 +3,8 @@
 use std::time::Duration;
 
 use storyos_application::{
-    ArchiveExportWorkStore, CompleteArchiveExportError, CompleteReadableExportError,
-    ReadableExportWorkStore, claim_next_archive_export, claim_next_readable_export,
-    complete_archive_export, complete_readable_export,
+    ClaimedExportWork, CompleteArchiveExportError, CompleteReadableExportError, ExportWorkStore,
+    claim_next_export_work, complete_archive_export, complete_readable_export,
 };
 
 pub fn in_process_loop_enabled() -> bool {
@@ -20,7 +19,7 @@ pub fn readable_export_lease_ttl_from_env() -> Duration {
         .unwrap_or(Duration::from_secs(30))
 }
 
-pub async fn run(store: impl ReadableExportWorkStore + ArchiveExportWorkStore) {
+pub async fn run(store: impl ExportWorkStore) {
     loop {
         if !step(&store).await {
             tokio::time::sleep(Duration::from_millis(50)).await;
@@ -29,18 +28,14 @@ pub async fn run(store: impl ReadableExportWorkStore + ArchiveExportWorkStore) {
 }
 
 pub async fn run_once(
-    store: &(impl ReadableExportWorkStore + ArchiveExportWorkStore),
+    store: &impl ExportWorkStore,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    match claim_next_readable_export(store).await {
-        Ok(Some(claim)) => {
+    match claim_next_export_work(store).await {
+        Ok(Some(ClaimedExportWork::Readable(claim))) => {
             complete_readable_export(store, &claim).await?;
-            return Ok(());
+            Ok(())
         }
-        Ok(None) => {}
-        Err(error) => return Err(error.into()),
-    }
-    match claim_next_archive_export(store).await {
-        Ok(Some(claim)) => {
+        Ok(Some(ClaimedExportWork::Archive(claim))) => {
             complete_archive_export(store, &claim).await?;
             Ok(())
         }
@@ -50,31 +45,24 @@ pub async fn run_once(
 }
 
 pub async fn claim_only(
-    store: &(impl ReadableExportWorkStore + ArchiveExportWorkStore),
+    store: &impl ExportWorkStore,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    if claim_next_readable_export(store).await?.is_some() {
-        return Ok(());
-    }
-    claim_next_archive_export(store).await?;
+    claim_next_export_work(store).await?;
     Ok(())
 }
 
-async fn step(store: &(impl ReadableExportWorkStore + ArchiveExportWorkStore)) -> bool {
-    match claim_next_readable_export(store).await {
-        Ok(Some(claim)) => {
+async fn step(store: &impl ExportWorkStore) -> bool {
+    match claim_next_export_work(store).await {
+        Ok(Some(ClaimedExportWork::Readable(claim))) => {
             for _ in 0..4 {
                 match complete_readable_export(store, &claim).await {
                     Ok(_) | Err(CompleteReadableExportError::StaleFence) => return true,
                     Err(_) => {}
                 }
             }
-            return false;
+            false
         }
-        Ok(None) => {}
-        Err(_) => return false,
-    }
-    match claim_next_archive_export(store).await {
-        Ok(Some(claim)) => {
+        Ok(Some(ClaimedExportWork::Archive(claim))) => {
             for _ in 0..4 {
                 match complete_archive_export(store, &claim).await {
                     Ok(_) | Err(CompleteArchiveExportError::StaleFence) => return true,

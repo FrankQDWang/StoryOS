@@ -15,71 +15,12 @@ impl ArchiveExportWorkStore for PostgresProjectReader {
     ) -> Result<Option<ClaimedArchiveExport>, ProjectReadError> {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
-        transaction
-            .execute(
-                "SELECT set_config('storyos.scope_mode', 'worker', true),
-                        set_config('storyos.owner_user_id', '', true),
-                        set_config('storyos.project_id', '', true),
-                        set_config('storyos.user_id', '', true)",
-                &[],
-            )
-            .await
-            .map_err(read_error)?;
+        crate::export_work::set_worker_scope(&transaction).await?;
         let lease_seconds = i64::try_from(self.readable_export_lease_ttl.as_secs())
             .map_err(ProjectReadError::unavailable)?;
-        let claimed = transaction
-            .query_opt(
-                "WITH next_work AS (
-                   SELECT owner_user_id, project_id, export_id
-                     FROM storyos.project_export_operations AS operation
-                    WHERE operation.settled_result IS NULL
-                      AND (
-                        operation.wakeup_pending
-                        OR (
-                          operation.claim_generation > 0
-                          AND operation.lease_expires_at IS NOT NULL
-                          AND operation.lease_expires_at <= clock_timestamp()
-                        )
-                      )
-                    ORDER BY operation.created_at
-                    FOR UPDATE SKIP LOCKED
-                    LIMIT 1
-                 )
-                 UPDATE storyos.project_export_operations AS operation
-                    SET claim_generation = operation.claim_generation + 1,
-                        fence_token = operation.claim_generation + 1,
-                        lease_expires_at = clock_timestamp()
-                          + ($1::bigint * interval '1 second'),
-                        wakeup_pending = false
-                   FROM next_work
-                  WHERE operation.owner_user_id = next_work.owner_user_id
-                    AND operation.project_id = next_work.project_id
-                    AND operation.export_id = next_work.export_id
-              RETURNING operation.owner_user_id::text,
-                        operation.project_id::text,
-                        operation.export_id::text,
-                        operation.fence_token,
-                        operation.source_snapshot_id::text,
-                        operation.author_command_admission_id::text,
-                        operation.command_id::text,
-                        operation.idempotency_key::text",
-                &[&lease_seconds],
-            )
-            .await
-            .map_err(read_error)?;
+        let claimed = claim_archive_export_row(&transaction, lease_seconds).await?;
         transaction.commit().await.map_err(read_error)?;
-        Ok(claimed.map(|row| ClaimedArchiveExport {
-            project_scope: ProjectScope::new(
-                UserId::new(row.get::<_, String>(0)),
-                ProjectId::new(row.get::<_, String>(1)),
-            ),
-            export_id: row.get(2),
-            fence_token: row.get(3),
-            source_snapshot_id: row.get(4),
-            author_command_admission_id: row.get(5),
-            command_id: row.get(6),
-            idempotency_key: row.get(7),
-        }))
+        Ok(claimed)
     }
 
     async fn complete_archive_export(
@@ -102,6 +43,64 @@ impl ArchiveExportWorkStore for PostgresProjectReader {
         }
         result
     }
+}
+
+pub(crate) async fn claim_archive_export_row(
+    transaction: &tokio_postgres::Transaction<'_>,
+    lease_seconds: i64,
+) -> Result<Option<ClaimedArchiveExport>, ProjectReadError> {
+    let claimed = transaction
+        .query_opt(
+            "WITH next_work AS (
+               SELECT owner_user_id, project_id, export_id
+                 FROM storyos.project_export_operations AS operation
+                WHERE operation.settled_result IS NULL
+                  AND (
+                    operation.wakeup_pending
+                    OR (
+                      operation.claim_generation > 0
+                      AND operation.lease_expires_at IS NOT NULL
+                      AND operation.lease_expires_at <= clock_timestamp()
+                    )
+                  )
+                ORDER BY operation.created_at
+                FOR UPDATE SKIP LOCKED
+                LIMIT 1
+             )
+             UPDATE storyos.project_export_operations AS operation
+                SET claim_generation = operation.claim_generation + 1,
+                    fence_token = operation.claim_generation + 1,
+                    lease_expires_at = clock_timestamp()
+                      + ($1::bigint * interval '1 second'),
+                    wakeup_pending = false
+               FROM next_work
+              WHERE operation.owner_user_id = next_work.owner_user_id
+                AND operation.project_id = next_work.project_id
+                AND operation.export_id = next_work.export_id
+          RETURNING operation.owner_user_id::text,
+                    operation.project_id::text,
+                    operation.export_id::text,
+                    operation.fence_token,
+                    operation.source_snapshot_id::text,
+                    operation.author_command_admission_id::text,
+                    operation.command_id::text,
+                    operation.idempotency_key::text",
+            &[&lease_seconds],
+        )
+        .await
+        .map_err(read_error)?;
+    Ok(claimed.map(|row| ClaimedArchiveExport {
+        project_scope: ProjectScope::new(
+            UserId::new(row.get::<_, String>(0)),
+            ProjectId::new(row.get::<_, String>(1)),
+        ),
+        export_id: row.get(2),
+        fence_token: row.get(3),
+        source_snapshot_id: row.get(4),
+        author_command_admission_id: row.get(5),
+        command_id: row.get(6),
+        idempotency_key: row.get(7),
+    }))
 }
 
 async fn complete_claimed_export(
