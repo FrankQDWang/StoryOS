@@ -9,12 +9,12 @@ impl ExportProjectArchiveStore for Store {
     async fn export_project_archive(
         &self,
         command: &ExportProjectArchiveCommand,
-    ) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+    ) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
         *self.0.lock().unwrap() += 1;
-        Ok(ExportProjectArchiveSettlement {
+        Ok(ExportProjectArchiveAdmission {
             ids: command.ids.clone(),
             export_id: command.export_id.clone(),
-            effect: ExportProjectArchiveSettlementEffect::Admitted {
+            effect: ExportProjectArchiveAdmissionEffect::Admitted {
                 archive_profile: command.archive_profile.clone(),
                 archive_path_profile: command.archive_path_profile.clone(),
                 source_snapshot: Box::new(snapshot()),
@@ -132,14 +132,14 @@ fn command() -> ExportProjectArchiveCommand {
 #[tokio::test]
 async fn an_exact_export_binding_reaches_the_store() {
     let store = Store(Mutex::new(0));
-    let settlement = request_export_project_archive(&store, &command())
+    let admission = request_export_project_archive(&store, &command())
         .await
         .unwrap();
     assert_eq!(*store.0.lock().unwrap(), 1);
-    assert_eq!(settlement.export_id, "export");
+    assert_eq!(admission.export_id, "export");
     assert_eq!(
-        settlement.effect,
-        ExportProjectArchiveSettlementEffect::Admitted {
+        admission.effect,
+        ExportProjectArchiveAdmissionEffect::Admitted {
             archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
             archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
             source_snapshot: Box::new(snapshot()),

@@ -32,14 +32,14 @@ pub struct ExportProjectArchiveCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ExportProjectArchiveSettlement {
+pub struct ExportProjectArchiveAdmission {
     pub ids: AuthorCommandAdmissionIds,
     pub export_id: String,
-    pub effect: ExportProjectArchiveSettlementEffect,
+    pub effect: ExportProjectArchiveAdmissionEffect,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum ExportProjectArchiveSettlementEffect {
+pub enum ExportProjectArchiveAdmissionEffect {
     Admitted {
         archive_profile: String,
         archive_path_profile: String,
@@ -96,13 +96,13 @@ pub trait ExportProjectArchiveStore: Sync {
     fn export_project_archive(
         &self,
         command: &ExportProjectArchiveCommand,
-    ) -> impl Future<Output = Result<ExportProjectArchiveSettlement, ExportProjectArchiveError>> + Send;
+    ) -> impl Future<Output = Result<ExportProjectArchiveAdmission, ExportProjectArchiveError>> + Send;
 }
 
 pub async fn request_export_project_archive(
     store: &impl ExportProjectArchiveStore,
     command: &ExportProjectArchiveCommand,
-) -> Result<ExportProjectArchiveSettlement, ExportProjectArchiveError> {
+) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
     let challenge = &command.challenge_binding;
     let command_digest = {
         use sha2::{Digest as _, Sha256};
