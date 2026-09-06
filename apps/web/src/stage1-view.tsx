@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 
 import {
@@ -96,7 +97,9 @@ function ProjectReadyView({
   const [pending, setPending] = useState<PendingEditProjection | null>(
     state.editor.kind === "editor-ready" ? state.editor.pending : null,
   );
-  const [saveState, setSaveState] = useState<PendingEditProjection["save_state"]>(
+  const [saveState, setSaveState] = useState<
+    PendingEditProjection["save_state"] | "pending"
+  >(
     state.editor.kind === "editor-ready" ? state.editor.pending.save_state : "needs_attention",
   );
   const [editorFailure, setEditorFailure] = useState<string>();
@@ -493,9 +496,18 @@ function ProjectReadyView({
             fetchImpl={fetchImpl}
             cryptoImpl={cryptoImpl}
             controllerRef={inputRef}
-            onProjection={(projection) => {
+            onProjection={(projection, source) => {
               (state.editor as EditorReadyState).pending = projection;
               if (selectedChapterIdRef.current !== currentChapterId) return;
+              if (source === "local") {
+                // Keep the pre-Journal copy off the projection save-state
+                // attribute before the next paint.
+                flushSync(() => {
+                  setPending(projection);
+                  setSaveState(projection.save_state === "saving" ? "saving" : "pending");
+                });
+                return;
+              }
               setPending(projection);
               setSaveState(projection.save_state);
               if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
@@ -509,7 +521,8 @@ function ProjectReadyView({
             }}
           />
           <small
-            data-save-state={saveState}
+            data-save-state={saveState === "pending" ? "saved" : saveState}
+            data-save-presentation={saveState === "pending" ? "pending" : undefined}
             data-editor-failure={editorFailure ?? ""}
             data-unsettled-intent-count={pending?.unsettled_intent_count ?? ""}
             data-authoritative-revision-id={

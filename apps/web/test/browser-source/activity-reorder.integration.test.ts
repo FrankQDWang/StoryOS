@@ -87,7 +87,7 @@ it("converges duplicate and reordered Activity frames to one durable ingest", as
     });
     const expectedProjection = {
       body: "Base",
-      save_state: "clean",
+      save_state: "saved",
       unsettled_intent_count: 0,
       authoritative_revision_id: REVISION,
     };

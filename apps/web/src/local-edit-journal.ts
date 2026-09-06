@@ -587,15 +587,11 @@ function pendingProjectionFromSnapshot(
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
   const appliedSequences = new Set<number>();
-  let hasAppliedSettlement = false;
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
     const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
     if (isAppliedSettlement(group)) {
-      // A later authorized current-Chapter base must not inherit the prior
-      // Chapter save state.
-      if (groupTargetsCurrentChapter) hasAppliedSettlement = true;
       for (const item of group.ordered_coverage) appliedSequences.add(item.local_intent_sequence);
     } else if (isZeroAuthoritySettlement(group) && groupTargetsCurrentChapter) {
       hasZeroAuthoritySettlement = true;
@@ -624,7 +620,7 @@ function pendingProjectionFromSnapshot(
       ? "needs_attention"
       : activeRecords.length
         ? "saving"
-        : hasAppliedSettlement ? "saved" : "clean",
+        : "saved",
     unsettled_intent_count: activeRecords.length,
     authoritative_revision_id: base.authoritative_head_revision_id,
     ...(workspace.session.author_undo_frontier_sequence
