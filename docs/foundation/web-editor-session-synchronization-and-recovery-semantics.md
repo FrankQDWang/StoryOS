@@ -1330,8 +1330,8 @@ Session binding/generation, client/security contracts, Editor Session, writer
 generation, action class, request contract, final digest/profile and covered
 fields, targets/Heads/Revisions, idempotency and nonce records, complete
 `ApplyAuthorEdit` intent/selections/retry source/ownership/Anchors/reservations,
-editor contract, undo group, and durable journal reconstruction. Equality of a
-subset is failure.
+editor contract, undo group, and complete persisted Admission `command_payload`.
+Equality of a subset is failure.
 
 A visible reconfirmation creates a new idempotency key, anti-forgery challenge,
 Command, Admission, and eventual Receipt. Once an Admission exists,

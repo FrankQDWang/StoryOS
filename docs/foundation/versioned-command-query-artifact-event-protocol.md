@@ -673,9 +673,10 @@ reference, or reconfirmation disposition, and commit time.
   acknowledgement. After an author-command admission commits, recovery first
   resolves an existing Receipt. When validated storage proves that no Receipt
   exists, only the same unexpired `direct_editor_action` admission with every
-  binding still equal and complete journal intent still recoverable may invoke
-  automatically; an expired, changed, or intent-unrecoverable direct action,
-  explicit editor command, or explicit project command settles as
+  binding still equal and complete persisted Admission `command_payload`
+  still recoverable may invoke automatically; an expired, changed, or
+  intent-unrecoverable direct action, explicit editor command, or explicit
+  project command settles as
   `requires_reconfirmation` without Core execution. When settlement cannot yet
   be proven, the same admission remains `outcome_unknown` and
   reconciliation-required rather than authorizing another invocation.
