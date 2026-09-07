@@ -9,8 +9,8 @@ use uuid::Uuid;
 
 use super::*;
 use crate::pinned_export_source::{
-    EXPORT_REFUSED_RECEIPT_REASON, PinnedExportSourceCompleteness, PinnedExportSourceLoad,
-    load_pinned_export_source,
+    EXPORT_REFUSED_RECEIPT_REASON, PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON,
+    PinnedExportSourceCompleteness, PinnedExportSourceLoad, load_pinned_export_source,
 };
 use crate::snapshot::PinnedSnapshot;
 
@@ -239,7 +239,7 @@ async fn complete_claimed_export(
                         client,
                         claim,
                         &canonical_command_digest,
-                        EXPORT_REFUSED_RECEIPT_REASON,
+                        PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON,
                     )
                     .await
                 }
@@ -250,7 +250,7 @@ async fn complete_claimed_export(
                 client,
                 claim,
                 &canonical_command_digest,
-                EXPORT_REFUSED_RECEIPT_REASON,
+                PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON,
             )
             .await
         }

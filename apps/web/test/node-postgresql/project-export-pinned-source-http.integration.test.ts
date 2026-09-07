@@ -24,6 +24,7 @@ import type {
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   createEmptyProject,
+  exportSettlementReceipt,
   queryStoryOSPostgres as queryPostgres,
   runStoryOSWorker,
   sessionFetch as browserFetch,
@@ -325,6 +326,15 @@ test("an Archive whose Pinned Export Source is missing settles failed without li
     const failed = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
     assert.equal(failed.status, "failed");
     assert.equal("immutable_root" in failed, false);
+    assert.equal(
+      await exportSettlementReceipt({
+        ownerUserId: USER_A,
+        projectId,
+        exportId,
+        operationsTable: "project_export_operations",
+      }),
+      "refused pinned_export_source_unavailable",
+    );
     const refusedZip = await fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
     assert.equal(refusedZip.status, 422);
     const entryRows = await queryPostgres(`

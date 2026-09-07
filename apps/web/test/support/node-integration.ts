@@ -159,6 +159,27 @@ export async function queryStoryOSPostgres(query: string): Promise<string> {
   return stdout.trim();
 }
 
+export async function exportSettlementReceipt(options: {
+  readonly ownerUserId: string;
+  readonly projectId: string;
+  readonly exportId: string;
+  readonly operationsTable:
+    | "human_readable_manuscript_export_operations"
+    | "project_export_operations";
+}): Promise<string> {
+  return queryStoryOSPostgres(`
+    SELECT receipt.result_kind || ' ' || (receipt.result_payload->>'reason')
+      FROM storyos.domain_receipts AS receipt
+      JOIN storyos.${options.operationsTable} AS operation
+        ON operation.owner_user_id = receipt.owner_user_id
+       AND operation.project_id = receipt.project_id
+       AND operation.author_command_admission_id = receipt.author_command_admission_id
+     WHERE operation.owner_user_id = '${options.ownerUserId}'::uuid
+       AND operation.project_id = '${options.projectId}'::uuid
+       AND operation.export_id = '${options.exportId}'::uuid;
+  `);
+}
+
 export async function withChallengeRetry<Result>(
   action: () => Promise<Result>,
 ): Promise<Result> {

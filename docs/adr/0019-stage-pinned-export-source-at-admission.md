@@ -15,6 +15,7 @@ Export admission must freeze the exact facts that later Worker settlement may re
 ## Consequences
 
 - Human-readable admission stores manuscript facts. Archive admission stores the complete exportable families. Both are the same Pinned Export Source type.
-- The source is unavailable when its Snapshot is missing or expired. Settlement then fails. Live Project state is never a fallback, including for operations admitted before this source exists.
+- The source is unavailable when its Snapshot is missing or expired, or when the source is missing, partial, or digest-invalid. Settlement then fails. Live Project state is never a fallback, including for operations admitted before this source exists.
+- A Domain Receipt for that unavailable-source settlement stays `refused` and records `pinned_export_source_unavailable`. The word `archived_project` remains only when the Project is archived at settlement. A missing Project row at settlement is not this decision.
 - After settlement, the source may be discarded. A `ready` export keeps its output bytes. A later Archive may include other still in-progress Pinned Export Source records. It must not nest a copy of the source that it is packing.
 - This decision does not change public export transport, status vocabulary, manuscript format, or Archive byte profiles. It does not resume Stage 3.

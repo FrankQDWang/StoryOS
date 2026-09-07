@@ -8,13 +8,13 @@ use tokio_postgres::GenericClient;
 use super::{ProjectReadError, read_error};
 use crate::author_edit::sha256_hex;
 
-/// Receipt reason when export settlement fails closed.
-///
-/// The persisted `domain_receipts_result_shape` vocabulary admits one refusal
-/// reason for export commands, so an unavailable Pinned Export Source or
-/// Snapshot records the same word as an archived Project. A distinct reason
-/// needs a receipt-shape migration.
+/// Receipt reason when export settlement refuses an archived Project, or when
+/// settlement finds no Project row.
 pub(crate) const EXPORT_REFUSED_RECEIPT_REASON: &str = "archived_project";
+
+/// Receipt reason when settlement cannot prove the Pinned Export Source.
+pub(crate) const PINNED_EXPORT_SOURCE_UNAVAILABLE_RECEIPT_REASON: &str =
+    "pinned_export_source_unavailable";
 
 /// Completeness profile stored with one Pinned Export Source row.
 #[derive(Clone, Copy)]

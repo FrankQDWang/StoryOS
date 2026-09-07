@@ -197,6 +197,7 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
         "crates/storyos-adapter-postgres/migrations/0032_create_volume_canonical_sibling_order.sql",
         "crates/storyos-adapter-postgres/migrations/0033_create_chapter_canonical_sibling_order.sql",
         "crates/storyos-adapter-postgres/migrations/0034_pinned_export_sources.sql",
+        "crates/storyos-adapter-postgres/migrations/0035_export_pinned_source_unavailable_receipt_reason.sql",
     ]
     if bootstrap.get("transaction_boundary") != "one_postgresql_transaction":
         fail(errors, "Release 1 bootstrap must use one PostgreSQL transaction")

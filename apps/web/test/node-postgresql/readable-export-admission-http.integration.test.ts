@@ -21,6 +21,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  exportSettlementReceipt,
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   runStoryOSWorker,
@@ -586,6 +587,15 @@ test("the Worker settles failed when the Project is archived after admission", a
     });
     assert.equal(failed.status, "failed");
     assert.equal("manuscript_utf8" in failed, false);
+    assert.equal(
+      await exportSettlementReceipt({
+        ownerUserId: USER_A,
+        projectId: first.projectId,
+        exportId: applied.admitted.effect.export_id,
+        operationsTable: "human_readable_manuscript_export_operations",
+      }),
+      "refused archived_project",
+    );
 
     const replay = await exportHumanReadableManuscript({
       baseUrl,
@@ -656,6 +666,15 @@ test("the Worker settles failed when the pinned Snapshot is unavailable before o
     });
     assert.equal(failed.status, "failed");
     assert.equal("manuscript_utf8" in failed, false);
+    assert.equal(
+      await exportSettlementReceipt({
+        ownerUserId: USER_A,
+        projectId: first.projectId,
+        exportId: applied.admitted.effect.export_id,
+        operationsTable: "human_readable_manuscript_export_operations",
+      }),
+      "refused pinned_export_source_unavailable",
+    );
   } finally {
     await stopRealServer(server);
   }

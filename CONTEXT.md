@@ -80,7 +80,7 @@ A versioned, self-describing, integrity-protected portable archive of one exact 
 _Avoid_: Selected-table dump, backup, cache snapshot, credential bundle, project copy, Worker-time live Project state as archive input
 
 **Pinned Export Source**:
-The immutable, Project Scope-bound copy of the exportable canonical facts required by one admitted export operation: manuscript facts for a human-readable export, or the complete exportable families for a Project Export Archive. It is created at admission, bound to that operation's source Snapshot locator, unavailable when that Snapshot is missing or expired, and discarded after settlement; both export Workers read only this source and never live Project state.
+The immutable, Project Scope-bound copy of the exportable canonical facts required by one admitted export operation: manuscript facts for a human-readable export, or the complete exportable families for a Project Export Archive. It is created at admission, bound to that operation's source Snapshot locator, unavailable when that Snapshot is missing or expired or when the source is missing, partial, or digest-invalid, and discarded after settlement; both export Workers read only this source and never live Project state.
 _Avoid_: Canonical Query Snapshot as frozen export input, live Project rows, Activity-position reconstruction, Worker-time current state, settled manuscript or ZIP as the source, second Snapshot authority, nested copy of the packing operation's own source
 
 **Project Restore**:

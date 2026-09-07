@@ -20,6 +20,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  exportSettlementReceipt,
   queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   runStoryOSWorker,
@@ -703,6 +704,15 @@ test("the Worker settles failed when the Project is archived after admission", a
     });
     assert.equal(failed.status, "failed");
     assert.equal("immutable_root" in failed, false);
+    assert.equal(
+      await exportSettlementReceipt({
+        ownerUserId: USER_A,
+        projectId: first.projectId,
+        exportId: applied.admitted.effect.export_id,
+        operationsTable: "project_export_operations",
+      }),
+      "refused archived_project",
+    );
     const exportUrl = `${baseUrl}/api/v1/projects/${encodeURIComponent(first.projectId)}/exports/${encodeURIComponent(applied.admitted.effect.export_id)}`;
     const failedZip = await first.fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
     assert.equal(failedZip.status, 422);
@@ -783,6 +793,15 @@ test("the Worker settles failed when the pinned Snapshot is unavailable before o
     });
     assert.equal(failed.status, "failed");
     assert.equal("immutable_root" in failed, false);
+    assert.equal(
+      await exportSettlementReceipt({
+        ownerUserId: USER_A,
+        projectId: first.projectId,
+        exportId: applied.admitted.effect.export_id,
+        operationsTable: "project_export_operations",
+      }),
+      "refused pinned_export_source_unavailable",
+    );
   } finally {
     await stopRealServer(server);
   }
