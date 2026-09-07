@@ -74,6 +74,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/manuscript_revision_members.json",
     ),
     (
+        "pinned_export_sources",
+        "canonical/pinned_export_sources.json",
+    ),
+    (
         "project_activity_event_payloads",
         "canonical/project_activity_event_payloads.json",
     ),

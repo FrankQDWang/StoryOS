@@ -256,8 +256,31 @@ async fn persist_export(
                 "canonical snapshot is required for human-readable export",
             )))
         })?;
+    let tree = crate::manuscript_tree::load_live_tree_facts(
+        client,
+        &command.project_scope,
+        snapshot.clone(),
+    )
+    .await
+    .map_err(export_read_error)?;
+    let chapters = crate::manuscript_search::read_live_chapter_blocks(
+        client,
+        &command.project_scope,
+        crate::manuscript_search::LiveChapterReadExtent::AllChapters,
+    )
+    .await
+    .map_err(export_read_error)?;
+    let volumes = storyos_application::readable_volumes_from_canonical_facts(&tree, &chapters);
     insert_export_admission(client, command).await?;
     insert_export_operation(client, command, &snapshot).await?;
+    crate::pinned_export_source::insert_human_readable_pinned_export_source(
+        client,
+        &command.project_scope,
+        &command.export_id,
+        &snapshot.snapshot_id,
+        &volumes,
+    )
+    .await?;
     Ok(ExportHumanReadableManuscriptAdmission {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),

@@ -328,6 +328,7 @@ async fn remove_export_work_rows(admin: &tokio_postgres::Client) {
     admin
         .batch_execute(
             "DELETE FROM storyos.human_readable_manuscript_exports;
+             DELETE FROM storyos.pinned_export_sources;
              DELETE FROM storyos.human_readable_manuscript_export_operations;
              DELETE FROM storyos.project_export_entries;
              DELETE FROM storyos.project_export_manifests;

@@ -72,6 +72,7 @@ mod list_projects;
 mod manuscript_block;
 mod manuscript_search;
 mod manuscript_tree;
+mod pinned_export_source;
 mod project_archive_build;
 mod project_export;
 mod project_export_work;
