@@ -44,6 +44,7 @@ mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
 mod manuscript_tree;
+mod pinned_export_source;
 mod project_activity;
 mod project_export;
 mod project_export_work;
@@ -126,6 +127,9 @@ pub use manuscript_statistics::{
 pub use manuscript_tree::{
     CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+};
+pub use pinned_export_source::{
+    PinnedExportSource, PinnedExportSourceFacts, render_readable_manuscript_from_pinned_source,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,

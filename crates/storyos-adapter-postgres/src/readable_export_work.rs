@@ -4,14 +4,12 @@ use sha2::{Digest, Sha256};
 use storyos_application::{
     ClaimedReadableExport, CompleteReadableExport, CompleteReadableExportError, ProjectId,
     ProjectReadError, ProjectScope, ReadableExportWorkStore, UserId,
-    render_readable_manuscript_from_facts,
+    render_readable_manuscript_from_pinned_source,
 };
 use storyos_core::{ProjectLifecycle, READABLE_EXPORT_PROFILE};
 use uuid::Uuid;
 
 use super::*;
-use crate::manuscript_search::{LiveChapterReadExtent, read_live_chapter_blocks};
-use crate::manuscript_tree::load_live_tree_facts;
 use crate::snapshot::PinnedSnapshot;
 
 impl ReadableExportWorkStore for PostgresProjectReader {
@@ -196,17 +194,20 @@ async fn complete_claimed_export(
     .map_err(complete_read_error)?
     {
         PinnedSnapshot::Available(snapshot) => {
-            let tree = load_live_tree_facts(client, &claim.project_scope, snapshot.clone())
-                .await
-                .map_err(complete_read_error)?;
-            let chapters = read_live_chapter_blocks(
+            let source = crate::pinned_export_source::load_human_readable_pinned_export_source(
                 client,
                 &claim.project_scope,
-                LiveChapterReadExtent::AllChapters,
+                &claim.export_id,
+                &snapshot.snapshot_id,
             )
             .await
-            .map_err(complete_read_error)?;
-            let manuscript_utf8 = render_readable_manuscript_from_facts(&tree, &chapters);
+            .map_err(complete_read_error)?
+            .ok_or_else(|| {
+                CompleteReadableExportError::unavailable(std::io::Error::other(
+                    "Pinned Export Source is required for human-readable settlement",
+                ))
+            })?;
+            let manuscript_utf8 = render_readable_manuscript_from_pinned_source(&source);
             persist_ready_export(
                 client,
                 claim,
