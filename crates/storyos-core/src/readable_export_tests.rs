@@ -44,3 +44,47 @@ fn utf8_lf_profile_matches_pinned_golden_cases() {
         );
     }
 }
+
+const REPRESENTATIVE_BODY: &str = "The rain kept the same beat on the window ledge.";
+const PREVIOUS_BODY_COPIES: usize = 3;
+
+#[test]
+fn representative_manuscript_appends_each_chapter_body_once() {
+    let volumes = [ReadableExportVolume {
+        title: "Volume A".to_owned(),
+        chapters: vec![ReadableExportChapter {
+            title: "Chapter A".to_owned(),
+            body: Some(REPRESENTATIVE_BODY.to_owned()),
+        }],
+    }];
+    let expected =
+        "# Volume A\n\n## Chapter A\n\nThe rain kept the same beat on the window ledge.\n";
+    assert_eq!(render_readable_manuscript(&volumes), expected);
+
+    let mut record = BodyWriteRecord {
+        payload: REPRESENTATIVE_BODY,
+        payload_write_bytes: 0,
+        sink: String::new(),
+    };
+    append_readable_manuscript(&mut record, &volumes)
+        .expect("the public renderer writes into one buffer");
+    assert_eq!(record.sink, expected);
+    assert_eq!(record.payload_write_bytes, REPRESENTATIVE_BODY.len());
+    assert!(record.payload_write_bytes < PREVIOUS_BODY_COPIES * REPRESENTATIVE_BODY.len());
+}
+
+struct BodyWriteRecord<'a> {
+    payload: &'a str,
+    payload_write_bytes: usize,
+    sink: String,
+}
+
+impl std::fmt::Write for BodyWriteRecord<'_> {
+    fn write_str(&mut self, text: &str) -> std::fmt::Result {
+        if text == self.payload {
+            self.payload_write_bytes += text.len();
+        }
+        self.sink.push_str(text);
+        Ok(())
+    }
+}
