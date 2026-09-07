@@ -14,7 +14,7 @@
     "contract_graph_digest": "sha256:62c9bb4adc67df6fb3a0603c8fe75e35b8b0e6abd8faea0d0b61d29f777cadf0",
     "contract_graph_revision": "release1-wire-catalog-2026-09-05-chapter-created-order-v2",
     "envelope_profile": "storyos.public.envelope.v1",
-    "fixture_corpus_digest": "sha256:ae4c01ee1cd84dc779177dcae27abd1e1856fe3b0608848938027d024f4d4071",
+    "fixture_corpus_digest": "sha256:85844ec622846c055b1fac1db0be090ebfc42aa3bb4619a9031927de37b7e58f",
     "generated_client_revision": "storyos.typescript-client.release-1.v16",
     "json_schema_catalog_digest": "sha256:7c702fb89402780f9599f7a579068e339253033efef20c3cd3e632ef9e347081",
     "limit_profile_revision": "storyos.foundation.absolute.v1",
