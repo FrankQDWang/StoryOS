@@ -291,6 +291,17 @@ async fn persist_export(
         })?;
     insert_export_admission(client, command).await?;
     insert_export_operation(client, command, &snapshot).await?;
+    let families =
+        crate::project_archive_build::collect_exportable_families(client, &command.project_scope)
+            .await?;
+    crate::pinned_export_source::insert_archive_pinned_export_source(
+        client,
+        &command.project_scope,
+        &command.export_id,
+        &snapshot.snapshot_id,
+        &families,
+    )
+    .await?;
     Ok(ExportProjectArchiveAdmission {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),

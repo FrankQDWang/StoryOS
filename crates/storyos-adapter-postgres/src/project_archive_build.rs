@@ -1,6 +1,6 @@
 use storyos_application::{
-    CanonicalSnapshot, ExportOperationPage, ExportProjectArchiveError, ProjectReadError,
-    ProjectScope, VerifiedExportArchive,
+    CanonicalSnapshot, ExportOperationPage, ExportProjectArchiveError, PinnedArchiveFamily,
+    ProjectReadError, ProjectScope, VerifiedExportArchive,
 };
 use storyos_core::{
     ARCHIVE_PATH_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
@@ -108,26 +108,51 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
 ];
 
+pub(super) async fn collect_exportable_families(
+    client: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> Result<Vec<PinnedArchiveFamily>, ExportProjectArchiveError> {
+    let mut families = Vec::with_capacity(EXPORT_TABLES.len());
+    for (table, path) in EXPORT_TABLES {
+        let rows = load_table_json(client, table, scope).await?;
+        classify_rows(&rows, scope)?;
+        families.push(PinnedArchiveFamily {
+            table: (*table).to_owned(),
+            path: (*path).to_owned(),
+            rows_json: canonical_json(&serde_json::Value::Array(rows)),
+        });
+    }
+    Ok(families)
+}
+
 pub(super) async fn persist_export_archive(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     export_id: &str,
     snapshot: &CanonicalSnapshot,
     created_at: &str,
+    families: &[PinnedArchiveFamily],
 ) -> Result<String, ExportProjectArchiveError> {
-    let mut sources = Vec::with_capacity(EXPORT_TABLES.len());
-    let mut present = Vec::with_capacity(EXPORT_TABLES.len());
-    let mut counts = Vec::with_capacity(EXPORT_TABLES.len());
-    for (table, path) in EXPORT_TABLES {
-        let rows = load_table_json(client, table, scope).await?;
+    let mut sources = Vec::with_capacity(families.len());
+    let mut present = Vec::with_capacity(families.len());
+    let mut counts = Vec::with_capacity(families.len());
+    for family in families {
+        let rows: Vec<serde_json::Value> = match serde_json::from_str(&family.rows_json) {
+            Ok(serde_json::Value::Array(values)) => values,
+            _ => {
+                return Err(archive_build_error(
+                    ProjectArchiveBuildRefusal::InvalidProvenance,
+                ));
+            }
+        };
         classify_rows(&rows, scope)?;
-        present.push(*table);
-        counts.push(((*table).to_owned(), rows.len().to_string()));
+        present.push(family.table.as_str());
+        counts.push((family.table.clone(), rows.len().to_string()));
         let bytes = canonical_json(&serde_json::Value::Array(rows)).into_bytes();
         sources.push(ArchiveEntrySource {
-            path: (*path).to_owned(),
+            path: family.path.clone(),
             media_type: "application/json".to_owned(),
-            payload_schema: format!("storyos.table.{table}.v1"),
+            payload_schema: format!("storyos.table.{}.v1", family.table),
             bytes,
         });
     }

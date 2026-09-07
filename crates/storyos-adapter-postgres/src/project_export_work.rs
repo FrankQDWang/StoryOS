@@ -1,7 +1,8 @@
 use storyos_application::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
-    PROJECT_EXPORT_ARCHIVE_PROFILE, ProjectId, ProjectReadError, ProjectScope, UserId,
+    PROJECT_EXPORT_ARCHIVE_PROFILE, PinnedExportSourceFacts, ProjectId, ProjectReadError,
+    ProjectScope, UserId,
 };
 use storyos_core::ProjectLifecycle;
 use uuid::Uuid;
@@ -192,7 +193,32 @@ async fn complete_claimed_export(
     .map_err(complete_read_error)?
     {
         PinnedSnapshot::Available(snapshot) => {
-            persist_ready_export(client, claim, &canonical_command_digest, &snapshot).await
+            let source = crate::pinned_export_source::load_archive_pinned_export_source(
+                client,
+                &claim.project_scope,
+                &claim.export_id,
+                &snapshot.snapshot_id,
+            )
+            .await
+            .map_err(complete_read_error)?
+            .ok_or_else(|| {
+                CompleteArchiveExportError::unavailable(std::io::Error::other(
+                    "Pinned Export Source is required for Archive settlement",
+                ))
+            })?;
+            let PinnedExportSourceFacts::ProjectExportArchive { families } = source.facts else {
+                return Err(CompleteArchiveExportError::unavailable(
+                    std::io::Error::other("Archive settlement requires Archive completeness"),
+                ));
+            };
+            persist_ready_export(
+                client,
+                claim,
+                &canonical_command_digest,
+                &snapshot,
+                &families,
+            )
+            .await
         }
         PinnedSnapshot::Expired | PinnedSnapshot::Missing => {
             persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
@@ -206,6 +232,7 @@ async fn persist_ready_export(
     claim: &ClaimedArchiveExport,
     canonical_command_digest: &str,
     snapshot: &storyos_application::CanonicalSnapshot,
+    families: &[storyos_application::PinnedArchiveFamily],
 ) -> Result<CompleteArchiveExport, CompleteArchiveExportError> {
     let receipt_id = Uuid::now_v7().to_string();
     let receipt_created_at = insert_export_receipt(
@@ -287,6 +314,7 @@ async fn persist_ready_export(
         &claim.export_id,
         snapshot,
         &receipt_created_at,
+        families,
     )
     .await
     .map_err(complete_pack_error)?;

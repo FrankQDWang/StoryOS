@@ -129,7 +129,8 @@ pub use manuscript_tree::{
     VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
 pub use pinned_export_source::{
-    PinnedExportSource, PinnedExportSourceFacts, render_readable_manuscript_from_pinned_source,
+    PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,
+    render_readable_manuscript_from_pinned_source,
 };
 pub use project_export::{
     ExportOperationPage, ExportOperationProgress, ExportOperationReader,
