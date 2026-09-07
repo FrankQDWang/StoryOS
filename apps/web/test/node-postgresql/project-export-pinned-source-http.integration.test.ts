@@ -4,23 +4,27 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
-  createProject,
-  createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
   digestCreateVolume,
+  digestExportHumanReadableManuscript,
   digestExportProjectArchive,
   digestUpdateProject,
+  exportHumanReadableManuscript,
   exportProjectArchive,
   getExportOperation,
+  getHumanReadableManuscriptExport,
   updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   DigestValue,
+  ExportHumanReadableManuscriptRequest,
   ExportProjectArchiveRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  createEmptyProject,
+  queryStoryOSPostgres as queryPostgres,
   runStoryOSWorker,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -105,6 +109,59 @@ function zipStoreFiles(bytes: Uint8Array): Map<string, Uint8Array> {
   return files;
 }
 
+async function admitArchive(
+  command: { baseUrl: string; fetchImpl: typeof fetch; projectId: string },
+  exportKey: string,
+  correlationId: string,
+): Promise<string> {
+  const request = exportRequest(correlationId);
+  const applied = await challenged({
+    ...command,
+    method: "POST",
+    route: "/api/v1/projects/{project_id}/exports",
+    schema: request.command_schema,
+    idempotencyKey: exportKey,
+    digest: await digestExportProjectArchive(request),
+    send: (antiForgery) => exportProjectArchive({
+      ...command, idempotencyKey: exportKey, antiForgery, request,
+    }),
+  });
+  if (applied.result.effect.kind !== "admitted") {
+    throw new Error("Project Export Archive must admit");
+  }
+  return applied.result.effect.export_id;
+}
+
+async function admitHumanReadableExport(
+  command: { baseUrl: string; fetchImpl: typeof fetch; projectId: string },
+  exportKey: string,
+  correlationId: string,
+): Promise<string> {
+  const request: ExportHumanReadableManuscriptRequest = {
+    command_schema: "storyos.command.export-human-readable-manuscript.request.v1",
+    export_human_readable_manuscript_input: { ...bindings(), correlation_id: correlationId },
+  };
+  const applied = await challenged({
+    ...command,
+    method: "POST",
+    route: "/api/v1/projects/{project_id}/manuscript/exports",
+    schema: request.command_schema,
+    idempotencyKey: exportKey,
+    digest: await digestExportHumanReadableManuscript(request),
+    send: (antiForgery) => exportHumanReadableManuscript({
+      ...command, idempotencyKey: exportKey, antiForgery, request,
+    }),
+  });
+  if (applied.result.effect.kind !== "admitted") {
+    throw new Error("Human-readable export must admit");
+  }
+  return applied.result.effect.export_id;
+}
+
+function exportUrlFor(baseUrl: string, projectId: string, exportId: string): string {
+  return `${baseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/exports/${encodeURIComponent(exportId)}`;
+}
+
 test("an admitted Project Export Archive settles the pinned families after later live changes", async () => {
   const { baseUrl, server } = await startStoryOSServer({
     repositoryRoot,
@@ -114,29 +171,13 @@ test("an admitted Project Export Archive settles the pinned families after later
   });
   try {
     const fetchImpl = browserFetch(baseUrl, "session-a");
-    const createKey = "018f0000-0000-7001-8000-00000000e101";
-    const createRequest = {
-      command_schema: "storyos.command.create-project.request.v1" as const,
-      create_project_input: {
-        title: ADMITTED_TITLE,
-        ...bindings(),
-        correlation_id: "018f0000-0000-7001-8000-00000000e111",
-      },
-      idempotency_key: createKey,
-    };
-    const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
-    await createProject({
+    const projectId = await createEmptyProject({
       baseUrl,
       fetchImpl,
-      idempotencyKey: createKey,
-      antiForgery: created.nonce,
-      request: {
-        command_schema: createRequest.command_schema,
-        prospective_project_id: created.prospective_project_id,
-        create_project_input: createRequest.create_project_input,
-      },
+      createKey: "018f0000-0000-7001-8000-00000000e101",
+      correlationId: "018f0000-0000-7001-8000-00000000e111",
+      title: ADMITTED_TITLE,
     });
-    const projectId = created.prospective_project_id;
     const command = { baseUrl, fetchImpl, projectId };
 
     const request = exportRequest("018f0000-0000-7001-8000-00000000e114");
@@ -158,7 +199,7 @@ test("an admitted Project Export Archive settles the pinned families after later
     }
     const exportId = applied.result.effect.export_id;
     const sourceSnapshotId = applied.result.effect.source_snapshot.snapshot_id;
-    const exportUrl = `${baseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/exports/${encodeURIComponent(exportId)}`;
+    const exportUrl = exportUrlFor(baseUrl, projectId, exportId);
 
     const waiting = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
     assert.equal(waiting.status, "in_progress");
@@ -241,6 +282,111 @@ test("an admitted Project Export Archive settles the pinned families after later
       new TextDecoder().decode(zipFiles.get("canonical/manuscript_objects.json")),
     );
     assert.equal(JSON.stringify(objects).includes("Volume B"), false);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("an Archive whose Pinned Export Source is missing settles failed without live fallback", async () => {
+  const { baseUrl, server } = await startStoryOSServer({
+    repositoryRoot,
+    serverBinary,
+    sessions: { "session-a": USER_A },
+    extraEnv: { STORYOS_WORKER: "0" },
+  });
+  try {
+    const fetchImpl = browserFetch(baseUrl, "session-a");
+    const projectId = await createEmptyProject({
+      baseUrl,
+      fetchImpl,
+      createKey: "018f0000-0000-7001-8000-00000000e201",
+      correlationId: "018f0000-0000-7001-8000-00000000e211",
+      title: "Fail Closed Archive",
+    });
+    const command = { baseUrl, fetchImpl, projectId };
+    const exportId = await admitArchive(
+      command, "018f0000-0000-7001-8000-00000000e204", "018f0000-0000-7001-8000-00000000e214",
+    );
+    const exportUrl = exportUrlFor(baseUrl, projectId, exportId);
+
+    // An operation admitted before this source existed has no source row.
+    const removed = await queryPostgres(`
+      DELETE FROM storyos.pinned_export_sources
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${projectId}'::uuid
+         AND export_id = '${exportId}'::uuid;
+      SELECT 'ok';
+    `);
+    assert.match(removed, /ok$/);
+    const waiting = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
+    assert.equal(waiting.status, "in_progress");
+
+    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    const failed = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
+    assert.equal(failed.status, "failed");
+    assert.equal("immutable_root" in failed, false);
+    const refusedZip = await fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
+    assert.equal(refusedZip.status, 422);
+    const entryRows = await queryPostgres(`
+      SELECT count(*)::text
+        FROM storyos.project_export_entries
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${projectId}'::uuid;
+    `);
+    assert.equal(entryRows, "0");
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("a later Archive packs other in-progress Pinned Export Sources and not its own", async () => {
+  const { baseUrl, server } = await startStoryOSServer({
+    repositoryRoot,
+    serverBinary,
+    sessions: { "session-a": USER_A },
+    extraEnv: { STORYOS_WORKER: "0" },
+  });
+  try {
+    const fetchImpl = browserFetch(baseUrl, "session-a");
+    const projectId = await createEmptyProject({
+      baseUrl,
+      fetchImpl,
+      createKey: "018f0000-0000-7001-8000-00000000e301",
+      correlationId: "018f0000-0000-7001-8000-00000000e311",
+      title: "Nested Source Archive",
+    });
+    const command = { baseUrl, fetchImpl, projectId };
+    const readableExportId = await admitHumanReadableExport(
+      command, "018f0000-0000-7001-8000-00000000e303", "018f0000-0000-7001-8000-00000000e313",
+    );
+    const archiveExportId = await admitArchive(
+      command, "018f0000-0000-7001-8000-00000000e304", "018f0000-0000-7001-8000-00000000e314",
+    );
+
+    // Claim order is readable-first, so two runs settle both operations.
+    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    const readable = await getHumanReadableManuscriptExport({
+      baseUrl, projectId, exportId: readableExportId, fetchImpl,
+    });
+    assert.equal(readable.status, "ready");
+    const archive = await getExportOperation({
+      baseUrl, projectId, exportId: archiveExportId, fetchImpl,
+    });
+    assert.equal(archive.status, "ready");
+
+    const zipResponse = await fetchImpl(exportUrlFor(baseUrl, projectId, archiveExportId), {
+      headers: { Accept: ARCHIVE_MEDIA },
+    });
+    assert.equal(zipResponse.status, 200);
+    const zipFiles = zipStoreFiles(new Uint8Array(await zipResponse.arrayBuffer()));
+    const sources: Array<{ export_id: string; completeness_profile: string }> = JSON.parse(
+      new TextDecoder().decode(zipFiles.get("canonical/pinned_export_sources.json")),
+    );
+    assert.deepEqual(
+      sources.map((row) => [row.export_id, row.completeness_profile]),
+      [[readableExportId, "human_readable_manuscript"]],
+    );
   } finally {
     await stopRealServer(server);
   }

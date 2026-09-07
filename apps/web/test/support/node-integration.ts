@@ -5,7 +5,12 @@ import { once } from "node:events";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
-import { StoryOSProtocolError } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  StoryOSProtocolError,
+  createProject,
+  createProjectChallenge,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -109,6 +114,40 @@ export async function runStoryOSWorker(options: {
     timeout: 15_000,
     killSignal: "SIGKILL",
   });
+}
+
+/** Creates one empty Project through the public protocol and returns its Project ID. */
+export async function createEmptyProject(options: {
+  readonly baseUrl: string;
+  readonly fetchImpl: typeof fetch;
+  readonly createKey: string;
+  readonly correlationId: string;
+  readonly title: string;
+}): Promise<string> {
+  const { baseUrl, fetchImpl, createKey } = options;
+  const createRequest = {
+    command_schema: "storyos.command.create-project.request.v1" as const,
+    create_project_input: {
+      title: options.title,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: options.correlationId,
+    },
+    idempotency_key: createKey,
+  };
+  const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
+  await createProject({
+    baseUrl,
+    fetchImpl,
+    idempotencyKey: createKey,
+    antiForgery: created.nonce,
+    request: {
+      command_schema: createRequest.command_schema,
+      prospective_project_id: created.prospective_project_id,
+      create_project_input: createRequest.create_project_input,
+    },
+  });
+  return created.prospective_project_id;
 }
 
 export async function queryStoryOSPostgres(query: string): Promise<string> {
