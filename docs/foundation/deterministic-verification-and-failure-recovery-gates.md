@@ -279,7 +279,7 @@ classification, not a new product artifact.
 | Shorthand | Exact passing condition |
 | --- | --- |
 | `PASS-POS` | `passed`: every scheduled positive fact matches the oracle and the named bundle replays. |
-| `PASS-REFUSAL` | `expected_refusal`: refusal is the scheduled oracle result, with no Admission/authority/effect/disclosure and a non-oracular response. |
+| `PASS-REFUSAL` | `expected_refusal`: refusal is the scheduled oracle result at the owner-defined boundary, with no unauthorized record, authority, effect, or disclosure and a non-oracular response. A pre-Admission refusal or public `Rejected` result proves that no Admission, Receipt, or Core effect exists. That result is not an Admission lifecycle state. When a selected closed profile, for example section 10.1, expects `RequiresReconfirmation`, the existing Admission remains, and that result is its terminal no-Receipt settlement. That settlement proves that this Admission creates no Core effect. The no-Admission case and the `RequiresReconfirmation` case remain distinct. `PASS-REFUSAL` does not turn an unresolved state into a terminal result. |
 | `PASS-UNKNOWN` | `expected_outcome_unknown`: the dispatch claim is durable, the uncertainty is explicit, the fence is active, and reconciliation is separately admitted; this is not success. |
 | `PASS-HOLD` | `expected_recovery_hold`: recovery exposes the unresolved state or Recovery Draft/reconfirmation boundary without claiming commit. |
 | `PASS-STAGE` | The row's mandatory evidence is current, attributable, replayable, and passed at the exact implementation baseline; stage release still requires the author journey. |
