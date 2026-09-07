@@ -320,6 +320,9 @@ pnpm --dir apps/web exec vitest run --project node-postgresql \
 echo "Running HTTP exportProjectArchive tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/project-export-admission-http.integration.test.ts
+echo "Running HTTP exportProjectArchive pinned-source tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/project-export-pinned-source-http.integration.test.ts
 echo "Running HTTP exportHumanReadableManuscript admission tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/readable-export-admission-http.integration.test.ts

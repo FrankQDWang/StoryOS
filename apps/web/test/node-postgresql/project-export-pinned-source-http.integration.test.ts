@@ -1,0 +1,247 @@
+import assert from "node:assert/strict";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { test } from "vitest";
+
+import {
+  createProject,
+  createProjectChallenge,
+  createProjectCommandChallenge,
+  createVolume,
+  digestCreateVolume,
+  digestExportProjectArchive,
+  digestUpdateProject,
+  exportProjectArchive,
+  getExportOperation,
+  updateProject,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type {
+  DigestValue,
+  ExportProjectArchiveRequest,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import {
+  runStoryOSWorker,
+  sessionFetch as browserFetch,
+  startStoryOSServer,
+  stopStoryOSServer as stopRealServer,
+  withChallengeRetry,
+} from "../support/node-integration.ts";
+
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+const exe = process.platform === "win32" ? ".exe" : "";
+const serverBinary = join(repositoryRoot, "target", "release-package", `storyos-server${exe}`);
+const workerBinary = join(repositoryRoot, "target", "release-package", `storyos-worker${exe}`);
+const USER_A = "018f0000-0000-7001-8000-000000000001";
+const CLIENT = RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision;
+const SECURITY = "storyos.web-security-policy.release-1.v1";
+const ARCHIVE_MEDIA =
+  'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"';
+const ADMITTED_TITLE = "Pinned Archive Novel";
+
+function bindings() {
+  return { client_contract_revision: CLIENT, security_policy_revision: SECURITY };
+}
+
+function exportRequest(correlationId: string): ExportProjectArchiveRequest {
+  return {
+    command_schema: "storyos.command.export-project-archive.request.v1",
+    export_project_archive_input: {
+      ...bindings(),
+      correlation_id: correlationId,
+      archive_profile: "storyos.project-export.v1",
+      archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
+    },
+  };
+}
+
+async function challenged<Result>(options: {
+  baseUrl: string;
+  fetchImpl: typeof fetch;
+  projectId: string;
+  method: string;
+  route: string;
+  schema: string;
+  idempotencyKey: string;
+  digest: DigestValue;
+  send: (antiForgery: string) => Promise<Result>;
+}): Promise<{ antiForgery: string; result: Result }> {
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl: options.baseUrl,
+    projectId: options.projectId,
+    fetchImpl: options.fetchImpl,
+    request: {
+      method: options.method,
+      route_template: options.route,
+      command_schema: options.schema,
+      canonical_command_digest: options.digest,
+      idempotency_key: options.idempotencyKey,
+    },
+  }));
+  return {
+    antiForgery: challenge.nonce,
+    result: await options.send(challenge.nonce),
+  };
+}
+
+/** StoryOS Project Export ZIP files use STORE only. */
+function zipStoreFiles(bytes: Uint8Array): Map<string, Uint8Array> {
+  const files = new Map<string, Uint8Array>();
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let offset = 0;
+  while (offset + 30 <= bytes.length) {
+    if (view.getUint32(offset, true) !== 0x04034b50) {
+      break;
+    }
+    const size = view.getUint32(offset + 18, true);
+    const nameLen = view.getUint16(offset + 26, true);
+    const extraLen = view.getUint16(offset + 28, true);
+    const nameStart = offset + 30;
+    const name = new TextDecoder().decode(bytes.subarray(nameStart, nameStart + nameLen));
+    const dataStart = nameStart + nameLen + extraLen;
+    files.set(name, bytes.subarray(dataStart, dataStart + size));
+    offset = dataStart + size;
+  }
+  return files;
+}
+
+test("an admitted Project Export Archive settles the pinned families after later live changes", async () => {
+  const { baseUrl, server } = await startStoryOSServer({
+    repositoryRoot,
+    serverBinary,
+    sessions: { "session-a": USER_A },
+    extraEnv: { STORYOS_WORKER: "0" },
+  });
+  try {
+    const fetchImpl = browserFetch(baseUrl, "session-a");
+    const createKey = "018f0000-0000-7001-8000-00000000e101";
+    const createRequest = {
+      command_schema: "storyos.command.create-project.request.v1" as const,
+      create_project_input: {
+        title: ADMITTED_TITLE,
+        ...bindings(),
+        correlation_id: "018f0000-0000-7001-8000-00000000e111",
+      },
+      idempotency_key: createKey,
+    };
+    const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
+    await createProject({
+      baseUrl,
+      fetchImpl,
+      idempotencyKey: createKey,
+      antiForgery: created.nonce,
+      request: {
+        command_schema: createRequest.command_schema,
+        prospective_project_id: created.prospective_project_id,
+        create_project_input: createRequest.create_project_input,
+      },
+    });
+    const projectId = created.prospective_project_id;
+    const command = { baseUrl, fetchImpl, projectId };
+
+    const request = exportRequest("018f0000-0000-7001-8000-00000000e114");
+    const exportKey = "018f0000-0000-7001-8000-00000000e104";
+    const applied = await challenged({
+      ...command,
+      method: "POST",
+      route: "/api/v1/projects/{project_id}/exports",
+      schema: request.command_schema,
+      idempotencyKey: exportKey,
+      digest: await digestExportProjectArchive(request),
+      send: (antiForgery) => exportProjectArchive({
+        ...command, idempotencyKey: exportKey, antiForgery, request,
+      }),
+    });
+    assert.equal(applied.result.acknowledgement, "accepted");
+    if (applied.result.effect.kind !== "admitted") {
+      throw new Error("Project Export Archive must admit");
+    }
+    const exportId = applied.result.effect.export_id;
+    const sourceSnapshotId = applied.result.effect.source_snapshot.snapshot_id;
+    const exportUrl = `${baseUrl}/api/v1/projects/${encodeURIComponent(projectId)}/exports/${encodeURIComponent(exportId)}`;
+
+    const waiting = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
+    assert.equal(waiting.status, "in_progress");
+    assert.equal("immutable_root" in waiting, false);
+    assert.equal(waiting.source_snapshot.snapshot_id, sourceSnapshotId);
+    const refusedZip = await fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
+    assert.equal(refusedZip.status, 422);
+
+    const replay = await exportProjectArchive({
+      ...command, idempotencyKey: exportKey, antiForgery: applied.antiForgery, request,
+    });
+    assert.equal(replay.command_id, applied.result.command_id);
+    if (replay.effect.kind !== "admitted") {
+      throw new Error("retry must return the same admitted operation");
+    }
+    assert.equal(replay.effect.export_id, exportId);
+
+    const renameProject = {
+      command_schema: "storyos.command.update-project.request.v1" as const,
+      update_project_input: {
+        title: "Later Archive Title",
+        expected_project_revision: "1",
+        ...bindings(),
+        correlation_id: "018f0000-0000-7001-8000-00000000e115",
+      },
+    };
+    const renamed = await challenged({
+      ...command,
+      method: "PATCH",
+      route: "/api/v1/projects/{project_id}",
+      schema: renameProject.command_schema,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e105",
+      digest: await digestUpdateProject(renameProject),
+      send: (antiForgery) => updateProject({
+        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000e105", antiForgery,
+        request: renameProject,
+      }),
+    });
+    assert.equal(renamed.result.effect.kind, "authoritative_applied");
+
+    const laterVolumeRequest = {
+      command_schema: "storyos.command.create-volume.request.v1" as const,
+      create_volume_input: {
+        title: "Volume B",
+        expected_tree_revision: "1",
+        ...bindings(),
+        correlation_id: "018f0000-0000-7001-8000-00000000e11a",
+      },
+    };
+    const laterVolume = await challenged({
+      ...command,
+      method: "POST",
+      route: "/api/v1/projects/{project_id}/volumes",
+      schema: laterVolumeRequest.command_schema,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e10a",
+      digest: await digestCreateVolume(laterVolumeRequest),
+      send: (antiForgery) => createVolume({
+        ...command, idempotencyKey: "018f0000-0000-7001-8000-00000000e10a", antiForgery,
+        request: laterVolumeRequest,
+      }),
+    });
+    assert.equal(laterVolume.result.effect.kind, "authoritative_applied");
+
+    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+    const ready = await getExportOperation({ baseUrl, projectId, exportId, fetchImpl });
+    assert.equal(ready.status, "ready");
+    if (ready.status !== "ready") {
+      throw new Error("the Worker must settle the pinned Project Export Archive");
+    }
+    assert.equal(ready.source_snapshot.snapshot_id, sourceSnapshotId);
+    assert.equal(ready.export_id, exportId);
+
+    const zipResponse = await fetchImpl(exportUrl, { headers: { Accept: ARCHIVE_MEDIA } });
+    assert.equal(zipResponse.status, 200);
+    const zipBytes = new Uint8Array(await zipResponse.arrayBuffer());
+    const zipFiles = zipStoreFiles(zipBytes);
+    const projects = JSON.parse(new TextDecoder().decode(zipFiles.get("canonical/projects.json")));
+    assert.deepEqual(projects.map((row: { title: string }) => row.title), [ADMITTED_TITLE]);
+    const objects = JSON.parse(
+      new TextDecoder().decode(zipFiles.get("canonical/manuscript_objects.json")),
+    );
+    assert.equal(JSON.stringify(objects).includes("Volume B"), false);
+  } finally {
+    await stopRealServer(server);
+  }
+});
