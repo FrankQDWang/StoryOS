@@ -544,12 +544,20 @@ new policy revision and matching Editor Contract revision. A missing or
 mismatched mapping falls back to one intent per command or a safe pre-Admission
 refusal.
 
-For the Release 1 manual-input surface, each `AuthorEditUnit` contains exactly
-one `ReplaceSelection`. Web proves that its complete Local Edit Journal coverage
-is contiguous, ordered, non-overlapping, policy-matched, and one-to-one with the
-frozen units before challenge creation. Missing, duplicate, skipped, reordered,
-overlapping, or policy-mismatched local records fail at that Web boundary and
-cannot receive an Admission or Domain Receipt.
+For the current Release 1 production surface, one completed semantic editor
+intent contains an ordered nonempty list of supported primitives. Each member
+is `ReplaceSelection`, `SplitBlock`, `JoinBlocks`, `MoveBlock`, or
+`RetypeBlock`. A unit that contains only `SplitBlock` or only `JoinBlocks` is
+a valid completed unit and contains no `ReplaceSelection`. A contiguous
+replacement may keep every supported primitive of that one semantic editor
+intent in one unit. The historical Stage 1 bounded-input surface required
+exactly one `ReplaceSelection` in each `AuthorEditUnit`. That replacement-only
+rule remains valid only for that historical Stage 1 scope. It is not the
+current Admission or Core acceptance rule. Web proves that its complete Local
+Edit Journal coverage is contiguous, ordered, non-overlapping, policy-matched,
+and one-to-one with the frozen units before challenge creation. Missing,
+duplicate, skipped, reordered, overlapping, or policy-mismatched local records
+fail at that Web boundary and cannot receive an Admission or Domain Receipt.
 
 Core receives the exact ordered unit list and the existing first-record anchor;
 it receives no per-unit journal identity or sequence and does not claim to
