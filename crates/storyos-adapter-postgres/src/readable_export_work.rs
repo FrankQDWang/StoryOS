@@ -10,6 +10,10 @@ use storyos_core::{ProjectLifecycle, READABLE_EXPORT_PROFILE};
 use uuid::Uuid;
 
 use super::*;
+use crate::pinned_export_source::{
+    EXPORT_REFUSED_RECEIPT_REASON, PinnedExportSourceCompleteness, PinnedExportSourceLoad,
+    load_pinned_export_source,
+};
 use crate::snapshot::PinnedSnapshot;
 
 impl ReadableExportWorkStore for PostgresProjectReader {
@@ -169,8 +173,13 @@ async fn complete_claimed_export(
         .await
         .map_err(complete_database_error)?
     else {
-        return persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
-            .await;
+        return persist_failed_export(
+            client,
+            claim,
+            &canonical_command_digest,
+            EXPORT_REFUSED_RECEIPT_REASON,
+        )
+        .await;
     };
     let lifecycle = match project.get::<_, String>(0).as_str() {
         "active" => ProjectLifecycle::Active,
@@ -182,8 +191,13 @@ async fn complete_claimed_export(
         }
     };
     if lifecycle == ProjectLifecycle::Archived {
-        return persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
-            .await;
+        return persist_failed_export(
+            client,
+            claim,
+            &canonical_command_digest,
+            EXPORT_REFUSED_RECEIPT_REASON,
+        )
+        .await;
     }
     match crate::snapshot::load_pinned_snapshot(
         client,
@@ -194,32 +208,46 @@ async fn complete_claimed_export(
     .map_err(complete_read_error)?
     {
         PinnedSnapshot::Available(snapshot) => {
-            let source = crate::pinned_export_source::load_human_readable_pinned_export_source(
+            match load_pinned_export_source(
                 client,
                 &claim.project_scope,
                 &claim.export_id,
                 &snapshot.snapshot_id,
+                PinnedExportSourceCompleteness::HumanReadableManuscript,
             )
             .await
             .map_err(complete_read_error)?
-            .ok_or_else(|| {
-                CompleteReadableExportError::unavailable(std::io::Error::other(
-                    "Pinned Export Source is required for human-readable settlement",
-                ))
-            })?;
-            let manuscript_utf8 = render_readable_manuscript_from_pinned_source(&source);
-            persist_ready_export(
+            {
+                PinnedExportSourceLoad::Available(source) => {
+                    let manuscript_utf8 = render_readable_manuscript_from_pinned_source(&source);
+                    persist_ready_export(
+                        client,
+                        claim,
+                        &canonical_command_digest,
+                        &snapshot,
+                        &manuscript_utf8,
+                    )
+                    .await
+                }
+                PinnedExportSourceLoad::Unavailable => {
+                    persist_failed_export(
+                        client,
+                        claim,
+                        &canonical_command_digest,
+                        EXPORT_REFUSED_RECEIPT_REASON,
+                    )
+                    .await
+                }
+            }
+        }
+        PinnedSnapshot::Expired | PinnedSnapshot::Missing => {
+            persist_failed_export(
                 client,
                 claim,
                 &canonical_command_digest,
-                &snapshot,
-                &manuscript_utf8,
+                EXPORT_REFUSED_RECEIPT_REASON,
             )
             .await
-        }
-        PinnedSnapshot::Expired | PinnedSnapshot::Missing => {
-            persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
-                .await
         }
     }
 }

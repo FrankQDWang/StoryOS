@@ -1,13 +1,17 @@
 use storyos_application::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
-    PROJECT_EXPORT_ARCHIVE_PROFILE, PinnedExportSourceFacts, ProjectId, ProjectReadError,
-    ProjectScope, UserId,
+    PROJECT_EXPORT_ARCHIVE_PROFILE, PinnedExportSource, PinnedExportSourceFacts, ProjectId,
+    ProjectReadError, ProjectScope, UserId,
 };
 use storyos_core::ProjectLifecycle;
 use uuid::Uuid;
 
 use super::*;
+use crate::pinned_export_source::{
+    EXPORT_REFUSED_RECEIPT_REASON, PinnedExportSourceCompleteness, PinnedExportSourceLoad,
+    load_pinned_export_source,
+};
 use crate::snapshot::PinnedSnapshot;
 
 impl ArchiveExportWorkStore for PostgresProjectReader {
@@ -168,8 +172,13 @@ async fn complete_claimed_export(
         .await
         .map_err(complete_database_error)?
     else {
-        return persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
-            .await;
+        return persist_failed_export(
+            client,
+            claim,
+            &canonical_command_digest,
+            EXPORT_REFUSED_RECEIPT_REASON,
+        )
+        .await;
     };
     let lifecycle = match project.get::<_, String>(0).as_str() {
         "active" => ProjectLifecycle::Active,
@@ -181,8 +190,13 @@ async fn complete_claimed_export(
         }
     };
     if lifecycle == ProjectLifecycle::Archived {
-        return persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
-            .await;
+        return persist_failed_export(
+            client,
+            claim,
+            &canonical_command_digest,
+            EXPORT_REFUSED_RECEIPT_REASON,
+        )
+        .await;
     }
     match crate::snapshot::load_pinned_snapshot(
         client,
@@ -193,36 +207,52 @@ async fn complete_claimed_export(
     .map_err(complete_read_error)?
     {
         PinnedSnapshot::Available(snapshot) => {
-            let source = crate::pinned_export_source::load_archive_pinned_export_source(
+            let source = load_pinned_export_source(
                 client,
                 &claim.project_scope,
                 &claim.export_id,
                 &snapshot.snapshot_id,
+                PinnedExportSourceCompleteness::ProjectExportArchive,
             )
             .await
-            .map_err(complete_read_error)?
-            .ok_or_else(|| {
-                CompleteArchiveExportError::unavailable(std::io::Error::other(
-                    "Pinned Export Source is required for Archive settlement",
-                ))
-            })?;
-            let PinnedExportSourceFacts::ProjectExportArchive { families } = source.facts else {
-                return Err(CompleteArchiveExportError::unavailable(
-                    std::io::Error::other("Archive settlement requires Archive completeness"),
-                ));
-            };
-            persist_ready_export(
+            .map_err(complete_read_error)?;
+            match source {
+                PinnedExportSourceLoad::Available(PinnedExportSource {
+                    facts: PinnedExportSourceFacts::ProjectExportArchive { families },
+                    ..
+                }) => {
+                    persist_ready_export(
+                        client,
+                        claim,
+                        &canonical_command_digest,
+                        &snapshot,
+                        &families,
+                    )
+                    .await
+                }
+                PinnedExportSourceLoad::Available(PinnedExportSource {
+                    facts: PinnedExportSourceFacts::HumanReadableManuscript { .. },
+                    ..
+                })
+                | PinnedExportSourceLoad::Unavailable => {
+                    persist_failed_export(
+                        client,
+                        claim,
+                        &canonical_command_digest,
+                        EXPORT_REFUSED_RECEIPT_REASON,
+                    )
+                    .await
+                }
+            }
+        }
+        PinnedSnapshot::Expired | PinnedSnapshot::Missing => {
+            persist_failed_export(
                 client,
                 claim,
                 &canonical_command_digest,
-                &snapshot,
-                &families,
+                EXPORT_REFUSED_RECEIPT_REASON,
             )
             .await
-        }
-        PinnedSnapshot::Expired | PinnedSnapshot::Missing => {
-            persist_failed_export(client, claim, &canonical_command_digest, "archived_project")
-                .await
         }
     }
 }

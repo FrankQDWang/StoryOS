@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "vitest";
@@ -7,8 +8,6 @@ import {
   applyAuthorEdit,
   createChapter,
   createEditorSession,
-  createProject,
-  createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
   digestApplyAuthorEdit,
@@ -33,6 +32,8 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  createEmptyProject,
+  queryStoryOSPostgres as queryPostgres,
   runStoryOSWorker,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -89,6 +90,35 @@ async function challenged<Result>(options: {
   };
 }
 
+async function admitExport(
+  command: { baseUrl: string; fetchImpl: typeof fetch; projectId: string },
+  exportKey: string,
+  correlationId: string,
+): Promise<string> {
+  const request = exportRequest(correlationId);
+  const applied = await challenged({
+    ...command,
+    method: "POST",
+    route: "/api/v1/projects/{project_id}/manuscript/exports",
+    schema: request.command_schema,
+    idempotencyKey: exportKey,
+    digest: await digestExportHumanReadableManuscript(request),
+    send: (antiForgery) => exportHumanReadableManuscript({
+      ...command, idempotencyKey: exportKey, antiForgery, request,
+    }),
+  });
+  if (applied.result.effect.kind !== "admitted") {
+    throw new Error("Human-readable export must admit");
+  }
+  return applied.result.effect.export_id;
+}
+
+function sourceRowFilter(projectId: string, exportId: string): string {
+  return `owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${projectId}'::uuid
+         AND export_id = '${exportId}'::uuid`;
+}
+
 test("an admitted human-readable export settles the pinned manuscript after later live changes", async () => {
   const { baseUrl, server } = await startStoryOSServer({
     repositoryRoot,
@@ -98,29 +128,13 @@ test("an admitted human-readable export settles the pinned manuscript after late
   });
   try {
     const fetchImpl = browserFetch(baseUrl, "session-a");
-    const createKey = "018f0000-0000-7001-8000-00000000d101";
-    const createRequest = {
-      command_schema: "storyos.command.create-project.request.v1" as const,
-      create_project_input: {
-        title: "Pinned Source Novel",
-        ...bindings(),
-        correlation_id: "018f0000-0000-7001-8000-00000000d111",
-      },
-      idempotency_key: createKey,
-    };
-    const created = await createProjectChallenge({ baseUrl, request: createRequest, fetchImpl });
-    await createProject({
+    const projectId = await createEmptyProject({
       baseUrl,
       fetchImpl,
-      idempotencyKey: createKey,
-      antiForgery: created.nonce,
-      request: {
-        command_schema: createRequest.command_schema,
-        prospective_project_id: created.prospective_project_id,
-        create_project_input: createRequest.create_project_input,
-      },
+      createKey: "018f0000-0000-7001-8000-00000000d101",
+      correlationId: "018f0000-0000-7001-8000-00000000d111",
+      title: "Pinned Source Novel",
     });
-    const projectId = created.prospective_project_id;
     const command = {
       baseUrl,
       fetchImpl,
@@ -408,6 +422,92 @@ test("an admitted human-readable export settles the pinned manuscript after late
     assert.equal(ready.manuscript_utf8, ADMITTED_MANUSCRIPT);
     assert.equal(ready.source_snapshot.snapshot_id, sourceSnapshotId);
     assert.equal(ready.export_id, exportId);
+
+    // After settlement the frozen input may be discarded. The output bytes stay.
+    const discarded = await queryPostgres(`
+      DELETE FROM storyos.pinned_export_sources
+       WHERE ${sourceRowFilter(projectId, exportId)};
+      SELECT 'ok';
+    `);
+    assert.match(discarded, /ok$/);
+    const afterDiscard = await getHumanReadableManuscriptExport({
+      baseUrl, projectId, exportId, fetchImpl,
+    });
+    if (afterDiscard.status !== "ready") {
+      throw new Error("a ready export must stay ready after its source is discarded");
+    }
+    assert.equal(afterDiscard.manuscript_utf8, ADMITTED_MANUSCRIPT);
+    assert.equal(afterDiscard.content_sha256, ready.content_sha256);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("missing, partial, and digest-invalid Pinned Export Sources settle failed without live fallback", async () => {
+  const { baseUrl, server } = await startStoryOSServer({
+    repositoryRoot,
+    serverBinary,
+    sessions: { "session-a": USER_A },
+    extraEnv: { STORYOS_WORKER: "0" },
+  });
+  try {
+    const fetchImpl = browserFetch(baseUrl, "session-a");
+    const projectId = await createEmptyProject({
+      baseUrl,
+      fetchImpl,
+      createKey: "018f0000-0000-7001-8000-00000000d501",
+      correlationId: "018f0000-0000-7001-8000-00000000d511",
+      title: "Fail Closed Novel",
+    });
+    const command = { baseUrl, fetchImpl, projectId };
+    const missingId = await admitExport(
+      command, "018f0000-0000-7001-8000-00000000d502", "018f0000-0000-7001-8000-00000000d512",
+    );
+    const partialId = await admitExport(
+      command, "018f0000-0000-7001-8000-00000000d503", "018f0000-0000-7001-8000-00000000d513",
+    );
+    const digestInvalidId = await admitExport(
+      command, "018f0000-0000-7001-8000-00000000d504", "018f0000-0000-7001-8000-00000000d514",
+    );
+
+    // An operation admitted before this source existed has no source row.
+    // A partial source has a matching digest but lacks the required facts.
+    // A digest-invalid source has complete facts that fail their digest.
+    const partialFacts = "{}";
+    const partialDigest = createHash("sha256").update(partialFacts).digest("hex");
+    const damaged = await queryPostgres(`
+      DELETE FROM storyos.pinned_export_sources
+       WHERE ${sourceRowFilter(projectId, missingId)};
+      UPDATE storyos.pinned_export_sources
+         SET facts = '${partialFacts}'::jsonb, facts_sha256 = '${partialDigest}'
+       WHERE ${sourceRowFilter(projectId, partialId)};
+      UPDATE storyos.pinned_export_sources
+         SET facts_sha256 = repeat('0', 64)
+       WHERE ${sourceRowFilter(projectId, digestInvalidId)};
+      SELECT 'ok';
+    `);
+    assert.match(damaged, /ok$/);
+
+    for (const exportId of [missingId, partialId, digestInvalidId]) {
+      const waiting = await getHumanReadableManuscriptExport({
+        baseUrl, projectId, exportId, fetchImpl,
+      });
+      assert.equal(waiting.status, "in_progress");
+      await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
+      const failed = await getHumanReadableManuscriptExport({
+        baseUrl, projectId, exportId, fetchImpl,
+      });
+      assert.equal(failed.status, "failed");
+      assert.equal("manuscript_utf8" in failed, false);
+    }
+
+    const outputRows = await queryPostgres(`
+      SELECT count(*)::text
+        FROM storyos.human_readable_manuscript_exports
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${projectId}'::uuid;
+    `);
+    assert.equal(outputRows, "0");
   } finally {
     await stopRealServer(server);
   }
