@@ -48,6 +48,28 @@
         }
       ],
       "expected": "# Volume A\n\n## Chapter A\n\nHello world\n\n# Volume B\n\n## Chapter C\n\n雨落在窗沿。\n"
+    },
+    {
+      "name": "empty_present_body",
+      "volumes": [
+        {
+          "title": "Volume A",
+          "chapters": [
+            { "title": "Chapter A", "body": "" }
+          ]
+        }
+      ],
+      "expected": "# Volume A\n\n## Chapter A\n\n\n"
+    },
+    {
+      "name": "empty_volume",
+      "volumes": [
+        {
+          "title": "Volume A",
+          "chapters": []
+        }
+      ],
+      "expected": "# Volume A\n"
     }
   ]
 }
