@@ -28,6 +28,7 @@ import {
 import type {
   ApplyAuthorEditRequest,
   CreateEditorSessionRequest,
+  DigestValue,
   ExportHumanReadableManuscriptRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -67,7 +68,7 @@ async function challenged<Result>(options: {
   route: string;
   schema: string;
   idempotencyKey: string;
-  digest: string;
+  digest: DigestValue;
   send: (antiForgery: string) => Promise<Result>;
 }): Promise<{ antiForgery: string; result: Result }> {
   const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
@@ -150,6 +151,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
     if (volume.result.effect.kind !== "authoritative_applied") {
       throw new Error("Volume A must apply");
     }
+    const volumeId = volume.result.effect.volume_id;
 
     const chapterRequest = {
       command_schema: "storyos.command.create-chapter.request.v1" as const,
@@ -168,7 +170,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
       idempotencyKey: "018f0000-0000-7001-8000-00000000d103",
       digest: await digestCreateChapter(chapterRequest),
       send: (antiForgery) => createChapter({
-        ...command, volumeId: volume.result.effect.volume_id,
+        ...command, volumeId,
         idempotencyKey: "018f0000-0000-7001-8000-00000000d103", antiForgery,
         request: chapterRequest,
       }),
@@ -176,6 +178,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
     if (chapter.result.effect.kind !== "authoritative_applied") {
       throw new Error("Chapter A must apply");
     }
+    const chapterId = chapter.result.effect.chapter_id;
 
     const request = exportRequest("018f0000-0000-7001-8000-00000000d114");
     const exportKey = "018f0000-0000-7001-8000-00000000d104";
@@ -256,7 +259,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
       idempotencyKey: "018f0000-0000-7001-8000-00000000d106",
       digest: await digestUpdateVolume(renameVolume),
       send: (antiForgery) => updateVolume({
-        ...command, volumeId: volume.result.effect.volume_id,
+        ...command, volumeId,
         idempotencyKey: "018f0000-0000-7001-8000-00000000d106", antiForgery,
         request: renameVolume,
       }),
@@ -281,7 +284,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
       idempotencyKey: "018f0000-0000-7001-8000-00000000d107",
       digest: await digestUpdateChapter(renameChapter),
       send: (antiForgery) => updateChapter({
-        ...command, chapterId: chapter.result.effect.chapter_id,
+        ...command, chapterId,
         idempotencyKey: "018f0000-0000-7001-8000-00000000d107", antiForgery,
         request: renameChapter,
       }),
@@ -369,6 +372,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
     if (laterVolume.result.effect.kind !== "authoritative_applied") {
       throw new Error("Volume B must apply");
     }
+    const laterVolumeId = laterVolume.result.effect.volume_id;
     const laterChapterRequest = {
       command_schema: "storyos.command.create-chapter.request.v1" as const,
       create_chapter_input: {
@@ -386,7 +390,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
       idempotencyKey: "018f0000-0000-7001-8000-00000000d10b",
       digest: await digestCreateChapter(laterChapterRequest),
       send: (antiForgery) => createChapter({
-        ...command, volumeId: laterVolume.result.effect.volume_id,
+        ...command, volumeId: laterVolumeId,
         idempotencyKey: "018f0000-0000-7001-8000-00000000d10b", antiForgery,
         request: laterChapterRequest,
       }),
