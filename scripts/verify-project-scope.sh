@@ -114,7 +114,63 @@ if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
   make release-package
 fi
 
+start_postgres() {
+  name=$1
+  docker run --detach --name "$name" \
+    --env POSTGRES_PASSWORD=admin \
+    --publish 127.0.0.1::5432 postgres:16-alpine >/dev/null
+  attempt=0
+  until docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
+    && docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 40 ]; then
+      echo "PostgreSQL did not become ready: $name" >&2
+      exit 1
+    fi
+    sleep 0.25
+  done
+}
+
+copy_catalogued_sql() {
+  docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
+    "$1:/tmp/storyos-release1-bootstrap" >/dev/null
+}
+
+apply_catalogued_sql() {
+  python3 - "$1" "${2:-}" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+container, mode = sys.argv[1], sys.argv[2]
+catalog = json.loads(Path("docs/foundation/postgresql-release-1-persistence-catalog.json").read_text())
+args = ["docker", "exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+        "--single-transaction", "-U", "postgres"]
+for source in catalog["migration_chain"]["bootstrap"]["sources"]:
+    name = source["path"].rsplit("/", 1)[-1]
+    args.extend(["-f", f"/tmp/storyos-release1-bootstrap/{name}"])
+    if mode == "fault" and name == "0002_project_command_challenges.sql":
+        args.extend(["-c", "SELECT 1 / 0"])
+raise SystemExit(subprocess.call(
+    args,
+    stdout=subprocess.DEVNULL,
+    stderr=subprocess.DEVNULL if mode == "fault" else None,
+))
+PY
+}
+
+postgres_admin_url() {
+  published=$(docker port "$1" 5432/tcp)
+  printf 'postgres://postgres:admin@127.0.0.1:%s/postgres\n' "${published##*:}"
+}
+
+storage_bin="$repository_root/target/release-package/storyos-storage"
+if [ ! -x "$storage_bin" ]; then
+  echo "The release package does not contain storyos-storage" >&2
+  exit 1
+fi
+
 container="storyos-issue105-$$"
+oracle_container="storyos-storage-oracle-$$"
+activation_container="storyos-storage-activation-$$"
 s1_server_pid=""
 s1_server_log=""
 export CARGO_NET_OFFLINE=true
@@ -126,69 +182,19 @@ cleanup() {
   if [ -n "$s1_server_log" ]; then
     rm -f "$s1_server_log"
   fi
-  docker rm -f "$container" >/dev/null 2>&1 || true
+  docker rm -f "$container" "$oracle_container" "$activation_container" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
 cleanup
 
-docker run --detach --name "$container" \
-  --env POSTGRES_PASSWORD=admin \
-  --publish 127.0.0.1::5432 postgres:16-alpine >/dev/null
-
-attempt=0
-until docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete" \
-  && docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 40 ]; then
-    echo "PostgreSQL did not become ready" >&2
-    exit 1
-  fi
-  sleep 0.25
-done
-
-docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
-  "$container:/tmp/storyos-release1-bootstrap" >/dev/null
-if docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgres \
-  -f /tmp/storyos-release1-bootstrap/0000_roles.sql \
-  -f /tmp/storyos-release1-bootstrap/0001_controlled_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0002_project_command_challenges.sql \
-  -c "SELECT 1 / 0" \
-  -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
-  -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql \
-  -f /tmp/storyos-release1-bootstrap/0006_snapshot_replay.sql \
-  -f /tmp/storyos-release1-bootstrap/0007_takeover_admission_activity.sql \
-  -f /tmp/storyos-release1-bootstrap/0008_create_project_challenge.sql \
-  -f /tmp/storyos-release1-bootstrap/0009_create_empty_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0010_list_owned_projects.sql \
-  -f /tmp/storyos-release1-bootstrap/0011_update_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0012_archive_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0013_manuscript_tree.sql \
-  -f /tmp/storyos-release1-bootstrap/0014_create_volume.sql \
-  -f /tmp/storyos-release1-bootstrap/0015_create_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0016_update_volume.sql \
-  -f /tmp/storyos-release1-bootstrap/0017_update_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0018_manuscript_blocks.sql \
-  -f /tmp/storyos-release1-bootstrap/0019_set_current_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0020_undo_latest_author_action.sql \
-  -f /tmp/storyos-release1-bootstrap/0021_delete_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql \
-  -f /tmp/storyos-release1-bootstrap/0023_export_human_readable_manuscript.sql \
-  -f /tmp/storyos-release1-bootstrap/0024_export_project_archive_admission.sql \
-  -f /tmp/storyos-release1-bootstrap/0025_export_project_archive_entries.sql \
-  -f /tmp/storyos-release1-bootstrap/0026_recovery_visibility_proof.sql \
-  -f /tmp/storyos-release1-bootstrap/0027_author_command_admission_reconfirmations.sql \
-  -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql \
-  -f /tmp/storyos-release1-bootstrap/0029_human_readable_manuscript_export_operations.sql \
-  -f /tmp/storyos-release1-bootstrap/0030_human_readable_export_worker_claim.sql \
-  -f /tmp/storyos-release1-bootstrap/0031_project_export_operations.sql \
-  -f /tmp/storyos-release1-bootstrap/0032_create_volume_canonical_sibling_order.sql \
-  -f /tmp/storyos-release1-bootstrap/0033_create_chapter_canonical_sibling_order.sql \
-  -f /tmp/storyos-release1-bootstrap/0034_pinned_export_sources.sql \
-  -f /tmp/storyos-release1-bootstrap/0035_export_pinned_source_unavailable_receipt_reason.sql >/dev/null 2>&1; then
+echo "Running catalogued SQL apply and faulted rollback without Server or Worker"
+start_postgres "$oracle_container"
+copy_catalogued_sql "$oracle_container"
+if apply_catalogued_sql "$oracle_container" fault; then
   echo "The faulted Release 1 bootstrap unexpectedly committed" >&2
   exit 1
 fi
-rollback_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+rollback_state=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT (SELECT count(*) FROM pg_roles
             WHERE rolname IN ('storyos_owner', 'storyos_runtime'))::text
           || '/' || COALESCE(to_regnamespace('storyos')::text, 'absent')")
@@ -196,43 +202,122 @@ if [ "$rollback_state" != "0/absent" ]; then
   echo "The faulted Release 1 bootstrap exposed partial state: $rollback_state" >&2
   exit 1
 fi
+apply_catalogued_sql "$oracle_container"
+oracle_secret=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
+     FROM pg_authid WHERE rolname = 'storyos_runtime'")
+if [ "$oracle_secret" != "absent" ]; then
+  echo "The tracked Release 1 bootstrap installed a runtime password" >&2
+  exit 1
+fi
+oracle_active=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT count(*)::text FROM storyos.storage_activation_proofs")
+if [ "$oracle_active" != "0" ]; then
+  echo "The SQL apply oracle wrote Activation rows" >&2
+  exit 1
+fi
+docker exec -i "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+oracle_admin=$(postgres_admin_url "$oracle_container")
+if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
+  echo "storyos-storage adopted a non-empty database without a ledger" >&2
+  exit 1
+fi
+oracle_title=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT title FROM storyos.projects
+    WHERE project_id = '018f0000-0000-7001-8000-000000000002'")
+if [ "$oracle_title" != "Project A" ]; then
+  echo "A refused Preflight changed domain rows: $oracle_title" >&2
+  exit 1
+fi
+docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+  "INSERT INTO storyos.storage_activation_proofs (
+     proof_id, phase, catalog_id, catalog_checksum, migration_chain_id,
+     migration_chain_digest, database_schema_identity, active_schema_version,
+     public_release, route_catalog_id, route_catalog_sha256, activated_at
+   ) VALUES (
+     'release-1', 'active', 'wrong.catalog',
+     'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+     'wrong.chain',
+     'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+     'wrong.schema', 'wrong.version', 'wrong.release', 'wrong.route',
+     'sha256:2222222222222222222222222222222222222222222222222222222222222222',
+     clock_timestamp()
+   )" >/dev/null
+if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
+  echo "storyos-storage Activated over a mismatched identity" >&2
+  exit 1
+fi
+mismatch_state=$(docker exec "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT catalog_id || '/' || title
+     FROM storyos.storage_activation_proofs, storyos.projects
+    WHERE proof_id = 'release-1'
+      AND project_id = '018f0000-0000-7001-8000-000000000002'")
+if [ "$mismatch_state" != "wrong.catalog/Project A" ]; then
+  echo "An identity mismatch changed stored proof or domain rows: $mismatch_state" >&2
+  exit 1
+fi
 
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgres \
-  -f /tmp/storyos-release1-bootstrap/0000_roles.sql \
-  -f /tmp/storyos-release1-bootstrap/0001_controlled_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0002_project_command_challenges.sql \
-  -f /tmp/storyos-release1-bootstrap/0004_editor_sessions.sql \
-  -f /tmp/storyos-release1-bootstrap/0005_author_edits.sql \
-  -f /tmp/storyos-release1-bootstrap/0006_snapshot_replay.sql \
-  -f /tmp/storyos-release1-bootstrap/0007_takeover_admission_activity.sql \
-  -f /tmp/storyos-release1-bootstrap/0008_create_project_challenge.sql \
-  -f /tmp/storyos-release1-bootstrap/0009_create_empty_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0010_list_owned_projects.sql \
-  -f /tmp/storyos-release1-bootstrap/0011_update_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0012_archive_project.sql \
-  -f /tmp/storyos-release1-bootstrap/0013_manuscript_tree.sql \
-  -f /tmp/storyos-release1-bootstrap/0014_create_volume.sql \
-  -f /tmp/storyos-release1-bootstrap/0015_create_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0016_update_volume.sql \
-  -f /tmp/storyos-release1-bootstrap/0017_update_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0018_manuscript_blocks.sql \
-  -f /tmp/storyos-release1-bootstrap/0019_set_current_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0020_undo_latest_author_action.sql \
-  -f /tmp/storyos-release1-bootstrap/0021_delete_chapter.sql \
-  -f /tmp/storyos-release1-bootstrap/0022_delete_volume.sql \
-  -f /tmp/storyos-release1-bootstrap/0023_export_human_readable_manuscript.sql \
-  -f /tmp/storyos-release1-bootstrap/0024_export_project_archive_admission.sql \
-  -f /tmp/storyos-release1-bootstrap/0025_export_project_archive_entries.sql \
-  -f /tmp/storyos-release1-bootstrap/0026_recovery_visibility_proof.sql \
-  -f /tmp/storyos-release1-bootstrap/0027_author_command_admission_reconfirmations.sql \
-  -f /tmp/storyos-release1-bootstrap/0028_tree_revision_conflict_names.sql \
-  -f /tmp/storyos-release1-bootstrap/0029_human_readable_manuscript_export_operations.sql \
-  -f /tmp/storyos-release1-bootstrap/0030_human_readable_export_worker_claim.sql \
-  -f /tmp/storyos-release1-bootstrap/0031_project_export_operations.sql \
-  -f /tmp/storyos-release1-bootstrap/0032_create_volume_canonical_sibling_order.sql \
-  -f /tmp/storyos-release1-bootstrap/0033_create_chapter_canonical_sibling_order.sql \
-  -f /tmp/storyos-release1-bootstrap/0034_pinned_export_sources.sql \
-  -f /tmp/storyos-release1-bootstrap/0035_export_pinned_source_unavailable_receipt_reason.sql >/dev/null
+echo "Running packaged storyos-storage against a fresh empty database"
+start_postgres "$activation_container"
+activation_admin=$(postgres_admin_url "$activation_container")
+if STORYOS_DATABASE_URL="$activation_admin" "$storage_bin"; then
+  echo "storyos-storage reused STORYOS_DATABASE_URL" >&2
+  exit 1
+fi
+STORYOS_DATABASE_URL="postgres://storyos_runtime:wrong@127.0.0.1:1/postgres" \
+STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
+  "$storage_bin"
+STORYOS_STORAGE_ADMIN_URL="$activation_admin" \
+  "$storage_bin"
+expected_sources=$(python3 -c "
+import json
+from pathlib import Path
+catalog = json.loads(Path('docs/foundation/postgresql-release-1-persistence-catalog.json').read_text())
+print(len(catalog['migration_chain']['bootstrap']['sources']))
+")
+activation_state=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT proof.phase || '/' || owner.rolcanlogin::text || '/' ||
+          CASE WHEN runtime.rolpassword IS NULL THEN 'absent' ELSE 'present' END || '/' ||
+          (SELECT count(*) FROM storyos.schema_migrations)::text || '/' ||
+          (SELECT count(*) FROM storyos.migration_phases)::text || '/' ||
+          (SELECT count(*) FROM storyos.migration_phase_checksums)::text
+     FROM storyos.storage_activation_proofs AS proof,
+          pg_roles AS owner,
+          pg_authid AS runtime
+    WHERE proof.proof_id = 'release-1'
+      AND owner.rolname = 'storyos_owner'
+      AND runtime.rolname = 'storyos_runtime'")
+if [ "$activation_state" != "active/f/absent/1/4/$expected_sources" ]; then
+  echo "storyos-storage did not persist the Active proof: $activation_state" >&2
+  exit 1
+fi
+docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+runtime_select=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
+  -U storyos_runtime -d postgres -Atc \
+  "SELECT phase FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
+if [ "$runtime_select" != "active" ]; then
+  echo "storyos_runtime cannot SELECT the activation proof" >&2
+  exit 1
+fi
+if docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
+  -U storyos_runtime -d postgres -c \
+  "INSERT INTO storyos.schema_migrations (
+     schema_version, migration_id, checksum, release_identity, runner_revision,
+     started_at, status
+   ) VALUES (
+     'forged', 'forged', 'sha256:3333333333333333333333333333333333333333333333333333333333333333',
+     'forged', 'forged', clock_timestamp(), 'applied'
+   )" >/dev/null 2>&1; then
+  echo "storyos_runtime ran the storage state machine" >&2
+  exit 1
+fi
+
+echo "Preparing the Server-facing verify database"
+start_postgres "$container"
+copy_catalogued_sql "$container"
+apply_catalogued_sql "$container"
 
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END

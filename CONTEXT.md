@@ -18,7 +18,7 @@ _Avoid_: Login session as User identity, client-asserted role, URL access token,
 
 **Trusted Local Session Bootstrap**:
 The Foundation-local issuance of one Client Session Binding for the single configured local User, performed by the packaged Server when the author opens the printed Protected Web origin, without a login product, operator cookie injection, or test cookie injection as the product path.
-_Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user local identity picker
+_Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user local identity picker, Release 1 Storage Activation, database bootstrap
 
 **Project Author**:
 The one User who owns a Project and may exercise its author-only intents, settings, Acceptance, and other creative-authority commands. `Author` names this project-scoped role rather than a second durable person identity; shared ownership, collaborators, ownership transfer, and multi-author editing require a separate later contract.
@@ -90,6 +90,10 @@ _Avoid_: Import as new, ID remapping, partial merge, overwrite restore, ownershi
 **Foundation Validation Deployment**:
 The initial product stage in which one bootstrapped User uses StoryOS to write a real novel while exercising the same Project Scope and Project Isolation contracts required when more Users are served later. It is a validation stage, not a distinct single-user domain model or permission shortcut; deployment and persistence choices belong to architecture decisions.
 _Avoid_: Product-wide single-user mode, global current User, throwaway domain model, implicit Project access
+
+**Release 1 Storage Activation**:
+The inspectable `Active` proof that one exact Release 1 PostgreSQL storage identity—catalog, checksum chain, ledger, and activation record—matches the packaged release and is the only proof that admits Server or Worker traffic.
+_Avoid_: Trusted Local Session Bootstrap, Server-startup DDL, schema version as readiness, HTTP health check, sidecar activation file, test SQL apply as the production owner, Recovery Visibility Proof, adopting an unknown non-empty database
 
 **Foundation Monorepo**:
 The one StoryOS repository that jointly governs the Rust workspace, production Web Client, external-contract source, and checked-in generated contract artifacts so a compatible product change is reviewed and reproducibly verified as one unit. It does not make internal package boundaries an author setting or admit disposable prototypes or `.reference` as production members.
