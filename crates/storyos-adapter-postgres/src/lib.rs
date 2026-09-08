@@ -80,6 +80,7 @@ mod readable_export;
 mod readable_export_work;
 mod set_current_chapter;
 mod snapshot;
+mod storage_activation;
 mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -96,6 +97,10 @@ use storyos_application::{
     ProjectId, ProjectReadError, ProjectReader, ProjectScope, RevisionId,
 };
 use tokio_postgres::NoTls;
+
+pub use storage_activation::{
+    StorageActivation, StorageActivationError, activate_release1_storage,
+};
 
 #[derive(Clone, Debug)]
 pub struct PostgresProjectReader {
