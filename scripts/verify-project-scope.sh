@@ -277,7 +277,8 @@ catalog = json.loads(Path('docs/foundation/postgresql-release-1-persistence-cata
 print(len(catalog['migration_chain']['bootstrap']['sources']))
 ")
 activation_state=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
-  "SELECT proof.phase || '/' || owner.rolcanlogin::text || '/' ||
+  "SELECT proof.phase || '/' ||
+          CASE WHEN owner.rolcanlogin THEN 'login' ELSE 'nologin' END || '/' ||
           CASE WHEN runtime.rolpassword IS NULL THEN 'absent' ELSE 'present' END || '/' ||
           (SELECT count(*) FROM storyos.schema_migrations)::text || '/' ||
           (SELECT count(*) FROM storyos.migration_phases)::text || '/' ||
@@ -288,7 +289,7 @@ activation_state=$(docker exec "$activation_container" psql -X -v ON_ERROR_STOP=
     WHERE proof.proof_id = 'release-1'
       AND owner.rolname = 'storyos_owner'
       AND runtime.rolname = 'storyos_runtime'")
-if [ "$activation_state" != "active/f/absent/1/4/$expected_sources" ]; then
+if [ "$activation_state" != "active/nologin/absent/1/4/$expected_sources" ]; then
   echo "storyos-storage did not persist the Active proof: $activation_state" >&2
   exit 1
 fi
