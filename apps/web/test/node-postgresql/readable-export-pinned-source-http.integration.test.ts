@@ -33,6 +33,7 @@ import type {
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   createEmptyProject,
+  exportSettlementReceipt,
   queryStoryOSPostgres as queryPostgres,
   runStoryOSWorker,
   sessionFetch as browserFetch,
@@ -499,6 +500,15 @@ test("missing, partial, and digest-invalid Pinned Export Sources settle failed w
       });
       assert.equal(failed.status, "failed");
       assert.equal("manuscript_utf8" in failed, false);
+      assert.equal(
+        await exportSettlementReceipt({
+          ownerUserId: USER_A,
+          projectId,
+          exportId,
+          operationsTable: "human_readable_manuscript_export_operations",
+        }),
+        "refused pinned_export_source_unavailable",
+      );
     }
 
     const outputRows = await queryPostgres(`
