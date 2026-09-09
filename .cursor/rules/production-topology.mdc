@@ -1,0 +1,9 @@
+---
+description: Production topology is ADR 0022. A self-managed production PostgreSQL host or a second Web origin is requirements drift.
+globs: crates/storyos-adapter-postgres/**,crates/storyos-storage/**,crates/storyos-server/**,scripts/**,docs/operations/**,docs/foundation/**,docs/adr/**
+alwaysApply: false
+---
+
+# Production topology
+
+The current production topology is ADR 0022. Read that ADR before changing hosting, recovery, or Web delivery. Treat a self-managed production PostgreSQL host or a second Web origin as requirements drift.

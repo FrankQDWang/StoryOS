@@ -17,8 +17,8 @@ The opaque server-held request-authentication binding established by a trusted l
 _Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
 **Trusted Local Session Bootstrap**:
-The Foundation-local issuance of one Client Session Binding for the single configured local User, performed by the packaged Server when the author opens the printed Protected Web origin, without a login product, operator cookie injection, or test cookie injection as the product path.
-_Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user local identity picker, Release 1 Storage Activation, database bootstrap
+The packaged Server issues one Client Session Binding for the single configured User when the author opens the printed Protected Web origin, without a login product or cookie injection as the product path. Local names that single-User path, not a loopback-only transport; the printed origin may be the loopback HTTP origin or the Foundation Validation Public Origin.
+_Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user identity picker, treating local as loopback-only, Release 1 Storage Activation, database bootstrap
 
 **Project Author**:
 The one User who owns a Project and may exercise its author-only intents, settings, Acceptance, and other creative-authority commands. `Author` names this project-scoped role rather than a second durable person identity; shared ownership, collaborators, ownership transfer, and multi-author editing require a separate later contract.
@@ -88,12 +88,24 @@ The validating import of one Project Export Archive as the same Project Scope in
 _Avoid_: Import as new, ID remapping, partial merge, overwrite restore, ownership transfer
 
 **Foundation Validation Deployment**:
-The initial product stage in which one bootstrapped User uses StoryOS to write a real novel while exercising the same Project Scope and Project Isolation contracts required when more Users are served later. It is a validation stage, not a distinct single-user domain model or permission shortcut; deployment and persistence choices belong to architecture decisions.
-_Avoid_: Product-wide single-user mode, global current User, throwaway domain model, implicit Project access
+The initial product stage in which one bootstrapped User uses StoryOS to write a real novel while exercising the same Project Scope and Project Isolation contracts required when more Users are served later. It is a validation stage, not a distinct single-user domain model or permission shortcut. Local development uses a Mac and OrbStack PostgreSQL. Production PostgreSQL is adopted hosted infrastructure. Server, Worker, and Web stay paired on a Linux VPS behind TLS.
+_Avoid_: Product-wide single-user mode, global current User, throwaway domain model, implicit Project access, treating the local database host as the production recovery host, Vercel as the production Web host, treating this stage as PASS-CLOUD
+
+**Foundation Validation Public Origin**:
+The one operator-configured `https` first-party Origin and matching public Host for the Foundation Validation Deployment on the paired VPS. It is a Client Session Binding transport profile, not the later controlled-cloud handoff.
+_Avoid_: PASS-CLOUD, EV-CCD, HND-005, Vercel origin, second Web host, bind address as the printed origin, controlled-cloud multi-user deployment
+
+**Adopted Hosted Infrastructure**:
+A widely validated external PostgreSQL hosting service that production uses instead of an operator-owned database host. Local development may use OrbStack PostgreSQL. The vendor does not become Author, User, Project, or admission authority, and it does not host the Protected Web Client.
+_Avoid_: rebuilding a production physical WAL archive, Vercel or another second Web host, Supabase Auth or PostgREST as product surfaces, silent contract override
 
 **Release 1 Storage Activation**:
 The inspectable `Active` proof that one exact Release 1 PostgreSQL storage identity—catalog, checksum chain, ledger, and activation record—matches the packaged release and is the only proof that admits Server or Worker traffic.
-_Avoid_: Trusted Local Session Bootstrap, Server-startup DDL, schema version as readiness, HTTP health check, sidecar activation file, test SQL apply as the production owner, Recovery Visibility Proof, adopting an unknown non-empty database
+_Avoid_: Trusted Local Session Bootstrap, Server-startup DDL, schema version as readiness, HTTP health check, sidecar activation file, test SQL apply as the production owner, Recovery Visibility Proof, Release 1 Recovery Chain, adopting an unknown non-empty database
+
+**Release 1 Recovery Chain**:
+The StoryOS-owned maintenance boundary that binds one Active Release 1 storage identity to host-loss recovery for that identity. On local OrbStack PostgreSQL the isolated drill binds physical Recovery Copies that StoryOS can read. On hosted production PostgreSQL the vendor holds the daily physical backup; StoryOS does not possess the files and proves only that backups exist and that a non-live restored copy can pass Recovery Visibility Proof. Runtime may observe only an install-once proof. It is not Release 1 Storage Activation.
+_Avoid_: storyos-storage, Server or Worker administration, ephemeral verify drill as the live production owner, same-disk VPS backup as the production promise, in-place vendor PITR as release proof, Trusted Local Session Bootstrap, per-request chain-health gate, adopting Supabase Auth as session bootstrap
 
 **Foundation Monorepo**:
 The one StoryOS repository that jointly governs the Rust workspace, production Web Client, external-contract source, and checked-in generated contract artifacts so a compatible product change is reviewed and reproducibly verified as one unit. It does not make internal package boundaries an author setting or admit disposable prototypes or `.reference` as production members.
@@ -112,12 +124,12 @@ A repository-owned non-runtime record that makes an upstream design or source ob
 _Avoid_: Machine-local snapshot, vendored runtime source, implicit dependency, unpinned citation
 
 **Foundation Recovery Service Profile**:
-The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss; loss of the database host or disk has a recovery-point objective of at most fifteen minutes and a recovery-time objective of at most two hours. The deployment therefore uses synchronous PostgreSQL commit durability, a daily physical base backup plus continuous WAL archival into a failure domain independent of the database host, and a successful automated restore proof for every release candidate. Backup retention duration belongs to the later retention contract, but every claimed window must retain a complete verifiable recovery chain and Recovery Visibility Proof before a restored Project becomes readable. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster, and later controlled-cloud deployments may declare a stricter profile.
-_Avoid_: Asynchronous author acknowledgement, same-disk backup, daily dump only, untested backup file, Foundation high-availability cluster
+The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss through synchronous PostgreSQL commit. On hosted production PostgreSQL, loss of the vendor compute host is covered by the vendor daily physical backup; the recovery-point objective is at most twenty-four hours until a later tightening adopts vendor PITR. StoryOS does not possess those backup or WAL files. A restored Project becomes readable only after Recovery Visibility Proof. A local OrbStack drill remains the Hold and proof oracle. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster.
+_Avoid_: Asynchronous author acknowledgement, same-disk backup as the production promise, treating a logical dump as a Recovery Copy, treating fifteen-minute StoryOS-owned WAL as the current hosted promise, untested backup file, Foundation high-availability cluster
 
 **Recovery Copy**:
 A bounded PostgreSQL base backup, WAL segment, or equivalent recovery-chain member retained only to meet the Foundation Recovery Service Profile, never as a Project Export, ordinary read source, or independent authority. It remains subject to the exact retained lifecycle ledger and can serve a Project only through a successful Recovery Visibility Proof.
-_Avoid_: Export archive, cold Project copy, raw recovery database, alternate source of truth
+_Avoid_: Export archive, cold Project copy, raw recovery database, alternate source of truth, Release 1 Recovery Chain
 
 **Recovery Visibility Proof**:
 The inspectable determination that a restored Project Scope includes and has applied every recoverable later lifecycle decision relevant to the selected recovery target, including Redaction, Tombstone, retention, and availability gaps, before any ordinary read or execution is enabled. A missing or unverifiable lifecycle range fails closed to a recovery hold rather than exposing an older view as current. A contract-valid SQL NULL current Chapter is not a Chapter gap.
