@@ -162,11 +162,244 @@ postgres_admin_url() {
   printf 'postgres://postgres:admin@127.0.0.1:%s/postgres\n' "${published##*:}"
 }
 
+postgres_runtime_url() {
+  published=$(docker port "$1" 5432/tcp)
+  printf 'postgres://storyos_runtime:runtime@127.0.0.1:%s/postgres\n' "${published##*:}"
+}
+
+set_runtime_password() {
+  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+}
+
 storage_bin="$repository_root/target/release-package/storyos-storage"
-if [ ! -x "$storage_bin" ]; then
-  echo "The release package does not contain storyos-storage" >&2
+server_bin="$repository_root/target/release-package/storyos-server"
+worker_bin="$repository_root/target/release-package/storyos-worker"
+web_root="$repository_root/target/release-package/web"
+if [ ! -x "$storage_bin" ] || [ ! -x "$server_bin" ] || [ ! -x "$worker_bin" ]; then
+  echo "The release package does not contain storyos-storage, Server, and Worker" >&2
   exit 1
 fi
+
+gate_sessions="{\"session-a\":\"018f0000-0000-7001-8000-000000000001\"}"
+gate_secret="test-only-challenge-secret-that-is-at-least-thirty-two-bytes"
+closed_postgres_url="postgres://storyos_runtime:runtime@127.0.0.1:1/postgres"
+canary_admin_url="postgres://postgres:wrong@127.0.0.1:1/postgres"
+
+assert_offline_storage_activation_checks() {
+  echo "Checking packaged offline Server and Worker checks access no PostgreSQL"
+  STORYOS_DATABASE_URL="$closed_postgres_url" \
+  STORYOS_STORAGE_ADMIN_URL="$closed_postgres_url" \
+    "$server_bin" --check-web-root "$web_root"
+  STORYOS_DATABASE_URL="$closed_postgres_url" \
+  STORYOS_STORAGE_ADMIN_URL="$closed_postgres_url" \
+    "$worker_bin" --check
+}
+
+assert_packaged_server_refuses_bind() {
+  name=$1
+  runtime_url=$2
+  log=$(mktemp "${TMPDIR:-/tmp}/storyos-gate-server.XXXXXX")
+  STORYOS_DATABASE_URL="$runtime_url" \
+  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+  STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
+  STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_WORKER=1 \
+    "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
+  pid=$!
+  attempt=0
+  while kill -0 "$pid" >/dev/null 2>&1; do
+    if grep -q '^STORYOS_SERVER_URL=' "$log"; then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      cat "$log" >&2
+      echo "Packaged Server bound without a matching Active proof: $name" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 40 ]; then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      cat "$log" >&2
+      echo "Packaged Server stayed up without refusing Activation: $name" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    sleep 0.05
+  done
+  wait "$pid" || true
+  if grep -q '^STORYOS_SERVER_URL=' "$log"; then
+    cat "$log" >&2
+    echo "Packaged Server printed a ready URL without a matching Active proof: $name" >&2
+    rm -f "$log"
+    exit 1
+  fi
+  rm -f "$log"
+}
+
+assert_packaged_server_binds() {
+  name=$1
+  runtime_url=$2
+  log=$(mktemp "${TMPDIR:-/tmp}/storyos-gate-bind.XXXXXX")
+  STORYOS_DATABASE_URL="$runtime_url" \
+  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+  STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
+  STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_WORKER=0 \
+    "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
+  pid=$!
+  attempt=0
+  while ! grep -q '^STORYOS_SERVER_URL=http://' "$log"; do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      cat "$log" >&2
+      echo "Packaged Server did not bind with an Active proof: $name" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 100 ]; then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      cat "$log" >&2
+      echo "Packaged Server did not become ready with an Active proof: $name" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    sleep 0.05
+  done
+  kill "$pid" >/dev/null 2>&1 || true
+  wait "$pid" >/dev/null 2>&1 || true
+  rm -f "$log"
+}
+
+assert_packaged_worker_refuses_claim() {
+  name=$1
+  runtime_url=$2
+  if STORYOS_DATABASE_URL="$runtime_url" \
+     STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+     "$worker_bin" --claim-only; then
+    echo "Packaged Worker claimed without a matching Active proof: $name" >&2
+    exit 1
+  fi
+}
+
+prove_bound_request_path_activation() {
+  echo "Checking bound Server request-path Activation refusals"
+  log=$(mktemp "${TMPDIR:-/tmp}/storyos-gate-http.XXXXXX")
+  STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
+  STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+  STORYOS_BOOTSTRAP_SESSIONS="$gate_sessions" \
+  STORYOS_CHALLENGE_SECRET="$gate_secret" \
+  STORYOS_WORKER=0 \
+    "$server_bin" --bind 127.0.0.1:0 --web-root "$web_root" >"$log" 2>&1 &
+  pid=$!
+  attempt=0
+  while ! grep -q '^STORYOS_SERVER_URL=http://' "$log"; do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      cat "$log" >&2
+      echo "Packaged Server exited before request-path Activation checks" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 100 ]; then
+      kill "$pid" >/dev/null 2>&1 || true
+      wait "$pid" >/dev/null 2>&1 || true
+      cat "$log" >&2
+      echo "Packaged Server did not become ready for request-path Activation checks" >&2
+      rm -f "$log"
+      exit 1
+    fi
+    sleep 0.05
+  done
+  base=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$log" | head -n 1)
+  headers=$(mktemp "${TMPDIR:-/tmp}/storyos-gate-headers.XXXXXX")
+  body=$(mktemp "${TMPDIR:-/tmp}/storyos-gate-body.XXXXXX")
+  fetch_project() {
+    curl -sS -D "$headers" -o "$body" \
+      -H "origin: $base" \
+      -H "cookie: storyos_session=session-a" \
+      "$base/api/v1/projects/018f0000-0000-7001-8000-000000000002"
+  }
+  fetch_project
+  status=$(awk 'NR==1 { print $2 }' "$headers")
+  if [ "$status" != "200" ]; then
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+    echo "Active proof did not admit a Project read: $status" >&2
+    cat "$body" >&2
+    rm -f "$log" "$headers" "$body"
+    exit 1
+  fi
+  restore_sql=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT format(
+       'INSERT INTO storyos.storage_activation_proofs (
+          proof_id, phase, catalog_id, catalog_checksum, migration_chain_id,
+          migration_chain_digest, database_schema_identity, active_schema_version,
+          public_release, route_catalog_id, route_catalog_sha256, activated_at
+        ) VALUES (%L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L, %L)',
+       proof_id, phase, catalog_id, catalog_checksum, migration_chain_id,
+       migration_chain_digest, database_schema_identity, active_schema_version,
+       public_release, route_catalog_id, route_catalog_sha256, activated_at
+     ) FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
+  original_catalog=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT catalog_id FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+    "DELETE FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'" >/dev/null
+  fetch_project
+  status=$(awk 'NR==1 { print $2 }' "$headers")
+  if [ "$status" != "503" ] || ! grep -q '"code":"project_store_unavailable"' "$body"; then
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+    echo "A vanished proof did not use project_store_unavailable: $status" >&2
+    cat "$body" >&2
+    docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c "$restore_sql" >/dev/null
+    rm -f "$log" "$headers" "$body"
+    exit 1
+  fi
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c "$restore_sql" >/dev/null
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+    "UPDATE storyos.storage_activation_proofs
+        SET catalog_id = 'wrong.catalog'
+      WHERE proof_id = 'release-1'" >/dev/null
+  fetch_project
+  status=$(awk 'NR==1 { print $2 }' "$headers")
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+    "UPDATE storyos.storage_activation_proofs
+        SET catalog_id = '$original_catalog'
+      WHERE proof_id = 'release-1'" >/dev/null
+  if [ "$status" != "409" ] || ! grep -q '"code":"upgrade_required"' "$body"; then
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+    echo "An identity mismatch did not return upgrade_required: $status" >&2
+    cat "$body" >&2
+    rm -f "$log" "$headers" "$body"
+    exit 1
+  fi
+  kill "$pid" >/dev/null 2>&1 || true
+  wait "$pid" >/dev/null 2>&1 || true
+  rm -f "$log" "$headers" "$body"
+}
+
+reload_controlled_fixture() {
+  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
+    "DO \$\$ DECLARE tbl text; BEGIN
+       FOR tbl IN SELECT tablename FROM pg_tables
+         WHERE schemaname = 'storyos'
+           AND tablename NOT IN (
+             'storage_activation_proofs',
+             'schema_migrations',
+             'migration_phases',
+             'migration_phase_checksums'
+           )
+       LOOP
+         EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
+       END LOOP;
+     END \$\$;" >/dev/null
+  docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+}
 
 container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
@@ -216,6 +449,11 @@ if [ "$oracle_active" != "0" ]; then
   echo "The SQL apply oracle wrote Activation rows" >&2
   exit 1
 fi
+set_runtime_password "$oracle_container"
+oracle_runtime=$(postgres_runtime_url "$oracle_container")
+echo "Refusing Server bind and Worker claim without an Active proof"
+assert_packaged_server_refuses_bind "sql-apply-without-active" "$oracle_runtime"
+assert_packaged_worker_refuses_claim "sql-apply-without-active" "$oracle_runtime"
 docker exec -i "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 oracle_admin=$(postgres_admin_url "$oracle_container")
@@ -257,6 +495,9 @@ if [ "$mismatch_state" != "wrong.catalog/Project A" ]; then
   echo "An identity mismatch changed stored proof or domain rows: $mismatch_state" >&2
   exit 1
 fi
+echo "Refusing Server bind and Worker claim on an identity mismatch"
+assert_packaged_server_refuses_bind "identity-mismatch" "$oracle_runtime"
+assert_packaged_worker_refuses_claim "identity-mismatch" "$oracle_runtime"
 
 echo "Running packaged storyos-storage against a fresh empty database"
 start_postgres "$activation_container"
@@ -314,12 +555,23 @@ if docker exec "$activation_container" psql -X -v ON_ERROR_STOP=1 \
   echo "storyos_runtime ran the storage state machine" >&2
   exit 1
 fi
+activation_runtime=$(postgres_runtime_url "$activation_container")
+assert_offline_storage_activation_checks
+echo "Binding packaged Server and Worker only from the Active proof"
+assert_packaged_server_binds "active-proof" "$activation_runtime"
+STORYOS_DATABASE_URL="$activation_runtime" \
+STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
+  "$worker_bin" --claim-only
 
 echo "Preparing the Server-facing verify database"
 start_postgres "$container"
-copy_catalogued_sql "$container"
-apply_catalogued_sql "$container"
-
+container_admin=$(postgres_admin_url "$container")
+if STORYOS_DATABASE_URL="$container_admin" "$storage_bin"; then
+  echo "storyos-storage reused STORYOS_DATABASE_URL for the Server-facing database" >&2
+  exit 1
+fi
+STORYOS_STORAGE_ADMIN_URL="$container_admin" \
+  "$storage_bin"
 runtime_secret_state=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT CASE WHEN rolpassword IS NULL THEN 'absent' ELSE 'present' END
      FROM pg_authid WHERE rolname = 'storyos_runtime'")
@@ -327,9 +579,13 @@ if [ "$runtime_secret_state" != "absent" ]; then
   echo "The tracked Release 1 bootstrap installed a runtime password" >&2
   exit 1
 fi
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
-
+set_runtime_password "$container"
+server_facing_active=$(docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+  "SELECT phase FROM storyos.storage_activation_proofs WHERE proof_id = 'release-1'")
+if [ "$server_facing_active" != "active" ]; then
+  echo "The Server-facing verify database was not Activated by storyos-storage" >&2
+  exit 1
+fi
 docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 
@@ -338,10 +594,14 @@ port=${published##*:}
 export STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$port/postgres"
 export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$port/postgres"
 export STORYOS_TEST_POSTGRES_CONTAINER="$container"
+prove_bound_request_path_activation
 echo "Running PostgreSQL Application and RLS tests"
 cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture
 cargo test -p storyos-adapter-postgres --lib -- --ignored --nocapture
+echo "Running HTTP protocol host tests"
+pnpm --dir apps/web exec vitest run --project node-postgresql \
+  test/node-postgresql/protocol-http-host.integration.test.ts
 echo "Running HTTP Project Scope tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/project-http.integration.test.ts
@@ -418,40 +678,20 @@ echo "Running HTTP exportHumanReadableManuscript pinned-source tests"
 pnpm --dir apps/web exec vitest run --project node-postgresql \
   test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
 echo "Running HTTP human-readable export process-cut tests"
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
-  "DO \$\$ DECLARE tbl text; BEGIN
-     FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'storyos' LOOP
-       EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
-     END LOOP;
-   END \$\$;" >/dev/null
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+reload_controlled_fixture
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/readable-export-admission-process-cut.integration.test.ts
 echo "Running HTTP Project Export Archive process-cut tests"
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
-  "DO \$\$ DECLARE tbl text; BEGIN
-     FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'storyos' LOOP
-       EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
-     END LOOP;
-   END \$\$;" >/dev/null
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+reload_controlled_fixture
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/project-export-admission-process-cut.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
-docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
-  "DO \$\$ DECLARE tbl text; BEGIN
-     FOR tbl IN SELECT tablename FROM pg_tables WHERE schemaname = 'storyos' LOOP
-       EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
-     END LOOP;
-   END \$\$;" >/dev/null
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+reload_controlled_fixture
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
 stage1_user_id="018f0000-0000-7001-8000-000000000001"
 STORYOS_DATABASE_URL="$STORYOS_TEST_DATABASE_URL" \
+STORYOS_STORAGE_ADMIN_URL="$canary_admin_url" \
 STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$stage1_user_id\"}" \
 STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
   "$repository_root/target/release-package/storyos-server" --bind 127.0.0.1:0 \

@@ -16,7 +16,7 @@ pub(super) async fn list_projects(
         .client_session_binding(session_handle)
         .ok_or_else(authentication_required)?;
     validate_session_binding(&state, session_handle, &session, &headers, &request_origin)?;
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     let projects = list_owned_projects(&reader, &session.owner_user_id)
         .await
         .map_err(service_unavailable)?;

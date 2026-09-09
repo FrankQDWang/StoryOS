@@ -70,7 +70,7 @@ pub(super) async fn set_current_chapter(
         "sha256:{}:{digest_hex}",
         contracts::SET_CURRENT_CHAPTER_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = SetCurrentChapterCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

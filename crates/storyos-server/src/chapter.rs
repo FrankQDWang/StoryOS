@@ -15,7 +15,7 @@ pub(super) async fn get_chapter(
     )?;
     valid_uuid(&chapter_id)?;
     let chapter_id = ChapterId::new(chapter_id);
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     match open_chapter(&reader, &scope, &chapter_id)
         .await
         .map_err(service_unavailable)?

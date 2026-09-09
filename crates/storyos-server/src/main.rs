@@ -4,7 +4,7 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use storyos_adapter_postgres::PostgresProjectReader;
+use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
 use storyos_application::UserId;
 use tokio::net::TcpListener;
 use uuid::Uuid;
@@ -31,6 +31,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             multiple_mapping_allowance,
         )?;
     let assets = storyos_server::WebAssetSet::load(web_root)?;
+    let database_url = env::var("STORYOS_DATABASE_URL").map_err(|_| {
+        "STORYOS_DATABASE_URL is required for Release 1 Storage Activation".to_owned()
+    })?;
+    require_release1_storage_activation_proof(&database_url).await?;
     let listener = TcpListener::bind(bind_address).await?;
     let address = listener.local_addr()?;
     let host = address.to_string();
@@ -62,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .collect::<Result<HashMap<_, _>, uuid::Error>>()?;
     let config = storyos_server::ServerConfig {
-        database_url: env::var("STORYOS_DATABASE_URL").ok(),
+        database_url: Some(database_url),
         session_bindings,
         current_session_generation,
         accepted_client_contract_revision: Some(client_contract_revision),

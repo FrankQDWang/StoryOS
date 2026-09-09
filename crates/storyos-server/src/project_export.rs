@@ -70,7 +70,7 @@ pub(super) async fn export_project_archive(
         "sha256:{}:{digest_hex}",
         contracts::EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let admission = request_export_project_archive(
         &store,
         &ExportProjectArchiveCommand {
@@ -174,7 +174,7 @@ pub(super) async fn get_export_operation_query(
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
     valid_uuid(&export_id)?;
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     if wants_project_archive_zip(&headers) {
         return match get_verified_export_archive(&reader, &scope, &export_id)
             .await

@@ -75,7 +75,7 @@ pub(super) async fn update_project(
         "sha256:{}:{digest_hex}",
         contracts::UPDATE_PROJECT_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let settlement = storyos_application::update_project(
         &store,
         &UpdateProjectCommand {

@@ -81,6 +81,7 @@ mod readable_export_work;
 mod set_current_chapter;
 mod snapshot;
 mod storage_activation;
+mod storage_activation_proof;
 mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
@@ -100,6 +101,9 @@ use tokio_postgres::NoTls;
 
 pub use storage_activation::{
     StorageActivation, StorageActivationError, activate_release1_storage,
+};
+pub use storage_activation_proof::{
+    StorageActivationProofError, require_release1_storage_activation_proof,
 };
 
 #[derive(Clone, Debug)]

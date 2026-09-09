@@ -70,7 +70,7 @@ pub(super) async fn create_project_command_challenge(
     {
         return Err(invalid_request());
     }
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     if open_project(&store, &scope)
         .await
         .map_err(service_unavailable)?

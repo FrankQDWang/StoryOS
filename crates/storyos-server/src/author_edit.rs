@@ -167,7 +167,7 @@ pub(super) async fn apply_author_edit(
             },
         })
         .collect();
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = ApplyAuthorEditCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

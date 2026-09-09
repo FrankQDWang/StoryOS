@@ -9,7 +9,9 @@ use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing};
-use storyos_adapter_postgres::PostgresProjectReader;
+use storyos_adapter_postgres::{
+    PostgresProjectReader, StorageActivationProofError, require_release1_storage_activation_proof,
+};
 use storyos_application::{
     ProjectCommandChallengeError, ProjectId, ProjectScope as ApplicationScope, UserId, open_project,
 };
@@ -421,7 +423,7 @@ async fn get_project(
         &project_id,
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     let Some(project) = open_project(&reader, &scope)
         .await
         .map_err(service_unavailable)?
@@ -561,19 +563,26 @@ fn valid_uuid(value: &str) -> Result<(), ApiError> {
     })
 }
 
-fn project_reader(state: &ServerState) -> Result<PostgresProjectReader, ApiError> {
-    state
-        .config
-        .database_url
-        .as_ref()
-        .map(PostgresProjectReader::new)
-        .ok_or_else(|| {
-            problem(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "project_store_unavailable",
-                "The Project store is unavailable.",
-            )
-        })
+async fn project_reader(state: &ServerState) -> Result<PostgresProjectReader, ApiError> {
+    let database_url = state.config.database_url.as_ref().ok_or_else(|| {
+        problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "project_store_unavailable",
+            "The Project store is unavailable.",
+        )
+    })?;
+    match require_release1_storage_activation_proof(database_url).await {
+        Ok(()) => Ok(PostgresProjectReader::new(database_url)),
+        Err(StorageActivationProofError::IdentityMismatch) => Err(upgrade_required()),
+        Err(
+            StorageActivationProofError::MissingOrInactive
+            | StorageActivationProofError::Unavailable(_),
+        ) => Err(problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "project_store_unavailable",
+            "The Project store is unavailable.",
+        )),
+    }
 }
 
 fn contract_scope(scope: &ApplicationScope) -> contracts::ProjectScope {
@@ -588,6 +597,14 @@ fn service_unavailable(_error: storyos_application::ProjectReadError) -> ApiErro
         StatusCode::SERVICE_UNAVAILABLE,
         "project_store_unavailable",
         "The Project store is unavailable.",
+    )
+}
+
+fn upgrade_required() -> ApiError {
+    problem(
+        StatusCode::CONFLICT,
+        "upgrade_required",
+        "The store release identity does not match.",
     )
 }
 

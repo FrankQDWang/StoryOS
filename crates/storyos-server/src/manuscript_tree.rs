@@ -13,7 +13,7 @@ pub(super) async fn get_manuscript_tree(
         &project_id,
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     let Some(tree) = read_canonical_manuscript_tree(&reader, &scope)
         .await
         .map_err(service_unavailable)?

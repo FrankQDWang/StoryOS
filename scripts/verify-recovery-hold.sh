@@ -67,6 +67,7 @@ docker run --rm --user root --volume "$archive_volume:/archive" postgres:16-alpi
 
 docker run --detach --name "$primary" \
   --network "$network" \
+  --publish 127.0.0.1::5432 \
   --env POSTGRES_PASSWORD=admin \
   --volume "$archive_volume:/var/lib/postgresql/wal_archive" \
   postgres:16-alpine \
@@ -99,15 +100,19 @@ wait_postgres() {
 
 wait_postgres "$primary" init
 
-docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
-  "$primary:/tmp/storyos-release1-bootstrap" >/dev/null
-psql_files=""
-for file in "$repository_root/crates/storyos-adapter-postgres/migrations/"*.sql; do
-  psql_files="$psql_files -f /tmp/storyos-release1-bootstrap/$(basename "$file")"
-done
-# shellcheck disable=SC2086
-docker exec "$primary" psql -X -v ON_ERROR_STOP=1 --single-transaction -U postgres \
-  $psql_files >/dev/null
+storage_bin="$repository_root/target/release-package/storyos-storage"
+if [ ! -x "$storage_bin" ]; then
+  echo "Release package is required for Recovery Copy Activation" >&2
+  exit 1
+fi
+primary_published=$(docker port "$primary" 5432/tcp)
+primary_port=${primary_published##*:}
+if [ -z "$primary_port" ]; then
+  echo "Primary PostgreSQL did not publish a host port" >&2
+  exit 1
+fi
+STORYOS_STORAGE_ADMIN_URL="postgres://postgres:admin@127.0.0.1:$primary_port/postgres" \
+  "$storage_bin"
 docker exec -i "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
   < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
@@ -608,6 +613,7 @@ fi
 unset STORYOS_STAGE1_AUTHORITY_ORACLE
 drill_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-server.XXXXXX")
 STORYOS_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$hold_port/postgres" \
+STORYOS_STORAGE_ADMIN_URL="postgres://postgres:wrong@127.0.0.1:1/postgres" \
 STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$owner_a\"}" \
 STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
   "$server_bin" --bind 127.0.0.1:0 \

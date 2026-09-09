@@ -80,7 +80,7 @@ pub(super) async fn create_project_challenge(
     let nonce_digest = plain_digest(
         secret_digest(secret, NONCE_HMAC_PROFILE, &binding_parts(&binding)).as_bytes(),
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let issued = issue_create_project_challenge(
         &store,
         &IssueCreateProjectChallenge {

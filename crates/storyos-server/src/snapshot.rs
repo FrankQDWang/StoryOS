@@ -118,7 +118,7 @@ async fn authorized_snapshot_lookup(
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
     valid_uuid(snapshot_id)?;
-    let store = project_reader(state)?;
+    let store = project_reader(state).await?;
     let lookup = SnapshotLookup {
         project_scope: scope.clone(),
         snapshot_id: snapshot_id.to_owned(),

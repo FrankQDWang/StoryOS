@@ -79,7 +79,7 @@ pub(super) async fn update_chapter(
         "sha256:{}:{digest_hex}",
         contracts::UPDATE_CHAPTER_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = UpdateChapterCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

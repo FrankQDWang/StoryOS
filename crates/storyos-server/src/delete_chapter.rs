@@ -74,7 +74,7 @@ pub(super) async fn delete_chapter(
         "sha256:{}:{digest_hex}",
         contracts::DELETE_CHAPTER_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = DeleteChapterCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

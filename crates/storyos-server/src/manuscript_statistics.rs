@@ -27,7 +27,7 @@ pub(super) async fn get_statistics(
         None => None,
         Some(value) => Some(value.parse::<u64>().map_err(|_| invalid_request())?),
     };
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     match get_manuscript_statistics(
         &reader,
         &scope,

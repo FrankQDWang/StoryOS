@@ -110,7 +110,7 @@ pub(super) async fn create_editor_session(
         ),
         idempotency_key: idempotency_key.to_owned(),
     };
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let session = storyos_application::create_editor_session(
         &store,
         &OpenEditorSession {
@@ -155,7 +155,7 @@ pub(super) async fn get_editor_session(
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
     let binding_ref = session_binding_ref(secret, session_handle);
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let session = storyos_application::get_editor_session(
         &store,
         &EditorSessionLookup {

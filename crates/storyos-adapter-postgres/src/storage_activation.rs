@@ -72,7 +72,7 @@ impl std::error::Error for StorageActivationError {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-struct PackagedIdentity {
+pub(crate) struct PackagedIdentity {
     catalog_id: String,
     catalog_checksum: String,
     migration_chain_id: String,
@@ -272,7 +272,7 @@ async fn persist_activation(
     Ok(())
 }
 
-async fn read_proof(
+pub(crate) async fn read_proof(
     client: &tokio_postgres::Client,
 ) -> Result<Option<PackagedIdentity>, StorageActivationError> {
     let present: bool = client
@@ -332,7 +332,7 @@ async fn database_has_user_state(
         .get(0))
 }
 
-fn packaged_catalog() -> Result<serde_json::Value, StorageActivationError> {
+pub(crate) fn packaged_catalog() -> Result<serde_json::Value, StorageActivationError> {
     let catalog: serde_json::Value = serde_json::from_str(CATALOG_JSON).map_err(unavailable)?;
     let sources = catalog["migration_chain"]["bootstrap"]["sources"]
         .as_array()
@@ -353,7 +353,7 @@ fn packaged_catalog() -> Result<serde_json::Value, StorageActivationError> {
     Ok(catalog)
 }
 
-fn packaged_identity(
+pub(crate) fn packaged_identity(
     catalog: &serde_json::Value,
 ) -> Result<PackagedIdentity, StorageActivationError> {
     let schema = &catalog["schema_identity"];
