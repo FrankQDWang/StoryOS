@@ -32,7 +32,7 @@ jobs:
             615408dabba489805f36aee83719cd0e8eb18dc3:refs/storyos/verification/delivery-baseline \
             3468bdaaaa97ef05fd7c6e3f61836d20f1f76496:refs/storyos/verification/foundation-merge
 
-      - uses: dtolnay/rust-toolchain@1.96.0
+      - uses: dtolnay/rust-toolchain@1.98.1
         with:
           components: clippy, rustfmt
 

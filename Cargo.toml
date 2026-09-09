@@ -10,7 +10,7 @@ members = [
 resolver = "3"
 [workspace.package]
 edition = "2024"
-rust-version = "1.96"
+rust-version = "1.98"
 [workspace.dependencies]
 axum = "=0.8.9"
 hmac = "=0.13.0"
@@ -31,3 +31,6 @@ uuid = { version = "=1.18.1", features = ["v7"] }
 unsafe_code = "forbid"
 [workspace.lints.clippy]
 all = "deny"
+uninlined_format_args = "deny"
+redundant_closure_for_method_calls = "deny"
+collapsible_else_if = "deny"
