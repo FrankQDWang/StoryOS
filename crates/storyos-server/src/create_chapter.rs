@@ -76,7 +76,7 @@ pub(super) async fn create_chapter(
         "sha256:{}:{digest_hex}",
         contracts::CREATE_CHAPTER_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = CreateChapterCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

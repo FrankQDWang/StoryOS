@@ -73,7 +73,7 @@ pub(super) async fn archive_project(
         "sha256:{}:{digest_hex}",
         contracts::ARCHIVE_PROJECT_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let settlement = storyos_application::archive_project(
         &store,
         &ArchiveProjectCommand {

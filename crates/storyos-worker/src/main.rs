@@ -1,6 +1,6 @@
 use std::env;
 
-use storyos_adapter_postgres::PostgresProjectReader;
+use storyos_adapter_postgres::{PostgresProjectReader, require_release1_storage_activation_proof};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -9,6 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         return Ok(());
     }
     let database_url = env::var("STORYOS_DATABASE_URL")?;
+    require_release1_storage_activation_proof(&database_url).await?;
     let store = PostgresProjectReader::new(database_url)
         .with_readable_export_lease_ttl(storyos_worker::readable_export_lease_ttl_from_env());
     if arguments.iter().any(|argument| argument == "--claim-only") {

@@ -75,7 +75,7 @@ pub(super) async fn create_volume(
         "sha256:{}:{digest_hex}",
         contracts::CREATE_VOLUME_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let settlement = storyos_application::create_volume(
         &store,
         &CreateVolumeCommand {

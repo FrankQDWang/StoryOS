@@ -35,7 +35,7 @@ pub(super) async fn search_manuscript_query(
         None => None,
         Some(value) => Some(value.parse::<u64>().map_err(|_| invalid_request())?),
     };
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     match search_manuscript(
         &reader,
         &scope,

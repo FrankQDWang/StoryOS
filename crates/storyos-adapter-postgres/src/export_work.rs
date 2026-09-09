@@ -4,6 +4,9 @@ use super::*;
 
 impl ExportWorkStore for PostgresProjectReader {
     async fn claim_next_export_work(&self) -> Result<Option<ClaimedExportWork>, ProjectReadError> {
+        crate::require_release1_storage_activation_proof(&self.database_url)
+            .await
+            .map_err(ProjectReadError::unavailable)?;
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_worker_scope(&transaction).await?;

@@ -77,7 +77,7 @@ pub(super) async fn create_project(
         session.owner_user_id.clone(),
         ProjectId::new(body.prospective_project_id.clone()),
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let settlement = storyos_application::create_project(
         &store,
         &CreateProjectCommand {

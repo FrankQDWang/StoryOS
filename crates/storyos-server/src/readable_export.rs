@@ -75,7 +75,7 @@ pub(super) async fn export_human_readable_manuscript(
         "sha256:{}:{digest_hex}",
         contracts::EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let admission = request_human_readable_manuscript_export(
         &store,
         &ExportHumanReadableManuscriptCommand {
@@ -195,7 +195,7 @@ pub(super) async fn get_human_readable_manuscript_export_query(
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
     valid_uuid(&export_id)?;
-    let reader = project_reader(&state)?;
+    let reader = project_reader(&state).await?;
     match get_human_readable_manuscript_export(&reader, &scope, &export_id)
         .await
         .map_err(service_unavailable)?

@@ -74,7 +74,7 @@ pub(super) async fn delete_volume(
         "sha256:{}:{digest_hex}",
         contracts::DELETE_VOLUME_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = DeleteVolumeCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

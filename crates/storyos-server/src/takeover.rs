@@ -88,7 +88,7 @@ pub(super) async fn take_over_project_writer(
         ),
         idempotency_key: idempotency_key.to_owned(),
     };
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = TakeOverProjectWriterCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

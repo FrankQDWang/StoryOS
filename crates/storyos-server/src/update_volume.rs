@@ -79,7 +79,7 @@ pub(super) async fn update_volume(
         "sha256:{}:{digest_hex}",
         contracts::UPDATE_VOLUME_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = UpdateVolumeCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {

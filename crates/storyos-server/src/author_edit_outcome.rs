@@ -72,7 +72,7 @@ async fn resolve_outcome_response(
         .as_deref()
         .filter(|secret| secret.len() >= 32)
         .ok_or_else(challenge_store_unavailable)?;
-    let store = project_reader(state)?;
+    let store = project_reader(state).await?;
     let outcome = storyos_application::get_apply_author_edit_outcome(
         &store,
         &ResolveApplyAuthorEditOutcome {

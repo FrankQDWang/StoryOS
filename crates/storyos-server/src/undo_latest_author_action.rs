@@ -76,7 +76,7 @@ pub(super) async fn undo_latest_author_action(
         "sha256:{}:{digest_hex}",
         contracts::UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE
     );
-    let store = project_reader(&state)?;
+    let store = project_reader(&state).await?;
     let command = UndoLatestAuthorActionCommand {
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
