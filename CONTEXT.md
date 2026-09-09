@@ -92,8 +92,8 @@ The initial product stage in which one bootstrapped User uses StoryOS to write a
 _Avoid_: Product-wide single-user mode, global current User, throwaway domain model, implicit Project access, treating the local database host as the production recovery host, Vercel as the production Web host, treating this stage as PASS-CLOUD
 
 **Foundation Validation Public Origin**:
-The one operator-configured `https` first-party Origin and matching public Host for the Foundation Validation Deployment on the paired VPS. It is a Client Session Binding transport profile, not the later controlled-cloud handoff.
-_Avoid_: PASS-CLOUD, EV-CCD, HND-005, Vercel origin, second Web host, bind address as the printed origin, controlled-cloud multi-user deployment
+The one Server-held operator-configured `https` first-party Origin and matching DNS Host for the Foundation Validation Deployment; it is a Client Session Binding transport profile, not the later controlled-cloud handoff. Forwarded headers do not define it.
+_Avoid_: PASS-CLOUD, EV-CCD, HND-005, Vercel origin, proxied CDN, Cloudflare orange cloud, bind address as the printed origin, X-Forwarded-Host as the allowed site, public IP as Host, controlled-cloud multi-user deployment
 
 **Adopted Hosted Infrastructure**:
 A widely validated external PostgreSQL hosting service that production uses instead of an operator-owned database host. Local development may use OrbStack PostgreSQL. The vendor does not become Author, User, Project, or admission authority, and it does not host the Protected Web Client.
