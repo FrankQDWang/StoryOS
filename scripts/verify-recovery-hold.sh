@@ -102,7 +102,7 @@ wait_postgres "$primary" init
 
 storage_bin="$repository_root/target/release-package/storyos-storage"
 if [ ! -x "$storage_bin" ]; then
-  echo "Release package is required for Recovery Copy Activation" >&2
+  echo "The release package does not contain storyos-storage" >&2
   exit 1
 fi
 primary_published=$(docker port "$primary" 5432/tcp)
