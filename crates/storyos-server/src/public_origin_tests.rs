@@ -72,7 +72,12 @@ fn a_public_origin_admits_loopback_localhost_and_unix_listens() {
         allowed_host: "example.com:8443".to_owned(),
         allowed_origin: "https://example.com:8443".to_owned(),
     });
-    for bind in ["127.0.0.1:0", "[::1]:3000", "localhost:3000", "/run/storyos.sock"] {
+    for bind in [
+        "127.0.0.1:0",
+        "[::1]:3000",
+        "localhost:3000",
+        "/run/storyos.sock",
+    ] {
         assert_eq!(
             packaged_transport_plan(
                 /*public_origin*/ Some("https://example.com:8443"),
