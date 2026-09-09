@@ -1,4 +1,5 @@
 use super::*;
+use std::path::PathBuf;
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
     EditorClientBinding, IssueCreateProjectChallenge, ProjectId, ProjectScope, UserId,
@@ -32,37 +33,132 @@ struct HoldObservation {
     proof_written: bool,
 }
 
-struct RestoreRuntimeLogin {
-    admin_url: String,
+struct IsolatedProofDatabase {
+    cluster_admin_url: String,
+    database_name: String,
 }
 
-impl Drop for RestoreRuntimeLogin {
+impl Drop for IsolatedProofDatabase {
     fn drop(&mut self) {
-        let admin_url = self.admin_url.clone();
+        let cluster_admin_url = self.cluster_admin_url.clone();
+        let database_name = self.database_name.clone();
         std::thread::spawn(move || {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("restore runtime");
             runtime.block_on(async {
-                let (client, connection) = tokio_postgres::connect(&admin_url, NoTls)
+                let (client, connection) = tokio_postgres::connect(&cluster_admin_url, NoTls)
                     .await
                     .expect("restore login connect");
                 tokio::spawn(async move {
                     let _ = connection.await;
                 });
                 client
-                    .batch_execute(
-                        "ALTER ROLE storyos_runtime LOGIN;
-                         ALTER TABLE IF EXISTS storyos.projects FORCE ROW LEVEL SECURITY;",
-                    )
+                    .batch_execute("ALTER ROLE storyos_runtime LOGIN")
                     .await
                     .expect("restore runtime login");
+                client
+                    .execute(
+                        &format!("DROP DATABASE IF EXISTS {database_name} WITH (FORCE)"),
+                        &[],
+                    )
+                    .await
+                    .expect("drop isolated proof database");
             });
         })
         .join()
         .expect("restore login thread");
     }
+}
+
+fn with_database_name(url: &str, database_name: &str) -> String {
+    let Some((prefix, _)) = url.rsplit_once('/') else {
+        panic!("database URL must include a database name");
+    };
+    format!("{prefix}/{database_name}")
+}
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .expect("adapter crate lives under the repository root")
+}
+
+fn catalogued_schema_sql() -> String {
+    let root = repo_root();
+    let catalog: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(root.join("docs/foundation/postgresql-release-1-persistence-catalog.json"))
+            .expect("read persistence catalog"),
+    )
+    .expect("persistence catalog must be JSON");
+    let mut sql = String::from("BEGIN;\n");
+    for source in catalog["migration_chain"]["bootstrap"]["sources"]
+        .as_array()
+        .expect("catalogued bootstrap sources")
+    {
+        let path = source["path"].as_str().expect("bootstrap source path");
+        if path.ends_with("/0000_roles.sql") {
+            continue;
+        }
+        sql.push_str(
+            &std::fs::read_to_string(root.join(path)).unwrap_or_else(|error| {
+                panic!("read {path}: {error}");
+            }),
+        );
+        sql.push('\n');
+    }
+    sql.push_str("COMMIT;\n");
+    sql
+}
+
+async fn open_isolated_proof(
+    database_name: &str,
+) -> (IsolatedProofDatabase, PostgresProjectReader, Client) {
+    assert!(
+        database_name
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_'),
+        "isolated proof database name must be a safe SQL identifier"
+    );
+    let cluster_admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let cluster_runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let cluster = connect_admin(&cluster_admin_url).await;
+    cluster
+        .execute(
+            &format!("DROP DATABASE IF EXISTS {database_name} WITH (FORCE)"),
+            &[],
+        )
+        .await
+        .unwrap();
+    cluster
+        .execute(&format!("CREATE DATABASE {database_name}"), &[])
+        .await
+        .unwrap();
+    let isolated_admin_url = with_database_name(&cluster_admin_url, database_name);
+    let isolated_runtime_url = with_database_name(&cluster_runtime_url, database_name);
+    let admin = connect_admin(&isolated_admin_url).await;
+    admin.batch_execute(&catalogued_schema_sql()).await.unwrap();
+    admin
+        .batch_execute(
+            &std::fs::read_to_string(
+                repo_root().join("crates/storyos-adapter-postgres/tests/fixture.sql"),
+            )
+            .expect("read fixture SQL"),
+        )
+        .await
+        .unwrap();
+    (
+        IsolatedProofDatabase {
+            cluster_admin_url,
+            database_name: database_name.to_owned(),
+        },
+        PostgresProjectReader::new(isolated_runtime_url),
+        admin,
+    )
 }
 
 struct ProofIds {
@@ -268,16 +364,8 @@ async fn recovery_visibility_proof_accepts_lawful_null_current_chapter() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let _restore_login = RestoreRuntimeLogin {
-        admin_url: admin_url.clone(),
-    };
-    let store = PostgresProjectReader::new(runtime_url);
+    let (_isolated, store, admin) = open_isolated_proof("storyos_rvp_null").await;
     let project_id = create_empty_project(&store, "f801").await;
-    let admin = connect_admin(&admin_url).await;
     assert_eq!(
         empty_project_facts(&admin, &project_id).await,
         expected_empty_project()
@@ -336,16 +424,8 @@ async fn recovery_visibility_proof_keeps_hold_for_broken_required_checks() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
-        .expect("run through scripts/verify-project-scope.sh");
-    let _restore_login = RestoreRuntimeLogin {
-        admin_url: admin_url.clone(),
-    };
-    let store = PostgresProjectReader::new(runtime_url);
+    let (_isolated, store, admin) = open_isolated_proof("storyos_rvp_hold").await;
     let project_id = create_empty_project(&store, "f811").await;
-    let admin = connect_admin(&admin_url).await;
     admin
         .batch_execute("ALTER ROLE storyos_runtime NOLOGIN")
         .await
