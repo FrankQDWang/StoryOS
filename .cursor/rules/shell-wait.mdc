@@ -1,31 +1,28 @@
 ---
-description: Start long verify in the background. Wait on process exit or a true end line, not a mid-run Error.
+description: Start a long verify command in the background. Wait for process exit, not a mid-run line.
 alwaysApply: true
 ---
 
 # Shell wait
 
-Start a long repository command with `block_until_ms: 0`. Keep other work. The completion notice is the end signal.
+Start a long repository command with `block_until_ms: 0`. Continue other work. The completion notice is the end signal.
 
-Poll with AwaitShell only when the next step is blocked on that process. Wait for process exit, or for one line that means the whole command ended.
+Poll with AwaitShell only when the next step is blocked on that process. Wait for process exit. A pattern is valid only when that line cannot appear before the command ends.
 
-True end of complete `make verify`:
+A successful complete `make verify` prints `verified parent #100` after the last tracker check. A failed make target may print `make: *** [verify`.
 
-- `verified parent #100` after the last tracker check
-- `make: *** [verify` when a make target fails
+These strings are not AwaitShell patterns:
 
-These lines are not the end of `make verify`:
+- `verify-stage1` is the contracts self-check. It can appear near 15 seconds.
+- `Error:` is an expected Storage Activation reject (`MissingOrInactive` / `IdentityMismatch`).
 
-- `verify-stage1` — contracts self-check, often near 15s
-- a bare `Error:` — Storage Activation expected reject (`MissingOrInactive` / `IdentityMismatch`)
-
-Size a poll window to the command class:
+Set the poll window from the command class:
 
 | Command | Typical duration |
 |---|---|
-| GitHub PR `verify` sentinel | about 16s |
-| Dirty-tree `make verify` | fails in about 24s |
+| GitHub PR `verify` sentinel | about 16 seconds |
+| Dirty-tree `make verify` | fails in about 24 seconds |
 | One `verify-tracker` | tens of seconds |
-| Clean complete `make verify` | about 9 minutes (Chrome exact-dist and isolated Recovery Copy) |
+| Clean complete `make verify` | about 9 minutes |
 
-Use an 8–12 minute window only for one clean complete `make verify` when a poll is required, and only with a true end line.
+When a poll is required for a clean complete `make verify`, wait for process exit. Treat `verified parent #100` as the success line. Do not open a second 8–12 minute wait after a mid-run line.
