@@ -120,8 +120,12 @@ A bounded PostgreSQL base backup, WAL segment, or equivalent recovery-chain memb
 _Avoid_: Export archive, cold Project copy, raw recovery database, alternate source of truth
 
 **Recovery Visibility Proof**:
-The inspectable determination that a restored Project Scope includes and has applied every recoverable later lifecycle decision relevant to the selected recovery target, including Redaction, Tombstone, retention, and availability gaps, before any ordinary read or execution is enabled. A missing or unverifiable lifecycle range fails closed to a recovery hold rather than exposing an older view as current.
-_Avoid_: Successful database boot, point-in-time restore alone, best-effort lifecycle replay
+The inspectable determination that a restored Project Scope includes and has applied every recoverable later lifecycle decision relevant to the selected recovery target, including Redaction, Tombstone, retention, and availability gaps, before any ordinary read or execution is enabled. A missing or unverifiable lifecycle range fails closed to a recovery hold rather than exposing an older view as current. A contract-valid SQL NULL current Chapter is not a Chapter gap.
+_Avoid_: Successful database boot, point-in-time restore alone, best-effort lifecycle replay, counting a lawful empty Project as a missing Chapter
+
+**Empty Project create**:
+The public `createProject` command that inserts one Project with `current_chapter_id` as SQL NULL and creates no Volume, Chapter, or manuscript payload. Canonical Snapshot create may already write Replay Generation and Replay Floor; those records are not a Chapter. This committed empty state is lawful.
+_Avoid_: Starter Chapter, manufactured manuscript, treating emptiness as missing recovery evidence
 
 **Non-Revival Recovery Oracle**:
 The deterministic recovery and replay test rule that compares recovered state against retained historical facts plus current lifecycle availability, not against a demand to reproduce unavailable payload bytes. It proves that Receipts, causation, replay/resync, provenance, and explicit availability gaps remain truthful while Redaction, Tombstone, compaction, archive, export, restore, cache, projection, and Provider continuity cannot make unavailable payload visible, eligible, or newly authoritative.
