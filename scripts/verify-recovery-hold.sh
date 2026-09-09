@@ -6,6 +6,10 @@ set -eu
 # Proof passes; a missing proof keeps the restored copy in recovery_hold. After
 # that proof, this drill enables ordinary writes and continues writing through
 # the production browser.
+#
+# STORYOS_RECOVERY_DRILL=fixture-only keeps the populated fixture path.
+# STORYOS_RECOVERY_DRILL=mixed creates two empty Projects through public
+# createProject before the base backup, beside the populated fixture Project.
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
@@ -16,10 +20,19 @@ primary="storyos-recovery-primary-$suffix"
 hold="storyos-recovery-hold-$suffix"
 wal_marker="WAL after base backup"
 project_id="018f0000-0000-7001-8000-000000000002"
+owner_a="018f0000-0000-7001-8000-000000000001"
+project_b="018f0000-0000-7001-8000-000000000102"
+live_chapter="018f0000-0000-7001-8000-000000000003"
 created_volumes=0
 destination_kind=verification_volumes
 drill_server_pid=""
 drill_server_log=""
+server_bin="$repository_root/target/release-package/storyos-server"
+web_root="$repository_root/target/release-package/web"
+
+# shellcheck source=recovery-hold-drill.sh
+. "$repository_root/scripts/recovery-hold-drill.sh"
+echo "Isolated Recovery Copy drill: $recovery_drill"
 
 if [ -n "${STORYOS_RECOVERY_COPY_DIR:-}" ]; then
   recovery_root=$STORYOS_RECOVERY_COPY_DIR
@@ -85,7 +98,7 @@ wait_postgres() {
       if [ "$wait_mode" = "init" ]; then
         docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete"
       else
-        docker logs "$container" 2>&1 | grep -Eq "ready to accept (read-only )?connections"
+        docker logs "$container" 2>&1 | grep -F "ready to accept connections"
       fi
     } && docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
     attempt=$((attempt + 1))
@@ -129,6 +142,29 @@ docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
       UPDATE storyos.manuscript_objects
          SET parent_volume_id = '018f0000-0000-7001-8000-0000000001aa'
        WHERE manuscript_object_id = '018f0000-0000-7001-8000-000000000103';" >/dev/null
+if [ "$recovery_drill" = "mixed" ]; then
+  docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+  start_recovery_drill_server \
+    "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+  created=$(node "$repository_root/scripts/create-public-empty-projects.mjs" \
+    "$STORYOS_DEV_SERVER" session-a \
+    "$empty_project_title_one" "$empty_project_title_two") || {
+    cat "$drill_server_log" >&2
+    echo "Public createProject did not create the empty Projects" >&2
+    exit 1
+  }
+  stop_recovery_drill_server
+  empty_project_one=$(printf '%s\n' "$created" | sed -n '1p')
+  empty_project_two=$(printf '%s\n' "$created" | sed -n '2p')
+  if [ -z "$empty_project_one" ] || [ -z "$empty_project_two" ] \
+    || [ "$empty_project_one" = "$empty_project_two" ]; then
+    echo "Public createProject did not return two Project IDs" >&2
+    exit 1
+  fi
+  assert_mixed_empty_projects "$primary"
+  echo "Created two empty Projects through public createProject before backup"
+fi
 
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT count(*) FROM pg_roles WHERE rolname IN ('storyos_backup', 'storyos_restore')")
@@ -313,6 +349,7 @@ if [ "$restored_title" != "$wal_marker" ]; then
   echo "Isolated restore did not replay archived WAL: $restored_title" >&2
   exit 1
 fi
+assert_mixed_empty_projects "$hold"
 
 if ! docker exec "$hold" env PGPASSWORD=restore \
   psql -X -v ON_ERROR_STOP=1 -U storyos_restore -d postgres -c "SELECT 1" >/dev/null; then
@@ -397,9 +434,6 @@ chain_sha256=$(python3 -c "import hashlib,sys; print(hashlib.sha256(open(sys.arg
 recovery_copy_id="018f0000-0000-7001-8000-0000000000c1"
 restore_proof_id="018f0000-0000-7001-8000-0000000000c2"
 visibility_proof_id="018f0000-0000-7001-8000-0000000000c3"
-owner_a="018f0000-0000-7001-8000-000000000001"
-project_b="018f0000-0000-7001-8000-000000000102"
-live_chapter="018f0000-0000-7001-8000-000000000003"
 
 if docker exec "$hold" env PGPASSWORD=restore \
   psql -X -v ON_ERROR_STOP=1 -U storyos_restore -d postgres -Atc \
@@ -571,15 +605,10 @@ case "$rebuilt" in
     exit 1
     ;;
 esac
+assert_mixed_empty_projects "$hold"
+assert_mixed_populated_stays_separate "$hold"
 
 echo "Isolated restore passed Recovery Visibility Proof"
-
-server_bin="$repository_root/target/release-package/storyos-server"
-web_root="$repository_root/target/release-package/web"
-if [ ! -x "$server_bin" ] || [ ! -d "$web_root" ]; then
-  echo "Release package is required for continued writing after restore" >&2
-  exit 1
-fi
 
 docker exec -e PGOPTIONS="-c default_transaction_read_only=off" "$hold" \
   psql -X -v ON_ERROR_STOP=1 -U postgres \
@@ -610,39 +639,14 @@ if [ -z "$hold_port" ]; then
   exit 1
 fi
 
-unset STORYOS_STAGE1_AUTHORITY_ORACLE
-drill_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-server.XXXXXX")
-STORYOS_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$hold_port/postgres" \
-STORYOS_STORAGE_ADMIN_URL="postgres://postgres:wrong@127.0.0.1:1/postgres" \
-STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$owner_a\"}" \
-STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
-  "$server_bin" --bind 127.0.0.1:0 \
-  --web-root "$web_root" \
-  >"$drill_server_log" 2>&1 &
-drill_server_pid=$!
-attempt=0
-while ! grep -q '^STORYOS_SERVER_URL=http://' "$drill_server_log"; do
-  if ! kill -0 "$drill_server_pid" >/dev/null 2>&1; then
-    cat "$drill_server_log" >&2
-    echo "The StoryOS Server exited before continued writing" >&2
-    exit 1
-  fi
-  attempt=$((attempt + 1))
-  if [ "$attempt" -ge 100 ]; then
-    cat "$drill_server_log" >&2
-    echo "The StoryOS Server did not become ready for continued writing" >&2
-    exit 1
-  fi
-  sleep 0.05
-done
-STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$drill_server_log" | head -n 1)
-export STORYOS_DEV_SERVER
+start_recovery_drill_server \
+  "postgres://storyos_runtime:runtime@127.0.0.1:$hold_port/postgres"
 export STORYOS_PHYSICAL_DRILL=1
 echo "Running exact-dist continued writing after restore"
 pnpm --dir apps/web exec vitest run --project browser-exact-dist
-kill "$drill_server_pid" >/dev/null 2>&1 || true
-wait "$drill_server_pid" >/dev/null 2>&1 || true
-drill_server_pid=""
+stop_recovery_drill_server
+assert_mixed_empty_projects "$hold"
+assert_mixed_populated_stays_separate "$hold"
 
 rto_seconds=$(($(date +%s) - restore_started))
 if [ "$rpo_seconds" -gt 900 ]; then

@@ -721,4 +721,6 @@ kill "$s1_server_pid" >/dev/null 2>&1 || true
 wait "$s1_server_pid" >/dev/null 2>&1 || true
 s1_server_pid=""
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
-"$repository_root/scripts/verify-recovery-hold.sh"
+STORYOS_RECOVERY_DRILL=fixture-only "$repository_root/scripts/verify-recovery-hold.sh"
+echo "Running mixed empty and populated isolated Recovery Copy restore"
+STORYOS_RECOVERY_DRILL=mixed "$repository_root/scripts/verify-recovery-hold.sh"
