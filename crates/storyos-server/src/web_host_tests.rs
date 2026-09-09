@@ -13,7 +13,7 @@ use uuid::Uuid;
 use super::*;
 use crate::{
     CLIENT_SESSION_BINDING_LIFETIME_SECS, ClientSessionBinding, RELEASE_1_SECURITY_POLICY_REVISION,
-    ServerConfig, TrustedLocalSessionBootstrap,
+    ServerConfig, SessionCookieSecure, TrustedLocalSessionBootstrap,
 };
 
 const SCRIPT: &str = "assets/index-12345678.js";
@@ -123,6 +123,115 @@ fn set_cookie(response: &axum::http::Response<Body>) -> Option<&str> {
         panic!("Trusted Local Session Bootstrap issues exactly one Set-Cookie");
     }
     value
+}
+
+#[tokio::test]
+async fn public_https_profile_cookie_includes_secure_and_ignores_forwarded_headers() {
+    let fixture = Fixture::new();
+    let assets = WebAssetSet::load_bound(&fixture.root, &fixture.digest).unwrap();
+    let mut public = config(
+        TrustedLocalSessionBootstrap::IssueTheSingleConfiguredHandle,
+        now_secs() + CLIENT_SESSION_BINDING_LIFETIME_SECS,
+    );
+    public.allowed_host = Some("example.com".to_owned());
+    public.allowed_origin = Some("https://example.com".to_owned());
+    public
+        .session_bindings
+        .get_mut(HANDLE)
+        .unwrap()
+        .allowed_host = "example.com".to_owned();
+    public
+        .session_bindings
+        .get_mut(HANDLE)
+        .unwrap()
+        .allowed_origin = "https://example.com".to_owned();
+    public.session_cookie_secure = SessionCookieSecure::Include;
+    let router = router_with_web(public, assets);
+    let issued = Request::builder()
+        .uri("/")
+        .header("host", "example.com")
+        .header("x-forwarded-host", "evil.example")
+        .header("x-forwarded-proto", "http")
+        .body(Body::empty())
+        .expect("public document GET should be valid");
+    let response = router
+        .clone()
+        .oneshot(issued)
+        .await
+        .expect("public document GET should complete");
+    assert_eq!(response.status(), StatusCode::OK);
+    let cookie = set_cookie(&response).expect("public document GET issues one cookie");
+    assert_eq!(
+        cookie,
+        format!(
+            "storyos_session={HANDLE}; HttpOnly; SameSite=Strict; Path=/; Max-Age={CLIENT_SESSION_BINDING_LIFETIME_SECS}; Secure"
+        )
+    );
+
+    let spoofed_host = Request::builder()
+        .uri("/")
+        .header("host", HOST)
+        .header("x-forwarded-host", "example.com")
+        .header("x-forwarded-proto", "https")
+        .body(Body::empty())
+        .expect("forwarded Host GET should be valid");
+    let spoofed = router
+        .clone()
+        .oneshot(spoofed_host)
+        .await
+        .expect("forwarded Host GET should complete");
+    assert_eq!(spoofed.status(), StatusCode::OK);
+    assert_eq!(set_cookie(&spoofed), None);
+
+    let api = Request::builder()
+        .uri(format!("/api/v1/projects/{PROJECT_ID}"))
+        .header("host", "example.com")
+        .header("origin", "https://example.com")
+        .header("cookie", "storyos_session=session-a")
+        .header("x-forwarded-host", "evil.example")
+        .header("x-forwarded-proto", "http")
+        .body(Body::empty())
+        .expect("public API GET should be valid");
+    let admitted = router
+        .clone()
+        .oneshot(api)
+        .await
+        .expect("public API GET should complete");
+    assert_eq!(admitted.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(set_cookie(&admitted), None);
+
+    let wrong_host = Request::builder()
+        .uri(format!("/api/v1/projects/{PROJECT_ID}"))
+        .header("host", "evil.example")
+        .header("origin", "https://example.com")
+        .header("cookie", "storyos_session=session-a")
+        .body(Body::empty())
+        .expect("wrong Host GET should be valid");
+    assert_eq!(
+        router
+            .clone()
+            .oneshot(wrong_host)
+            .await
+            .expect("wrong Host GET should complete")
+            .status(),
+        StatusCode::FORBIDDEN,
+    );
+
+    let wrong_origin = Request::builder()
+        .uri(format!("/api/v1/projects/{PROJECT_ID}"))
+        .header("host", "example.com")
+        .header("origin", "https://evil.example")
+        .header("cookie", "storyos_session=session-a")
+        .body(Body::empty())
+        .expect("wrong Origin GET should be valid");
+    assert_eq!(
+        router
+            .oneshot(wrong_origin)
+            .await
+            .expect("wrong Origin GET should complete")
+            .status(),
+        StatusCode::FORBIDDEN,
+    );
 }
 
 #[tokio::test]

@@ -14,4 +14,4 @@ The packaged Server holds the allowed site as one configured Foundation Validati
 
 ## Consequences
 
-- This ADR records the admission-authority decision. The current Server still treats the bind address as the allowed Origin. A later ticket changes the packaged Server.
+- This ADR records the admission-authority decision. Packaged `storyos-server` holds a configured Foundation Validation Public Origin when `STORYOS_PUBLIC_ORIGIN` is set. When that setting is absent, the Server keeps the bind-derived local HTTP profile.

@@ -9,7 +9,8 @@ use uuid::Uuid;
 
 use crate::{
     CLIENT_SESSION_BINDING_LIFETIME_SECS, PresentedSessionCookie, ServerConfig, ServerState,
-    TrustedLocalSessionBootstrap, WebAssetSet, api_router, presented_session_cookie,
+    SessionCookieSecure, TrustedLocalSessionBootstrap, WebAssetSet, api_router,
+    presented_session_cookie,
 };
 
 const CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; worker-src 'none'; require-trusted-types-for 'script'; trusted-types 'none'";
@@ -126,10 +127,13 @@ fn trusted_local_session_cookie(
         state.server.config.session_bindings.keys().next()?.clone()
     };
     match presented_session_cookie(headers) {
-        PresentedSessionCookie::Absent => Some(session_set_cookie(&handle)?),
+        PresentedSessionCookie::Absent => Some(session_set_cookie(
+            &handle,
+            state.server.config.session_cookie_secure,
+        )?),
         PresentedSessionCookie::Handle(existing) if existing == handle => {
             if state.server.refresh_client_session_binding(&handle) {
-                session_set_cookie(&handle)
+                session_set_cookie(&handle, state.server.config.session_cookie_secure)
             } else {
                 None
             }
@@ -138,9 +142,13 @@ fn trusted_local_session_cookie(
     }
 }
 
-fn session_set_cookie(handle: &str) -> Option<HeaderValue> {
+fn session_set_cookie(handle: &str, secure: SessionCookieSecure) -> Option<HeaderValue> {
+    let flags = match secure {
+        SessionCookieSecure::Omit => "",
+        SessionCookieSecure::Include => "; Secure",
+    };
     HeaderValue::from_str(&format!(
-        "storyos_session={handle}; HttpOnly; SameSite=Strict; Path=/; Max-Age={CLIENT_SESSION_BINDING_LIFETIME_SECS}"
+        "storyos_session={handle}; HttpOnly; SameSite=Strict; Path=/; Max-Age={CLIENT_SESSION_BINDING_LIFETIME_SECS}{flags}"
     ))
     .ok()
 }

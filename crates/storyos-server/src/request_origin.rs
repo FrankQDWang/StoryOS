@@ -1,7 +1,7 @@
 use std::cell::Cell;
 
 use axum::http::{HeaderMap, header};
-use url::{Origin, SyntaxViolation, Url};
+use url::{Host, Origin, SyntaxViolation, Url};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum RequestOriginPolicy {
@@ -19,6 +19,31 @@ pub(super) struct TupleOrigin(Origin);
 impl TupleOrigin {
     pub(super) fn from_allowed_origin(raw: &str) -> Option<Self> {
         Self::parse(raw, UrlInput::SerializedOrigin)
+    }
+
+    pub(super) fn is_https(&self) -> bool {
+        matches!(&self.0, Origin::Tuple(scheme, _, _) if scheme == "https")
+    }
+
+    pub(super) fn ascii_serialization(&self) -> String {
+        self.0.ascii_serialization()
+    }
+
+    pub(super) fn is_dns_domain(&self) -> bool {
+        matches!(&self.0, Origin::Tuple(_, Host::Domain(_), _))
+    }
+
+    pub(super) fn https_allowed_host(&self) -> Option<String> {
+        match &self.0 {
+            Origin::Tuple(scheme, Host::Domain(domain), port) if scheme == "https" => {
+                Some(if *port == 443 {
+                    domain.clone()
+                } else {
+                    format!("{domain}:{port}")
+                })
+            }
+            Origin::Tuple(_, _, _) | Origin::Opaque(_) => None,
+        }
     }
 
     fn parse(raw: &str, input: UrlInput) -> Option<Self> {

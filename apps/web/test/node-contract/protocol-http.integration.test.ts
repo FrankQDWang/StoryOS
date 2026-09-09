@@ -32,13 +32,21 @@ function packagedStartupEnv(sessions?: string): NodeJS.ProcessEnv {
 
 const execFileAsync = promisify(execFile);
 
-async function refusesBind(args: string[], env: NodeJS.ProcessEnv): Promise<void> {
+async function refusesBind(
+  args: string[],
+  env: NodeJS.ProcessEnv,
+  stderr?: RegExp,
+): Promise<void> {
   await assert.rejects(execFileAsync(serverBinary, args, {
     cwd: repositoryRoot, timeout: 4_000, env,
   }), (error: unknown) => {
     assert.ok(error instanceof Error);
     assert.equal(Reflect.get(error, "code"), 1, error.message);
     assert.doesNotMatch(String(Reflect.get(error, "stdout")), /STORYOS_SERVER_URL=/);
+    if (stderr !== undefined) {
+      assert.match(String(Reflect.get(error, "stderr")), stderr);
+      assert.doesNotMatch(String(Reflect.get(error, "stderr")), /STORYOS_DATABASE_URL/);
+    }
     return true;
   });
 }
@@ -114,6 +122,26 @@ test("offline worker check does not require PostgreSQL", async () => {
       STORYOS_STORAGE_ADMIN_URL: CLOSED_ADMIN,
     },
   });
+});
+
+test("packaged production startup refuses an invalid public Origin before Storage Activation", async () => {
+  const env = packagedStartupEnv(`{"session-a":"${LOCAL_USER}"}`);
+  env.STORYOS_PUBLIC_ORIGIN = "http://example.com";
+  await refusesBind(
+    ["--web-root", webRoot, "--bind", "127.0.0.1:0"],
+    env,
+    /STORYOS_PUBLIC_ORIGIN/,
+  );
+});
+
+test("packaged production startup refuses a non-loopback listen when a public Origin is set", async () => {
+  const env = packagedStartupEnv(`{"session-a":"${LOCAL_USER}"}`);
+  env.STORYOS_PUBLIC_ORIGIN = "https://example.com";
+  await refusesBind(
+    ["--web-root", webRoot, "--bind", "0.0.0.0:3000"],
+    env,
+    /STORYOS_PUBLIC_ORIGIN/,
+  );
 });
 
 test("packaged production startup refuses bind without a reachable Active proof", async () => {
