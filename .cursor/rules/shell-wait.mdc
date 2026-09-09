@@ -1,0 +1,31 @@
+---
+description: Start long verify in the background. Wait on process exit or a true end line, not a mid-run Error.
+alwaysApply: true
+---
+
+# Shell wait
+
+Start a long repository command with `block_until_ms: 0`. Keep other work. The completion notice is the end signal.
+
+Poll with AwaitShell only when the next step is blocked on that process. Wait for process exit, or for one line that means the whole command ended.
+
+True end of complete `make verify`:
+
+- `verified parent #100` after the last tracker check
+- `make: *** [verify` when a make target fails
+
+These lines are not the end of `make verify`:
+
+- `verify-stage1` — contracts self-check, often near 15s
+- a bare `Error:` — Storage Activation expected reject (`MissingOrInactive` / `IdentityMismatch`)
+
+Size a poll window to the command class:
+
+| Command | Typical duration |
+|---|---|
+| GitHub PR `verify` sentinel | about 16s |
+| Dirty-tree `make verify` | fails in about 24s |
+| One `verify-tracker` | tens of seconds |
+| Clean complete `make verify` | about 9 minutes (Chrome exact-dist and isolated Recovery Copy) |
+
+Use an 8–12 minute window only for one clean complete `make verify` when a poll is required, and only with a true end line.
