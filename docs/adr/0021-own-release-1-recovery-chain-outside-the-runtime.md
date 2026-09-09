@@ -26,7 +26,7 @@ These earlier working choices assumed an operator-owned PostgreSQL host. They do
 - Extending `storyos-storage`, or replacing the owner with a dashboard runbook, was rejected. `storyos-recovery` is a thin vendor adapter: it proves vendor backups exist for the bound project, and it runs Recovery Visibility Proof against a restored copy that is not the live production project.
 - Checking backup freshness on every Server request was rejected. Runtime may observe only an install-once proof that this storage identity is bound to a hosted project with vendor backups enabled.
 - A new public Problem for a missing install-once proof was rejected. Absence reuses `project_store_unavailable`. An identity mismatch reuses `upgrade_required`.
-- Keeping the Profile at a fifteen-minute StoryOS-owned RPO while adopting daily vendor backups was rejected. The Profile text must change with this ADR. The tracked storage-contract section changes in the same revision that lands after a live Supabase spike.
+- Keeping the Profile at a fifteen-minute StoryOS-owned RPO while adopting daily vendor backups was rejected. The Profile text must change with this ADR. The tracked storage-contract section changes in the same revision as the compatibility children that follow the live hosted spike.
 - Absorbing Supabase Auth, Realtime, Storage, or PostgREST was rejected.
 - This decision does not absorb structural-authority settlement, frozen command acknowledgements, live Project Activity delivery, or public TLS and Host/Origin ownership. [Own Public Host, HTTPS Origin, and Cookie Secure](https://github.com/FrankQDWang/StoryOS/issues/604) owns that sibling gap. It does not resume Stage 3.
 

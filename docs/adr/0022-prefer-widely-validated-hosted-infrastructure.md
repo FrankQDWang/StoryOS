@@ -6,7 +6,7 @@ status: accepted
 
 Production uses widely validated hosted PostgreSQL instead of rebuilding an equivalent physical database host. Local development uses a Mac with OrbStack PostgreSQL. Production PostgreSQL is hosted Supabase. StoryOS Server, Worker, and Web stay paired on a Linux VPS. A TLS reverse proxy such as Caddy terminates HTTPS in front of that Server. A vendor does not become a StoryOS domain authority.
 
-This premise was spoken before it was written. Until this ADR, no tracked file named Supabase, Vercel, or the VPS. ADR 0004 therefore sent every later agent toward operator-owned local PostgreSQL. That was process drift against an unwritten production choice, not an agent inventing a new product.
+Operators stated this production choice before any tracked file recorded it. No earlier GOAL, ADR, foundation contract, or Issue named the hosted database, the VPS, or the rejected second Web host. ADR 0004 therefore sent later agents toward operator-owned local PostgreSQL. That was process drift against an unwritten production choice.
 
 ## Considered options
 

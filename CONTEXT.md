@@ -17,7 +17,7 @@ The opaque server-held request-authentication binding established by a trusted l
 _Avoid_: Login session as User identity, client-asserted role, URL access token, reusable command nonce
 
 **Trusted Local Session Bootstrap**:
-The issuance of one Client Session Binding for the single configured User when the author opens the printed Protected Web origin, without a login product. Local names that single-User bootstrap, not a loopback-only transport; the printed origin may be the loopback HTTP origin or the Foundation Validation Public Origin.
+The packaged Server issues one Client Session Binding for the single configured User when the author opens the printed Protected Web origin, without a login product or cookie injection as the product path. Local names that single-User path, not a loopback-only transport; the printed origin may be the loopback HTTP origin or the Foundation Validation Public Origin.
 _Avoid_: Login, account signup, operator cookie injection, test cookie injection as product issuance, multi-user identity picker, treating local as loopback-only, Release 1 Storage Activation, database bootstrap
 
 **Project Author**:
@@ -124,7 +124,7 @@ A repository-owned non-runtime record that makes an upstream design or source ob
 _Avoid_: Machine-local snapshot, vendored runtime source, implicit dependency, unpinned citation
 
 **Foundation Recovery Service Profile**:
-The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss. On hosted production PostgreSQL, loss of the vendor compute host is covered by the vendor daily physical backup; the recovery-point objective is at most twenty-four hours until a later tightening adopts vendor PITR. StoryOS does not possess those backup or WAL files. A restored Project becomes readable only after Recovery Visibility Proof. A local OrbStack drill remains the Hold and proof oracle. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster.
+The minimum durability and disaster-recovery promise for the Foundation Validation Deployment. Every author-visible successful commit survives an ordinary process or power crash with zero acknowledged-data loss through synchronous PostgreSQL commit. On hosted production PostgreSQL, loss of the vendor compute host is covered by the vendor daily physical backup; the recovery-point objective is at most twenty-four hours until a later tightening adopts vendor PITR. StoryOS does not possess those backup or WAL files. A restored Project becomes readable only after Recovery Visibility Proof. A local OrbStack drill remains the Hold and proof oracle. This Profile does not require a synchronous replica, automatic failover, or a high-availability cluster.
 _Avoid_: Asynchronous author acknowledgement, same-disk backup as the production promise, treating a logical dump as a Recovery Copy, treating fifteen-minute StoryOS-owned WAL as the current hosted promise, untested backup file, Foundation high-availability cluster
 
 **Recovery Copy**:
