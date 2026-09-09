@@ -98,7 +98,7 @@ wait_postgres() {
       if [ "$wait_mode" = "init" ]; then
         docker logs "$container" 2>&1 | grep -q "PostgreSQL init process complete"
       else
-        docker logs "$container" 2>&1 | grep -Eq "ready to accept (read-only )?connections"
+        docker logs "$container" 2>&1 | grep -F "ready to accept connections"
       fi
     } && docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
     attempt=$((attempt + 1))
