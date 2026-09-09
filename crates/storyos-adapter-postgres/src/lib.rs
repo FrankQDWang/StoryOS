@@ -25,6 +25,10 @@ mod create_project_challenge_tests;
 mod create_project_tests;
 
 #[cfg(test)]
+#[path = "recovery_visibility_proof_tests.rs"]
+mod recovery_visibility_proof_tests;
+
+#[cfg(test)]
 #[path = "update_project_tests.rs"]
 mod update_project_tests;
 

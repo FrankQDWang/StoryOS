@@ -164,13 +164,15 @@ BEGIN
          (head.owner_user_id, head.project_id,
           head.manuscript_object_id, head.current_revision_id)
    WHERE revision.revision_id IS NULL;
+  -- A lawful empty Project stores current_chapter_id as SQL NULL. That NULL is not a Chapter gap.
   SELECT count(*) INTO chapter_gaps
     FROM storyos.projects AS project
     LEFT JOIN storyos.manuscript_objects AS chapter
       ON (chapter.owner_user_id, chapter.project_id, chapter.manuscript_object_id) =
          (project.owner_user_id, project.project_id, project.current_chapter_id)
      AND chapter.object_kind = 'chapter'
-   WHERE chapter.manuscript_object_id IS NULL;
+   WHERE project.current_chapter_id IS NOT NULL
+     AND chapter.manuscript_object_id IS NULL;
   SELECT count(*) INTO replay_gaps
     FROM storyos.projects AS project
     LEFT JOIN storyos.replay_generations AS generation

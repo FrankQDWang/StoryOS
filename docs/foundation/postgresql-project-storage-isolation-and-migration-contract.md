@@ -184,7 +184,8 @@ DomainReceipt, and one `project_created` Activity payload. It creates no
 Volume, Chapter, or manuscript payload. The current-chapter foreign key uses
 `MATCH SIMPLE` and stays DEFERRABLE. The User-level
 `create_project_challenges` row is the Admission proof. After insert, every
-project-bearing read and write uses exact Project Scope.
+project-bearing read and write uses exact Project Scope. Recovery Visibility
+Proof does not count this SQL NULL current Chapter as a Chapter gap.
 
 ## 1. Scope and authority
 
@@ -1122,8 +1123,10 @@ validates migration checksums, scoped referential closure, payload digests,
 Heads, sequences, idempotency, manifests, and outbox fences; rebuilds or drops
 disposable projections as required; rotates runtime and maintenance
 credentials; then enables traffic only after the operational contract's
-Recovery Visibility Proof succeeds. OutcomeUnknown work remains uncertain and
-is reconciled, never silently replayed.
+Recovery Visibility Proof succeeds. A contract-valid SQL NULL current Chapter
+is not a Chapter gap. A broken non-NULL current Chapter reference remains a
+Chapter gap. OutcomeUnknown work remains uncertain and is reconciled, never
+silently replayed.
 
 ### 10.3 Project Export Archive and Project Restore
 
