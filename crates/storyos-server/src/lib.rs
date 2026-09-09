@@ -35,6 +35,7 @@ mod manuscript_statistics;
 mod manuscript_tree;
 mod project_command_challenge;
 mod project_export;
+mod public_origin;
 mod readable_export;
 mod request_origin;
 mod session_bootstrap;
@@ -48,6 +49,10 @@ mod update_volume;
 mod web_assets;
 mod web_host;
 
+pub use public_origin::{
+    PackagedPublicOrigin, PackagedTransportError, PackagedTransportPlan, SessionCookieSecure,
+    packaged_transport_plan,
+};
 pub use session_bootstrap::{
     CLIENT_SESSION_BINDING_LIFETIME_SECS, MultipleMappingAllowance, PackagedSessionBootstrapError,
     TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS, TrustedLocalSessionBootstrap,
@@ -111,6 +116,7 @@ pub struct ServerConfig {
     pub allowed_origin: Option<String>,
     pub project_command_challenge_secret: Option<Vec<u8>>,
     pub trusted_local_session_bootstrap: TrustedLocalSessionBootstrap,
+    pub session_cookie_secure: SessionCookieSecure,
 }
 
 impl fmt::Debug for ServerConfig {

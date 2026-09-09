@@ -19,6 +19,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let (bind_address, web_root) = server_options(&arguments)?;
+    let transport = storyos_server::packaged_transport_plan(
+        env::var("STORYOS_PUBLIC_ORIGIN").ok().as_deref(),
+        bind_address,
+    )
+    .map_err(|error| error.to_string())?;
     let multiple_mapping_allowance =
         if env::var(storyos_server::TEST_ALLOW_MULTIPLE_BOOTSTRAP_SESSIONS).as_deref() == Ok("1") {
             storyos_server::MultipleMappingAllowance::IsolationTestsDisableIssuance
@@ -37,7 +42,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     require_release1_storage_activation_proof(&database_url).await?;
     let listener = TcpListener::bind(bind_address).await?;
     let address = listener.local_addr()?;
-    let host = address.to_string();
+    let (allowed_host, allowed_origin, printed_server_url) = match &transport {
+        storyos_server::PackagedTransportPlan::LocalHttp => {
+            let host = address.to_string();
+            (
+                host.clone(),
+                format!("http://{host}"),
+                format!("http://{address}"),
+            )
+        }
+        storyos_server::PackagedTransportPlan::PublicHttps(public) => (
+            public.allowed_host.clone(),
+            public.allowed_origin.clone(),
+            public.allowed_origin.clone(),
+        ),
+    };
     let issued_at_unix_seconds = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let expires_at_unix_seconds = issued_at_unix_seconds
         .checked_add(storyos_server::CLIENT_SESSION_BINDING_LIFETIME_SECS)
@@ -47,14 +66,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .release_identity
         .web_client_contract_revision;
     let security_policy_revision = storyos_server::RELEASE_1_SECURITY_POLICY_REVISION.to_owned();
-    let allowed_origin = format!("http://{host}");
     let session_bindings = session_users
         .into_iter()
         .map(|(handle, owner_user_id)| {
             Uuid::parse_str(&owner_user_id)?;
             let binding = storyos_server::ClientSessionBinding {
                 owner_user_id: UserId::new(owner_user_id),
-                allowed_host: host.clone(),
+                allowed_host: allowed_host.clone(),
                 allowed_origin: allowed_origin.clone(),
                 session_generation: current_session_generation,
                 issued_at_unix_seconds,
@@ -71,14 +89,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         current_session_generation,
         accepted_client_contract_revision: Some(client_contract_revision),
         accepted_security_policy_revision: Some(security_policy_revision),
-        allowed_host: Some(host.clone()),
+        allowed_host: Some(allowed_host),
         allowed_origin: Some(allowed_origin),
         project_command_challenge_secret: env::var("STORYOS_CHALLENGE_SECRET")
             .ok()
             .map(String::into_bytes),
         trusted_local_session_bootstrap,
+        session_cookie_secure: match transport {
+            storyos_server::PackagedTransportPlan::LocalHttp => {
+                storyos_server::SessionCookieSecure::Omit
+            }
+            storyos_server::PackagedTransportPlan::PublicHttps(_) => {
+                storyos_server::SessionCookieSecure::Include
+            }
+        },
     };
-    println!("STORYOS_SERVER_URL=http://{address}");
+    println!("STORYOS_SERVER_URL={printed_server_url}");
     io::stdout().flush()?;
     if storyos_worker::in_process_loop_enabled()
         && let Some(database_url) = config.database_url.clone()

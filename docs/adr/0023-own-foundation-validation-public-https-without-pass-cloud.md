@@ -25,5 +25,5 @@ Foundation Validation needs one public `https` Host on the paired VPS so the aut
 - One binary has two profiles. When the public Origin is unset, today's local HTTP profile remains. When it is set, that Origin is the printed site and a non-loopback listen is refused.
 - Caddy is operator-owned. It is not part of the release package. Required behavior: terminate TLS, present the public Host, proxy to the Server listen address, redirect port 80 to `https`, and send HSTS. An example Caddyfile may live in the operations document. HTTP-01 or DNS-01 is operator practice. StoryOS does not take a DNS API token.
 - Public HTTPS proof is an operator checklist against the printed origin. It is not a `make verify` journey and not a second Browser Mode harness.
-- The current packaged Server still derives Host and Origin from the bind address and issues a cookie without `Secure`. This ADR records the decision. It does not claim that product code already matches it.
+- Packaged `storyos-server` has two profiles. When `STORYOS_PUBLIC_ORIGIN` is absent, Host and Origin come from the bind address and the cookie omits `Secure`. When that setting is one `https` Origin, the Server prints that Origin, derives the Host, issues `Secure`, and refuses a non-loopback listen.
 - This decision does not resume Stage 3 and does not absorb the recovery-chain spike.
