@@ -61,7 +61,7 @@ pub(super) async fn persist_created_chapter(
     tree_revision: &u64,
     chapter_id: &str,
     current: &CreateChapterCurrent,
-) -> Result<(), CreateChapterError> {
+) -> Result<String, CreateChapterError> {
     let payload_id = Uuid::now_v7().to_string();
     let revision_id = Uuid::now_v7().to_string();
     let empty: &[u8] = &[];
@@ -159,7 +159,7 @@ pub(super) async fn persist_created_chapter(
             std::io::Error::other("tree revision or current Chapter changed under FOR UPDATE"),
         )));
     }
-    Ok(())
+    Ok(revision_id)
 }
 
 pub(super) async fn insert_create_chapter_admission(

@@ -5,11 +5,12 @@ use storyos_application::{
 use uuid::Uuid;
 
 use super::structural_authority_settlement::{
-    StructureCommitBinding, persist_compensation_author_action, persist_structure_commit,
+    StructureAffectedIdentity, StructureCommitBinding, persist_compensation_author_action,
+    persist_structure_commit,
 };
 use super::undo_latest_author_action::{
-    ObservedStructureFrontier, UndoReceiptAuthority, insert_undo_receipt, settle_idempotency,
-    undo_database_error, undo_from_session,
+    ObservedStructureFrontier, ObservedStructureIdentity, UndoReceiptAuthority,
+    insert_undo_receipt, settle_idempotency, undo_database_error, undo_from_session,
 };
 
 pub(super) async fn persist_structure_compensation(
@@ -25,26 +26,7 @@ pub(super) async fn persist_structure_compensation(
         )
         .await
         .map_err(UndoLatestAuthorActionError::Unavailable)?;
-    let updated = client
-        .execute(
-            "UPDATE storyos.projects
-                SET tree_revision = $3::text::bigint
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &frontier.prior_manuscript_tree_revision.to_string(),
-                &frontier.resulting_manuscript_tree_revision.to_string(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
-    if updated != 1 {
-        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
-            std::io::Error::other("tree revision changed under FOR UPDATE"),
-        )));
-    }
+    restore_prior_tree(client, command, frontier).await?;
     let receipt_created_at = insert_undo_receipt(
         client,
         command,
@@ -57,36 +39,14 @@ pub(super) async fn persist_structure_compensation(
         },
     )
     .await?;
-    let decision_id = Uuid::now_v7().to_string();
-    client
-        .execute(
-            "INSERT INTO storyos.volume_removal_decisions
-               (owner_user_id, project_id, volume_removal_decision_id, receipt_id,
-                volume_id, tree_revision)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6::text::bigint)",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-                &decision_id,
-                &command.ids.receipt_id,
-                &frontier.affected_volume_id,
-                &frontier.prior_manuscript_tree_revision.to_string(),
-            ],
-        )
-        .await
-        .map_err(undo_database_error)?;
+    persist_structure_removal(client, command, frontier).await?;
     persist_structure_commit(
         client,
         &command.project_scope,
         &sequences,
         &command.ids.author_command_admission_id,
         &command.ids.receipt_id,
-        StructureCommitBinding {
-            prior_manuscript_tree_revision: frontier.resulting_manuscript_tree_revision,
-            resulting_manuscript_tree_revision: frontier.prior_manuscript_tree_revision,
-            affected_volume_id: &frontier.affected_volume_id,
-        },
+        compensation_commit_binding(frontier),
     )
     .await
     .map_err(undo_database_error)?;
@@ -128,6 +88,138 @@ pub(super) async fn persist_structure_compensation(
         receipt_created_at,
         project_activity_position: sequences.project_activity_position,
     })
+}
+
+async fn restore_prior_tree(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+    frontier: &ObservedStructureFrontier,
+) -> Result<(), UndoLatestAuthorActionError> {
+    let updated = match &frontier.identity {
+        ObservedStructureIdentity::Volume { .. } => client
+            .execute(
+                "UPDATE storyos.projects
+                    SET tree_revision = $3::text::bigint
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &frontier.prior_manuscript_tree_revision.to_string(),
+                    &frontier.resulting_manuscript_tree_revision.to_string(),
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?,
+        ObservedStructureIdentity::Chapter { chapter_id } => client
+            .execute(
+                "UPDATE storyos.projects
+                    SET tree_revision = $3::text::bigint,
+                        current_chapter_id = CASE
+                          WHEN current_chapter_id = $5::text::uuid THEN NULL
+                          ELSE current_chapter_id
+                        END
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &frontier.prior_manuscript_tree_revision.to_string(),
+                    &frontier.resulting_manuscript_tree_revision.to_string(),
+                    &chapter_id,
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?,
+    };
+    if updated != 1 {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("tree revision changed under FOR UPDATE"),
+        )));
+    }
+    Ok(())
+}
+
+async fn persist_structure_removal(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+    frontier: &ObservedStructureFrontier,
+) -> Result<(), UndoLatestAuthorActionError> {
+    let decision_id = Uuid::now_v7().to_string();
+    match &frontier.identity {
+        ObservedStructureIdentity::Volume { volume_id } => {
+            client
+                .execute(
+                    "INSERT INTO storyos.volume_removal_decisions
+                       (owner_user_id, project_id, volume_removal_decision_id, receipt_id,
+                        volume_id, tree_revision)
+                     VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                             $5::text::uuid, $6::text::bigint)",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &decision_id,
+                        &command.ids.receipt_id,
+                        &volume_id,
+                        &frontier.prior_manuscript_tree_revision.to_string(),
+                    ],
+                )
+                .await
+                .map_err(undo_database_error)?;
+        }
+        ObservedStructureIdentity::Chapter { chapter_id } => {
+            let volume_id = client
+                .query_one(
+                    "SELECT parent_volume_id::text
+                       FROM storyos.manuscript_objects
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND manuscript_object_id = $3::text::uuid AND object_kind = 'chapter'",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &chapter_id,
+                    ],
+                )
+                .await
+                .map_err(undo_database_error)?
+                .get::<_, String>(0);
+            client
+                .execute(
+                    "INSERT INTO storyos.chapter_removal_decisions
+                       (owner_user_id, project_id, chapter_removal_decision_id, receipt_id,
+                        chapter_id, volume_id, tree_revision)
+                     VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                             $5::text::uuid, $6::text::uuid, $7::text::bigint)",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &decision_id,
+                        &command.ids.receipt_id,
+                        &chapter_id,
+                        &volume_id,
+                        &frontier.prior_manuscript_tree_revision.to_string(),
+                    ],
+                )
+                .await
+                .map_err(undo_database_error)?;
+        }
+    }
+    Ok(())
+}
+
+fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> StructureCommitBinding<'_> {
+    StructureCommitBinding {
+        prior_manuscript_tree_revision: frontier.resulting_manuscript_tree_revision,
+        resulting_manuscript_tree_revision: frontier.prior_manuscript_tree_revision,
+        identity: match &frontier.identity {
+            ObservedStructureIdentity::Volume { volume_id } => {
+                StructureAffectedIdentity::Volume { volume_id }
+            }
+            ObservedStructureIdentity::Chapter { chapter_id } => {
+                StructureAffectedIdentity::Chapter { chapter_id }
+            }
+        },
+    }
 }
 
 pub(super) async fn editor_session_chapter(

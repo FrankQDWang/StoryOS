@@ -272,6 +272,13 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     assert_eq!(tree_revision, 3);
     assert_eq!(current, storyos_core::CreateChapterCurrent::SelectCreated);
     assert_eq!(order, CreateChapterPublicOrder::CanonicalSiblingOrder(1));
+    let authority = first
+        .authority
+        .clone()
+        .expect("Applied Create Chapter must write Structural Authority Settlement");
+    assert_eq!(authority.prior_manuscript_tree_revision, 2);
+    assert_eq!(authority.resulting_manuscript_tree_revision, 3);
+    assert_eq!(authority.author_action_sequence, 2);
     let replay = create_chapter(
         &store,
         &chapter_command(
@@ -287,6 +294,25 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     .await
     .unwrap();
     assert_eq!(replay, first);
+
+    let tree_after_first = get_manuscript_tree(&store, &scope)
+        .await
+        .unwrap()
+        .expect("the Project still has a Canonical Query");
+    assert_eq!(tree_after_first.tree_revision, 3);
+    assert_eq!(tree_after_first.snapshot.snapshot_id, authority.snapshot_id);
+    assert_eq!(
+        tree_after_first.snapshot.project_activity_position,
+        first.project_activity_position
+    );
+    assert_eq!(
+        tree_after_first.volumes[0].chapters,
+        vec![ChapterNode {
+            chapter_id: ChapterId::new(chapter_id.clone()),
+            title: "Chapter A".to_owned(),
+            order: 1,
+        }]
+    );
 
     let opened = open_current_chapter(&store, &scope, &ChapterId::new(chapter_id.clone()))
         .await
@@ -403,6 +429,15 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         .expect("the Project still has a Canonical Query");
     assert_eq!(tree.project_scope, scope);
     assert_eq!(tree.tree_revision, 5);
+    let third_authority = third
+        .authority
+        .clone()
+        .expect("the third Chapter must write Structural Authority Settlement");
+    assert_eq!(tree.snapshot.snapshot_id, third_authority.snapshot_id);
+    assert_eq!(
+        tree.snapshot.project_activity_position,
+        third.project_activity_position
+    );
     assert_eq!(
         tree.volumes,
         vec![VolumeNode {
@@ -519,6 +554,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             reason: storyos_core::CreateChapterConflict::StaleTreeRevision,
         }
     );
+    assert_eq!(stale.authority, None);
 
     let invalid_issue = chapter_issue(&scope, "0922", CHAPTER_A_DIGEST);
     issue_project_command_challenge(&store, &invalid_issue)
@@ -544,6 +580,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             reason: storyos_core::CreateChapterRefusal::InvalidVolumeJoin,
         }
     );
+    assert_eq!(invalid.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -562,10 +599,32 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
                     (SELECT count(*) FROM storyos.domain_receipts
                       WHERE project_id = $1::text::uuid AND command_kind = 'createChapter'),
                     (SELECT count(*) FROM storyos.project_activity_event_payloads
-                      WHERE project_id = $1::text::uuid AND event_kind = 'chapter_created')
+                      WHERE project_id = $1::text::uuid AND event_kind = 'chapter_created'),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE project_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.author_action_entries
+                      WHERE project_id = $1::text::uuid AND disposition = 'forward'),
+                    (SELECT manuscript_object_id = $2::text::uuid
+                              AND prior_revision_id IS NULL
+                              AND resulting_revision_id = $3::text::uuid
+                              AND affected_chapter_id = $2::text::uuid
+                              AND affected_volume_id IS NULL
+                              AND prior_manuscript_tree_revision = 2
+                              AND resulting_manuscript_tree_revision = 3
+                       FROM storyos.authoritative_commits
+                      WHERE project_id = $1::text::uuid
+                        AND authoritative_commit_id = $4::text::uuid),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE receipt_id = $5::text::uuid)
                FROM storyos.projects
               WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
+            &[
+                &scope.project_id.as_ref(),
+                &chapter_id,
+                &authority.resulting_revision_id,
+                &authority.authoritative_commit_id,
+                &stale.ids.receipt_id,
+            ],
         )
         .await
         .unwrap();
@@ -577,9 +636,25 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             row.get::<_, i64>(3),
             row.get::<_, i64>(4),
             row.get::<_, i64>(5),
-            row.get::<_, i64>(6)
+            row.get::<_, i64>(6),
+            row.get::<_, i64>(7),
+            row.get::<_, i64>(8),
+            row.get::<_, bool>(9),
+            row.get::<_, i64>(10)
         ),
-        ("5".to_owned(), chapter_id.clone(), 3, 3, 3, 5, 3)
+        (
+            "5".to_owned(),
+            chapter_id.clone(),
+            3,
+            3,
+            3,
+            5,
+            3,
+            4,
+            4,
+            true,
+            0
+        )
     );
 
     admin
@@ -614,6 +689,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
             reason: storyos_core::CreateChapterRefusal::ArchivedProject,
         }
     );
+    assert_eq!(archived.authority, None);
     let chapters_after_refuse = admin
         .query_one(
             "SELECT count(*) FROM storyos.manuscript_objects

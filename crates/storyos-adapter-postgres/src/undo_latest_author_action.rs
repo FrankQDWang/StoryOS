@@ -67,11 +67,16 @@ pub(super) struct ObservedProseFrontier {
     current_head_revision_id: String,
 }
 
+pub(super) enum ObservedStructureIdentity {
+    Volume { volume_id: String },
+    Chapter { chapter_id: String },
+}
+
 pub(super) struct ObservedStructureFrontier {
     pub sequence: u64,
     pub prior_manuscript_tree_revision: u64,
     pub resulting_manuscript_tree_revision: u64,
-    pub affected_volume_id: String,
+    pub identity: ObservedStructureIdentity,
 }
 
 pub(super) enum UndoReceiptAuthority {
@@ -1000,8 +1005,32 @@ fn observed_frontier(
                 resulting_manuscript_tree_revision: resulting_tree
                     .parse()
                     .map_err(undo_parse_error)?,
-                affected_volume_id,
+                identity: ObservedStructureIdentity::Volume {
+                    volume_id: affected_volume_id,
+                },
             }),
+            (
+                Some(object_id),
+                Some(_resulting_revision_id),
+                None,
+                None,
+                Some(_current_head),
+                Some(prior_tree),
+                Some(resulting_tree),
+                None,
+                Some(affected_chapter_id),
+            ) if object_id == affected_chapter_id => {
+                ObservedFrontier::Structure(ObservedStructureFrontier {
+                    sequence,
+                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
+                    resulting_manuscript_tree_revision: resulting_tree
+                        .parse()
+                        .map_err(undo_parse_error)?,
+                    identity: ObservedStructureIdentity::Chapter {
+                        chapter_id: affected_chapter_id,
+                    },
+                })
+            }
             _ => ObservedFrontier::Barrier { sequence },
         },
     ))
