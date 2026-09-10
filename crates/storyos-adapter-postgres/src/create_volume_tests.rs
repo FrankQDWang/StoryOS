@@ -197,6 +197,13 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     };
     assert_eq!(tree_revision, 2);
     assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(1));
+    let authority = first
+        .authority
+        .clone()
+        .expect("Applied Create Volume must write Structural Authority Settlement");
+    assert_eq!(authority.prior_manuscript_tree_revision, 1);
+    assert_eq!(authority.resulting_manuscript_tree_revision, 2);
+    assert_eq!(authority.author_action_sequence, 1);
     let replay = create_volume(
         &store,
         &command(
@@ -216,6 +223,11 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
         .expect("the Project still has a Canonical Query");
     assert_eq!(tree.project_scope, scope);
     assert_eq!(tree.tree_revision, 2);
+    assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    assert_eq!(
+        tree.snapshot.project_activity_position,
+        first.project_activity_position
+    );
     assert_eq!(
         tree.volumes,
         vec![VolumeNode {
@@ -256,6 +268,7 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
             reason: storyos_core::CreateVolumeConflict::StaleTreeRevision,
         }
     );
+    assert_eq!(stale.authority, None);
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
@@ -269,10 +282,30 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
                     (SELECT count(*) FROM storyos.domain_receipts
                       WHERE project_id = $1::text::uuid AND command_kind = 'createVolume'),
                     (SELECT count(*) FROM storyos.project_activity_event_payloads
-                      WHERE project_id = $1::text::uuid AND event_kind = 'volume_created')
+                      WHERE project_id = $1::text::uuid AND event_kind = 'volume_created'),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE project_id = $1::text::uuid),
+                    (SELECT count(*) FROM storyos.author_action_entries
+                      WHERE project_id = $1::text::uuid AND disposition = 'forward'),
+                    (SELECT manuscript_object_id IS NULL
+                              AND prior_revision_id IS NULL
+                              AND resulting_revision_id IS NULL
+                              AND affected_volume_id = $2::text::uuid
+                              AND prior_manuscript_tree_revision = 1
+                              AND resulting_manuscript_tree_revision = 2
+                       FROM storyos.authoritative_commits
+                      WHERE project_id = $1::text::uuid
+                        AND authoritative_commit_id = $3::text::uuid),
+                    (SELECT count(*) FROM storyos.authoritative_commits
+                      WHERE receipt_id = $4::text::uuid)
                FROM storyos.projects
               WHERE project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
+            &[
+                &scope.project_id.as_ref(),
+                &volume_id,
+                &authority.authoritative_commit_id,
+                &stale.ids.receipt_id,
+            ],
         )
         .await
         .unwrap();
@@ -281,9 +314,13 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
             row.get::<_, String>(0),
             row.get::<_, i64>(1),
             row.get::<_, i64>(2),
-            row.get::<_, i64>(3)
+            row.get::<_, i64>(3),
+            row.get::<_, i64>(4),
+            row.get::<_, i64>(5),
+            row.get::<_, bool>(6),
+            row.get::<_, i64>(7)
         ),
-        ("2".to_owned(), 1, 2, 1)
+        ("2".to_owned(), 1, 2, 1, 1, 1, true, 0)
     );
 
     admin
@@ -315,6 +352,7 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
             reason: storyos_core::CreateVolumeRefusal::ArchivedProject,
         }
     );
+    assert_eq!(archived.authority, None);
     let volumes_after_refuse = admin
         .query_one(
             "SELECT count(*) FROM storyos.manuscript_objects
@@ -410,6 +448,14 @@ async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks
     };
     assert_eq!(tree_revision, 3);
     assert_eq!(order, CreateVolumePublicOrder::CanonicalSiblingOrder(2));
+    assert_eq!(
+        second
+            .authority
+            .as_ref()
+            .expect("second Applied Create Volume must write authority")
+            .author_action_sequence,
+        2
+    );
     let replay = create_volume(
         &store,
         &titled_command(

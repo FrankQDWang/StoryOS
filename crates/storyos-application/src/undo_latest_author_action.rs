@@ -38,6 +38,13 @@ pub enum UndoLatestAuthorActionSettlementEffect {
         blocks: Vec<crate::ManuscriptBlock>,
         author_undo_frontier_sequence: Option<u64>,
     },
+    CompensatedStructure {
+        source_sequence: u64,
+        author_action_sequence: u64,
+        authoritative_commit_id: String,
+        snapshot_id: String,
+        author_undo_frontier_sequence: Option<u64>,
+    },
     Conflicted {
         reason: storyos_core::UndoLatestAuthorActionConflict,
     },

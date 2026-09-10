@@ -352,8 +352,8 @@ async fn authority_history_floor_exists_without_rewriting_structure_activity() {
             "replay_generation": 1,
             "floor_matches_snapshot": true,
             "replay_generation_count": 1,
-            "commit_count": 0,
-            "author_action_count": 0,
+            "commit_count": 1,
+            "author_action_count": 1,
             "volume_created_payload": {
                 "kind": "volume_created",
                 "volume_id": volume_id,
@@ -376,65 +376,6 @@ async fn applied_structure_receipt_may_bind_empty_pair_commit_and_author_action(
     let store = PostgresProjectReader::new(runtime_url);
     let (scope, volume_id) = seed_project_with_volume(&store, "0820", "0822").await;
     let admin = open_admin().await;
-    let receipt = admin
-        .query_one(
-            "SELECT receipt_id::text, author_command_admission_id::text
-               FROM storyos.domain_receipts
-              WHERE project_id = $1::text::uuid
-                AND command_kind = 'createVolume'
-                AND result_kind = 'authoritative_applied'",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let receipt_id: String = receipt.get(0);
-    let admission_id: String = receipt.get(1);
-    let commit_id = "018f0000-0000-7001-8000-000000000823";
-    admin.batch_execute("BEGIN").await.unwrap();
-    admin
-        .execute(
-            "INSERT INTO storyos.authoritative_commits
-               (owner_user_id, project_id, authoritative_commit_id, authoritative_commit_sequence,
-                author_command_admission_id, receipt_id, receipt_result_kind,
-                prior_manuscript_tree_revision, resulting_manuscript_tree_revision,
-                affected_volume_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1,
-                     $4::text::uuid, $5::text::uuid, 'authoritative_applied',
-                     1, 2, $6::text::uuid)",
-            &[
-                &USER_A,
-                &scope.project_id.as_ref(),
-                &commit_id,
-                &admission_id,
-                &receipt_id,
-                &volume_id,
-            ],
-        )
-        .await
-        .unwrap();
-    admin
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                authoritative_commit_id, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, 1, 'forward',
-                     $3::text::uuid, $4::text::uuid, 'authoritative_applied')",
-            &[&USER_A, &scope.project_id.as_ref(), &commit_id, &receipt_id],
-        )
-        .await
-        .unwrap();
-    admin
-        .execute(
-            "UPDATE storyos.domain_receipts
-                SET authoritative_commit_ids = ARRAY[$3::text::uuid]
-              WHERE owner_user_id = $1::text::uuid
-                AND project_id = $2::text::uuid
-                AND receipt_id = $4::text::uuid",
-            &[&USER_A, &scope.project_id.as_ref(), &commit_id, &receipt_id],
-        )
-        .await
-        .unwrap();
-    admin.batch_execute("COMMIT").await.unwrap();
     let bound: serde_json::Value = serde_json::from_str(
         &admin
             .query_one(
@@ -468,16 +409,15 @@ async fn applied_structure_receipt_may_bind_empty_pair_commit_and_author_action(
                         (authoritative_commit.owner_user_id,
                          authoritative_commit.project_id,
                          authoritative_commit.receipt_id)
-                  WHERE authoritative_commit.project_id = $1::text::uuid
-                    AND authoritative_commit.authoritative_commit_id
-                      = $2::text::uuid",
-                &[&scope.project_id.as_ref(), &commit_id],
+                  WHERE authoritative_commit.project_id = $1::text::uuid",
+                &[&scope.project_id.as_ref()],
             )
             .await
             .unwrap()
             .get::<_, String>(0),
     )
     .unwrap();
+    let commit_id = bound["commit_id"].as_str().expect("commit id").to_owned();
     assert_eq!(
         bound,
         serde_json::json!({
@@ -597,7 +537,7 @@ async fn applied_create_chapter_receipt_may_bind_genesis_revision_pair() {
                 manuscript_object_id, resulting_revision_id,
                 prior_manuscript_tree_revision, resulting_manuscript_tree_revision,
                 affected_chapter_id)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1,
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 2,
                      $4::text::uuid, $5::text::uuid, 'authoritative_applied',
                      $6::text::uuid, $7::text::uuid, 2, 3, $6::text::uuid)",
             &[
@@ -617,7 +557,7 @@ async fn applied_create_chapter_receipt_may_bind_genesis_revision_pair() {
             "INSERT INTO storyos.author_action_entries
                (owner_user_id, project_id, author_action_sequence, disposition,
                 authoritative_commit_id, receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, 1, 'forward',
+             VALUES ($1::text::uuid, $2::text::uuid, 2, 'forward',
                      $3::text::uuid, $4::text::uuid, 'authoritative_applied')",
             &[&USER_A, &scope.project_id.as_ref(), &commit_id, &receipt_id],
         )
@@ -818,7 +758,7 @@ async fn applied_set_current_chapter_receipt_may_bind_author_action_without_comm
             "INSERT INTO storyos.author_action_entries
                (owner_user_id, project_id, author_action_sequence, disposition,
                 receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, 1, 'forward',
+             VALUES ($1::text::uuid, $2::text::uuid, 2, 'forward',
                      $3::text::uuid, 'authoritative_applied')",
             &[
                 &USER_A,
@@ -855,7 +795,7 @@ async fn applied_set_current_chapter_receipt_may_bind_author_action_without_comm
         bound,
         serde_json::json!({
             "command_kind": "setCurrentChapter",
-            "action_sequence": 1,
+            "action_sequence": 2,
             "action_commit_id": null,
             "receipt_commit_ids": [],
         })

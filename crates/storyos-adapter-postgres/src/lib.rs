@@ -41,6 +41,10 @@ mod archive_project_tests;
 mod create_volume_tests;
 
 #[cfg(test)]
+#[path = "create_volume_authority_tests.rs"]
+mod create_volume_authority_tests;
+
+#[cfg(test)]
 #[path = "structural_authority_schema_tests.rs"]
 mod structural_authority_schema_tests;
 
@@ -90,8 +94,10 @@ mod set_current_chapter;
 mod snapshot;
 mod storage_activation;
 mod storage_activation_proof;
+mod structural_authority_settlement;
 mod takeover;
 mod undo_latest_author_action;
+mod undo_structure;
 mod update_chapter;
 mod update_project;
 mod update_volume;

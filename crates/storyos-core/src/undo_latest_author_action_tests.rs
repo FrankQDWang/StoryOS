@@ -80,3 +80,18 @@ fn a_wrong_target_head_classifies_as_conflicted_with_zero_authority_effect() {
         }
     );
 }
+
+#[test]
+fn a_matching_structure_frontier_classifies_as_compensated_without_head_proof() {
+    let mut structure = command();
+    structure.current_author_undo_frontier = Some(AuthorUndoFrontier {
+        sequence: 1,
+        kind: AuthorUndoFrontierKind::ReversibleStructureTransition,
+    });
+    structure.expected_head_revision_id = String::new();
+    structure.current_head_revision_id = "018f0000-0000-7001-8000-000000000999".to_owned();
+    assert_eq!(
+        undo_latest_author_action(&structure),
+        UndoLatestAuthorActionResult::Compensated { source_sequence: 1 }
+    );
+}

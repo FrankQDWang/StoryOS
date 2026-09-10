@@ -1,7 +1,7 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder,
-    CreateVolumeSettlement, CreateVolumeSettlementEffect, CreateVolumeStore,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    AuthorCommandAdmissionIds, CreateVolumeAuthority, CreateVolumeCommand, CreateVolumeError,
+    CreateVolumePublicOrder, CreateVolumeSettlement, CreateVolumeSettlementEffect,
+    CreateVolumeStore, ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateVolume as CoreCreateVolume, CreateVolumeResult, ProjectLifecycle, ProjectPresence,
@@ -166,6 +166,20 @@ async fn persist_create_volume(
         CreateVolumeResult::Refused { reason } => CreateVolumeSettlementEffect::Refused { reason },
     };
     insert_create_volume_admission(client, command).await?;
+    let authority_sequences = match &effect {
+        CreateVolumeSettlementEffect::Applied { volume_id, .. } => {
+            let sequences =
+                crate::structural_authority_settlement::allocate_structure_transition_sequences(
+                    client,
+                    &command.project_scope,
+                )
+                .await
+                .map_err(CreateVolumeError::Unavailable)?;
+            Some((sequences, volume_id.clone()))
+        }
+        CreateVolumeSettlementEffect::Conflicted { .. }
+        | CreateVolumeSettlementEffect::Refused { .. } => None,
+    };
     let (result_kind, result_payload) = match &effect {
         CreateVolumeSettlementEffect::Applied {
             order: CreateVolumePublicOrder::CanonicalSiblingOrder(order),
@@ -194,6 +208,10 @@ async fn persist_create_volume(
             ("refused", format!(r#"{{"reason":"{refused}"}}"#))
         }
     };
+    let commit_ids = authority_sequences
+        .as_ref()
+        .map(|(sequences, _)| vec![sequences.authoritative_commit_id.clone()])
+        .unwrap_or_default();
     let receipt_created_at = client
         .query_one(
             "INSERT INTO storyos.domain_receipts
@@ -205,7 +223,7 @@ async fn persist_create_volume(
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, 'createVolume', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
+                     '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[], '{}'::text[], '{}'::text[],
                      '{}'::text[], $8, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -219,6 +237,7 @@ async fn persist_create_volume(
                 &command.challenge_binding.idempotency_key,
                 &result_kind,
                 &result_payload,
+                &commit_ids,
             ],
         )
         .await
@@ -241,11 +260,15 @@ async fn persist_create_volume(
         .map_err(create_volume_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let CreateVolumeSettlementEffect::Applied {
-        tree_revision,
-        volume_id,
-        order: CreateVolumePublicOrder::CanonicalSiblingOrder(order),
-    } = &effect
+    let mut authority = None;
+    if let (
+        CreateVolumeSettlementEffect::Applied {
+            tree_revision,
+            volume_id,
+            order: CreateVolumePublicOrder::CanonicalSiblingOrder(order),
+        },
+        Some((sequences, _)),
+    ) = (&effect, authority_sequences)
     {
         let updated = client
             .execute(
@@ -267,26 +290,8 @@ async fn persist_create_volume(
                 std::io::Error::other("tree revision changed under FOR UPDATE"),
             )));
         }
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(create_volume_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(create_volume_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
+        project_activity_position = sequences.project_activity_position;
+        project_activity_event_id = sequences.project_activity_event_id.clone();
         let payload = serde_json::json!({
             "kind": "volume_created",
             "volume_id": volume_id,
@@ -314,6 +319,43 @@ async fn persist_create_volume(
             )
             .await
             .map_err(create_volume_database_error)?;
+        crate::structural_authority_settlement::persist_structure_commit(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.author_command_admission_id,
+            &command.ids.receipt_id,
+            crate::structural_authority_settlement::StructureCommitBinding {
+                prior_manuscript_tree_revision: command.expected_tree_revision,
+                resulting_manuscript_tree_revision: *tree_revision,
+                affected_volume_id: volume_id,
+            },
+        )
+        .await
+        .map_err(create_volume_database_error)?;
+        crate::structural_authority_settlement::persist_forward_author_action(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.receipt_id,
+        )
+        .await
+        .map_err(create_volume_database_error)?;
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            &command.project_scope,
+            &sequences.snapshot_id,
+            project_activity_position,
+        )
+        .await
+        .map_err(create_volume_database_error)?;
+        authority = Some(CreateVolumeAuthority {
+            authoritative_commit_id: sequences.authoritative_commit_id,
+            author_action_sequence: sequences.author_action_sequence,
+            snapshot_id: sequences.snapshot_id,
+            prior_manuscript_tree_revision: command.expected_tree_revision,
+            resulting_manuscript_tree_revision: *tree_revision,
+        });
     }
     client
         .execute(
@@ -336,6 +378,7 @@ async fn persist_create_volume(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        authority,
     })
 }
 
@@ -423,7 +466,12 @@ async fn read_create_volume_settlement(
                         payload.payload->>'volume_id',
                         payload.project_activity_position::text,
                         payload.project_activity_event_id::text,
-                        receipt.result_payload->>'order'
+                        receipt.result_payload->>'order',
+                        authoritative_commit.authoritative_commit_id::text,
+                        action.author_action_sequence::text,
+                        snapshot.snapshot_id::text,
+                        authoritative_commit.prior_manuscript_tree_revision::text,
+                        authoritative_commit.resulting_manuscript_tree_revision::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -439,6 +487,19 @@ async fn read_create_volume_settlement(
               LEFT JOIN storyos.project_activity_event_payloads AS payload
                      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
+                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
+                         authoritative_commit.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.project_snapshots AS snapshot
+                     ON (snapshot.owner_user_id, snapshot.project_id,
+                         snapshot.project_activity_position) =
+                        (payload.owner_user_id, payload.project_id,
+                         payload.project_activity_position)
+                    AND snapshot.snapshot_kind = 'canonical'
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -499,6 +560,34 @@ async fn read_create_volume_settlement(
             },
             _ => return Err(CreateVolumeError::BindingConflict),
         };
+        let authority = match (
+            row.get::<_, Option<String>>(11),
+            row.get::<_, Option<String>>(12),
+            row.get::<_, Option<String>>(13),
+            row.get::<_, Option<String>>(14),
+            row.get::<_, Option<String>>(15),
+        ) {
+            (
+                Some(authoritative_commit_id),
+                Some(author_action_sequence),
+                Some(snapshot_id),
+                Some(prior_manuscript_tree_revision),
+                Some(resulting_manuscript_tree_revision),
+            ) => Some(CreateVolumeAuthority {
+                authoritative_commit_id,
+                author_action_sequence: author_action_sequence
+                    .parse()
+                    .map_err(create_volume_parse_error)?,
+                snapshot_id,
+                prior_manuscript_tree_revision: prior_manuscript_tree_revision
+                    .parse()
+                    .map_err(create_volume_parse_error)?,
+                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
+                    .parse()
+                    .map_err(create_volume_parse_error)?,
+            }),
+            _ => None,
+        };
         Ok(CreateVolumeSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -513,6 +602,7 @@ async fn read_create_volume_settlement(
                 .parse::<u64>()
                 .map_err(create_volume_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
+            authority,
         })
     }
     .await;

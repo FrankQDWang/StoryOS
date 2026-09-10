@@ -99,8 +99,8 @@ pub use create_project_challenge::{
     IssueCreateProjectChallenge, issue_create_project_challenge,
 };
 pub use create_volume::{
-    CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder, CreateVolumeSettlement,
-    CreateVolumeSettlementEffect, CreateVolumeStore, create_volume,
+    CreateVolumeAuthority, CreateVolumeCommand, CreateVolumeError, CreateVolumePublicOrder,
+    CreateVolumeSettlement, CreateVolumeSettlementEffect, CreateVolumeStore, create_volume,
 };
 pub use delete_chapter::{
     DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
