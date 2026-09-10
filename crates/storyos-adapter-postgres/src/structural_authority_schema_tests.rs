@@ -1,10 +1,13 @@
 use super::*;
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, ProjectCommandChallengeBinding,
-    ProjectId, ProjectScope, UserId, create_project, create_volume, issue_create_project_challenge,
-    issue_project_command_challenge,
+    AuthorCommandAdmissionIds, ChapterId, CreateChapterCommand, CreateChapterSettlementEffect,
+    CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeCommand,
+    CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
+    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, SetCurrentChapterCommand,
+    SetCurrentChapterSettlementEffect, UserId, create_chapter, create_editor_session,
+    create_project, create_volume, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, set_current_chapter,
 };
 use tokio_postgres::NoTls;
 
@@ -14,6 +17,12 @@ const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const TITLE: &str = "Volume A";
 const COMMAND_BYTES: &[u8] = br#"{"expected_tree_revision":"1","title":"Volume A"}"#;
 const COMMAND_DIGEST: &str = "sha256:storyos.command.createVolume.jcs.v1:2b02ae40bec5ed5ccf7ec412519d2178186dc80e3829100851514a6f3422cedf";
+const CHAPTER_A_BYTES: &[u8] = br#"{"expected_tree_revision":"2","title":"Chapter A"}"#;
+const CHAPTER_A_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:fdee6f3020b94d08f6e75dfab8be7caf86d1a8c84c521254b03e6a45153a1de2";
+const CHAPTER_B_BYTES: &[u8] = br#"{"expected_tree_revision":"3","title":"Chapter B"}"#;
+const CHAPTER_B_DIGEST: &str = "sha256:storyos.command.createChapter.jcs.v1:23a99998cce1f35b113794d41235dae8fae7d8ae9f234ba67161a2f9e8e86e65";
+const CURRENT_BYTES: &[u8] = b"{}";
+const CURRENT_DIGEST: &str = "sha256:storyos.command.setCurrentChapter.jcs.v1:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a";
 
 fn create_project_issue(
     idempotency_key: &str,
@@ -123,6 +132,69 @@ fn volume_command(
     }
 }
 
+fn command_issue(
+    scope: &ProjectScope,
+    idempotency_suffix: &str,
+    method: &str,
+    route: &str,
+    schema: &str,
+    kind: &str,
+    digest: &str,
+) -> IssueProjectCommandChallenge {
+    IssueProjectCommandChallenge {
+        binding: ProjectCommandChallengeBinding {
+            project_scope: scope.clone(),
+            client_session_binding_digest: "sha256:session-a".to_owned(),
+            client_session_generation: 1,
+            client_contract_revision: CLIENT.to_owned(),
+            security_policy_revision: SECURITY.to_owned(),
+            limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
+            challenge_rate_policy_revision:
+                "storyos.project-command-challenge-rate.fixed-window.v1".to_owned(),
+            method: method.to_owned(),
+            route_template: route.to_owned(),
+            command_schema: schema.to_owned(),
+            command_kind: kind.to_owned(),
+            canonical_command_digest: digest.to_owned(),
+            idempotency_key: format!("018f0000-0000-7001-8000-00000000{idempotency_suffix}"),
+        },
+        nonce: format!("opaque-nonce-{idempotency_suffix}"),
+        nonce_digest: format!("sha256:nonce-{idempotency_suffix}"),
+    }
+}
+
+fn chapter_command(
+    binding: ProjectCommandChallengeBinding,
+    nonce_digest: &str,
+    ids_suffix: &str,
+    volume_id: &str,
+    title: &str,
+    expected_tree_revision: u64,
+    bytes: &[u8],
+) -> CreateChapterCommand {
+    CreateChapterCommand {
+        project_scope: binding.project_scope.clone(),
+        client_binding: EditorClientBinding {
+            binding_ref: binding.client_session_binding_digest.clone(),
+            session_generation: binding.client_session_generation,
+            client_contract_revision: binding.client_contract_revision.clone(),
+            security_policy_revision: binding.security_policy_revision.clone(),
+        },
+        challenge_binding: binding,
+        nonce_digest: nonce_digest.to_owned(),
+        canonical_command_bytes: bytes.to_vec(),
+        correlation_id: format!("018f0000-0000-7001-8000-00000000{ids_suffix}"),
+        volume_id: volume_id.to_owned(),
+        title: title.to_owned(),
+        expected_tree_revision,
+        ids: AuthorCommandAdmissionIds {
+            command_id: format!("018f0000-0000-7001-8000-00000001{ids_suffix}"),
+            author_command_admission_id: format!("018f0000-0000-7001-8000-00000002{ids_suffix}"),
+            receipt_id: format!("018f0000-0000-7001-8000-00000003{ids_suffix}"),
+        },
+    }
+}
+
 async fn open_admin() -> tokio_postgres::Client {
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
@@ -175,6 +247,48 @@ async fn seed_project_with_volume(
         panic!("Create Volume on an empty active Project must apply");
     };
     (scope, volume_id)
+}
+
+async fn seed_chapter(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    volume_id: &str,
+    suffix: &str,
+    title: &str,
+    expected_tree_revision: u64,
+    bytes: &[u8],
+    digest: &str,
+) -> String {
+    let issue = command_issue(
+        scope,
+        suffix,
+        "POST",
+        "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+        "storyos.command.create-chapter.request.v1",
+        "createChapter",
+        digest,
+    );
+    issue_project_command_challenge(store, &issue)
+        .await
+        .unwrap();
+    let created = create_chapter(
+        store,
+        &chapter_command(
+            issue.binding,
+            &issue.nonce_digest,
+            suffix,
+            volume_id,
+            title,
+            expected_tree_revision,
+            bytes,
+        ),
+    )
+    .await
+    .unwrap();
+    let CreateChapterSettlementEffect::Applied { chapter_id, .. } = created.effect else {
+        panic!("Create Chapter on an active Volume must apply");
+    };
+    chapter_id
 }
 
 #[tokio::test]
@@ -420,6 +534,336 @@ async fn unsuccessful_structure_receipt_still_rejects_commit_ids() {
         )
         .await
         .expect_err("a conflicted structure Receipt must keep zero Commit identities");
+    assert_eq!(
+        error.code(),
+        Some(&tokio_postgres::error::SqlState::CHECK_VIOLATION)
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn applied_create_chapter_receipt_may_bind_genesis_revision_pair() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let (scope, volume_id) = seed_project_with_volume(&store, "0840", "0842").await;
+    let chapter_id = seed_chapter(
+        &store,
+        &scope,
+        &volume_id,
+        "0844",
+        "Chapter A",
+        /*expected_tree_revision*/ 2,
+        CHAPTER_A_BYTES,
+        CHAPTER_A_DIGEST,
+    )
+    .await;
+    let admin = open_admin().await;
+    let receipt = admin
+        .query_one(
+            "SELECT receipt.receipt_id::text,
+                    receipt.author_command_admission_id::text,
+                    head.current_revision_id::text
+               FROM storyos.domain_receipts AS receipt
+               JOIN storyos.authoritative_heads AS head
+                 ON (head.owner_user_id, head.project_id, head.manuscript_object_id) =
+                    (receipt.owner_user_id, receipt.project_id, $2::text::uuid)
+              WHERE receipt.project_id = $1::text::uuid
+                AND receipt.command_kind = 'createChapter'
+                AND receipt.result_kind = 'authoritative_applied'",
+            &[&scope.project_id.as_ref(), &chapter_id],
+        )
+        .await
+        .unwrap();
+    let receipt_id: String = receipt.get(0);
+    let admission_id: String = receipt.get(1);
+    let revision_id: String = receipt.get(2);
+    let commit_id = "018f0000-0000-7001-8000-000000000845";
+    admin.batch_execute("BEGIN").await.unwrap();
+    admin
+        .execute(
+            "INSERT INTO storyos.authoritative_commits
+               (owner_user_id, project_id, authoritative_commit_id, authoritative_commit_sequence,
+                author_command_admission_id, receipt_id, receipt_result_kind,
+                manuscript_object_id, resulting_revision_id,
+                prior_manuscript_tree_revision, resulting_manuscript_tree_revision,
+                affected_chapter_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, 1,
+                     $4::text::uuid, $5::text::uuid, 'authoritative_applied',
+                     $6::text::uuid, $7::text::uuid, 2, 3, $6::text::uuid)",
+            &[
+                &USER_A,
+                &scope.project_id.as_ref(),
+                &commit_id,
+                &admission_id,
+                &receipt_id,
+                &chapter_id,
+                &revision_id,
+            ],
+        )
+        .await
+        .unwrap();
+    admin
+        .execute(
+            "INSERT INTO storyos.author_action_entries
+               (owner_user_id, project_id, author_action_sequence, disposition,
+                authoritative_commit_id, receipt_id, receipt_result_kind)
+             VALUES ($1::text::uuid, $2::text::uuid, 1, 'forward',
+                     $3::text::uuid, $4::text::uuid, 'authoritative_applied')",
+            &[&USER_A, &scope.project_id.as_ref(), &commit_id, &receipt_id],
+        )
+        .await
+        .unwrap();
+    admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET authoritative_commit_ids = ARRAY[$3::text::uuid]
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND receipt_id = $4::text::uuid",
+            &[&USER_A, &scope.project_id.as_ref(), &commit_id, &receipt_id],
+        )
+        .await
+        .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    let bound: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'commit_id', authoritative_commit.authoritative_commit_id,
+                          'prior_tree',
+                            authoritative_commit.prior_manuscript_tree_revision,
+                          'resulting_tree',
+                            authoritative_commit.resulting_manuscript_tree_revision,
+                          'affected_chapter_id',
+                            authoritative_commit.affected_chapter_id,
+                          'manuscript_object_id',
+                            authoritative_commit.manuscript_object_id,
+                          'prior_revision_id',
+                            authoritative_commit.prior_revision_id,
+                          'resulting_revision_id',
+                            authoritative_commit.resulting_revision_id,
+                          'action_commit_id', action.authoritative_commit_id,
+                          'receipt_commit_ids', receipt.authoritative_commit_ids
+                        )::text
+                   FROM storyos.authoritative_commits AS authoritative_commit
+                   JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id,
+                         action.authoritative_commit_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.authoritative_commit_id)
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id,
+                         receipt.receipt_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.receipt_id)
+                  WHERE authoritative_commit.project_id = $1::text::uuid
+                    AND authoritative_commit.authoritative_commit_id
+                      = $2::text::uuid",
+                &[&scope.project_id.as_ref(), &commit_id],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
+    assert_eq!(
+        bound,
+        serde_json::json!({
+            "commit_id": commit_id,
+            "prior_tree": 2,
+            "resulting_tree": 3,
+            "affected_chapter_id": chapter_id,
+            "manuscript_object_id": chapter_id,
+            "prior_revision_id": null,
+            "resulting_revision_id": revision_id,
+            "action_commit_id": commit_id,
+            "receipt_commit_ids": [commit_id],
+        })
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn applied_set_current_chapter_receipt_may_bind_author_action_without_commit() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let (scope, volume_id) = seed_project_with_volume(&store, "0850", "0852").await;
+    let chapter_a = seed_chapter(
+        &store,
+        &scope,
+        &volume_id,
+        "0854",
+        "Chapter A",
+        /*expected_tree_revision*/ 2,
+        CHAPTER_A_BYTES,
+        CHAPTER_A_DIGEST,
+    )
+    .await;
+    let chapter_b = seed_chapter(
+        &store,
+        &scope,
+        &volume_id,
+        "0856",
+        "Chapter B",
+        /*expected_tree_revision*/ 3,
+        CHAPTER_B_BYTES,
+        CHAPTER_B_DIGEST,
+    )
+    .await;
+    let session_issue = command_issue(
+        &scope,
+        "0858",
+        "POST",
+        "/api/v1/projects/{project_id}/editor-sessions",
+        "storyos.command.create-editor-session.request.v1",
+        "createEditorSession",
+        "sha256:storyos.test:0858",
+    );
+    issue_project_command_challenge(&store, &session_issue)
+        .await
+        .unwrap();
+    let editor_session_id = "018f0000-0000-7001-8000-000000000859";
+    create_editor_session(
+        &store,
+        &OpenEditorSession {
+            project_scope: scope.clone(),
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            snapshot_id: "018f0000-0000-7001-8000-00000000085a".to_owned(),
+            client_binding: EditorClientBinding {
+                binding_ref: session_issue.binding.client_session_binding_digest.clone(),
+                session_generation: session_issue.binding.client_session_generation,
+                client_contract_revision: session_issue.binding.client_contract_revision.clone(),
+                security_policy_revision: session_issue.binding.security_policy_revision.clone(),
+            },
+            challenge_binding: session_issue.binding,
+            nonce_digest: session_issue.nonce_digest,
+        },
+    )
+    .await
+    .unwrap();
+    let OpenChapter::Found(opened_b) =
+        open_chapter(&store, &scope, &ChapterId::new(chapter_b.clone()))
+            .await
+            .unwrap()
+    else {
+        panic!("Chapter B must open");
+    };
+    let switch_issue = command_issue(
+        &scope,
+        "085b",
+        "PUT",
+        "/api/v1/projects/{project_id}/current-chapter",
+        "storyos.command.set-current-chapter.request.v1",
+        "setCurrentChapter",
+        CURRENT_DIGEST,
+    );
+    issue_project_command_challenge(&store, &switch_issue)
+        .await
+        .unwrap();
+    let switched = set_current_chapter(
+        &store,
+        &SetCurrentChapterCommand {
+            project_scope: switch_issue.binding.project_scope.clone(),
+            client_binding: EditorClientBinding {
+                binding_ref: switch_issue.binding.client_session_binding_digest.clone(),
+                session_generation: switch_issue.binding.client_session_generation,
+                client_contract_revision: switch_issue.binding.client_contract_revision.clone(),
+                security_policy_revision: switch_issue.binding.security_policy_revision.clone(),
+            },
+            challenge_binding: switch_issue.binding.clone(),
+            nonce_digest: switch_issue.nonce_digest.clone(),
+            canonical_command_bytes: CURRENT_BYTES.to_vec(),
+            correlation_id: "018f0000-0000-7001-8000-00000000085c".to_owned(),
+            ids: AuthorCommandAdmissionIds {
+                command_id: "018f0000-0000-7001-8000-00000001085c".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-00000002085c".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-00000003085c".to_owned(),
+            },
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            chapter_id: chapter_b.clone(),
+            expected_current_chapter_id: chapter_a,
+            expected_target_revision_id: opened_b.chapter.revision_id.as_ref().to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    assert!(matches!(
+        switched.effect,
+        SetCurrentChapterSettlementEffect::Applied { .. }
+    ));
+    let admin = open_admin().await;
+    admin.batch_execute("BEGIN").await.unwrap();
+    admin
+        .execute(
+            "INSERT INTO storyos.author_action_entries
+               (owner_user_id, project_id, author_action_sequence, disposition,
+                receipt_id, receipt_result_kind)
+             VALUES ($1::text::uuid, $2::text::uuid, 1, 'forward',
+                     $3::text::uuid, 'authoritative_applied')",
+            &[
+                &USER_A,
+                &scope.project_id.as_ref(),
+                &switched.ids.receipt_id,
+            ],
+        )
+        .await
+        .unwrap();
+    admin.batch_execute("COMMIT").await.unwrap();
+    let bound: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'command_kind', receipt.command_kind,
+                          'action_sequence', action.author_action_sequence,
+                          'action_commit_id', action.authoritative_commit_id,
+                          'receipt_commit_ids', receipt.authoritative_commit_ids
+                        )::text
+                   FROM storyos.domain_receipts AS receipt
+                   JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+                  WHERE receipt.project_id = $1::text::uuid
+                    AND receipt.receipt_id = $2::text::uuid",
+                &[&scope.project_id.as_ref(), &switched.ids.receipt_id],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
+    assert_eq!(
+        bound,
+        serde_json::json!({
+            "command_kind": "setCurrentChapter",
+            "action_sequence": 1,
+            "action_commit_id": null,
+            "receipt_commit_ids": [],
+        })
+    );
+    let error = admin
+        .execute(
+            "UPDATE storyos.domain_receipts
+                SET authoritative_commit_ids = ARRAY[$3::text::uuid]
+              WHERE project_id = $1::text::uuid
+                AND receipt_id = $2::text::uuid",
+            &[
+                &scope.project_id.as_ref(),
+                &switched.ids.receipt_id,
+                &"018f0000-0000-7001-8000-00000000085d",
+            ],
+        )
+        .await
+        .expect_err("Applied setCurrentChapter must keep zero Commit identities");
     assert_eq!(
         error.code(),
         Some(&tokio_postgres::error::SqlState::CHECK_VIOLATION)

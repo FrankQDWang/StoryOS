@@ -31,8 +31,19 @@ ALTER TABLE storyos.authoritative_commits
         OR (manuscript_object_id IS NOT NULL
           AND prior_revision_id IS NOT NULL
           AND resulting_revision_id IS NOT NULL)
+        OR (manuscript_object_id IS NOT NULL
+          AND prior_revision_id IS NULL
+          AND resulting_revision_id IS NOT NULL
+          AND affected_chapter_id IS NOT NULL
+          AND manuscript_object_id = affected_chapter_id)
       ))
   ) IS TRUE);
+CREATE INDEX authoritative_commits_affected_volume_fk_idx
+  ON storyos.authoritative_commits
+    (owner_user_id, project_id, affected_volume_id);
+CREATE INDEX authoritative_commits_affected_chapter_fk_idx
+  ON storyos.authoritative_commits
+    (owner_user_id, project_id, affected_chapter_id);
 
 ALTER TABLE storyos.author_action_entries
   ALTER COLUMN authoritative_commit_id DROP NOT NULL;
@@ -140,6 +151,14 @@ FOR EACH ROW EXECUTE FUNCTION storyos.ensure_authority_history_floor();
 RESET ROLE;
 
 ALTER TABLE storyos.authoritative_commits
+  ADD CONSTRAINT authoritative_commits_affected_volume_fk
+  FOREIGN KEY (owner_user_id, project_id, affected_volume_id)
+    REFERENCES storyos.manuscript_objects
+      (owner_user_id, project_id, manuscript_object_id) MATCH SIMPLE,
+  ADD CONSTRAINT authoritative_commits_affected_chapter_fk
+  FOREIGN KEY (owner_user_id, project_id, affected_chapter_id)
+    REFERENCES storyos.manuscript_objects
+      (owner_user_id, project_id, manuscript_object_id) MATCH SIMPLE,
   ADD CONSTRAINT authoritative_commits_prior_revision_fk
   FOREIGN KEY (owner_user_id, project_id, manuscript_object_id, prior_revision_id)
     REFERENCES storyos.authoritative_revisions
@@ -872,13 +891,16 @@ BEGIN
        AND payload.project_id = scoped_project_id
        AND payload.receipt_id = scoped_receipt_id;
     IF scoped_result_kind = 'authoritative_applied' THEN
-      IF (activity_count, action_count, commit_count, revision_envelope_count,
-          payload_count, archival_count)
-           <> (0, 0, 0, 0, 1, 0)
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR commit_count <> 0
+         OR revision_envelope_count <> 0
+         OR action_count NOT IN (0, 1)
          OR payload_event_kind IS DISTINCT FROM 'current_chapter_set' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'setCurrentChapter applied requires one current-chapter-set Activity and zero manuscript authority';
+          MESSAGE = 'setCurrentChapter applied requires one current-chapter-set Activity, no Commit, and at most one Author Action';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)
