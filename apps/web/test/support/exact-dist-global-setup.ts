@@ -96,7 +96,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           applyAuthorEdit: 3, takeOverProjectWriter: 1 },
         session_count: 2,
         writer_generations: ["1", "2"],
-        author_action_count: 3,
+        author_action_count: 5,
         manuscript_body: "Saved by the new production writer.",
       },
       receipt_count: 4,

@@ -1,7 +1,7 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
-    CreateChapterSettlement, CreateChapterSettlementEffect, CreateChapterStore,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    AuthorCommandAdmissionIds, CreateChapterAuthority, CreateChapterCommand, CreateChapterError,
+    CreateChapterPublicOrder, CreateChapterSettlement, CreateChapterSettlementEffect,
+    CreateChapterStore, ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateChapter as CoreCreateChapter, CreateChapterCurrent, CreateChapterOpen,
@@ -186,6 +186,20 @@ async fn persist_create_chapter(
         }
     };
     insert_create_chapter_admission(client, command).await?;
+    let authority_sequences = match &effect {
+        CreateChapterSettlementEffect::Applied { .. } => {
+            let sequences =
+                crate::structural_authority_settlement::allocate_structure_transition_sequences(
+                    client,
+                    &command.project_scope,
+                )
+                .await
+                .map_err(CreateChapterError::Unavailable)?;
+            Some(sequences)
+        }
+        CreateChapterSettlementEffect::Conflicted { .. }
+        | CreateChapterSettlementEffect::Refused { .. } => None,
+    };
     let (result_kind, result_payload) = match &effect {
         CreateChapterSettlementEffect::Applied {
             order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
@@ -215,6 +229,10 @@ async fn persist_create_chapter(
             ("refused", format!(r#"{{"reason":"{refused}"}}"#))
         }
     };
+    let commit_ids = authority_sequences
+        .as_ref()
+        .map(|sequences| vec![sequences.authoritative_commit_id.clone()])
+        .unwrap_or_default();
     let receipt_created_at = client
         .query_one(
             "INSERT INTO storyos.domain_receipts
@@ -226,7 +244,7 @@ async fn persist_create_chapter(
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, 'createChapter', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
+                     '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[], '{}'::text[], '{}'::text[],
                      '{}'::text[], $8, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -240,6 +258,7 @@ async fn persist_create_chapter(
                 &command.challenge_binding.idempotency_key,
                 &result_kind,
                 &result_payload,
+                &commit_ids,
             ],
         )
         .await
@@ -262,35 +281,21 @@ async fn persist_create_chapter(
         .map_err(create_chapter_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let CreateChapterSettlementEffect::Applied {
-        tree_revision,
-        chapter_id,
-        current,
-        order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
-        ..
-    } = &effect
+    let mut authority = None;
+    if let (
+        CreateChapterSettlementEffect::Applied {
+            tree_revision,
+            chapter_id,
+            current,
+            order: CreateChapterPublicOrder::CanonicalSiblingOrder(order),
+        },
+        Some(sequences),
+    ) = (&effect, authority_sequences)
     {
-        persist_created_chapter(client, command, tree_revision, chapter_id, current).await?;
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(create_chapter_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(create_chapter_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
+        let resulting_revision_id =
+            persist_created_chapter(client, command, tree_revision, chapter_id, current).await?;
+        project_activity_position = sequences.project_activity_position;
+        project_activity_event_id = sequences.project_activity_event_id.clone();
         let resulting_current = client
             .query_one(
                 "SELECT current_chapter_id::text FROM storyos.projects
@@ -332,6 +337,48 @@ async fn persist_create_chapter(
             )
             .await
             .map_err(create_chapter_database_error)?;
+        crate::structural_authority_settlement::persist_structure_commit(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.author_command_admission_id,
+            &command.ids.receipt_id,
+            crate::structural_authority_settlement::StructureCommitBinding {
+                prior_manuscript_tree_revision: command.expected_tree_revision,
+                resulting_manuscript_tree_revision: *tree_revision,
+                identity:
+                    crate::structural_authority_settlement::StructureAffectedIdentity::ChapterInitialRevision {
+                        chapter_id,
+                        resulting_revision_id: &resulting_revision_id,
+                    },
+            },
+        )
+        .await
+        .map_err(create_chapter_database_error)?;
+        crate::structural_authority_settlement::persist_forward_author_action(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.receipt_id,
+        )
+        .await
+        .map_err(create_chapter_database_error)?;
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            &command.project_scope,
+            &sequences.snapshot_id,
+            project_activity_position,
+        )
+        .await
+        .map_err(create_chapter_database_error)?;
+        authority = Some(CreateChapterAuthority {
+            authoritative_commit_id: sequences.authoritative_commit_id,
+            author_action_sequence: sequences.author_action_sequence,
+            snapshot_id: sequences.snapshot_id,
+            prior_manuscript_tree_revision: command.expected_tree_revision,
+            resulting_manuscript_tree_revision: *tree_revision,
+            resulting_revision_id,
+        });
     }
     client
         .execute(
@@ -354,6 +401,7 @@ async fn persist_create_chapter(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        authority,
     })
 }
 
@@ -389,7 +437,13 @@ async fn read_create_chapter_settlement(
                         payload.payload->>'order',
                         payload.project_activity_position::text,
                         payload.project_activity_event_id::text,
-                        receipt.result_payload->>'order'
+                        receipt.result_payload->>'order',
+                        authoritative_commit.authoritative_commit_id::text,
+                        action.author_action_sequence::text,
+                        snapshot.snapshot_id::text,
+                        authoritative_commit.prior_manuscript_tree_revision::text,
+                        authoritative_commit.resulting_manuscript_tree_revision::text,
+                        authoritative_commit.resulting_revision_id::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -405,6 +459,19 @@ async fn read_create_chapter_settlement(
               LEFT JOIN storyos.project_activity_event_payloads AS payload
                      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
+                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
+                         authoritative_commit.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.project_snapshots AS snapshot
+                     ON (snapshot.owner_user_id, snapshot.project_id,
+                         snapshot.project_activity_position) =
+                        (payload.owner_user_id, payload.project_id,
+                         payload.project_activity_position)
+                    AND snapshot.snapshot_kind = 'canonical'
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -481,6 +548,37 @@ async fn read_create_chapter_settlement(
             },
             _ => return Err(CreateChapterError::BindingConflict),
         };
+        let authority = match (
+            row.get::<_, Option<String>>(13),
+            row.get::<_, Option<String>>(14),
+            row.get::<_, Option<String>>(15),
+            row.get::<_, Option<String>>(16),
+            row.get::<_, Option<String>>(17),
+            row.get::<_, Option<String>>(18),
+        ) {
+            (
+                Some(authoritative_commit_id),
+                Some(author_action_sequence),
+                Some(snapshot_id),
+                Some(prior_manuscript_tree_revision),
+                Some(resulting_manuscript_tree_revision),
+                Some(resulting_revision_id),
+            ) => Some(CreateChapterAuthority {
+                authoritative_commit_id,
+                author_action_sequence: author_action_sequence
+                    .parse()
+                    .map_err(create_chapter_parse_error)?,
+                snapshot_id,
+                prior_manuscript_tree_revision: prior_manuscript_tree_revision
+                    .parse()
+                    .map_err(create_chapter_parse_error)?,
+                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
+                    .parse()
+                    .map_err(create_chapter_parse_error)?,
+                resulting_revision_id,
+            }),
+            _ => None,
+        };
         Ok(CreateChapterSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -495,6 +593,7 @@ async fn read_create_chapter_settlement(
                 .parse::<u64>()
                 .map_err(create_chapter_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(11).unwrap_or_default(),
+            authority,
         })
     }
     .await;

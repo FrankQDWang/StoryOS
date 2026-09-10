@@ -53,6 +53,10 @@ mod structural_authority_schema_tests;
 mod create_chapter_tests;
 
 #[cfg(test)]
+#[path = "create_chapter_authority_tests.rs"]
+mod create_chapter_authority_tests;
+
+#[cfg(test)]
 #[path = "update_volume_tests.rs"]
 mod update_volume_tests;
 

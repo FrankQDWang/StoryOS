@@ -11,10 +11,23 @@ pub(crate) struct StructureTransitionSequences {
     pub snapshot_id: String,
 }
 
+pub(crate) enum StructureAffectedIdentity<'a> {
+    Volume {
+        volume_id: &'a str,
+    },
+    Chapter {
+        chapter_id: &'a str,
+    },
+    ChapterInitialRevision {
+        chapter_id: &'a str,
+        resulting_revision_id: &'a str,
+    },
+}
+
 pub(crate) struct StructureCommitBinding<'a> {
     pub prior_manuscript_tree_revision: u64,
     pub resulting_manuscript_tree_revision: u64,
-    pub affected_volume_id: &'a str,
+    pub identity: StructureAffectedIdentity<'a>,
 }
 
 pub(crate) async fn allocate_structure_transition_sequences(
@@ -56,16 +69,78 @@ pub(crate) async fn persist_structure_commit(
     receipt_id: &str,
     binding: StructureCommitBinding<'_>,
 ) -> Result<(), tokio_postgres::Error> {
+    match &binding.identity {
+        StructureAffectedIdentity::Volume { .. } | StructureAffectedIdentity::Chapter { .. } => {
+            persist_empty_pair_structure_commit(
+                client,
+                scope,
+                sequences,
+                admission_id,
+                receipt_id,
+                &binding,
+            )
+            .await?;
+        }
+        StructureAffectedIdentity::ChapterInitialRevision {
+            chapter_id,
+            resulting_revision_id,
+        } => {
+            client
+                .execute(
+                    "INSERT INTO storyos.authoritative_commits
+                       (owner_user_id, project_id, authoritative_commit_id,
+                        authoritative_commit_sequence, author_command_admission_id, receipt_id,
+                        receipt_result_kind, prior_manuscript_tree_revision,
+                        resulting_manuscript_tree_revision, affected_chapter_id,
+                        manuscript_object_id, resulting_revision_id)
+                     VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::numeric,
+                             $5::text::uuid, $6::text::uuid, 'authoritative_applied',
+                             $7::text::numeric, $8::text::numeric, $9::text::uuid,
+                             $9::text::uuid, $10::text::uuid)",
+                    &[
+                        &scope.owner_user_id.as_ref(),
+                        &scope.project_id.as_ref(),
+                        &sequences.authoritative_commit_id,
+                        &sequences.authoritative_commit_sequence.to_string(),
+                        &admission_id,
+                        &receipt_id,
+                        &binding.prior_manuscript_tree_revision.to_string(),
+                        &binding.resulting_manuscript_tree_revision.to_string(),
+                        &chapter_id,
+                        &resulting_revision_id,
+                    ],
+                )
+                .await?;
+        }
+    }
+    Ok(())
+}
+
+async fn persist_empty_pair_structure_commit(
+    client: &Client,
+    scope: &ProjectScope,
+    sequences: &StructureTransitionSequences,
+    admission_id: &str,
+    receipt_id: &str,
+    binding: &StructureCommitBinding<'_>,
+) -> Result<(), tokio_postgres::Error> {
+    let (affected_volume_id, affected_chapter_id) = match binding.identity {
+        StructureAffectedIdentity::Volume { volume_id } => (Some(volume_id), None),
+        StructureAffectedIdentity::Chapter { chapter_id } => (None, Some(chapter_id)),
+        StructureAffectedIdentity::ChapterInitialRevision { .. } => {
+            unreachable!("initial Chapter Revision uses the genesis Commit insert")
+        }
+    };
     client
         .execute(
             "INSERT INTO storyos.authoritative_commits
-               (owner_user_id, project_id, authoritative_commit_id, authoritative_commit_sequence,
-                author_command_admission_id, receipt_id, receipt_result_kind,
-                prior_manuscript_tree_revision, resulting_manuscript_tree_revision,
-                affected_volume_id)
+               (owner_user_id, project_id, authoritative_commit_id,
+                authoritative_commit_sequence, author_command_admission_id, receipt_id,
+                receipt_result_kind, prior_manuscript_tree_revision,
+                resulting_manuscript_tree_revision, affected_volume_id, affected_chapter_id)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::numeric,
                      $5::text::uuid, $6::text::uuid, 'authoritative_applied',
-                     $7::text::numeric, $8::text::numeric, $9::text::uuid)",
+                     $7::text::numeric, $8::text::numeric, $9::text::uuid, $10::text::uuid)",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -75,7 +150,8 @@ pub(crate) async fn persist_structure_commit(
                 &receipt_id,
                 &binding.prior_manuscript_tree_revision.to_string(),
                 &binding.resulting_manuscript_tree_revision.to_string(),
-                &binding.affected_volume_id,
+                &affected_volume_id,
+                &affected_chapter_id,
             ],
         )
         .await?;

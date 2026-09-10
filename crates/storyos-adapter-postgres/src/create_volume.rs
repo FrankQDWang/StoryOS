@@ -328,7 +328,10 @@ async fn persist_create_volume(
             crate::structural_authority_settlement::StructureCommitBinding {
                 prior_manuscript_tree_revision: command.expected_tree_revision,
                 resulting_manuscript_tree_revision: *tree_revision,
-                affected_volume_id: volume_id,
+                identity:
+                    crate::structural_authority_settlement::StructureAffectedIdentity::Volume {
+                        volume_id,
+                    },
             },
         )
         .await

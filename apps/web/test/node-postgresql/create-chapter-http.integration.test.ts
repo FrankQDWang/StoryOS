@@ -337,6 +337,9 @@ test("createChapter creates three named Chapters, keeps the first current, and f
     assert.equal(applied.created.effect.volume_id, volumeId);
     assert.match(applied.created.effect.chapter_id, UUID_V7);
     assert.equal(applied.created.effect.current_chapter_id, applied.created.effect.chapter_id);
+    assert.equal(applied.created.receipt.authoritative_commit_ids.length, 1);
+    assert.match(applied.created.receipt.authoritative_commit_ids[0] ?? "", UUID_V7);
+    assert.equal(applied.created.receipt.author_action_sequence, "2");
     assert.equal(applied.created.project.open.kind, "current_chapter");
     if (applied.created.project.open.kind !== "current_chapter") {
       throw new Error("the first Chapter must select current");
@@ -362,6 +365,11 @@ test("createChapter creates three named Chapters, keeps the first current, and f
     });
     assert.equal(replay.command_id, applied.created.command_id);
     assert.equal(replay.receipt.receipt_id, applied.created.receipt.receipt_id);
+    assert.deepEqual(
+      replay.receipt.authoritative_commit_ids,
+      applied.created.receipt.authoritative_commit_ids,
+    );
+    assert.equal(replay.receipt.author_action_sequence, "2");
 
     const chapterB = await postChapter(
       baseUrl,
@@ -477,6 +485,8 @@ test("createChapter creates three named Chapters, keeps the first current, and f
       throw new Error("stale Create Chapter must conflict");
     }
     assert.equal(stale.created.effect.reason, "stale_tree_revision");
+    assert.deepEqual(stale.created.receipt.authoritative_commit_ids, []);
+    assert.equal(stale.created.receipt.author_action_sequence, null);
 
     const invalidJoin = await postChapter(
       baseUrl,
@@ -492,6 +502,8 @@ test("createChapter creates three named Chapters, keeps the first current, and f
       throw new Error("wrong Volume join must refuse");
     }
     assert.equal(invalidJoin.created.effect.reason, "invalid_volume_join");
+    assert.deepEqual(invalidJoin.created.receipt.authoritative_commit_ids, []);
+    assert.equal(invalidJoin.created.receipt.author_action_sequence, null);
 
     await assert.rejects(
       createChapter({
@@ -555,6 +567,8 @@ test("createChapter creates three named Chapters, keeps the first current, and f
       throw new Error("Create Chapter on an archived Project must refuse");
     }
     assert.equal(refused.created.effect.reason, "archived_project");
+    assert.deepEqual(refused.created.receipt.authoritative_commit_ids, []);
+    assert.equal(refused.created.receipt.author_action_sequence, null);
 
     const foreign = await createEmpty(
       baseUrl,
@@ -887,6 +901,8 @@ test("createChapter reports Canonical Sibling Order through removal, replay, and
     });
     assert.equal(appliedChapter(historicalB).order, "2");
     assert.equal(historicalB.receipt.receipt_id, chapterB.created.receipt.receipt_id);
+    assert.deepEqual(historicalB.receipt.authoritative_commit_ids, []);
+    assert.equal(historicalB.receipt.author_action_sequence, null);
   } finally {
     await stopRealServer(server);
   }

@@ -19,12 +19,23 @@ pub struct CreateChapterCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CreateChapterAuthority {
+    pub authoritative_commit_id: String,
+    pub author_action_sequence: u64,
+    pub snapshot_id: String,
+    pub prior_manuscript_tree_revision: u64,
+    pub resulting_manuscript_tree_revision: u64,
+    pub resulting_revision_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateChapterSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub effect: CreateChapterSettlementEffect,
     pub receipt_created_at: String,
     pub project_activity_position: u64,
     pub project_activity_event_id: String,
+    pub authority: Option<CreateChapterAuthority>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
