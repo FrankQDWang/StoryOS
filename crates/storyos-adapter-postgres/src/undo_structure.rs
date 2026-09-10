@@ -8,9 +8,10 @@ use super::structural_authority_settlement::{
     StructureAffectedIdentity, StructureCommitBinding, persist_compensation_author_action,
     persist_structure_commit,
 };
+use super::undo_frontier::{ObservedStructureFrontier, ObservedStructureIdentity};
 use super::undo_latest_author_action::{
-    ObservedStructureFrontier, ObservedStructureIdentity, UndoReceiptAuthority,
-    insert_undo_receipt, settle_idempotency, undo_database_error, undo_from_session,
+    UndoReceiptAuthority, insert_undo_receipt, settle_idempotency, undo_database_error,
+    undo_from_session,
 };
 
 pub(super) async fn persist_structure_compensation(
@@ -27,6 +28,7 @@ pub(super) async fn persist_structure_compensation(
         .await
         .map_err(UndoLatestAuthorActionError::Unavailable)?;
     restore_prior_tree(client, command, frontier).await?;
+    restore_volume_update_sibling_order(client, command, frontier).await?;
     let receipt_created_at = insert_undo_receipt(
         client,
         command,
@@ -96,7 +98,8 @@ async fn restore_prior_tree(
     frontier: &ObservedStructureFrontier,
 ) -> Result<(), UndoLatestAuthorActionError> {
     let updated = match &frontier.identity {
-        ObservedStructureIdentity::Volume { .. } => client
+        ObservedStructureIdentity::Volume { .. }
+        | ObservedStructureIdentity::VolumeUpdate { .. } => client
             .execute(
                 "UPDATE storyos.projects
                     SET tree_revision = $3::text::bigint
@@ -147,6 +150,9 @@ async fn persist_structure_removal(
 ) -> Result<(), UndoLatestAuthorActionError> {
     let decision_id = Uuid::now_v7().to_string();
     match &frontier.identity {
+        // Update Volume Compensation restores title and Canonical Sibling Order.
+        // It must not write a Volume removal decision.
+        ObservedStructureIdentity::VolumeUpdate { .. } => {}
         ObservedStructureIdentity::Volume { volume_id } => {
             client
                 .execute(
@@ -207,12 +213,122 @@ async fn persist_structure_removal(
     Ok(())
 }
 
+async fn restore_volume_update_sibling_order(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+    frontier: &ObservedStructureFrontier,
+) -> Result<(), UndoLatestAuthorActionError> {
+    let ObservedStructureIdentity::VolumeUpdate {
+        volume_id,
+        prior_title,
+        prior_order,
+    } = &frontier.identity
+    else {
+        return Ok(());
+    };
+    let volumes = client
+        .query(
+            "SELECT manuscript_object_id::text
+               FROM storyos.manuscript_objects AS volume
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND object_kind = 'volume'
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.volume_removal_decisions AS removal
+                   WHERE removal.owner_user_id = volume.owner_user_id
+                     AND removal.project_id = volume.project_id
+                     AND removal.volume_id = volume.manuscript_object_id
+                )
+              ORDER BY tree_order
+              FOR UPDATE",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    let ordered_ids = volumes
+        .iter()
+        .map(|volume| volume.get::<_, String>(0))
+        .collect::<Vec<_>>();
+    let Some(current_index) = ordered_ids.iter().position(|id| id == volume_id) else {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("updated Volume missing under FOR UPDATE"),
+        )));
+    };
+    let current_order = current_index as u64 + 1;
+    let updated = client
+        .execute(
+            "UPDATE storyos.manuscript_objects
+                SET title = $3
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND manuscript_object_id = $4::text::uuid AND object_kind = 'volume'",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                prior_title,
+                volume_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    if updated != 1 {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("Volume row changed under FOR UPDATE"),
+        )));
+    }
+    if current_order == *prior_order {
+        return Ok(());
+    }
+    if *prior_order < 1 || *prior_order as usize > ordered_ids.len() {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("prior Canonical Sibling Order is outside the live Volume set"),
+        )));
+    }
+    let mut ids = ordered_ids;
+    let moved = ids.remove(current_index);
+    ids.insert((*prior_order - 1) as usize, moved);
+    client
+        .execute(
+            "UPDATE storyos.manuscript_objects
+                SET tree_order = tree_order + 1000000
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND object_kind = 'volume'",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    for (index, live_volume_id) in ids.iter().enumerate() {
+        let tree_order = (index + 1).to_string();
+        client
+            .execute(
+                "UPDATE storyos.manuscript_objects
+                    SET tree_order = $3::text::bigint
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND manuscript_object_id = $4::text::uuid AND object_kind = 'volume'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &tree_order,
+                    live_volume_id,
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?;
+    }
+    Ok(())
+}
+
 fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> StructureCommitBinding<'_> {
     StructureCommitBinding {
         prior_manuscript_tree_revision: frontier.resulting_manuscript_tree_revision,
         resulting_manuscript_tree_revision: frontier.prior_manuscript_tree_revision,
         identity: match &frontier.identity {
-            ObservedStructureIdentity::Volume { volume_id } => {
+            ObservedStructureIdentity::Volume { volume_id }
+            | ObservedStructureIdentity::VolumeUpdate { volume_id, .. } => {
                 StructureAffectedIdentity::Volume { volume_id }
             }
             ObservedStructureIdentity::Chapter { chapter_id } => {

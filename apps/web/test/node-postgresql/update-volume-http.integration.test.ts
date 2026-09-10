@@ -229,6 +229,9 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
     assert.equal(applied.updated.effect.order, "2");
     assert.equal(applied.updated.effect.tree_revision, "4");
     assert.match(applied.updated.effect.project_activity_position, /^[1-9][0-9]*$/);
+    assert.equal(applied.updated.receipt.authoritative_commit_ids.length, 1);
+    assert.match(applied.updated.receipt.authoritative_commit_ids[0] ?? "", UUID_V7);
+    assert.equal(applied.updated.receipt.author_action_sequence, "3");
     assert.match(volumeId, UUID_V7);
 
     const replay = await updateVolume({
@@ -242,9 +245,15 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
     });
     assert.equal(replay.command_id, applied.updated.command_id);
     assert.equal(replay.receipt.receipt_id, applied.updated.receipt.receipt_id);
+    assert.deepEqual(
+      replay.receipt.authoritative_commit_ids,
+      applied.updated.receipt.authoritative_commit_ids,
+    );
+    assert.equal(replay.receipt.author_action_sequence, "3");
 
     const tree = await getManuscriptTree({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
     assert.equal(tree.tree_revision, "4");
+    assert.equal(tree.snapshot.project_activity_position, applied.updated.effect.project_activity_position);
     assert.equal(tree.volumes.length, 2);
     assert.equal(tree.volumes[1]?.volume_id, volumeId);
     assert.equal(tree.volumes[1]?.title, "Volume B");
@@ -264,6 +273,8 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
       throw new Error("stale Update Volume must conflict");
     }
     assert.equal(stale.updated.effect.reason, "stale_tree_revision");
+    assert.deepEqual(stale.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(stale.updated.receipt.author_action_sequence, null);
     const afterStale = await getManuscriptTree({
       baseUrl,
       projectId: first.projectId,
@@ -286,6 +297,8 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
       throw new Error("unchanged Update Volume must have no effect");
     }
     assert.equal(unchanged.updated.effect.reason, "unchanged");
+    assert.deepEqual(unchanged.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(unchanged.updated.receipt.author_action_sequence, null);
 
     const invalidJoin = await patchVolume(
       baseUrl,
@@ -301,6 +314,8 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
       throw new Error("missing Volume must refuse");
     }
     assert.equal(invalidJoin.updated.effect.reason, "invalid_volume_join");
+    assert.deepEqual(invalidJoin.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(invalidJoin.updated.receipt.author_action_sequence, null);
 
     const invalidOrder = await patchVolume(
       baseUrl,

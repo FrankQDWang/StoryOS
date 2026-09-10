@@ -5,9 +5,10 @@ use storyos_application::{
     CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
     IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
     ProjectCommandChallengeBinding, ProjectId, ProjectScope, SetCurrentChapterCommand,
-    SetCurrentChapterSettlementEffect, UserId, create_chapter, create_editor_session,
-    create_project, create_volume, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, set_current_chapter,
+    SetCurrentChapterSettlementEffect, UpdateVolumeCommand, UpdateVolumeSettlementEffect, UserId,
+    VolumeId, create_chapter, create_editor_session, create_project, create_volume,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
+    set_current_chapter, update_volume,
 };
 use tokio_postgres::NoTls;
 
@@ -759,5 +760,125 @@ async fn applied_set_current_chapter_receipt_may_bind_author_action_without_comm
     assert_eq!(
         error.code(),
         Some(&tokio_postgres::error::SqlState::CHECK_VIOLATION)
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn applied_update_volume_receipt_may_bind_empty_pair_commit_and_author_action() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let (scope, volume_id) = seed_project_with_volume(&store, "0860", "0862").await;
+    let update_bytes = br#"{"expected_tree_revision":"2","order":"1","title":"Volume B"}"#;
+    let update_digest = format!(
+        "sha256:storyos.command.updateVolume.jcs.v1:{}",
+        crate::author_edit::sha256_hex(update_bytes)
+    );
+    let update_issue = command_issue(
+        &scope,
+        "0864",
+        "PATCH",
+        "/api/v1/projects/{project_id}/volumes/{volume_id}",
+        "storyos.command.update-volume.request.v1",
+        "updateVolume",
+        &update_digest,
+    );
+    issue_project_command_challenge(&store, &update_issue)
+        .await
+        .unwrap();
+    let updated = update_volume(
+        &store,
+        &UpdateVolumeCommand {
+            project_scope: scope.clone(),
+            client_binding: EditorClientBinding {
+                binding_ref: update_issue.binding.client_session_binding_digest.clone(),
+                session_generation: update_issue.binding.client_session_generation,
+                client_contract_revision: update_issue.binding.client_contract_revision.clone(),
+                security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+            },
+            challenge_binding: update_issue.binding,
+            nonce_digest: update_issue.nonce_digest,
+            canonical_command_bytes: update_bytes.to_vec(),
+            correlation_id: "018f0000-0000-7001-8000-000000000864".to_owned(),
+            volume_id: VolumeId::new(volume_id.clone()),
+            title: "Volume B".to_owned(),
+            order: 1,
+            expected_tree_revision: 2,
+            ids: AuthorCommandAdmissionIds {
+                command_id: "018f0000-0000-7001-8000-000000010864".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-000000020864".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-000000030864".to_owned(),
+            },
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        updated.effect,
+        UpdateVolumeSettlementEffect::Applied {
+            title: "Volume B".to_owned(),
+            order: 1,
+            tree_revision: 3,
+        }
+    );
+    let admin = open_admin().await;
+    let bound: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'prior_tree',
+                            authoritative_commit.prior_manuscript_tree_revision,
+                          'resulting_tree',
+                            authoritative_commit.resulting_manuscript_tree_revision,
+                          'affected_volume_id',
+                            authoritative_commit.affected_volume_id,
+                          'manuscript_object_id',
+                            authoritative_commit.manuscript_object_id,
+                          'prior_revision_id',
+                            authoritative_commit.prior_revision_id,
+                          'resulting_revision_id',
+                            authoritative_commit.resulting_revision_id,
+                          'action_commit_id', action.authoritative_commit_id,
+                          'receipt_commit_ids', receipt.authoritative_commit_ids
+                        )::text
+                   FROM storyos.authoritative_commits AS authoritative_commit
+                   JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id,
+                         action.authoritative_commit_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.authoritative_commit_id)
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id,
+                         receipt.receipt_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.receipt_id)
+                  WHERE authoritative_commit.project_id = $1::text::uuid
+                    AND receipt.command_kind = 'updateVolume'",
+                &[&scope.project_id.as_ref()],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
+    let commit_id = bound["action_commit_id"].clone();
+    assert_eq!(
+        bound,
+        serde_json::json!({
+            "prior_tree": 2,
+            "resulting_tree": 3,
+            "affected_volume_id": volume_id,
+            "manuscript_object_id": null,
+            "prior_revision_id": null,
+            "resulting_revision_id": null,
+            "action_commit_id": commit_id,
+            "receipt_commit_ids": [commit_id],
+        })
     );
 }
