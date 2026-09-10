@@ -130,6 +130,13 @@ CREATE TRIGGER project_snapshots_authority_history_floor
 AFTER INSERT ON storyos.project_snapshots
 FOR EACH ROW EXECUTE FUNCTION storyos.ensure_authority_history_floor();
 
+-- A Project that already exists receives one new canonical Snapshot at the
+-- current Activity position. The Floor points at that Snapshot so it does not
+-- claim an earlier structure Transition Snapshot. Replay Generation stays
+-- unchanged. Historical Activity is not rewritten into Commit or Author Action
+-- rows. Superuser applies the backfill because FORCE RLS would hide those rows
+-- from storyos_owner without a Project Scope setting.
+
 RESET ROLE;
 
 ALTER TABLE storyos.authoritative_commits
@@ -789,7 +796,7 @@ BEGIN
          OR payload_event_kind IS DISTINCT FROM 'volume_created' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'createVolume applied requires one volume-created Activity and zero chapter authority';
+          MESSAGE = 'createVolume applied requires one volume-created Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)
@@ -818,7 +825,7 @@ BEGIN
          OR payload_event_kind IS DISTINCT FROM 'volume_updated' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'updateVolume applied requires one volume-updated Activity and zero chapter authority';
+          MESSAGE = 'updateVolume applied requires one volume-updated Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)
@@ -847,7 +854,7 @@ BEGIN
          OR payload_event_kind IS DISTINCT FROM 'chapter_updated' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'updateChapter applied requires one chapter-updated Activity and zero Author Edit authority';
+          MESSAGE = 'updateChapter applied requires one chapter-updated Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)
@@ -900,7 +907,7 @@ BEGIN
          OR payload_event_kind IS DISTINCT FROM 'chapter_created' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'createChapter applied requires one chapter-created Activity and zero Author Edit authority';
+          MESSAGE = 'createChapter applied requires one chapter-created Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)
@@ -930,7 +937,7 @@ BEGIN
          OR payload_event_kind IS DISTINCT FROM 'chapter_deleted' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'deleteChapter applied requires one chapter-deleted Activity and zero Author Edit authority';
+          MESSAGE = 'deleteChapter applied requires one chapter-deleted Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)
@@ -959,7 +966,7 @@ BEGIN
          OR payload_event_kind IS DISTINCT FROM 'volume_deleted' THEN
         RAISE EXCEPTION USING
           ERRCODE = '23514',
-          MESSAGE = 'deleteVolume applied requires one volume-deleted Activity and zero Author Edit authority';
+          MESSAGE = 'deleteVolume applied requires one volume-deleted Activity and at most one structure Commit';
       END IF;
     ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
            payload_count, archival_count)

@@ -166,7 +166,7 @@ async fn seed_project_with_volume(
             first_issue.binding.clone(),
             &first_issue.nonce_digest,
             volume_suffix,
-            1,
+            /*expected_tree_revision*/ 1,
         ),
     )
     .await
@@ -186,46 +186,65 @@ async fn authority_history_floor_exists_without_rewriting_structure_activity() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let (scope, _) = seed_project_with_volume(&store, "0810", "0812").await;
+    let (scope, volume_id) = seed_project_with_volume(&store, "0810", "0812").await;
     let admin = open_admin().await;
-    let row = admin
-        .query_one(
-            "SELECT floor.floor_activity_position::text,
-                    floor.snapshot_id::text,
-                    snapshot.replay_generation::text,
-                    snapshot.project_activity_position::text,
-                    (SELECT count(*) FROM storyos.replay_generations
-                      WHERE project_id = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.authoritative_commits
-                      WHERE project_id = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.author_action_entries
-                      WHERE project_id = $1::text::uuid),
-                    (SELECT count(*) FROM storyos.project_activity_event_payloads
-                      WHERE project_id = $1::text::uuid AND event_kind = 'volume_created'),
-                    (SELECT payload::text FROM storyos.project_activity_event_payloads
-                      WHERE project_id = $1::text::uuid AND event_kind = 'volume_created')
-               FROM storyos.authority_history_floors AS floor
-               JOIN storyos.project_snapshots AS snapshot
-                 ON (snapshot.owner_user_id, snapshot.project_id, snapshot.snapshot_id) =
-                    (floor.owner_user_id, floor.project_id, floor.snapshot_id)
-              WHERE floor.project_id = $1::text::uuid",
-            &[&scope.project_id.as_ref()],
-        )
-        .await
-        .unwrap();
-    let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(8)).unwrap();
-    assert_eq!(row.get::<_, String>(2), "1");
-    assert_eq!(row.get::<_, i64>(4), 1);
-    assert_eq!(row.get::<_, i64>(5), 0);
-    assert_eq!(row.get::<_, i64>(6), 0);
-    assert_eq!(row.get::<_, i64>(7), 1);
-    assert_eq!(row.get::<_, String>(0), row.get::<_, String>(3));
+    let observed: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'replay_generation', snapshot.replay_generation,
+                          'floor_matches_snapshot',
+                            floor.floor_activity_position
+                              = snapshot.project_activity_position,
+                          'replay_generation_count', (
+                            SELECT count(*) FROM storyos.replay_generations
+                             WHERE project_id = $1::text::uuid
+                          ),
+                          'commit_count', (
+                            SELECT count(*) FROM storyos.authoritative_commits
+                             WHERE project_id = $1::text::uuid
+                          ),
+                          'author_action_count', (
+                            SELECT count(*) FROM storyos.author_action_entries
+                             WHERE project_id = $1::text::uuid
+                          ),
+                          'volume_created_payload', (
+                            SELECT payload
+                              FROM storyos.project_activity_event_payloads
+                             WHERE project_id = $1::text::uuid
+                               AND event_kind = 'volume_created'
+                          )
+                        )::text
+                   FROM storyos.authority_history_floors AS floor
+                   JOIN storyos.project_snapshots AS snapshot
+                     ON (snapshot.owner_user_id, snapshot.project_id,
+                         snapshot.snapshot_id) =
+                        (floor.owner_user_id, floor.project_id, floor.snapshot_id)
+                  WHERE floor.project_id = $1::text::uuid",
+                &[&scope.project_id.as_ref()],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
     assert_eq!(
-        payload.get("kind").and_then(serde_json::Value::as_str),
-        Some("volume_created")
+        observed,
+        serde_json::json!({
+            "replay_generation": 1,
+            "floor_matches_snapshot": true,
+            "replay_generation_count": 1,
+            "commit_count": 0,
+            "author_action_count": 0,
+            "volume_created_payload": {
+                "kind": "volume_created",
+                "volume_id": volume_id,
+                "title": TITLE,
+                "tree_revision": "2",
+                "order": "1",
+            },
+        })
     );
-    assert!(payload.get("authoritative_commit_id").is_none());
-    assert!(payload.get("author_action_sequence").is_none());
 }
 
 #[tokio::test]
@@ -298,6 +317,63 @@ async fn applied_structure_receipt_may_bind_empty_pair_commit_and_author_action(
         .await
         .unwrap();
     admin.batch_execute("COMMIT").await.unwrap();
+    let bound: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'commit_id', authoritative_commit.authoritative_commit_id,
+                          'prior_tree',
+                            authoritative_commit.prior_manuscript_tree_revision,
+                          'resulting_tree',
+                            authoritative_commit.resulting_manuscript_tree_revision,
+                          'affected_volume_id',
+                            authoritative_commit.affected_volume_id,
+                          'manuscript_object_id',
+                            authoritative_commit.manuscript_object_id,
+                          'prior_revision_id',
+                            authoritative_commit.prior_revision_id,
+                          'resulting_revision_id',
+                            authoritative_commit.resulting_revision_id,
+                          'action_commit_id', action.authoritative_commit_id,
+                          'receipt_commit_ids', receipt.authoritative_commit_ids
+                        )::text
+                   FROM storyos.authoritative_commits AS authoritative_commit
+                   JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id,
+                         action.authoritative_commit_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.authoritative_commit_id)
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id,
+                         receipt.receipt_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.receipt_id)
+                  WHERE authoritative_commit.project_id = $1::text::uuid
+                    AND authoritative_commit.authoritative_commit_id
+                      = $2::text::uuid",
+                &[&scope.project_id.as_ref(), &commit_id],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
+    assert_eq!(
+        bound,
+        serde_json::json!({
+            "commit_id": commit_id,
+            "prior_tree": 1,
+            "resulting_tree": 2,
+            "affected_volume_id": volume_id,
+            "manuscript_object_id": null,
+            "prior_revision_id": null,
+            "resulting_revision_id": null,
+            "action_commit_id": commit_id,
+            "receipt_commit_ids": [commit_id],
+        })
+    );
 }
 
 #[tokio::test]
@@ -320,7 +396,7 @@ async fn unsuccessful_structure_receipt_still_rejects_commit_ids() {
             stale_issue.binding.clone(),
             &stale_issue.nonce_digest,
             "0835",
-            1,
+            /*expected_tree_revision*/ 1,
         ),
     )
     .await
@@ -344,5 +420,8 @@ async fn unsuccessful_structure_receipt_still_rejects_commit_ids() {
         )
         .await
         .expect_err("a conflicted structure Receipt must keep zero Commit identities");
-    assert!(error.code().is_some());
+    assert_eq!(
+        error.code(),
+        Some(&tokio_postgres::error::SqlState::CHECK_VIOLATION)
+    );
 }
