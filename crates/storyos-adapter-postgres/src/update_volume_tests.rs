@@ -705,15 +705,11 @@ async fn apply_update(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,
-    volume_id: &str,
-    title: &str,
-    order: u64,
-    expected_tree_revision: u64,
-    bytes: &[u8],
+    fixture: UpdateFixture<'_>,
 ) -> storyos_application::UpdateVolumeSettlement {
     let digest = format!(
         "sha256:storyos.command.updateVolume.jcs.v1:{}",
-        crate::author_edit::sha256_hex(bytes)
+        crate::author_edit::sha256_hex(fixture.bytes)
     );
     let issue = update_issue(scope, suffix, &digest);
     issue_project_command_challenge(store, &issue)
@@ -721,18 +717,7 @@ async fn apply_update(
         .unwrap();
     update_volume(
         store,
-        &update_command(
-            issue.binding,
-            &issue.nonce_digest,
-            suffix,
-            UpdateFixture {
-                volume_id,
-                title,
-                order,
-                expected_tree_revision,
-                bytes,
-            },
-        ),
+        &update_command(issue.binding, &issue.nonce_digest, suffix, fixture),
     )
     .await
     .unwrap()
@@ -783,17 +768,31 @@ async fn author_undo_compensates_update_volume_and_restores_title_and_canonical_
     .await;
     // Sibling Update Volume changes A's live order. A's last Activity still says order 1.
     let move_b = br#"{"expected_tree_revision":"4","order":"1","title":"Volume B"}"#;
-    apply_update(&store, &scope, "0b36", &volume_b, "Volume B", 1, 4, move_b).await;
+    apply_update(
+        &store,
+        &scope,
+        "0b36",
+        UpdateFixture {
+            volume_id: &volume_b,
+            title: "Volume B",
+            order: 1,
+            expected_tree_revision: 4,
+            bytes: move_b,
+        },
+    )
+    .await;
     let rename_a = br#"{"expected_tree_revision":"5","order":"2","title":"Renamed A"}"#;
     let updated = apply_update(
         &store,
         &scope,
         "0b38",
-        &volume_a,
-        "Renamed A",
-        2,
-        5,
-        rename_a,
+        UpdateFixture {
+            volume_id: &volume_a,
+            title: "Renamed A",
+            order: 2,
+            expected_tree_revision: 5,
+            bytes: rename_a,
+        },
     )
     .await;
     let UpdateVolumeSettlementEffect::Applied { tree_revision, .. } = updated.effect else {

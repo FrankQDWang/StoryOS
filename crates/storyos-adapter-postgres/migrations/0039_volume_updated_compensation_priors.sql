@@ -143,4 +143,3 @@ ALTER TABLE storyos.project_activity_event_payloads
           - 'archive_path_profile' = '{}'::jsonb)
     )
   ) IS TRUE);
-
