@@ -36,9 +36,29 @@ _Avoid_: Tenant inferred from session, project path, unscoped global ID, client-
 The author-approved current truth of a novel project, including prose, established fictional-world truth, characters, relationships, timeline, and manuscript structure. Authority is a binary boundary reached only through an explicit author-authorized domain action; lifecycle, confidence, and lock status do not form authority levels.
 _Avoid_: Canon (too narrow), accepted artifact, Agent memory
 
+**Manuscript Structure Transition**:
+One successful author-owned change to live Volume or Chapter identity, title, parentage, Canonical Sibling Order, or removal. It is an Authoritative State change and advances Manuscript Tree Revision by one. A Current Chapter change is not this transition.
+_Avoid_: Structural command as a second authority system, fake prose Revision, physical tree_order as public order, Current Chapter change
+
 **Canonical Sibling Order**:
 The 1-based rank of one live Volume among the Project's live Volumes, or of one live Chapter among the live Chapters of its parent Volume, in current Authoritative manuscript structure. A successful create acknowledgement, a new create Activity event, and exact replay of that acknowledgement report this same rank for that node. A historical create Activity that stored a storage key in the same field is not this rank.
 _Avoid_: Storage key, physical row order, browser-owned order, tombstone-inclusive sequence
+
+**Current Chapter**:
+The optional Project-scoped pointer to the Chapter that is the author's present working location. Its absence on an Empty Project is lawful. It is Workspace Context, not manuscript structure and not Authoritative State.
+_Avoid_: Authoritative Chapter, required chapter, current passage as authority
+
+**Manuscript Tree Revision**:
+The Project Scope-local generation of Authoritative manuscript structure. One Manuscript Structure Transition advances it by one. A Current Chapter change does not.
+_Avoid_: Authoritative Revision, Canonical Sibling Order, Canonical Query Snapshot, physical tree_order
+
+**Canonical Manuscript Tree**:
+The current live Volume and Chapter hierarchy under one Project Scope, read only with the latest Canonical Query Snapshot that committed with those facts. A stale Snapshot is not a historical tree.
+_Avoid_: Embedded Snapshot tree, versioned historical tree, live rows beside an older Snapshot
+
+**Structural Authority Settlement**:
+The complete Core Transition outcome for one Manuscript Structure Transition or Current Chapter change, visible only when its Receipt, Author Action, Activity, Snapshot, and any required Authoritative Commit appear together.
+_Avoid_: Per-command persist, Author Edit settlement, browser settlement
 
 **Discovery Writing**:
 The StoryOS authorship model, inspired by Dean Koontz's page-by-page process, in which the author develops the novel from a live premise and characters, repeatedly refines the current passage, and discovers the story through writing, while Agent assistance stays grounded in the current passage and the author's present creative choices.
@@ -184,8 +204,8 @@ An immutable version of one authoritative domain object, appended only by StoryO
 _Avoid_: Artifact Revision, mutable row
 
 **Authoritative Commit**:
-The Project Scope-ordered atomic record of one author-authorized domain transaction, identifying its Project Scope, actor, cause, and all prior and resulting Authoritative Revisions. Its scope-local sequence begins at one and advances without gaps only when an authority-changing transaction commits; refused, failed, and no-change attempts have no Commit sequence.
-_Avoid_: Project snapshot, Run Event, attempted-command sequence, wall-clock order
+The Project Scope-ordered atomic record of one author-authorized domain transaction, identifying its Project Scope, actor, cause, every prior and resulting Authoritative Revision, and any Manuscript Structure Transition by its prior and resulting Manuscript Tree Revision plus the affected Volume or Chapter identities. Its scope-local sequence begins at one and advances without gaps only when Authoritative State changes; a Current Chapter change, and refused, failed, or no-change attempts, allocate none.
+_Avoid_: Project snapshot, Run Event, attempted-command sequence, wall-clock order, fake prose Revision, full tree image in the Commit
 
 **Durable Identity**:
 A stable, opaque, strongly typed identity assigned to one durable StoryOS entity or record. Identity types are not interchangeable, and an identity never conveys authority, causality, freshness, project order, or capability.
@@ -578,6 +598,10 @@ _Avoid_: Global event bus, per-Run truth stream, internal event log, universal p
 **Replay Generation**:
 A project-local bounded replay epoch of the Project Activity Stream, published with one authorized replay floor and fresh Snapshot at a compaction or archival boundary. A cursor never crosses generations: a below-floor cursor fails explicitly rather than being translated, guessed, or silently advanced.
 _Avoid_: Infinite cursor migration, guessed offset, stream fork
+
+**Authority History Floor**:
+The Project Scope Activity position after which every successful Manuscript Structure Transition has a complete Authoritative Commit and Author Action. Earlier structural Activity stays immutable and is not rewritten into those records.
+_Avoid_: Replay Floor, Replay Generation, invented backfill, Barrier as history rewrite
 
 **Activity Stream Resync**:
 The authorized recovery from an expired Project Activity cursor that loads a fresh canonical Snapshot and resumes strictly after its recorded Activity position. It exposes the replay-generation boundary and never treats a cursor-too-old failure as an empty stream, a successful replay, or permission to skip historical facts.

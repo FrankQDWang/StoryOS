@@ -272,8 +272,9 @@ async fn editor_session_tables_force_scope_and_composite_references() {
         .query(
             "SELECT relname, relrowsecurity, relforcerowsecurity
              FROM pg_class WHERE relname IN
-               ('editor_session_base_snapshots', 'editor_sessions', 'project_snapshots',
-                'project_writer_generations', 'replay_floors', 'replay_generations')
+               ('authority_history_floors', 'editor_session_base_snapshots', 'editor_sessions',
+                'project_snapshots', 'project_writer_generations', 'replay_floors',
+                'replay_generations')
              ORDER BY relname",
             &[],
         )
@@ -291,6 +292,7 @@ async fn editor_session_tables_force_scope_and_composite_references() {
     assert_eq!(
         posture,
         [
+            "authority_history_floors",
             "editor_session_base_snapshots",
             "editor_sessions",
             "project_snapshots",
