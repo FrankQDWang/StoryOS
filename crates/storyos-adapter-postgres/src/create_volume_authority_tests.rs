@@ -210,13 +210,13 @@ async fn two_users_and_two_projects_keep_separate_structure_sequences() {
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let first = seed_project(&store, USER_A, "0910").await;
-    let second = seed_project(&store, USER_A, "0912").await;
-    let other_user = seed_project(&store, USER_B, "0914").await;
+    let first = seed_project(&store, USER_A, "f610").await;
+    let second = seed_project(&store, USER_A, "f612").await;
+    let other_user = seed_project(&store, USER_B, "f614").await;
     let first_volume = post_volume(
         &store,
         &first,
-        "0916",
+        "f616",
         "Volume A",
         VOLUME_A_BYTES,
         VOLUME_A_DIGEST,
@@ -226,7 +226,7 @@ async fn two_users_and_two_projects_keep_separate_structure_sequences() {
     let second_volume = post_volume(
         &store,
         &second,
-        "0918",
+        "f618",
         "Volume A",
         VOLUME_A_BYTES,
         VOLUME_A_DIGEST,
@@ -236,7 +236,7 @@ async fn two_users_and_two_projects_keep_separate_structure_sequences() {
     let other_volume = post_volume(
         &store,
         &other_user,
-        "091a",
+        "f61a",
         "Volume A",
         VOLUME_A_BYTES,
         VOLUME_A_DIGEST,
@@ -268,11 +268,11 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let scope = seed_project(&store, USER_A, "0920").await;
+    let scope = seed_project(&store, USER_A, "f620").await;
     let volume_a = post_volume(
         &store,
         &scope,
-        "0922",
+        "f622",
         "Volume A",
         VOLUME_A_BYTES,
         VOLUME_A_DIGEST,
@@ -288,7 +288,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     };
     let chapter_issue = command_issue(
         &scope,
-        "0924",
+        "f624",
         "POST",
         "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
         "storyos.command.create-chapter.request.v1",
@@ -311,14 +311,14 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             challenge_binding: chapter_issue.binding,
             nonce_digest: chapter_issue.nonce_digest,
             canonical_command_bytes: CHAPTER_BYTES.to_vec(),
-            correlation_id: "018f0000-0000-7001-8000-000000000924".to_owned(),
+            correlation_id: "018f0000-0000-7001-8000-00000000f624".to_owned(),
             volume_id: volume_a_id.clone(),
             title: "Chapter A".to_owned(),
             expected_tree_revision: 2,
             ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000010924".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000020924".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000030924".to_owned(),
+                command_id: "018f0000-0000-7001-8000-00000001f624".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-00000002f624".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-00000003f624".to_owned(),
             },
         },
     )
@@ -329,23 +329,23 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     };
     let session_issue = command_issue(
         &scope,
-        "0926",
+        "f626",
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         "createEditorSession",
-        "sha256:storyos.test:0926",
+        "sha256:storyos.test:f626",
     );
     issue_project_command_challenge(&store, &session_issue)
         .await
         .unwrap();
-    let editor_session_id = "018f0000-0000-7001-8000-000000000927";
+    let editor_session_id = "018f0000-0000-7001-8000-00000000f627";
     create_editor_session(
         &store,
         &OpenEditorSession {
             project_scope: scope.clone(),
             editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: "018f0000-0000-7001-8000-000000000928".to_owned(),
+            snapshot_id: "018f0000-0000-7001-8000-00000000f628".to_owned(),
             client_binding: EditorClientBinding {
                 binding_ref: session_issue.binding.client_session_binding_digest.clone(),
                 session_generation: session_issue.binding.client_session_generation,
@@ -372,7 +372,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             editor_session_id,
             chapter_id: &chapter_id,
             expected_revision_id: opened.chapter.revision_id.as_ref(),
-            suffix: "092a",
+            suffix: "f62a",
             local_intent_sequence: 1,
             text: "x",
         },
@@ -381,7 +381,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
     let volume_b = post_volume(
         &store,
         &scope,
-        "092c",
+        "f62c",
         "Volume B",
         VOLUME_B_BYTES,
         &volume_b_digest(),
@@ -408,7 +408,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
                 AuthorEditSettlementEffect::AuthoritativeApplied { ids, .. } => &ids.revision_id,
                 effect => panic!("first edit must apply, received {effect:?}"),
             },
-            suffix: "092e",
+            suffix: "f62e",
             local_intent_sequence: 2,
             text: "y",
         },
@@ -428,7 +428,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         editor_session_id,
         later_action,
         &later_ids.revision_id,
-        "0930",
+        "f630",
     )
     .await;
     assert!(matches!(
@@ -455,7 +455,7 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             .expect("Volume B authority")
             .author_action_sequence,
         opened.chapter.revision_id.as_ref(),
-        "0932",
+        "f632",
     )
     .await;
     let UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
