@@ -828,12 +828,12 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let scope = seed_project(&store, "0f10").await;
-    let volume_id = apply_volume(&store, &scope, "0f12").await;
+    let scope = seed_project(&store, "1180").await;
+    let volume_id = apply_volume(&store, &scope, "1182").await;
     let chapter_a = apply_chapter(
         &store,
         &scope,
-        "0f14",
+        "1184",
         &volume_id,
         "Chapter A",
         CHAPTER_A_BYTES,
@@ -843,7 +843,7 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
     let chapter_b = apply_chapter(
         &store,
         &scope,
-        "0f16",
+        "1186",
         &volume_id,
         "Chapter B",
         CHAPTER_B_BYTES,
@@ -855,7 +855,7 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
     apply_update(
         &store,
         &scope,
-        "0f18",
+        "1188",
         UpdateFixture {
             chapter_id: &chapter_b,
             title: "Chapter B",
@@ -869,7 +869,7 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
     let updated = apply_update(
         &store,
         &scope,
-        "0f1a",
+        "118a",
         UpdateFixture {
             chapter_id: &chapter_a,
             title: "Renamed A",
@@ -889,23 +889,23 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
         .expect("Applied Update Chapter must write authority");
     let session_issue = named_issue(
         &scope,
-        "0f1c",
+        "118c",
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         "createEditorSession",
-        "sha256:storyos.test:0f1c",
+        "sha256:storyos.test:118c",
     );
     issue_project_command_challenge(&store, &session_issue)
         .await
         .unwrap();
-    let editor_session_id = "018f0000-0000-7001-8000-000000000f1d";
+    let editor_session_id = "018f0000-0000-7001-8000-00000000118d";
     create_editor_session(
         &store,
         &OpenEditorSession {
             project_scope: scope.clone(),
             editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: "018f0000-0000-7001-8000-000000000f1e".to_owned(),
+            snapshot_id: "018f0000-0000-7001-8000-00000000118e".to_owned(),
             client_binding: EditorClientBinding {
                 binding_ref: session_issue.binding.client_session_binding_digest.clone(),
                 session_generation: session_issue.binding.client_session_generation,
@@ -931,7 +931,7 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
         "editor_session_id": editor_session_id,
         "client_contract_revision": CLIENT,
         "security_policy_revision": SECURITY,
-        "correlation_id": "018f0000-0000-7001-8000-000000000f1f",
+        "correlation_id": "018f0000-0000-7001-8000-00000000118f",
     });
     let undo_body = serde_json::json!({
         "command_schema": "storyos.command.undo-latest-author-action.request.v1",
@@ -944,7 +944,7 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
     );
     let undo_issue = named_issue(
         &scope,
-        "0f1f",
+        "118f",
         "POST",
         "/api/v1/projects/{project_id}/author-actions/undo",
         "storyos.command.undo-latest-author-action.request.v1",
@@ -967,11 +967,11 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
             challenge_binding: undo_issue.binding,
             nonce_digest: undo_issue.nonce_digest,
             canonical_command_bytes: undo_bytes,
-            correlation_id: "018f0000-0000-7001-8000-000000000f1f".to_owned(),
+            correlation_id: "018f0000-0000-7001-8000-00000000118f".to_owned(),
             ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000010f1f".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000020f1f".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000030f1f".to_owned(),
+                command_id: "018f0000-0000-7001-8000-00000001118f".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-00000002118f".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-00000003118f".to_owned(),
             },
             editor_session_id: EditorSessionId::new(editor_session_id),
             expected_author_undo_frontier_sequence: authority.author_action_sequence,
@@ -1090,12 +1090,12 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
     let store = PostgresProjectReader::new(runtime_url);
-    let scope = seed_project(&store, "0f50").await;
-    let volume_id = apply_volume(&store, &scope, "0f52").await;
+    let scope = seed_project(&store, "11c0").await;
+    let volume_id = apply_volume(&store, &scope, "11c2").await;
     let chapter_a = apply_chapter(
         &store,
         &scope,
-        "0f54",
+        "11c4",
         &volume_id,
         "Chapter A",
         CHAPTER_A_BYTES,
@@ -1105,7 +1105,7 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
     let chapter_b = apply_chapter(
         &store,
         &scope,
-        "0f56",
+        "11c6",
         &volume_id,
         "Chapter B",
         CHAPTER_B_BYTES,
@@ -1116,7 +1116,7 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
     let updated = apply_update(
         &store,
         &scope,
-        "0f58",
+        "11c8",
         UpdateFixture {
             chapter_id: &chapter_a,
             title: "Renamed A",
@@ -1160,23 +1160,23 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
     );
     let session_issue = named_issue(
         &scope,
-        "0f5a",
+        "11ca",
         "POST",
         "/api/v1/projects/{project_id}/editor-sessions",
         "storyos.command.create-editor-session.request.v1",
         "createEditorSession",
-        "sha256:storyos.test:0f5a",
+        "sha256:storyos.test:11ca",
     );
     issue_project_command_challenge(&store, &session_issue)
         .await
         .unwrap();
-    let editor_session_id = "018f0000-0000-7001-8000-000000000f5b";
+    let editor_session_id = "018f0000-0000-7001-8000-0000000011cb";
     create_editor_session(
         &store,
         &OpenEditorSession {
             project_scope: scope.clone(),
             editor_session_id: EditorSessionId::new(editor_session_id),
-            snapshot_id: "018f0000-0000-7001-8000-000000000f5c".to_owned(),
+            snapshot_id: "018f0000-0000-7001-8000-0000000011cc".to_owned(),
             client_binding: EditorClientBinding {
                 binding_ref: session_issue.binding.client_session_binding_digest.clone(),
                 session_generation: session_issue.binding.client_session_generation,
@@ -1202,7 +1202,7 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
         "editor_session_id": editor_session_id,
         "client_contract_revision": CLIENT,
         "security_policy_revision": SECURITY,
-        "correlation_id": "018f0000-0000-7001-8000-000000000f5e",
+        "correlation_id": "018f0000-0000-7001-8000-0000000011ce",
     });
     let undo_body = serde_json::json!({
         "command_schema": "storyos.command.undo-latest-author-action.request.v1",
@@ -1215,7 +1215,7 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
     );
     let undo_issue = named_issue(
         &scope,
-        "0f5e",
+        "11ce",
         "POST",
         "/api/v1/projects/{project_id}/author-actions/undo",
         "storyos.command.undo-latest-author-action.request.v1",
@@ -1238,11 +1238,11 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
             challenge_binding: undo_issue.binding,
             nonce_digest: undo_issue.nonce_digest,
             canonical_command_bytes: undo_bytes,
-            correlation_id: "018f0000-0000-7001-8000-000000000f5e".to_owned(),
+            correlation_id: "018f0000-0000-7001-8000-0000000011ce".to_owned(),
             ids: AuthorCommandAdmissionIds {
-                command_id: "018f0000-0000-7001-8000-000000010f5e".to_owned(),
-                author_command_admission_id: "018f0000-0000-7001-8000-000000020f5e".to_owned(),
-                receipt_id: "018f0000-0000-7001-8000-000000030f5e".to_owned(),
+                command_id: "018f0000-0000-7001-8000-0000000111ce".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-0000000211ce".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-0000000311ce".to_owned(),
             },
             editor_session_id: EditorSessionId::new(editor_session_id),
             expected_author_undo_frontier_sequence: authority.author_action_sequence,
