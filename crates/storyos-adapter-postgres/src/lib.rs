@@ -41,6 +41,10 @@ mod archive_project_tests;
 mod create_volume_tests;
 
 #[cfg(test)]
+#[path = "structural_authority_schema_tests.rs"]
+mod structural_authority_schema_tests;
+
+#[cfg(test)]
 #[path = "create_chapter_tests.rs"]
 mod create_chapter_tests;
 

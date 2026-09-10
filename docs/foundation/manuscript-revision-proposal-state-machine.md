@@ -126,9 +126,17 @@ AuthoritativeCommit {
   actor
   cause
   prior_and_resulting_revision_pairs
+  prior_and_resulting_manuscript_tree_revisions
+  affected_volume_or_chapter_identity
   created_at
 }
 ```
+
+A Manuscript Structure Transition may bind an empty
+`prior_and_resulting_revision_pairs` list when no Authoritative Revision
+changed. That Commit still names the prior and resulting Manuscript Tree
+Revision and the affected Volume or Chapter identity. A Current Chapter change
+allocates no Commit.
 
 ### 3.2 Author Action order
 

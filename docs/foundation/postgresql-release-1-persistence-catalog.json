@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:a1581342241c17186535bd3e74605caea276f1d008e3a51a17c3da9002e7ef81"
+    "digest": "sha256:94df8bcbc2db3d26d0525d8b599d5dfef383a1e51a0e7765c68357c570e35cdf"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:6756925fdf69712dd443753ab3fe66845333921152c43c925f40c45466cb1809",
+    "migration_chain_digest": "sha256:4a4b5027c0165da48f56ffe86dfa643d187adcb12bf8d19ba8e5acbb7f775746",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:9bbc7109a671da689b393c7336ce89b72af3dd6f9fc6fa4aac2898d57ebf6b56",
+      "manifest_sha256": "sha256:9ace2d792dd1f04a5ec110e54c3f99c10d6c1d8241ef5c3854324702b3ecce15",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -379,6 +379,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0036_release1_storage_activation.sql",
           "lf_sha256": "sha256:29fd34ee91b0429a46ff776f8ece1258debce43bf82fe20edaa9086f3d95216f"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0037_structural_authority_settlement_schema.sql",
+          "lf_sha256": "sha256:cd6af9f0741c8a9772b425b02efa1455568e5c5e17611b5a21aecdcd3199135d"
         }
       ]
     },
@@ -604,7 +608,7 @@
     },
     {
       "family_id": "operational-project-activity",
-      "table_families": ["project_activity_events", "project_activity_event_payloads", "project_activity_positions", "replay_generations", "replay_floors", "project_activity_cursors", "project_activity_handoffs"],
+      "table_families": ["project_activity_events", "project_activity_event_payloads", "project_activity_positions", "replay_generations", "replay_floors", "authority_history_floors", "project_activity_cursors", "project_activity_handoffs"],
       "owner": "replay",
       "authority_class": "operational",
       "durability_class": "append_only_replay_history",

@@ -49,6 +49,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/authoritative_revisions.json",
     ),
     (
+        "authority_history_floors",
+        "canonical/authority_history_floors.json",
+    ),
+    (
         "chapter_removal_decisions",
         "canonical/chapter_removal_decisions.json",
     ),

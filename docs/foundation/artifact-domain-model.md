@@ -606,12 +606,15 @@ Receipts are displayable in the Run Timeline and any future observation surface,
 
 Each authoritative domain object has a stable identity and immutable linear Authoritative Revisions guarded by an expected prior revision.
 
-Every author-authorized domain transaction also creates one Project Scope-ordered `AuthoritativeCommit` containing:
+Every author-authorized domain transaction that changes Authoritative State also creates one Project Scope-ordered `AuthoritativeCommit` containing:
 
 - a monotonic sequence local to the exact Project Scope;
 - actor and cause;
-- all prior and resulting Authoritative Revision references;
+- all prior and resulting Authoritative Revision references, which may be empty when a Manuscript Structure Transition changes no Authoritative Revision;
+- the prior and resulting Manuscript Tree Revision and the affected Volume or Chapter identity when the transaction is a Manuscript Structure Transition;
 - the associated Direct Author Action, Acceptance Receipt, or an Undo Acceptance Receipt whose outcome is `Compensated`.
+
+A Current Chapter change allocates no Authoritative Commit.
 
 This provides precise object conflict checks and a single atomic Project Scope order without creating a complete project snapshot for every edit. Current Authoritative State is a projection over each object's current revision.
 
