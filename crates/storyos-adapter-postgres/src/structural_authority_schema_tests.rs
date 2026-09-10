@@ -5,10 +5,11 @@ use storyos_application::{
     CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
     IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
     ProjectCommandChallengeBinding, ProjectId, ProjectScope, SetCurrentChapterCommand,
-    SetCurrentChapterSettlementEffect, UpdateVolumeCommand, UpdateVolumeSettlementEffect, UserId,
-    VolumeId, create_chapter, create_editor_session, create_project, create_volume,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    set_current_chapter, update_volume,
+    SetCurrentChapterSettlementEffect, UpdateChapterCommand, UpdateChapterSettlementEffect,
+    UpdateVolumeCommand, UpdateVolumeSettlementEffect, UserId, VolumeId, create_chapter,
+    create_editor_session, create_project, create_volume, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, set_current_chapter, update_chapter,
+    update_volume,
 };
 use tokio_postgres::NoTls;
 
@@ -874,6 +875,139 @@ async fn applied_update_volume_receipt_may_bind_empty_pair_commit_and_author_act
             "prior_tree": 2,
             "resulting_tree": 3,
             "affected_volume_id": volume_id,
+            "manuscript_object_id": null,
+            "prior_revision_id": null,
+            "resulting_revision_id": null,
+            "action_commit_id": commit_id,
+            "receipt_commit_ids": [commit_id],
+        })
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn applied_update_chapter_receipt_may_bind_empty_pair_commit_and_author_action() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let (scope, volume_id) = seed_project_with_volume(&store, "0870", "0872").await;
+    let chapter_id = seed_chapter(
+        &store,
+        &scope,
+        &volume_id,
+        SeedChapter {
+            suffix: "0873",
+            title: "Chapter A",
+            expected_tree_revision: 2,
+            bytes: CHAPTER_A_BYTES,
+            digest: CHAPTER_A_DIGEST,
+        },
+    )
+    .await;
+    let update_bytes = br#"{"expected_tree_revision":"3","order":"1","title":"Chapter B"}"#;
+    let update_digest = format!(
+        "sha256:storyos.command.updateChapter.jcs.v1:{}",
+        crate::author_edit::sha256_hex(update_bytes)
+    );
+    let update_issue = command_issue(
+        &scope,
+        "0874",
+        "PATCH",
+        "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+        "storyos.command.update-chapter.request.v1",
+        "updateChapter",
+        &update_digest,
+    );
+    issue_project_command_challenge(&store, &update_issue)
+        .await
+        .unwrap();
+    let updated = update_chapter(
+        &store,
+        &UpdateChapterCommand {
+            project_scope: scope.clone(),
+            client_binding: EditorClientBinding {
+                binding_ref: update_issue.binding.client_session_binding_digest.clone(),
+                session_generation: update_issue.binding.client_session_generation,
+                client_contract_revision: update_issue.binding.client_contract_revision.clone(),
+                security_policy_revision: update_issue.binding.security_policy_revision.clone(),
+            },
+            challenge_binding: update_issue.binding,
+            nonce_digest: update_issue.nonce_digest,
+            canonical_command_bytes: update_bytes.to_vec(),
+            correlation_id: "018f0000-0000-7001-8000-000000000874".to_owned(),
+            chapter_id: ChapterId::new(chapter_id.clone()),
+            title: "Chapter B".to_owned(),
+            order: 1,
+            expected_tree_revision: 3,
+            ids: AuthorCommandAdmissionIds {
+                command_id: "018f0000-0000-7001-8000-000000010874".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-000000020874".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-000000030874".to_owned(),
+            },
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        updated.effect,
+        UpdateChapterSettlementEffect::Applied {
+            title: "Chapter B".to_owned(),
+            order: 1,
+            tree_revision: 4,
+        }
+    );
+    let admin = open_admin().await;
+    let bound: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'prior_tree',
+                            authoritative_commit.prior_manuscript_tree_revision,
+                          'resulting_tree',
+                            authoritative_commit.resulting_manuscript_tree_revision,
+                          'affected_chapter_id',
+                            authoritative_commit.affected_chapter_id,
+                          'manuscript_object_id',
+                            authoritative_commit.manuscript_object_id,
+                          'prior_revision_id',
+                            authoritative_commit.prior_revision_id,
+                          'resulting_revision_id',
+                            authoritative_commit.resulting_revision_id,
+                          'action_commit_id', action.authoritative_commit_id,
+                          'receipt_commit_ids', receipt.authoritative_commit_ids
+                        )::text
+                   FROM storyos.authoritative_commits AS authoritative_commit
+                   JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id,
+                         action.authoritative_commit_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.authoritative_commit_id)
+                   JOIN storyos.domain_receipts AS receipt
+                     ON (receipt.owner_user_id, receipt.project_id,
+                         receipt.receipt_id) =
+                        (authoritative_commit.owner_user_id,
+                         authoritative_commit.project_id,
+                         authoritative_commit.receipt_id)
+                  WHERE authoritative_commit.project_id = $1::text::uuid
+                    AND receipt.command_kind = 'updateChapter'",
+                &[&scope.project_id.as_ref()],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
+    let commit_id = bound["action_commit_id"].clone();
+    assert_eq!(
+        bound,
+        serde_json::json!({
+            "prior_tree": 3,
+            "resulting_tree": 4,
+            "affected_chapter_id": chapter_id,
             "manuscript_object_id": null,
             "prior_revision_id": null,
             "resulting_revision_id": null,

@@ -1,12 +1,11 @@
 use storyos_application::{
-    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
+    UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
     UpdateChapterSettlementEffect,
 };
 use storyos_core::{
     ChapterJoin, ProjectLifecycle, ProjectPresence, UpdateChapter as CoreUpdateChapter,
     UpdateChapterResult, update_chapter as classify_update_chapter,
 };
-use uuid::Uuid;
 
 use super::{update_chapter_database_error, update_chapter_parse_error};
 
@@ -109,7 +108,7 @@ pub(super) async fn persist_update_chapter(
         current_tree_revision,
         current_lifecycle,
         title: command.title.clone(),
-        current_title,
+        current_title: current_title.clone(),
         order: command.order,
         current_order,
         chapter_count,
@@ -138,6 +137,21 @@ pub(super) async fn persist_update_chapter(
         }
     };
     insert_update_chapter_admission(client, command).await?;
+    let authority_sequences = match &effect {
+        UpdateChapterSettlementEffect::Applied { .. } => {
+            let sequences =
+                crate::structural_authority_settlement::allocate_structure_transition_sequences(
+                    client,
+                    &command.project_scope,
+                )
+                .await
+                .map_err(UpdateChapterError::Unavailable)?;
+            Some(sequences)
+        }
+        UpdateChapterSettlementEffect::NoEffect { .. }
+        | UpdateChapterSettlementEffect::Conflicted { .. }
+        | UpdateChapterSettlementEffect::Refused { .. } => None,
+    };
     let (result_kind, result_payload) = match &effect {
         UpdateChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
         UpdateChapterSettlementEffect::NoEffect { .. } => {
@@ -160,6 +174,10 @@ pub(super) async fn persist_update_chapter(
             ("refused", format!(r#"{{"reason":"{refused}"}}"#))
         }
     };
+    let commit_ids = authority_sequences
+        .as_ref()
+        .map(|sequences| vec![sequences.authoritative_commit_id.clone()])
+        .unwrap_or_default();
     let receipt_created_at = client
         .query_one(
             "INSERT INTO storyos.domain_receipts
@@ -171,7 +189,7 @@ pub(super) async fn persist_update_chapter(
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, 'updateChapter', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
+                     '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[], '{}'::text[], '{}'::text[],
                      '{}'::text[], $8, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -185,6 +203,7 @@ pub(super) async fn persist_update_chapter(
                 &command.challenge_binding.idempotency_key,
                 &result_kind,
                 &result_payload,
+                &commit_ids,
             ],
         )
         .await
@@ -207,11 +226,15 @@ pub(super) async fn persist_update_chapter(
         .map_err(update_chapter_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let UpdateChapterSettlementEffect::Applied {
-        title,
-        order,
-        tree_revision,
-    } = &effect
+    let mut authority = None;
+    if let (
+        UpdateChapterSettlementEffect::Applied {
+            title,
+            order,
+            tree_revision,
+        },
+        Some(sequences),
+    ) = (&effect, authority_sequences)
     {
         apply_chapter_tree(
             client,
@@ -226,32 +249,16 @@ pub(super) async fn persist_update_chapter(
             *tree_revision,
         )
         .await?;
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(update_chapter_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(update_chapter_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
+        project_activity_position = sequences.project_activity_position;
+        project_activity_event_id = sequences.project_activity_event_id.clone();
         let payload = serde_json::json!({
             "kind": "chapter_updated",
             "chapter_id": command.chapter_id.as_ref(),
             "title": title,
             "tree_revision": tree_revision.to_string(),
             "order": order.to_string(),
+            "prior_title": current_title,
+            "prior_order": current_order.to_string(),
         })
         .to_string();
         client
@@ -273,6 +280,46 @@ pub(super) async fn persist_update_chapter(
             )
             .await
             .map_err(update_chapter_database_error)?;
+        crate::structural_authority_settlement::persist_structure_commit(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.author_command_admission_id,
+            &command.ids.receipt_id,
+            crate::structural_authority_settlement::StructureCommitBinding {
+                prior_manuscript_tree_revision: command.expected_tree_revision,
+                resulting_manuscript_tree_revision: *tree_revision,
+                identity:
+                    crate::structural_authority_settlement::StructureAffectedIdentity::Chapter {
+                        chapter_id: command.chapter_id.as_ref(),
+                    },
+            },
+        )
+        .await
+        .map_err(update_chapter_database_error)?;
+        crate::structural_authority_settlement::persist_forward_author_action(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.receipt_id,
+        )
+        .await
+        .map_err(update_chapter_database_error)?;
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            &command.project_scope,
+            &sequences.snapshot_id,
+            project_activity_position,
+        )
+        .await
+        .map_err(update_chapter_database_error)?;
+        authority = Some(UpdateChapterAuthority {
+            authoritative_commit_id: sequences.authoritative_commit_id,
+            author_action_sequence: sequences.author_action_sequence,
+            snapshot_id: sequences.snapshot_id,
+            prior_manuscript_tree_revision: command.expected_tree_revision,
+            resulting_manuscript_tree_revision: *tree_revision,
+        });
     }
     client
         .execute(
@@ -295,6 +342,7 @@ pub(super) async fn persist_update_chapter(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        authority,
     })
 }
 

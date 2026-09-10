@@ -133,6 +133,13 @@ fn update_chapter_response(
     project: storyos_application::Project,
     settlement: storyos_application::UpdateChapterSettlement,
 ) -> Result<Json<contracts::UpdateChapterResponse>, ApiError> {
+    let (commit_ids, action_sequence) = match settlement.authority.as_ref() {
+        Some(authority) => (
+            vec![authority.authoritative_commit_id.clone()],
+            Some(authority.author_action_sequence.to_string()),
+        ),
+        None => (Vec::new(), None),
+    };
     let (receipt_result, effect) = match settlement.effect {
         UpdateChapterSettlementEffect::Applied {
             title,
@@ -215,8 +222,8 @@ fn update_chapter_response(
             resulting_heads: Vec::new(),
             authoritative_revision_ids: Vec::new(),
             proposal_revision_ids: Vec::new(),
-            authoritative_commit_ids: Vec::new(),
-            author_action_sequence: None,
+            authoritative_commit_ids: commit_ids,
+            author_action_sequence: action_sequence,
             draft_artifact_refs: Vec::new(),
             artifact_lifecycle_event_refs: Vec::new(),
             condition_refs: Vec::new(),

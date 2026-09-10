@@ -29,6 +29,7 @@ pub(super) async fn persist_structure_compensation(
         .map_err(UndoLatestAuthorActionError::Unavailable)?;
     restore_prior_tree(client, command, frontier).await?;
     restore_volume_update_sibling_order(client, command, frontier).await?;
+    restore_chapter_update_sibling_order(client, command, frontier).await?;
     let receipt_created_at = insert_undo_receipt(
         client,
         command,
@@ -99,7 +100,8 @@ async fn restore_prior_tree(
 ) -> Result<(), UndoLatestAuthorActionError> {
     let updated = match &frontier.identity {
         ObservedStructureIdentity::Volume { .. }
-        | ObservedStructureIdentity::VolumeUpdate { .. } => client
+        | ObservedStructureIdentity::VolumeUpdate { .. }
+        | ObservedStructureIdentity::ChapterUpdate { .. } => client
             .execute(
                 "UPDATE storyos.projects
                     SET tree_revision = $3::text::bigint
@@ -150,9 +152,10 @@ async fn persist_structure_removal(
 ) -> Result<(), UndoLatestAuthorActionError> {
     let decision_id = Uuid::now_v7().to_string();
     match &frontier.identity {
-        // Update Volume Compensation restores title and Canonical Sibling Order.
-        // It must not write a Volume removal decision.
-        ObservedStructureIdentity::VolumeUpdate { .. } => {}
+        // Update Volume or Update Chapter Compensation restores title and Canonical Sibling Order.
+        // It must not write a removal decision.
+        ObservedStructureIdentity::VolumeUpdate { .. }
+        | ObservedStructureIdentity::ChapterUpdate { .. } => {}
         ObservedStructureIdentity::Volume { volume_id } => {
             client
                 .execute(
@@ -322,6 +325,133 @@ async fn restore_volume_update_sibling_order(
     Ok(())
 }
 
+async fn restore_chapter_update_sibling_order(
+    client: &tokio_postgres::Client,
+    command: &UndoLatestAuthorActionCommand,
+    frontier: &ObservedStructureFrontier,
+) -> Result<(), UndoLatestAuthorActionError> {
+    let ObservedStructureIdentity::ChapterUpdate {
+        chapter_id,
+        prior_title,
+        prior_order,
+    } = &frontier.identity
+    else {
+        return Ok(());
+    };
+    let parent_volume_id = client
+        .query_one(
+            "SELECT parent_volume_id::text
+               FROM storyos.manuscript_objects
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND manuscript_object_id = $3::text::uuid AND object_kind = 'chapter'",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &chapter_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?
+        .get::<_, String>(0);
+    let chapters = client
+        .query(
+            "SELECT manuscript_object_id::text
+               FROM storyos.manuscript_objects AS chapter
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND object_kind = 'chapter'
+                AND parent_volume_id = $3::text::uuid
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.chapter_removal_decisions AS removal
+                   WHERE removal.owner_user_id = chapter.owner_user_id
+                     AND removal.project_id = chapter.project_id
+                     AND removal.chapter_id = chapter.manuscript_object_id
+                )
+              ORDER BY tree_order
+              FOR UPDATE",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &parent_volume_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    let ordered_ids = chapters
+        .iter()
+        .map(|chapter| chapter.get::<_, String>(0))
+        .collect::<Vec<_>>();
+    let Some(current_index) = ordered_ids.iter().position(|id| id == chapter_id) else {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("updated Chapter missing under FOR UPDATE"),
+        )));
+    };
+    let current_order = current_index as u64 + 1;
+    let updated = client
+        .execute(
+            "UPDATE storyos.manuscript_objects
+                SET title = $3
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                prior_title,
+                chapter_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    if updated != 1 {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("Chapter row changed under FOR UPDATE"),
+        )));
+    }
+    if current_order == *prior_order {
+        return Ok(());
+    }
+    if *prior_order < 1 || *prior_order as usize > ordered_ids.len() {
+        return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+            std::io::Error::other("prior Canonical Sibling Order is outside the live Chapter set"),
+        )));
+    }
+    let mut ids = ordered_ids;
+    let moved = ids.remove(current_index);
+    ids.insert((*prior_order - 1) as usize, moved);
+    client
+        .execute(
+            "UPDATE storyos.manuscript_objects
+                SET tree_order = tree_order + 1000000
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND object_kind = 'chapter' AND parent_volume_id = $3::text::uuid",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &parent_volume_id,
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    for (index, live_chapter_id) in ids.iter().enumerate() {
+        let tree_order = (index + 1).to_string();
+        client
+            .execute(
+                "UPDATE storyos.manuscript_objects
+                    SET tree_order = $3::text::bigint
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &tree_order,
+                    live_chapter_id,
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?;
+    }
+    Ok(())
+}
+
 fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> StructureCommitBinding<'_> {
     StructureCommitBinding {
         prior_manuscript_tree_revision: frontier.resulting_manuscript_tree_revision,
@@ -331,7 +461,8 @@ fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> Structur
             | ObservedStructureIdentity::VolumeUpdate { volume_id, .. } => {
                 StructureAffectedIdentity::Volume { volume_id }
             }
-            ObservedStructureIdentity::Chapter { chapter_id } => {
+            ObservedStructureIdentity::Chapter { chapter_id }
+            | ObservedStructureIdentity::ChapterUpdate { chapter_id, .. } => {
                 StructureAffectedIdentity::Chapter { chapter_id }
             }
         },
