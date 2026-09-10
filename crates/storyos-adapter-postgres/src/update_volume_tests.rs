@@ -995,3 +995,286 @@ async fn author_undo_compensates_update_volume_and_restores_title_and_canonical_
         })
     );
 }
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn author_undo_compensates_update_volume_and_restores_prior_live_sibling_place() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let scope = seed_project(&store, "0d50").await;
+    let volume_a = apply_volume(
+        &store,
+        &scope,
+        "0d52",
+        "Volume A",
+        VOLUME_A_BYTES,
+        VOLUME_A_DIGEST,
+        1,
+    )
+    .await;
+    let volume_b = apply_volume(
+        &store,
+        &scope,
+        "0d54",
+        "Volume B",
+        VOLUME_B_BYTES,
+        VOLUME_B_DIGEST,
+        2,
+    )
+    .await;
+    let chapter_bytes = br#"{"expected_tree_revision":"3","title":"Chapter A"}"#;
+    let chapter_id = apply_chapter(
+        &store,
+        &scope,
+        "0d55",
+        &volume_a,
+        "Chapter A",
+        chapter_bytes,
+        3,
+    )
+    .await;
+    let move_a = br#"{"expected_tree_revision":"4","order":"2","title":"Renamed A"}"#;
+    let updated = apply_update(
+        &store,
+        &scope,
+        "0d56",
+        UpdateFixture {
+            volume_id: &volume_a,
+            title: "Renamed A",
+            order: 2,
+            expected_tree_revision: 4,
+            bytes: move_a,
+        },
+    )
+    .await;
+    let UpdateVolumeSettlementEffect::Applied { tree_revision, .. } = updated.effect else {
+        panic!("Move A must apply");
+    };
+    assert_eq!(tree_revision, 5);
+    let authority = updated
+        .authority
+        .clone()
+        .expect("Applied Update Volume must write authority");
+    let tree_after_move = get_manuscript_tree(&store, &scope)
+        .await
+        .unwrap()
+        .expect("the tree remains after Update Volume");
+    assert_eq!(
+        tree_after_move.volumes,
+        vec![
+            VolumeNode {
+                volume_id: VolumeId::new(volume_b.clone()),
+                title: "Volume B".to_owned(),
+                order: 1,
+                chapters: Vec::new(),
+            },
+            VolumeNode {
+                volume_id: VolumeId::new(volume_a.clone()),
+                title: "Renamed A".to_owned(),
+                order: 2,
+                chapters: vec![ChapterNode {
+                    chapter_id: ChapterId::new(chapter_id.clone()),
+                    title: "Chapter A".to_owned(),
+                    order: 1,
+                }],
+            },
+        ]
+    );
+    let session_issue = named_issue(
+        &scope,
+        "0d5a",
+        "POST",
+        "/api/v1/projects/{project_id}/editor-sessions",
+        "storyos.command.create-editor-session.request.v1",
+        "createEditorSession",
+        "sha256:storyos.test:0d5a",
+    );
+    issue_project_command_challenge(&store, &session_issue)
+        .await
+        .unwrap();
+    let editor_session_id = "018f0000-0000-7001-8000-000000000d5b";
+    create_editor_session(
+        &store,
+        &OpenEditorSession {
+            project_scope: scope.clone(),
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            snapshot_id: "018f0000-0000-7001-8000-000000000d5c".to_owned(),
+            client_binding: EditorClientBinding {
+                binding_ref: session_issue.binding.client_session_binding_digest.clone(),
+                session_generation: session_issue.binding.client_session_generation,
+                client_contract_revision: session_issue.binding.client_contract_revision.clone(),
+                security_policy_revision: session_issue.binding.security_policy_revision.clone(),
+            },
+            challenge_binding: session_issue.binding,
+            nonce_digest: session_issue.nonce_digest,
+        },
+    )
+    .await
+    .unwrap();
+    let OpenChapter::Found(opened) =
+        open_chapter(&store, &scope, &ChapterId::new(chapter_id.clone()))
+            .await
+            .unwrap()
+    else {
+        panic!("Chapter A must open");
+    };
+    let undo_input = serde_json::json!({
+        "expected_author_undo_frontier_sequence": authority.author_action_sequence.to_string(),
+        "expected_authoritative_revision_id": opened.chapter.revision_id.as_ref(),
+        "editor_session_id": editor_session_id,
+        "client_contract_revision": CLIENT,
+        "security_policy_revision": SECURITY,
+        "correlation_id": "018f0000-0000-7001-8000-000000000d5e",
+    });
+    let undo_body = serde_json::json!({
+        "command_schema": "storyos.command.undo-latest-author-action.request.v1",
+        "undo_latest_author_action_input": undo_input,
+    });
+    let undo_bytes = serde_json::to_vec(&undo_body).unwrap();
+    let undo_digest = format!(
+        "sha256:storyos.command.undoLatestAuthorAction.jcs.v1:{}",
+        crate::author_edit::sha256_hex(&undo_bytes)
+    );
+    let undo_issue = named_issue(
+        &scope,
+        "0d5e",
+        "POST",
+        "/api/v1/projects/{project_id}/author-actions/undo",
+        "storyos.command.undo-latest-author-action.request.v1",
+        "undoLatestAuthorAction",
+        &undo_digest,
+    );
+    issue_project_command_challenge(&store, &undo_issue)
+        .await
+        .unwrap();
+    let undone = undo_latest_author_action(
+        &store,
+        &UndoLatestAuthorActionCommand {
+            project_scope: scope.clone(),
+            client_binding: EditorClientBinding {
+                binding_ref: undo_issue.binding.client_session_binding_digest.clone(),
+                session_generation: undo_issue.binding.client_session_generation,
+                client_contract_revision: undo_issue.binding.client_contract_revision.clone(),
+                security_policy_revision: undo_issue.binding.security_policy_revision.clone(),
+            },
+            challenge_binding: undo_issue.binding,
+            nonce_digest: undo_issue.nonce_digest,
+            canonical_command_bytes: undo_bytes,
+            correlation_id: "018f0000-0000-7001-8000-000000000d5e".to_owned(),
+            ids: AuthorCommandAdmissionIds {
+                command_id: "018f0000-0000-7001-8000-000000010d5e".to_owned(),
+                author_command_admission_id: "018f0000-0000-7001-8000-000000020d5e".to_owned(),
+                receipt_id: "018f0000-0000-7001-8000-000000030d5e".to_owned(),
+            },
+            editor_session_id: EditorSessionId::new(editor_session_id),
+            expected_author_undo_frontier_sequence: authority.author_action_sequence,
+            expected_authoritative_revision_id: opened.chapter.revision_id.as_ref().to_owned(),
+        },
+    )
+    .await
+    .unwrap();
+    let UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+        source_sequence,
+        snapshot_id,
+        ..
+    } = undone.effect.clone()
+    else {
+        panic!("Update Volume Undo must write structure Compensation");
+    };
+    assert_eq!(source_sequence, authority.author_action_sequence);
+    let tree = get_manuscript_tree(&store, &scope)
+        .await
+        .unwrap()
+        .expect("the tree remains after Update Volume Compensation");
+    assert_eq!(tree.tree_revision, 4);
+    assert_eq!(tree.snapshot.snapshot_id, snapshot_id);
+    assert_eq!(
+        tree.volumes,
+        vec![
+            VolumeNode {
+                volume_id: VolumeId::new(volume_a),
+                title: "Volume A".to_owned(),
+                order: 1,
+                chapters: vec![ChapterNode {
+                    chapter_id: ChapterId::new(chapter_id),
+                    title: "Chapter A".to_owned(),
+                    order: 1,
+                }],
+            },
+            VolumeNode {
+                volume_id: VolumeId::new(volume_b),
+                title: "Volume B".to_owned(),
+                order: 2,
+                chapters: Vec::new(),
+            },
+        ]
+    );
+    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        admin_connection.await.unwrap();
+    });
+    let observed: serde_json::Value = serde_json::from_str(
+        &admin
+            .query_one(
+                "SELECT jsonb_build_object(
+                          'prior_title', (
+                            SELECT payload->>'prior_title'
+                              FROM storyos.project_activity_event_payloads
+                             WHERE project_id = $1::text::uuid
+                               AND receipt_id = $2::text::uuid
+                          ),
+                          'prior_order', (
+                            SELECT payload->>'prior_order'
+                              FROM storyos.project_activity_event_payloads
+                             WHERE project_id = $1::text::uuid
+                               AND receipt_id = $2::text::uuid
+                          ),
+                          'compensation_actions', (
+                            SELECT count(*) FROM storyos.author_action_entries
+                             WHERE project_id = $1::text::uuid
+                               AND disposition = 'compensation'
+                               AND compensated_source_sequence = $3::text::numeric
+                          ),
+                          'forward_update_actions', (
+                            SELECT count(*) FROM storyos.author_action_entries
+                             WHERE project_id = $1::text::uuid
+                               AND disposition = 'forward'
+                               AND receipt_id IN (
+                                 SELECT receipt_id FROM storyos.domain_receipts
+                                  WHERE project_id = $1::text::uuid
+                                    AND command_kind = 'updateVolume'
+                               )
+                          ),
+                          'volume_removal_decisions', (
+                            SELECT count(*) FROM storyos.volume_removal_decisions
+                             WHERE project_id = $1::text::uuid
+                          )
+                        )::text",
+                &[
+                    &scope.project_id.as_ref(),
+                    &updated.ids.receipt_id,
+                    &source_sequence.to_string(),
+                ],
+            )
+            .await
+            .unwrap()
+            .get::<_, String>(0),
+    )
+    .unwrap();
+    assert_eq!(
+        observed,
+        serde_json::json!({
+            "prior_title": "Volume A",
+            "prior_order": "1",
+            "compensation_actions": 1,
+            "forward_update_actions": 1,
+            "volume_removal_decisions": 0,
+        })
+    );
+}
