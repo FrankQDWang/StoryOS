@@ -100,6 +100,7 @@ mod storage_activation;
 mod storage_activation_proof;
 mod structural_authority_settlement;
 mod takeover;
+mod undo_frontier;
 mod undo_latest_author_action;
 mod undo_structure;
 mod update_chapter;

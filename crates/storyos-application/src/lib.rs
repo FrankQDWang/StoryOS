@@ -177,8 +177,8 @@ pub use update_project::{
     UpdateProjectSettlementEffect, UpdateProjectStore, update_project,
 };
 pub use update_volume::{
-    UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement, UpdateVolumeSettlementEffect,
-    UpdateVolumeStore, update_volume,
+    UpdateVolumeAuthority, UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement,
+    UpdateVolumeSettlementEffect, UpdateVolumeStore, update_volume,
 };
 
 pub use editor_session::{
