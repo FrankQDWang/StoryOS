@@ -249,24 +249,28 @@ async fn seed_project_with_volume(
     (scope, volume_id)
 }
 
+struct SeedChapter<'a> {
+    suffix: &'a str,
+    title: &'a str,
+    expected_tree_revision: u64,
+    bytes: &'a [u8],
+    digest: &'a str,
+}
+
 async fn seed_chapter(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     volume_id: &str,
-    suffix: &str,
-    title: &str,
-    expected_tree_revision: u64,
-    bytes: &[u8],
-    digest: &str,
+    chapter: SeedChapter<'_>,
 ) -> String {
     let issue = command_issue(
         scope,
-        suffix,
+        chapter.suffix,
         "POST",
         "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
         "storyos.command.create-chapter.request.v1",
         "createChapter",
-        digest,
+        chapter.digest,
     );
     issue_project_command_challenge(store, &issue)
         .await
@@ -276,11 +280,11 @@ async fn seed_chapter(
         &chapter_command(
             issue.binding,
             &issue.nonce_digest,
-            suffix,
+            chapter.suffix,
             volume_id,
-            title,
-            expected_tree_revision,
-            bytes,
+            chapter.title,
+            chapter.expected_tree_revision,
+            chapter.bytes,
         ),
     )
     .await
@@ -554,11 +558,13 @@ async fn applied_create_chapter_receipt_may_bind_genesis_revision_pair() {
         &store,
         &scope,
         &volume_id,
-        "0844",
-        "Chapter A",
-        /*expected_tree_revision*/ 2,
-        CHAPTER_A_BYTES,
-        CHAPTER_A_DIGEST,
+        SeedChapter {
+            suffix: "0844",
+            title: "Chapter A",
+            expected_tree_revision: 2,
+            bytes: CHAPTER_A_BYTES,
+            digest: CHAPTER_A_DIGEST,
+        },
     )
     .await;
     let admin = open_admin().await;
@@ -702,22 +708,26 @@ async fn applied_set_current_chapter_receipt_may_bind_author_action_without_comm
         &store,
         &scope,
         &volume_id,
-        "0854",
-        "Chapter A",
-        /*expected_tree_revision*/ 2,
-        CHAPTER_A_BYTES,
-        CHAPTER_A_DIGEST,
+        SeedChapter {
+            suffix: "0854",
+            title: "Chapter A",
+            expected_tree_revision: 2,
+            bytes: CHAPTER_A_BYTES,
+            digest: CHAPTER_A_DIGEST,
+        },
     )
     .await;
     let chapter_b = seed_chapter(
         &store,
         &scope,
         &volume_id,
-        "0856",
-        "Chapter B",
-        /*expected_tree_revision*/ 3,
-        CHAPTER_B_BYTES,
-        CHAPTER_B_DIGEST,
+        SeedChapter {
+            suffix: "0856",
+            title: "Chapter B",
+            expected_tree_revision: 3,
+            bytes: CHAPTER_B_BYTES,
+            digest: CHAPTER_B_DIGEST,
+        },
     )
     .await;
     let session_issue = command_issue(
