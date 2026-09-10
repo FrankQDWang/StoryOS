@@ -17,6 +17,7 @@ pub struct AuthorUndoFrontier {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AuthorUndoFrontierKind {
     ReversibleDirectAuthorAction { resulting_revision_id: String },
+    ReversibleStructureTransition,
     Barrier,
 }
 
@@ -65,6 +66,11 @@ pub fn undo_latest_author_action(command: &UndoLatestAuthorAction) -> UndoLatest
         AuthorUndoFrontierKind::Barrier => UndoLatestAuthorActionResult::Unavailable {
             reason: UndoLatestAuthorActionUnavailable::Barrier,
         },
+        AuthorUndoFrontierKind::ReversibleStructureTransition => {
+            UndoLatestAuthorActionResult::Compensated {
+                source_sequence: frontier.sequence,
+            }
+        }
         AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
             resulting_revision_id,
         } => {

@@ -131,6 +131,32 @@ fn undo_response(
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
     let (receipt_result, effect, revision_ids, commit_ids, resulting_head, action_sequence) =
         match settlement.effect {
+            UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
+                source_sequence,
+                author_action_sequence,
+                authoritative_commit_id,
+                snapshot_id: _,
+                author_undo_frontier_sequence,
+            } => (
+                contracts::DomainReceiptResult::AuthoritativeApplied,
+                contracts::UndoLatestAuthorActionEffect::Compensated {
+                    source_sequence: source_sequence.to_string(),
+                    author_action_sequence: author_action_sequence.to_string(),
+                    authoritative_commit_id: authoritative_commit_id.clone(),
+                    authoritative_revision: contract_chapter_revision(
+                        command.expected_authoritative_revision_id.clone(),
+                        String::new(),
+                        &[],
+                    ),
+                    project_activity_position: settlement.project_activity_position.to_string(),
+                    author_undo_frontier_sequence: author_undo_frontier_sequence
+                        .map(|sequence| sequence.to_string()),
+                },
+                Vec::new(),
+                vec![authoritative_commit_id],
+                command.expected_authoritative_revision_id.clone(),
+                Some(author_action_sequence.to_string()),
+            ),
             UndoLatestAuthorActionSettlementEffect::Compensated {
                 source_sequence,
                 author_action_sequence,

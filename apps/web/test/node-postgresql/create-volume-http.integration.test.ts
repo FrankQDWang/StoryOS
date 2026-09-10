@@ -155,6 +155,9 @@ test("createVolume creates one named Volume, replays, and fails closed", async (
     assert.equal(applied.created.effect.order, "1");
     assert.match(applied.created.effect.volume_id, UUID_V7);
     assert.match(applied.created.effect.project_activity_position, /^[1-9][0-9]*$/);
+    assert.equal(applied.created.receipt.authoritative_commit_ids.length, 1);
+    assert.match(applied.created.receipt.authoritative_commit_ids[0] ?? "", UUID_V7);
+    assert.equal(applied.created.receipt.author_action_sequence, "1");
 
     const replay = await createVolume({
       baseUrl,
@@ -551,6 +554,8 @@ test("createVolume reports Canonical Sibling Order through removal, replay, and 
     });
     assert.equal(appliedVolume(historicalB).order, "1");
     assert.equal(historicalB.receipt.receipt_id, volumeB.created.receipt.receipt_id);
+    assert.deepEqual(historicalB.receipt.authoritative_commit_ids, []);
+    assert.equal(historicalB.receipt.author_action_sequence, null);
   } finally {
     await stopRealServer(server);
   }
