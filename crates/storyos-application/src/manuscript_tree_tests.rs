@@ -39,7 +39,7 @@ fn foreign_scope() -> ProjectScope {
 }
 
 fn found_facts(facts: CanonicalTreeFacts) -> CanonicalTreeRead {
-    CanonicalTreeRead::Found(facts)
+    CanonicalTreeRead::Found(Box::new(facts))
 }
 
 #[tokio::test]
@@ -60,12 +60,12 @@ async fn an_empty_active_project_returns_an_ordered_canonical_tree_with_zero_vol
 
     assert_eq!(
         tree,
-        GetManuscriptTree::Found(CanonicalManuscriptTree {
+        GetManuscriptTree::Found(Box::new(CanonicalManuscriptTree {
             project_scope: scope,
             snapshot,
             tree_revision: 1,
             volumes: Vec::new(),
-        })
+        }))
     );
 }
 

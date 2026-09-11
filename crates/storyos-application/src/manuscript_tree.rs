@@ -68,7 +68,7 @@ pub struct CanonicalTreeFacts {
 /// Live tree facts bound to one Snapshot, or a closed missing/resync outcome.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CanonicalTreeRead {
-    Found(CanonicalTreeFacts),
+    Found(Box<CanonicalTreeFacts>),
     Missing,
     SnapshotExpired,
 }
@@ -76,7 +76,7 @@ pub enum CanonicalTreeRead {
 /// Canonical Manuscript Tree read: live structure with the latest Snapshot, or resync.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum GetManuscriptTree {
-    Found(CanonicalManuscriptTree),
+    Found(Box<CanonicalManuscriptTree>),
     Missing,
     SnapshotExpired,
 }
@@ -106,29 +106,32 @@ pub async fn get_manuscript_tree(
                             .all(|chapter| &chapter.project_scope == scope)
                 }) =>
         {
-            Ok(GetManuscriptTree::Found(CanonicalManuscriptTree {
-                project_scope: scope.clone(),
-                snapshot: facts.snapshot,
-                tree_revision: facts.tree_revision,
-                volumes: facts
-                    .volumes
-                    .into_iter()
-                    .map(|volume| VolumeNode {
-                        volume_id: volume.volume_id,
-                        title: volume.title,
-                        order: volume.order,
-                        chapters: volume
-                            .chapters
-                            .into_iter()
-                            .map(|chapter| ChapterNode {
-                                chapter_id: chapter.chapter_id,
-                                title: chapter.title,
-                                order: chapter.order,
-                            })
-                            .collect(),
-                    })
-                    .collect(),
-            }))
+            let facts = *facts;
+            Ok(GetManuscriptTree::Found(Box::new(
+                CanonicalManuscriptTree {
+                    project_scope: scope.clone(),
+                    snapshot: facts.snapshot,
+                    tree_revision: facts.tree_revision,
+                    volumes: facts
+                        .volumes
+                        .into_iter()
+                        .map(|volume| VolumeNode {
+                            volume_id: volume.volume_id,
+                            title: volume.title,
+                            order: volume.order,
+                            chapters: volume
+                                .chapters
+                                .into_iter()
+                                .map(|chapter| ChapterNode {
+                                    chapter_id: chapter.chapter_id,
+                                    title: chapter.title,
+                                    order: chapter.order,
+                                })
+                                .collect(),
+                        })
+                        .collect(),
+                },
+            )))
         }
         CanonicalTreeRead::Found(_) => Ok(GetManuscriptTree::Missing),
     }

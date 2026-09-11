@@ -28,7 +28,7 @@ pub(super) async fn get_manuscript_tree(
                 "The Snapshot is no longer available.",
             ));
         }
-        GetManuscriptTree::Found(tree) => tree,
+        GetManuscriptTree::Found(tree) => *tree,
     };
     let project_scope = contract_scope(&scope);
     Ok(Json(contracts::GetManuscriptTreeResponse {

@@ -37,7 +37,7 @@ impl ManuscriptTreeReader for PostgresProjectReader {
                 CanonicalSnapshotQuery::Missing => Ok(CanonicalTreeRead::Missing),
                 CanonicalSnapshotQuery::Expired => Ok(CanonicalTreeRead::SnapshotExpired),
                 CanonicalSnapshotQuery::Available(snapshot) => Ok(CanonicalTreeRead::Found(
-                    load_live_tree_facts(&*client, scope, snapshot).await?,
+                    Box::new(load_live_tree_facts(&*client, scope, snapshot).await?),
                 )),
             }
         }
