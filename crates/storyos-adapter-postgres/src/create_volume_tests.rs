@@ -573,7 +573,7 @@ async fn stale_latest_snapshot_resyncs_and_does_not_return_the_live_tree() {
             volume_issue.binding.clone(),
             &volume_issue.nonce_digest,
             "06c3",
-            1,
+            /*expected_tree_revision*/ 1,
         ),
     )
     .await

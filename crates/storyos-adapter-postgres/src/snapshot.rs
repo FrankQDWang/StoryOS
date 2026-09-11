@@ -219,10 +219,10 @@ pub(super) enum CanonicalSnapshotQuery {
 }
 
 pub(super) async fn load_latest_canonical_snapshot_query(
-    transaction: &tokio_postgres::Transaction<'_>,
+    client: &impl tokio_postgres::GenericClient,
     scope: &ProjectScope,
 ) -> Result<CanonicalSnapshotQuery, ProjectReadError> {
-    let row = transaction
+    let row = client
         .query_opt(
             "SELECT snapshot.snapshot_id::text,
                     snapshot.project_activity_position::text,
