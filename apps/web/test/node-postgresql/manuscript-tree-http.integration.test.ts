@@ -11,6 +11,7 @@ import {
 import type { CreateProjectChallengeRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -117,6 +118,43 @@ test("getManuscriptTree returns the empty canonical tree and fail-closes across 
     );
     assert.equal(foreignOrigin.status, 403);
     assert.doesNotMatch(await foreignOrigin.text(), /Tree Empty/);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("getManuscriptTree resyncs when the latest Snapshot is stale", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const empty = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-000000000713",
+      "Tree Stale Snapshot",
+    );
+    const tree = await getManuscriptTree({
+      baseUrl,
+      projectId: empty.created.project_scope.project_id,
+      fetchImpl: empty.fetchImpl,
+    });
+    await queryPostgres(`
+      UPDATE storyos.project_snapshots
+         SET expires_at = clock_timestamp() - interval '1 second'
+       WHERE owner_user_id = '${USER_A}'::uuid
+         AND project_id = '${empty.created.project_scope.project_id}'::uuid
+         AND snapshot_id = '${tree.snapshot.snapshot_id}'::uuid`);
+    await assert.rejects(
+      getManuscriptTree({
+        baseUrl,
+        projectId: empty.created.project_scope.project_id,
+        fetchImpl: empty.fetchImpl,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 409
+          && JSON.parse(protocol.responseBody ?? "{}").code === "snapshot_expired";
+      },
+    );
   } finally {
     await stopRealServer(server);
   }

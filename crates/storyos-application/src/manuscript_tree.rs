@@ -65,55 +65,76 @@ pub struct CanonicalTreeFacts {
     pub volumes: Vec<VolumeFact>,
 }
 
+/// Live tree facts bound to one Snapshot, or a closed missing/resync outcome.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CanonicalTreeRead {
+    Found(Box<CanonicalTreeFacts>),
+    Missing,
+    SnapshotExpired,
+}
+
+/// Canonical Manuscript Tree read: live structure with the latest Snapshot, or resync.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum GetManuscriptTree {
+    Found(Box<CanonicalManuscriptTree>),
+    Missing,
+    SnapshotExpired,
+}
+
 /// Reads canonical manuscript tree facts under one already authenticated exact Project Scope.
 pub trait ManuscriptTreeReader: Sync {
     fn read_canonical_tree_facts(
         &self,
         scope: &ProjectScope,
-    ) -> impl Future<Output = Result<Option<CanonicalTreeFacts>, ProjectReadError>> + Send;
+    ) -> impl Future<Output = Result<CanonicalTreeRead, ProjectReadError>> + Send;
 }
 
 pub async fn get_manuscript_tree(
     reader: &impl ManuscriptTreeReader,
     scope: &ProjectScope,
-) -> Result<Option<CanonicalManuscriptTree>, ProjectReadError> {
-    let Some(facts) = reader.read_canonical_tree_facts(scope).await? else {
-        return Ok(None);
-    };
-    if &facts.project_scope != scope
-        || facts.volumes.iter().any(|volume| {
-            &volume.project_scope != scope
-                || volume
-                    .chapters
-                    .iter()
-                    .any(|chapter| &chapter.project_scope != scope)
-        })
-    {
-        return Ok(None);
+) -> Result<GetManuscriptTree, ProjectReadError> {
+    match reader.read_canonical_tree_facts(scope).await? {
+        CanonicalTreeRead::Missing => Ok(GetManuscriptTree::Missing),
+        CanonicalTreeRead::SnapshotExpired => Ok(GetManuscriptTree::SnapshotExpired),
+        CanonicalTreeRead::Found(facts)
+            if &facts.project_scope == scope
+                && facts.volumes.iter().all(|volume| {
+                    &volume.project_scope == scope
+                        && volume
+                            .chapters
+                            .iter()
+                            .all(|chapter| &chapter.project_scope == scope)
+                }) =>
+        {
+            let facts = *facts;
+            Ok(GetManuscriptTree::Found(Box::new(
+                CanonicalManuscriptTree {
+                    project_scope: scope.clone(),
+                    snapshot: facts.snapshot,
+                    tree_revision: facts.tree_revision,
+                    volumes: facts
+                        .volumes
+                        .into_iter()
+                        .map(|volume| VolumeNode {
+                            volume_id: volume.volume_id,
+                            title: volume.title,
+                            order: volume.order,
+                            chapters: volume
+                                .chapters
+                                .into_iter()
+                                .map(|chapter| ChapterNode {
+                                    chapter_id: chapter.chapter_id,
+                                    title: chapter.title,
+                                    order: chapter.order,
+                                })
+                                .collect(),
+                        })
+                        .collect(),
+                },
+            )))
+        }
+        CanonicalTreeRead::Found(_) => Ok(GetManuscriptTree::Missing),
     }
-    Ok(Some(CanonicalManuscriptTree {
-        project_scope: scope.clone(),
-        snapshot: facts.snapshot,
-        tree_revision: facts.tree_revision,
-        volumes: facts
-            .volumes
-            .into_iter()
-            .map(|volume| VolumeNode {
-                volume_id: volume.volume_id,
-                title: volume.title,
-                order: volume.order,
-                chapters: volume
-                    .chapters
-                    .into_iter()
-                    .map(|chapter| ChapterNode {
-                        chapter_id: chapter.chapter_id,
-                        title: chapter.title,
-                        order: chapter.order,
-                    })
-                    .collect(),
-            })
-            .collect(),
-    }))
 }
 
 #[cfg(test)]

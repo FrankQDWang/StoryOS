@@ -1,19 +1,19 @@
 use super::{
-    CanonicalManuscriptTree, CanonicalSnapshot, CanonicalTreeFacts, ChapterFact,
-    ManuscriptTreeReader, VolumeFact, VolumeId, get_manuscript_tree,
+    CanonicalManuscriptTree, CanonicalSnapshot, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact,
+    GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, get_manuscript_tree,
 };
 use crate::{ChapterId, ProjectId, ProjectReadError, ProjectScope, UserId};
 
 struct FixtureReader {
-    facts: CanonicalTreeFacts,
+    read: CanonicalTreeRead,
 }
 
 impl ManuscriptTreeReader for FixtureReader {
     async fn read_canonical_tree_facts(
         &self,
         _scope: &ProjectScope,
-    ) -> Result<Option<CanonicalTreeFacts>, ProjectReadError> {
-        Ok(Some(self.facts.clone()))
+    ) -> Result<CanonicalTreeRead, ProjectReadError> {
+        Ok(self.read.clone())
     }
 }
 
@@ -38,30 +38,34 @@ fn foreign_scope() -> ProjectScope {
     ProjectScope::new(UserId::new("user-b"), ProjectId::new("project-a"))
 }
 
+fn found_facts(facts: CanonicalTreeFacts) -> CanonicalTreeRead {
+    CanonicalTreeRead::Found(Box::new(facts))
+}
+
 #[tokio::test]
 async fn an_empty_active_project_returns_an_ordered_canonical_tree_with_zero_volumes_and_zero_chapters()
  {
     let scope = owned_scope();
     let snapshot = empty_snapshot();
     let reader = FixtureReader {
-        facts: CanonicalTreeFacts {
+        read: found_facts(CanonicalTreeFacts {
             project_scope: scope.clone(),
             snapshot: snapshot.clone(),
             tree_revision: 1,
             volumes: Vec::new(),
-        },
+        }),
     };
 
     let tree = get_manuscript_tree(&reader, &scope).await.unwrap();
 
     assert_eq!(
         tree,
-        Some(CanonicalManuscriptTree {
+        GetManuscriptTree::Found(Box::new(CanonicalManuscriptTree {
             project_scope: scope,
             snapshot,
             tree_revision: 1,
             volumes: Vec::new(),
-        })
+        }))
     );
 }
 
@@ -69,24 +73,24 @@ async fn an_empty_active_project_returns_an_ordered_canonical_tree_with_zero_vol
 async fn a_snapshot_outside_project_scope_returns_no_canonical_tree() {
     let scope = owned_scope();
     let reader = FixtureReader {
-        facts: CanonicalTreeFacts {
+        read: found_facts(CanonicalTreeFacts {
             project_scope: foreign_scope(),
             snapshot: empty_snapshot(),
             tree_revision: 1,
             volumes: Vec::new(),
-        },
+        }),
     };
 
     let tree = get_manuscript_tree(&reader, &scope).await.unwrap();
 
-    assert_eq!(tree, None);
+    assert_eq!(tree, GetManuscriptTree::Missing);
 }
 
 #[tokio::test]
 async fn a_volume_outside_project_scope_returns_no_canonical_tree() {
     let scope = owned_scope();
     let reader = FixtureReader {
-        facts: CanonicalTreeFacts {
+        read: found_facts(CanonicalTreeFacts {
             project_scope: scope.clone(),
             snapshot: empty_snapshot(),
             tree_revision: 1,
@@ -97,19 +101,19 @@ async fn a_volume_outside_project_scope_returns_no_canonical_tree() {
                 order: 1,
                 chapters: Vec::new(),
             }],
-        },
+        }),
     };
 
     let tree = get_manuscript_tree(&reader, &scope).await.unwrap();
 
-    assert_eq!(tree, None);
+    assert_eq!(tree, GetManuscriptTree::Missing);
 }
 
 #[tokio::test]
 async fn a_chapter_outside_project_scope_returns_no_canonical_tree() {
     let scope = owned_scope();
     let reader = FixtureReader {
-        facts: CanonicalTreeFacts {
+        read: found_facts(CanonicalTreeFacts {
             project_scope: scope.clone(),
             snapshot: empty_snapshot(),
             tree_revision: 1,
@@ -125,10 +129,10 @@ async fn a_chapter_outside_project_scope_returns_no_canonical_tree() {
                     order: 1,
                 }],
             }],
-        },
+        }),
     };
 
     let tree = get_manuscript_tree(&reader, &scope).await.unwrap();
 
-    assert_eq!(tree, None);
+    assert_eq!(tree, GetManuscriptTree::Missing);
 }

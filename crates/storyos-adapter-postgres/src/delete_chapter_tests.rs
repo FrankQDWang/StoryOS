@@ -3,7 +3,7 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
     CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, CreateVolumeSettlementEffect, DeleteChapterCommand,
-    DeleteChapterSettlementEffect, EditorClientBinding, EditorSessionId,
+    DeleteChapterSettlementEffect, EditorClientBinding, EditorSessionId, GetManuscriptTree,
     IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
     ProjectCommandChallengeBinding, ProjectId, ProjectScope, UndoLatestAuthorActionCommand,
     UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
@@ -465,10 +465,9 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
     .unwrap();
     assert_eq!(replay, first);
 
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree.tree_revision, 5);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
     assert_eq!(
@@ -509,7 +508,7 @@ async fn delete_chapter_is_atomic_replayable_and_scope_safe() {
         )
         .await
         .unwrap(),
-        None
+        GetManuscriptTree::Missing
     );
 
     let already = apply_delete(
@@ -806,10 +805,9 @@ async fn author_undo_compensates_delete_chapter_and_restores_prior_chapter_ident
         panic!("Delete Chapter Undo must write structure Compensation");
     };
     assert_eq!(source_sequence, authority.author_action_sequence);
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after Delete Chapter Compensation");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the tree remains after Delete Chapter Compensation");
+    };
     assert_eq!(tree.tree_revision, 4);
     assert_eq!(tree.snapshot.snapshot_id, snapshot_id);
     assert_eq!(

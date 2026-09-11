@@ -1,42 +1,54 @@
 use storyos_application::{
-    CanonicalTreeFacts, ChapterFact, ChapterId, ManuscriptTreeReader, ProjectReadError,
-    ProjectScope, VolumeFact, VolumeId,
+    CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterId, ManuscriptTreeReader,
+    ProjectReadError, ProjectScope, VolumeFact, VolumeId,
 };
 use tokio_postgres::GenericClient;
 
 use super::{PostgresProjectReader, read_error, set_scope};
+use crate::snapshot::CanonicalSnapshotQuery;
 
 impl ManuscriptTreeReader for PostgresProjectReader {
     async fn read_canonical_tree_facts(
         &self,
         scope: &ProjectScope,
-    ) -> Result<Option<CanonicalTreeFacts>, ProjectReadError> {
-        let mut client = self.connect().await?;
-        let transaction = client.transaction().await.map_err(read_error)?;
-        set_scope(&transaction, scope).await?;
-        let Some(_) = transaction
-            .query_opt(
-                "SELECT tree_revision::text
-                   FROM storyos.projects
-                  WHERE owner_user_id = $1::text::uuid
-                    AND project_id = $2::text::uuid
-                    AND lifecycle_state = 'active'",
-                &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
-            )
+    ) -> Result<CanonicalTreeRead, ProjectReadError> {
+        let client = self.connect().await?;
+        client
+            .batch_execute("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY")
             .await
-            .map_err(read_error)?
-        else {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(None);
-        };
-        let snapshot = crate::snapshot::load_latest_canonical_snapshot(&transaction, scope).await?;
-        let Some(snapshot) = snapshot else {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(None);
-        };
-        let facts = load_live_tree_facts(&transaction, scope, snapshot).await?;
-        transaction.commit().await.map_err(read_error)?;
-        Ok(Some(facts))
+            .map_err(read_error)?;
+        let outcome = async {
+            set_scope(&*client, scope).await?;
+            let Some(_) = client
+                .query_opt(
+                    "SELECT tree_revision::text
+                       FROM storyos.projects
+                      WHERE owner_user_id = $1::text::uuid
+                        AND project_id = $2::text::uuid
+                        AND lifecycle_state = 'active'",
+                    &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+                )
+                .await
+                .map_err(read_error)?
+            else {
+                return Ok(CanonicalTreeRead::Missing);
+            };
+            match crate::snapshot::load_latest_canonical_snapshot_query(&*client, scope).await? {
+                CanonicalSnapshotQuery::Missing => Ok(CanonicalTreeRead::Missing),
+                CanonicalSnapshotQuery::Expired => Ok(CanonicalTreeRead::SnapshotExpired),
+                CanonicalSnapshotQuery::Available(snapshot) => Ok(CanonicalTreeRead::Found(
+                    Box::new(load_live_tree_facts(&*client, scope, snapshot).await?),
+                )),
+            }
+        }
+        .await;
+        match &outcome {
+            Ok(_) => client.batch_execute("COMMIT").await.map_err(read_error)?,
+            Err(_) => {
+                let _rollback = client.batch_execute("ROLLBACK").await;
+            }
+        }
+        outcome
     }
 }
 

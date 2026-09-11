@@ -1,8 +1,8 @@
 use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
-    EditorClientBinding, IssueCreateProjectChallenge, ProjectId, ProjectScope, UserId,
-    create_project, get_manuscript_tree, issue_create_project_challenge,
+    EditorClientBinding, GetManuscriptTree, IssueCreateProjectChallenge, ProjectId, ProjectScope,
+    UserId, create_project, get_manuscript_tree, issue_create_project_challenge,
 };
 use tokio_postgres::NoTls;
 
@@ -96,16 +96,16 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
         binding.prospective_project_id.clone(),
     );
 
-    let Some(first) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+    let GetManuscriptTree::Found(first) = get_manuscript_tree(&store, &scope).await.unwrap() else {
         panic!("empty active Project must return a Canonical Query");
     };
     assert_eq!(first.project_scope, scope);
     assert_eq!(first.volumes, Vec::new());
 
-    let second = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Create Project Snapshot remains bound");
+    let GetManuscriptTree::Found(second) = get_manuscript_tree(&store, &scope).await.unwrap()
+    else {
+        panic!("the Create Project Snapshot remains bound");
+    };
     assert_eq!(second, first);
 
     assert_eq!(
@@ -115,7 +115,7 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
         )
         .await
         .unwrap(),
-        None
+        GetManuscriptTree::Missing
     );
     assert_eq!(
         get_manuscript_tree(
@@ -124,7 +124,7 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
         )
         .await
         .unwrap(),
-        None
+        GetManuscriptTree::Missing
     );
 
     let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
@@ -139,5 +139,8 @@ async fn empty_canonical_tree_is_scope_safe_and_snapshot_bound() {
         )
         .await
         .unwrap();
-    assert_eq!(get_manuscript_tree(&store, &scope).await.unwrap(), None);
+    assert_eq!(
+        get_manuscript_tree(&store, &scope).await.unwrap(),
+        GetManuscriptTree::Missing
+    );
 }

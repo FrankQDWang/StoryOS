@@ -3,13 +3,13 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
     CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UpdateChapterCommand, UpdateChapterSettlementEffect,
-    UserId, VolumeId, VolumeNode, create_chapter, create_editor_session, create_project,
-    create_volume, get_manuscript_tree, issue_create_project_challenge,
-    issue_project_command_challenge, open_chapter, open_current_chapter, open_project,
-    undo_latest_author_action, update_chapter,
+    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UpdateChapterCommand,
+    UpdateChapterSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
+    create_editor_session, create_project, create_volume, get_manuscript_tree,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
+    open_current_chapter, open_project, undo_latest_author_action, update_chapter,
 };
 use tokio_postgres::NoTls;
 
@@ -468,10 +468,9 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
         Some(ChapterId::new(first_chapter_id.clone()))
     );
 
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree.tree_revision, 5);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
     assert_eq!(
@@ -505,7 +504,7 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
         )
         .await
         .unwrap(),
-        None
+        GetManuscriptTree::Missing
     );
 
     let stale_issue = update_issue(&scope, "0d1a", UPDATE_DIGEST);
@@ -989,10 +988,9 @@ async fn author_undo_compensates_update_chapter_and_restores_title_and_canonical
         panic!("Update Chapter Undo must write structure Compensation");
     };
     assert_eq!(source_sequence, authority.author_action_sequence);
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after Update Chapter Compensation");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the tree remains after Update Chapter Compensation");
+    };
     assert_eq!(tree.tree_revision, 5);
     assert_eq!(tree.snapshot.snapshot_id, snapshot_id);
     assert_eq!(
@@ -1134,10 +1132,11 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
         .authority
         .clone()
         .expect("Applied Update Chapter must write authority");
-    let tree_after_move = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after Update Chapter");
+    let GetManuscriptTree::Found(tree_after_move) =
+        get_manuscript_tree(&store, &scope).await.unwrap()
+    else {
+        panic!("the tree remains after Update Chapter");
+    };
     assert_eq!(
         tree_after_move.volumes,
         vec![VolumeNode {
@@ -1260,10 +1259,9 @@ async fn author_undo_compensates_update_chapter_and_restores_prior_live_sibling_
         panic!("Update Chapter Undo must write structure Compensation");
     };
     assert_eq!(source_sequence, authority.author_action_sequence);
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after Update Chapter Compensation");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the tree remains after Update Chapter Compensation");
+    };
     assert_eq!(tree.tree_revision, 4);
     assert_eq!(tree.snapshot.snapshot_id, snapshot_id);
     assert_eq!(

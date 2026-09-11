@@ -715,10 +715,10 @@ impl ProjectReader for PostgresProjectReader {
 }
 
 async fn set_scope(
-    transaction: &tokio_postgres::Transaction<'_>,
+    client: &impl tokio_postgres::GenericClient,
     scope: &ProjectScope,
 ) -> Result<(), ProjectReadError> {
-    transaction
+    client
         .execute(
             "SELECT set_config('storyos.user_id', $1, true), \
              set_config('storyos.owner_user_id', $1, true), \

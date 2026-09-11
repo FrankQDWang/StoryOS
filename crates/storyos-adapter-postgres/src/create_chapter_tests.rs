@@ -2,11 +2,12 @@ use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
     CreateChapterPublicOrder, CreateChapterSettlementEffect, CreateProjectChallengeBinding,
-    CreateProjectCommand, CreateVolumeCommand, EditorClientBinding, IssueCreateProjectChallenge,
-    IssueProjectCommandChallenge, OpenChapter, ProjectCommandChallengeBinding, ProjectId,
-    ProjectScope, UserId, VolumeId, VolumeNode, create_chapter, create_project, create_volume,
-    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
-    open_chapter, open_current_chapter, open_project,
+    CreateProjectCommand, CreateVolumeCommand, EditorClientBinding, GetManuscriptTree,
+    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
+    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, VolumeId, VolumeNode,
+    create_chapter, create_project, create_volume, get_manuscript_tree,
+    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
+    open_current_chapter, open_project,
 };
 use tokio_postgres::NoTls;
 
@@ -295,10 +296,11 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
     .unwrap();
     assert_eq!(replay, first);
 
-    let tree_after_first = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree_after_first) =
+        get_manuscript_tree(&store, &scope).await.unwrap()
+    else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree_after_first.tree_revision, 3);
     assert_eq!(tree_after_first.snapshot.snapshot_id, authority.snapshot_id);
     assert_eq!(
@@ -423,10 +425,9 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         CreateChapterPublicOrder::CanonicalSiblingOrder(3)
     );
 
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree.project_scope, scope);
     assert_eq!(tree.tree_revision, 5);
     let third_authority = third
@@ -517,7 +518,7 @@ async fn create_chapter_is_atomic_replayable_and_scope_safe() {
         )
         .await
         .unwrap(),
-        None
+        GetManuscriptTree::Missing
     );
     assert_eq!(
         open_current_chapter(
@@ -845,10 +846,9 @@ async fn create_chapter_replays_canonical_sibling_order_and_keeps_historical_ack
     .unwrap();
     assert_eq!(replay, second);
 
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree.tree_revision, 4);
     assert_eq!(tree.volumes[0].chapters[1].order, 2);
     assert_eq!(
