@@ -401,6 +401,13 @@ reload_controlled_fixture() {
     < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 }
 
+# The node-postgresql files share one database and one fixture, so ScriptOrderSequencer
+# keeps the given order instead of the Vitest default order.
+run_http_files() {
+  STORYOS_VITEST_FILE_ORDER=$(printf '%s:' "$@") \
+    pnpm --dir apps/web exec vitest run --project node-postgresql "$@"
+}
+
 container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
@@ -596,86 +603,44 @@ export STORYOS_TEST_ADMIN_DATABASE_URL="postgres://postgres:admin@127.0.0.1:$por
 export STORYOS_TEST_POSTGRES_CONTAINER="$container"
 prove_bound_request_path_activation
 echo "Running PostgreSQL Application and RLS tests"
-cargo test -p storyos-adapter-postgres --test project_scope -- --ignored --nocapture
-cargo test -p storyos-adapter-postgres --test project_command_challenge -- --ignored --nocapture
-cargo test -p storyos-adapter-postgres --lib -- --ignored --nocapture
-echo "Running HTTP protocol host tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/protocol-http-host.integration.test.ts
-echo "Running HTTP Project Scope tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
+# `make contracts` builds these targets with `--workspace --all-features`. The same
+# selection reuses those artifacts. A package-only selection unifies dependency features
+# differently and recompiles storyos-adapter-postgres for each target. The `--lib` step
+# runs every ignored lib test in the workspace; today only storyos-adapter-postgres has them.
+cargo test --workspace --all-features --test project_scope -- --ignored --nocapture
+cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture
+cargo test --workspace --all-features --lib -- --ignored --nocapture
+echo "Running HTTP protocol host and Project Scope tests"
+run_http_files \
+  test/node-postgresql/protocol-http-host.integration.test.ts \
   test/node-postgresql/project-http.integration.test.ts
 echo "Running HTTP ApplyAuthorEdit process-cut tests"
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/apply-author-edit-process-cut.integration.test.ts
-echo "Running HTTP Activity Stream duplicate-resume tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/activity-stream-duplicate-http.integration.test.ts
-echo "Running HTTP Activity Stream cross-table tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/activity-stream-cross-table-http.integration.test.ts
-echo "Running HTTP Snapshot and Activity Stream tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/snapshot-replay-http.integration.test.ts
-echo "Running HTTP createProjectChallenge tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/create-project-challenge-http.integration.test.ts
-echo "Running HTTP createProject tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/create-project-http.integration.test.ts
-echo "Running HTTP listProjects tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/list-projects-http.integration.test.ts
-echo "Running HTTP updateProject tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/update-project-http.integration.test.ts
-echo "Running HTTP archiveProject tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/archive-project-http.integration.test.ts
-echo "Running HTTP createVolume tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/create-volume-http.integration.test.ts
-echo "Running HTTP updateVolume tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/update-volume-http.integration.test.ts
-echo "Running HTTP createChapter tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/create-chapter-http.integration.test.ts
-echo "Running HTTP updateChapter tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/update-chapter-http.integration.test.ts
-echo "Running HTTP setCurrentChapter tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/set-current-chapter-http.integration.test.ts
-echo "Running HTTP deleteChapter tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/delete-chapter-http.integration.test.ts
-echo "Running HTTP deleteVolume tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/delete-volume-http.integration.test.ts
-echo "Running HTTP getManuscriptTree tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/manuscript-tree-http.integration.test.ts
-echo "Running HTTP searchManuscript tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/manuscript-search-http.integration.test.ts
-echo "Running HTTP takeOverProjectWriter tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/takeover-http.integration.test.ts
-echo "Running HTTP fenced-writer late-result tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/takeover-late-result-http.integration.test.ts
-echo "Running HTTP exportProjectArchive tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/project-export-admission-http.integration.test.ts
-echo "Running HTTP exportProjectArchive pinned-source tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/project-export-pinned-source-http.integration.test.ts
-echo "Running HTTP exportHumanReadableManuscript admission tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
-  test/node-postgresql/readable-export-admission-http.integration.test.ts
-echo "Running HTTP exportHumanReadableManuscript pinned-source tests"
-pnpm --dir apps/web exec vitest run --project node-postgresql \
+echo "Running HTTP Activity Stream, Project, structure, query, and export tests"
+run_http_files \
+  test/node-postgresql/activity-stream-duplicate-http.integration.test.ts \
+  test/node-postgresql/activity-stream-cross-table-http.integration.test.ts \
+  test/node-postgresql/snapshot-replay-http.integration.test.ts \
+  test/node-postgresql/create-project-challenge-http.integration.test.ts \
+  test/node-postgresql/create-project-http.integration.test.ts \
+  test/node-postgresql/list-projects-http.integration.test.ts \
+  test/node-postgresql/update-project-http.integration.test.ts \
+  test/node-postgresql/archive-project-http.integration.test.ts \
+  test/node-postgresql/create-volume-http.integration.test.ts \
+  test/node-postgresql/update-volume-http.integration.test.ts \
+  test/node-postgresql/create-chapter-http.integration.test.ts \
+  test/node-postgresql/update-chapter-http.integration.test.ts \
+  test/node-postgresql/set-current-chapter-http.integration.test.ts \
+  test/node-postgresql/delete-chapter-http.integration.test.ts \
+  test/node-postgresql/delete-volume-http.integration.test.ts \
+  test/node-postgresql/manuscript-tree-http.integration.test.ts \
+  test/node-postgresql/manuscript-search-http.integration.test.ts \
+  test/node-postgresql/takeover-http.integration.test.ts \
+  test/node-postgresql/takeover-late-result-http.integration.test.ts \
+  test/node-postgresql/project-export-admission-http.integration.test.ts \
+  test/node-postgresql/project-export-pinned-source-http.integration.test.ts \
+  test/node-postgresql/readable-export-admission-http.integration.test.ts \
   test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
 echo "Running HTTP human-readable export process-cut tests"
 reload_controlled_fixture

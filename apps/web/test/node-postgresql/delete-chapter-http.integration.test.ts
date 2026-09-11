@@ -235,6 +235,9 @@ function appliedId(created: { effect: { kind: string; chapter_id?: string } }): 
   return created.effect.chapter_id;
 }
 
+// One Project admits at most PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY (10) Command
+// Challenges in one 60-second window. The eleventh waits for the next window, so each
+// test in this file stays at or under 10 Command Challenges on one Project.
 test("deleteChapter removes a Chapter, honors deletion, and selects next then previous then empty", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
@@ -389,19 +392,6 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
     );
     assert.equal(stale.effect.kind, "conflicted");
 
-    const invalidJoin = await deleteOwned(
-      baseUrl,
-      fetchImpl,
-      projectId,
-      MISSING_CHAPTER,
-      "018f0000-0000-7001-8000-00000000c221",
-      deleteRequest("8", "018f0000-0000-7001-8000-00000000c222"),
-    );
-    assert.equal(invalidJoin.effect.kind, "refused");
-    if (invalidJoin.effect.kind === "refused") {
-      assert.equal(invalidJoin.effect.reason, "invalid_chapter_join");
-    }
-
     const foreign = browserFetch(baseUrl, "session-b");
     await assert.rejects(
       () => deleteOwned(
@@ -419,7 +409,7 @@ test("deleteChapter removes a Chapter, honors deletion, and selects next then pr
   }
 });
 
-test("deleteChapter refuses an archived Project", async () => {
+test("deleteChapter refuses a missing Chapter join and an archived Project", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
     const { fetchImpl, projectId } = await createEmpty(
@@ -446,6 +436,20 @@ test("deleteChapter refuses an archived Project", async () => {
       chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-00000000c306"),
     );
     const chapterId = appliedId(chapter);
+
+    const invalidJoin = await deleteOwned(
+      baseUrl,
+      fetchImpl,
+      projectId,
+      MISSING_CHAPTER,
+      "018f0000-0000-7001-8000-00000000c311",
+      deleteRequest("3", "018f0000-0000-7001-8000-00000000c312"),
+    );
+    assert.equal(invalidJoin.effect.kind, "refused");
+    if (invalidJoin.effect.kind === "refused") {
+      assert.equal(invalidJoin.effect.reason, "invalid_chapter_join");
+    }
+
     const digest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-00000000c307"));
     const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
       baseUrl,
