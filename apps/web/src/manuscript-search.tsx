@@ -53,7 +53,7 @@ export function ManuscriptSearchPanel({
   const [outcome, setOutcome] = useState<SearchOutcome | undefined>(undefined);
   const [selectedMatch, setSelectedMatch] = useState<BoundReplacementMatch | undefined>(undefined);
   const [replaceOutcome, setReplaceOutcome] = useState<
-    { kind: "applied" } | { kind: "refused" } | undefined
+    { kind: "applied" } | { kind: "refused" } | { kind: "stale" } | undefined
   >(undefined);
 
   return (
@@ -70,6 +70,9 @@ export function ManuscriptSearchPanel({
               : "current_chapter";
           if (!query) return;
           setSelection(nextSelection);
+          setOutcome(undefined);
+          setSelectedMatch(undefined);
+          setReplaceOutcome(undefined);
           void (async () => {
             try {
               const page = await searchManuscript({
@@ -90,6 +93,7 @@ export function ManuscriptSearchPanel({
                 manuscriptBlockId: first.manuscript_block_id,
                 start: Number(first.start),
                 end: Number(first.end),
+                queryText: query,
               });
               setReplaceOutcome(undefined);
             } catch (error) {
@@ -174,6 +178,7 @@ export function ManuscriptSearchPanel({
                     manuscriptBlockId: item.manuscript_block_id,
                     start: Number(item.start),
                     end: Number(item.end),
+                    queryText: outcome.query,
                   };
                   const selected = selectedMatch?.chapterId === match.chapterId
                     && selectedMatch.manuscriptBlockId === match.manuscriptBlockId
@@ -215,6 +220,7 @@ export function ManuscriptSearchPanel({
                     manuscriptBlockId: item.manuscript_block_id,
                     start: Number(item.start),
                     end: Number(item.end),
+                    queryText: outcome.query,
                   }));
                   const broader = data.get("replace-mode") === "all"
                     || (submitter instanceof HTMLButtonElement
@@ -250,7 +256,11 @@ export function ManuscriptSearchPanel({
                   role="status"
                   data-replace-outcome={replaceOutcome.kind}
                 >
-                  {replaceOutcome.kind === "applied" ? "已替换一处匹配。" : "已拒绝更广的替换，权威正文未改。"}
+                  {replaceOutcome.kind === "applied"
+                    ? "已替换一处匹配。"
+                    : replaceOutcome.kind === "stale"
+                      ? "选中的匹配已失效，权威正文未改。"
+                      : "已拒绝更广的替换，权威正文未改。"}
                 </p>
               )}
             </>

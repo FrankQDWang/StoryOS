@@ -251,9 +251,10 @@ export function ManuscriptEditor({
       hasIncompleteSemanticIntent: () => composingRef.current || editor.view.composing,
       close: () => idle.close(),
       async replaceBound({ kind, matches, text }) {
+        if (persistWorkspaceRef.current === undefined) return "refused";
+        await idle.flush();
         const workspace = persistWorkspaceRef.current;
         if (workspace === undefined) return "refused";
-        await idle.flush();
         const chapterId = workspace.session.base_snapshot.chapter_id;
         const current = workspace.pending.blocks.map((block) => ({
           manuscript_block_id: block.manuscript_block_id,
@@ -264,6 +265,17 @@ export function ManuscriptEditor({
         const createdAt = new Date().toISOString();
         const beforeRevision = workspace.pending.authoritative_revision_id;
         if (kind === "one" && match !== undefined && matches.length === 1) {
+          const named = current.find((block) =>
+            block.manuscript_block_id === match.manuscriptBlockId);
+          if (named === undefined
+            || !Number.isSafeInteger(match.start)
+            || !Number.isSafeInteger(match.end)
+            || match.start < 0
+            || match.end < match.start
+            || match.end > named.text.length
+            || named.text.slice(match.start, match.end) !== match.queryText) {
+            return "stale";
+          }
           const resultingBlocks = applyBoundReplaces(current, [match], text);
           await idle.persist({
             kind: "replace_block_selection",
@@ -300,12 +312,14 @@ export function ManuscriptEditor({
               manuscriptBlockId: first.manuscript_block_id,
               start: 0,
               end: 0,
+              queryText: "",
             },
             {
               chapterId,
               manuscriptBlockId: first.manuscript_block_id,
               start: 0,
               end: 0,
+              queryText: "",
             },
           ];
         const resultingBlocks = currentMatches.length >= 2
