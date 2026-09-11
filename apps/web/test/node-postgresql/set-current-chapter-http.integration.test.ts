@@ -345,6 +345,8 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
     }
     assert.equal(applied.switched.effect.current_chapter_id, chapterBId);
     assert.match(applied.switched.effect.base_snapshot_id, UUID_V7);
+    assert.equal(applied.switched.receipt.author_action_sequence, "4");
+    assert.deepEqual(applied.switched.receipt.authoritative_commit_ids, []);
     assert.equal(applied.switched.project.open.kind, "current_chapter");
     if (applied.switched.project.open.kind !== "current_chapter") {
       throw new Error("the Project must name the new current Chapter");
@@ -396,6 +398,7 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
       throw new Error("stale current Chapter must conflict");
     }
     assert.equal(stale.switched.effect.reason, "stale_current_chapter");
+    assert.equal(stale.switched.receipt.author_action_sequence, null);
 
     const wrong = await putCurrent(
       baseUrl,
@@ -415,6 +418,7 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
       throw new Error("wrong target Head must conflict");
     }
     assert.equal(wrong.switched.effect.reason, "wrong_target_head");
+    assert.equal(wrong.switched.receipt.author_action_sequence, null);
 
     const already = await putCurrent(
       baseUrl,
@@ -434,6 +438,7 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
       throw new Error("already-current must have no effect");
     }
     assert.equal(already.switched.effect.reason, "already_current");
+    assert.equal(already.switched.receipt.author_action_sequence, null);
 
     const foreign = await createEmpty(
       baseUrl,

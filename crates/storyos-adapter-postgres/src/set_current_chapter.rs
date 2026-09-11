@@ -1,13 +1,12 @@
 use storyos_application::{
     AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,
-    SetCurrentChapterSettlementEffect, SetCurrentChapterStore,
+    SetCurrentChapterAuthority, SetCurrentChapterCommand, SetCurrentChapterError,
+    SetCurrentChapterSettlement, SetCurrentChapterSettlementEffect, SetCurrentChapterStore,
 };
 use storyos_core::{
     ChapterJoin, ProjectLifecycle, ProjectPresence, SetCurrentChapter as CoreSetCurrentChapter,
     SetCurrentChapterResult, set_current_chapter as classify_set_current_chapter,
 };
-use uuid::Uuid;
 
 use super::*;
 
@@ -68,7 +67,8 @@ async fn persist_set_current_chapter(
                     project.current_chapter_id::text,
                     chapter.manuscript_object_id::text,
                     head.current_revision_id::text,
-                    expected.revision_id::text
+                    expected.revision_id::text,
+                    project.tree_revision::text
                FROM storyos.projects AS project
           LEFT JOIN storyos.manuscript_objects AS chapter
                  ON chapter.owner_user_id = project.owner_user_id
@@ -121,6 +121,10 @@ async fn persist_set_current_chapter(
     };
     let current_target_revision_id = row.get::<_, Option<String>>(3).unwrap_or_default();
     let expected_revision_exists = row.get::<_, Option<String>>(4).is_some();
+    let manuscript_tree_revision = row
+        .get::<_, String>(5)
+        .parse::<u64>()
+        .map_err(set_current_chapter_parse_error)?;
     let classified = classify_set_current_chapter(&CoreSetCurrentChapter {
         presence: ProjectPresence::Present,
         chapter_join: chapter_join.clone(),
@@ -131,24 +135,35 @@ async fn persist_set_current_chapter(
         expected_target_revision_id: command.expected_target_revision_id.clone(),
         current_target_revision_id: current_target_revision_id.clone(),
     });
-    let effect = match classified {
+    let (effect, authority_sequences) = match classified {
         SetCurrentChapterResult::Applied { current_chapter_id } => {
-            SetCurrentChapterSettlementEffect::Applied {
-                current_chapter_id,
-                base_snapshot_id: Uuid::now_v7().to_string(),
-            }
+            let sequences =
+                crate::structural_authority_settlement::allocate_current_chapter_sequences(
+                    client,
+                    &command.project_scope,
+                )
+                .await
+                .map_err(SetCurrentChapterError::Unavailable)?;
+            (
+                SetCurrentChapterSettlementEffect::Applied {
+                    current_chapter_id,
+                    base_snapshot_id: sequences.snapshot_id.clone(),
+                },
+                Some(sequences),
+            )
         }
         SetCurrentChapterResult::NoEffect { reason } => {
-            SetCurrentChapterSettlementEffect::NoEffect { reason }
+            (SetCurrentChapterSettlementEffect::NoEffect { reason }, None)
         }
-        SetCurrentChapterResult::Conflicted { reason } => {
-            SetCurrentChapterSettlementEffect::Conflicted { reason }
-        }
+        SetCurrentChapterResult::Conflicted { reason } => (
+            SetCurrentChapterSettlementEffect::Conflicted { reason },
+            None,
+        ),
         SetCurrentChapterResult::Refused {
             reason: storyos_core::SetCurrentChapterRefusal::MissingProject,
         } => return Err(SetCurrentChapterError::MissingProject),
         SetCurrentChapterResult::Refused { reason } => {
-            SetCurrentChapterSettlementEffect::Refused { reason }
+            (SetCurrentChapterSettlementEffect::Refused { reason }, None)
         }
     };
     let admission_chapter =
@@ -244,10 +259,14 @@ async fn persist_set_current_chapter(
         .map_err(set_current_chapter_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let SetCurrentChapterSettlementEffect::Applied {
-        current_chapter_id,
-        base_snapshot_id,
-    } = &effect
+    let mut authority = None;
+    if let (
+        SetCurrentChapterSettlementEffect::Applied {
+            current_chapter_id,
+            base_snapshot_id,
+        },
+        Some(sequences),
+    ) = (&effect, authority_sequences)
     {
         let updated = client
             .execute(
@@ -270,26 +289,8 @@ async fn persist_set_current_chapter(
                 std::io::Error::other("current Chapter changed under FOR UPDATE"),
             )));
         }
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(set_current_chapter_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(set_current_chapter_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
+        project_activity_position = sequences.project_activity_position;
+        project_activity_event_id = sequences.project_activity_event_id.clone();
         crate::snapshot::persist_canonical_snapshot(
             client,
             &command.project_scope,
@@ -362,6 +363,19 @@ async fn persist_set_current_chapter(
             )
             .await
             .map_err(set_current_chapter_database_error)?;
+        crate::structural_authority_settlement::persist_current_chapter_forward_author_action(
+            client,
+            &command.project_scope,
+            sequences.author_action_sequence,
+            &command.ids.receipt_id,
+        )
+        .await
+        .map_err(set_current_chapter_database_error)?;
+        authority = Some(SetCurrentChapterAuthority {
+            author_action_sequence: sequences.author_action_sequence,
+            snapshot_id: sequences.snapshot_id,
+            manuscript_tree_revision,
+        });
     }
     client
         .execute(
@@ -384,6 +398,7 @@ async fn persist_set_current_chapter(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        authority,
     })
 }
 
@@ -497,7 +512,10 @@ async fn read_set_current_chapter_settlement(
                         payload.payload->>'current_chapter_id',
                         payload.payload->>'base_snapshot_id',
                         payload.project_activity_position::text,
-                        payload.project_activity_event_id::text
+                        payload.project_activity_event_id::text,
+                        action.author_action_sequence::text,
+                        snapshot.snapshot_id::text,
+                        project.tree_revision::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -513,6 +531,18 @@ async fn read_set_current_chapter_settlement(
               LEFT JOIN storyos.project_activity_event_payloads AS payload
                      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.project_snapshots AS snapshot
+                     ON (snapshot.owner_user_id, snapshot.project_id,
+                         snapshot.project_activity_position) =
+                        (payload.owner_user_id, payload.project_id,
+                         payload.project_activity_position)
+                    AND snapshot.snapshot_kind = 'canonical'
+              LEFT JOIN storyos.projects AS project
+                     ON (project.owner_user_id, project.project_id) =
+                        (receipt.owner_user_id, receipt.project_id)
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -569,6 +599,24 @@ async fn read_set_current_chapter_settlement(
             },
             _ => return Err(SetCurrentChapterError::BindingConflict),
         };
+        let authority = match (
+            row.get::<_, Option<String>>(10),
+            row.get::<_, Option<String>>(11),
+            row.get::<_, Option<String>>(12),
+        ) {
+            (Some(author_action_sequence), Some(snapshot_id), Some(tree_revision)) => {
+                Some(SetCurrentChapterAuthority {
+                    author_action_sequence: author_action_sequence
+                        .parse()
+                        .map_err(set_current_chapter_parse_error)?,
+                    snapshot_id,
+                    manuscript_tree_revision: tree_revision
+                        .parse()
+                        .map_err(set_current_chapter_parse_error)?,
+                })
+            }
+            _ => None,
+        };
         Ok(SetCurrentChapterSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -583,6 +631,7 @@ async fn read_set_current_chapter_settlement(
                 .parse::<u64>()
                 .map_err(set_current_chapter_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
+            authority,
         })
     }
     .await;

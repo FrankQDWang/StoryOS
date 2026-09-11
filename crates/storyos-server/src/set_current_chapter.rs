@@ -124,6 +124,10 @@ fn set_current_chapter_response(
     project: storyos_application::Project,
     settlement: storyos_application::SetCurrentChapterSettlement,
 ) -> Result<Json<contracts::SetCurrentChapterResponse>, ApiError> {
+    let action_sequence = settlement
+        .authority
+        .as_ref()
+        .map(|authority| authority.author_action_sequence.to_string());
     let (receipt_result, effect) = match settlement.effect {
         SetCurrentChapterSettlementEffect::Applied {
             current_chapter_id,
@@ -207,7 +211,7 @@ fn set_current_chapter_response(
             authoritative_revision_ids: Vec::new(),
             proposal_revision_ids: Vec::new(),
             authoritative_commit_ids: Vec::new(),
-            author_action_sequence: None,
+            author_action_sequence: action_sequence,
             draft_artifact_refs: Vec::new(),
             artifact_lifecycle_event_refs: Vec::new(),
             condition_refs: Vec::new(),

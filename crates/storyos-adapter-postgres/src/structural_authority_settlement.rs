@@ -11,6 +11,13 @@ pub(crate) struct StructureTransitionSequences {
     pub snapshot_id: String,
 }
 
+pub(crate) struct CurrentChapterSequences {
+    pub author_action_sequence: u64,
+    pub project_activity_position: u64,
+    pub project_activity_event_id: String,
+    pub snapshot_id: String,
+}
+
 pub(crate) enum StructureAffectedIdentity<'a> {
     Volume {
         volume_id: &'a str,
@@ -152,6 +159,83 @@ async fn persist_empty_pair_structure_commit(
                 &binding.resulting_manuscript_tree_revision.to_string(),
                 &affected_volume_id,
                 &affected_chapter_id,
+            ],
+        )
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn allocate_current_chapter_sequences(
+    client: &Client,
+    scope: &ProjectScope,
+) -> Result<CurrentChapterSequences, Box<dyn std::error::Error + Send + Sync>> {
+    let row = client
+        .query_one(
+            "INSERT INTO storyos.scope_counters AS counters
+               (owner_user_id, project_id, author_action_sequence,
+                authoritative_commit_sequence, project_activity_position)
+             VALUES ($1::text::uuid, $2::text::uuid, 1, 1, 1)
+             ON CONFLICT (owner_user_id, project_id)
+             DO UPDATE SET
+               author_action_sequence = counters.author_action_sequence + 1,
+               project_activity_position = counters.project_activity_position + 1
+             RETURNING counters.author_action_sequence::text,
+                       counters.project_activity_position::text",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await?;
+    Ok(CurrentChapterSequences {
+        author_action_sequence: parse_counter(row.get(0))?,
+        project_activity_position: parse_counter(row.get(1))?,
+        project_activity_event_id: Uuid::now_v7().to_string(),
+        snapshot_id: Uuid::now_v7().to_string(),
+    })
+}
+
+pub(crate) async fn persist_current_chapter_forward_author_action(
+    client: &Client,
+    scope: &ProjectScope,
+    author_action_sequence: u64,
+    receipt_id: &str,
+) -> Result<(), tokio_postgres::Error> {
+    client
+        .execute(
+            "INSERT INTO storyos.author_action_entries
+               (owner_user_id, project_id, author_action_sequence, disposition,
+                receipt_id, receipt_result_kind)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
+                     $4::text::uuid, 'authoritative_applied')",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &author_action_sequence.to_string(),
+                &receipt_id,
+            ],
+        )
+        .await?;
+    Ok(())
+}
+
+pub(crate) async fn persist_current_chapter_compensation_author_action(
+    client: &Client,
+    scope: &ProjectScope,
+    author_action_sequence: u64,
+    receipt_id: &str,
+    source_sequence: u64,
+) -> Result<(), tokio_postgres::Error> {
+    client
+        .execute(
+            "INSERT INTO storyos.author_action_entries
+               (owner_user_id, project_id, author_action_sequence, disposition,
+                compensated_source_sequence, receipt_id, receipt_result_kind)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'compensation',
+                     $4::text::numeric, $5::text::uuid, 'authoritative_applied')",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &author_action_sequence.to_string(),
+                &source_sequence.to_string(),
+                &receipt_id,
             ],
         )
         .await?;

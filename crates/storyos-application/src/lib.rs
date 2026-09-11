@@ -161,8 +161,9 @@ pub use readable_export_work::{
     ReadableExportWorkStore, claim_next_readable_export, complete_readable_export,
 };
 pub use set_current_chapter::{
-    SetCurrentChapterCommand, SetCurrentChapterError, SetCurrentChapterSettlement,
-    SetCurrentChapterSettlementEffect, SetCurrentChapterStore, set_current_chapter,
+    SetCurrentChapterAuthority, SetCurrentChapterCommand, SetCurrentChapterError,
+    SetCurrentChapterSettlement, SetCurrentChapterSettlementEffect, SetCurrentChapterStore,
+    set_current_chapter,
 };
 pub use undo_latest_author_action::{
     UndoLatestAuthorActionCommand, UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,

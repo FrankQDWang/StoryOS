@@ -76,6 +76,10 @@ mod delete_volume_tests;
 #[path = "set_current_chapter_tests.rs"]
 mod set_current_chapter_tests;
 
+#[cfg(test)]
+#[path = "set_current_chapter_authority_tests.rs"]
+mod set_current_chapter_authority_tests;
+
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
@@ -109,6 +113,7 @@ mod storage_activation;
 mod storage_activation_proof;
 mod structural_authority_settlement;
 mod takeover;
+mod undo_current_chapter;
 mod undo_frontier;
 mod undo_latest_author_action;
 mod undo_structure;
