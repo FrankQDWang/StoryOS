@@ -103,7 +103,7 @@ pub use create_volume::{
     CreateVolumeSettlement, CreateVolumeSettlementEffect, CreateVolumeStore, create_volume,
 };
 pub use delete_chapter::{
-    DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
+    DeleteChapterAuthority, DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
     DeleteChapterSettlementEffect, DeleteChapterStore, delete_chapter,
 };
 pub use delete_volume::{

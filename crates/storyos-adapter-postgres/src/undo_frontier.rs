@@ -28,6 +28,10 @@ pub(super) enum ObservedStructureIdentity {
     Chapter {
         chapter_id: String,
     },
+    ChapterDelete {
+        chapter_id: String,
+        prior_current_chapter_id: Option<String>,
+    },
     ChapterUpdate {
         chapter_id: String,
         prior_title: String,
@@ -66,7 +70,8 @@ pub(super) async fn load_observed_frontier(
                     frontier.affected_chapter_id::text,
                     frontier.command_kind,
                     frontier.prior_title,
-                    frontier.prior_order
+                    frontier.prior_order,
+                    frontier.prior_current_chapter_id
                FROM storyos.projects AS project
           LEFT JOIN LATERAL (
                 SELECT action.author_action_sequence,
@@ -79,7 +84,8 @@ pub(super) async fn load_observed_frontier(
                        commit.affected_chapter_id,
                        receipt.command_kind,
                        payload.payload->>'prior_title' AS prior_title,
-                       payload.payload->>'prior_order' AS prior_order
+                       payload.payload->>'prior_order' AS prior_order,
+                       payload.payload->>'prior_current_chapter_id' AS prior_current_chapter_id
                   FROM storyos.author_action_entries AS action
                   JOIN storyos.authoritative_commits AS commit
                     ON (commit.owner_user_id, commit.project_id, commit.receipt_id,
@@ -255,6 +261,32 @@ fn observed_frontier(
                         chapter_id: affected_chapter_id,
                         prior_title,
                         prior_order: prior_order.parse().map_err(undo_parse_error)?,
+                    },
+                })
+            }
+            (
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(prior_tree),
+                Some(resulting_tree),
+                None,
+                Some(affected_chapter_id),
+                Some(command_kind),
+                _,
+                _,
+            ) if command_kind == "deleteChapter" => {
+                ObservedFrontier::Structure(ObservedStructureFrontier {
+                    sequence,
+                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
+                    resulting_manuscript_tree_revision: resulting_tree
+                        .parse()
+                        .map_err(undo_parse_error)?,
+                    identity: ObservedStructureIdentity::ChapterDelete {
+                        chapter_id: affected_chapter_id,
+                        prior_current_chapter_id: row.get(14),
                     },
                 })
             }

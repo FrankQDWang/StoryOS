@@ -1,5 +1,5 @@
 use storyos_application::{
-    DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
+    DeleteChapterAuthority, DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
     DeleteChapterSettlementEffect,
 };
 use storyos_core::{
@@ -125,7 +125,7 @@ pub(super) async fn persist_delete_chapter(
         current_tree_revision,
         current_lifecycle,
         chapter_id: command.chapter_id.as_ref().to_owned(),
-        current_chapter_id,
+        current_chapter_id: current_chapter_id.clone(),
         ordered_active_chapter_ids,
     });
     let effect = match classified {
@@ -151,6 +151,21 @@ pub(super) async fn persist_delete_chapter(
         }
     };
     insert_delete_chapter_admission(client, command).await?;
+    let authority_sequences = match &effect {
+        DeleteChapterSettlementEffect::Applied { .. } => {
+            let sequences =
+                crate::structural_authority_settlement::allocate_structure_transition_sequences(
+                    client,
+                    &command.project_scope,
+                )
+                .await
+                .map_err(DeleteChapterError::Unavailable)?;
+            Some(sequences)
+        }
+        DeleteChapterSettlementEffect::NoEffect { .. }
+        | DeleteChapterSettlementEffect::Conflicted { .. }
+        | DeleteChapterSettlementEffect::Refused { .. } => None,
+    };
     let (result_kind, result_payload) = match &effect {
         DeleteChapterSettlementEffect::Applied { .. } => ("authoritative_applied", "{}".to_owned()),
         DeleteChapterSettlementEffect::NoEffect { .. } => {
@@ -171,6 +186,10 @@ pub(super) async fn persist_delete_chapter(
             ("refused", format!(r#"{{"reason":"{refused}"}}"#))
         }
     };
+    let commit_ids = authority_sequences
+        .as_ref()
+        .map(|sequences| vec![sequences.authoritative_commit_id.clone()])
+        .unwrap_or_default();
     let receipt_created_at = client
         .query_one(
             "INSERT INTO storyos.domain_receipts
@@ -182,7 +201,7 @@ pub(super) async fn persist_delete_chapter(
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, 'deleteChapter', $6, $7::text::uuid,
                      'author_command_admission', '{}'::uuid[], '{}'::uuid[], '{}'::uuid[],
-                     '{}'::uuid[], '{}'::uuid[], '{}'::uuid[], '{}'::text[], '{}'::text[],
+                     '{}'::uuid[], '{}'::uuid[], $10::text[]::uuid[], '{}'::text[], '{}'::text[],
                      '{}'::text[], $8, $9::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -196,6 +215,7 @@ pub(super) async fn persist_delete_chapter(
                 &command.challenge_binding.idempotency_key,
                 &result_kind,
                 &result_payload,
+                &commit_ids,
             ],
         )
         .await
@@ -218,33 +238,19 @@ pub(super) async fn persist_delete_chapter(
         .map_err(delete_chapter_database_error)?;
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
-    if let DeleteChapterSettlementEffect::Applied {
-        tree_revision,
-        volume_id,
-        current,
-    } = &effect
+    let mut authority = None;
+    if let (
+        DeleteChapterSettlementEffect::Applied {
+            tree_revision,
+            volume_id,
+            current,
+        },
+        Some(sequences),
+    ) = (&effect, authority_sequences)
     {
         persist_removed_chapter(client, command, tree_revision, volume_id, current).await?;
-        project_activity_position = client
-            .query_one(
-                "INSERT INTO storyos.scope_counters AS counters
-                   (owner_user_id, project_id, project_activity_position)
-                 VALUES ($1::text::uuid, $2::text::uuid, 1)
-                 ON CONFLICT (owner_user_id, project_id)
-                 DO UPDATE SET
-                   project_activity_position = counters.project_activity_position + 1
-                 RETURNING counters.project_activity_position::text",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(delete_chapter_database_error)?
-            .get::<_, String>(0)
-            .parse::<u64>()
-            .map_err(delete_chapter_parse_error)?;
-        project_activity_event_id = Uuid::now_v7().to_string();
+        project_activity_position = sequences.project_activity_position;
+        project_activity_event_id = sequences.project_activity_event_id.clone();
         let resulting_current = client
             .query_one(
                 "SELECT current_chapter_id::text FROM storyos.projects
@@ -263,6 +269,7 @@ pub(super) async fn persist_delete_chapter(
             "volume_id": volume_id,
             "tree_revision": tree_revision.to_string(),
             "current_chapter_id": resulting_current,
+            "prior_current_chapter_id": current_chapter_id,
         })
         .to_string();
         client
@@ -284,25 +291,56 @@ pub(super) async fn persist_delete_chapter(
             )
             .await
             .map_err(delete_chapter_database_error)?;
-        if let Some(current_chapter_id) = resulting_current.as_deref() {
+        crate::structural_authority_settlement::persist_structure_commit(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.author_command_admission_id,
+            &command.ids.receipt_id,
+            crate::structural_authority_settlement::StructureCommitBinding {
+                prior_manuscript_tree_revision: command.expected_tree_revision,
+                resulting_manuscript_tree_revision: *tree_revision,
+                identity:
+                    crate::structural_authority_settlement::StructureAffectedIdentity::Chapter {
+                        chapter_id: command.chapter_id.as_ref(),
+                    },
+            },
+        )
+        .await
+        .map_err(delete_chapter_database_error)?;
+        crate::structural_authority_settlement::persist_forward_author_action(
+            client,
+            &command.project_scope,
+            &sequences,
+            &command.ids.receipt_id,
+        )
+        .await
+        .map_err(delete_chapter_database_error)?;
+        crate::snapshot::persist_canonical_snapshot(
+            client,
+            &command.project_scope,
+            &sequences.snapshot_id,
+            project_activity_position,
+        )
+        .await
+        .map_err(delete_chapter_database_error)?;
+        if let Some(successor_chapter_id) = resulting_current.as_deref() {
             bind_current_writer_base_to_chapter(
                 client,
                 command,
-                current_chapter_id,
+                successor_chapter_id,
+                &sequences.snapshot_id,
                 project_activity_position,
             )
             .await?;
-        } else {
-            let snapshot_id = Uuid::now_v7().to_string();
-            crate::snapshot::persist_canonical_snapshot(
-                client,
-                &command.project_scope,
-                &snapshot_id,
-                project_activity_position,
-            )
-            .await
-            .map_err(delete_chapter_database_error)?;
         }
+        authority = Some(DeleteChapterAuthority {
+            authoritative_commit_id: sequences.authoritative_commit_id,
+            author_action_sequence: sequences.author_action_sequence,
+            snapshot_id: sequences.snapshot_id,
+            prior_manuscript_tree_revision: command.expected_tree_revision,
+            resulting_manuscript_tree_revision: *tree_revision,
+        });
     }
     client
         .execute(
@@ -325,6 +363,7 @@ pub(super) async fn persist_delete_chapter(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        authority,
     })
 }
 
@@ -415,6 +454,7 @@ async fn bind_current_writer_base_to_chapter(
     client: &tokio_postgres::Client,
     command: &DeleteChapterCommand,
     chapter_id: &str,
+    snapshot_id: &str,
     project_activity_position: u64,
 ) -> Result<(), DeleteChapterError> {
     let Some(authoritative_revision_id) = client
@@ -437,15 +477,6 @@ async fn bind_current_writer_base_to_chapter(
             std::io::Error::other("successor Chapter has no authoritative head"),
         )));
     };
-    let snapshot_id = Uuid::now_v7().to_string();
-    crate::snapshot::persist_canonical_snapshot(
-        client,
-        &command.project_scope,
-        &snapshot_id,
-        project_activity_position,
-    )
-    .await
-    .map_err(delete_chapter_database_error)?;
     let activity_position_text = project_activity_position.to_string();
     client
         .execute(
