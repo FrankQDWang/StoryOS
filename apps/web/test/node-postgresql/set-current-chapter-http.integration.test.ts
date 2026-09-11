@@ -239,6 +239,9 @@ async function putCurrent(
   return { challenge, switched };
 }
 
+// One Project admits at most PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY (10) Command
+// Challenges in one 60-second window. The eleventh waits for the next window, so each
+// test in this file stays at or under 10 Command Challenges on one Project.
 test("setCurrentChapter switches the current Chapter, replays, and fails closed", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
@@ -432,68 +435,6 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
     }
     assert.equal(already.switched.effect.reason, "already_current");
 
-    const invalidJoin = await putCurrent(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "018f0000-0000-7001-8000-000000000f22",
-      currentRequest({
-        chapterId: MISSING_CHAPTER,
-        expectedCurrentChapterId: chapterBId,
-        expectedTargetRevisionId: revisionB,
-        editorSessionId,
-        correlationId: "018f0000-0000-7001-8000-000000000f23",
-      }),
-    );
-    assert.equal(invalidJoin.switched.effect.kind, "refused");
-    if (invalidJoin.switched.effect.kind !== "refused") {
-      throw new Error("missing Chapter must refuse");
-    }
-    assert.equal(invalidJoin.switched.effect.reason, "invalid_chapter_join");
-
-    const archiveDigest = await digestArchiveProject(
-      archiveRequest("1", "018f0000-0000-7001-8000-000000000f24"),
-    );
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "PUT",
-        route_template: "/api/v1/projects/{project_id}/archival",
-        command_schema: "storyos.command.archive-project.request.v1",
-        canonical_command_digest: archiveDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000f25",
-      },
-    }));
-    const archived = await archiveProject({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000f25",
-      antiForgery: archiveChallenge.nonce,
-      request: archiveRequest("1", "018f0000-0000-7001-8000-000000000f24"),
-    });
-    assert.equal(archived.effect.kind, "authoritative_applied");
-    const refused = await putCurrent(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "018f0000-0000-7001-8000-000000000f26",
-      currentRequest({
-        chapterId: chapterAId,
-        expectedCurrentChapterId: chapterBId,
-        expectedTargetRevisionId: revisionB,
-        editorSessionId,
-        correlationId: "018f0000-0000-7001-8000-000000000f27",
-      }),
-    );
-    assert.equal(refused.switched.effect.kind, "refused");
-    if (refused.switched.effect.kind !== "refused") {
-      throw new Error("archived Project must refuse");
-    }
-    assert.equal(refused.switched.effect.reason, "archived_project");
-
     const foreign = await createEmpty(
       baseUrl,
       "session-b",
@@ -520,6 +461,150 @@ test("setCurrentChapter switches the current Chapter, replays, and fails closed"
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("setCurrentChapter refuses a missing Chapter join and an archived Project", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const owned = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-000000000f30",
+      "Archive Then Switch",
+      "018f0000-0000-7001-8000-000000000f31",
+    );
+    const volume = await postVolume(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      "018f0000-0000-7001-8000-000000000f32",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000f33"),
+    );
+    if (volume.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const chapterA = await postChapter(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-000000000f34",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-000000000f35"),
+    );
+    const chapterB = await postChapter(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-000000000f36",
+      chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-000000000f37"),
+    );
+    if (chapterA.effect.kind !== "authoritative_applied"
+      || chapterB.effect.kind !== "authoritative_applied") {
+      throw new Error("both Chapters must apply");
+    }
+    const chapterAId = chapterA.effect.chapter_id;
+    const chapterBId = chapterB.effect.chapter_id;
+    const sessionRequest: CreateEditorSessionRequest = {
+      command_schema: "storyos.command.create-editor-session.request.v1",
+      client_contract_revision: CLIENT,
+      security_policy_revision: SECURITY,
+      correlation_id: "018f0000-0000-7001-8000-000000000f38",
+    };
+    const sessionDigest = await digestCreateEditorSession(sessionRequest);
+    const sessionChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: owned.projectId,
+      fetchImpl: owned.fetchImpl,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/editor-sessions",
+        command_schema: sessionRequest.command_schema,
+        canonical_command_digest: sessionDigest,
+        idempotency_key: "018f0000-0000-7001-8000-000000000f39",
+      },
+    }));
+    const session = await createEditorSession({
+      baseUrl,
+      projectId: owned.projectId,
+      fetchImpl: owned.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000f39",
+      antiForgery: sessionChallenge.nonce,
+      request: sessionRequest,
+    });
+    const editorSessionId = session.editor_session.editor_session_id;
+    const openedB = await getChapter({
+      baseUrl,
+      projectId: owned.projectId,
+      chapterId: chapterBId,
+      fetchImpl: owned.fetchImpl,
+    });
+    const revisionB = openedB.chapter.current_revision.revision_id;
+
+    const invalidJoin = await putCurrent(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      "018f0000-0000-7001-8000-000000000f3a",
+      currentRequest({
+        chapterId: MISSING_CHAPTER,
+        expectedCurrentChapterId: chapterAId,
+        expectedTargetRevisionId: revisionB,
+        editorSessionId,
+        correlationId: "018f0000-0000-7001-8000-000000000f3b",
+      }),
+    );
+    assert.equal(invalidJoin.switched.effect.kind, "refused");
+    if (invalidJoin.switched.effect.kind !== "refused") {
+      throw new Error("missing Chapter must refuse");
+    }
+    assert.equal(invalidJoin.switched.effect.reason, "invalid_chapter_join");
+
+    const archiveDigest = await digestArchiveProject(
+      archiveRequest("1", "018f0000-0000-7001-8000-000000000f3c"),
+    );
+    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: owned.projectId,
+      fetchImpl: owned.fetchImpl,
+      request: {
+        method: "PUT",
+        route_template: "/api/v1/projects/{project_id}/archival",
+        command_schema: "storyos.command.archive-project.request.v1",
+        canonical_command_digest: archiveDigest,
+        idempotency_key: "018f0000-0000-7001-8000-000000000f3d",
+      },
+    }));
+    const archived = await archiveProject({
+      baseUrl,
+      projectId: owned.projectId,
+      fetchImpl: owned.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000f3d",
+      antiForgery: archiveChallenge.nonce,
+      request: archiveRequest("1", "018f0000-0000-7001-8000-000000000f3c"),
+    });
+    assert.equal(archived.effect.kind, "authoritative_applied");
+    const refused = await putCurrent(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      "018f0000-0000-7001-8000-000000000f3e",
+      currentRequest({
+        chapterId: chapterBId,
+        expectedCurrentChapterId: chapterAId,
+        expectedTargetRevisionId: revisionB,
+        editorSessionId,
+        correlationId: "018f0000-0000-7001-8000-000000000f3f",
+      }),
+    );
+    assert.equal(refused.switched.effect.kind, "refused");
+    if (refused.switched.effect.kind !== "refused") {
+      throw new Error("archived Project must refuse");
+    }
+    assert.equal(refused.switched.effect.reason, "archived_project");
   } finally {
     await stopRealServer(server);
   }

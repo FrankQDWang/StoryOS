@@ -70,7 +70,7 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   if (title === null || title === undefined || form === null || form === undefined) {
     throw new Error("the protected-ready form is missing");
   }
-  title.value = "Empty Novel";
+  title.value = "Volume Update Novel";
   form.requestSubmit();
   await expect.poll(() =>
     created.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
@@ -106,14 +106,14 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   const reopened = await loadApplication("StoryOS exact-dist renamed Volume library");
   await expect.poll(() =>
     [...(reopened.contentDocument?.querySelectorAll('#app button[data-open="empty"]') ?? [])]
-      .some((button) => button.textContent === "Empty Novel")
+      .some((button) => button.textContent === "Volume Update Novel")
   ).toBe(true);
   const libraryRoot = reopened.contentDocument?.querySelector("#app");
   if (libraryRoot === null || libraryRoot === undefined) {
     throw new Error("the protected-ready library is missing");
   }
   const openButton = [...libraryRoot.querySelectorAll<HTMLButtonElement>('button[data-open="empty"]')]
-    .find((button) => button.textContent === "Empty Novel");
+    .find((button) => button.textContent === "Volume Update Novel");
   openButton?.click();
   await expect.poll(() => libraryRoot.getAttribute("data-boot-state")).toBe("empty-project-ready");
   await expect.poll(() => volumeTitles(libraryRoot)).toEqual(["Volume C", "Volume B"]);
@@ -134,14 +134,14 @@ it("the author renames and reorders Volumes from the canonical tree and they sur
   const ordered = await loadApplication("StoryOS exact-dist reordered Volume library");
   await expect.poll(() =>
     [...(ordered.contentDocument?.querySelectorAll('#app button[data-open="empty"]') ?? [])]
-      .some((button) => button.textContent === "Empty Novel")
+      .some((button) => button.textContent === "Volume Update Novel")
   ).toBe(true);
   const orderedRoot = ordered.contentDocument?.querySelector("#app");
   if (orderedRoot === null || orderedRoot === undefined) {
     throw new Error("the reopened library is missing");
   }
   const reopenButton = [...orderedRoot.querySelectorAll<HTMLButtonElement>('button[data-open="empty"]')]
-    .find((button) => button.textContent === "Empty Novel");
+    .find((button) => button.textContent === "Volume Update Novel");
   reopenButton?.click();
   await expect.poll(() => orderedRoot.getAttribute("data-boot-state")).toBe("empty-project-ready");
   await expect.poll(() => volumeTitles(orderedRoot)).toEqual(["Volume B", "Volume C"]);

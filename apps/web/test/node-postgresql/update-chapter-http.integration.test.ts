@@ -234,6 +234,9 @@ async function patchChapter(
   return { challenge, updated };
 }
 
+// One Project admits at most PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY (10) Command
+// Challenges in one 60-second window. The eleventh waits for the next window, so each
+// test in this file stays at or under 10 Command Challenges on one Project.
 test("updateChapter renames and reorders one Chapter, replays, and fails closed", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
@@ -387,23 +390,6 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
     assert.deepEqual(unchanged.updated.receipt.authoritative_commit_ids, []);
     assert.equal(unchanged.updated.receipt.author_action_sequence, null);
 
-    const invalidJoin = await patchChapter(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      MISSING_CHAPTER,
-      "018f0000-0000-7001-8000-000000000e57",
-      updateRequest("Chapter B", "1", "5", "018f0000-0000-7001-8000-000000000e47"),
-    );
-    assert.equal(invalidJoin.updated.receipt.result, "refused");
-    assert.equal(invalidJoin.updated.effect.kind, "refused");
-    if (invalidJoin.updated.effect.kind !== "refused") {
-      throw new Error("missing Chapter must refuse");
-    }
-    assert.equal(invalidJoin.updated.effect.reason, "invalid_chapter_join");
-    assert.deepEqual(invalidJoin.updated.receipt.authoritative_commit_ids, []);
-    assert.equal(invalidJoin.updated.receipt.author_action_sequence, null);
-
     const invalidOrder = await patchChapter(
       baseUrl,
       first.fetchImpl,
@@ -443,44 +429,6 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
       (error) => requireStoryOSProtocolError(error).status === 400,
     );
 
-    const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-000000000e4b"));
-    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      request: {
-        method: "PUT",
-        route_template: "/api/v1/projects/{project_id}/archival",
-        command_schema: "storyos.command.archive-project.request.v1",
-        canonical_command_digest: archiveDigest,
-        idempotency_key: "018f0000-0000-7001-8000-000000000e5b",
-      },
-    }));
-    const archived = await archiveProject({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000e5b",
-      antiForgery: archiveChallenge.nonce,
-      request: archiveRequest("1", "018f0000-0000-7001-8000-000000000e4b"),
-    });
-    assert.equal(archived.effect.kind, "authoritative_applied");
-
-    const refused = await patchChapter(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      chapterId,
-      "018f0000-0000-7001-8000-000000000e5c",
-      updateRequest("Chapter B", "2", "5", "018f0000-0000-7001-8000-000000000e4c"),
-    );
-    assert.equal(refused.updated.receipt.result, "refused");
-    assert.equal(refused.updated.effect.kind, "refused");
-    if (refused.updated.effect.kind !== "refused") {
-      throw new Error("Update Chapter on an archived Project must refuse");
-    }
-    assert.equal(refused.updated.effect.reason, "archived_project");
-
     const foreign = await createEmpty(
       baseUrl,
       "session-b",
@@ -502,6 +450,98 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("updateChapter refuses a missing Chapter join and an archived Project", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const owned = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-000000000e60",
+      "Archive Then Update",
+      "018f0000-0000-7001-8000-000000000e61",
+    );
+    const volume = await postVolume(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      "018f0000-0000-7001-8000-000000000e62",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000e63"),
+    );
+    if (volume.created.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const chapter = await postChapter(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      volume.created.effect.volume_id,
+      "018f0000-0000-7001-8000-000000000e64",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-000000000e65"),
+    );
+    if (chapter.created.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Chapter must apply");
+    }
+    const chapterId = chapter.created.effect.chapter_id;
+
+    const invalidJoin = await patchChapter(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      MISSING_CHAPTER,
+      "018f0000-0000-7001-8000-000000000e66",
+      updateRequest("Chapter B", "1", "3", "018f0000-0000-7001-8000-000000000e67"),
+    );
+    assert.equal(invalidJoin.updated.receipt.result, "refused");
+    assert.equal(invalidJoin.updated.effect.kind, "refused");
+    if (invalidJoin.updated.effect.kind !== "refused") {
+      throw new Error("missing Chapter must refuse");
+    }
+    assert.equal(invalidJoin.updated.effect.reason, "invalid_chapter_join");
+    assert.deepEqual(invalidJoin.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(invalidJoin.updated.receipt.author_action_sequence, null);
+
+    const archiveDigest = await digestArchiveProject(archiveRequest("1", "018f0000-0000-7001-8000-000000000e68"));
+    const archiveChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: owned.projectId,
+      fetchImpl: owned.fetchImpl,
+      request: {
+        method: "PUT",
+        route_template: "/api/v1/projects/{project_id}/archival",
+        command_schema: "storyos.command.archive-project.request.v1",
+        canonical_command_digest: archiveDigest,
+        idempotency_key: "018f0000-0000-7001-8000-000000000e69",
+      },
+    }));
+    const archived = await archiveProject({
+      baseUrl,
+      projectId: owned.projectId,
+      fetchImpl: owned.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000e69",
+      antiForgery: archiveChallenge.nonce,
+      request: archiveRequest("1", "018f0000-0000-7001-8000-000000000e68"),
+    });
+    assert.equal(archived.effect.kind, "authoritative_applied");
+
+    const refused = await patchChapter(
+      baseUrl,
+      owned.fetchImpl,
+      owned.projectId,
+      chapterId,
+      "018f0000-0000-7001-8000-000000000e6a",
+      updateRequest("Chapter A", "1", "3", "018f0000-0000-7001-8000-000000000e6b"),
+    );
+    assert.equal(refused.updated.receipt.result, "refused");
+    assert.equal(refused.updated.effect.kind, "refused");
+    if (refused.updated.effect.kind !== "refused") {
+      throw new Error("Update Chapter on an archived Project must refuse");
+    }
+    assert.equal(refused.updated.effect.reason, "archived_project");
   } finally {
     await stopRealServer(server);
   }

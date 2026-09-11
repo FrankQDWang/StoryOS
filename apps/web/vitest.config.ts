@@ -9,6 +9,7 @@ import { defineConfig, defineProject } from "vitest/config";
 import { storyOSApiProxy } from "./test/support/api-proxy";
 import { storyOSBrowserCommands } from "./test/support/browser-commands";
 import { exactDistPlugin } from "./test/support/exact-dist-plugin";
+import { ScriptOrderSequencer } from "./test/support/script-order-sequencer";
 
 const webRoot = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(webRoot, "../..");
@@ -50,6 +51,7 @@ const sessionCookieProbe: Plugin = {
 
 export default defineConfig({
   test: {
+    sequence: { sequencer: ScriptOrderSequencer },
     projects: [
       defineProject({
         root: webRoot,
