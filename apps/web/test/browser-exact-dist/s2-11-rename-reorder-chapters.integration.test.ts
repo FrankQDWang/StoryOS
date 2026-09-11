@@ -95,7 +95,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
   if (title === null || title === undefined || form === null || form === undefined) {
     throw new Error("the protected-ready form is missing");
   }
-  title.value = "Empty Novel";
+  title.value = "Chapter Update Novel";
   form.requestSubmit();
   await expect.poll(() =>
     created.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
@@ -142,7 +142,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
   if (libraryRoot === null || libraryRoot === undefined) {
     throw new Error("the protected-ready library is missing");
   }
-  await openNamedProject(libraryRoot, "Empty Novel");
+  await openNamedProject(libraryRoot, "Chapter Update Novel");
   await expect.poll(() => chapterTitles(libraryRoot)).toEqual(["Chapter C", "Chapter B"]);
   expect(libraryRoot.querySelector("h2")?.textContent).toBe("Chapter C");
   const libraryEditor = libraryRoot.querySelector(MANUSCRIPT_EDITOR_SELECTOR);
@@ -165,7 +165,7 @@ it("the author renames and reorders Chapters from the canonical tree and they su
   if (orderedRoot === null || orderedRoot === undefined) {
     throw new Error("the reopened library is missing");
   }
-  await openNamedProject(orderedRoot, "Empty Novel");
+  await openNamedProject(orderedRoot, "Chapter Update Novel");
   await expect.poll(() => chapterTitles(orderedRoot)).toEqual(["Chapter B", "Chapter C"]);
   const first = orderedRoot.querySelector('nav[aria-label="稿件目录"] li[data-chapter-order="1"]');
   const second = orderedRoot.querySelector('nav[aria-label="稿件目录"] li[data-chapter-order="2"]');
