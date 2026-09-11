@@ -9,7 +9,7 @@ Start a long repository command with `block_until_ms: 0`. Continue other work. T
 
 Poll with AwaitShell only when the next step is blocked on that process. Wait for process exit. A pattern is valid only when that line cannot appear before the command ends.
 
-A successful complete `make verify` prints `verified parent #100` after the last tracker check. A failed make target may print `make: *** [verify`.
+A successful complete `make verify` prints `verified parent #100` after the last tracker check. A successful `make verify-local` ends with the line `verified <n> transaction-control statements on PooledClient receivers`; in a complete `make verify` that line appears before the tracker check and is not the end. A failed make target may print `make: *** [verify`.
 
 These strings are not AwaitShell patterns:
 
@@ -22,7 +22,8 @@ Set the poll window from the command class:
 |---|---|
 | GitHub PR `verify` sentinel | about 16 seconds |
 | Dirty-tree `make verify` | fails in about 24 seconds |
+| Clean complete `make verify-local` | about 2.5 minutes |
 | One `verify-tracker` | tens of seconds |
-| Clean complete `make verify` | about 9 minutes |
+| Clean complete `make verify` | about 3 minutes |
 
-When a poll is required for a clean complete `make verify`, wait for process exit. Treat `verified parent #100` as the success line. Do not open a second 8–12 minute wait after a mid-run line.
+When a poll is required for a clean complete `make verify`, wait for process exit. Treat `verified parent #100` as the success line. Do not open a second long wait after a mid-run line.

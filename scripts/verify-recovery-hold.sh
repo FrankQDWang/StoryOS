@@ -207,7 +207,7 @@ docker run --rm --network "$network" --user postgres \
   --env PGPASSWORD=backup \
   --entrypoint pg_basebackup \
   postgres:16-alpine \
-  -h "$primary" -U storyos_backup -D /backup -Fp -Xs --no-password >/dev/null
+  -h "$primary" -U storyos_backup -D /backup -Fp -Xs --checkpoint=fast --no-password >/dev/null
 
 docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
   -c "UPDATE storyos.projects SET title = '$wal_marker' WHERE project_id = '$project_id'" >/dev/null

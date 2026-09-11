@@ -25,8 +25,8 @@
 ### Verification evidence
 
 - The required GitHub `verify` check is a pull-request synthetic-merge sentinel. It does not replace complete local verification.
-- Before merging each PR, run `make verify` on a tree that matches the required `verify` synthetic-merge tree. Record the head, tree, command, PASS result, and clean worktree in one PR comment.
-- A new commit that changes the tree, or a changed base, invalidates that evidence. Obtain a fresh synthetic-merge tree and rerun local verification when the candidate tree changes. After the ticket merges, synchronize `main` and compare its tree SHA to the tree SHA in the PR evidence comment. When they are equal, run `make verify-tracker` only. Record the equality and link the PR evidence comment in the ticket Resolution. When they differ, rerun `make verify`. Record the final commit, tree, and evidence in the ticket Resolution.
+- Before merging each PR, run `make verify-local` on a tree that matches the required `verify` synthetic-merge tree. Record the head, tree, command, PASS result, and clean worktree in one PR comment. The required GitHub `verify` check and the post-merge `make verify-tracker` own the tracker check.
+- A new commit that changes the tree, or a changed base, invalidates that evidence. Obtain a fresh synthetic-merge tree and rerun local verification when the candidate tree changes. After the ticket merges, synchronize `main` and compare its tree SHA to the tree SHA in the PR evidence comment. When they are equal, run `make verify-tracker` only. Record the equality and link the PR evidence comment in the ticket Resolution. When they differ, run `make verify`. Record the final commit, tree, and evidence in the ticket Resolution.
 
 ## Reference source policy
 
