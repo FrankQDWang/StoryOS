@@ -26,7 +26,7 @@
 
 - The required GitHub `verify` check is a pull-request synthetic-merge sentinel. It does not replace complete local verification.
 - Before merging each PR, run `make verify` on a tree that matches the required `verify` synthetic-merge tree. Record the head, tree, command, PASS result, and clean worktree in one PR comment.
-- A new commit or changed base invalidates that evidence. Obtain a fresh synthetic-merge tree and rerun local verification when the candidate tree changes. After the ticket merges, synchronize `main`, rerun `make verify`, and record the final commit, tree, and evidence in the ticket Resolution.
+- A new commit that changes the tree, or a changed base, invalidates that evidence. Obtain a fresh synthetic-merge tree and rerun local verification when the candidate tree changes. After the ticket merges, synchronize `main` and compare its tree SHA to the tree SHA in the PR evidence comment. When they are equal, run `make verify-tracker` only. Record the equality and link the PR evidence comment in the ticket Resolution. When they differ, rerun `make verify`. Record the final commit, tree, and evidence in the ticket Resolution.
 
 ## Reference source policy
 
@@ -111,8 +111,8 @@ use_field_init_shorthand = true
 - Avoid test-only functions in the main implementation.
 - Check whether there are existing helpers to make tests more streamlined and readable.
 - Avoid mutating process environment in tests; prefer passing environment-derived flags or dependencies from above.
-- Write comments that explain non-obvious rationale, invariants, safety constraints, or external quirks. Do not restate the code.
-- Document a public API by its observable contract. Do not document incidental implementation details.
+- Prefer no comment. A comment that stays gives one non-obvious reason in one line; code changes later and comments do not.
+- Document a public API by its observable contract, in one line where possible. Do not document incidental implementation details.
 - Treat changes to ToolSpec, MCP adapters, Skill manifests, Artifact and Run events, external APIs, configuration, persisted data, or recovery formats as contract changes and review their breaking and migration impact explicitly.
 - Editable sources own deterministic generated artifacts. Change and stage a generated artifact with the editable source that produces it, regenerate it with the StoryOS-owned command, classify its diff separately from hand-written lines, and review the generated diff for drift.
 - Unless the change is mechanical the total number of changed lines should not exceed 800 lines.

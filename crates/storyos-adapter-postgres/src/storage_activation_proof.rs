@@ -45,8 +45,7 @@ impl std::error::Error for StorageActivationProofError {
     }
 }
 
-/// Open one connection and read the proof. Server, Worker, and `storyos-storage`
-/// use this at start, before any pool exists.
+/// Read the proof on one new connection; the startup gate runs before any pool exists.
 pub async fn require_release1_storage_activation_proof(
     database_url: &str,
 ) -> Result<(), StorageActivationProofError> {

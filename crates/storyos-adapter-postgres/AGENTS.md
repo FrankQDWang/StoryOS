@@ -10,8 +10,9 @@ This file adds the subtree rules for the `storyos_runtime` store. The root `AGEN
 - Run `BEGIN`, `START TRANSACTION`, `COMMIT`, `END`, `ROLLBACK`, and `ABORT` only through `batch_execute` on a `PooledClient`. That method records the transaction state; a `BEGIN` through `execute`, `query`, or `simple_query` is not recorded, so the pool can hand an open transaction to the next request.
 - A helper that runs transaction control takes `client: &PooledClient`. A helper that takes `&tokio_postgres::Client` or `impl GenericClient` does not run transaction control. It runs inside a transaction that its caller owns, or it runs one autocommit read such as the Storage Activation proof read.
 - Pass `&*client` when a `PooledClient` goes to a helper that takes `impl GenericClient`.
+- Set scope only with transaction-local `set_config(..., true)`. Session-level state would survive a settled transaction and reach the next checkout.
 - `storage_activation.rs` is the maintenance owner. It runs on its own admin connection that never enters the pool, so these rules do not apply to it.
-- `python3 scripts/verify-transaction-control-receivers.py` checks these rules. `make contracts` runs its self-test and `make verify-local` runs the check.
+- `python3 scripts/verify-transaction-control-receivers.py` checks these rules from the source text. It does not read `execute` or `query` calls with a non-literal statement. `make contracts` runs its self-test and `make verify-local` runs the check.
 
 ## Run one PostgreSQL test locally
 

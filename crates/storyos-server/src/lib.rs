@@ -138,7 +138,6 @@ struct ServerState {
     allowed_origin: Option<TupleOrigin>,
     session_allowed_origins: HashMap<String, TupleOrigin>,
     live_session_bindings: Arc<Mutex<HashMap<String, ClientSessionBinding>>>,
-    // One store per Server so every protected request reuses its idle connections.
     project_store: Option<PostgresProjectReader>,
 }
 

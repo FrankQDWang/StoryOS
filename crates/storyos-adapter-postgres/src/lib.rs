@@ -270,9 +270,7 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
     }
 }
 
-/// A caller-owned PostgreSQL transaction for one Project command attempt.
-///
-/// Drop without `commit` or `rollback` closes the connection, and PostgreSQL rolls back.
+/// One Project command attempt's transaction; drop without `commit` or `rollback` rolls back.
 pub struct PostgresProjectCommandTransaction {
     client: PooledClient,
 }
@@ -589,10 +587,7 @@ impl PostgresProjectReader {
         self
     }
 
-    /// Read the Release 1 Storage Activation proof on a pooled connection.
-    ///
-    /// ADR 0020 requires this read again on every protected request and Worker
-    /// claim. The result has the same meaning as the URL-based startup gate.
+    /// Read the Release 1 Storage Activation proof on a pooled connection (ADR 0020).
     pub async fn require_release1_storage_activation_proof(
         &self,
     ) -> Result<(), StorageActivationProofError> {
