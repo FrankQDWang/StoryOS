@@ -352,6 +352,12 @@ prove_bound_request_path_activation() {
   rm -f "$log" "$headers" "$body"
 }
 
+# Earlier stages use the 10-per-minute Command Challenge budget of the fixture Project.
+reset_command_challenge_rate_windows() {
+  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    -c "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0" >/dev/null
+}
+
 # The node-postgresql files share one database and one fixture, so ScriptOrderSequencer
 # keeps the given order instead of the Vitest default order.
 run_http_files() {
@@ -564,9 +570,11 @@ run_http_files \
   test/node-postgresql/protocol-http-host.integration.test.ts \
   test/node-postgresql/project-http.integration.test.ts
 echo "Running HTTP ApplyAuthorEdit process-cut tests"
+reset_command_challenge_rate_windows "$container"
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/apply-author-edit-process-cut.integration.test.ts
 echo "Running HTTP Activity Stream, Project, structure, query, and export tests"
+reset_command_challenge_rate_windows "$container"
 run_http_files \
   test/node-postgresql/activity-stream-duplicate-http.integration.test.ts \
   test/node-postgresql/activity-stream-cross-table-http.integration.test.ts \
