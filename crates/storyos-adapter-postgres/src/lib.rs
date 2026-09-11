@@ -69,6 +69,10 @@ mod update_chapter_tests;
 mod delete_chapter_tests;
 
 #[cfg(test)]
+#[path = "delete_volume_tests.rs"]
+mod delete_volume_tests;
+
+#[cfg(test)]
 #[path = "set_current_chapter_tests.rs"]
 mod set_current_chapter_tests;
 

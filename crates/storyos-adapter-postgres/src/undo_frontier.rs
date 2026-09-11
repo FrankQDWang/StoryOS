@@ -20,6 +20,9 @@ pub(super) enum ObservedStructureIdentity {
     Volume {
         volume_id: String,
     },
+    VolumeDelete {
+        volume_id: String,
+    },
     VolumeUpdate {
         volume_id: String,
         prior_title: String,
@@ -206,6 +209,31 @@ fn observed_frontier(
                         .parse()
                         .map_err(undo_parse_error)?,
                     identity: ObservedStructureIdentity::Volume {
+                        volume_id: affected_volume_id,
+                    },
+                })
+            }
+            (
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(prior_tree),
+                Some(resulting_tree),
+                Some(affected_volume_id),
+                None,
+                Some(command_kind),
+                _,
+                _,
+            ) if command_kind == "deleteVolume" => {
+                ObservedFrontier::Structure(ObservedStructureFrontier {
+                    sequence,
+                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
+                    resulting_manuscript_tree_revision: resulting_tree
+                        .parse()
+                        .map_err(undo_parse_error)?,
+                    identity: ObservedStructureIdentity::VolumeDelete {
                         volume_id: affected_volume_id,
                     },
                 })

@@ -107,8 +107,8 @@ pub use delete_chapter::{
     DeleteChapterSettlementEffect, DeleteChapterStore, delete_chapter,
 };
 pub use delete_volume::{
-    DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement, DeleteVolumeSettlementEffect,
-    DeleteVolumeStore, delete_volume,
+    DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement,
+    DeleteVolumeSettlementEffect, DeleteVolumeStore, delete_volume,
 };
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
