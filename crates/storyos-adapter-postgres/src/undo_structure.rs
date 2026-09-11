@@ -116,6 +116,26 @@ async fn restore_prior_tree(
             )
             .await
             .map_err(undo_database_error)?,
+        ObservedStructureIdentity::ChapterDelete {
+            prior_current_chapter_id,
+            ..
+        } => client
+            .execute(
+                "UPDATE storyos.projects
+                    SET tree_revision = $3::text::bigint,
+                        current_chapter_id = $5::text::uuid
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND tree_revision = $4::text::bigint AND lifecycle_state = 'active'",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &frontier.prior_manuscript_tree_revision.to_string(),
+                    &frontier.resulting_manuscript_tree_revision.to_string(),
+                    &prior_current_chapter_id.as_deref(),
+                ],
+            )
+            .await
+            .map_err(undo_database_error)?,
         ObservedStructureIdentity::Chapter { chapter_id } => client
             .execute(
                 "UPDATE storyos.projects
@@ -156,6 +176,21 @@ async fn persist_structure_removal(
         // It must not write a removal decision.
         ObservedStructureIdentity::VolumeUpdate { .. }
         | ObservedStructureIdentity::ChapterUpdate { .. } => {}
+        ObservedStructureIdentity::ChapterDelete { chapter_id, .. } => {
+            client
+                .execute(
+                    "DELETE FROM storyos.chapter_removal_decisions
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND chapter_id = $3::text::uuid",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &chapter_id,
+                    ],
+                )
+                .await
+                .map_err(undo_database_error)?;
+        }
         ObservedStructureIdentity::Volume { volume_id } => {
             client
                 .execute(
@@ -462,6 +497,7 @@ fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> Structur
                 StructureAffectedIdentity::Volume { volume_id }
             }
             ObservedStructureIdentity::Chapter { chapter_id }
+            | ObservedStructureIdentity::ChapterDelete { chapter_id, .. }
             | ObservedStructureIdentity::ChapterUpdate { chapter_id, .. } => {
                 StructureAffectedIdentity::Chapter { chapter_id }
             }
