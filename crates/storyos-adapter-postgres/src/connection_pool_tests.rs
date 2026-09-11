@@ -7,8 +7,7 @@ use crate::PostgresProjectReader;
 const USER: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT: &str = "018f0000-0000-7001-8000-000000000002";
 
-// PostgreSQL can give a new backend the PID of an exited one. The pair with
-// `backend_start` identifies one backend exactly.
+// A PID can be reused; the pair with `backend_start` is unique.
 async fn backend_identity(client: &tokio_postgres::Client) -> (i32, SystemTime) {
     let row = client
         .query_one(

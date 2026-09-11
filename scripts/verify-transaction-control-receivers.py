@@ -1,31 +1,5 @@
 #!/usr/bin/env python3
-"""Guard the connection-reuse invariant of storyos-adapter-postgres.
-
-`PostgresProjectReader` pools connections. The pool learns the transaction state of a
-connection only from the transaction-control statements that run through
-`PooledClient::batch_execute`. A `BEGIN` that the pool does not see can return a
-connection inside an open transaction to the next request. Three rules keep the
-record complete:
-
-1. A transaction-control statement is a plain or raw string literal that runs only
-   through `batch_execute`. A `batch_execute` or `simple_query` argument that is not
-   a literal is a violation, because the check cannot read it.
-2. Its receiver is a `PooledClient`: a local bound from `connect()`,
-   `connect_challenge()`, or `checkout()`, a `&PooledClient` parameter, or a
-   `PooledClient` field. It is never a `&tokio_postgres::Client` or generic
-   `GenericClient` parameter, and never a local bound from another source.
-3. `tokio_postgres::connect` appears only in `connection_pool.rs` and in
-   `storage_activation.rs`. The pool forwards statements, and the maintenance owner
-   runs on its own admin connection that never enters the pool, so rules 1 and 2 do
-   not apply to those two files. `connection_pool::open` appears only in
-   `storage_activation_proof.rs`, where the startup gate runs before a pool exists.
-
-The check reads source text, not types. `execute` and `query` calls with a
-non-literal statement stay unchecked; they carry parameters and no site in the
-crate uses them for transaction control. Test files (`*_tests.rs`) open raw
-connections on purpose and are not checked. Run with `--self-test` to check the
-rules against built-in samples.
-"""
+"""Text check of the connection-reuse rules in crates/storyos-adapter-postgres/AGENTS.md."""
 
 import re
 import sys
@@ -37,8 +11,7 @@ SOURCE_DIR = ROOT / "crates/storyos-adapter-postgres/src"
 CONNECT_OWNERS = {"connection_pool.rs", "storage_activation.rs"}
 STARTUP_GATE = "storage_activation_proof.rs"
 POOLED_SOURCES = re.compile(r"\.(connect|connect_challenge|checkout)\s*\(")
-# `ROLLBACK TO` releases a savepoint and keeps the transaction open, as in
-# `connection_pool::transaction_control`.
+# `ROLLBACK TO` keeps the transaction open.
 TRANSACTION_CONTROL = re.compile(
     r"^\s*(BEGIN|START\s+TRANSACTION|COMMIT|END|ROLLBACK(?!\s+TO\b)|ABORT)\b", re.IGNORECASE
 )
@@ -55,7 +28,6 @@ FUNCTION = re.compile(r"\bfn\s+[A-Za-z_][A-Za-z0-9_]*\s*")
 
 
 def balanced_end(text: str, start: int, opening: str, closing: str) -> int:
-    """Return the index of the bracket that closes the one at `start`, or -1."""
     depth = 0
     for index in range(start, len(text)):
         if text[index] == opening:
@@ -68,7 +40,6 @@ def balanced_end(text: str, start: int, opening: str, closing: str) -> int:
 
 
 def parameters(text: str, call_start: int) -> dict[str, str]:
-    """Return `name -> type` for the function that encloses `call_start`."""
     functions = [match for match in FUNCTION.finditer(text, 0, call_start)]
     if not functions:
         return {}

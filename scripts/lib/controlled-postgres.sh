@@ -1,9 +1,4 @@
-# Controlled PostgreSQL container functions.
-#
-# `scripts/verify-project-scope.sh` and `scripts/dev-postgres.sh` source this file.
-# The caller sets `repository_root` first. Every function takes the container name
-# as its first argument. The verify oracles stay in the caller; this file holds only
-# the steps that both scripts need in the same form.
+# Source after setting repository_root; shared by verify-project-scope.sh and dev-postgres.sh.
 
 start_postgres() {
   name=$1
@@ -42,9 +37,7 @@ load_controlled_fixture() {
     < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
 }
 
-# Empty every domain table and load the fixture again. The Storage Activation
-# proof and the migration ledger stay, so the database stays Active. The cascade
-# notices carry no information, so the session hides them.
+# Keeps the activation proof and migration ledger, so the database stays Active.
 reload_controlled_fixture() {
   docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
     -c "SET client_min_messages = warning" -c \

@@ -1,13 +1,4 @@
-//! Reuse of idle `storyos_runtime` connections inside one process.
-//!
-//! One protected request reads the Storage Activation proof and then runs one
-//! Application operation. Without reuse each step opens a new PostgreSQL
-//! connection, and the idle Worker opens two more every 50 ms. One refused
-//! connect then becomes one `project_store_unavailable` refusal. The pool keeps
-//! a few idle connections so steady-state traffic opens none.
-//!
-//! Every runtime statement sets its scope with transaction-local `set_config`, so a
-//! connection outside a transaction carries no state into the next checkout.
+//! Idle `storyos_runtime` connections reused inside one process (ADR 0031).
 
 #[cfg(test)]
 #[path = "connection_pool_tests.rs"]
@@ -20,7 +11,6 @@ use std::sync::{Arc, Mutex};
 
 use tokio_postgres::NoTls;
 
-/// Idle connections kept per pool. A connection returned above this count closes.
 const IDLE_CAPACITY: usize = 8;
 
 pub(crate) struct ConnectionPool {
@@ -36,7 +26,6 @@ impl ConnectionPool {
         }
     }
 
-    /// Take an open idle connection, or open a new one.
     pub(crate) async fn checkout(self: &Arc<Self>) -> Result<PooledClient, tokio_postgres::Error> {
         let client = loop {
             let idle = self.idle.lock().ok().and_then(|mut idle| idle.pop());
@@ -64,7 +53,6 @@ impl fmt::Debug for ConnectionPool {
     }
 }
 
-/// Open one connection and drive it on its own task.
 pub(crate) async fn open(
     database_url: &str,
 ) -> Result<tokio_postgres::Client, tokio_postgres::Error> {
@@ -75,28 +63,16 @@ pub(crate) async fn open(
     Ok(client)
 }
 
-/// One checked-out connection.
-///
-/// Drop returns the connection to the pool only when it is outside a transaction.
-/// A connection dropped inside a transaction closes, and PostgreSQL rolls back.
-/// PostgreSQL reports the transaction status in each `ReadyForQuery` message, but
-/// `tokio_postgres::Client` does not expose it. So `batch_execute` records the
-/// transaction-control statements that the adapter runs on the client.
-/// `Client::transaction()` rolls back on its own drop and needs no record.
+/// One checked-out connection; drop returns it to the pool only outside a transaction.
 pub(crate) struct PooledClient {
     client: Option<tokio_postgres::Client>,
     pool: Arc<ConnectionPool>,
-    // Atomic only so a future that holds `&PooledClient` stays `Send`; one task uses it.
+    // Atomic only so a future that holds `&PooledClient` stays `Send`.
     in_transaction: AtomicBool,
 }
 
 impl PooledClient {
-    /// Run one simple statement string and track `BEGIN`, `COMMIT`, and `ROLLBACK`.
-    ///
-    /// This inherent method shadows `Client::batch_execute`. A `BEGIN` marks the
-    /// connection before the statement runs. A `COMMIT` or `ROLLBACK` clears the
-    /// mark only after PostgreSQL confirms it. A cancelled or failed statement
-    /// therefore leaves the mark in place, and the connection closes on drop.
+    /// Shadows `Client::batch_execute`; marks before `BEGIN` and clears only after a confirmed end.
     pub(crate) async fn batch_execute(&self, statement: &str) -> Result<(), tokio_postgres::Error> {
         let control = transaction_control(statement);
         if control == Some(TransactionControl::Begin) {
@@ -121,7 +97,6 @@ fn transaction_control(statement: &str) -> Option<TransactionControl> {
         .split_whitespace()
         .map(|word| word.trim_end_matches(';').to_ascii_uppercase());
     match (words.next().as_deref(), words.next().as_deref()) {
-        // `COMMIT AND CHAIN` and `ROLLBACK AND CHAIN` end one transaction and start the next.
         (Some("BEGIN"), _)
         | (Some("START"), Some("TRANSACTION"))
         | (Some("COMMIT" | "END" | "ROLLBACK" | "ABORT"), Some("AND")) => {

@@ -1,14 +1,5 @@
 #!/bin/sh
-# One Active, fixture-loaded PostgreSQL for local test iteration.
-#
-# `up` prepares the same Server-facing database that `verify-project-scope.sh`
-# uses and prints the export lines that the ignored cargo tests and the
-# `node-postgresql` Vitest project read. Run `eval "$(scripts/dev-postgres.sh up)"`.
-# `reload` empties the domain tables and loads the fixture again. `env` prints the
-# export lines for a running container. `down` removes the container.
-#
-# The packaged `storyos-storage` activates the database, so `make release-package`
-# must have run on a clean worktree first.
+# Local Active, fixture-loaded PostgreSQL: eval "$(scripts/dev-postgres.sh up)"
 set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
