@@ -70,9 +70,6 @@ export function ManuscriptSearchPanel({
               : "current_chapter";
           if (!query) return;
           setSelection(nextSelection);
-          setOutcome(undefined);
-          setSelectedMatch(undefined);
-          setReplaceOutcome(undefined);
           void (async () => {
             try {
               const page = await searchManuscript({

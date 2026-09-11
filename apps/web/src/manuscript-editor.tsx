@@ -265,15 +265,15 @@ export function ManuscriptEditor({
         const createdAt = new Date().toISOString();
         const beforeRevision = workspace.pending.authoritative_revision_id;
         if (kind === "one" && match !== undefined && matches.length === 1) {
-          const named = current.find((block) =>
+          const currentBlock = current.find((block) =>
             block.manuscript_block_id === match.manuscriptBlockId);
-          if (named === undefined
+          if (currentBlock === undefined
             || !Number.isSafeInteger(match.start)
             || !Number.isSafeInteger(match.end)
             || match.start < 0
             || match.end < match.start
-            || match.end > named.text.length
-            || named.text.slice(match.start, match.end) !== match.queryText) {
+            || match.end > currentBlock.text.length
+            || currentBlock.text.slice(match.start, match.end) !== match.queryText) {
             return "stale";
           }
           const resultingBlocks = applyBoundReplaces(current, [match], text);

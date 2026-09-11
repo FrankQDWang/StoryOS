@@ -14,11 +14,11 @@ import {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const QUERY = "fox";
 const ONE = "cat";
-const SOURCE = `red ${QUERY} ${QUERY} ${QUERY}`;
+const SOURCE = `red ${QUERY} ${QUERY} ${QUERY} ${QUERY}`;
 const AFTER_SAVED_PREFIX = `new ${SOURCE}`;
 const AFTER_PENDING_PREFIX = `x${AFTER_SAVED_PREFIX}`;
-const AFTER_ONE = `xnew red ${ONE} ${QUERY} ${QUERY}`;
-const AFTER_RETRY = `xnew red ${ONE} ${ONE} ${QUERY}`;
+const AFTER_ONE = `xnew red ${ONE} ${QUERY} ${QUERY} ${QUERY}`;
+const AFTER_RETRY = `xnew red ${ONE} ${ONE} ${QUERY} ${QUERY}`;
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -256,7 +256,7 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
     throw new Error("the Project or Chapter identity is missing");
   }
 
-  const firstSearch = await search(frame, QUERY, "3");
+  const firstSearch = await search(frame, QUERY, "4");
   expect(firstSearch.querySelector("[data-replace-one]")).toBeInstanceOf(
     applicationWindow(frame).HTMLButtonElement,
   );
@@ -282,7 +282,7 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
   expect(manuscriptBody(editor)).toBe(AFTER_SAVED_PREFIX);
   expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_SAVED_PREFIX);
 
-  const pendingSearch = await search(frame, QUERY, "3");
+  const pendingSearch = await search(frame, QUERY, "4");
   const pendingControls = replaceControls(pendingSearch);
   await insertAtStart(frame, "x", AFTER_PENDING_PREFIX, "visible");
   pendingControls.replacement.value = ONE;
@@ -293,7 +293,7 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
   expect(manuscriptBody(editor)).toBe(AFTER_PENDING_PREFIX);
   expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_PENDING_PREFIX);
 
-  const fresh = await search(frame, QUERY, "3");
+  const fresh = await search(frame, QUERY, "4");
   const freshControls = replaceControls(fresh);
   const beforeOne = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
@@ -305,7 +305,7 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
   expect(manuscriptBody(editor)).toBe(AFTER_ONE);
   expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_ONE);
 
-  const retry = await search(frame, QUERY, "2");
+  const retry = await search(frame, QUERY, "3");
   const retryControls = replaceControls(retry);
   const beforeRetry = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
@@ -316,7 +316,7 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
   expect(manuscriptBody(editor)).toBe(AFTER_RETRY);
   expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_RETRY);
 
-  const remaining = await search(frame, QUERY, "1");
+  const remaining = await search(frame, QUERY, "2");
   const remainingControls = replaceControls(remaining);
   remainingControls.replacement.value = "wolf";
   remainingControls.replaceAll.click();
