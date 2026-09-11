@@ -9,6 +9,7 @@ contracts:
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py --self-test
 	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
+	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-transaction-control-receivers.py --self-test
 	cargo run --quiet -p storyos-contracts -- check
 	$(MAKE) web
 web-typecheck:
@@ -31,6 +32,7 @@ generate-contracts:
 verify-local: contracts
 	@cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py
 	@PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-transaction-control-receivers.py
 
 verify-tracker:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py

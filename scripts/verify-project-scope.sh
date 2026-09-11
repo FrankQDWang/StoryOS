@@ -114,22 +114,7 @@ if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
   make release-package
 fi
 
-start_postgres() {
-  name=$1
-  docker run --detach --name "$name" \
-    --env POSTGRES_PASSWORD=admin \
-    --publish 127.0.0.1::5432 postgres:16-alpine >/dev/null
-  attempt=0
-  until docker logs "$name" 2>&1 | grep -q "PostgreSQL init process complete" \
-    && docker exec "$name" pg_isready -U postgres >/dev/null 2>&1; do
-    attempt=$((attempt + 1))
-    if [ "$attempt" -ge 40 ]; then
-      echo "PostgreSQL did not become ready: $name" >&2
-      exit 1
-    fi
-    sleep 0.25
-  done
-}
+. "$repository_root/scripts/lib/controlled-postgres.sh"
 
 copy_catalogued_sql() {
   docker cp "$repository_root/crates/storyos-adapter-postgres/migrations/." \
@@ -155,21 +140,6 @@ raise SystemExit(subprocess.call(
     stderr=subprocess.DEVNULL if mode == "fault" else None,
 ))
 PY
-}
-
-postgres_admin_url() {
-  published=$(docker port "$1" 5432/tcp)
-  printf 'postgres://postgres:admin@127.0.0.1:%s/postgres\n' "${published##*:}"
-}
-
-postgres_runtime_url() {
-  published=$(docker port "$1" 5432/tcp)
-  printf 'postgres://storyos_runtime:runtime@127.0.0.1:%s/postgres\n' "${published##*:}"
-}
-
-set_runtime_password() {
-  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
-    -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
 }
 
 storage_bin="$repository_root/target/release-package/storyos-storage"
@@ -382,25 +352,6 @@ prove_bound_request_path_activation() {
   rm -f "$log" "$headers" "$body"
 }
 
-reload_controlled_fixture() {
-  docker exec "$container" psql -X -v ON_ERROR_STOP=1 -U postgres -c \
-    "DO \$\$ DECLARE tbl text; BEGIN
-       FOR tbl IN SELECT tablename FROM pg_tables
-         WHERE schemaname = 'storyos'
-           AND tablename NOT IN (
-             'storage_activation_proofs',
-             'schema_migrations',
-             'migration_phases',
-             'migration_phase_checksums'
-           )
-       LOOP
-         EXECUTE format('TRUNCATE TABLE storyos.%I CASCADE', tbl);
-       END LOOP;
-     END \$\$;" >/dev/null
-  docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-    < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
-}
-
 # The node-postgresql files share one database and one fixture, so ScriptOrderSequencer
 # keeps the given order instead of the Vitest default order.
 run_http_files() {
@@ -461,8 +412,7 @@ oracle_runtime=$(postgres_runtime_url "$oracle_container")
 echo "Refusing Server bind and Worker claim without an Active proof"
 assert_packaged_server_refuses_bind "sql-apply-without-active" "$oracle_runtime"
 assert_packaged_worker_refuses_claim "sql-apply-without-active" "$oracle_runtime"
-docker exec -i "$oracle_container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+load_controlled_fixture "$oracle_container"
 oracle_admin=$(postgres_admin_url "$oracle_container")
 if STORYOS_STORAGE_ADMIN_URL="$oracle_admin" "$storage_bin"; then
   echo "storyos-storage adopted a non-empty database without a ledger" >&2
@@ -593,8 +543,7 @@ if [ "$server_facing_active" != "active" ]; then
   echo "The Server-facing verify database was not Activated by storyos-storage" >&2
   exit 1
 fi
-docker exec -i "$container" psql -X -v ON_ERROR_STOP=1 -U postgres \
-  < "$repository_root/crates/storyos-adapter-postgres/tests/fixture.sql" >/dev/null
+load_controlled_fixture "$container"
 
 published=$(docker port "$container" 5432/tcp)
 port=${published##*:}
@@ -643,15 +592,15 @@ run_http_files \
   test/node-postgresql/readable-export-admission-http.integration.test.ts \
   test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
 echo "Running HTTP human-readable export process-cut tests"
-reload_controlled_fixture
+reload_controlled_fixture "$container"
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/readable-export-admission-process-cut.integration.test.ts
 echo "Running HTTP Project Export Archive process-cut tests"
-reload_controlled_fixture
+reload_controlled_fixture "$container"
 pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/project-export-admission-process-cut.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
-reload_controlled_fixture
+reload_controlled_fixture "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
 stage1_user_id="018f0000-0000-7001-8000-000000000001"
