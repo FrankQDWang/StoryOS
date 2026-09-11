@@ -4,6 +4,7 @@ import { getChapter } from "../../../../generated/typescript/storyos-public-rele
 import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
+  focusManuscriptStart,
   manuscriptBody,
   manuscriptEditor,
   manuscriptIsEditable,
@@ -11,10 +12,13 @@ import {
 } from "../support/manuscript-surface.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const TOKEN = "AlphaToken";
-const ONE = "BetaToken";
-const SOURCE = `${TOKEN} ${TOKEN} ${TOKEN}`;
-const AFTER_ONE = `${ONE} ${TOKEN} ${TOKEN}`;
+const QUERY = "fox";
+const ONE = "cat";
+const SOURCE = `red ${QUERY} ${QUERY} ${QUERY} ${QUERY}`;
+const AFTER_SAVED_PREFIX = `new ${SOURCE}`;
+const AFTER_PENDING_PREFIX = `x${AFTER_SAVED_PREFIX}`;
+const AFTER_ONE = `xnew red ${ONE} ${QUERY} ${QUERY} ${QUERY}`;
+const AFTER_RETRY = `xnew red ${ONE} ${ONE} ${QUERY} ${QUERY}`;
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -90,6 +94,53 @@ async function typeIntoCurrent(frame: HTMLIFrameElement, text: string): Promise<
   await waitSaved(root);
 }
 
+async function insertAtStart(
+  frame: HTMLIFrameElement,
+  text: string,
+  expectedBody: string,
+  settle: "saved" | "visible",
+): Promise<void> {
+  const root = appRoot(frame);
+  const editor = manuscriptEditor(root, applicationWindow(frame));
+  editor.focus();
+  focusManuscriptStart(editor, applicationWindow(frame));
+  await applyTrustedInput({ operation: "insert_text", text });
+  await expect.poll(() => manuscriptBody(editor), { timeout: 10_000 }).toBe(expectedBody);
+  if (settle === "saved") {
+    await expect.poll(() =>
+      root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
+      { timeout: 10_000 },
+    ).toBe("saving");
+    await waitSaved(root);
+  }
+}
+
+function replaceControls(outcome: Element): {
+  replacement: HTMLInputElement;
+  replaceOne: HTMLButtonElement;
+  replaceAll: HTMLButtonElement;
+} {
+  const replacement = outcome.querySelector<HTMLInputElement>(
+    'input[name="manuscript-search-replacement"]',
+  );
+  const replaceOne = outcome.querySelector<HTMLButtonElement>("[data-replace-one]");
+  const replaceAll = outcome.querySelector<HTMLButtonElement>("[data-replace-all]");
+  if (replacement === null || replaceOne === null || replaceAll === null) {
+    throw new Error("the replace controls are missing");
+  }
+  return { replacement, replaceOne, replaceAll };
+}
+
+async function waitReplaceOutcome(root: Element, expected: string): Promise<Element> {
+  await expect.poll(() =>
+    root.querySelector("[data-replace-outcome]")?.getAttribute("data-replace-outcome"),
+    { timeout: 10_000 },
+  ).toBe(expected);
+  const node = root.querySelector("[data-replace-outcome]");
+  if (node === null) throw new Error("the replace outcome is missing");
+  return node;
+}
+
 async function search(
   frame: HTMLIFrameElement,
   query: string,
@@ -106,13 +157,19 @@ async function search(
   }
   radio.click();
   input.value = query;
+  const previousSnapshot = root.querySelector("[data-search-outcome='ready']")
+    ?.getAttribute("data-search-snapshot-id");
   form.requestSubmit();
   await expect.poll(() => {
     const node = root.querySelector("[data-search-outcome='ready']");
-    return node?.getAttribute("data-search-query") === query
-      && node.getAttribute("data-search-selection") === "current_chapter"
-      ? node.getAttribute("data-search-count")
-      : undefined;
+    if (node?.getAttribute("data-search-query") !== query
+      || node.getAttribute("data-search-selection") !== "current_chapter"
+      || node.getAttribute("data-search-count") !== count) {
+      return undefined;
+    }
+    const snapshot = node.getAttribute("data-search-snapshot-id");
+    if (previousSnapshot !== undefined && snapshot === previousSnapshot) return undefined;
+    return count;
   }, { timeout: 10_000 }).toBe(count);
   const outcome = [...root.querySelectorAll("[data-search-outcome='ready']")]
     .find((node) => node.getAttribute("data-search-query") === query
@@ -136,8 +193,8 @@ async function readBody(
   return chapter.chapter.current_revision.body;
 }
 
-it("replaces one visible match and refuses a broader replace without authority", {
-  timeout: 90_000,
+it("rejects a stale selected match, replaces one visible match, and refuses a broader replace", {
+  timeout: 120_000,
 }, async () => {
   const frame = document.createElement("iframe");
   applicationFrame = frame;
@@ -199,52 +256,75 @@ it("replaces one visible match and refuses a broader replace without authority",
     throw new Error("the Project or Chapter identity is missing");
   }
 
-  const outcome = await search(frame, TOKEN, "3");
-  expect(outcome.querySelector("[data-replace-one]")).toBeInstanceOf(
+  const firstSearch = await search(frame, QUERY, "4");
+  expect(firstSearch.querySelector("[data-replace-one]")).toBeInstanceOf(
     applicationWindow(frame).HTMLButtonElement,
   );
-  expect(outcome.querySelector("[data-replace-all]")).toBeInstanceOf(
+  expect(firstSearch.querySelector("[data-replace-all]")).toBeInstanceOf(
     applicationWindow(frame).HTMLButtonElement,
   );
-  const replacement = outcome.querySelector<HTMLInputElement>(
-    'input[name="manuscript-search-replacement"]',
-  );
-  const replaceOne = outcome.querySelector<HTMLButtonElement>("[data-replace-one]");
-  if (replacement === null || replaceOne === null) {
-    throw new Error("the one-match replace control is missing");
-  }
+  await insertAtStart(frame, "new ", AFTER_SAVED_PREFIX, "saved");
+  const beforeStaleSaved = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  const savedControls = replaceControls(firstSearch);
+  savedControls.replacement.value = ONE;
+  savedControls.replaceOne.click();
+  const staleSaved = await waitReplaceOutcome(root, "stale");
+  expect(staleSaved.textContent).toBe("选中的匹配已失效，权威正文未改。");
+  await expect.poll(() =>
+    root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
+    { timeout: 10_000 },
+  ).toBe("saved");
+  expect(root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id")).toBe(beforeStaleSaved);
+  const editor = manuscriptEditor(root, applicationWindow(frame));
+  expect(manuscriptIsEditable(editor)).toBe(true);
+  expect(manuscriptBody(editor)).toBe(AFTER_SAVED_PREFIX);
+  expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_SAVED_PREFIX);
+
+  const pendingSearch = await search(frame, QUERY, "4");
+  const pendingControls = replaceControls(pendingSearch);
+  await insertAtStart(frame, "x", AFTER_PENDING_PREFIX, "visible");
+  pendingControls.replacement.value = ONE;
+  pendingControls.replaceOne.click();
+  const stalePending = await waitReplaceOutcome(root, "stale");
+  expect(stalePending.textContent).toBe("选中的匹配已失效，权威正文未改。");
+  await waitSaved(root);
+  expect(manuscriptBody(editor)).toBe(AFTER_PENDING_PREFIX);
+  expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_PENDING_PREFIX);
+
+  const fresh = await search(frame, QUERY, "4");
+  const freshControls = replaceControls(fresh);
   const beforeOne = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
-  replacement.value = ONE;
-  replaceOne.click();
-  await expect.poll(() =>
-    root.querySelector("[data-replace-outcome]")?.getAttribute("data-replace-outcome"),
-    { timeout: 10_000 },
-  ).toBe("applied");
+  freshControls.replacement.value = ONE;
+  freshControls.replaceOne.click();
+  await waitReplaceOutcome(root, "applied");
   await waitSaved(root, beforeOne);
-  const editor = manuscriptEditor(root, applicationWindow(frame));
   expect(manuscriptIsEditable(editor)).toBe(true);
   expect(manuscriptBody(editor)).toBe(AFTER_ONE);
   expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_ONE);
 
-  const remaining = await search(frame, TOKEN, "2");
-  const remainingReplacement = remaining.querySelector<HTMLInputElement>(
-    'input[name="manuscript-search-replacement"]',
-  );
-  const replaceAll = remaining.querySelector<HTMLButtonElement>("[data-replace-all]");
-  if (remainingReplacement === null || replaceAll === null) {
-    throw new Error("the broader replace control is missing");
-  }
-  remainingReplacement.value = "GammaToken";
-  replaceAll.click();
-  await expect.poll(() =>
-    root.querySelector("[data-replace-outcome]")?.getAttribute("data-replace-outcome"),
-    { timeout: 10_000 },
-  ).toBe("refused");
+  const retry = await search(frame, QUERY, "3");
+  const retryControls = replaceControls(retry);
+  const beforeRetry = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  retryControls.replacement.value = ONE;
+  retryControls.replaceOne.click();
+  await waitReplaceOutcome(root, "applied");
+  await waitSaved(root, beforeRetry);
+  expect(manuscriptBody(editor)).toBe(AFTER_RETRY);
+  expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_RETRY);
+
+  const remaining = await search(frame, QUERY, "2");
+  const remainingControls = replaceControls(remaining);
+  remainingControls.replacement.value = "wolf";
+  remainingControls.replaceAll.click();
+  await waitReplaceOutcome(root, "refused");
   await expect.poll(() =>
     root.querySelector("[data-save-state]")?.getAttribute("data-save-state"),
     { timeout: 10_000 },
   ).toBe("needs_attention");
-  expect(manuscriptBody(editor)).toBe(AFTER_ONE);
-  expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_ONE);
+  expect(manuscriptBody(editor)).toBe(AFTER_RETRY);
+  expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_RETRY);
 });

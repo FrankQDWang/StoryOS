@@ -21,6 +21,20 @@ export function manuscriptIsEditable(editor: Element): boolean {
   return editor.getAttribute("contenteditable") === "true";
 }
 
+export function focusManuscriptStart(
+  editor: HTMLElement,
+  realm: Window & typeof globalThis,
+): void {
+  editor.focus();
+  const selection = realm.getSelection();
+  if (selection === null) throw new Error("the manuscript selection is unavailable");
+  const range = editor.ownerDocument.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(true);
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
 export function focusManuscriptEnd(
   editor: HTMLElement,
   realm: Window & typeof globalThis,

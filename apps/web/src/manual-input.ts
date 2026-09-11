@@ -34,6 +34,7 @@ export interface BoundReplacementMatch {
   manuscriptBlockId: string;
   start: number;
   end: number;
+  queryText: string;
 }
 
 export interface ManualInputController {
@@ -45,7 +46,7 @@ export interface ManualInputController {
     kind: "one" | "broader";
     matches: BoundReplacementMatch[];
     text: string;
-  }): Promise<"applied" | "refused">;
+  }): Promise<"applied" | "refused" | "stale">;
 }
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
