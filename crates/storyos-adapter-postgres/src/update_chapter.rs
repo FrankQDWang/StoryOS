@@ -1,6 +1,6 @@
 use storyos_application::{
     AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
+    UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
     UpdateChapterSettlementEffect, UpdateChapterStore,
 };
 
@@ -86,7 +86,12 @@ async fn read_update_chapter_settlement(
                         payload.payload->>'title',
                         payload.payload->>'order',
                         payload.project_activity_position::text,
-                        payload.project_activity_event_id::text
+                        payload.project_activity_event_id::text,
+                        authoritative_commit.authoritative_commit_id::text,
+                        action.author_action_sequence::text,
+                        snapshot.snapshot_id::text,
+                        authoritative_commit.prior_manuscript_tree_revision::text,
+                        authoritative_commit.resulting_manuscript_tree_revision::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -102,6 +107,19 @@ async fn read_update_chapter_settlement(
               LEFT JOIN storyos.project_activity_event_payloads AS payload
                      ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.authoritative_commits AS authoritative_commit
+                     ON (authoritative_commit.owner_user_id, authoritative_commit.project_id,
+                         authoritative_commit.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.author_action_entries AS action
+                     ON (action.owner_user_id, action.project_id, action.receipt_id) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.project_snapshots AS snapshot
+                     ON (snapshot.owner_user_id, snapshot.project_id,
+                         snapshot.project_activity_position) =
+                        (payload.owner_user_id, payload.project_id,
+                         payload.project_activity_position)
+                    AND snapshot.snapshot_kind = 'canonical'
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -166,6 +184,34 @@ async fn read_update_chapter_settlement(
             },
             _ => return Err(UpdateChapterError::BindingConflict),
         };
+        let authority = match (
+            row.get::<_, Option<String>>(11),
+            row.get::<_, Option<String>>(12),
+            row.get::<_, Option<String>>(13),
+            row.get::<_, Option<String>>(14),
+            row.get::<_, Option<String>>(15),
+        ) {
+            (
+                Some(authoritative_commit_id),
+                Some(author_action_sequence),
+                Some(snapshot_id),
+                Some(prior_manuscript_tree_revision),
+                Some(resulting_manuscript_tree_revision),
+            ) => Some(UpdateChapterAuthority {
+                authoritative_commit_id,
+                author_action_sequence: author_action_sequence
+                    .parse()
+                    .map_err(update_chapter_parse_error)?,
+                snapshot_id,
+                prior_manuscript_tree_revision: prior_manuscript_tree_revision
+                    .parse()
+                    .map_err(update_chapter_parse_error)?,
+                resulting_manuscript_tree_revision: resulting_manuscript_tree_revision
+                    .parse()
+                    .map_err(update_chapter_parse_error)?,
+            }),
+            _ => None,
+        };
         Ok(UpdateChapterSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -180,6 +226,7 @@ async fn read_update_chapter_settlement(
                 .parse::<u64>()
                 .map_err(update_chapter_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(10).unwrap_or_default(),
+            authority,
         })
     }
     .await;

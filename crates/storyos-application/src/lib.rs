@@ -169,7 +169,7 @@ pub use undo_latest_author_action::{
     UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore, undo_latest_author_action,
 };
 pub use update_chapter::{
-    UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
+    UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
     UpdateChapterSettlementEffect, UpdateChapterStore, update_chapter,
 };
 pub use update_project::{

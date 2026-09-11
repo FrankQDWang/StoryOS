@@ -299,6 +299,9 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
     assert.equal(applied.updated.effect.order, "2");
     assert.equal(applied.updated.effect.tree_revision, "5");
     assert.match(applied.updated.effect.project_activity_position, /^[1-9][0-9]*$/);
+    assert.equal(applied.updated.receipt.authoritative_commit_ids.length, 1);
+    assert.match(applied.updated.receipt.authoritative_commit_ids[0] ?? "", UUID_V7);
+    assert.equal(applied.updated.receipt.author_action_sequence, "4");
     assert.match(chapterId, UUID_V7);
     assert.equal(applied.updated.project.open.kind, "current_chapter");
     if (applied.updated.project.open.kind !== "current_chapter") {
@@ -317,6 +320,11 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
     });
     assert.equal(replay.command_id, applied.updated.command_id);
     assert.equal(replay.receipt.receipt_id, applied.updated.receipt.receipt_id);
+    assert.deepEqual(
+      replay.receipt.authoritative_commit_ids,
+      applied.updated.receipt.authoritative_commit_ids,
+    );
+    assert.equal(replay.receipt.author_action_sequence, "4");
 
     const opened = await getChapter({
       baseUrl,
@@ -329,6 +337,7 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
 
     const tree = await getManuscriptTree({ baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl });
     assert.equal(tree.tree_revision, "5");
+    assert.equal(tree.snapshot.project_activity_position, applied.updated.effect.project_activity_position);
     assert.equal(tree.volumes.length, 1);
     assert.equal(tree.volumes[0]?.chapters.length, 2);
     assert.equal(tree.volumes[0]?.chapters[0]?.title, "Chapter B");
@@ -351,6 +360,8 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
       throw new Error("stale Update Chapter must conflict");
     }
     assert.equal(stale.updated.effect.reason, "stale_tree_revision");
+    assert.deepEqual(stale.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(stale.updated.receipt.author_action_sequence, null);
     const afterStale = await getManuscriptTree({
       baseUrl,
       projectId: first.projectId,
@@ -373,6 +384,8 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
       throw new Error("unchanged Update Chapter must have no effect");
     }
     assert.equal(unchanged.updated.effect.reason, "unchanged");
+    assert.deepEqual(unchanged.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(unchanged.updated.receipt.author_action_sequence, null);
 
     const invalidJoin = await patchChapter(
       baseUrl,
@@ -388,6 +401,8 @@ test("updateChapter renames and reorders one Chapter, replays, and fails closed"
       throw new Error("missing Chapter must refuse");
     }
     assert.equal(invalidJoin.updated.effect.reason, "invalid_chapter_join");
+    assert.deepEqual(invalidJoin.updated.receipt.authoritative_commit_ids, []);
+    assert.equal(invalidJoin.updated.receipt.author_action_sequence, null);
 
     const invalidOrder = await patchChapter(
       baseUrl,

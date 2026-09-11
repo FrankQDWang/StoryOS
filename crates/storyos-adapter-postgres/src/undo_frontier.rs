@@ -28,6 +28,11 @@ pub(super) enum ObservedStructureIdentity {
     Chapter {
         chapter_id: String,
     },
+    ChapterUpdate {
+        chapter_id: String,
+        prior_title: String,
+        prior_order: u64,
+    },
 }
 
 pub(super) struct ObservedStructureFrontier {
@@ -221,6 +226,33 @@ fn observed_frontier(
                         .map_err(undo_parse_error)?,
                     identity: ObservedStructureIdentity::VolumeUpdate {
                         volume_id: affected_volume_id,
+                        prior_title,
+                        prior_order: prior_order.parse().map_err(undo_parse_error)?,
+                    },
+                })
+            }
+            (
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some(prior_tree),
+                Some(resulting_tree),
+                None,
+                Some(affected_chapter_id),
+                Some(command_kind),
+                Some(prior_title),
+                Some(prior_order),
+            ) if command_kind == "updateChapter" => {
+                ObservedFrontier::Structure(ObservedStructureFrontier {
+                    sequence,
+                    prior_manuscript_tree_revision: prior_tree.parse().map_err(undo_parse_error)?,
+                    resulting_manuscript_tree_revision: resulting_tree
+                        .parse()
+                        .map_err(undo_parse_error)?,
+                    identity: ObservedStructureIdentity::ChapterUpdate {
+                        chapter_id: affected_chapter_id,
                         prior_title,
                         prior_order: prior_order.parse().map_err(undo_parse_error)?,
                     },
