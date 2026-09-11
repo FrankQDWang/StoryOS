@@ -1,7 +1,6 @@
-use std::time::Duration;
-
 use super::*;
 use storyos_application::{UserId, issue_project_command_challenge};
+use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const PROJECT_A: &str = "018f0000-0000-7001-8000-000000000002";
@@ -10,9 +9,8 @@ const PROJECT_B: &str = "018f0000-0000-7001-8000-000000000102";
 
 fn fixed_clock_store(database_url: String, unix_seconds: i64) -> PostgresProjectReader {
     PostgresProjectReader {
-        database_url,
         challenge_rate_clock_unix_seconds: Some(unix_seconds),
-        readable_export_lease_ttl: Duration::from_secs(30),
+        ..PostgresProjectReader::new(database_url)
     }
 }
 

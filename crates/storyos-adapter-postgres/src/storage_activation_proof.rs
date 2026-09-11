@@ -2,8 +2,6 @@
 
 use std::fmt;
 
-use tokio_postgres::NoTls;
-
 use crate::storage_activation::{
     StorageActivationError, packaged_catalog, packaged_identity, read_proof,
 };
@@ -47,21 +45,26 @@ impl std::error::Error for StorageActivationProofError {
     }
 }
 
+/// Open one connection and read the proof. Server, Worker, and `storyos-storage`
+/// use this at start, before any pool exists.
 pub async fn require_release1_storage_activation_proof(
     database_url: &str,
 ) -> Result<(), StorageActivationProofError> {
     if database_url.is_empty() {
         return Err(StorageActivationProofError::MissingOrInactive);
     }
-    let catalog = packaged_catalog().map_err(catalog_error)?;
-    let identity = packaged_identity(&catalog).map_err(catalog_error)?;
-    let (client, connection) = tokio_postgres::connect(database_url, NoTls)
+    let client = crate::connection_pool::open(database_url)
         .await
         .map_err(unavailable)?;
-    tokio::spawn(async move {
-        let _connection_result = connection.await;
-    });
-    let proof = match read_proof(&client).await {
+    require_release1_storage_activation_proof_on(&client).await
+}
+
+pub(crate) async fn require_release1_storage_activation_proof_on(
+    client: &tokio_postgres::Client,
+) -> Result<(), StorageActivationProofError> {
+    let catalog = packaged_catalog().map_err(catalog_error)?;
+    let identity = packaged_identity(&catalog).map_err(catalog_error)?;
+    let proof = match read_proof(client).await {
         Ok(proof) => proof,
         Err(StorageActivationError::Unavailable(source)) => {
             return Err(StorageActivationProofError::Unavailable(source));
@@ -88,7 +91,7 @@ fn catalog_error(error: StorageActivationError) -> StorageActivationProofError {
     }
 }
 
-fn unavailable(
+pub(crate) fn unavailable(
     source: impl Into<Box<dyn std::error::Error + Send + Sync>>,
 ) -> StorageActivationProofError {
     StorageActivationProofError::Unavailable(source.into())

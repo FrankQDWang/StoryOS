@@ -272,7 +272,7 @@ impl PostgresProjectReader {
                     return Err(AuthorEditError::BindingConflict);
                 }
                 let blocks = crate::manuscript_block::load_or_upgrade_blocks(
-                    &client,
+                    &*client,
                     identity.project_scope.owner_user_id.as_ref(),
                     identity.project_scope.project_id.as_ref(),
                     &identity.chapter_id,

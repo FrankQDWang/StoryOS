@@ -365,7 +365,7 @@ async fn persist_create_project(
 }
 
 async fn read_create_project_settlement(
-    client: &tokio_postgres::Client,
+    client: &PooledClient,
     command: &CreateProjectCommand,
     receipt_id: &str,
 ) -> Result<CreateProjectSettlement, CreateProjectError> {

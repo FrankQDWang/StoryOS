@@ -80,6 +80,7 @@ mod author_edit_outcome;
 mod author_edit_replay;
 mod author_edit_settlement;
 mod chapter_query;
+mod connection_pool;
 mod create_chapter;
 mod create_project;
 mod create_project_challenge;
@@ -111,8 +112,10 @@ mod update_chapter;
 mod update_project;
 mod update_volume;
 
+use std::sync::Arc;
 use std::time::Duration;
 
+use connection_pool::{ConnectionPool, PooledClient};
 use storyos_application::{
     Chapter, ChapterId, IssueProjectCommandChallenge, PROJECT_COMMAND_CHALLENGE_RATE_CAPACITY,
     PROJECT_COMMAND_CHALLENGE_RATE_POLICY_REVISION, PROJECT_COMMAND_CHALLENGE_RATE_WINDOW_SECONDS,
@@ -120,7 +123,6 @@ use storyos_application::{
     ProjectCommandChallengeStore, ProjectCommandChallengeTransaction, ProjectCommandChallengeUse,
     ProjectId, ProjectReadError, ProjectReader, ProjectScope, RevisionId,
 };
-use tokio_postgres::NoTls;
 
 pub use storage_activation::{
     StorageActivation, StorageActivationError, activate_release1_storage,
@@ -129,9 +131,10 @@ pub use storage_activation_proof::{
     StorageActivationProofError, require_release1_storage_activation_proof,
 };
 
+/// The `storyos_runtime` store. Clones share one connection pool.
 #[derive(Clone, Debug)]
 pub struct PostgresProjectReader {
-    database_url: String,
+    pool: Arc<ConnectionPool>,
     challenge_rate_clock_unix_seconds: Option<i64>,
     readable_export_lease_ttl: Duration,
 }
@@ -268,8 +271,10 @@ impl ProjectCommandChallengeStore for PostgresProjectReader {
 }
 
 /// A caller-owned PostgreSQL transaction for one Project command attempt.
+///
+/// Drop without `commit` or `rollback` closes the connection, and PostgreSQL rolls back.
 pub struct PostgresProjectCommandTransaction {
-    client: tokio_postgres::Client,
+    client: PooledClient,
 }
 
 impl PostgresProjectCommandTransaction {
@@ -406,16 +411,8 @@ impl PostgresProjectReader {
         Ok(PostgresProjectCommandTransaction { client })
     }
 
-    async fn connect_challenge(
-        &self,
-    ) -> Result<tokio_postgres::Client, ProjectCommandChallengeError> {
-        let (client, connection) = tokio_postgres::connect(&self.database_url, NoTls)
-            .await
-            .map_err(challenge_error)?;
-        tokio::spawn(async move {
-            let _connection_result = connection.await;
-        });
-        Ok(client)
+    async fn connect_challenge(&self) -> Result<PooledClient, ProjectCommandChallengeError> {
+        self.pool.checkout().await.map_err(challenge_error)
     }
 }
 
@@ -581,7 +578,7 @@ fn challenge_error(source: tokio_postgres::Error) -> ProjectCommandChallengeErro
 impl PostgresProjectReader {
     pub fn new(database_url: impl Into<String>) -> Self {
         Self {
-            database_url: database_url.into(),
+            pool: Arc::new(ConnectionPool::new(database_url.into())),
             challenge_rate_clock_unix_seconds: None,
             readable_export_lease_ttl: Duration::from_secs(30),
         }
@@ -592,14 +589,23 @@ impl PostgresProjectReader {
         self
     }
 
-    pub(crate) async fn connect(&self) -> Result<tokio_postgres::Client, ProjectReadError> {
-        let (client, connection) = tokio_postgres::connect(&self.database_url, NoTls)
+    /// Read the Release 1 Storage Activation proof on a pooled connection.
+    ///
+    /// ADR 0020 requires this read again on every protected request and Worker
+    /// claim. The result has the same meaning as the URL-based startup gate.
+    pub async fn require_release1_storage_activation_proof(
+        &self,
+    ) -> Result<(), StorageActivationProofError> {
+        let client = self
+            .pool
+            .checkout()
             .await
-            .map_err(read_error)?;
-        tokio::spawn(async move {
-            let _connection_result = connection.await;
-        });
-        Ok(client)
+            .map_err(storage_activation_proof::unavailable)?;
+        storage_activation_proof::require_release1_storage_activation_proof_on(&client).await
+    }
+
+    pub(crate) async fn connect(&self) -> Result<PooledClient, ProjectReadError> {
+        self.pool.checkout().await.map_err(read_error)
     }
 }
 

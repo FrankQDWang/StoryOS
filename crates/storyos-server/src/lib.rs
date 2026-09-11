@@ -9,9 +9,7 @@ use axum::extract::{Path, Request, State};
 use axum::http::{HeaderMap, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::{Json, Router, routing};
-use storyos_adapter_postgres::{
-    PostgresProjectReader, StorageActivationProofError, require_release1_storage_activation_proof,
-};
+use storyos_adapter_postgres::{PostgresProjectReader, StorageActivationProofError};
 use storyos_application::{
     ProjectCommandChallengeError, ProjectId, ProjectScope as ApplicationScope, UserId, open_project,
 };
@@ -140,6 +138,8 @@ struct ServerState {
     allowed_origin: Option<TupleOrigin>,
     session_allowed_origins: HashMap<String, TupleOrigin>,
     live_session_bindings: Arc<Mutex<HashMap<String, ClientSessionBinding>>>,
+    // One store per Server so every protected request reuses its idle connections.
+    project_store: Option<PostgresProjectReader>,
 }
 
 impl ServerState {
@@ -148,6 +148,10 @@ impl ServerState {
             .allowed_origin
             .as_deref()
             .and_then(TupleOrigin::from_allowed_origin);
+        let project_store = config
+            .database_url
+            .as_deref()
+            .map(PostgresProjectReader::new);
         let session_allowed_origins = config
             .session_bindings
             .iter()
@@ -162,6 +166,7 @@ impl ServerState {
             allowed_origin,
             session_allowed_origins,
             live_session_bindings,
+            project_store,
         }
     }
 
@@ -570,15 +575,15 @@ fn valid_uuid(value: &str) -> Result<(), ApiError> {
 }
 
 async fn project_reader(state: &ServerState) -> Result<PostgresProjectReader, ApiError> {
-    let database_url = state.config.database_url.as_ref().ok_or_else(|| {
+    let store = state.project_store.as_ref().ok_or_else(|| {
         problem(
             StatusCode::SERVICE_UNAVAILABLE,
             "project_store_unavailable",
             "The Project store is unavailable.",
         )
     })?;
-    match require_release1_storage_activation_proof(database_url).await {
-        Ok(()) => Ok(PostgresProjectReader::new(database_url)),
+    match store.require_release1_storage_activation_proof().await {
+        Ok(()) => Ok(store.clone()),
         Err(StorageActivationProofError::IdentityMismatch) => Err(upgrade_required()),
         Err(
             StorageActivationProofError::MissingOrInactive
