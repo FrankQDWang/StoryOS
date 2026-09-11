@@ -21,12 +21,20 @@ pub struct SetCurrentChapterCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SetCurrentChapterAuthority {
+    pub author_action_sequence: u64,
+    pub snapshot_id: String,
+    pub manuscript_tree_revision: u64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SetCurrentChapterSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub effect: SetCurrentChapterSettlementEffect,
     pub receipt_created_at: String,
     pub project_activity_position: u64,
     pub project_activity_event_id: String,
+    pub authority: Option<SetCurrentChapterAuthority>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

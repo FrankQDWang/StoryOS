@@ -4,7 +4,14 @@ use storyos_core::AuthorUndoFrontierKind;
 pub(super) enum ObservedFrontier {
     Prose(ObservedProseFrontier),
     Structure(ObservedStructureFrontier),
+    CurrentChapter(ObservedCurrentChapterFrontier),
     Barrier { sequence: u64 },
+}
+
+pub(super) struct ObservedCurrentChapterFrontier {
+    pub sequence: u64,
+    pub prior_chapter_id: String,
+    pub resulting_chapter_id: String,
 }
 
 pub(super) struct ObservedProseFrontier {
@@ -74,7 +81,9 @@ pub(super) async fn load_observed_frontier(
                     frontier.command_kind,
                     frontier.prior_title,
                     frontier.prior_order,
-                    frontier.prior_current_chapter_id
+                    frontier.prior_current_chapter_id,
+                    frontier.prior_chapter_id,
+                    frontier.resulting_chapter_id
                FROM storyos.projects AS project
           LEFT JOIN LATERAL (
                 SELECT action.author_action_sequence,
@@ -88,16 +97,18 @@ pub(super) async fn load_observed_frontier(
                        receipt.command_kind,
                        payload.payload->>'prior_title' AS prior_title,
                        payload.payload->>'prior_order' AS prior_order,
-                       payload.payload->>'prior_current_chapter_id' AS prior_current_chapter_id
+                       payload.payload->>'prior_current_chapter_id' AS prior_current_chapter_id,
+                       payload.payload->>'prior_chapter_id' AS prior_chapter_id,
+                       payload.payload->>'current_chapter_id' AS resulting_chapter_id
                   FROM storyos.author_action_entries AS action
-                  JOIN storyos.authoritative_commits AS commit
+                  JOIN storyos.domain_receipts AS receipt
+                    ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                       (action.owner_user_id, action.project_id, action.receipt_id)
+             LEFT JOIN storyos.authoritative_commits AS commit
                     ON (commit.owner_user_id, commit.project_id, commit.receipt_id,
                         commit.receipt_result_kind, commit.authoritative_commit_id) =
                        (action.owner_user_id, action.project_id, action.receipt_id,
                         action.receipt_result_kind, action.authoritative_commit_id)
-                  JOIN storyos.domain_receipts AS receipt
-                    ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                       (action.owner_user_id, action.project_id, action.receipt_id)
              LEFT JOIN storyos.project_activity_event_payloads AS payload
                     ON (payload.owner_user_id, payload.project_id, payload.receipt_id) =
                        (action.owner_user_id, action.project_id, action.receipt_id)
@@ -343,6 +354,23 @@ fn observed_frontier(
                     },
                 })
             }
+            (None, None, None, None, None, None, None, None, None, Some(command_kind), _, _)
+                if command_kind == "setCurrentChapter" =>
+            {
+                match (
+                    row.get::<_, Option<String>>(15),
+                    row.get::<_, Option<String>>(16),
+                ) {
+                    (Some(prior_chapter_id), Some(resulting_chapter_id)) => {
+                        ObservedFrontier::CurrentChapter(ObservedCurrentChapterFrontier {
+                            sequence,
+                            prior_chapter_id,
+                            resulting_chapter_id,
+                        })
+                    }
+                    _ => ObservedFrontier::Barrier { sequence },
+                }
+            }
             _ => ObservedFrontier::Barrier { sequence },
         },
     ))
@@ -353,6 +381,7 @@ impl ObservedFrontier {
         match self {
             Self::Prose(frontier) => frontier.sequence,
             Self::Structure(frontier) => frontier.sequence,
+            Self::CurrentChapter(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
         }
     }
@@ -362,7 +391,9 @@ impl ObservedFrontier {
             Self::Prose(frontier) => AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
                 resulting_revision_id: frontier.resulting_revision_id.clone(),
             },
-            Self::Structure(_) => AuthorUndoFrontierKind::ReversibleStructureTransition,
+            Self::Structure(_) | Self::CurrentChapter(_) => {
+                AuthorUndoFrontierKind::ReversibleStructureTransition
+            }
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
         }
     }
@@ -370,7 +401,7 @@ impl ObservedFrontier {
     pub(super) fn prose_head(&self) -> Option<&str> {
         match self {
             Self::Prose(frontier) => Some(frontier.current_head_revision_id.as_str()),
-            Self::Structure(_) | Self::Barrier { .. } => None,
+            Self::Structure(_) | Self::CurrentChapter(_) | Self::Barrier { .. } => None,
         }
     }
 }

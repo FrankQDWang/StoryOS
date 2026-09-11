@@ -20,6 +20,7 @@ impl SetCurrentChapterStore for Store {
             receipt_created_at: "2026-08-29T00:00:00.000Z".to_owned(),
             project_activity_position: 2,
             project_activity_event_id: "event".to_owned(),
+            authority: None,
         })
     }
 }

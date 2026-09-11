@@ -695,24 +695,6 @@ async fn applied_set_current_chapter_receipt_may_bind_author_action_without_comm
         SetCurrentChapterSettlementEffect::Applied { .. }
     ));
     let admin = open_admin().await;
-    admin.batch_execute("BEGIN").await.unwrap();
-    // Create Volume and two Create Chapter settlements occupy sequences 1 through 3.
-    admin
-        .execute(
-            "INSERT INTO storyos.author_action_entries
-               (owner_user_id, project_id, author_action_sequence, disposition,
-                receipt_id, receipt_result_kind)
-             VALUES ($1::text::uuid, $2::text::uuid, 4, 'forward',
-                     $3::text::uuid, 'authoritative_applied')",
-            &[
-                &USER_A,
-                &scope.project_id.as_ref(),
-                &switched.ids.receipt_id,
-            ],
-        )
-        .await
-        .unwrap();
-    admin.batch_execute("COMMIT").await.unwrap();
     let bound: serde_json::Value = serde_json::from_str(
         &admin
             .query_one(

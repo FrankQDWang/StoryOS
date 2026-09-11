@@ -74,6 +74,24 @@ async fn persist_undo(
     if lifecycle_state != "active" {
         return Err(UndoLatestAuthorActionError::BindingConflict);
     }
+    let observed = match observed {
+        Some(ObservedFrontier::CurrentChapter(frontier)) => {
+            if crate::undo_current_chapter::live_chapter_is_lawful_target(
+                client,
+                command,
+                &frontier.prior_chapter_id,
+            )
+            .await?
+            {
+                Some(ObservedFrontier::CurrentChapter(frontier))
+            } else {
+                Some(ObservedFrontier::Barrier {
+                    sequence: frontier.sequence,
+                })
+            }
+        }
+        other => other,
+    };
     let classified = classify_undo(&CoreUndo {
         expected_author_undo_frontier_sequence: command.expected_author_undo_frontier_sequence,
         current_author_undo_frontier: observed.as_ref().map(|frontier| AuthorUndoFrontier {
@@ -93,7 +111,12 @@ async fn persist_undo(
             Some(frontier.chapter_id.as_str()),
             Some(frontier.resulting_revision_id.as_str()),
         ),
-        Some(ObservedFrontier::Structure(_) | ObservedFrontier::Barrier { .. }) | None => {
+        Some(
+            ObservedFrontier::Structure(_)
+            | ObservedFrontier::CurrentChapter(_)
+            | ObservedFrontier::Barrier { .. },
+        )
+        | None => {
             match (
                 session_chapter.as_deref(),
                 command.expected_authoritative_revision_id.as_str(),
@@ -113,6 +136,15 @@ async fn persist_undo(
             }
             Some(ObservedFrontier::Structure(frontier)) => {
                 crate::undo_structure::persist_structure_compensation(
+                    client,
+                    command,
+                    frontier,
+                    source_sequence,
+                )
+                .await
+            }
+            Some(ObservedFrontier::CurrentChapter(frontier)) => {
+                crate::undo_current_chapter::persist_current_chapter_compensation(
                     client,
                     command,
                     frontier,
@@ -756,9 +788,7 @@ async fn read_undo_settlement(
                     .ok_or(UndoLatestAuthorActionError::BindingConflict)?
                     .parse()
                     .map_err(undo_parse_error)?;
-                let authoritative_commit_id = row
-                    .get::<_, Option<String>>(8)
-                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+                let authoritative_commit_id = row.get::<_, Option<String>>(8);
                 if let Some(revision_id) = row.get::<_, Option<String>>(9) {
                     let stored = row
                         .get::<_, Option<String>>(10)
@@ -779,17 +809,27 @@ async fn read_undo_settlement(
                     UndoLatestAuthorActionSettlementEffect::Compensated {
                         source_sequence,
                         author_action_sequence,
-                        authoritative_commit_id,
+                        authoritative_commit_id: authoritative_commit_id
+                            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
                         revision_id: revision_id.clone(),
                         body: crate::manuscript_block::display_body_from_stored(&stored, &blocks),
                         blocks,
                         author_undo_frontier_sequence: current_frontier,
                     }
-                } else {
+                } else if let Some(authoritative_commit_id) = authoritative_commit_id {
                     UndoLatestAuthorActionSettlementEffect::CompensatedStructure {
                         source_sequence,
                         author_action_sequence,
                         authoritative_commit_id,
+                        snapshot_id: row
+                            .get::<_, Option<String>>(13)
+                            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+                        author_undo_frontier_sequence: current_frontier,
+                    }
+                } else {
+                    UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
+                        source_sequence,
+                        author_action_sequence,
                         snapshot_id: row
                             .get::<_, Option<String>>(13)
                             .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
