@@ -422,7 +422,7 @@ async fn read_admitted_operation(
             .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
         let snapshot_id = row.get::<_, String>(3);
         let source_snapshot = crate::snapshot::load_canonical_snapshot_by_id(
-            &client,
+            &*client,
             &command.project_scope,
             &snapshot_id,
         )
@@ -531,7 +531,7 @@ async fn read_settled_admission(
         }
         .ok_or(ExportHumanReadableManuscriptError::BindingConflict)?;
         let source_snapshot = crate::snapshot::load_canonical_snapshot_by_id(
-            &client,
+            &*client,
             &command.project_scope,
             &source_snapshot_id,
         )
@@ -556,7 +556,7 @@ async fn read_settled_admission(
 }
 
 async fn finish_readonly(
-    client: &tokio_postgres::Client,
+    client: &PooledClient,
     result: &Result<ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptError>,
 ) -> Result<(), ExportHumanReadableManuscriptError> {
     match result {

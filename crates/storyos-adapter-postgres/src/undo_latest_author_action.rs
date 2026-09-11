@@ -767,7 +767,7 @@ async fn read_undo_settlement(
                         .get::<_, Option<String>>(12)
                         .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
                     let blocks = crate::manuscript_block::load_revision_blocks(
-                        &client,
+                        &*client,
                         command.project_scope.owner_user_id.as_ref(),
                         command.project_scope.project_id.as_ref(),
                         &chapter_id,
