@@ -6,19 +6,30 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
 CROSSWALK = ROOT / "generated/evidence/stage1-contract-crosswalk.json"
 REPOSITORY = "repos/FrankQDWang/StoryOS"
 ISSUE_URL_PREFIX = "https://github.com/FrankQDWang/StoryOS/issues/"
+API_ATTEMPTS = 3
 
 
-def api(path: str):
-    result = subprocess.run(
-        ["gh", "api", f"{REPOSITORY}/{path}"], check=True, capture_output=True, text=True
+def api(path: str, run=subprocess.run, pause=time.sleep):
+    # One `gh api` non-zero exit in a run of about 20 calls is usually a network or
+    # GitHub 5xx fault. A bounded retry prevents a complete `make verify` failure on it.
+    # A call that fails on every attempt still fails closed with the last stderr.
+    command = ["gh", "api", f"{REPOSITORY}/{path}"]
+    for attempt in range(1, API_ATTEMPTS + 1):
+        result = run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            return json.loads(result.stdout)
+        if attempt < API_ATTEMPTS:
+            pause(attempt)
+    raise SystemExit(
+        f"gh api {path} failed on {API_ATTEMPTS} attempts; last stderr:\n{result.stderr.strip()}"
     )
-    return json.loads(result.stdout)
 
 
 def body_sha256(body: str) -> str:
@@ -164,6 +175,23 @@ def self_test() -> None:
             pass
         else:
             raise AssertionError("invalid historical reusable-owner policy must fail closed")
+
+    def scripted_runner(exit_codes: list[int]):
+        def run(command, capture_output, text):
+            code = exit_codes.pop(0)
+            return subprocess.CompletedProcess(command, code, stdout='{"ok": true}', stderr="dial tcp: timeout")
+        return run
+
+    pauses: list[int] = []
+    assert api("issues/1", run=scripted_runner([1, 0]), pause=pauses.append) == {"ok": True}
+    assert pauses == [1]
+    try:
+        api("issues/1", run=scripted_runner([1, 1, 1]), pause=pauses.append)
+    except SystemExit as error:
+        assert "issues/1" in str(error) and "dial tcp: timeout" in str(error)
+    else:
+        raise AssertionError("a gh api call that fails on every attempt must fail closed")
+    assert pauses == [1, 1, 2]
 
 
 def main() -> None:
