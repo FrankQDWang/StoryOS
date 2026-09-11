@@ -3,12 +3,12 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
     CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
-    create_editor_session, create_project, create_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
-    undo_latest_author_action,
+    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeId,
+    VolumeNode, create_chapter, create_editor_session, create_project, create_volume,
+    get_manuscript_tree, issue_create_project_challenge, issue_project_command_challenge,
+    open_chapter, open_project, undo_latest_author_action,
 };
 use tokio_postgres::NoTls;
 
@@ -526,10 +526,10 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
         panic!("Create Chapter Undo must write structure Compensation");
     };
     assert_eq!(source_sequence, chapter_b_authority.author_action_sequence);
-    let tree_after_b = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after Chapter B Compensation");
+    let GetManuscriptTree::Found(tree_after_b) = get_manuscript_tree(&store, &scope).await.unwrap()
+    else {
+        panic!("the tree remains after Chapter B Compensation");
+    };
     assert_eq!(tree_after_b.tree_revision, 3);
     assert_eq!(tree_after_b.snapshot.snapshot_id, snapshot_id);
     assert_eq!(
@@ -565,10 +565,10 @@ async fn author_undo_compensates_create_chapter_and_restores_the_initial_revisio
         UndoLatestAuthorActionSettlementEffect::CompensatedStructure { source_sequence, .. }
             if source_sequence == chapter_a_authority.author_action_sequence
     ));
-    let tree_after_a = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Volume remains after Chapter A Compensation");
+    let GetManuscriptTree::Found(tree_after_a) = get_manuscript_tree(&store, &scope).await.unwrap()
+    else {
+        panic!("the Volume remains after Chapter A Compensation");
+    };
     assert_eq!(tree_after_a.tree_revision, 2);
     assert_eq!(
         tree_after_a.volumes,

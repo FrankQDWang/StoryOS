@@ -4,12 +4,12 @@ use storyos_application::{
     ChapterNode, CreateChapterCommand, CreateChapterSettlementEffect,
     CreateProjectChallengeBinding, CreateProjectCommand, CreateVolumeCommand,
     CreateVolumePublicOrder, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UndoLatestAuthorActionCommand,
-    UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, apply_author_edit,
-    create_chapter, create_editor_session, create_project, create_volume, get_manuscript_tree,
-    issue_create_project_challenge, issue_project_command_challenge, open_chapter,
-    undo_latest_author_action,
+    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    UndoLatestAuthorActionCommand, UndoLatestAuthorActionSettlementEffect, UserId, VolumeId,
+    VolumeNode, apply_author_edit, create_chapter, create_editor_session, create_project,
+    create_volume, get_manuscript_tree, issue_create_project_challenge,
+    issue_project_command_challenge, open_chapter, undo_latest_author_action,
 };
 use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
 use tokio_postgres::NoTls;
@@ -436,10 +436,11 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
         UndoLatestAuthorActionSettlementEffect::Compensated { source_sequence, .. }
             if source_sequence == later_action
     ));
-    let tree_after_edit_undo = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after prose Undo");
+    let GetManuscriptTree::Found(tree_after_edit_undo) =
+        get_manuscript_tree(&store, &scope).await.unwrap()
+    else {
+        panic!("the tree remains after prose Undo");
+    };
     assert_eq!(tree_after_edit_undo.tree_revision, 4);
     assert_eq!(
         tree_after_edit_undo.volumes[1].volume_id,
@@ -474,10 +475,9 @@ async fn author_undo_compensates_create_volume_and_still_reverses_a_later_edit_f
             .expect("Volume B authority")
             .author_action_sequence
     );
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after structure Compensation");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the tree remains after structure Compensation");
+    };
     assert_eq!(tree.tree_revision, 3);
     assert_eq!(tree.snapshot.snapshot_id, snapshot_id);
     assert_eq!(

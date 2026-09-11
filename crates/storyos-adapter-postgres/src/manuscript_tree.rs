@@ -1,16 +1,17 @@
 use storyos_application::{
-    CanonicalTreeFacts, ChapterFact, ChapterId, ManuscriptTreeReader, ProjectReadError,
-    ProjectScope, VolumeFact, VolumeId,
+    CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterId, ManuscriptTreeReader,
+    ProjectReadError, ProjectScope, VolumeFact, VolumeId,
 };
 use tokio_postgres::GenericClient;
 
 use super::{PostgresProjectReader, read_error, set_scope};
+use crate::snapshot::CanonicalSnapshotQuery;
 
 impl ManuscriptTreeReader for PostgresProjectReader {
     async fn read_canonical_tree_facts(
         &self,
         scope: &ProjectScope,
-    ) -> Result<Option<CanonicalTreeFacts>, ProjectReadError> {
+    ) -> Result<CanonicalTreeRead, ProjectReadError> {
         let mut client = self.connect().await?;
         let transaction = client.transaction().await.map_err(read_error)?;
         set_scope(&transaction, scope).await?;
@@ -27,16 +28,25 @@ impl ManuscriptTreeReader for PostgresProjectReader {
             .map_err(read_error)?
         else {
             transaction.commit().await.map_err(read_error)?;
-            return Ok(None);
+            return Ok(CanonicalTreeRead::Missing);
         };
-        let snapshot = crate::snapshot::load_latest_canonical_snapshot(&transaction, scope).await?;
-        let Some(snapshot) = snapshot else {
-            transaction.commit().await.map_err(read_error)?;
-            return Ok(None);
+        let snapshot =
+            crate::snapshot::load_latest_canonical_snapshot_query(&transaction, scope).await?;
+        let facts = match snapshot {
+            CanonicalSnapshotQuery::Missing => {
+                transaction.commit().await.map_err(read_error)?;
+                return Ok(CanonicalTreeRead::Missing);
+            }
+            CanonicalSnapshotQuery::Expired => {
+                transaction.commit().await.map_err(read_error)?;
+                return Ok(CanonicalTreeRead::SnapshotExpired);
+            }
+            CanonicalSnapshotQuery::Available(snapshot) => {
+                load_live_tree_facts(&transaction, scope, snapshot).await?
+            }
         };
-        let facts = load_live_tree_facts(&transaction, scope, snapshot).await?;
         transaction.commit().await.map_err(read_error)?;
-        Ok(Some(facts))
+        Ok(CanonicalTreeRead::Found(facts))
     }
 }
 

@@ -3,9 +3,9 @@ use storyos_application::{
     AuthorCommandAdmissionIds, ChapterId, ChapterNode, CreateChapterCommand,
     CreateChapterSettlementEffect, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, CreateVolumeSettlementEffect, EditorClientBinding, EditorSessionId,
-    IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter, OpenEditorSession,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, SetCurrentChapterCommand,
-    SetCurrentChapterSettlementEffect, UndoLatestAuthorActionCommand,
+    GetManuscriptTree, IssueCreateProjectChallenge, IssueProjectCommandChallenge, OpenChapter,
+    OpenEditorSession, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    SetCurrentChapterCommand, SetCurrentChapterSettlementEffect, UndoLatestAuthorActionCommand,
     UndoLatestAuthorActionSettlementEffect, UserId, VolumeId, VolumeNode, create_chapter,
     create_editor_session, create_project, create_volume, get_manuscript_tree,
     issue_create_project_challenge, issue_project_command_challenge, open_chapter, open_project,
@@ -523,10 +523,9 @@ async fn applied_set_current_chapter_writes_action_snapshot_and_no_commit() {
     };
     let replay = set_current_chapter(&store, &replay_command).await.unwrap();
     assert_eq!(replay, first);
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Canonical Manuscript Tree remains");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Canonical Manuscript Tree remains");
+    };
     assert_eq!(tree.tree_revision, 4);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
     assert_eq!(
@@ -722,10 +721,9 @@ async fn author_undo_restores_prior_current_chapter_or_stays_unavailable() {
             .current_chapter_id,
         Some(ChapterId::new(chapter_a.clone()))
     );
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the tree remains after Current Chapter Compensation");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the tree remains after Current Chapter Compensation");
+    };
     assert_eq!(tree.tree_revision, 4);
     assert_eq!(tree.snapshot.snapshot_id, snapshot_id);
     assert_eq!(

@@ -2,9 +2,10 @@ use super::*;
 use storyos_application::{
     AuthorCommandAdmissionIds, CreateProjectChallengeBinding, CreateProjectCommand,
     CreateVolumeCommand, CreateVolumePublicOrder, CreateVolumeSettlementEffect,
-    EditorClientBinding, IssueCreateProjectChallenge, IssueProjectCommandChallenge,
-    ProjectCommandChallengeBinding, ProjectId, ProjectScope, UserId, VolumeId, VolumeNode,
-    create_project, create_volume, get_manuscript_tree, issue_create_project_challenge,
+    EditorClientBinding, GetManuscriptTree, IssueCreateProjectChallenge,
+    IssueProjectCommandChallenge, ProjectCommandChallengeBinding, ProjectId, ProjectScope,
+    SnapshotLookup, UserId, VolumeId, VolumeNode, create_project, create_volume,
+    get_manuscript_tree, get_snapshot, issue_create_project_challenge,
     issue_project_command_challenge,
 };
 use tokio_postgres::NoTls;
@@ -217,10 +218,9 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
     .unwrap();
     assert_eq!(replay, first);
 
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree.project_scope, scope);
     assert_eq!(tree.tree_revision, 2);
     assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
@@ -244,7 +244,7 @@ async fn create_volume_is_atomic_replayable_and_scope_safe() {
         )
         .await
         .unwrap(),
-        None
+        GetManuscriptTree::Missing
     );
 
     let stale_issue = issue_request(&scope, "0714");
@@ -471,10 +471,9 @@ async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks
     .unwrap();
     assert_eq!(replay, second);
 
-    let tree = get_manuscript_tree(&store, &scope)
-        .await
-        .unwrap()
-        .expect("the Project still has a Canonical Query");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("the Project still has a Canonical Query");
+    };
     assert_eq!(tree.tree_revision, 3);
     assert_eq!(tree.volumes[1].order, 2);
     assert_eq!(tree.volumes[1].volume_id, VolumeId::new(volume_id.clone()));
@@ -530,5 +529,94 @@ async fn create_volume_replays_canonical_sibling_order_and_keeps_historical_acks
             volume_id,
             order: CreateVolumePublicOrder::HistoricalCreateVolumeAck,
         }
+    );
+}
+
+#[tokio::test]
+#[ignore = "run through scripts/verify-project-scope.sh"]
+async fn stale_latest_snapshot_resyncs_and_does_not_return_the_live_tree() {
+    let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
+        .lock()
+        .await;
+    let runtime_url = std::env::var("STORYOS_TEST_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
+        .expect("run through scripts/verify-project-scope.sh");
+    let store = PostgresProjectReader::new(runtime_url);
+    let project_issue = create_project_issue("018f0000-0000-7001-8000-0000000006c0", "06c0");
+    let issued = issue_create_project_challenge(&store, &project_issue)
+        .await
+        .unwrap();
+    let mut project_binding = project_issue.binding.clone();
+    project_binding.prospective_project_id = issued.prospective_project_id.clone();
+    project_binding.canonical_command_digest = issued.canonical_command_digest.clone();
+    create_project(
+        &store,
+        &create_project_command(project_binding.clone(), &project_issue.nonce_digest, "06c1"),
+    )
+    .await
+    .unwrap();
+    let scope = ProjectScope::new(
+        project_binding.owner_user_id.clone(),
+        project_binding.prospective_project_id.clone(),
+    );
+    let GetManuscriptTree::Found(empty) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("Create Project binds an empty Canonical Manuscript Tree");
+    };
+    let volume_issue = issue_request(&scope, "06c2");
+    issue_project_command_challenge(&store, &volume_issue)
+        .await
+        .unwrap();
+    let created = create_volume(
+        &store,
+        &command(
+            volume_issue.binding.clone(),
+            &volume_issue.nonce_digest,
+            "06c3",
+            1,
+        ),
+    )
+    .await
+    .unwrap();
+    let authority = created
+        .authority
+        .clone()
+        .expect("Applied Create Volume writes Structural Authority Settlement");
+    let GetManuscriptTree::Found(tree) = get_manuscript_tree(&store, &scope).await.unwrap() else {
+        panic!("Create Volume must leave a Canonical Manuscript Tree");
+    };
+    assert_eq!(tree.snapshot.snapshot_id, authority.snapshot_id);
+    assert_ne!(tree.snapshot.snapshot_id, empty.snapshot.snapshot_id);
+    assert_eq!(tree.volumes.len(), 1);
+    let recovery = get_snapshot(
+        &store,
+        &SnapshotLookup {
+            project_scope: scope.clone(),
+            snapshot_id: tree.snapshot.snapshot_id.clone(),
+        },
+    )
+    .await
+    .unwrap()
+    .expect("recovery can read the latest Snapshot after the structure change");
+    assert_eq!(recovery, tree.snapshot);
+
+    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    tokio::spawn(async move {
+        admin_connection.await.unwrap();
+    });
+    admin
+        .execute(
+            "UPDATE storyos.project_snapshots
+                SET expires_at = clock_timestamp() - interval '1 second'
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND snapshot_id = $3::text::uuid",
+            &[&USER_A, &scope.project_id.as_ref(), &authority.snapshot_id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        get_manuscript_tree(&store, &scope).await.unwrap(),
+        GetManuscriptTree::SnapshotExpired
     );
 }

@@ -125,8 +125,8 @@ pub use manuscript_statistics::{
     ManuscriptTotals, get_manuscript_statistics,
 };
 pub use manuscript_tree::{
-    CanonicalManuscriptTree, CanonicalTreeFacts, ChapterFact, ChapterNode, ManuscriptTreeReader,
-    VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
+    CanonicalManuscriptTree, CanonicalTreeFacts, CanonicalTreeRead, ChapterFact, ChapterNode,
+    GetManuscriptTree, ManuscriptTreeReader, VolumeFact, VolumeId, VolumeNode, get_manuscript_tree,
 };
 pub use pinned_export_source::{
     PinnedArchiveFamily, PinnedExportSource, PinnedExportSourceFacts,

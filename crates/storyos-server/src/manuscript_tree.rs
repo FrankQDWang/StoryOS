@@ -1,4 +1,6 @@
-use storyos_application::get_manuscript_tree as read_canonical_manuscript_tree;
+use storyos_application::{
+    GetManuscriptTree, get_manuscript_tree as read_canonical_manuscript_tree,
+};
 
 use super::*;
 
@@ -14,11 +16,19 @@ pub(super) async fn get_manuscript_tree(
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
     let reader = project_reader(&state).await?;
-    let Some(tree) = read_canonical_manuscript_tree(&reader, &scope)
+    let tree = match read_canonical_manuscript_tree(&reader, &scope)
         .await
         .map_err(service_unavailable)?
-    else {
-        return Err(resource_unavailable());
+    {
+        GetManuscriptTree::Missing => return Err(resource_unavailable()),
+        GetManuscriptTree::SnapshotExpired => {
+            return Err(problem(
+                StatusCode::CONFLICT,
+                "snapshot_expired",
+                "The Snapshot is no longer available.",
+            ));
+        }
+        GetManuscriptTree::Found(tree) => tree,
     };
     let project_scope = contract_scope(&scope);
     Ok(Json(contracts::GetManuscriptTreeResponse {
