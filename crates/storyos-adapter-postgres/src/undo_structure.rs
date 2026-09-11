@@ -100,6 +100,7 @@ async fn restore_prior_tree(
 ) -> Result<(), UndoLatestAuthorActionError> {
     let updated = match &frontier.identity {
         ObservedStructureIdentity::Volume { .. }
+        | ObservedStructureIdentity::VolumeDelete { .. }
         | ObservedStructureIdentity::VolumeUpdate { .. }
         | ObservedStructureIdentity::ChapterUpdate { .. } => client
             .execute(
@@ -186,6 +187,21 @@ async fn persist_structure_removal(
                         &command.project_scope.owner_user_id.as_ref(),
                         &command.project_scope.project_id.as_ref(),
                         &chapter_id,
+                    ],
+                )
+                .await
+                .map_err(undo_database_error)?;
+        }
+        ObservedStructureIdentity::VolumeDelete { volume_id } => {
+            client
+                .execute(
+                    "DELETE FROM storyos.volume_removal_decisions
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND volume_id = $3::text::uuid",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &volume_id,
                     ],
                 )
                 .await
@@ -493,6 +509,7 @@ fn compensation_commit_binding(frontier: &ObservedStructureFrontier) -> Structur
         resulting_manuscript_tree_revision: frontier.prior_manuscript_tree_revision,
         identity: match &frontier.identity {
             ObservedStructureIdentity::Volume { volume_id }
+            | ObservedStructureIdentity::VolumeDelete { volume_id }
             | ObservedStructureIdentity::VolumeUpdate { volume_id, .. } => {
                 StructureAffectedIdentity::Volume { volume_id }
             }

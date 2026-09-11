@@ -20,6 +20,7 @@ impl DeleteVolumeStore for Store {
             receipt_created_at: "2026-08-27T00:00:00.000Z".to_owned(),
             project_activity_position: 5,
             project_activity_event_id: "event".to_owned(),
+            authority: None,
         })
     }
 }

@@ -279,6 +279,8 @@ test("deleteVolume removes an empty Volume, refuses a nonempty Volume, and honor
     if (refused.effect.kind === "refused") {
       assert.equal(refused.effect.reason, "nonempty_volume");
     }
+    assert.deepEqual(refused.receipt.authoritative_commit_ids, []);
+    assert.equal(refused.receipt.author_action_sequence, null);
     const treeAfterRefuse = await getManuscriptTree({ baseUrl, projectId, fetchImpl });
     assert.equal(treeAfterRefuse.tree_revision, treeBefore.tree_revision);
     assert.deepEqual(
@@ -300,6 +302,9 @@ test("deleteVolume removes an empty Volume, refuses a nonempty Volume, and honor
     assert.equal(removed.effect.kind, "authoritative_applied");
     assert.equal(removed.receipt.command_kind, "deleteVolume");
     assert.match(removed.command_id, UUID_V7);
+    assert.equal(removed.receipt.authoritative_commit_ids.length, 1);
+    assert.match(removed.receipt.authoritative_commit_ids[0] ?? "", UUID_V7);
+    assert.equal(removed.receipt.author_action_sequence, "4");
     const treeAfterA = await getManuscriptTree({ baseUrl, projectId, fetchImpl });
     assert.deepEqual(
       treeAfterA.volumes.map((volume) => ({ title: volume.title, order: volume.order })),
@@ -316,6 +321,11 @@ test("deleteVolume removes an empty Volume, refuses a nonempty Volume, and honor
     );
     assert.equal(retried.effect.kind, "authoritative_applied");
     assert.equal(retried.command_id, removed.command_id);
+    assert.deepEqual(
+      retried.receipt.authoritative_commit_ids,
+      removed.receipt.authoritative_commit_ids,
+    );
+    assert.equal(retried.receipt.author_action_sequence, "4");
 
     const alreadyRemoved = await deleteOwned(
       baseUrl,
@@ -329,6 +339,8 @@ test("deleteVolume removes an empty Volume, refuses a nonempty Volume, and honor
     if (alreadyRemoved.effect.kind === "no_effect") {
       assert.equal(alreadyRemoved.effect.reason, "already_removed");
     }
+    assert.deepEqual(alreadyRemoved.receipt.authoritative_commit_ids, []);
+    assert.equal(alreadyRemoved.receipt.author_action_sequence, null);
 
     const revived = await postChapter(
       baseUrl,
@@ -415,6 +427,8 @@ test("deleteVolume refuses an archived Project", async () => {
     if (refused.effect.kind === "refused") {
       assert.equal(refused.effect.reason, "archived_project");
     }
+    assert.deepEqual(refused.receipt.authoritative_commit_ids, []);
+    assert.equal(refused.receipt.author_action_sequence, null);
   } finally {
     await stopRealServer(server);
   }
