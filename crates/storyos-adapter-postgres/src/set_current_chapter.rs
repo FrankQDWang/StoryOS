@@ -1,7 +1,12 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
+};
 use storyos_application::{
-    AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    SetCurrentChapterAuthority, SetCurrentChapterCommand, SetCurrentChapterError,
-    SetCurrentChapterSettlement, SetCurrentChapterSettlementEffect, SetCurrentChapterStore,
+    AuthorCommandAdmissionIds, ChapterId, Project, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse, SetCurrentChapterAuthority, SetCurrentChapterCommand,
+    SetCurrentChapterError, SetCurrentChapterSettlement, SetCurrentChapterSettlementEffect,
+    SetCurrentChapterStore,
 };
 use storyos_core::{
     ChapterJoin, ProjectLifecycle, ProjectPresence, SetCurrentChapter as CoreSetCurrentChapter,
@@ -68,7 +73,8 @@ async fn persist_set_current_chapter(
                     chapter.manuscript_object_id::text,
                     head.current_revision_id::text,
                     expected.revision_id::text,
-                    project.tree_revision::text
+                    project.tree_revision::text,
+                    project.title
                FROM storyos.projects AS project
           LEFT JOIN storyos.manuscript_objects AS chapter
                  ON chapter.owner_user_id = project.owner_user_id
@@ -125,6 +131,7 @@ async fn persist_set_current_chapter(
         .get::<_, String>(5)
         .parse::<u64>()
         .map_err(set_current_chapter_parse_error)?;
+    let title = row.get::<_, String>(6);
     let classified = classify_set_current_chapter(&CoreSetCurrentChapter {
         presence: ProjectPresence::Present,
         chapter_join: chapter_join.clone(),
@@ -377,10 +384,28 @@ async fn persist_set_current_chapter(
             manuscript_tree_revision,
         });
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title,
+        current_chapter_id: match &effect {
+            SetCurrentChapterSettlementEffect::Applied {
+                current_chapter_id, ..
+            } => Some(ChapterId::new(current_chapter_id.clone())),
+            SetCurrentChapterSettlementEffect::NoEffect { .. }
+            | SetCurrentChapterSettlementEffect::Conflicted { .. }
+            | SetCurrentChapterSettlementEffect::Refused { .. } => {
+                current_chapter_id.map(ChapterId::new)
+            }
+        },
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'setCurrentChapter' AND idempotency_key = $4::text::uuid",
             &[
@@ -388,6 +413,8 @@ async fn persist_set_current_chapter(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -399,6 +426,7 @@ async fn persist_set_current_chapter(
         project_activity_position,
         project_activity_event_id,
         authority,
+        response_project,
     })
 }
 
@@ -515,7 +543,22 @@ async fn read_set_current_chapter_settlement(
                         payload.project_activity_event_id::text,
                         action.author_action_sequence::text,
                         snapshot.snapshot_id::text,
-                        project.tree_revision::text
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text,
+                        (
+                          SELECT structure.payload->>'tree_revision'
+                            FROM storyos.project_activity_event_payloads AS structure
+                           WHERE (structure.owner_user_id, structure.project_id) =
+                                 (receipt.owner_user_id, receipt.project_id)
+                             AND jsonb_typeof(structure.payload->'tree_revision') = 'string'
+                             AND (
+                               payload.project_activity_position IS NULL
+                               OR structure.project_activity_position
+                                 <= payload.project_activity_position
+                             )
+                           ORDER BY structure.project_activity_position DESC
+                           LIMIT 1
+                        )
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -540,9 +583,6 @@ async fn read_set_current_chapter_settlement(
                         (payload.owner_user_id, payload.project_id,
                          payload.project_activity_position)
                     AND snapshot.snapshot_kind = 'canonical'
-              LEFT JOIN storyos.projects AS project
-                     ON (project.owner_user_id, project.project_id) =
-                        (receipt.owner_user_id, receipt.project_id)
                   WHERE receipt.owner_user_id = $1::text::uuid
                     AND receipt.project_id = $2::text::uuid
                     AND receipt.receipt_id = $3::text::uuid
@@ -602,7 +642,7 @@ async fn read_set_current_chapter_settlement(
         let authority = match (
             row.get::<_, Option<String>>(10),
             row.get::<_, Option<String>>(11),
-            row.get::<_, Option<String>>(12),
+            row.get::<_, Option<String>>(14),
         ) {
             (Some(author_action_sequence), Some(snapshot_id), Some(tree_revision)) => {
                 Some(SetCurrentChapterAuthority {
@@ -615,7 +655,24 @@ async fn read_set_current_chapter_settlement(
                         .map_err(set_current_chapter_parse_error)?,
                 })
             }
-            _ => None,
+            (None, None, _) => None,
+            _ => return Err(SetCurrentChapterError::BindingConflict),
+        };
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(12).as_deref(),
+            row.get::<_, Option<String>>(13).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(SetCurrentChapterError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(SetCurrentChapterError::Unavailable(Box::new(
+                    std::io::Error::other(
+                        "Set Current Chapter acknowledgement evidence is damaged",
+                    ),
+                )));
+            }
         };
         Ok(SetCurrentChapterSettlement {
             ids: AuthorCommandAdmissionIds {
@@ -632,6 +689,7 @@ async fn read_set_current_chapter_settlement(
                 .map_err(set_current_chapter_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
             authority,
+            response_project,
         })
     }
     .await;

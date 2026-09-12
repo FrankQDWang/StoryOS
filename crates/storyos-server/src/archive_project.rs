@@ -113,16 +113,12 @@ pub(super) async fn archive_project(
     )
     .await
     .map_err(archive_project_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
     archive_project_response(
         &scope,
         &input.correlation_id,
         &digest_hex,
         idempotency_key,
-        project,
         settlement,
     )
 }
@@ -132,9 +128,9 @@ fn archive_project_response(
     correlation_id: &str,
     digest_hex: &str,
     idempotency_key: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::ArchiveProjectSettlement,
 ) -> Result<Json<contracts::ArchiveProjectResponse>, ApiError> {
+    let project = settlement.response_project;
     let (receipt_result, effect) = match settlement.effect {
         ArchiveProjectSettlementEffect::Applied { revision } => (
             contracts::DomainReceiptResult::AuthoritativeApplied,
@@ -240,6 +236,11 @@ fn archive_project_error(error: ArchiveProjectError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Archive Project binding conflicts.",
+        ),
+        ArchiveProjectError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Archive Project acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         ArchiveProjectError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

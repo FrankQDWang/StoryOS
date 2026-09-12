@@ -20,6 +20,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -77,6 +78,31 @@ async function startRealServer() {
     serverBinary,
     sessions: { "session-a": USER_A, "session-b": USER_B },
   });
+}
+
+function capturingPut(inner: typeof fetch): { fetchImpl: typeof fetch; lastPutBody: () => string } {
+  let lastPutBody = "";
+  return {
+    fetchImpl: async (input, init) => {
+      const response = await inner(input, init);
+      const url = String(input instanceof Request ? input.url : input);
+      if (response.ok && (init?.method ?? "GET") === "PUT" && url.includes("/archival")) {
+        lastPutBody = await response.clone().text();
+      }
+      return response;
+    },
+    lastPutBody: () => lastPutBody,
+  };
+}
+
+function problemCode(error: unknown): string | undefined {
+  const protocol = requireStoryOSProtocolError(error);
+  if (protocol.responseBody === undefined) return undefined;
+  try {
+    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
+  } catch {
+    return undefined;
+  }
 }
 
 async function createEmpty(baseUrl: string, session: string, idempotencyKey: string, title: string) {
@@ -273,6 +299,234 @@ test("archiveProject settles lifecycle, replays, lists archived, and fails close
     });
     assert.equal(recovered.receipt.result, "authoritative_applied");
     assert.equal(recovered.effect.kind, "authoritative_applied");
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("archiveProject freezes the acknowledgement and does not archive twice", async () => {
+  let { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000930", "Archive Novel");
+    const request = archiveRequest("1", "018f0000-0000-7001-8000-000000000931");
+    const firstCapture = capturingPut(first.fetchImpl);
+    const applied = await archive(
+      baseUrl,
+      firstCapture.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000932",
+      request,
+    );
+    const firstBody = firstCapture.lastPutBody();
+    assert.equal(applied.archived.receipt.result, "authoritative_applied");
+    assert.equal(JSON.parse(firstBody).project.title, "Archive Novel");
+    assert.equal(JSON.parse(firstBody).project.open.kind, "empty");
+
+    const alreadyRequest = archiveRequest("2", "018f0000-0000-7001-8000-000000000933");
+    const alreadyCapture = capturingPut(first.fetchImpl);
+    const already = await archive(
+      baseUrl,
+      alreadyCapture.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000934",
+      alreadyRequest,
+    );
+    const alreadyBody = alreadyCapture.lastPutBody();
+    assert.equal(already.archived.receipt.result, "no_effect");
+
+    const staleRequest = archiveRequest("1", "018f0000-0000-7001-8000-000000000935");
+    const staleCapture = capturingPut(first.fetchImpl);
+    const stale = await archive(
+      baseUrl,
+      staleCapture.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000936",
+      staleRequest,
+    );
+    const staleBody = staleCapture.lastPutBody();
+    assert.equal(stale.archived.receipt.result, "conflicted");
+
+    const frozenCapture = capturingPut(first.fetchImpl);
+    const frozen = await archiveProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: frozenCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000932",
+      antiForgery: applied.challenge.nonce,
+      request,
+    });
+    assert.deepEqual(frozen, applied.archived);
+    assert.equal(frozenCapture.lastPutBody(), firstBody);
+
+    const frozenAlreadyCapture = capturingPut(first.fetchImpl);
+    const frozenAlready = await archiveProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: frozenAlreadyCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000934",
+      antiForgery: already.challenge.nonce,
+      request: alreadyRequest,
+    });
+    assert.deepEqual(frozenAlready, already.archived);
+    assert.equal(frozenAlreadyCapture.lastPutBody(), alreadyBody);
+
+    const frozenStaleCapture = capturingPut(first.fetchImpl);
+    const frozenStale = await archiveProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: frozenStaleCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000936",
+      antiForgery: stale.challenge.nonce,
+      request: staleRequest,
+    });
+    assert.deepEqual(frozenStale, stale.archived);
+    assert.equal(frozenStaleCapture.lastPutBody(), staleBody);
+
+    assert.equal(
+      await queryPostgres(`
+        SELECT lifecycle_state || ' ' || count(*)::text FROM storyos.projects
+         WHERE project_id = '${first.projectId}'::uuid GROUP BY lifecycle_state;
+      `),
+      "archived 1",
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.project_archival_decisions
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      "1",
+    );
+    const receiptCount = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'archiveProject';
+    `);
+    assert.equal(receiptCount, "3");
+    await stopRealServer(server);
+    ({ baseUrl, server } = await startRealServer());
+    const restartedFetch = browserFetch(baseUrl, "session-a");
+    const afterRestartCapture = capturingPut(restartedFetch);
+    const afterRestart = await archiveProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: afterRestartCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000932",
+      antiForgery: applied.challenge.nonce,
+      request,
+    });
+    assert.deepEqual(afterRestart, applied.archived);
+    assert.equal(afterRestartCapture.lastPutBody(), firstBody);
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'archiveProject';
+      `),
+      receiptCount,
+    );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("archiveProject distinguishes historical absence from damaged new-format evidence", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000937", "Archive Novel");
+    const request = archiveRequest("1", "018f0000-0000-7001-8000-000000000938");
+    const applied = await archive(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000939",
+      request,
+    );
+    assert.equal(applied.archived.project.title, "Archive Novel");
+    const novelsBefore = await queryPostgres(`
+      SELECT title || ' ' || lifecycle_state || ' ' || count(*)::text FROM storyos.projects
+       WHERE project_id = '${first.projectId}'::uuid GROUP BY title, lifecycle_state;
+    `);
+    const receiptsBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid;
+    `);
+    const keysBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.command_idempotency
+       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'archiveProject';
+    `);
+    const decisionsBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.project_archival_decisions
+       WHERE project_id = '${first.projectId}'::uuid;
+    `);
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = NULL, response_project = NULL
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-000000000939'::uuid;
+    `);
+    await assert.rejects(
+      archiveProject({
+        baseUrl,
+        projectId: first.projectId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-000000000939",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 409
+          && problemCode(error) === "historical_acknowledgement_unavailable";
+      },
+    );
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = 'command_response_project.v1',
+             response_project = '{"broken":true}'::jsonb
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-000000000939'::uuid;
+    `);
+    await assert.rejects(
+      archiveProject({
+        baseUrl,
+        projectId: first.projectId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-000000000939",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 503
+          && problemCode(error) !== "historical_acknowledgement_unavailable";
+      },
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT title || ' ' || lifecycle_state || ' ' || count(*)::text FROM storyos.projects
+         WHERE project_id = '${first.projectId}'::uuid GROUP BY title, lifecycle_state;
+      `),
+      novelsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      receiptsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.command_idempotency
+         WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'archiveProject';
+      `),
+      keysBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.project_archival_decisions
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      decisionsBefore,
+    );
   } finally {
     await stopRealServer(server);
   }

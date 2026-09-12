@@ -111,19 +111,19 @@ pub(super) async fn set_current_chapter(
     let settlement = storyos_application::set_current_chapter(&store, &command)
         .await
         .map_err(set_current_chapter_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    set_current_chapter_response(&command, &digest_hex, project, settlement)
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(
+        &command.challenge_binding.idempotency_key,
+    )
+    .await;
+    set_current_chapter_response(&command, &digest_hex, settlement)
 }
 
 fn set_current_chapter_response(
     command: &SetCurrentChapterCommand,
     digest_hex: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::SetCurrentChapterSettlement,
 ) -> Result<Json<contracts::SetCurrentChapterResponse>, ApiError> {
+    let project = settlement.response_project;
     let action_sequence = settlement
         .authority
         .as_ref()
@@ -259,6 +259,11 @@ fn set_current_chapter_error(error: SetCurrentChapterError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Set Current Chapter binding conflicts.",
+        ),
+        SetCurrentChapterError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Set Current Chapter acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         SetCurrentChapterError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

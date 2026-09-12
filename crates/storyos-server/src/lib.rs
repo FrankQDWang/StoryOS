@@ -16,6 +16,7 @@ use storyos_application::{
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod acknowledgement_hold;
 mod archive_project;
 mod author_edit;
 mod author_edit_outcome;

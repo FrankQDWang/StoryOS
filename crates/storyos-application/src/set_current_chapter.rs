@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use crate::{
-    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
+    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, Project,
     ProjectCommandChallengeBinding, ProjectScope,
 };
 
@@ -35,6 +35,7 @@ pub struct SetCurrentChapterSettlement {
     pub project_activity_position: u64,
     pub project_activity_event_id: String,
     pub authority: Option<SetCurrentChapterAuthority>,
+    pub response_project: Project,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -57,6 +58,7 @@ pub enum SetCurrentChapterSettlementEffect {
 #[derive(Debug)]
 pub enum SetCurrentChapterError {
     BindingConflict,
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
@@ -68,6 +70,8 @@ impl std::fmt::Display for SetCurrentChapterError {
             Self::BindingConflict => {
                 formatter.write_str("The Set Current Chapter binding conflicts")
             }
+            Self::HistoricalAcknowledgementUnavailable => formatter
+                .write_str("The original Set Current Chapter acknowledgement cannot be recovered"),
             Self::InvalidChallenge => {
                 formatter.write_str("The Set Current Chapter challenge is invalid")
             }
@@ -83,7 +87,10 @@ impl std::error::Error for SetCurrentChapterError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge | Self::MissingProject => None,
+            Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
+            | Self::InvalidChallenge
+            | Self::MissingProject => None,
         }
     }
 }

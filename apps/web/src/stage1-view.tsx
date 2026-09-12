@@ -42,8 +42,8 @@ import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
   historicalAcknowledgementUnavailable,
-  renameOwnedProject,
-} from "./rename-project.ts";
+} from "./historical-acknowledgement.ts";
+import { renameOwnedProject } from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
@@ -243,8 +243,12 @@ function ProjectReadyView({
           cryptoImpl,
         });
         onReopened(next);
-      } catch {
-        setSwitchRecovery("无法设为当前章节。");
+      } catch (error: unknown) {
+        setSwitchRecovery(
+          historicalAcknowledgementUnavailable(error)
+            ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
+            : "无法设为当前章节。",
+        );
       } finally {
         makeCurrentInFlightRef.current = false;
       }
@@ -664,6 +668,7 @@ function ArchiveProjectForm({
   cryptoImpl: Crypto;
   onArchived: () => void;
 }) {
+  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   return (
     <form
       data-archive={projectId}
@@ -677,15 +682,23 @@ function ArchiveProjectForm({
           projectId,
           expectedProjectRevision: revision,
         }).then((archived) => {
+          setHistoricalUnavailable(false);
           if (archived.effect.kind === "authoritative_applied"
             || (archived.effect.kind === "no_effect"
               && archived.effect.reason === "already_archived")) {
             onArchived();
           }
-        }).catch(() => {});
+        }).catch((error: unknown) => {
+          if (historicalAcknowledgementUnavailable(error)) {
+            setHistoricalUnavailable(true);
+          }
+        });
       }}
     >
       <button type="submit" disabled={revision === undefined}>归档</button>
+      {historicalUnavailable
+        ? <p data-archive-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+        : null}
     </form>
   );
 }

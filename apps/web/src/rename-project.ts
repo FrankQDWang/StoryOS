@@ -1,11 +1,16 @@
 import {
-  StoryOSProtocolError,
   createProjectCommandChallenge,
   digestUpdateProject,
   updateProject,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { UpdateProjectResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
+
+export {
+  HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
+  historicalAcknowledgementUnavailable,
+} from "./historical-acknowledgement.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -36,20 +41,6 @@ function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
-
-export function historicalAcknowledgementUnavailable(error: unknown): boolean {
-  if (!(error instanceof StoryOSProtocolError) || error.status !== 409 || typeof error.responseBody !== "string") {
-    return false;
-  }
-  try {
-    const problem = JSON.parse(error.responseBody) as { code?: string };
-    return problem.code === "historical_acknowledgement_unavailable";
-  } catch {
-    return false;
-  }
-}
-
-export const HISTORICAL_ACKNOWLEDGEMENT_MESSAGE = "原始回复无法恢复。请刷新后查看当前结果。";
 
 export async function renameOwnedProject(options: {
   baseUrl: string;

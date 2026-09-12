@@ -5,6 +5,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ArchiveProjectResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -55,7 +56,10 @@ export async function archiveOwnedProject(options: {
     const archived = await submitArchive(options, flight);
     inFlightArchives.delete(identity);
     return archived;
-  } catch {
+  } catch (error) {
+    if (historicalAcknowledgementUnavailable(error)) {
+      throw error;
+    }
     const archived = await submitArchive(options, flight);
     inFlightArchives.delete(identity);
     return archived;
