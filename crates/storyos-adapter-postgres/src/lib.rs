@@ -88,6 +88,7 @@ mod author_edit_outcome;
 mod author_edit_replay;
 mod author_edit_settlement;
 mod chapter_query;
+mod command_response_project;
 mod connection_pool;
 mod create_chapter;
 mod create_project;

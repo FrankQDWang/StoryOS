@@ -144,9 +144,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:86bcbbf32ecc492bf502e31b53f32544f48d2a1bf5db97f497b01e1463496b27";
+    "sha256:9dce673c9f756126b15f518809376de03d86abcf79975b6d793c8f22cb52b14d";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:62c9bb4adc67df6fb3a0603c8fe75e35b8b0e6abd8faea0d0b61d29f777cadf0";
+    "sha256:18f3ec31cdd2b4930c2f380b98533ae82510ad7bc1f4cecdd2cb6335a01ac05f";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 

@@ -1643,6 +1643,14 @@ _Avoid_: Success message, accepted Artifact
 The typed Receipt kind for a Core domain-command attempt whose owning result contract does not define a more specific Validation, Acceptance, Undo Acceptance, or Author Undo Receipt identity. It records success, refusal, redirection, conflict, and no-effect outcomes without serving as a generic fallback for another Receipt kind.
 _Avoid_: Generic Receipt, Validation Receipt, Acceptance Receipt, unknown-receipt fallback
 
+**Command-response Project**:
+The three-field Project projection captured with a command outcome: Project identity, title, and open state including Current Chapter when present. First delivery and exact retry use this stored projection. An independent Project query continues to return current state.
+_Avoid_: Live Project read in a command acknowledgement, manuscript text, whole Snapshot
+
+**Historical acknowledgement unavailable**:
+The explicit Problem for a known pre-capture command whose complete original acknowledgement cannot be proved. It is not command failure, and it is not a license to present live state as the old reply.
+_Avoid_: Generic network error, fabricated success, live-state backfill
+
 **Undo Acceptance Receipt**:
 The immutable, idempotent typed Receipt produced by an Undo Acceptance attempt, identifying the original Acceptance Receipt, command digest, and one outcome: compensated with a Commit, reversal required with a Reversal Proposal, or unavailable with a reason.
 _Avoid_: Compensation Receipt, undo message
