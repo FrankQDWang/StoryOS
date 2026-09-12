@@ -18,6 +18,9 @@ Operators stated this production choice before any tracked file recorded it. No 
 
 ## Consequences
 
+- Current development uses local OrbStack PostgreSQL. Hosted compatibility work is deferred until deployment preparation. The existing Supabase Free preflight is retained as evidence of deployment differences, not as a local development prerequisite or completed hosted acceptance.
+- During future deployment preparation, check packaged Release 1 Storage Activation, Server and Worker connections, and the Protected Web Client write, save, and reload journey against the chosen hosted project. Hosted backup and recovery acceptance remain separate under ADR 0021.
+- Local `make verify` continues to use OrbStack PostgreSQL and the existing isolated recovery oracle. The hosted journey is an explicit operator check. It does not become a required cloud dependency of local verification.
 - [ADR 0016](0016-deliver-and-verify-the-paired-production-web-host.md) remains the production Web host contract. Public Host, Origin, `https`, and cookie `Secure` are missing from the current Server. [Own Public Host, HTTPS Origin, and Cookie Secure](https://github.com/FrankQDWang/StoryOS/issues/604) owns that gap. The gap is independent of which PostgreSQL host is used.
 - [ADR 0004](0004-adopt-postgresql-service-and-project-isolation-boundary.md) still owns Project Isolation. Local OrbStack PostgreSQL is the development and isolated-oracle host. It is not the production recovery host.
 - [ADR 0021](0021-own-release-1-recovery-chain-outside-the-runtime.md) follows this premise: hosted Supabase holds the production physical chain. StoryOS owns the procedure, not the files.
