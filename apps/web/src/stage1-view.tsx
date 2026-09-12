@@ -39,7 +39,11 @@ import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
 import { ProjectActivityStatus } from "./project-activity-status.tsx";
 import { CreateVolumeForm, ManuscriptTree } from "./manuscript-tree.tsx";
-import { renameOwnedProject } from "./rename-project.ts";
+import {
+  HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
+  historicalAcknowledgementUnavailable,
+  renameOwnedProject,
+} from "./rename-project.ts";
 import { setOwnedCurrentChapter } from "./set-current-chapter.ts";
 import { TakeOverWriterButton } from "./take-over-writer-button.tsx";
 import { WritingWorkspace } from "./writing-workspace.tsx";
@@ -606,6 +610,7 @@ function RenameProjectForm({
   cryptoImpl: Crypto;
   onRenamed: (title: string, revision: string) => void;
 }) {
+  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   return (
     <form
       data-rename={projectId}
@@ -622,9 +627,14 @@ function RenameProjectForm({
           title,
           expectedProjectRevision: revision,
         }).then((updated) => {
+          setHistoricalUnavailable(false);
           if (updated.effect.kind !== "authoritative_applied") return;
           onRenamed(updated.project.title, updated.effect.revision);
-        }).catch(() => {});
+        }).catch((error: unknown) => {
+          if (historicalAcknowledgementUnavailable(error)) {
+            setHistoricalUnavailable(true);
+          }
+        });
       }}
     >
       <label>
@@ -632,6 +642,9 @@ function RenameProjectForm({
         <input name="rename-title" required maxLength={1024} disabled={revision === undefined} />
       </label>
       <button type="submit" disabled={revision === undefined}>重命名</button>
+      {historicalUnavailable
+        ? <p data-rename-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+        : null}
     </form>
   );
 }

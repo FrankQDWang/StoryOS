@@ -116,16 +116,12 @@ pub(super) async fn update_project(
     )
     .await
     .map_err(update_project_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
+    hold_first_acknowledgement_if_requested(idempotency_key).await;
     update_project_response(
         &scope,
         &input.correlation_id,
         &digest_hex,
         idempotency_key,
-        project,
         settlement,
     )
 }
@@ -135,9 +131,9 @@ fn update_project_response(
     correlation_id: &str,
     digest_hex: &str,
     idempotency_key: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::UpdateProjectSettlement,
 ) -> Result<Json<contracts::UpdateProjectResponse>, ApiError> {
+    let project = settlement.response_project;
     let (receipt_result, effect) = match settlement.effect {
         UpdateProjectSettlementEffect::Applied { title, revision } => (
             contracts::DomainReceiptResult::AuthoritativeApplied,
@@ -238,12 +234,34 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
     }
 }
 
+// Release-package HTTP tests cannot use cfg(test).
+async fn hold_first_acknowledgement_if_requested(idempotency_key: &str) {
+    let Ok(expected) = std::env::var("STORYOS_TEST_ACK_HOLD_IDEMPOTENCY_KEY") else {
+        return;
+    };
+    if expected != idempotency_key {
+        return;
+    }
+    let Ok(path) = std::env::var("STORYOS_TEST_ACK_HOLD_PATH") else {
+        return;
+    };
+    let path = std::path::PathBuf::from(path);
+    while path.exists() {
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+}
+
 fn update_project_error(error: UpdateProjectError) -> ApiError {
     match error {
         UpdateProjectError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Update Project binding conflicts.",
+        ),
+        UpdateProjectError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Update Project acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         UpdateProjectError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

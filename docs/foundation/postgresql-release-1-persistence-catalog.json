@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:a31f8464cfab2313febe1920a7591fa58f61a1b50d723bbd7270b89af2665781",
+    "migration_chain_digest": "sha256:978ed80c87f8c332c046c3569784634eca832389b9d3c3c2848c9413772fd29e",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -27,7 +27,7 @@
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:86bcbbf32ecc492bf502e31b53f32544f48d2a1bf5db97f497b01e1463496b27",
+      "route_catalog_sha256": "sha256:9dce673c9f756126b15f518809376de03d86abcf79975b6d793c8f22cb52b14d",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:ddc349509b49097e7d6f4249c0392b3a66f7e462c3985fc929800ca27e5b44bb",
+      "manifest_sha256": "sha256:31cdcb4576e4b82fba1618dd7a8e01088050e34b19f413e956c2d095468d9400",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -407,6 +407,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0043_current_chapter_compensation.sql",
           "lf_sha256": "sha256:0a2037f359d97ac2d4c2f494f675dac4bc99c91033f119e0fb992aa017588de3"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0044_command_response_project.sql",
+          "lf_sha256": "sha256:494fcd3666b0c3d383e210a066f3dbec8e219ac6b8f5fc1f34f443d264040b2b"
         }
       ]
     },

@@ -1283,6 +1283,7 @@ after Author Command Admission; they do not grant invocation authority.
 | `snapshot_not_ready` | 503 | after_condition | required canonical position is not yet readable within budget |
 | `projection_not_ready` | 503 | after_condition | required projection watermark is unavailable |
 | `upgrade_required` | 409 | after_condition | no safe compatible protocol projection exists |
+| `historical_acknowledgement_unavailable` | 409 | never | the original command acknowledgement cannot be recovered from stored evidence |
 | `limit_exceeded` | 422 | never | a named content, complexity, or non-byte work bound was exceeded |
 
 An implementation may add more specific codes without changing these

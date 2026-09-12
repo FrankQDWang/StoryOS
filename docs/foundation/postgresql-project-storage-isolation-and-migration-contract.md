@@ -34,7 +34,7 @@ StorageCompatibilityIdentity {
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
   route_catalog_contract_revision: release1-wire-catalog-2026-09-05-chapter-created-order-v2
-  route_catalog_sha256: sha256:86bcbbf32ecc492bf502e31b53f32544f48d2a1bf5db97f497b01e1463496b27
+  route_catalog_sha256: sha256:9dce673c9f756126b15f518809376de03d86abcf79975b6d793c8f22cb52b14d
   compatibility_profile: storyos.public.same-release.v1
   release_identity_schema_id: storyos.compatibility.release-identity.v1
 }
@@ -602,8 +602,22 @@ imply causality across kinds.
 
 `command_idempotency` contains scope, command kind, caller-visible
 `idempotency_key`, canonical command digest and digest profile, outcome kind,
-exact Receipt or result reference, and committed time. Its unique composite key
+exact Receipt or result reference, committed time, and, for a converted
+command family, the command-response Project capture. Its unique composite key
 arbitrates concurrent first attempts.
+
+`acknowledgement_format` is the capture marker. Converted families write
+`command_response_project.v1` and the three-field response Project in the same
+transaction as the Receipt and result reference. Update Project is the first
+converted family. Unconverted families keep their current acknowledgement
+composition and leave those columns null.
+
+- a settled row with a null format is a known pre-capture command and cannot
+  replay a complete original acknowledgement;
+- a present format with a valid response Project is the immutable replay source
+  for that command's public Project fields;
+- a present format with a missing or invalid response Project is a storage
+  fault and never receives the historical exemption.
 
 - same key, kind, scope, and digest returns the immutable original outcome;
 - same scope and kind with a different digest is a typed misuse and changes
@@ -627,6 +641,12 @@ authority graph and Project Activity Event to that transaction.
 
 An exact retry first resolves `command_idempotency.result_reference`, then
 reads that exact `receipt_id` without joining an authority or Activity table.
+A converted family also reads `acknowledgement_format` and `response_project`
+from that same idempotency row. The command handler must not read the live
+Project to complete its acknowledgement. Independent Project queries keep
+current-state meaning. A known pre-capture settled row returns HTTP 409
+`historical_acknowledgement_unavailable`. Damaged new-format evidence follows
+the storage-error path.
 It validates Scope, command digest, Admission, `ReceiptSettled`, and idempotency
 linkage. It also validates the Admission target and expected Head, and proves
 that every Receipt Head belongs to that target. It then branches on the Receipt

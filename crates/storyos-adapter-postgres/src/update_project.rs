@@ -1,7 +1,12 @@
 use storyos_application::{
-    AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
-    UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
+    AuthorCommandAdmissionIds, ChapterId, Project, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse, UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
     UpdateProjectSettlementEffect, UpdateProjectStore,
+};
+
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
 };
 use storyos_core::{
     ProjectPresence, UpdateProject as CoreUpdateProject, UpdateProjectResult, update_project,
@@ -63,7 +68,8 @@ async fn persist_update_project(
 ) -> Result<UpdateProjectSettlement, UpdateProjectError> {
     let row = client
         .query_opt(
-            "SELECT title, revision::text, lifecycle_state FROM storyos.projects
+            "SELECT title, revision::text, lifecycle_state, current_chapter_id::text
+               FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -84,6 +90,7 @@ async fn persist_update_project(
     if row.get::<_, String>(2) != "active" {
         return Err(UpdateProjectError::BindingConflict);
     }
+    let current_chapter_id = row.get::<_, Option<String>>(3).map(ChapterId::new);
     let classified = update_project(&CoreUpdateProject {
         presence: ProjectPresence::Present,
         expected_revision: command.expected_revision,
@@ -236,10 +243,24 @@ async fn persist_update_project(
             .await
             .map_err(update_project_database_error)?;
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: match &effect {
+            UpdateProjectSettlementEffect::Applied { title, .. } => title.clone(),
+            UpdateProjectSettlementEffect::NoEffect { .. }
+            | UpdateProjectSettlementEffect::Conflicted { .. }
+            | UpdateProjectSettlementEffect::Refused { .. } => current_title,
+        },
+        current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'updateProject' AND idempotency_key = $4::text::uuid",
             &[
@@ -247,6 +268,8 @@ async fn persist_update_project(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -257,6 +280,7 @@ async fn persist_update_project(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        response_project,
     })
 }
 
@@ -343,7 +367,9 @@ async fn read_update_project_settlement(
                         payload.payload->>'title',
                         payload.payload->>'revision',
                         payload.project_activity_position::text,
-                        payload.project_activity_event_id::text
+                        payload.project_activity_event_id::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -401,6 +427,20 @@ async fn read_update_project_settlement(
             }
             _ => return Err(UpdateProjectError::BindingConflict),
         };
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(10).as_deref(),
+            row.get::<_, Option<String>>(11).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(UpdateProjectError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(UpdateProjectError::Unavailable(Box::new(
+                    std::io::Error::other("Update Project acknowledgement evidence is damaged"),
+                )));
+            }
+        };
         Ok(UpdateProjectSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -415,6 +455,7 @@ async fn read_update_project_settlement(
                 .parse::<u64>()
                 .map_err(update_project_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
+            response_project,
         })
     }
     .await;
