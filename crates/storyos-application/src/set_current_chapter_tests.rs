@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::{ProjectId, UserId};
+use crate::{Project, ProjectId, UserId};
 
 struct Store(Mutex<usize>);
 
@@ -21,6 +21,11 @@ impl SetCurrentChapterStore for Store {
             project_activity_position: 2,
             project_activity_event_id: "event".to_owned(),
             authority: None,
+            response_project: Project {
+                project_id: command.project_scope.project_id.clone(),
+                title: "Current Chapter Novel".to_owned(),
+                current_chapter_id: None,
+            },
         })
     }
 }

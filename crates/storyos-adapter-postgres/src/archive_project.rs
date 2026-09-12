@@ -1,7 +1,11 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
+};
 use storyos_application::{
     ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
-    ArchiveProjectSettlementEffect, ArchiveProjectStore, AuthorCommandAdmissionIds,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    ArchiveProjectSettlementEffect, ArchiveProjectStore, AuthorCommandAdmissionIds, ChapterId,
+    Project, ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     ArchiveProject as CoreArchiveProject, ArchiveProjectResult, ProjectLifecycle, ProjectPresence,
@@ -64,7 +68,8 @@ async fn persist_archive_project(
 ) -> Result<ArchiveProjectSettlement, ArchiveProjectError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, revision::text FROM storyos.projects
+            "SELECT lifecycle_state, revision::text, title, current_chapter_id::text
+               FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -90,6 +95,8 @@ async fn persist_archive_project(
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(archive_project_parse_error)?;
+    let title = row.get::<_, String>(2);
+    let current_chapter_id = row.get::<_, Option<String>>(3).map(ChapterId::new);
     let classified = archive_project(&CoreArchiveProject {
         presence: ProjectPresence::Present,
         expected_revision: command.expected_revision,
@@ -257,10 +264,19 @@ async fn persist_archive_project(
             .await
             .map_err(archive_project_database_error)?;
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title,
+        current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'archiveProject' AND idempotency_key = $4::text::uuid",
             &[
@@ -268,6 +284,8 @@ async fn persist_archive_project(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -278,6 +296,7 @@ async fn persist_archive_project(
         receipt_created_at,
         project_activity_position,
         project_activity_event_id,
+        response_project,
     })
 }
 
@@ -363,7 +382,9 @@ async fn read_archive_project_settlement(
                         receipt.result_payload->>'reason',
                         payload.payload->>'revision',
                         payload.project_activity_position::text,
-                        payload.project_activity_event_id::text
+                        payload.project_activity_event_id::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -419,6 +440,20 @@ async fn read_archive_project_settlement(
             }
             _ => return Err(ArchiveProjectError::BindingConflict),
         };
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(9).as_deref(),
+            row.get::<_, Option<String>>(10).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(ArchiveProjectError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(ArchiveProjectError::Unavailable(Box::new(
+                    std::io::Error::other("Archive Project acknowledgement evidence is damaged"),
+                )));
+            }
+        };
         Ok(ArchiveProjectSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -433,6 +468,7 @@ async fn read_archive_project_settlement(
                 .parse::<u64>()
                 .map_err(archive_project_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(8).unwrap_or_default(),
+            response_project,
         })
     }
     .await;
