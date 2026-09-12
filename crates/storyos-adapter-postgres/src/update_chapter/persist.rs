@@ -1,6 +1,9 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
+};
 use storyos_application::{
-    UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError, UpdateChapterSettlement,
-    UpdateChapterSettlementEffect,
+    ChapterId, Project, UpdateChapterAuthority, UpdateChapterCommand, UpdateChapterError,
+    UpdateChapterSettlement, UpdateChapterSettlementEffect,
 };
 use storyos_core::{
     ChapterJoin, ProjectLifecycle, ProjectPresence, UpdateChapter as CoreUpdateChapter,
@@ -20,7 +23,8 @@ pub(super) async fn persist_update_chapter(
 ) -> Result<UpdateChapterSettlement, UpdateChapterError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text FROM storyos.projects
+            "SELECT lifecycle_state, tree_revision::text, title, current_chapter_id::text
+               FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -46,6 +50,8 @@ pub(super) async fn persist_update_chapter(
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(update_chapter_parse_error)?;
+    let project_title = row.get::<_, String>(2);
+    let current_chapter_id = row.get::<_, Option<String>>(3).map(ChapterId::new);
     let chapters = client
         .query(
             "SELECT manuscript_object_id::text, title, tree_order::text, parent_volume_id::text
@@ -321,10 +327,19 @@ pub(super) async fn persist_update_chapter(
             resulting_manuscript_tree_revision: *tree_revision,
         });
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: project_title,
+        current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'updateChapter' AND idempotency_key = $4::text::uuid",
             &[
@@ -332,6 +347,8 @@ pub(super) async fn persist_update_chapter(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -343,6 +360,7 @@ pub(super) async fn persist_update_chapter(
         project_activity_position,
         project_activity_event_id,
         authority,
+        response_project,
     })
 }
 

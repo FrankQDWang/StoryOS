@@ -1,5 +1,9 @@
 import { useState } from "react";
 
+import {
+  HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
+  historicalAcknowledgementUnavailable,
+} from "./historical-acknowledgement.ts";
 import { updateOwnedVolume } from "./update-volume.ts";
 
 export function VolumeTreeActions({
@@ -28,6 +32,7 @@ export function VolumeTreeActions({
   onRemoveVolume?: ((volumeId: string) => void) | undefined;
 }) {
   const [pendingRemoval, setPendingRemoval] = useState(false);
+  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   const currentOrder = Number(order);
   const canMove = Number.isInteger(currentOrder) && currentOrder >= 1;
   const submitUpdate = (nextTitle: string, nextOrder: string) => {
@@ -41,6 +46,7 @@ export function VolumeTreeActions({
       order: nextOrder,
       expectedTreeRevision,
     }).then((updated) => {
+      setHistoricalUnavailable(false);
       if (
         updated.effect.kind !== "authoritative_applied"
         && updated.effect.kind !== "no_effect"
@@ -48,7 +54,11 @@ export function VolumeTreeActions({
         return;
       }
       onUpdated();
-    }).catch(() => {});
+    }).catch((error: unknown) => {
+      if (historicalAcknowledgementUnavailable(error)) {
+        setHistoricalUnavailable(true);
+      }
+    });
   };
   return (
     <>
@@ -66,6 +76,9 @@ export function VolumeTreeActions({
           <input name="volume-title" required maxLength={1024} defaultValue={title} />
         </label>
         <button type="submit">重命名</button>
+        {historicalUnavailable
+          ? <p data-rename-volume-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+          : null}
       </form>
       <button
         type="button"

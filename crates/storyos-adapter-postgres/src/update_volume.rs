@@ -1,3 +1,6 @@
+use crate::command_response_project::{
+    CommandResponseProjectEvidence, read_command_response_project,
+};
 use storyos_application::{
     AuthorCommandAdmissionIds, ProjectCommandChallengeError, ProjectCommandChallengeUse,
     UpdateVolumeAuthority, UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement,
@@ -91,7 +94,9 @@ async fn read_update_volume_settlement(
                         action.author_action_sequence::text,
                         snapshot.snapshot_id::text,
                         authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text
+                        authoritative_commit.resulting_manuscript_tree_revision::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -212,6 +217,20 @@ async fn read_update_volume_settlement(
             }),
             _ => None,
         };
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(16).as_deref(),
+            row.get::<_, Option<String>>(17).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(UpdateVolumeError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(UpdateVolumeError::Unavailable(Box::new(
+                    std::io::Error::other("Update Volume acknowledgement evidence is damaged"),
+                )));
+            }
+        };
         Ok(UpdateVolumeSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -227,6 +246,7 @@ async fn read_update_volume_settlement(
                 .map_err(update_volume_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(10).unwrap_or_default(),
             authority,
+            response_project,
         })
     }
     .await;

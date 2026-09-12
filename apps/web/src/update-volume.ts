@@ -5,6 +5,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { UpdateVolumeResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -61,7 +62,10 @@ export async function updateOwnedVolume(options: {
     const updated = await submitUpdateVolume(options, flight);
     inFlightUpdates.delete(identity);
     return updated;
-  } catch {
+  } catch (error) {
+    if (historicalAcknowledgementUnavailable(error)) {
+      throw error;
+    }
     const updated = await submitUpdateVolume(options, flight);
     inFlightUpdates.delete(identity);
     return updated;
