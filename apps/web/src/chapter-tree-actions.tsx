@@ -1,4 +1,9 @@
 import { useState } from "react";
+
+import {
+  HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
+  historicalAcknowledgementUnavailable,
+} from "./historical-acknowledgement.ts";
 import { updateOwnedChapter } from "./update-chapter.ts";
 
 export function ChapterTreeActions({
@@ -39,6 +44,7 @@ export function ChapterTreeActions({
   onUpdated: () => void;
 }) {
   const [pendingRemoval, setPendingRemoval] = useState(false);
+  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   const currentOrder = Number(order);
   const canMove = Number.isInteger(currentOrder) && currentOrder >= 1;
   const submitUpdate = (nextTitle: string, nextOrder: string) => {
@@ -52,6 +58,7 @@ export function ChapterTreeActions({
       order: nextOrder,
       expectedTreeRevision,
     }).then((updated) => {
+      setHistoricalUnavailable(false);
       if (
         updated.effect.kind !== "authoritative_applied"
         && updated.effect.kind !== "no_effect"
@@ -59,7 +66,11 @@ export function ChapterTreeActions({
         return;
       }
       onUpdated();
-    }).catch(() => {});
+    }).catch((error: unknown) => {
+      if (historicalAcknowledgementUnavailable(error)) {
+        setHistoricalUnavailable(true);
+      }
+    });
   };
   return (
     <li data-chapter-id={chapterId} data-chapter-order={order}>
@@ -103,6 +114,9 @@ export function ChapterTreeActions({
               <input name="chapter-title" required maxLength={1024} defaultValue={title} />
             </label>
             <button type="submit">重命名</button>
+            {historicalUnavailable
+              ? <p data-rename-chapter-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+              : null}
           </form>
           <button
             type="button"

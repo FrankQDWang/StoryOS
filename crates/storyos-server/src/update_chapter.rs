@@ -120,19 +120,16 @@ pub(super) async fn update_chapter(
     let settlement = storyos_application::update_chapter(&store, &command)
         .await
         .map_err(update_chapter_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    update_chapter_response(&command, &digest_hex, project, settlement)
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
+    update_chapter_response(&command, &digest_hex, settlement)
 }
 
 fn update_chapter_response(
     command: &UpdateChapterCommand,
     digest_hex: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::UpdateChapterSettlement,
 ) -> Result<Json<contracts::UpdateChapterResponse>, ApiError> {
+    let project = settlement.response_project;
     let (commit_ids, action_sequence) = match settlement.authority.as_ref() {
         Some(authority) => (
             vec![authority.authoritative_commit_id.clone()],
@@ -271,6 +268,11 @@ fn update_chapter_error(error: UpdateChapterError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Update Chapter binding conflicts.",
+        ),
+        UpdateChapterError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Update Chapter acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         UpdateChapterError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

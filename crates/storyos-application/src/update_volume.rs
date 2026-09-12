@@ -1,8 +1,8 @@
 use std::future::Future;
 
 use crate::{
-    AuthorCommandAdmissionIds, EditorClientBinding, ProjectCommandChallengeBinding, ProjectScope,
-    VolumeId,
+    AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
+    ProjectScope, VolumeId,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -37,6 +37,7 @@ pub struct UpdateVolumeSettlement {
     pub project_activity_position: u64,
     pub project_activity_event_id: String,
     pub authority: Option<UpdateVolumeAuthority>,
+    pub response_project: Project,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,6 +61,7 @@ pub enum UpdateVolumeSettlementEffect {
 #[derive(Debug)]
 pub enum UpdateVolumeError {
     BindingConflict,
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
@@ -69,6 +71,8 @@ impl std::fmt::Display for UpdateVolumeError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BindingConflict => formatter.write_str("The Update Volume binding conflicts"),
+            Self::HistoricalAcknowledgementUnavailable => formatter
+                .write_str("The original Update Volume acknowledgement cannot be recovered"),
             Self::InvalidChallenge => formatter.write_str("The Update Volume challenge is invalid"),
             Self::MissingProject => formatter.write_str("The Project is not in exact Scope"),
             Self::Unavailable(_) => formatter.write_str("The Update Volume store is unavailable"),
@@ -80,7 +84,10 @@ impl std::error::Error for UpdateVolumeError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge | Self::MissingProject => None,
+            Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
+            | Self::InvalidChallenge
+            | Self::MissingProject => None,
         }
     }
 }

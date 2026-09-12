@@ -120,19 +120,16 @@ pub(super) async fn update_volume(
     let settlement = storyos_application::update_volume(&store, &command)
         .await
         .map_err(update_volume_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    update_volume_response(&command, &digest_hex, project, settlement)
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
+    update_volume_response(&command, &digest_hex, settlement)
 }
 
 fn update_volume_response(
     command: &UpdateVolumeCommand,
     digest_hex: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::UpdateVolumeSettlement,
 ) -> Result<Json<contracts::UpdateVolumeResponse>, ApiError> {
+    let project = settlement.response_project;
     let (commit_ids, action_sequence) = match settlement.authority.as_ref() {
         Some(authority) => (
             vec![authority.authoritative_commit_id.clone()],
@@ -271,6 +268,11 @@ fn update_volume_error(error: UpdateVolumeError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Update Volume binding conflicts.",
+        ),
+        UpdateVolumeError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Update Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         UpdateVolumeError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

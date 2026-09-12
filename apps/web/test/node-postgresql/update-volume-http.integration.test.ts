@@ -5,24 +5,32 @@ import { test } from "vitest";
 
 import {
   archiveProject,
+  createChapter,
   createProject,
   createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
   digestArchiveProject,
+  digestCreateChapter,
   digestCreateVolume,
+  digestUpdateProject,
   digestUpdateVolume,
   getManuscriptTree,
+  getProject,
+  updateProject,
   updateVolume,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
+  CreateChapterRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
+  UpdateProjectRequest,
   UpdateVolumeRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -408,6 +416,380 @@ test("updateVolume renames and reorders one Volume, replays, and fails closed", 
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
       },
+    );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+function capturingVolumePatch(inner: typeof fetch): { fetchImpl: typeof fetch; lastPatchBody: () => string } {
+  let lastPatchBody = "";
+  return {
+    fetchImpl: async (input, init) => {
+      const response = await inner(input, init);
+      const url = String(input instanceof Request ? input.url : input);
+      if (response.ok && (init?.method ?? "GET") === "PATCH" && url.includes("/volumes/")) {
+        lastPatchBody = await response.clone().text();
+      }
+      return response;
+    },
+    lastPatchBody: () => lastPatchBody,
+  };
+}
+
+function problemCode(error: unknown): string | undefined {
+  const protocol = requireStoryOSProtocolError(error);
+  if (protocol.responseBody === undefined) return undefined;
+  try {
+    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
+  } catch {
+    return undefined;
+  }
+}
+
+function renameRequest(title: string, expectedProjectRevision: string, correlationId: string): UpdateProjectRequest {
+  return {
+    command_schema: "storyos.command.update-project.request.v1",
+    update_project_input: {
+      title,
+      expected_project_revision: expectedProjectRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+async function renameProject(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  idempotencyKey: string,
+  request: UpdateProjectRequest,
+) {
+  const digest = await digestUpdateProject(request);
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "PATCH",
+      route_template: "/api/v1/projects/{project_id}",
+      command_schema: request.command_schema,
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  const renamed = await updateProject({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    idempotencyKey,
+    antiForgery: challenge.nonce,
+    request,
+  });
+  return { challenge, renamed };
+}
+
+// One Project admits at most 10 Command Challenges in one 60-second window.
+test("updateVolume freezes applied, no-effect, and conflict acknowledgements after later title and Current Chapter changes", async () => {
+  let { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000d00", "Volume Update Freeze Novel");
+    const volume = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000d01",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000d02"),
+    );
+    if (volume.created.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const volumeId = volume.created.effect.volume_id;
+    const appliedRequest = updateRequest("Volume A Renamed", "1", "2", "018f0000-0000-7001-8000-000000000d04");
+    const firstCapture = capturingVolumePatch(first.fetchImpl);
+    const applied = await patchVolume(
+      baseUrl,
+      firstCapture.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000d03",
+      appliedRequest,
+    );
+    const appliedBody = firstCapture.lastPatchBody();
+    assert.equal(applied.updated.effect.kind, "authoritative_applied");
+    assert.equal(applied.updated.project.title, "Volume Update Freeze Novel");
+    assert.equal(applied.updated.project.open.kind, "empty");
+    const unchangedRequest = updateRequest("Volume A Renamed", "1", "3", "018f0000-0000-7001-8000-000000000d0a");
+    const unchangedCapture = capturingVolumePatch(first.fetchImpl);
+    const unchanged = await patchVolume(
+      baseUrl,
+      unchangedCapture.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000d09",
+      unchangedRequest,
+    );
+    const unchangedBody = unchangedCapture.lastPatchBody();
+    assert.equal(unchanged.updated.receipt.result, "no_effect");
+    assert.equal(unchanged.updated.project.title, "Volume Update Freeze Novel");
+    assert.equal(unchanged.updated.project.open.kind, "empty");
+    const staleRequest = updateRequest("Stale Volume", "1", "2", "018f0000-0000-7001-8000-000000000d0c");
+    const staleCapture = capturingVolumePatch(first.fetchImpl);
+    const stale = await patchVolume(
+      baseUrl,
+      staleCapture.fetchImpl,
+      first.projectId,
+      volumeId,
+      "018f0000-0000-7001-8000-000000000d0b",
+      staleRequest,
+    );
+    const staleBody = staleCapture.lastPatchBody();
+    assert.equal(stale.updated.receipt.result, "conflicted");
+    assert.equal(stale.updated.project.title, "Volume Update Freeze Novel");
+    const chapterRequest: CreateChapterRequest = {
+      command_schema: "storyos.command.create-chapter.request.v1",
+      create_chapter_input: {
+        title: "Chapter A",
+        expected_tree_revision: "3",
+        client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+        security_policy_revision: "storyos.web-security-policy.release-1.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000d06",
+      },
+    };
+    const chapterDigest = await digestCreateChapter(chapterRequest);
+    const chapterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+        command_schema: chapterRequest.command_schema,
+        canonical_command_digest: chapterDigest,
+        idempotency_key: "018f0000-0000-7001-8000-000000000d05",
+      },
+    }));
+    const chapter = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d05",
+      antiForgery: chapterChallenge.nonce,
+      request: chapterRequest,
+    });
+    assert.equal(chapter.effect.kind, "authoritative_applied");
+    if (chapter.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Chapter must apply");
+    }
+    const chapterId = chapter.effect.chapter_id;
+    const later = await renameProject(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000d07",
+      renameRequest("Later Volume Title", "1", "018f0000-0000-7001-8000-000000000d08"),
+    );
+    assert.equal(later.renamed.project.title, "Later Volume Title");
+    const frozenCapture = capturingVolumePatch(first.fetchImpl);
+    const frozen = await updateVolume({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: frozenCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d03",
+      antiForgery: applied.challenge.nonce,
+      request: appliedRequest,
+    });
+    assert.deepEqual(frozen, applied.updated);
+    assert.equal(frozenCapture.lastPatchBody(), appliedBody);
+    assert.equal(frozen.project.title, "Volume Update Freeze Novel");
+    assert.equal(frozen.project.open.kind, "empty");
+    const frozenUnchangedCapture = capturingVolumePatch(first.fetchImpl);
+    const frozenUnchanged = await updateVolume({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: frozenUnchangedCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d09",
+      antiForgery: unchanged.challenge.nonce,
+      request: unchangedRequest,
+    });
+    assert.deepEqual(frozenUnchanged, unchanged.updated);
+    assert.equal(frozenUnchangedCapture.lastPatchBody(), unchangedBody);
+    const frozenStaleCapture = capturingVolumePatch(first.fetchImpl);
+    const frozenStale = await updateVolume({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: frozenStaleCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d0b",
+      antiForgery: stale.challenge.nonce,
+      request: staleRequest,
+    });
+    assert.deepEqual(frozenStale, stale.updated);
+    assert.equal(frozenStaleCapture.lastPatchBody(), staleBody);
+    const opened = await getProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(opened.project.title, "Later Volume Title");
+    assert.equal(opened.project.open.kind, "current_chapter");
+    if (opened.project.open.kind !== "current_chapter") {
+      throw new Error("GET must report Chapter A");
+    }
+    assert.equal(opened.project.open.current_chapter_id, chapterId);
+    const receiptCount = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'updateVolume';
+    `);
+    assert.equal(receiptCount, "3");
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.authoritative_commits
+         WHERE project_id = '${first.projectId}'::uuid
+           AND receipt_id = '${applied.updated.receipt.receipt_id}'::uuid;
+      `),
+      "1",
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.author_action_entries
+         WHERE project_id = '${first.projectId}'::uuid
+           AND receipt_id = '${applied.updated.receipt.receipt_id}'::uuid;
+      `),
+      "1",
+    );
+    await stopRealServer(server);
+    ({ baseUrl, server } = await startRealServer());
+    const restartedFetch = browserFetch(baseUrl, "session-a");
+    const afterRestartCapture = capturingVolumePatch(restartedFetch);
+    const afterRestart = await updateVolume({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: afterRestartCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000d03",
+      antiForgery: applied.challenge.nonce,
+      request: appliedRequest,
+    });
+    assert.deepEqual(afterRestart, applied.updated);
+    assert.equal(afterRestartCapture.lastPatchBody(), appliedBody);
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'updateVolume';
+      `),
+      receiptCount,
+    );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("updateVolume distinguishes historical absence from damaged new-format evidence", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000d10", "Volume History Novel");
+    const volume = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000d11",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000d12"),
+    );
+    if (volume.created.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const request = updateRequest("Volume A Renamed", "1", "2", "018f0000-0000-7001-8000-000000000d14");
+    const applied = await patchVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volume.created.effect.volume_id,
+      "018f0000-0000-7001-8000-000000000d13",
+      request,
+    );
+    const novelsBefore = await queryPostgres(`
+      SELECT title || ' ' || count(*)::text FROM storyos.projects
+       WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
+    `);
+    const receiptsBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid;
+    `);
+    const volumesBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.manuscript_objects
+       WHERE project_id = '${first.projectId}'::uuid AND object_kind = 'volume';
+    `);
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = NULL, response_project = NULL
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-000000000d13'::uuid;
+    `);
+    await assert.rejects(
+      updateVolume({
+        baseUrl,
+        projectId: first.projectId,
+        volumeId: volume.created.effect.volume_id,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-000000000d13",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 409
+          && problemCode(error) === "historical_acknowledgement_unavailable";
+      },
+    );
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = 'command_response_project.v1',
+             response_project = '{"broken":true}'::jsonb
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-000000000d13'::uuid;
+    `);
+    await assert.rejects(
+      updateVolume({
+        baseUrl,
+        projectId: first.projectId,
+        volumeId: volume.created.effect.volume_id,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-000000000d13",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 503
+          && problemCode(error) !== "historical_acknowledgement_unavailable";
+      },
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT title || ' ' || count(*)::text FROM storyos.projects
+         WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
+      `),
+      novelsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      receiptsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.manuscript_objects
+         WHERE project_id = '${first.projectId}'::uuid AND object_kind = 'volume';
+      `),
+      volumesBefore,
     );
   } finally {
     await stopRealServer(server);
