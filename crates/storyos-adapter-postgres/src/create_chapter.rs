@@ -1,7 +1,12 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
+};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateChapterAuthority, CreateChapterCommand, CreateChapterError,
-    CreateChapterPublicOrder, CreateChapterSettlement, CreateChapterSettlementEffect,
-    CreateChapterStore, ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    AuthorCommandAdmissionIds, ChapterId, CreateChapterAuthority, CreateChapterCommand,
+    CreateChapterError, CreateChapterPublicOrder, CreateChapterSettlement,
+    CreateChapterSettlementEffect, CreateChapterStore, Project, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateChapter as CoreCreateChapter, CreateChapterCurrent, CreateChapterOpen,
@@ -71,7 +76,7 @@ async fn persist_create_chapter(
 ) -> Result<CreateChapterSettlement, CreateChapterError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
+            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text, title
                FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
@@ -99,6 +104,7 @@ async fn persist_create_chapter(
         .parse::<u64>()
         .map_err(create_chapter_parse_error)?;
     let current_chapter_id = row.get::<_, Option<String>>(2);
+    let current_title = row.get::<_, String>(3);
     let volume_join = if client
         .query_opt(
             "SELECT manuscript_object_id
@@ -282,6 +288,7 @@ async fn persist_create_chapter(
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
     let mut authority = None;
+    let mut response_chapter_id = current_chapter_id.clone().map(ChapterId::new);
     if let (
         CreateChapterSettlementEffect::Applied {
             tree_revision,
@@ -308,6 +315,7 @@ async fn persist_create_chapter(
             .await
             .map_err(create_chapter_database_error)?
             .get::<_, String>(0);
+        response_chapter_id = Some(ChapterId::new(resulting_current.clone()));
         let payload = serde_json::json!({
             "kind": "chapter_created",
             "volume_id": command.volume_id,
@@ -380,10 +388,19 @@ async fn persist_create_chapter(
             resulting_revision_id,
         });
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: current_title,
+        current_chapter_id: response_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'createChapter' AND idempotency_key = $4::text::uuid",
             &[
@@ -391,6 +408,8 @@ async fn persist_create_chapter(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -402,6 +421,7 @@ async fn persist_create_chapter(
         project_activity_position,
         project_activity_event_id,
         authority,
+        response_project,
     })
 }
 
@@ -443,7 +463,9 @@ async fn read_create_chapter_settlement(
                         snapshot.snapshot_id::text,
                         authoritative_commit.prior_manuscript_tree_revision::text,
                         authoritative_commit.resulting_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_revision_id::text
+                        authoritative_commit.resulting_revision_id::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -579,6 +601,20 @@ async fn read_create_chapter_settlement(
             }),
             _ => None,
         };
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(19).as_deref(),
+            row.get::<_, Option<String>>(20).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(CreateChapterError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(CreateChapterError::Unavailable(Box::new(
+                    std::io::Error::other("Create Chapter acknowledgement evidence is damaged"),
+                )));
+            }
+        };
         Ok(CreateChapterSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -594,6 +630,7 @@ async fn read_create_chapter_settlement(
                 .map_err(create_chapter_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(11).unwrap_or_default(),
             authority,
+            response_project,
         })
     }
     .await;

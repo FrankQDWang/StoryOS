@@ -116,17 +116,13 @@ pub(super) async fn create_volume(
     )
     .await
     .map_err(create_volume_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
     create_volume_response(
         &scope,
         &input.correlation_id,
         &digest_hex,
         idempotency_key,
         &input.title,
-        project,
         settlement,
     )
 }
@@ -137,9 +133,9 @@ fn create_volume_response(
     digest_hex: &str,
     idempotency_key: &str,
     title: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::CreateVolumeSettlement,
 ) -> Result<Json<contracts::CreateVolumeResponse>, ApiError> {
+    let project = settlement.response_project;
     let (commit_ids, action_sequence) = match (&settlement.effect, settlement.authority.as_ref()) {
         (
             CreateVolumeSettlementEffect::Applied {
@@ -271,6 +267,11 @@ fn create_volume_error(error: CreateVolumeError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Create Volume binding conflicts.",
+        ),
+        CreateVolumeError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Create Volume acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         CreateVolumeError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

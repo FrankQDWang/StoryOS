@@ -1,7 +1,8 @@
 use std::future::Future;
 
 use crate::{
-    AuthorCommandAdmissionIds, EditorClientBinding, ProjectCommandChallengeBinding, ProjectScope,
+    AuthorCommandAdmissionIds, EditorClientBinding, Project, ProjectCommandChallengeBinding,
+    ProjectScope,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,6 +37,7 @@ pub struct CreateChapterSettlement {
     pub project_activity_position: u64,
     pub project_activity_event_id: String,
     pub authority: Option<CreateChapterAuthority>,
+    pub response_project: Project,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -63,6 +65,7 @@ pub enum CreateChapterSettlementEffect {
 #[derive(Debug)]
 pub enum CreateChapterError {
     BindingConflict,
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
@@ -72,6 +75,8 @@ impl std::fmt::Display for CreateChapterError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BindingConflict => formatter.write_str("The Create Chapter binding conflicts"),
+            Self::HistoricalAcknowledgementUnavailable => formatter
+                .write_str("The original Create Chapter acknowledgement cannot be recovered"),
             Self::InvalidChallenge => {
                 formatter.write_str("The Create Chapter challenge is invalid")
             }
@@ -85,7 +90,10 @@ impl std::error::Error for CreateChapterError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge | Self::MissingProject => None,
+            Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
+            | Self::InvalidChallenge
+            | Self::MissingProject => None,
         }
     }
 }

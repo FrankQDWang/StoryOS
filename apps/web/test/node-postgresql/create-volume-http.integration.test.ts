@@ -6,24 +6,31 @@ import { test } from "vitest";
 import {
   activityStream,
   archiveProject,
+  createChapter,
   createProject,
   createProjectChallenge,
   createProjectCommandChallenge,
   createVolume,
   deleteVolume,
   digestArchiveProject,
+  digestCreateChapter,
   digestCreateVolume,
   digestDeleteVolume,
+  digestUpdateProject,
   digestUpdateVolume,
   getManuscriptTree,
+  getProject,
+  updateProject,
   updateVolume,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
+  CreateChapterRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
   CreateVolumeResponse,
   DeleteVolumeRequest,
+  UpdateProjectRequest,
   UpdateVolumeRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -556,6 +563,287 @@ test("createVolume reports Canonical Sibling Order through removal, replay, and 
     assert.equal(historicalB.receipt.receipt_id, volumeB.created.receipt.receipt_id);
     assert.deepEqual(historicalB.receipt.authoritative_commit_ids, []);
     assert.equal(historicalB.receipt.author_action_sequence, null);
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+function capturingPost(inner: typeof fetch): { fetchImpl: typeof fetch; lastPostBody: () => string } {
+  let lastPostBody = "";
+  return {
+    fetchImpl: async (input, init) => {
+      const response = await inner(input, init);
+      const url = String(input instanceof Request ? input.url : input);
+      if (response.ok && (init?.method ?? "GET") === "POST" && url.includes("/volumes") && !url.includes("/chapters")) {
+        lastPostBody = await response.clone().text();
+      }
+      return response;
+    },
+    lastPostBody: () => lastPostBody,
+  };
+}
+
+function problemCode(error: unknown): string | undefined {
+  const protocol = requireStoryOSProtocolError(error);
+  if (protocol.responseBody === undefined) return undefined;
+  try {
+    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
+  } catch {
+    return undefined;
+  }
+}
+
+test("createVolume freezes the acknowledgement after later title and Current Chapter changes", async () => {
+  let { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000890", "Volume Freeze Novel");
+    const request = volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000892");
+    const firstCapture = capturingPost(first.fetchImpl);
+    const applied = await postVolume(
+      baseUrl,
+      firstCapture.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000891",
+      request,
+    );
+    const firstBody = firstCapture.lastPostBody();
+    assert.equal(applied.created.project.title, "Volume Freeze Novel");
+    assert.equal(applied.created.project.open.kind, "empty");
+    const volumeId = appliedVolume(applied.created).volume_id;
+    const chapterRequest: CreateChapterRequest = {
+      command_schema: "storyos.command.create-chapter.request.v1",
+      create_chapter_input: {
+        title: "Chapter A",
+        expected_tree_revision: "2",
+        client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+        security_policy_revision: "storyos.web-security-policy.release-1.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000894",
+      },
+    };
+    const chapterDigest = await digestCreateChapter(chapterRequest);
+    const chapterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "POST",
+        route_template: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
+        command_schema: chapterRequest.command_schema,
+        canonical_command_digest: chapterDigest,
+        idempotency_key: "018f0000-0000-7001-8000-000000000893",
+      },
+    }));
+    const chapter = await createChapter({
+      baseUrl,
+      projectId: first.projectId,
+      volumeId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000893",
+      antiForgery: chapterChallenge.nonce,
+      request: chapterRequest,
+    });
+    assert.equal(chapter.effect.kind, "authoritative_applied");
+    const renameBody: UpdateProjectRequest = {
+      command_schema: "storyos.command.update-project.request.v1",
+      update_project_input: {
+        title: "Later Volume Title",
+        expected_project_revision: "1",
+        client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+        security_policy_revision: "storyos.web-security-policy.release-1.v1",
+        correlation_id: "018f0000-0000-7001-8000-000000000896",
+      },
+    };
+    const renameDigest = await digestUpdateProject(renameBody);
+    const renameChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "PATCH",
+        route_template: "/api/v1/projects/{project_id}",
+        command_schema: renameBody.command_schema,
+        canonical_command_digest: renameDigest,
+        idempotency_key: "018f0000-0000-7001-8000-000000000895",
+      },
+    }));
+    const renamed = await updateProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000895",
+      antiForgery: renameChallenge.nonce,
+      request: renameBody,
+    });
+    assert.equal(renamed.project.title, "Later Volume Title");
+    const opened = await getProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(opened.project.title, "Later Volume Title");
+    assert.equal(opened.project.open.kind, "current_chapter");
+    const frozenCapture = capturingPost(first.fetchImpl);
+    const frozen = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: frozenCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000891",
+      antiForgery: applied.challenge.nonce,
+      request,
+    });
+    assert.deepEqual(frozen, applied.created);
+    assert.equal(frozenCapture.lastPostBody(), firstBody);
+    assert.equal(frozen.project.title, "Volume Freeze Novel");
+    assert.equal(frozen.project.open.kind, "empty");
+    const receiptCount = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'createVolume';
+    `);
+    assert.equal(receiptCount, "1");
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.manuscript_objects
+         WHERE project_id = '${first.projectId}'::uuid AND object_kind = 'volume';
+      `),
+      "1",
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.project_activity_event_payloads
+         WHERE project_id = '${first.projectId}'::uuid AND event_kind = 'volume_created';
+      `),
+      "1",
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.authoritative_commits
+         WHERE project_id = '${first.projectId}'::uuid
+           AND receipt_id = '${applied.created.receipt.receipt_id}'::uuid;
+      `),
+      "1",
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.author_action_entries
+         WHERE project_id = '${first.projectId}'::uuid
+           AND receipt_id = '${applied.created.receipt.receipt_id}'::uuid;
+      `),
+      "1",
+    );
+    await stopRealServer(server);
+    ({ baseUrl, server } = await startRealServer());
+    const restartedFetch = browserFetch(baseUrl, "session-a");
+    const afterRestartCapture = capturingPost(restartedFetch);
+    const afterRestart = await createVolume({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: afterRestartCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-000000000891",
+      antiForgery: applied.challenge.nonce,
+      request,
+    });
+    assert.deepEqual(afterRestart, applied.created);
+    assert.equal(afterRestartCapture.lastPostBody(), firstBody);
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'createVolume';
+      `),
+      receiptCount,
+    );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("createVolume distinguishes historical absence from damaged new-format evidence", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000897", "Volume History Novel");
+    const request = volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-00000000089a");
+    const applied = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-000000000898",
+      request,
+    );
+    const novelsBefore = await queryPostgres(`
+      SELECT title || ' ' || count(*)::text FROM storyos.projects
+       WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
+    `);
+    const receiptsBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid;
+    `);
+    const volumesBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.manuscript_objects
+       WHERE project_id = '${first.projectId}'::uuid AND object_kind = 'volume';
+    `);
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = NULL, response_project = NULL
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-000000000898'::uuid;
+    `);
+    await assert.rejects(
+      createVolume({
+        baseUrl,
+        projectId: first.projectId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-000000000898",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 409
+          && problemCode(error) === "historical_acknowledgement_unavailable";
+      },
+    );
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = 'command_response_project.v1',
+             response_project = '{"broken":true}'::jsonb
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-000000000898'::uuid;
+    `);
+    await assert.rejects(
+      createVolume({
+        baseUrl,
+        projectId: first.projectId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-000000000898",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 503
+          && problemCode(error) !== "historical_acknowledgement_unavailable";
+      },
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT title || ' ' || count(*)::text FROM storyos.projects
+         WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
+      `),
+      novelsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      receiptsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.manuscript_objects
+         WHERE project_id = '${first.projectId}'::uuid AND object_kind = 'volume';
+      `),
+      volumesBefore,
+    );
   } finally {
     await stopRealServer(server);
   }

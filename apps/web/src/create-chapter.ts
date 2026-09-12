@@ -5,6 +5,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateChapterResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -59,7 +60,10 @@ export async function createOwnedChapter(options: {
     const created = await submitCreateChapter(options, flight);
     inFlightCreates.delete(identity);
     return created;
-  } catch {
+  } catch (error) {
+    if (historicalAcknowledgementUnavailable(error)) {
+      throw error;
+    }
     const created = await submitCreateChapter(options, flight);
     inFlightCreates.delete(identity);
     return created;

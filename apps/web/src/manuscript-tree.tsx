@@ -4,6 +4,10 @@ import type { GetManuscriptTreeResponse } from "../../../generated/typescript/st
 import { ChapterTreeActions } from "./chapter-tree-actions.tsx";
 import { createOwnedChapter } from "./create-chapter.ts";
 import { createOwnedVolume } from "./create-volume.ts";
+import {
+  HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
+  historicalAcknowledgementUnavailable,
+} from "./historical-acknowledgement.ts";
 import { VolumeTreeActions } from "./volume-tree-actions.tsx";
 
 function CreateChapterForm({
@@ -23,6 +27,7 @@ function CreateChapterForm({
   cryptoImpl: Crypto;
   onCreated: () => void;
 }) {
+  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   return (
     <form
       data-create-chapter={volumeId}
@@ -39,9 +44,14 @@ function CreateChapterForm({
           title,
           expectedTreeRevision: treeRevision,
         }).then((created) => {
+          setHistoricalUnavailable(false);
           if (created.effect.kind !== "authoritative_applied") return;
           onCreated();
-        }).catch(() => {});
+        }).catch((error: unknown) => {
+          if (historicalAcknowledgementUnavailable(error)) {
+            setHistoricalUnavailable(true);
+          }
+        });
       }}
     >
       <label>
@@ -49,6 +59,9 @@ function CreateChapterForm({
         <input name="chapter-title" required maxLength={1024} />
       </label>
       <button type="submit">创建章</button>
+      {historicalUnavailable
+        ? <p data-create-chapter-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+        : null}
     </form>
   );
 }
@@ -68,6 +81,7 @@ export function CreateVolumeForm({
   cryptoImpl: Crypto;
   onCreated: () => void;
 }) {
+  const [historicalUnavailable, setHistoricalUnavailable] = useState(false);
   return (
     <form
       data-create-volume={projectId}
@@ -83,9 +97,14 @@ export function CreateVolumeForm({
           title,
           expectedTreeRevision: treeRevision,
         }).then((created) => {
+          setHistoricalUnavailable(false);
           if (created.effect.kind !== "authoritative_applied") return;
           onCreated();
-        }).catch(() => {});
+        }).catch((error: unknown) => {
+          if (historicalAcknowledgementUnavailable(error)) {
+            setHistoricalUnavailable(true);
+          }
+        });
       }}
     >
       <label>
@@ -93,6 +112,9 @@ export function CreateVolumeForm({
         <input name="volume-title" required maxLength={1024} />
       </label>
       <button type="submit">创建卷</button>
+      {historicalUnavailable
+        ? <p data-create-volume-error>{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+        : null}
     </form>
   );
 }
