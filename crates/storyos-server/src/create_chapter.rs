@@ -116,19 +116,16 @@ pub(super) async fn create_chapter(
     let settlement = storyos_application::create_chapter(&store, &command)
         .await
         .map_err(create_chapter_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    create_chapter_response(&command, &digest_hex, project, settlement)
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
+    create_chapter_response(&command, &digest_hex, settlement)
 }
 
 fn create_chapter_response(
     command: &CreateChapterCommand,
     digest_hex: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::CreateChapterSettlement,
 ) -> Result<Json<contracts::CreateChapterResponse>, ApiError> {
+    let project = settlement.response_project;
     let (commit_ids, action_sequence) = match (&settlement.effect, settlement.authority.as_ref()) {
         (
             CreateChapterSettlementEffect::Applied {
@@ -276,6 +273,11 @@ fn create_chapter_error(error: CreateChapterError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Create Chapter binding conflicts.",
+        ),
+        CreateChapterError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Create Chapter acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         CreateChapterError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

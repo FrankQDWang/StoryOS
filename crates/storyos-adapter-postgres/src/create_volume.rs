@@ -1,7 +1,12 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
+};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CreateVolumeAuthority, CreateVolumeCommand, CreateVolumeError,
-    CreateVolumePublicOrder, CreateVolumeSettlement, CreateVolumeSettlementEffect,
-    CreateVolumeStore, ProjectCommandChallengeError, ProjectCommandChallengeUse,
+    AuthorCommandAdmissionIds, ChapterId, CreateVolumeAuthority, CreateVolumeCommand,
+    CreateVolumeError, CreateVolumePublicOrder, CreateVolumeSettlement,
+    CreateVolumeSettlementEffect, CreateVolumeStore, Project, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse,
 };
 use storyos_core::{
     CreateVolume as CoreCreateVolume, CreateVolumeResult, ProjectLifecycle, ProjectPresence,
@@ -64,7 +69,8 @@ async fn persist_create_volume(
 ) -> Result<CreateVolumeSettlement, CreateVolumeError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text FROM storyos.projects
+            "SELECT lifecycle_state, tree_revision::text, title, current_chapter_id::text
+               FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -90,6 +96,8 @@ async fn persist_create_volume(
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(create_volume_parse_error)?;
+    let current_title = row.get::<_, String>(2);
+    let current_chapter_id = row.get::<_, Option<String>>(3).map(ChapterId::new);
     let classified = classify_create_volume(&CoreCreateVolume {
         presence: ProjectPresence::Present,
         expected_tree_revision: command.expected_tree_revision,
@@ -360,10 +368,19 @@ async fn persist_create_volume(
             resulting_manuscript_tree_revision: *tree_revision,
         });
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: current_title,
+        current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'createVolume' AND idempotency_key = $4::text::uuid",
             &[
@@ -371,6 +388,8 @@ async fn persist_create_volume(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -382,6 +401,7 @@ async fn persist_create_volume(
         project_activity_position,
         project_activity_event_id,
         authority,
+        response_project,
     })
 }
 
@@ -474,7 +494,9 @@ async fn read_create_volume_settlement(
                         action.author_action_sequence::text,
                         snapshot.snapshot_id::text,
                         authoritative_commit.prior_manuscript_tree_revision::text,
-                        authoritative_commit.resulting_manuscript_tree_revision::text
+                        authoritative_commit.resulting_manuscript_tree_revision::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -591,6 +613,20 @@ async fn read_create_volume_settlement(
             }),
             _ => None,
         };
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(16).as_deref(),
+            row.get::<_, Option<String>>(17).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(CreateVolumeError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(CreateVolumeError::Unavailable(Box::new(
+                    std::io::Error::other("Create Volume acknowledgement evidence is damaged"),
+                )));
+            }
+        };
         Ok(CreateVolumeSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -606,6 +642,7 @@ async fn read_create_volume_settlement(
                 .map_err(create_volume_parse_error)?,
             project_activity_event_id: row.get::<_, Option<String>>(9).unwrap_or_default(),
             authority,
+            response_project,
         })
     }
     .await;
