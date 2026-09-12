@@ -693,24 +693,24 @@ test("updateVolume freezes applied, no-effect, and conflict acknowledgements aft
 test("updateVolume distinguishes historical absence from damaged new-format evidence", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000d10", "Volume History Novel");
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-0000000008b0", "Volume History Novel");
     const volume = await postVolume(
       baseUrl,
       first.fetchImpl,
       first.projectId,
-      "018f0000-0000-7001-8000-000000000d11",
-      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-000000000d12"),
+      "018f0000-0000-7001-8000-0000000008b1",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-0000000008b2"),
     );
     if (volume.created.effect.kind !== "authoritative_applied") {
       throw new Error("Create Volume must apply");
     }
-    const request = updateRequest("Volume A Renamed", "1", "2", "018f0000-0000-7001-8000-000000000d14");
+    const request = updateRequest("Volume A Renamed", "1", "2", "018f0000-0000-7001-8000-0000000008b4");
     const applied = await patchVolume(
       baseUrl,
       first.fetchImpl,
       first.projectId,
       volume.created.effect.volume_id,
-      "018f0000-0000-7001-8000-000000000d13",
+      "018f0000-0000-7001-8000-0000000008b3",
       request,
     );
     const novelsBefore = await queryPostgres(`
@@ -729,7 +729,7 @@ test("updateVolume distinguishes historical absence from damaged new-format evid
       UPDATE storyos.command_idempotency
          SET acknowledgement_format = NULL, response_project = NULL
        WHERE project_id = '${first.projectId}'::uuid
-         AND idempotency_key = '018f0000-0000-7001-8000-000000000d13'::uuid;
+         AND idempotency_key = '018f0000-0000-7001-8000-0000000008b3'::uuid;
     `);
     await assert.rejects(
       updateVolume({
@@ -737,7 +737,7 @@ test("updateVolume distinguishes historical absence from damaged new-format evid
         projectId: first.projectId,
         volumeId: volume.created.effect.volume_id,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000d13",
+        idempotencyKey: "018f0000-0000-7001-8000-0000000008b3",
         antiForgery: applied.challenge.nonce,
         request,
       }),
@@ -752,7 +752,7 @@ test("updateVolume distinguishes historical absence from damaged new-format evid
          SET acknowledgement_format = 'command_response_project.v1',
              response_project = '{"broken":true}'::jsonb
        WHERE project_id = '${first.projectId}'::uuid
-         AND idempotency_key = '018f0000-0000-7001-8000-000000000d13'::uuid;
+         AND idempotency_key = '018f0000-0000-7001-8000-0000000008b3'::uuid;
     `);
     await assert.rejects(
       updateVolume({
@@ -760,7 +760,7 @@ test("updateVolume distinguishes historical absence from damaged new-format evid
         projectId: first.projectId,
         volumeId: volume.created.effect.volume_id,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000d13",
+        idempotencyKey: "018f0000-0000-7001-8000-0000000008b3",
         antiForgery: applied.challenge.nonce,
         request,
       }),
