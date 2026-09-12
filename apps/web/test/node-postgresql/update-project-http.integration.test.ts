@@ -668,7 +668,7 @@ test("updateProject distinguishes historical absence from damaged new-format evi
 test("updateProject acknowledgement freezes Current Chapter", async () => {
   const { baseUrl, server } = await startRealServer();
   try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000860", "Empty Novel");
+    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a60", "Empty Novel");
     const volumeRequest: CreateVolumeRequest = {
       command_schema: "storyos.command.create-volume.request.v1",
       create_volume_input: {
@@ -676,14 +676,14 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
         expected_tree_revision: "1",
         client_contract_revision: CLIENT,
         security_policy_revision: SECURITY,
-        correlation_id: "018f0000-0000-7001-8000-000000000861",
+        correlation_id: "018f0000-0000-7001-8000-000000000a61",
       },
     };
     const volume = await challenged(
       baseUrl,
       first.fetchImpl,
       first.projectId,
-      "018f0000-0000-7001-8000-000000000862",
+      "018f0000-0000-7001-8000-000000000a62",
       "POST",
       "/api/v1/projects/{project_id}/volumes",
       volumeRequest.command_schema,
@@ -692,7 +692,7 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
         baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000862",
+        idempotencyKey: "018f0000-0000-7001-8000-000000000a62",
         antiForgery: nonce,
         request: volumeRequest,
       }),
@@ -735,12 +735,12 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
       }),
     );
     const chapterA = await postChapter(
-      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-000000000863"),
-      "018f0000-0000-7001-8000-000000000864",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-000000000a63"),
+      "018f0000-0000-7001-8000-000000000a64",
     );
     const chapterB = await postChapter(
-      chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-000000000865"),
-      "018f0000-0000-7001-8000-000000000866",
+      chapterRequest("Chapter B", "3", "018f0000-0000-7001-8000-000000000a65"),
+      "018f0000-0000-7001-8000-000000000a66",
     );
     assert.equal(chapterA.effect.kind, "authoritative_applied");
     assert.equal(chapterB.effect.kind, "authoritative_applied");
@@ -748,8 +748,8 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
       || chapterB.effect.kind !== "authoritative_applied") {
       throw new Error("both Chapters must apply");
     }
-    const renameKey = "018f0000-0000-7001-8000-000000000867";
-    const requestA = renameRequest("Open Novel", "1", "018f0000-0000-7001-8000-000000000868");
+    const renameKey = "018f0000-0000-7001-8000-000000000a67";
+    const requestA = renameRequest("Open Novel", "1", "018f0000-0000-7001-8000-000000000a68");
     const firstCapture = capturingPatch(first.fetchImpl);
     const firstRename = await rename(baseUrl, firstCapture.fetchImpl, first.projectId, renameKey, requestA);
     const firstBody = firstCapture.lastPatchBody();
@@ -762,13 +762,13 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
       command_schema: "storyos.command.create-editor-session.request.v1",
       client_contract_revision: CLIENT,
       security_policy_revision: SECURITY,
-      correlation_id: "018f0000-0000-7001-8000-000000000869",
+      correlation_id: "018f0000-0000-7001-8000-000000000a69",
     };
     const session = await challenged(
       baseUrl,
       first.fetchImpl,
       first.projectId,
-      "018f0000-0000-7001-8000-00000000086a",
+      "018f0000-0000-7001-8000-000000000a6a",
       "POST",
       "/api/v1/projects/{project_id}/editor-sessions",
       sessionRequest.command_schema,
@@ -777,7 +777,7 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
         baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000086a",
+        idempotencyKey: "018f0000-0000-7001-8000-000000000a6a",
         antiForgery: nonce,
         request: sessionRequest,
       }),
@@ -797,14 +797,14 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
         editor_session_id: session.editor_session.editor_session_id,
         client_contract_revision: CLIENT,
         security_policy_revision: SECURITY,
-        correlation_id: "018f0000-0000-7001-8000-00000000086b",
+        correlation_id: "018f0000-0000-7001-8000-000000000a6b",
       },
     };
     await challenged(
       baseUrl,
       first.fetchImpl,
       first.projectId,
-      "018f0000-0000-7001-8000-00000000086c",
+      "018f0000-0000-7001-8000-000000000a6c",
       "PUT",
       "/api/v1/projects/{project_id}/current-chapter",
       switchRequest.command_schema,
@@ -813,7 +813,7 @@ test("updateProject acknowledgement freezes Current Chapter", async () => {
         baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000086c",
+        idempotencyKey: "018f0000-0000-7001-8000-000000000a6c",
         antiForgery: nonce,
         request: switchRequest,
       }),
