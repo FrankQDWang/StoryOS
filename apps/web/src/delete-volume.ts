@@ -4,6 +4,7 @@ import {
   digestDeleteVolume,
   StoryOSProtocolError,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 import type { DeleteVolumeResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
@@ -59,6 +60,9 @@ export async function deleteOwnedVolume(options: {
     inFlightDeletes.delete(identity);
     return removed;
   } catch (error) {
+    if (historicalAcknowledgementUnavailable(error)) {
+      throw error;
+    }
     if (error instanceof StoryOSProtocolError && error.status === 429) {
       delete flight.nonce;
       await new Promise<void>((resolve) => {

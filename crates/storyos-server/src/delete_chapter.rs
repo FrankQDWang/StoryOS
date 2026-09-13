@@ -113,19 +113,16 @@ pub(super) async fn delete_chapter(
     let settlement = storyos_application::delete_chapter(&store, &command)
         .await
         .map_err(delete_chapter_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    delete_chapter_response(&command, &digest_hex, project, settlement)
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
+    delete_chapter_response(&command, &digest_hex, settlement)
 }
 
 fn delete_chapter_response(
     command: &DeleteChapterCommand,
     digest_hex: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::DeleteChapterSettlement,
 ) -> Result<Json<contracts::DeleteChapterResponse>, ApiError> {
+    let project = settlement.response_project;
     let (commit_ids, action_sequence) = match settlement.authority.as_ref() {
         Some(authority) => (
             vec![authority.authoritative_commit_id.clone()],
@@ -257,6 +254,11 @@ fn delete_chapter_error(error: DeleteChapterError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Delete Chapter binding conflicts.",
+        ),
+        DeleteChapterError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Delete Chapter acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         DeleteChapterError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

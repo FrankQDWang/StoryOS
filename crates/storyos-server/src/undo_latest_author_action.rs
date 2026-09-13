@@ -116,19 +116,16 @@ pub(super) async fn undo_latest_author_action(
     let settlement = storyos_application::undo_latest_author_action(&store, &command)
         .await
         .map_err(undo_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    undo_response(&command, &digest_hex, project, settlement)
+    super::acknowledgement_hold::hold_first_acknowledgement_if_requested(idempotency_key).await;
+    undo_response(&command, &digest_hex, settlement)
 }
 
 fn undo_response(
     command: &UndoLatestAuthorActionCommand,
     digest_hex: &str,
-    project: storyos_application::Project,
     settlement: storyos_application::UndoLatestAuthorActionSettlement,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
+    let project = settlement.response_project;
     let (receipt_result, effect, revision_ids, commit_ids, resulting_head, action_sequence) =
         match settlement.effect {
             UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
@@ -327,6 +324,11 @@ fn undo_error(error: UndoLatestAuthorActionError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The Undo Latest Author Action binding conflicts.",
+        ),
+        UndoLatestAuthorActionError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original Undo Latest Author Action acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         UndoLatestAuthorActionError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

@@ -1,6 +1,9 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
+};
 use storyos_application::{
-    DeleteChapterAuthority, DeleteChapterCommand, DeleteChapterError, DeleteChapterSettlement,
-    DeleteChapterSettlementEffect,
+    ChapterId, DeleteChapterAuthority, DeleteChapterCommand, DeleteChapterError,
+    DeleteChapterSettlement, DeleteChapterSettlementEffect, Project,
 };
 use storyos_core::{
     ChapterJoin, ChapterRemovalLifecycle, DeleteChapter as CoreDeleteChapter, DeleteChapterCurrent,
@@ -24,7 +27,7 @@ pub(super) async fn persist_delete_chapter(
 ) -> Result<DeleteChapterSettlement, DeleteChapterError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
+            "SELECT lifecycle_state, tree_revision::text, title, current_chapter_id::text
                FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
@@ -51,7 +54,8 @@ pub(super) async fn persist_delete_chapter(
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(delete_chapter_parse_error)?;
-    let current_chapter_id = row.get::<_, Option<String>>(2);
+    let project_title = row.get::<_, String>(2);
+    let current_chapter_id = row.get::<_, Option<String>>(3);
     let target = client
         .query_opt(
             "SELECT chapter.parent_volume_id::text, removal.chapter_id IS NOT NULL
@@ -239,6 +243,7 @@ pub(super) async fn persist_delete_chapter(
     let mut project_activity_position = 0;
     let mut project_activity_event_id = String::new();
     let mut authority = None;
+    let mut resulting_current_chapter_id = current_chapter_id.clone().map(ChapterId::new);
     if let (
         DeleteChapterSettlementEffect::Applied {
             tree_revision,
@@ -334,6 +339,7 @@ pub(super) async fn persist_delete_chapter(
             )
             .await?;
         }
+        resulting_current_chapter_id = resulting_current.map(ChapterId::new);
         authority = Some(DeleteChapterAuthority {
             authoritative_commit_id: sequences.authoritative_commit_id,
             author_action_sequence: sequences.author_action_sequence,
@@ -342,10 +348,19 @@ pub(super) async fn persist_delete_chapter(
             resulting_manuscript_tree_revision: *tree_revision,
         });
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: project_title,
+        current_chapter_id: resulting_current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'deleteChapter' AND idempotency_key = $4::text::uuid",
             &[
@@ -353,6 +368,8 @@ pub(super) async fn persist_delete_chapter(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -364,6 +381,7 @@ pub(super) async fn persist_delete_chapter(
         project_activity_position,
         project_activity_event_id,
         authority,
+        response_project,
     })
 }
 

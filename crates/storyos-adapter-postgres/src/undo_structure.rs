@@ -70,7 +70,7 @@ pub(super) async fn persist_structure_compensation(
     )
     .await
     .map_err(undo_database_error)?;
-    settle_idempotency(client, command).await?;
+    let response_project = settle_idempotency(client, command).await?;
     let author_undo_frontier_sequence =
         crate::editor_session::current_author_undo_frontier_sequence(
             client,
@@ -90,6 +90,7 @@ pub(super) async fn persist_structure_compensation(
         },
         receipt_created_at,
         project_activity_position: sequences.project_activity_position,
+        response_project,
     })
 }
 

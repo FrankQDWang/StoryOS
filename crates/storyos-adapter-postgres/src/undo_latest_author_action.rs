@@ -1,8 +1,12 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
+};
 use storyos_application::{
-    AuthorCommandAdmissionIds, EditorSessionError, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse, UndoLatestAuthorActionCommand, UndoLatestAuthorActionError,
-    UndoLatestAuthorActionSettlement, UndoLatestAuthorActionSettlementEffect,
-    UndoLatestAuthorActionStore,
+    AuthorCommandAdmissionIds, ChapterId, EditorSessionError, Project,
+    ProjectCommandChallengeError, ProjectCommandChallengeUse, UndoLatestAuthorActionCommand,
+    UndoLatestAuthorActionError, UndoLatestAuthorActionSettlement,
+    UndoLatestAuthorActionSettlementEffect, UndoLatestAuthorActionStore,
 };
 use storyos_core::{
     AuthorUndoFrontier, UndoLatestAuthorAction as CoreUndo, UndoLatestAuthorActionConflict,
@@ -445,7 +449,7 @@ async fn persist_compensation(
     )
     .await
     .map_err(undo_database_error)?;
-    settle_idempotency(client, command).await?;
+    let response_project = settle_idempotency(client, command).await?;
     let author_undo_frontier_sequence =
         crate::editor_session::current_author_undo_frontier_sequence(
             client,
@@ -467,6 +471,7 @@ async fn persist_compensation(
         },
         receipt_created_at,
         project_activity_position,
+        response_project,
     })
 }
 
@@ -495,12 +500,13 @@ async fn persist_zero_authority(
         UndoReceiptAuthority::None,
     )
     .await?;
-    settle_idempotency(client, command).await?;
+    let response_project = settle_idempotency(client, command).await?;
     Ok(UndoLatestAuthorActionSettlement {
         ids: command.ids.clone(),
         effect,
         receipt_created_at,
         project_activity_position: 0,
+        response_project,
     })
 }
 
@@ -659,11 +665,35 @@ pub(super) async fn insert_undo_receipt(
 pub(super) async fn settle_idempotency(
     client: &tokio_postgres::Client,
     command: &UndoLatestAuthorActionCommand,
-) -> Result<(), UndoLatestAuthorActionError> {
+) -> Result<Project, UndoLatestAuthorActionError> {
+    let row = client
+        .query_opt(
+            "SELECT title, current_chapter_id::text
+               FROM storyos.projects
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+            ],
+        )
+        .await
+        .map_err(undo_database_error)?;
+    let Some(row) = row else {
+        return Err(UndoLatestAuthorActionError::MissingProject);
+    };
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: row.get(0),
+        current_chapter_id: row.get::<_, Option<String>>(1).map(ChapterId::new),
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'undoLatestAuthorAction'
                 AND idempotency_key = $4::text::uuid",
@@ -672,11 +702,13 @@ pub(super) async fn settle_idempotency(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
         .map_err(undo_database_error)?;
-    Ok(())
+    Ok(response_project)
 }
 
 async fn read_undo_settlement(
@@ -713,13 +745,21 @@ async fn read_undo_settlement(
                         activity.project_activity_position::text,
                         commit.manuscript_object_id::text,
                         compensation_snapshot.snapshot_id,
-                        compensation_snapshot.project_activity_position
+                        compensation_snapshot.project_activity_position,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
                          settlement.author_command_admission_id, settlement.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id,
                          receipt.author_command_admission_id, receipt.receipt_id)
+                   JOIN storyos.command_idempotency AS idempotency
+                     ON (idempotency.owner_user_id, idempotency.project_id,
+                         idempotency.command_kind, idempotency.idempotency_key,
+                         idempotency.result_reference) =
+                        (receipt.owner_user_id, receipt.project_id, receipt.command_kind,
+                         receipt.idempotency_key, receipt.receipt_id::text)
               LEFT JOIN storyos.author_action_entries AS action
                      ON (action.owner_user_id, action.project_id, action.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
@@ -754,7 +794,8 @@ async fn read_undo_settlement(
                     AND receipt.command_kind = 'undoLatestAuthorAction'
                     AND receipt.command_digest = $4
                     AND receipt.idempotency_key = $5::text::uuid
-                    AND settlement.settlement_kind = 'receipt_settled'",
+                    AND settlement.settlement_kind = 'receipt_settled'
+                    AND idempotency.outcome_kind = 'settled'",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
@@ -766,16 +807,33 @@ async fn read_undo_settlement(
             .await
             .map_err(undo_database_error)?
             .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
-        let current_frontier = crate::editor_session::current_author_undo_frontier_sequence(
+        let receipt_created_at = row.get::<_, String>(5);
+        let current_frontier = crate::editor_session::author_undo_frontier_as_of_receipt(
             &client,
             command.project_scope.owner_user_id.as_ref(),
             command.project_scope.project_id.as_ref(),
+            receipt_id,
         )
         .await
         .map_err(undo_from_session)?;
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(15).as_deref(),
+            row.get::<_, Option<String>>(16).as_deref(),
+        ) {
+            Ok(CommandResponseProjectEvidence::Captured(project)) => project,
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(UndoLatestAuthorActionError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(UndoLatestAuthorActionError::Unavailable(Box::new(
+                    std::io::Error::other(
+                        "Undo Latest Author Action acknowledgement evidence is damaged",
+                    ),
+                )));
+            }
+        };
         let result_kind = row.get::<_, String>(3);
         let reason = row.get::<_, Option<String>>(4);
-        let receipt_created_at = row.get::<_, String>(5);
         let effect = match (result_kind.as_str(), reason.as_deref()) {
             ("authoritative_applied", None) => {
                 let source_sequence = row
@@ -875,6 +933,7 @@ async fn read_undo_settlement(
             effect,
             receipt_created_at,
             project_activity_position,
+            response_project,
         })
     }
     .await;

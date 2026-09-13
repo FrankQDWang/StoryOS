@@ -295,25 +295,79 @@ pub(super) async fn current_author_undo_frontier_sequence(
     owner_user_id: &str,
     project_id: &str,
 ) -> Result<Option<u64>, EditorSessionError> {
-    let row = client
-        .query_opt(
-            "SELECT action.author_action_sequence::text
-               FROM storyos.author_action_entries AS action
-          LEFT JOIN storyos.author_action_entries AS compensation
-                 ON compensation.owner_user_id = action.owner_user_id
-                AND compensation.project_id = action.project_id
-                AND compensation.disposition = 'compensation'
-                AND compensation.compensated_source_sequence = action.author_action_sequence
-              WHERE action.owner_user_id = $1::text::uuid
-                AND action.project_id = $2::text::uuid
-                AND action.disposition = 'forward'
-                AND compensation.author_action_sequence IS NULL
-           ORDER BY action.author_action_sequence DESC
-              LIMIT 1",
-            &[&owner_user_id, &project_id],
-        )
-        .await
-        .map_err(session_database_error)?;
+    load_author_undo_frontier(client, owner_user_id, project_id, None).await
+}
+
+pub(super) async fn author_undo_frontier_as_of_receipt(
+    client: &tokio_postgres::Client,
+    owner_user_id: &str,
+    project_id: &str,
+    receipt_id: &str,
+) -> Result<Option<u64>, EditorSessionError> {
+    load_author_undo_frontier(client, owner_user_id, project_id, Some(receipt_id)).await
+}
+
+async fn load_author_undo_frontier(
+    client: &tokio_postgres::Client,
+    owner_user_id: &str,
+    project_id: &str,
+    as_of_receipt_id: Option<&str>,
+) -> Result<Option<u64>, EditorSessionError> {
+    let row = match as_of_receipt_id {
+        Some(receipt_id) => client
+            .query_opt(
+                "SELECT action.author_action_sequence::text
+                       FROM storyos.author_action_entries AS action
+                       JOIN storyos.domain_receipts AS action_receipt
+                         ON (action_receipt.owner_user_id, action_receipt.project_id,
+                             action_receipt.receipt_id) =
+                            (action.owner_user_id, action.project_id, action.receipt_id)
+                       JOIN storyos.domain_receipts AS cutoff
+                         ON cutoff.owner_user_id = action.owner_user_id
+                        AND cutoff.project_id = action.project_id
+                        AND cutoff.receipt_id = $3::text::uuid
+                  LEFT JOIN storyos.author_action_entries AS compensation
+                         ON compensation.owner_user_id = action.owner_user_id
+                        AND compensation.project_id = action.project_id
+                        AND compensation.disposition = 'compensation'
+                        AND compensation.compensated_source_sequence = action.author_action_sequence
+                  LEFT JOIN storyos.domain_receipts AS compensation_receipt
+                         ON (compensation_receipt.owner_user_id, compensation_receipt.project_id,
+                             compensation_receipt.receipt_id) =
+                            (compensation.owner_user_id, compensation.project_id,
+                             compensation.receipt_id)
+                        AND compensation_receipt.created_at <= cutoff.created_at
+                      WHERE action.owner_user_id = $1::text::uuid
+                        AND action.project_id = $2::text::uuid
+                        AND action.disposition = 'forward'
+                        AND action_receipt.created_at <= cutoff.created_at
+                        AND compensation_receipt.receipt_id IS NULL
+                   ORDER BY action.author_action_sequence DESC
+                      LIMIT 1",
+                &[&owner_user_id, &project_id, &receipt_id],
+            )
+            .await
+            .map_err(session_database_error)?,
+        None => client
+            .query_opt(
+                "SELECT action.author_action_sequence::text
+                       FROM storyos.author_action_entries AS action
+                  LEFT JOIN storyos.author_action_entries AS compensation
+                         ON compensation.owner_user_id = action.owner_user_id
+                        AND compensation.project_id = action.project_id
+                        AND compensation.disposition = 'compensation'
+                        AND compensation.compensated_source_sequence = action.author_action_sequence
+                      WHERE action.owner_user_id = $1::text::uuid
+                        AND action.project_id = $2::text::uuid
+                        AND action.disposition = 'forward'
+                        AND compensation.author_action_sequence IS NULL
+                   ORDER BY action.author_action_sequence DESC
+                      LIMIT 1",
+                &[&owner_user_id, &project_id],
+            )
+            .await
+            .map_err(session_database_error)?,
+    };
     row.map(|row| {
         row.get::<_, String>(0)
             .parse::<u64>()

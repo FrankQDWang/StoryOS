@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use crate::{
-    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId,
+    AuthorCommandAdmissionIds, EditorClientBinding, EditorSessionId, Project,
     ProjectCommandChallengeBinding, ProjectScope,
 };
 
@@ -25,6 +25,7 @@ pub struct UndoLatestAuthorActionSettlement {
     pub effect: UndoLatestAuthorActionSettlementEffect,
     pub receipt_created_at: String,
     pub project_activity_position: u64,
+    pub response_project: Project,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -62,6 +63,7 @@ pub enum UndoLatestAuthorActionSettlementEffect {
 #[derive(Debug)]
 pub enum UndoLatestAuthorActionError {
     BindingConflict,
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
@@ -73,6 +75,9 @@ impl std::fmt::Display for UndoLatestAuthorActionError {
             Self::BindingConflict => {
                 formatter.write_str("The Undo Latest Author Action binding conflicts")
             }
+            Self::HistoricalAcknowledgementUnavailable => formatter.write_str(
+                "The original Undo Latest Author Action acknowledgement cannot be recovered",
+            ),
             Self::InvalidChallenge => {
                 formatter.write_str("The Undo Latest Author Action challenge is invalid")
             }
@@ -88,7 +93,10 @@ impl std::error::Error for UndoLatestAuthorActionError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict | Self::InvalidChallenge | Self::MissingProject => None,
+            Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
+            | Self::InvalidChallenge
+            | Self::MissingProject => None,
         }
     }
 }

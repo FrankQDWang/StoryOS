@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::{ProjectId, UserId};
+use crate::{Project, ProjectId, UserId};
 
 struct Store(Mutex<usize>);
 
@@ -18,6 +18,11 @@ impl UndoLatestAuthorActionStore for Store {
             },
             receipt_created_at: "2026-08-30T00:00:00.000Z".to_owned(),
             project_activity_position: 0,
+            response_project: Project {
+                project_id: command.project_scope.project_id.clone(),
+                title: "Empty Novel".to_owned(),
+                current_chapter_id: None,
+            },
         })
     }
 }
