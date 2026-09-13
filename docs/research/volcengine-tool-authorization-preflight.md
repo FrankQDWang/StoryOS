@@ -7,7 +7,7 @@ credential, inference, account, or exact-model acceptance claim. It supports
 ## Current integration scope
 
 The current
-[MCP research registration ticket](https://github.com/FrankQDWang/StoryOS/issues/397)
+[S5-01: Register One Approved MCP Research Tool](https://github.com/FrankQDWang/StoryOS/issues/397)
 requires one approved real operation. It leaves the exact service, account,
 allowed operations, destination, and spend to that integration ticket. The
 Stage 5 Responses specification refresh is still pending. This note does not
