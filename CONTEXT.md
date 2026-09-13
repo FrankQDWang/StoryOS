@@ -320,11 +320,11 @@ A durable record of execution, context, authorization, usage, validation, or a s
 _Avoid_: Artifact, temporary log
 
 **Agent Memory**:
-A Project Scope-bound, source-bearing, typed, and rebuildable retrieval projection over exact Authoritative State, Artifact, and Operational Record sources that supports continuity across threads and AgentRuns. It has no independent authority or writable truth and never interrupts active writing to demand memory confirmation; source conflict invalidates the projection, durable inference remains an Artifact, and only an explicit author-authorized domain action may change Authoritative State.
-_Avoid_: Fourth truth store, hidden model memory, unified mutable memory blob, Agent memory as Authoritative State, interruptive memory approval
+Project Scope-bound, inspectable, generated reference material that helps the Agent carry useful context across Project Conversations and AgentRuns. It can be corrected and read selectively, but grants no authority, instruction priority, execution permission, or guarantee of current truth.
+_Avoid_: Authoritative State, Provider continuation, active context compaction, hidden persistent memory
 
 **Working Context**:
-The operation-bounded view of live author input, in-progress model or Tool activity, short-term plans, and other unsettled material needed to continue active work. Only an immutable item version captured by the applicable Operation Input Snapshot may become a Context Candidate; for a RunStep, its Step Snapshot fulfills that boundary. A live mutable buffer, stream, or process object cannot be injected directly. Working Context evidence may remain in Operational Records for recovery, but it is excluded from long-term Agent Memory and cannot directly source a Memory Candidate.
+The operation-bounded view of live author input, in-progress model or Tool activity, short-term plans, and other unsettled material needed to continue active work. Only an immutable item version captured by the applicable Operation Input Snapshot may become a Context Candidate; for a RunStep, its Step Snapshot fulfills that boundary. A live mutable buffer, stream, or process object cannot be injected directly. Working Context evidence may remain in Operational Records for recovery; Memory extraction later reads eligible durable conversation snapshots, never the live buffer itself.
 _Avoid_: Agent Memory, durable project knowledge, hidden cross-Run memory
 
 **Workspace Context**:
@@ -401,7 +401,7 @@ _Avoid_: Candidate Artifact, selected context, qualified source, index hit as pe
 
 **Candidate Discovery**:
 The second Context Assembly gate, which enumerates mandatory sources and locates dynamic Context Candidates only from source classes allowed by the Operation Requirement. Discovery and Retrieval Index hits establish neither current eligibility nor permission to use or disclose content.
-_Avoid_: Memory Admission, Source Eligibility Gate, context selection
+_Avoid_: Source Eligibility Gate, context selection
 
 **Dynamic Retrieval**:
 The bounded discovery of non-universal context for one Operation Requirement through Deterministic Requirement Retrieval, an Agent Retrieval Request, or Author-required Retrieval. Retrieved content becomes Context Candidates only and cannot mutate the current Step Snapshot or an in-flight Model Attempt.
@@ -424,7 +424,7 @@ A disposable optimization that may warm a StoryOS-controlled, Project Scope-boun
 _Avoid_: Background disclosure, pre-approved context, first-turn injection
 
 **Source Eligibility Gate**:
-The third Context Assembly gate, which fail-closed checks every Context Candidate's exact domain identity and Context Source Version, matching Project Scope and Project Isolation for project-bearing content, caller permission, Source Integrity, Context Trust Assessment, Disclosure Eligibility, and every owning-domain qualification that applies to that source kind. A globally or User-reusable schema, ToolSpec, policy, Adapter definition, public capability description, or other definition may remain source-unscoped only when it contains no project-derived data or project authority; its selection and use still bind the current Project Scope. Applicable qualifications include Memory Admission and Memory Suppression for a memory-derived or ordinary-recall path, Lifecycle, Archive, Tombstone, Retention State, Story Scope, and Epistemic Scope. A non-applicable qualification is recorded as such rather than invented; an applicable check that fails or cannot be established excludes the Context Candidate, while an ineligible required source blocks the operation or enters an explicit recorded degradation mode.
+The third Context Assembly gate, which fail-closed checks every Context Candidate's exact domain identity and Context Source Version, matching Project Scope and Project Isolation for project-bearing content, caller permission, Source Integrity, Context Trust Assessment, Disclosure Eligibility, and every owning-domain qualification that applies to that source kind. A globally or User-reusable schema, ToolSpec, policy, Adapter definition, public capability description, or other definition may remain source-unscoped only when it contains no project-derived data or project authority; its selection and use still bind the current Project Scope. Applicable qualifications include current memory-use settings for newly read Memory Documents, Lifecycle, Archive, Tombstone, Retention State, Story Scope, and Epistemic Scope. A non-applicable qualification is recorded as such rather than invented; an applicable check that fails or cannot be established excludes the Context Candidate, while an ineligible required source blocks the operation or enters an explicit recorded degradation mode.
 _Avoid_: Relevance threshold, confidence warning, ranking penalty, best-effort inclusion
 
 **Context Trust Assessment**:
@@ -453,7 +453,7 @@ _Avoid_: Network access, source eligibility alone, cached consent, provider trus
 
 **Selection and Ranking**:
 The fourth Context Assembly gate, which gives eligible Mandatory Context budget priority and applies one exact Context Ranking Profile only to eligible dynamic Context Candidates. Selection and rank grant no truth, authority, evidentiary status, binding force, or disclosure permission.
-_Avoid_: Memory Admission, authority ranking, permission score
+_Avoid_: Authority ranking, permission score
 
 **Context Ranking Profile**:
 An immutable, versioned, Purpose- and source-class-specific comparison contract defining allowed relevance, scope specificity, structural or causal proximity, coverage, diversity, evidence-balance, and genuinely time-sensitive currency signals plus budget behavior and a stable non-semantic final tie-break. It cannot use a global trust score, source authority or ownership as a bonus, prior access or retrieval frequency, popularity, repetition, model confidence, or wall-clock decay for still-applicable fiction truth and historical evidence.
@@ -496,7 +496,7 @@ A disposable prompt, retrieval, Projection, embedding, Tool-schema, or other acc
 _Avoid_: Context Candidate, Context Assembly Manifest, durable memory, cached permission
 
 **Context Cache Reuse Decision**:
-The current fail-closed determination that one Context Cache Entry's complete dependencies still satisfy source identity and version, every applicable owning-domain qualification such as Lifecycle and Retention plus Memory Admission and Memory Suppression when the dependency is memory-derived or ordinary recall, permission, policy, destination, grant, and Adapter requirements for one operation. Changed or unverifiable dependencies make the Entry immediately unusable even if physical invalidation or deletion is still pending.
+The current fail-closed determination that one Context Cache Entry's complete dependencies still satisfy source identity and version, every applicable owning-domain qualification such as Lifecycle and Retention plus current memory-use settings for newly read Memory Documents, permission, policy, destination, grant, and Adapter requirements for one operation. Changed or unverifiable dependencies make the Entry immediately unusable even if physical invalidation or deletion is still pending.
 _Avoid_: Cache hit, stale-while-revalidate, prompt-prefix preservation, prior consent
 
 **Context Inspect**:
@@ -504,19 +504,19 @@ A read-only author audit of current or historical Operation Requirements, discov
 _Avoid_: History rewrite, model-use claim, unredacted debug dump
 
 **Context Include**:
-An author control bound to one exact Operation Requirement that makes one named source, exact Context Source Version, fragment, or domain object a Mandatory Context Candidate for that operation only. It never follows a later source version or grants authority, Instruction Authority, any owning-domain qualification including Memory Admission, budget exemption, or Disclosure Eligibility.
+An author control bound to one exact Operation Requirement that makes one named source, exact Context Source Version, fragment, or domain object a Mandatory Context Candidate for that operation only. It never follows a later source version or grants authority, Instruction Authority, any owning-domain access qualification, budget exemption, or Disclosure Eligibility.
 _Avoid_: Context Pin, source promotion, automatic latest version
 
 **Context Pin**:
-A prospective Author Context Requirement scoped to the Next Operation, Current AgentRun, or Project and bound either to one Exact Context Source Version or to Follow Source Identity with fresh resolution and eligibility on every operation. An Artifact or Authoritative State source uses its exact Revision as that version; other source families use their owning immutable version boundary rather than inventing a Revision. It requires logical consideration rather than universal disclosure, inherits no prior Memory Admission, and applies Memory Suppression only when it resolves through a memory-derived or ordinary-recall path; direct governed use of the unchanged raw source remains separately eligible. It fails unmet rather than guessing when identity becomes ambiguous, split, merged, or deleted.
+A prospective Author Context Requirement scoped to the Next Operation, Current AgentRun, or Project and bound either to one Exact Context Source Version or to Follow Source Identity with fresh resolution and eligibility on every operation. An Artifact or Authoritative State source uses its exact Revision as that version; other source families use their owning immutable version boundary rather than inventing a Revision. It requires logical consideration rather than universal disclosure, inherits no prior memory read permission, and applies current memory-use settings when it reads Memory Documents; direct governed use of the unchanged raw source remains separately eligible. It fails unmet rather than guessing when identity becomes ambiguous, split, merged, or deleted.
 _Avoid_: User prerequisite, permanent prompt text, implicit latest, authority marker, fabricated Revision
 
 **Context Exclude**:
 An author control scoped to one Operation, AgentRun, or Destination that bars a named source, Context Source Version, fragment, data category, and its protected provenance closure from future unsubmitted Destination Attempts. It outranks Include and Pin; an already committed Manifest remains historical while pending work is cancelled and reassembled, and a resulting mandatory-context gap becomes explicitly Degraded or Blocked.
-_Avoid_: Outbound Disclosure retraction, Manifest edit, Memory Suppression, hidden omission
+_Avoid_: Outbound Disclosure retraction, Manifest edit, Memory Note, hidden omission
 
 **Author Context Control Precedence**:
-The fail-closed order in which Tombstone, current permissions, Capability, and destination policy outrank Memory Suppression when the Candidate is memory-derived or enters through ordinary recall; applicable Memory Suppression then outranks applicable Exclude; Exclude outranks Include and Pin; and Include and Pin outrank ordinary dynamic ranking. Memory Suppression does not ban governed direct use of its unchanged raw source; a general source or disclosure ban requires Exclude or the owning policy. A positive control can never override a harder negative eligibility or disclosure boundary.
+The fail-closed order in which Tombstone, current permissions, Capability, destination policy, and applicable memory-use settings outrank Exclude; Exclude outranks Include and Pin; and Include and Pin outrank ordinary dynamic ranking. A Memory Note is conversational guidance and does not enter this control order. A positive control can never override a harder negative eligibility or disclosure boundary.
 _Avoid_: Last control wins, UI order, ranking override
 
 **Default Context Experience**:
@@ -544,7 +544,7 @@ An exact durable Revision or typed terminal outcome whose settlement meaning has
 _Avoid_: Live stream, intermediate event, latest value, permanently true source
 
 **Retrieval Index**:
-A disposable, rebuildable full-text, vector, graph, or other access projection over exact domain identities, Context Source Versions, current qualification records, and one build-policy version. Its internal IDs and scores have no domain meaning, and every result must fail closed unless the current source version, every applicable owning-domain qualification such as Lifecycle plus Memory Admission and Memory Suppression when relevant, scope, and permission eligibility can be revalidated before context use.
+A disposable, rebuildable full-text, vector, graph, or other access projection over exact domain identities, Context Source Versions, current qualification records, and one build-policy version. Its internal IDs and scores have no domain meaning, and every result must fail closed unless the current source version, every applicable owning-domain qualification such as Lifecycle and current memory-use settings when reading Memory Documents, scope, and permission eligibility can be revalidated before context use.
 _Avoid_: Semantic memory, vector store of record, index ID as Durable Identity, ranking as truth
 
 **AgentRun**:
@@ -1068,7 +1068,7 @@ The immutable Operational Record and execution evidence for one concrete planned
 _Avoid_: Logical Invocation, prior Attempt reuse, Disclosure Manifest, SDK hidden retry
 
 **Destination Attempt Admission Decision**:
-The immutable fail-closed Host decision at the final pre-I/O boundary for one exact Destination Attempt, revalidating its Project Scope, source and Projection dependencies, Lifecycle, applicable Memory Suppression for memory-derived or ordinary-recall dependencies, Context Exclude, requester permission, grants and exact Tool or Destination Disclosure Approval when required, destination identity and its evidence revision, Registration status, governing intake contract, policy, and budget against current versions. Any changed or unverifiable dependency refuses submission, preserves prior manifests, settles the unsubmitted Attempt, and requires new Context Assembly; only an admitted Decision may cross the destination boundary.
+The immutable fail-closed Host decision at the final pre-I/O boundary for one exact Destination Attempt, revalidating its Project Scope, source and Projection dependencies, Lifecycle, current memory-use settings for newly read Memory Documents, Context Exclude, requester permission, grants and exact Tool or Destination Disclosure Approval when required, destination identity and its evidence revision, Registration status, governing intake contract, policy, and budget against current versions. Any changed or unverifiable dependency refuses submission, preserves prior manifests, settles the unsubmitted Attempt, and requires new Context Assembly; only an admitted Decision may cross the destination boundary.
 _Avoid_: Context Assembly Manifest, cached authorization, provider retry flag, post-send audit
 
 **Capability Grant**:
@@ -1491,33 +1491,21 @@ _Avoid_: Forced rollback, silent undo
 A Core Artifact presenting one independently reviewable semantic fact or object without carrying an authoritative change command. It can serve as a source for a Proposal but cannot be accepted directly; independently selectable alternatives remain separate Candidates.
 _Avoid_: Proposal, pending truth
 
-**Memory Candidate**:
-A typed, source-bearing Candidate derived only from one or more Settled Source Versions for possible admission into Agent Memory. Extraction is replay-safe and preserves exact source lineage, but does not by itself validate the candidate, admit it for retrieval, or grant it authority.
-_Avoid_: Memory entry, extracted truth, generic untyped summary, live-stream memory
+**Memory Document**:
+A versioned, non-authoritative Artifact containing a generated conversation summary, consolidated memory notes, or memory navigation summary under one Project Scope. Its source references aid inspection and fresh lookup without proving every statement or a complete semantic influence history.
+_Avoid_: Authoritative fact, per-claim Candidate, Admission Decision, hidden model state
 
-**Memory Admission**:
-The source- and policy-evaluated decision that one exact Memory Candidate is eligible for ordinary project retrieval only within its supported scope. It is separate from extraction and ranking, fails closed on stale, unsupported, conflicting, self-referential, suppressed, or forbidden evidence, and grants no authority.
-_Avoid_: Retrieval score, extraction success, truth promotion, model confidence
-
-**Admitted Memory Entry**:
-The non-authoritative, source-bearing Agent Memory projection of one exact Memory Candidate under one current Memory Admission. It participates in ordinary retrieval only while its source, scope, permission, and suppression conditions remain valid; ranking may select among admitted entries but cannot admit them.
-_Avoid_: Accepted truth, authoritative memory, ranked candidate, permanent memory
-
-**Memory Lifecycle Relation**:
-An immutable appended fact that changes current retrieval eligibility or links a successor without rewriting a Memory Candidate, Memory Admission, source, or prior Run context. `corrects` replaces an error at the same scope and effective time, `supersedes` succeeds a once-valid entry from an explicit boundary, and `invalidates` removes eligibility without requiring a replacement; differences explained by story branch, time, or epistemic scope are not errors.
-_Avoid_: Mutable memory edit, overwrite, deletion as correction, historical context rewrite
-
-**Memory Suppression**:
-An auditable, scope-bounded author or authoritative-policy control that excludes targeted Memory Candidates, Admitted Memory Entries, source sets, or semantic ranges from extraction, admission, current projection, and ordinary retrieval without modifying their sources or prior Run context. It survives replay and rebuild, is normally reversible, and lifting it restores only eligibility for current re-evaluation rather than any historical Admission.
-_Avoid_: Archive, Tombstone, negative retrieval score, inferred memory rule
+**Memory Note**:
+An inspectable, author-requested Artifact containing plain-language guidance to add, correct, or forget generated Memory, linked to the requesting author Message. Recording the note requests later consolidation; it does not prove publication, physical deletion, an access prohibition, or a change to Authoritative State.
+_Avoid_: Author Preference, semantic suppression rule, deletion receipt, context exclusion
 
 **Inferred Preference**:
-A source-bearing Candidate that infers one bounded author preference from prior actions or feedback. Agent Memory may retrieve it as a non-binding hint, but repetition, confidence, author silence, or prior use never turns it into a constraint or lets it override a current author instruction.
+A non-binding interpretation of prior author action or feedback that can appear in Agent Memory with its sources and uncertainty. Repetition, confidence, author silence, or prior use never turns it into an authoritative constraint or lets it override a current author instruction.
 _Avoid_: Hidden policy, binding preference, implicit instruction, procedural memory
 
 **Operational Lesson**:
-A source-bearing Candidate that generalizes one bounded, reusable execution lesson from multiple comparable, settled, and causally independent Operational Records, including supporting and opposing evidence, applicability and version scope, and a re-evaluation boundary. Memory Admission may let it advise future Runs, but it cannot govern execution or alter a SkillPackage, StoryOS ToolSpec, Capability, or policy; that requires a separate governed change.
-_Avoid_: Procedural memory, single-failure rule, executable instruction, promoted Skill
+A non-binding account of a potentially useful execution outcome, with relevant sources, scope, and uncertainty. It may advise the Agent but cannot change a SkillPackage, ToolSpec, Capability, policy, or execution permission.
+_Avoid_: Executable instruction, promoted Skill, verified general rule
 
 **Draft**:
 A non-authoritative Core Artifact containing editable work that has not been expressed as validated domain changes, including Plan, Refused Edit, and Recovery Drafts. It follows Artifact revisions, common retention, and reversible Draft closure, may source a Proposal, and cannot be accepted directly.

@@ -31,7 +31,7 @@ This specification does not own:
 - Author Command Admission or protected-client trust;
 - Web Editor Session, Local Edit Journal, projection, synchronization,
   recovery, or editor control rendering;
-- Artifact classification, memory admission, preference persistence, research
+- Artifact classification, generated Memory, preference persistence, research
   provenance, public wire formats, or deterministic gate infrastructure.
 
 Those owner contracts remain controlling. This contract supplies the
@@ -332,7 +332,7 @@ exact.
 | Web Editor Session | the author-facing need to inspect or edit a Proposal, decide among currently permitted actions, or stop assistance without changing Proposal state | which exact controls the current surface exposes, plus editor rendering, journal, projection, synchronization, recovery, acknowledgement, and convergence |
 | Context and disclosure | one exact current purpose, Working Target, and author instruction | context qualification, limits, destination identity, permission, manifest, disclosure, routing, and degradation |
 | Artifact domain model | the author-facing distinction among advice, research, options, and proposed prose | Artifact classification, Revision identity, provenance, lifecycle, and the binary authority boundary |
-| Memory, preference, and research | explicit feedback scope and the distinction between current choice and future-facing preference | Author Preference persistence, Inferred Preference non-authority, Research Artifact and claim provenance, suppression, and retrieval |
+| Memory, preference, and research | explicit feedback scope and the distinction between current choice and future-facing preference | Author Preference persistence, Inferred Preference non-authority, Research Artifact and claim provenance, Memory Notes, and selective retrieval |
 | Deterministic verification | the normative scenario matrix and authority invariants below | executable gate organization, fixtures, fault evidence, and release verdicts |
 
 No interface permits this contract to invoke another owner’s mechanics by
