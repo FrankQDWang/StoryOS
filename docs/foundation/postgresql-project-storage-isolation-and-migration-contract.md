@@ -491,19 +491,38 @@ Domain Receipt. The same scoped transaction settles the
 `AuthorCommandAdmission` with `ReceiptSettled` and writes the idempotency
 `result_reference`.
 
-Only `AuthoritativeApplied` locks and advances the Author Action,
-Authoritative Commit, and Project Activity counters. Only that result writes a
-Canonical Revision and payload, Authoritative Commit, resulting Head, Author
-Action, and Project Activity Event. `NoEffect`, `Conflicted`, and `Refused`
-write no authority row and no Project Activity row. No row from either write
-set is published as committed before the transaction commits.
+Direct `ApplyAuthorEdit.AuthoritativeApplied` locks and advances the Author
+Action, Authoritative Commit, and Project Activity counters. That applied
+prose result writes a Canonical Revision and payload, Authoritative Commit,
+resulting Head, Author Action, and Project Activity Event. Direct
+`ApplyAuthorEdit` `NoEffect`, `Conflicted`, and `Refused` write no authority
+row, no Author Action, and no Project Activity row. Other commands and results
+use their owner-defined allocation matrices. A successful Current Chapter
+change writes a Forward Author Action, Activity, and Snapshot. It does not
+change Authoritative State or Manuscript Tree Revision and writes no
+Authoritative Commit or Authoritative Revision. A Manuscript Structure Transition
+writes an Authoritative Commit that may contain empty prose Revision pairs.
+`ApplyAuthorEdit.ProposalRevised` writes one Forward Author Action and a
+Proposal Revision and writes no Authoritative Commit. Takeover `no_effect`
+writes Activity without manuscript authority. ADR 0026 owns Current Chapter
+allocation. ADR 0025 owns structure Commit allocation. The Manuscript Revision
+and Proposal State Machine owns Author Edit allocation. The Web Editor Session
+contract owns takeover Activity. Current Chapter and structure paths are
+delivered. `ProposalRevised` allocation is accepted; Proposal editing remains
+undelivered. Allocation presence cannot substitute for the command's typed
+result. No row from either write set is published as committed before the
+transaction commits.
 
-Every Author Edit Revision Envelope and Authoritative Commit carries the same
-non-null applied Receipt identity and result kind. Composite foreign keys bind
-the Envelope to the Receipt and bind the Commit to both the Receipt and the
-Envelope's exact object, parent Revision, and resulting Revision. Author Action
+Every `ApplyAuthorEdit.AuthoritativeApplied` Revision Envelope and
+Authoritative Commit carries the same non-null applied Receipt identity and
+result kind. Composite foreign keys bind the Envelope to the Receipt and bind
+the Commit to both the Receipt and the Envelope's exact object, parent
+Revision, and resulting Revision. For that applied prose result, Author Action
 and Project Activity references continue the same Receipt and Commit tuple.
-These references cannot name a zero-authority Receipt.
+Those references cannot name a zero-authority Author Edit Receipt. A Current
+Chapter change or `ProposalRevised` Action names its Receipt and does not
+require a Commit tuple. Takeover `no_effect` Activity names its Receipt and
+does not require manuscript authority.
 
 Every single-identity Receipt array has the canonical PostgreSQL dimension
 `[1:1]` and rejects SQL `NULL` elements. Typed result discriminants and
@@ -523,7 +542,7 @@ The physical mapping is closed as follows:
 | Editor Session, current writer generation, Input Fence, and Proposal Pause Fence | `operational-admission-editor` | Scope-bound operational evidence; stale generations are fenced and no browser Local Edit Journal row becomes PostgreSQL authority |
 | Application Wire Record | `operational-wire-history` | Store exact accepted schema-valid message-content bytes once with route, method, release, schema, content type, digest profile, idempotency/Command reference, and resulting identity; never store cookies, headers, nonces, secrets, malformed bodies, or query-response archives |
 | Public Event wire representation | `operational-wire-history` | Store the first compact JSON representation with Event identity, Activity profile, schema, redaction profile, and representation digest; duplicate delivery is not another Wire Record |
-| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position` only when the result has client-visible Activity; for Author Edit this is only `AuthoritativeApplied`, with one exact Receipt, Commit, Revision, and Author Action relation |
+| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position` only when the result has client-visible Activity; for direct `ApplyAuthorEdit.AuthoritativeApplied` this is one exact Receipt, Commit, Revision, and Author Action relation; other Author Edit results and other commands follow their owner-defined Activity allocation |
 | Snapshot, cursor, replay floor, generation, and handoff evidence | `operational-snapshot-replay` and `operational-project-activity` | Snapshot is an authorized Server reading boundary; cursor is bound to Scope/requester/filter/profile/generation; an old-generation cursor returns `activity_cursor_too_old`; the client obtains a fresh authorized Snapshot and resumes after the Snapshot Activity position; handoff evidence preserves the old closing position, new generation, new floor, and Snapshot identity; that evidence is not an executable cursor map |
 | Run Event, Mailbox, Transcript, Approval, Attempt, budget, lease, and outbox evidence | `operational-run-mailbox` and `operational-context-disclosure` | Immutable events and delivery evidence plus fenced live state; retention/compaction semantics remain owned by [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) |
 | Context Assembly Manifest, external-use binding, compatibility Decision, Destination Attempt, disclosure, and external wire projection | `operational-context-disclosure` | Manifest and exact non-secret wire projection commit before dispatch claim; OutcomeUnknown disclosure is durable before possible I/O; binding and Decision are separate records |
@@ -639,8 +658,11 @@ For an author-owned command, the admission transaction atomically claims the
 pre-domain idempotency record, consumes its one-use nonce, and inserts the
 immutable `author_command_admission`. The Core transaction atomically writes
 the typed Receipt, the admission's terminal Receipt settlement, and the
-idempotency result reference. Only an authority-changing result adds the
-authority graph and Project Activity Event to that transaction.
+idempotency result reference. Each command adds only the Action, Activity,
+Commit, Revision, and Snapshot rows required by its owner-defined allocation
+for that result. Direct `ApplyAuthorEdit.AuthoritativeApplied` adds the
+authority graph and Project Activity Event. Direct `ApplyAuthorEdit`
+`NoEffect`, `Conflicted`, and `Refused` add none of those rows.
 
 An exact retry first resolves `command_idempotency.result_reference`, then
 reads that exact `receipt_id` without joining an authority or Activity table.
@@ -653,11 +675,13 @@ the storage-error path.
 It validates Scope, command digest, Admission, `ReceiptSettled`, and idempotency
 linkage. It also validates the Admission target and expected Head, and proves
 that every Receipt Head belongs to that target. It then branches on the Receipt
-`result_kind`. `AuthoritativeApplied`
+`result_kind`. For a retried `ApplyAuthorEdit` Receipt, `AuthoritativeApplied`
 must have exactly one complete Activity, Author Action, Commit, Revision, and
 payload relation. Its prior Receipt Head, Commit prior Revision, Envelope parent
-Revision, target object, and payload digest must agree. `NoEffect`, `Conflicted`,
-and `Refused` must have no authority relation. A `stale_authoritative_head`
+Revision, target object, and payload digest must agree. Direct
+`ApplyAuthorEdit` `NoEffect`, `Conflicted`, and `Refused` must have no
+authority relation. `ProposalRevised` must have one Forward Author Action and
+a Proposal Revision and no Authoritative Commit. A `stale_authoritative_head`
 conflict must preserve an expected Head that differs from its recorded current
 Head. A
 missing, duplicate, mixed, malformed, or surplus relation fails closed. The
@@ -1311,10 +1335,11 @@ covers at least:
 25. the catalog's protocol route-catalog digest and migration-chain digest
     agree with the checked-in Release 1 inputs, so a same-release activation
     cannot skip storage migration by reusing a public protocol identity.
-26. one applied Author Edit plus `NoEffect`, `Conflicted`, and `Refused`
-    produces four typed Domain Receipts but only one Activity Event, Revision,
-    payload, Commit, Head change, and Author Action; exact retry returns each
-    original settlement and refuses every impossible authority relation.
+26. one `ApplyAuthorEdit.AuthoritativeApplied` plus `NoEffect`, `Conflicted`,
+    and `Refused` produces four typed Domain Receipts but only one Activity
+    Event, Authoritative Revision, payload, Authoritative Commit, Head change,
+    and Author Action; exact retry returns each original settlement and
+    refuses every impossible authority relation.
 
 ## 12. Normative invariants and handoff
 
@@ -1326,10 +1351,14 @@ covers at least:
    caller filtering and UUID uniqueness are insufficient.
 4. Authoritative State, Artifacts, and Operational Records remain disjoint
    durable spaces even when one transaction spans them.
-5. Every Core-started author result has one independent typed Receipt. Only an
-   authority-changing result has a committed authority sequence, Revision,
-   Commit, Head change, Author Action, and Project Activity Event; its complete
-   allocation is one atomic fact.
+5. Every Core-started author result has one independent typed Receipt.
+   Author Action, Project Activity, Authoritative Commit, Authoritative
+   Revision, and Proposal Revision allocate separately according to the
+   command's owner-defined matrix. Direct `ApplyAuthorEdit.AuthoritativeApplied`
+   has one atomic Receipt, Revision/payload, Head, Commit, Action, and Activity
+   relation. Direct `ApplyAuthorEdit` `NoEffect`, `Conflicted`, and `Refused`
+   have the typed Receipt and none of those authority or Activity rows.
+   Allocation presence cannot substitute for the typed result.
 6. External I/O never occurs before the required durable manifest and dispatch
    evidence, and never decides transaction success.
 7. Committed domain order is transactionally gapless and never derived from a
