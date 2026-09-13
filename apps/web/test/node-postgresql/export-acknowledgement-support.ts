@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import type { ChildProcess } from "node:child_process";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   createChapter,
@@ -21,6 +23,13 @@ import {
   withChallengeRetry,
 } from "../support/node-integration.ts";
 
+const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+const workerBinary = join(
+  repositoryRoot,
+  "target",
+  "release-package",
+  process.platform === "win32" ? "storyos-worker.exe" : "storyos-worker",
+);
 const BINDING = {
   client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
   security_policy_revision: "storyos.web-security-policy.release-1.v1",
@@ -177,8 +186,6 @@ export async function assertExportAdmissionFreezes<Request, Response extends Exp
     renameCorrelation: string;
     renameKey: string;
   };
-  repositoryRoot: string;
-  workerBinary: string;
 }): Promise<void> {
   let { baseUrl, server } = await options.startServer();
   try {
@@ -234,9 +241,7 @@ export async function assertExportAdmissionFreezes<Request, Response extends Exp
     })).status, "in_progress");
     assert.equal(await countRows(options.operationsTable, first.projectId), "1");
     assert.equal(await countRows("pinned_export_sources", first.projectId), "1");
-    await runStoryOSWorker({
-      repositoryRoot: options.repositoryRoot, workerBinary: options.workerBinary, args: ["--once"],
-    });
+    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
     const settled = await replay(first.fetchImpl);
     assert.equal(settled.acknowledgement, "accepted");
     assert.equal(settled.project.title, options.titles.original);
@@ -297,6 +302,7 @@ export async function assertExportHistoricalEvidence<Request, Response extends E
     assert.equal(await countRows(options.operationsTable, first.projectId), operationsBefore);
     assert.equal(await countRows("command_idempotency", first.projectId, keysExtra), keysBefore);
     assert.equal(await countRows("pinned_export_sources", first.projectId), pinnedBefore);
+    await runStoryOSWorker({ repositoryRoot, workerBinary, args: ["--once"] });
   } finally {
     await options.stopServer(server);
   }

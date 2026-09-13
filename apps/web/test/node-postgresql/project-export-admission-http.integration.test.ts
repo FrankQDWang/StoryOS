@@ -835,8 +835,6 @@ test("exportProjectArchive freezes the Accepted acknowledgement after later titl
       renameCorrelation: "018f0000-0000-7001-8000-00000000eb12",
       renameKey: "018f0000-0000-7001-8000-00000000eb22",
     },
-    repositoryRoot,
-    workerBinary,
   });
 });
 

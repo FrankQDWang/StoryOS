@@ -708,8 +708,6 @@ test("exportHumanReadableManuscript freezes the Accepted acknowledgement after l
       renameCorrelation: "018f0000-0000-7001-8000-00000000ec12",
       renameKey: "018f0000-0000-7001-8000-00000000ec22",
     },
-    repositoryRoot,
-    workerBinary,
   });
 });
 
