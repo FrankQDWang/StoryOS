@@ -33,6 +33,12 @@ endpoint, model, or account. They also do not prove internal Tool behavior.
 Unknown required limits remain a qualification gap; no prompt or completed
 response converts a best-effort field into a hard guarantee.
 
+The [official Remote MCP guide](https://ark.volcengine.com/region:cn-beijing/docs/82379/1827534?lang=zh)
+uses `require_approval: "never"` in its DeepWiki and InfoQuest examples. It also
+shows a separate approval continuation with `mcp_approval_response`,
+`approval_request_id`, and `previous_response_id`. Tool-name filtering alone
+does not prove read-only effects or constrain a destination supplied in arguments.
+
 ## Approval conclusion
 
 The examined controls do not establish a present requirement for a generic
@@ -53,6 +59,13 @@ different integration paths. The existing
 records the first-party route and CLI evidence. A Harness entitlement is not
 proof of in-Response hosted Tool support. Ordinary StoryOS-dispatched MCP calls
 retain the Tool Gateway boundary even when their service is sold with Agent Plan.
+
+The [official ArkCLI reference](https://github.com/volcengine/ark-cli/blob/main/skills/arkcli-helper/references/arkcli-helper.md)
+configures search MCP and `byted-web-search` in the Host Harness without changing
+the model or Provider configuration. The examined
+[SDK Tool union](https://github.com/volcengine/volcengine-python-sdk/blob/3b116781c5b8bb648f215b29587f2ec74d9e5d02/volcenginesdkarkruntime/types/responses/tool_param.py#L27-L34)
+does not establish a `code_interpreter` route. Concrete temporary-computation
+support remains unknown rather than a claimed Provider-wide absence.
 
 Exact capability, effect bounds, account availability, and spending evidence
 remain part of the selected integration's qualification. This planning note
