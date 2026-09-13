@@ -332,8 +332,8 @@ The StoryOS-owned interaction surface and exact view state from which an interac
 _Avoid_: Project identity, browser tab as authority, process-global current workspace, untrusted client selection, fabricated background UI state
 
 **Context Assembly**:
-The Host-owned seven-gate pipeline through which project-derived information must pass before it enters a model, Tool, MCP server, embedding service, or other processing destination: Operation Requirement Determination, Candidate Discovery, Source Eligibility Gate, Selection and Ranking, Bounded Projection, Context Assembly Manifest Commit, then Destination-specific Disclosure and Attempt. A returned external result crosses the same complete pipeline again before any later context use, and no gate may be skipped, merged, or reordered.
-_Avoid_: Prompt construction, retrieval query, provider request builder
+The Host-owned seven-gate pipeline for each StoryOS-controlled destination submission: Operation Requirement Determination, Candidate Discovery, Source Eligibility Gate, Selection and Ranking, Bounded Projection, Context Assembly Manifest Commit, then Destination-specific Disclosure and Attempt. Received results cross it before later StoryOS submission; a bounded Provider-hosted Operation has prior admission for its whole scope without invented Host gates for invisible internal steps.
+_Avoid_: Prompt construction, retrieval query, provider request builder, internal Provider trace
 
 **Purpose**:
 The explicit, bounded reason one operation processes context and the exact class of result it is allowed to produce for its named destination. Purpose constrains discovery, projection, disclosure, and completion but grants no source access, Capability, authority, or permission and cannot be broadened in place after assembly begins.
@@ -384,8 +384,8 @@ The minimum destination-visible projection required to perform one eligible Oper
 _Avoid_: Host Control Context, full transcript, whole-project prompt, author outline as plan
 
 **Run Continuity Context**:
-The bounded, source-bearing prior author inputs, Steering Input or Wait Resolution, Agent Decisions, and settled results strictly necessary to interpret and continue the current RunStep. It is not the full project Transcript, a conversation copy, or permission to carry every prior item forward.
-_Avoid_: Full thread, cloned transcript, complete Run history
+The bounded ordered conversation input and task state prepared for one RunStep, including prior author input, Steering Input, decisions, and settled results or their recorded compaction. It preserves known references and gaps without making every original source a fresh read or replacing durable conversation history.
+_Avoid_: Whole Project, Provider state as history, semantic influence graph
 
 **Working Target Context**:
 The exact current object of work and its necessary local structure and Revisions, such as the current passage or selection, adjacent structure needed to interpret it, applicable Authoritative Revisions, and any Proposal under review. It does not make the surrounding chapter, manuscript, project library, or author outline mandatory by proximity.
@@ -404,7 +404,7 @@ The second Context Assembly gate, which enumerates mandatory sources and locates
 _Avoid_: Source Eligibility Gate, context selection
 
 **Dynamic Retrieval**:
-The bounded discovery of non-universal context for one Operation Requirement through Deterministic Requirement Retrieval, an Agent Retrieval Request, or Author-required Retrieval. Retrieved content becomes Context Candidates only and cannot mutate the current Step Snapshot or an in-flight Model Attempt.
+The bounded discovery of non-universal context for one Operation Requirement through Deterministic Requirement Retrieval, an Agent Retrieval Request, or Author-requested Retrieval. Retrieved content becomes Context Candidates only and cannot mutate the current Step Snapshot or an in-flight Model Attempt.
 _Avoid_: Automatic prompt injection, unrestricted project search, mutable current context
 
 **Deterministic Requirement Retrieval**:
@@ -415,9 +415,9 @@ _Avoid_: Similarity-based first-turn injection, Agent Retrieval Request, implici
 A typed request in one persisted Agent Decision that states the retrieval Purpose, allowed source classes, scope, and budget for later context work. Its results can enter only a subsequent RunStep through a new Context Assembly and never rewrite the requesting Step Snapshot or Model Attempt.
 _Avoid_: Mid-step context mutation, free-form search side effect, automatic injection
 
-**Author-required Retrieval**:
-An explicit author instruction that makes its target mandatory for Candidate Discovery and eligible selection within the instruction's scope. Author origin grants neither source authority nor exemption from eligibility, budget, projection, or destination disclosure.
-_Avoid_: Author-owned document as authority, unconditional payload inclusion, Author Plan
+**Author-requested Retrieval**:
+A source lookup requested by the author through an explicit reference or interpreted by the Agent from an ordinary Message. It grants no source authority, access, budget exemption, or disclosure permission and creates no persistent context-control rule.
+_Avoid_: Context Pin, semantic intent classifier, source promotion, direct disclosure
 
 **Speculative Context Prefetch**:
 A disposable optimization that may warm a StoryOS-controlled, Project Scope-bound index or cache without making its results selected, manifested, or destination-visible. Any prefetch requiring a model, Tool, MCP server, embedding service, or other External Processing Destination is a separate operation that must cross all seven Context Assembly gates.
@@ -460,7 +460,7 @@ An immutable, versioned, Purpose- and source-class-specific comparison contract 
 _Avoid_: Universal relevance score, trust ranking, access-frequency boost, authority weight
 
 **Bounded Projection**:
-The fifth Context Assembly gate and its attributable minimum-necessary transformation of selected exact Context Source Versions under one Context Projection Policy for one Purpose, exact Processing Destination Identity, and applicable intake and disclosure policy revisions. Its immutable Projection and lineage are Operational Records, never Artifacts or Authoritative State; a lossy Projection is a new source-linked item recording its transformation policy and omitted meaning, never an overwrite or substitute for original evidence. Generating it through a model, Tool, or external service is a separate operation that recursively crosses all seven gates.
+The fifth Context Assembly gate and its attributable minimum-necessary transformation of selected input under a versioned policy, Purpose, destination, and intake boundary. Its immutable Operational Record retains known input references and loss or unknown-state evidence without replacing the source; each StoryOS-submitted generation request passes its own Context Assembly.
 _Avoid_: Source Revision, silent truncation, rewritten history, evidence replacement
 
 **Context Projection Policy**:
@@ -472,71 +472,51 @@ A Projection mode that preserves the complete eligible content and semantics of 
 _Avoid_: High-priority excerpt, auto-summary, head-tail truncation
 
 **Deterministic Context Excerpt**:
-A Projection mode that selects exact complete domain units or locator-bound ranges, such as paragraphs, Fiction Assertions, Research Claims, typed Tool fields, or event ranges, while recording original extent and every omitted boundary. It never cuts an arbitrary token span or claims that omitted material was inspected by the destination.
-_Avoid_: Raw token slice, silent head-tail trim, summary
+A Projection mode that selects exact locatable ranges or complete domain units and records the original extent and cut boundaries. It cannot replace Exact Required content with a partial excerpt or claim the destination inspected omitted material.
+_Avoid_: Silent truncation, summary, required-content omission
 
 **Derived Context Summary**:
-A lossy, source-bearing Projection created from exact input Context Source Versions and prior Projections under a recorded generation policy, generator identity, and Projection Loss Indicator. It never replaces its source history, and model-, Tool-, or externally generated summaries require their own complete Context Assembly operation.
-_Avoid_: Rewritten history, opaque compaction, source evidence
+A lossy Projection from recorded input and prior projection references under an identified generation policy, producer, and Projection Loss Indicator. It does not replace original evidence or prove complete semantic preservation, and a StoryOS-submitted generation request requires its own Context Assembly.
+_Avoid_: Rewritten history, semantic equivalence proof, source evidence
 
 **Context Compaction Projection**:
-An immutable Operational Record and Derived Context Summary over an exact bounded context range, recording every input Context Source Version and prior Projection, compaction policy, generation contract and producer, usage, output, and Projection Loss Indicator. It may be selected by later Steps but never rewrites Messages, Run Events, Tool results, Step Snapshots, manifests, or the original context history and never becomes an Artifact or Authoritative State.
-_Avoid_: Replacement history, mutable conversation summary, provider continuity object
-
-**Compaction Source Closure**:
-The complete transitive set of exact Context Source Versions, Projection lineages, compaction boundaries, and accumulated loss evidence underlying one Context Compaction Projection. Re-compaction must retain this closure rather than presenting a summary of a summary as original history.
-_Avoid_: Latest summary only, flattened provenance, opaque context checkpoint
+An immutable Operational Record of one bounded active-context replacement, with known input and prior projection references, producer, output or native opaque reference, reported usage, and loss or unknown-state evidence. It supplies later requests without rewriting prior Messages, Run Events, Tool results, Step Snapshots, manifests, or request history, and is neither an Artifact nor Authoritative State.
+_Avoid_: Durable history deletion, Memory Document, semantic erasure, mutable past request
 
 **Opaque Provider Continuity**:
-A provider-specific cache handle, prior-response reference, encrypted compaction object, or other non-inspectable continuity mechanism used only as part of a Wire Payload Projection. It cannot become StoryOS history, a Context Candidate, or the only evidence of Effective Destination Context, and is ineligible when its complete StoryOS-held source closure and Project Scope cannot be revalidated and inspected.
-_Avoid_: Context Compaction Projection, provider continuity as source of truth, independent replay state
+A Provider-specific cache handle, prior-response reference, encrypted compaction object, or other non-inspectable mechanism bound to its original destination and validated Adapter mapping. It may support an admitted request but is neither StoryOS history nor authorization, and unknown internal content or model influence is not reconstructed from the reference.
+_Avoid_: Context Candidate, Provider state as source of truth, shared Project session
 
 **Context Cache Entry**:
 A disposable prompt, retrieval, Projection, embedding, Tool-schema, or other acceleration product keyed by exact Project Scope, Context Source Versions, policy and transformation versions, qualification state, destination identity, grant, and Adapter mapping. It owns no source meaning, eligibility, authorization, historical evidence, or authority and is never reusable across either Project Scope identity.
 _Avoid_: Context Candidate, Context Assembly Manifest, durable memory, cached permission
 
 **Context Cache Reuse Decision**:
-The current fail-closed determination that one Context Cache Entry's complete dependencies still satisfy source identity and version, every applicable owning-domain qualification such as Lifecycle and Retention plus current memory-use settings for newly read Memory Documents, permission, policy, destination, grant, and Adapter requirements for one operation. Changed or unverifiable dependencies make the Entry immediately unusable even if physical invalidation or deletion is still pending.
-_Avoid_: Cache hit, stale-while-revalidate, prompt-prefix preservation, prior consent
+The current fail-closed check of a cache entry against its actual input, Scope, permission, policy, destination, grant, and Adapter dependencies. Cached new-source reads require current source versions and applicable Memory settings; cached historical input uses its recorded identity and retained-copy restrictions without recursively resolving every mentioned source to latest.
+_Avoid_: Cache hit, stale read as current, prior consent, semantic influence closure
 
 **Context Inspect**:
 A read-only author audit of current or historical Operation Requirements, discovery, eligibility, selection, Projections and loss, manifests, Wire Payload Projections, Disclosure Events, and Destination Attempts, preserving historical facts while showing current invalidity separately. Its exact wire view means the exact non-secret application payload and protocol projection plus opaque secret-injection placeholders, never credential values, credential-value digests, or an unredacted transport envelope. Inspection obeys current Project Isolation, permissions, and redaction and distinguishes exactly reconstructable, reference-known, and provider-opaque context without presenting inference as fact.
 _Avoid_: History rewrite, model-use claim, unredacted debug dump
 
-**Context Include**:
-An author control bound to one exact Operation Requirement that makes one named source, exact Context Source Version, fragment, or domain object a Mandatory Context Candidate for that operation only. It never follows a later source version or grants authority, Instruction Authority, any owning-domain access qualification, budget exemption, or Disclosure Eligibility.
-_Avoid_: Context Pin, source promotion, automatic latest version
-
-**Context Pin**:
-A prospective Author Context Requirement scoped to the Next Operation, Current AgentRun, or Project and bound either to one Exact Context Source Version or to Follow Source Identity with fresh resolution and eligibility on every operation. An Artifact or Authoritative State source uses its exact Revision as that version; other source families use their owning immutable version boundary rather than inventing a Revision. It requires logical consideration rather than universal disclosure, inherits no prior memory read permission, and applies current memory-use settings when it reads Memory Documents; direct governed use of the unchanged raw source remains separately eligible. It fails unmet rather than guessing when identity becomes ambiguous, split, merged, or deleted.
-_Avoid_: User prerequisite, permanent prompt text, implicit latest, authority marker, fabricated Revision
-
-**Context Exclude**:
-An author control scoped to one Operation, AgentRun, or Destination that bars a named source, Context Source Version, fragment, data category, and its protected provenance closure from future unsubmitted Destination Attempts. It outranks Include and Pin; an already committed Manifest remains historical while pending work is cancelled and reassembled, and a resulting mandatory-context gap becomes explicitly Degraded or Blocked.
-_Avoid_: Outbound Disclosure retraction, Manifest edit, Memory Note, hidden omission
-
-**Author Context Control Precedence**:
-The fail-closed order in which Tombstone, current permissions, Capability, destination policy, and applicable memory-use settings outrank Exclude; Exclude outranks Include and Pin; and Include and Pin outrank ordinary dynamic ranking. A Memory Note is conversational guidance and does not enter this control order. A positive control can never override a harder negative eligibility or disclosure boundary.
-_Avoid_: Last control wins, UI order, ranking override
-
 **Default Context Experience**:
-The author-facing promise that a stable editor-integrated Agent automatically receives the eligible current Working Target and necessary project continuity without requiring the author to configure context scopes, source-version strategies, a character sheet, a Context Pin, or a Project Instruction. The precise controls and optional Project Instruction remain author conveniences surfaced only through plain-language or simple direct actions when needed, never prerequisites or routine context-management ceremony.
-_Avoid_: Manual context setup, required character sheet, scope dropdown workflow, context confirmation on every step
+The author-facing promise that the editor Agent receives the eligible current Working Target, instructions, and bounded conversation continuity, with optional Memory navigation and on-demand reads. Ordinary assistance needs no context scopes, source-version strategies, pins, character sheet, Project Instruction, or routine confirmation; inspection and real settings remain available when needed.
+_Avoid_: Manual context setup, semantic control registry, context confirmation on every step
 
 **Context Reference**:
 A Reference Only Projection exposing bounded catalog information and an exact source-qualified locator without exposing the referenced payload. It lets an Agent request later retrieval but does not prove that the referenced content was model-visible, eligible for disclosure, or used.
 _Avoid_: Loaded context, citation as disclosure, implicit retrieval
 
 **Projection Loss Indicator**:
-The structured account of semantic classes, ranges, modalities, precision, or uncertainty intentionally omitted or transformed by a lossy Projection. It is inspection and sufficiency evidence rather than a generic warning or permission to hide unknown loss.
-_Avoid_: Truncated flag, confidence score, disclaimer
+The recorded known cuts, transformations, expected information loss, and unknown semantic effects of one lossy Projection. Deterministic cuts can be exact; generated output cannot prove an exhaustive inventory of omitted meaning or model influence.
+_Avoid_: Exact semantic-preservation proof, hidden truncation, confidence score
 
 **Context Assembly Manifest**:
-The immutable provider-neutral Operational Record committed at the sixth Context Assembly gate before any StoryOS Controlled or External Processing Destination I/O, binding the exact requester User and Project Scope, Operation Requirement and Operation Input Snapshot, applicable Step Snapshot and Project Instruction Binding, Context Sufficiency Decision, considered Context Candidates and eligibility results, selected Skill and Tool context, exact selected Context Source Versions and Projections, Ranking Profile and results, budgets, exclusions, and unmet needs. It proves StoryOS's complete logical preparation rather than destination use or wire bytes; failure to persist it prevents all destination I/O.
+The immutable provider-neutral Operational Record of StoryOS preparation, committed at gate six before controlled destination I/O and binding Scope, requirement, input snapshot, sufficiency, considered candidates, selected input, known references, projections, policies, budgets, and gaps. It establishes neither Provider-internal content nor model attention; failure to persist it prevents submission.
 _Avoid_: ContextManifest, prompt dump, model-use proof, mutable request log
 
 **Destination-specific Disclosure and Attempt**:
-The seventh Context Assembly gate, which independently minimizes and authorizes the Effective Destination Context for each exact model, Tool, MCP server, embedding service, or other processing destination, establishes one Destination Attempt for every concrete planned execution, and records every dispatch, retry, fallback, or destination change through its Destination Context Manifest and owning execution evidence. Only an External Processing Destination also creates Outbound Disclosure evidence; cache reuse, prior-response linkage, or an existing Tool result can optimize computation or transport only after the preceding six gates and current eligibility revalidation.
+The seventh Context Assembly gate that minimizes and authorizes one StoryOS-controlled submission, binds its exact destination and any permitted hosted processing, and establishes its Destination Attempt evidence. Cache or continuation grants no authority; an external dispatch requires disclosure evidence, while invisible Provider-internal steps do not create invented Host Attempts.
 _Avoid_: Shared provider payload, cached authorization, prior Destination Attempt reuse
 
 **Settled Source Version**:
@@ -964,7 +944,7 @@ A ring-fenced portion of each applicable Budget Hard Ceiling reserved for cohere
 _Avoid_: General spare budget, retry allowance, shared burst pool
 
 **Outbound Disclosure**:
-The transfer of Project Scope-bound information beyond the StoryOS Controlled Processing Boundary to one named External Processing Destination, including generated queries, excerpts, metadata, or Artifact content. Transformation does not stop information from being a disclosure; every transfer must follow a committed Context Assembly Manifest and Destination Context Manifest under the same Project Scope, fit one exact authorized path under destination policy—an effective Project Destination Grant, an applicable Capability Grant or Tool Approval for a Tool Effect Request, or an exact Destination Disclosure Approval—and retain attributable evidence of its Purpose, data categories, and project sources.
+The transfer of Project Scope-bound information beyond the StoryOS Controlled Processing Boundary to a named External Processing Destination, including generated queries, excerpts, metadata, or Artifact content. Each StoryOS-controlled dispatch requires prior manifests and exact destination authority; bounded hosted outward processing uses the owning operation's admitted scope, with unobserved internal transfers remaining unknown rather than invented Host dispatch evidence.
 _Avoid_: External tool call, network access, upload
 
 **Context Processing Boundary**:
@@ -1036,7 +1016,7 @@ The controlled virtual monotonic clock and explicit interleaving schedule used b
 _Avoid_: Sleep-based test, scheduler race, accidental timeout, throughput benchmark as semantic gate
 
 **Destination Context Manifest**:
-The immutable provider-neutral Operational Record describing one exact minimum-necessary Effective Destination Context under one Context Assembly Manifest, exact requester User and Project Scope, Purpose, Processing Destination Identity and its current evidence revision, processing-boundary class, policy, applicable grant, approval requirement, and any authorization already effective when it commits. It is required for every StoryOS Controlled or External Processing Destination and is neither an actual Destination Attempt nor proof of destination-internal use; a later one-shot Destination Disclosure Approval binds the established Attempt rather than mutating this Manifest.
+The immutable provider-neutral Operational Record describing the minimum-necessary input and referenced context for one admitted operation, with its Context Assembly Manifest, exact Scope, Purpose, destination identity/evidence, processing boundary, policy, and authorization requirements. It binds permitted hosted processing when applicable but proves neither internal Provider consumption nor actual submission; a later one-shot Approval binds the established Attempt without changing the Manifest.
 _Avoid_: Context Assembly Manifest, provider request, Outbound Disclosure Event
 
 **Outbound Disclosure Manifest**:
@@ -1044,8 +1024,8 @@ The immutable Operational Record specializing one Destination Context Manifest f
 _Avoid_: Destination Context Manifest alone, Outbound Disclosure Event, reusable authorization, provider request log
 
 **Effective Destination Context**:
-The complete logical content, instructions, Tool contracts, and other context StoryOS makes newly available or intentionally references for one exact Destination Attempt, including transmitted material and known cache, prior-response, remote-state, or provider projections. Every component is classified as exactly reconstructable, reference-known, or provider-opaque; unknown provider-internal retention, transformation, or use remains unknown and can never be presented as exact fact.
-_Avoid_: Wire Payload Projection, request delta, provider cache entry, opaque continuity state
+The logical content, instructions, Tool contracts, and known prior state StoryOS prepares or intentionally references for one exact Destination Attempt. Evidence distinguishes exact input, known references, Provider reports, and opaque internal state without asserting complete internal reconstruction or model attention.
+_Avoid_: Wire Payload Projection, request delta alone, Provider-internal replica
 
 **Wire Payload Projection**:
 The exact non-secret provider-, protocol-, and Adapter-specific application payload bytes, frames, fields, or access-controlled payload references prepared for one Destination Attempt, together with opaque Credential References or secret-injection slots, their mapping version, and a digest over non-secret material only. Credential values, credential-value digests, and credential-bearing transport-envelope bytes remain ephemeral and are never persisted as this Projection. It is bound to any local outbound dispatch through its Disclosure Event and is wire-form evidence rather than proof of destination receipt, the canonical semantic request, or the complete Effective Destination Context.
@@ -1068,7 +1048,7 @@ The immutable Operational Record and execution evidence for one concrete planned
 _Avoid_: Logical Invocation, prior Attempt reuse, Disclosure Manifest, SDK hidden retry
 
 **Destination Attempt Admission Decision**:
-The immutable fail-closed Host decision at the final pre-I/O boundary for one exact Destination Attempt, revalidating its Project Scope, source and Projection dependencies, Lifecycle, current memory-use settings for newly read Memory Documents, Context Exclude, requester permission, grants and exact Tool or Destination Disclosure Approval when required, destination identity and its evidence revision, Registration status, governing intake contract, policy, and budget against current versions. Any changed or unverifiable dependency refuses submission, preserves prior manifests, settles the unsubmitted Attempt, and requires new Context Assembly; only an admitted Decision may cross the destination boundary.
+The immutable fail-closed Host decision immediately before I/O, revalidating exact Scope, actual input and reference dependencies, retained-copy restrictions, new-source read permissions and applicable Memory settings, grants, required Approvals, destination identity/evidence, Registration, intake contract, policy, and budget. An invalid required dependency refuses submission and preserves prior evidence; ordinary source changes do not recursively invalidate recorded conversation history.
 _Avoid_: Context Assembly Manifest, cached authorization, provider retry flag, post-send audit
 
 **Capability Grant**:
@@ -1084,7 +1064,7 @@ The Approval kind with two distinct exact request targets: a StoryOS ToolCall bo
 _Avoid_: Destination Disclosure Approval, Tool Exposure, Capability Grant, Acceptance
 
 **Destination Disclosure Approval**:
-The Approval kind bound to one exact Operation Requirement, Processing Destination Identity, Purpose, outbound data categories, hard bounds, Destination Context Manifest, source and Projection closure, governing policy, and one already-established but unsubmitted Destination Attempt. It may be created only after that Attempt and its exact Wire Payload Projection exist, and the final Destination Attempt Admission Decision must bind and revalidate the Approval before I/O. It can authorize only that exact disclosure boundary; changing destination, Purpose, category, bound, or logical or wire payload closure requires a new Decision, while any reusable ordinary authorization requires a Project Destination Grant setting. Every Destination Disclosure Approval is one-shot.
+The one-shot Approval bound to an exact unsubmitted Destination Attempt, its Operation Requirement, destination, Purpose, outbound categories, bounds, manifests, actual input/reference dependencies, non-secret Wire Payload Projection, and governing policy. Final admission revalidates it; a changed approved request requires a new Decision, and no approval proves a semantic influence closure or grants hosted execution authority.
 _Avoid_: Project Destination Grant, Tool Approval, blanket provider consent, prior disclosure
 
 **Policy Decision**:
