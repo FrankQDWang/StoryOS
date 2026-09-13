@@ -2,6 +2,11 @@
 
 Status: research note for StoryOS issue #48, researched against first-party sources on 2026-07-14.
 
+The current StoryOS execution and authorization contract is
+[ADR 0034: Bound Provider-hosted Tool Operations](../adr/0034-bound-provider-hosted-tool-operations.md).
+The comparisons below retain their dated research scope; they do not certify
+current Agent Plan capability or replace that contract.
+
 ## Scope and source boundary
 
 This note answers four related questions without treating similarly named mechanisms as interchangeable:

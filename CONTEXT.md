@@ -1072,7 +1072,7 @@ The immutable fail-closed Host decision at the final pre-I/O boundary for one ex
 _Avoid_: Context Assembly Manifest, cached authorization, provider retry flag, post-send audit
 
 **Capability Grant**:
-A bounded authorization to request named operations over specified project resources, external destinations, data categories, budgets, and time. Effective authority is always the non-escalating intersection of the project policy ceiling, the current Run's Capability Grant, and the exact capability requested by a ToolCall; approval may narrow or extend a lower layer only within its parent boundary.
+A bounded authorization to request named operations over specified project resources, external destinations, data categories, budgets, and time. Effective authority is always the non-escalating intersection of the project policy ceiling, the current Run's Capability Grant, and the exact capability requested by a StoryOS ToolCall or Provider-hosted Operation; approval may narrow or extend a lower layer only within its parent boundary.
 _Avoid_: Role, permission flag, discovered tool, model-visible tool
 
 **Approval**:
@@ -1080,7 +1080,7 @@ An immutable author decision over one exact typed operational request, input dig
 _Avoid_: Permission flag, confirmation dialog, Acceptance, permanent project setting
 
 **Tool Approval**:
-The Approval kind bound to an exact ToolSpec version, arguments, resolved targets, Tool Effect Request, scope, and governing policy. It may create a grant for only that ToolCall or a bounded remainder of the current Run; high-risk disclosure, external writes, and irreversible effects remain one-shot.
+The Approval kind with two distinct exact request targets: a StoryOS ToolCall bound to its ToolSpec, arguments, resolved targets, and Tool Effect Request, or a Provider-hosted Operation bound to its complete registered Tool set, intake, effects, destinations, and bounds under the governing policy and Project Scope. It may grant only that operation or a bounded remainder of the current Run; high-risk disclosure, external writes, and irreversible effects remain one-shot, and neither target authorizes the other.
 _Avoid_: Destination Disclosure Approval, Tool Exposure, Capability Grant, Acceptance
 
 **Destination Disclosure Approval**:
@@ -1188,7 +1188,7 @@ A sampleable, droppable, and redactable traces, metrics, or logs view derived fr
 _Avoid_: Durable Run evidence, provider log as truth, recovery source, audit ledger
 
 **StoryOS ToolSpec**:
-The provider-neutral, versioned semantic contract for one Tool, consisting only of its callable input, output, and error contract, Destination Context Intake Contract, Tool Effect Envelope, execution policy, and result and provenance rules. Implementation source and credentials belong to Tool Registration, while project enablement, provider compatibility, Exposure, grants, Approval, pricing, and invocation state remain separate dynamic records.
+The provider-neutral, versioned semantic contract for one Tool, consisting only of its callable input, output, and error contract, Destination Context Intake Contract, Tool Effect Envelope, execution policy, and result and provenance rules. Implementation source belongs to Tool Registration and credential bindings belong to scoped project-use records, while project enablement, provider compatibility, Exposure, grants, Approval, pricing, and invocation state remain separate dynamic records.
 _Avoid_: Provider function schema, Tool Registration, installed tool, ToolCall
 
 **Destination Context Intake Contract**:
@@ -1200,8 +1200,12 @@ Any Transcript, Project Instruction, Working Target, Agent Memory, project data,
 _Avoid_: Convenience metadata, default Tool context, provider session state
 
 **Provider-hosted Tool Destination**:
-A Tool executed by or behind a model Provider rather than StoryOS's controlled Tool Gateway implementation boundary. It remains a distinct External Processing Destination with its own Registration, Intake Contract, Capability, Destination Context Manifest, Outbound Disclosure, and Destination Attempt evidence and inherits none of the model destination's context or permission.
+A Tool processing boundary operated by or behind a model Provider and declared within a separately admitted Provider-hosted Operation. Its exact Registration, intake, permitted outward processing, and authority are distinct from the model destination's, while the operation binds the applicable manifests and actual submission evidence without inventing Host dispatch records for invisible internal steps; it inherits no model context or permission.
 _Avoid_: Model Tool Request, StoryOS ToolCall, provider prompt capability, inherited disclosure
+
+**Provider-hosted Operation**:
+The bounded search, read, or temporary-computation work that one exact Model Attempt may cause through its complete admitted hosted Tool set. This Operational Record binds the explicit intake, permitted effects, destinations, authority, budget, and result evidence before submission without claiming StoryOS control of each Provider-internal step.
+_Avoid_: StoryOS ToolCall, AgentRun, Agent Decision, Provider session, per-step Host approval
 
 **Telemetry Disclosure**:
 An Outbound Disclosure to a traces, metrics, logs, debug, crash-reporting, or support destination, defaulting to sanitized operational categories, identifiers, timings, and digests rather than project prose, prompts, research, Tool results, Project Instructions, or credentials. It is independently current-eligibility and Redaction checked, never enters Project Export or Restore, and telemetry's diagnostic purpose never grants ambient access to durable Run or Artifact payloads.
@@ -1236,7 +1240,7 @@ The sole StoryOS-owned authorization and execution boundary for every StoryOS-di
 _Avoid_: Tool Registry, provider runtime, direct adapter call
 
 **Credential Reference**:
-An opaque, host-owned, Project Scope-bound reference to credential material held by a deployment-specific secret backend and resolved only inside the execution boundary that needs it. PostgreSQL may retain its backend identity, non-secret locator and generation, availability or rebinding state, and Project Scope-bound use-binding metadata, but never the value or a value digest; the Reference, binding, and availability evidence grant no destination use, while Registrations and Operational Records may identify them without containing the secret. The Foundation-local backend is macOS Keychain, later controlled-cloud deployments use the same resolver contract with a managed secret service, and environment variables are development/test inputs only. Ordinary database backups, logs, support material, and Project exports omit secret material; an import whose destination cannot resolve a Reference leaves it explicitly Unbound until an authorized rebind. Models, MCP Apps, generated programs, Tool arguments, outputs, transcripts, and external servers cannot inspect, select, or transport credential material.
+An opaque, host-owned, Project Scope-bound reference to credential material held by a deployment-specific secret backend and resolved only inside the execution boundary that needs it. PostgreSQL may retain its backend identity, non-secret locator and generation, availability or rebinding state, and Project Scope-bound use-binding metadata, but never the value or a value digest; the Reference, binding, and availability evidence grant no destination use, while scoped use bindings and Operational Records may identify them without containing the secret. The Foundation-local backend is macOS Keychain, later controlled-cloud deployments use the same resolver contract with a managed secret service, and environment variables are development/test inputs only. Ordinary database backups, logs, support material, and Project exports omit secret material; an import whose destination cannot resolve a Reference leaves it explicitly Unbound until an authorized rebind. Models, MCP Apps, generated programs, Tool arguments, outputs, transcripts, and external servers cannot inspect, select, or transport credential material.
 _Avoid_: API key field, encrypted database secret, secret-value digest, portable secret export, production environment variable
 
 **Tool Effect Envelope**:
