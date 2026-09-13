@@ -4,169 +4,125 @@
 - Wayfinder resolution: [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Parent domain model: [Artifact and Authoritative-State Domain Model](artifact-domain-model.md)
-- Context and disclosure refinement: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
+- Context and disclosure owner: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - Authority decision: [ADR 0001](../adr/0001-separate-authoritative-state-artifacts-and-operational-records.md)
-- Ownership and deployment decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
-- Research inputs: [Fiction memory and research provenance semantics](../research/fiction-memory-and-research-provenance-semantics.md) and [Durable, inspectable Agent memory architecture](../research/durable-inspectable-agent-memory-architecture.md)
+- Ownership decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
+- Memory decision: [ADR 0035](../adr/0035-use-background-generated-project-memory.md)
 
 ## 1. Scope and authority
 
-This specification defines the logical contract for Project Scope-bound Agent
-continuity across threads and AgentRuns, typed fiction assertions, durable
-memory candidates, admission and lifecycle, author preferences, operational
-lessons, research claims and evidence, suppression, and rebuildable retrieval
-projections.
+Agent Memory supports continuity across Project Conversations and AgentRuns.
+StoryOS uses the Codex CLI mechanism: extract useful context from eligible prior
+conversation records in background work, consolidate readable memory documents,
+supply a bounded navigation summary, and let the Agent search and read details
+when relevant. Grok Build is a supporting reference, not the deciding contract.
 
-It refines the existing separation among Authoritative State, Artifacts, and
-Operational Records. It does not create another durable truth space and does
-not authorize implementation work. Database layout, wire representations,
-retrieval algorithms, user-interface layout, and retention periods remain with
-their owning Wayfinder tickets.
+Memory is separate from active model-context compaction, durable conversation
+history, and Provider continuation. It is an aid to recall, not a second source
+of fictional truth or a rule system for interpreting every author statement.
+General model prompts guide extraction, consolidation, and retrieval. StoryOS
+does not classify ordinary creative requests into a special exclusion registry,
+per-claim admission lifecycle, or deterministic semantic removal graph.
 
-Every Settled Source, Candidate, Admission Decision, Entry, Suppression,
-Evidence Relation, retrieval row, embedding input, cache key, and historical
-context reference binds one trusted `ProjectScope { owner_user_id, project_id }`.
-Project Scope is checked before discovery and after index lookup; a global
-namespace, opaque object ID, content digest, or caller-supplied owner cannot
-cross either the User or Project boundary. Missing or mismatched scope fails
-closed and cannot be softened by relevance, confidence, or rank.
+All memory inputs, documents, notes, jobs, indexes, tool reads, and disclosures
+bind one trusted `ProjectScope { owner_user_id, project_id }`. Background work
+cannot pool content across Projects or Users. A content hash, similar wording,
+or shared Provider account grants no access. The PostgreSQL and isolation
+contract remains in force; a Markdown representation is not an unmanaged local
+store or permission to copy the Codex runtime.
 
-StoryOS serves Discovery Writing. Long-term memory supports continuity around
-the passage and creative choices currently placed before the Agent; memory
-maintenance never interrupts active writing with an unsolicited confirmation
-request.
+This is a semantic contract. It does not implement Memory, choose physical
+paths or database tables, calibrate budgets, or release a product stage.
 
-## 2. Durable information spaces and the Agent Memory view
+## 2. Durable information spaces and generated documents
 
-StoryOS preserves three kinds of durable information:
+StoryOS retains three durable information spaces:
 
-| Durable space | Owns | Does not prove |
-|---|---|---|
-| Authoritative State | author-approved current fictional truth, creative decisions, and effective author constraints | that every Agent inference or research claim is true |
-| Artifacts | inspectable candidates, drafts, research, analysis, feedback, inferred preferences, operational lessons, and other produced content | authority merely because content was retained, cited, or admitted |
-| Operational Records | what a Run, Tool, policy, approval, failure, retry, or lifecycle transition actually did | a lasting creative fact, preference, Tool rule, or Skill |
+| Space | Role in Memory |
+|---|---|
+| Authoritative State | current author-owned prose, fiction facts, and explicit constraints that the Agent can read through their domain tools |
+| Artifacts | conversation Messages, inspectable source material, generated Memory Documents, and author-requested Memory Notes |
+| Operational Records | exact maintenance inputs, execution outcomes, publication and usage observations, and historical context evidence |
 
-`Agent Memory` is a source-bearing use-case view over exact records in those
-spaces. It may select, summarize, and index eligible content for a current
-need, but it never owns an independently writable fact. Every durable inference
-remains a typed Artifact, and every authoritative change still uses its owning
-author-authorized domain command.
+A `Memory Document` is generated, non-authoritative text with a stable document
+identity and revision. The set includes per-conversation summaries, consolidated
+notes, and a short navigation summary. Markdown supports bounded search and
+read; no vector database, graph, or embedding call is required for ordinary
+Memory. Storage owns durable revisions and the current published document set.
+Memory Documents and Memory Notes use the existing Tool Artifact family, with
+their content role defined by this contract. They add no top-level Artifact
+family or Creator: model work binds an AgentRunStep, and a memory tool write
+binds its ToolCall. Background Workers schedule that existing bounded work.
 
-Existing authoritative objects, Research Claims, and Operational Records are
-not copied into generic memory objects merely to make them searchable. Search
-access to an existing source is a projection over that source. Newly inferred
-or generalized durable content is a typed Memory Candidate and must pass Memory
-Admission before ordinary long-term recall.
+The consolidation Agent can replace a document's current content and remove
+obsolete generated documents. Publication retains the revision identity needed
+by already recorded uses, subject to retention. It does not overwrite an older
+Run's input evidence or alter the source conversation. Document versioning is
+not a separate immutable domain object and decision for each inferred sentence.
 
-If a memory projection conflicts with its source, the source wins. The
-projection immediately loses current eligibility and is invalidated or rebuilt.
-Repeated retrieval, model synthesis, confidence, age, or author silence never
-raises authority.
+Generated Memory may record preferences, working context, useful outcomes,
+failed approaches, and unresolved uncertainty. It does not turn an assistant
+suggestion, tentative fiction, or remembered statement into Authoritative State.
+Existing source objects remain independently readable and inspectable.
 
-## 3. Working Context, settlement, and candidate extraction
+## 3. Background extraction
 
-### 3.1 Working Context is not long-term memory
+Memory generation and use can be enabled or disabled separately. A Project
+Conversation can be excluded from future generation without deleting it or
+rewriting the active model context. These are explicit settings on identified
+resources; the Agent need not prove the meaning of every sentence to enforce
+them. Setting defaults and exact routes belong to release and protocol owners.
 
-The editor buffer, current model stream, current Tool progress, active retry,
-and Run-local working material may enter the current Run's bounded Working
-Context. They cannot directly source a long-term Memory Candidate.
+An eligible input is a durable snapshot of a prior, sufficiently idle Project
+Conversation that permits generation and whose records the job may read. Skip
+active conversations and provisional streams. A conversation need not be closed
+forever: a later settled snapshot can replace its earlier extraction input.
+Memory does not read an unsettled editor buffer, promote pending work, or use a
+previous memory summary as independent proof of what happened.
 
-Long-term extraction begins only from an exact `Settled Source Version`: a
-durably committed source revision or typed terminal outcome with defined
-settlement meaning. Eligible examples include a committed author edit, a
-settled Proposal outcome, a terminal AgentRun or ToolCall outcome, and complete
-author feedback that has been sent and persisted.
+Phase 1 supplies bounded conversation records to the model and requests a
+conversation summary, reusable memory notes, and source references. It may
+return no useful memory. General instructions ask it to retain useful context,
+keep uncertainty, and distinguish author decisions from proposals and guesses;
+there is no fixed taxonomy or minimum incident count for every memory claim.
+Secret handling applies before model submission and before publication.
 
-Settlement outcomes retain their owning distinctions. AgentRun outcomes must
-not flatten Succeeded, PartiallySucceeded, Failed, and Cancelled. Budget
-exhaustion is a typed Failed reason, not a top-level AgentRun outcome. If an
-output Artifact is later superseded, that fact is separate Artifact provenance
-and is not an AgentRun outcome. ToolCall outcomes must not flatten success,
-retryable failure, terminal failure, cancellation, and timeout. A retry that
-later succeeds does not become a lasting failure lesson, and author cancellation
-does not become evidence about Tool capability.
+The job records the exact input version, model and prompt versions, output,
+and outcome. Bounded selection, leases, idempotency, concurrency limits, and
+retry rules protect execution. Repeated delivery does not create duplicate
+current inputs. These controls prove which work completed, not that extracted
+statements are true. Ordinary writing does not wait for this work or receive
+per-item memory confirmation requests.
 
-### 3.2 Extraction is asynchronous, typed, and idempotent
+## 4. Consolidation and selective recall
 
-Extraction is a post-settlement derivation. It records the exact source
-identity and revision, settlement fact, extraction-policy version, candidate
-kind, supported scope, creator, and derivation evidence. Reprocessing the same
-semantic input under the same policy is idempotent. A later extraction-policy
-version is a new, attributable derivation and may explicitly replace prior
-results.
+Phase 2 consolidates a bounded set of extraction outputs and pending Memory
+Notes within one Project Scope. It updates per-conversation summaries,
+consolidated memory, source links, and the navigation summary. Only one
+publication for that Project may advance the current set at a time; a stale or
+failed job cannot publish over a newer set or expose a partial document set.
+Unchanged input may produce a no-op. Failed work can resume under the existing
+Worker and execution contracts without blocking the editor.
 
-The protocol ticket owns the concrete idempotency representation, but it must
-distinguish at least the extraction-policy version, source type and identity,
-source revision, candidate kind, and normalized claim scope. Event replay,
-Worker restart, and repeated queue delivery must not duplicate one candidate.
+The consolidation Agent can merge, rewrite, or remove generated notes using
+general instructions and available sources. New author feedback, changed
+inputs, age, and observed use can guide this work. Retention and input budgets
+bound the set; an index and a successful model output do not certify semantic
+correctness. Any use counter records an observed read or reported citation,
+not proof that the model attended to the material.
 
-When a source revision changes, candidates derived from the former revision
-are re-evaluated. A replacement is extracted from the new settled revision; it
-never edits the old candidate in place.
+At the start of a relevant conversation, Context Assembly may supply a small
+memory navigation summary and general read guidance. It does not inject the
+entire memory collection into every model call. The Agent decides whether to
+search the notes, read a relevant document, or consult current domain sources.
+Tools enforce Project Scope, access, actual lifecycle restrictions, and bounds
+before returning content. Source text stays reference material and gains no
+instruction authority merely by entering a memory document.
 
-### 3.3 Source meaning constrains extraction
-
-- An Acceptance with Acceptance Result Applied, and its selected applied
-  Operations, may create Authoritative State through the existing Acceptance
-  contract. Memory indexes the resulting Authoritative Revision; it does not
-  derive a second authoritative fact.
-- A Proposal Rejection and its selected rejected Operations are rejection
-  evidence and may source a bounded Inferred Preference. Rejection alone does
-  not establish a general preference.
-- A withdrawn Proposal records withdrawal and ordinarily supports no preference
-  inference.
-- One terminal ToolCall proves that one execution had that outcome. A reusable
-  Operational Lesson requires multiple comparable, settled, causally
-  independent Operational Records plus opposing evidence where available.
-- A final text difference does not by itself explain author intent. Extraction
-  uses typed domain outcomes and feedback rather than freely assigning meaning
-  to a content diff.
-- An existing memory projection is never an independent original source.
-  Evidence independence is evaluated at the underlying Authoritative Revision,
-  Artifact Revision, or Operational Record.
-
-## 4. Memory Candidate and Memory Admission
-
-Candidate extraction and ordinary recall admission are independent stages.
-
-A `Memory Candidate` says only that one typed, source-bearing inference may be
-worth retaining. It is not necessarily true, sufficiently supported, broadly
-applicable, permitted, or eligible for recall. Initial typed candidate kinds
-are `FictionAssertionCandidate`, `InferredPreference`, and
-`OperationalLesson`.
-
-The Candidate is an Artifact. Each Admission Decision and appended eligibility
-or lifecycle fact is an immutable Operational Record. An Admitted Memory Entry
-is the non-authoritative projection of one exact Candidate Revision under one
-exact passing Admission Decision; if materialized for audit or access, that
-materialization is immutable and remains rebuildable from those canonical
-records.
-
-Memory Admission evaluates one exact candidate and exact source set under one
-policy revision. It checks at least:
-
-- the candidate kind is consistent with its source classes;
-- every claim is actually supported by the cited source content;
-- project, work, continuity, branch, character, scene, story-time, narrative,
-  Agent, task, and environment scopes are no broader than the evidence;
-- a local or single event has not been generalized into a lasting rule;
-- the claim does not conflict with current applicable Authoritative State;
-- every exact source revision still exists and remains applicable;
-- no later revision, correction, invalidation, or supersession has displaced it;
-- current suppression, privacy, permission, role, and project-isolation rules
-  allow recall; and
-- claimed independent support resolves to independent original sources rather
-  than a cycle of derived memory objects.
-
-A passing decision creates an `Admitted Memory Entry`, which remains a
-non-authoritative projection of that candidate. Other decisions may leave the
-candidate pending, quarantined, suppressed, rejected, invalidated, superseded,
-or expired. Those histories remain inspectable but do not participate in
-ordinary recall.
-
-Retrieval ranking chooses only among currently eligible sources and Admitted
-Memory Entries. Ranking never decides truth, evidence sufficiency, permission,
-admission, or authority.
+Memory is fallible context. The Agent follows current author instructions and
+checks current sources when the task depends on their present value. Ranking
+measures relevance, not truth, authority, or permission. Ordinary recall does
+not require a Memory Candidate, Memory Admission, or Admitted Memory Entry.
 
 ## 5. Fiction Assertion semantics
 
@@ -200,31 +156,20 @@ not a domain conflict.
 
 An `Author Preference` is an explicit, future-facing, scope-bounded author
 constraint in Authoritative State. It is created or changed only through its
-author-authorized domain path. Memory may retrieve the source but cannot create
-or widen the constraint.
+author-authorized domain path. Memory may retrieve it but cannot create or
+widen it.
 
-An `Inferred Preference` is a non-binding Candidate derived from author action
-or feedback. It remains local to the evidenced scope, can be contradicted by a
-current instruction, and never becomes binding through repetition, confidence,
-silence, admission, or retrieval.
+An `Inferred Preference` is a non-binding interpretation of prior author action
+or feedback. An `Operational Lesson` is a non-binding account of a potentially
+useful execution outcome. Either can appear in generated notes with relevant
+sources and uncertainty; neither requires a separate Candidate or Admission
+state. Repetition, confidence, silence, or retrieval grants no authority.
 
-An `Operational Lesson` is a non-binding Candidate generalized from multiple
-comparable and causally independent settled Operational Records. It preserves
-supporting and opposing records, task and environment scope, relevant component
-versions, inference strength, and an expiry or re-evaluation boundary. Once
-admitted, it may appear only as a weak advisory input.
-
-Only a separately governed SkillPackage, StoryOS ToolSpec, Capability, or
-project policy can decide executable behavior. Turning a lesson into one of
-those objects requires its owning change and verification process; the lesson
-is neither modified nor promoted.
-
-StoryOS does not use `Episodic Memory`, `Semantic Memory`, or `Procedural
-Memory` as product types, permission boundaries, lifecycle owners, or primary
-context categories. Specific execution events remain Operational Records;
-fictional truth and character attitudes remain Fiction Assertions; external
-conclusions remain Research Claims; preferences and lessons use their exact
-terms; executable behavior remains with Skills, Tools, Capabilities, and policy.
+Memory cannot install or alter a SkillPackage, ToolSpec, Capability, project
+policy, or executable permission. A generated procedure can advise the Agent;
+changing governed executable behavior still uses its owning process. Fiction
+facts and Research Claims retain their own semantics rather than becoming
+entries in a universal memory taxonomy.
 
 ## 7. Research Claims and exact evidence
 
@@ -263,187 +208,119 @@ supports any result. The existence of supporting evidence also does not by
 itself make a Claim verified; current assessment considers opposing and
 qualifying evidence, source scope, and unresolved conflict.
 
-## 8. Immutable history and current lifecycle
+## 8. Correction, forgetting, and recorded history
 
-Memory Candidates, Admission Decisions, Admitted Memory Entries, and their
-source references are immutable. Correction and eligibility changes append
-lifecycle facts and relationships:
+Ordinary corrections and changes of mind enter the conversation as author
+Messages. The Agent interprets them with the available context. Earlier material
+may remain recorded or already supplied to the Provider while later instructions
+express the author's current intent. Do not interrupt ordinary assistance to
+compile that intent into a formal memory or context control.
 
-| Relation | Meaning |
-|---|---|
-| `corrects` | a successor fixes an erroneous statement under the same applicable scope and effective time |
-| `supersedes` | a once-applicable item is replaced from an explicit version, decision, or valid-time boundary |
-| `invalidates` | an item loses recall eligibility without requiring an equivalent replacement |
+When the author requests a lasting Memory change, the Agent can append a
+`Memory Note`: plain-language guidance for the next consolidation pass, with
+its author-message source. The Agent interprets the request through its normal
+loop and tool use; no deterministic natural-language classifier is required.
+Background extraction can learn automatically from eligible conversations,
+while a direct memory-update tool requires an author request. A note is neither
+an Author Preference nor a source-access prohibition.
 
-Scope refinement is preferred when apparent conflict is explained by a work,
-continuity, branch, story time, scene, narrative position, epistemic holder, or
-epistemic relation. Neither statement is marked wrong merely because a flat
-projection made them appear contradictory.
+A note can ask to add, correct, or forget remembered information. Consolidation
+uses it to revise generated documents. Report a recorded note separately from
+a published update. Do not promise immediate recall removal, prevention of all
+equivalent future inferences, precise semantic erasure, or erasure of content
+already sent to a model. General context compaction may summarize current task
+state; a memory note does not require a continuation-chain reset.
 
-Once an entry is corrected, invalidated, or superseded for the current scope,
-it immediately exits ordinary Agent Memory. If a replacement has not passed
-Admission, StoryOS tolerates a temporary recall gap rather than continuing to
-serve known-wrong content.
+An ordinary source edit or deletion changes later source reads. It does not
+rewrite conversation records or automatically erase every generated paraphrase.
+The Agent can read current sources, and later consolidation can revise old notes.
+Known source unavailability and document age remain inspectable. History records
+which document revisions StoryOS supplied, not what the model actually used.
 
-Every Run records the exact Memory Entries, source revisions, and Admission
-Decisions actually supplied through its Project Scope-bound Context Assembly
-Manifest and Step Snapshot.
-Later correction never rewrites that historical context, so StoryOS can still
-explain an earlier Agent decision using the information eligible at that time.
+## 9. Actual access, archive, and deletion controls
 
-Current Agent Memory is a projection computed from immutable content and
-appended lifecycle facts. Immutable history does not imply permanent current
-eligibility.
+Project Isolation, permissions, Archive, Redaction, Tombstone, and Project
+Deletion retain their owning business contracts. A memory tool cannot return a
+resource that those controls forbid. An explicit setting that excludes a
+conversation from generation stops new extraction from that input; rebuilding
+from the permitted set remains background work rather than a precise semantic
+forgetting guarantee.
 
-## 9. Archive, Tombstone, and Memory Suppression
+A real deletion or access restriction must cover generated copies that the
+owning policy includes. If the affected content cannot be isolated safely, the
+storage and retention owners must define a conservative document-set boundary,
+unavailability, and rebuild from allowed inputs. They must not infer a complete
+semantic dependency graph from model-generated citations. Memory Notes alone
+do not constitute physical deletion or satisfy that policy.
 
-These are orthogonal semantics:
+Provider retention and already disclosed data remain separate external facts.
+No generated memory revision rewrites an immutable disclosure record. The
+Context, Model, and retention owners decide any required future-use fence at
+the boundary they actually control.
 
-| Control | Content retained | Ordinary recall | Reversible | Prevents equivalent re-extraction |
-|---|---:|---:|---:|---:|
-| Archive | yes | no | normally yes | no |
-| Tombstone | only minimum non-content proof | no | normally no | according to Storage and Retention policy |
-| Memory Suppression | source unchanged | no | normally yes | yes, within its exact scope |
+## 10. Source references and rebuildable retrieval
 
-Archive preserves content, provenance, and lifecycle history while removing an
-object from normal use. It does not stop later analysis of a still-valid source
-from producing a materially different Candidate.
+Memory Documents keep references to their extraction inputs and to relevant
+source records. These help inspection and fresh lookup. A missing reference is
+reported as unavailable; a link alone does not prove support for every sentence
+or provide a complete transitive influence closure.
 
-Tombstone performs an audited physical purge or cryptographic destruction for
-author deletion, safety, privacy, or retention obligations. Only a minimum
-non-content deletion proof remains. The Storage and Run-retention tickets own
-physical fan-out and what protected evidence may legally remain.
+Text search is sufficient for the initial Memory mechanism. Optional full-text,
+vector, or graph indexes are disposable access projections over published
+Memory Document revisions and other permitted source objects. Their IDs are
+not durable domain identities. Reads recheck actual Project Scope, current
+access and lifecycle, and publication identity before returning content.
+An external embedding call remains an authorized disclosure operation.
 
-Memory Suppression is an authoritative author or policy control under one exact
-Project Scope over a work, Agent, source set, candidate kind, object set, or
-semantic scope.
-It changes no source content, but it applies during extraction, admission,
-current-view construction, index rebuild, and retrieval. Existing matching
-entries immediately leave ordinary recall. Replay, Worker recovery, policy
-upgrade, source reprocessing, and index rebuild cannot recreate the prohibited
-inference.
+Index loss does not lose the published memory documents, Memory Notes, or
+conversation records. A new index can be built from available documents.
+Regenerating memory from retained inputs is a separate model operation and need
+not produce identical wording. Unavailable retained inputs limit what can be
+regenerated; do not invent their contents or silently treat them as evidence.
 
-The authoritative Suppression instruction belongs to project policy state and
-its immutable lifecycle records, never to a Candidate, Admitted Memory Entry,
-or retrieval index.
+## 11. Author interaction
 
-An ordinary request to stop remembering or recalling content creates Memory
-Suppression unless the author explicitly requests physical deletion. A
-Suppression target should use object identities, scopes, and non-reversible
-fingerprints where possible rather than copying prohibited sensitive content.
-Lifting Suppression restores only eligibility for current re-evaluation under
-current sources and policy; it does not restore an old Admission Decision.
+The author can inspect the current memory summary and documents, their update
+status, and available source links. Ordinary conversation can express a memory
+correction. Explicit settings control reading existing memory and contributing
+to future memory; source editing and real deletion use their domain paths.
 
-Suppression and Tombstone never rewrite a historical Run's recorded context.
-
-## 10. Rebuildable retrieval projections
-
-Full-text, vector, graph, and other semantic retrieval structures are
-disposable access projections. They own no domain identity, source truth,
-Admission Decision, lifecycle fact, Suppression, Evidence Relation,
-Provenance, or permission.
-
-Every physical or logical retrieval namespace and cache key includes the exact
-Project Scope. Index lookup may produce candidates only inside that scope, and
-each hit is revalidated against canonical ownership before any content is
-returned. Embedding generation through an external API is an Outbound
-Disclosure operation and cannot use a cross-project batch or global text cache.
-
-Index-local document, vector, node, and edge identifiers are not durable object
-identities and cannot be cited by Runs, Artifacts, Claims, or audit records.
-Index records may copy qualification fields for filtering and performance, but
-those fields are non-canonical and identify the exact Project Scope, domain
-object, source revision, qualification revision, index policy, and content/build
-version from which they were projected.
-
-Before a retrieval result enters Context Assembly, StoryOS fails closed unless
-current domain records or a version-bound eligibility projection revalidate:
-
-- current Admission and lifecycle eligibility;
-- applicable Memory Suppression;
-- current source revision and replacement relations;
-- retention and Tombstone state;
-- project, work, continuity, branch, character, story-time, narrative, and
-  epistemic scope;
-- caller permission; and
-- any required evidence availability.
-
-Similarity, text match, graph distance, and ranking scores represent relevance
-only. They never mean truth, authority, evidence sufficiency, admission, or
-execution permission. A missing, corrupt, deleted, migrated, or re-sharded
-index leaves the canonical Candidate, Admission, Lifecycle, Suppression,
-Provenance, and Evidence records intact and rebuildable.
-
-Suppression and Tombstone revoke current recall eligibility immediately even
-when physical cache and index cleanup is still in progress. Cleanup is required
-but does not itself constitute the domain control.
-
-## 11. Author interaction and control
-
-Active writing is not paused for memory housekeeping. Automatic extraction,
-admission, invalidation, expiry, and index maintenance run after source
-settlement or in background work under their ordinary Run and capability
-contracts.
-
-An author interaction with remembered content routes to one of the owning
-semantics:
-
-- revise the exact source through its domain path;
-- inspect, confirm, reject, or replace a Candidate through its Artifact and
-  Admission lifecycle;
-- create or change an explicit Author Preference through its authoritative
-  command; or
-- create Memory Suppression when the intended effect is to stop recall.
-
-The author never edits a search document, vector, graph node, or consolidated
-memory blob as if that projection were a new source of truth. Deliberate memory
-inspection and settings may exist away from the uninterrupted writing flow.
+No memory review queue, Candidate confirmation card, scope form, or separate
+maintenance conversation is a prerequisite to writing or Agent assistance.
+Generated memory can be corrected without treating the document as fictional
+truth. Current prose, author-confirmed settings, and source evidence remain
+independently inspectable.
 
 ## 12. Ownership handoff
 
-This specification fixes the semantic invariants consumed by downstream work:
+| Owner | Required alignment |
+|---|---|
+| [Context](context-assembly-retrieval-and-outbound-disclosure-semantics.md) | bounded summary and tool-read intake, ordinary user steering, known source references, historical context, and truthful disclosure evidence |
+| [Model](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md) | general context compaction and continuation without ordinary-correction chain invalidation |
+| [Protocol](versioned-command-query-artifact-event-protocol.md) | memory document inspection, plain-language notes, separate use/generation settings, publication status, and source references |
+| [Storage](postgresql-project-storage-isolation-and-migration-contract.md) | document revisions and publication, job recovery, exact Project Scope, current reads, index rebuild, export/restore, and physical families |
+| [Retention](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | document, note, and job retention, real copy deletion, unavailable evidence, and operational-history compaction |
+| [Release](ai-independent-editor-first-release-baseline-and-handoff-criteria.md) and [proof](deterministic-verification-and-failure-recovery-gates.md) | Stage 7 background memory and observable verification; no semantic correctness or exact-forgetting oracle |
 
-| Contract or ticket | Owns next | Must preserve from this specification |
-|---|---|---|
-| [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md), resolving [issue 54](https://github.com/FrankQDWang/StoryOS/issues/54) | accepted mandatory and dynamic selection, ranking, context budgets, explanation, author controls, and outbound disclosure | qualification before ranking, no authority from relevance, exact source and Admission evidence, no interruptive memory confirmation |
-| [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md) | PostgreSQL records and transactions, payload tables, indexes, projection rebuild, physical deletion, backup, and migration | canonical domain records survive index loss; every copy preserves Project Scope; Suppression and Tombstone fan out to every derived copy without becoming index-only state |
-| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact identities, DTOs, commands, events, relations, idempotency keys, compatibility, and errors | immutable candidates and decisions, exact source revisions, append-only lifecycle, deterministic replay safety |
-| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | Run, Message, Context Assembly Manifest, snapshot, mailbox, and recovery-evidence retention | historical Runs retain what StoryOS assembled, disclosed, and executed without claiming model-internal use; every record preserves Project Scope; Working Context is not silently converted into long-term memory |
-
-No new follow-up ticket is required: the clarified work is already owned by
-these existing tickets.
+These original owners remain responsible for their pending revisions. This
+Memory decision does not claim that the older consumer documents, persistence
+catalog, or published Stage tickets already implement this contract. Actual
+runtime and schema changes remain with the later approved implementation work.
 
 ## 13. Normative invariants
 
-1. Agent Memory is a typed, source-bearing, rebuildable use-case view, not a
-   fourth durable truth space.
-2. No Memory Candidate is extracted from an unsettled source or live working
-   state.
-3. Extraction, Admission, and retrieval ranking are independent decisions.
-4. Admission grants ordinary recall eligibility, never authority.
-5. Existing durable source objects are not duplicated into generic memory
-   objects merely for search.
-6. Every durable inference remains a typed Artifact with exact source lineage.
-7. Authoritative State changes only through its owning author-authorized domain
-   command.
-8. Fiction Proposition, Story Scope, and Epistemic Scope are orthogonal.
-9. Story time, narrative position, and audit time are distinct.
-10. Evidence availability, support, opposition, qualification, derivation, and
-    context availability are distinct relations.
-11. A mutable location or current remote representation is never sufficient
-    historical evidence.
-12. Candidate, Admission, Entry, and historical Run context are never corrected
-    by in-place rewrite.
-13. Known-invalid content leaves ordinary recall even when no replacement is
-    admitted.
-14. Memory Suppression survives extraction replay and every projection rebuild.
-15. Archive, Tombstone, and Memory Suppression remain independent controls.
-16. No retrieval index owns canonical domain meaning or durable identity.
-17. Every memory source, lifecycle record, index entry, cache key, retrieval
-    result, and embedding operation validates one exact Project Scope before
-    discovery, use, disclosure, or reuse.
-18. Current qualification and permission are revalidated before context use.
-19. Operational Lessons advise but never execute or self-promote.
-20. Active writing is never interrupted solely to confirm memory maintenance.
-21. Historical Runs preserve the exact memory and source revisions actually
-    supplied at the time.
+1. Generated Memory is inspectable, Project-scoped, and non-authoritative.
+2. Background extraction, consolidation, active context compaction, and Provider
+   continuation are distinct operations.
+3. Ordinary author corrections use the general Agent loop; no semantic
+   exclusion or per-claim admission mechanism is required.
+4. Memory Notes request document changes; settings and business commands own
+   access, generation eligibility, and real deletion.
+5. Failed or stale maintenance cannot publish a partial or superseded set.
+6. A summary navigates to memory; it does not load the whole collection.
+7. Current source facts and author authority are independent from remembered
+   interpretations. Research evidence retains its exact-source contract.
+8. Source references and reported usage do not prove model influence or truth.
+9. Document updates preserve historical input identities subject to retention.
+10. Memory maintenance does not interrupt active writing or bypass a real
+    permission, disclosure, Proposal, or Acceptance boundary.

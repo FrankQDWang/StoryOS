@@ -167,7 +167,11 @@ ResearchArtifactKind
 manuscript editor refusal/recovery flow. `PlanDraft` belongs to plan authoring
 and is not an alternative outcome for an Author Edit.
 
-One Candidate represents one independently reviewable semantic candidate. A batch extraction creates multiple Candidate Artifacts and may create an Analysis Report that organizes them.
+One Candidate represents one independently reviewable semantic candidate. A batch of such candidates creates multiple Candidate Artifacts and may create an Analysis Report that organizes them.
+
+Generated Memory Documents and Memory Notes use the existing Tool Artifact
+family under the [Memory contract](fiction-memory-and-research-provenance-semantics.md).
+Their notes do not require one Candidate Artifact for each remembered statement.
 
 ### 3.2 Extension Artifacts
 
