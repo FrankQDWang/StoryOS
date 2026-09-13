@@ -12,6 +12,8 @@ use storyos_core::{
 
 use super::{update_chapter_database_error, update_chapter_parse_error};
 
+const CHAPTER_STORAGE_KEY_OFFSET: usize = 1_000_000;
+
 struct ChapterSiblings<'a> {
     ordered_ids: &'a [String],
     parent_volume_id: &'a str,
@@ -411,23 +413,44 @@ async fn apply_chapter_tree(
             )
             .await
             .map_err(update_chapter_database_error)?;
-        for (index, chapter_id) in ids.iter().enumerate() {
-            let tree_order = (index + 1).to_string();
+        if ids.len() <= CHAPTER_STORAGE_KEY_OFFSET {
+            let chapter_ids: Vec<&str> = ids.iter().map(String::as_str).collect();
             client
                 .execute(
-                    "UPDATE storyos.manuscript_objects
-                        SET tree_order = $3::text::bigint
-                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                        AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
+                    "UPDATE storyos.manuscript_objects AS chapter
+                        SET tree_order = ranked.tree_order
+                      FROM unnest($3::text[]) WITH ORDINALITY AS ranked(chapter_id, tree_order)
+                     WHERE chapter.owner_user_id = $1::text::uuid AND chapter.project_id = $2::text::uuid
+                       AND chapter.manuscript_object_id = ranked.chapter_id::uuid
+                       AND chapter.object_kind = 'chapter' AND chapter.parent_volume_id = $4::text::uuid",
                     &[
                         &command.project_scope.owner_user_id.as_ref(),
                         &command.project_scope.project_id.as_ref(),
-                        &tree_order,
-                        chapter_id,
+                        &chapter_ids,
+                        &siblings.parent_volume_id,
                     ],
                 )
                 .await
                 .map_err(update_chapter_database_error)?;
+        } else {
+            for (index, chapter_id) in ids.iter().enumerate() {
+                let tree_order = (index + 1).to_string();
+                client
+                    .execute(
+                        "UPDATE storyos.manuscript_objects
+                            SET tree_order = $3::text::bigint
+                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                            AND manuscript_object_id = $4::text::uuid AND object_kind = 'chapter'",
+                        &[
+                            &command.project_scope.owner_user_id.as_ref(),
+                            &command.project_scope.project_id.as_ref(),
+                            &tree_order,
+                            chapter_id,
+                        ],
+                    )
+                    .await
+                    .map_err(update_chapter_database_error)?;
+            }
         }
     }
     let bumped = client

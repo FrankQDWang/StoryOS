@@ -14,7 +14,7 @@ use storyos_application::{
 use tokio_postgres::NoTls;
 
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
-const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
+pub(super) const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const CLIENT: &str = "storyos.web-client.release-1.v3";
 const SECURITY: &str = "storyos.web-security-policy.release-1.v1";
 const VOLUME_TITLE: &str = "Volume A";
@@ -198,7 +198,7 @@ fn chapter_command(
     }
 }
 
-fn update_issue(
+pub(super) fn update_issue(
     scope: &ProjectScope,
     idempotency_suffix: &str,
     digest: &str,
@@ -225,15 +225,15 @@ fn update_issue(
     }
 }
 
-struct UpdateFixture<'a> {
-    chapter_id: &'a str,
-    title: &'a str,
-    order: u64,
-    expected_tree_revision: u64,
-    bytes: &'a [u8],
+pub(super) struct UpdateFixture<'a> {
+    pub chapter_id: &'a str,
+    pub title: &'a str,
+    pub order: u64,
+    pub expected_tree_revision: u64,
+    pub bytes: &'a [u8],
 }
 
-fn update_command(
+pub(super) fn update_command(
     binding: ProjectCommandChallengeBinding,
     nonce_digest: &str,
     ids_suffix: &str,
@@ -694,7 +694,7 @@ async fn update_chapter_is_atomic_replayable_and_scope_safe() {
     assert_eq!(chapters_after_refuse, 2);
 }
 
-async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectScope {
+pub(super) async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectScope {
     let issue = create_project_issue(&format!("018f0000-0000-7001-8000-00000000{suffix}"), suffix);
     let issued = issue_create_project_challenge(store, &issue).await.unwrap();
     let mut binding = issue.binding.clone();
@@ -709,7 +709,7 @@ async fn seed_project(store: &PostgresProjectReader, suffix: &str) -> ProjectSco
     ProjectScope::new(binding.owner_user_id, binding.prospective_project_id)
 }
 
-fn named_issue(
+pub(super) fn named_issue(
     scope: &ProjectScope,
     suffix: &str,
     method: &str,
@@ -740,7 +740,11 @@ fn named_issue(
     }
 }
 
-async fn apply_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffix: &str) -> String {
+pub(super) async fn apply_volume(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+) -> String {
     let issue = volume_issue(scope, suffix);
     issue_project_command_challenge(store, &issue)
         .await
@@ -757,7 +761,7 @@ async fn apply_volume(store: &PostgresProjectReader, scope: &ProjectScope, suffi
     volume_id
 }
 
-async fn apply_chapter(
+pub(super) async fn apply_chapter(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,
