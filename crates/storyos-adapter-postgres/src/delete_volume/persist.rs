@@ -1,6 +1,9 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, encode_command_response_project,
+};
 use storyos_application::{
-    DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError, DeleteVolumeSettlement,
-    DeleteVolumeSettlementEffect,
+    ChapterId, DeleteVolumeAuthority, DeleteVolumeCommand, DeleteVolumeError,
+    DeleteVolumeSettlement, DeleteVolumeSettlementEffect, Project,
 };
 use storyos_core::{
     DeleteVolume as CoreDeleteVolume, DeleteVolumeResult, ProjectLifecycle, ProjectPresence,
@@ -16,7 +19,7 @@ pub(super) async fn persist_delete_volume(
 ) -> Result<DeleteVolumeSettlement, DeleteVolumeError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state, tree_revision::text, current_chapter_id::text
+            "SELECT lifecycle_state, tree_revision::text, title, current_chapter_id::text
                FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
@@ -43,7 +46,8 @@ pub(super) async fn persist_delete_volume(
         .get::<_, String>(1)
         .parse::<u64>()
         .map_err(delete_volume_parse_error)?;
-    let current_chapter_id = row.get::<_, Option<String>>(2);
+    let project_title = row.get::<_, String>(2);
+    let current_chapter_id = row.get::<_, Option<String>>(3).map(ChapterId::new);
     let target = client
         .query_opt(
             "SELECT removal.volume_id IS NOT NULL
@@ -292,11 +296,11 @@ pub(super) async fn persist_delete_volume(
         )
         .await
         .map_err(delete_volume_database_error)?;
-        if let Some(chapter_id) = current_chapter_id.as_deref() {
+        if let Some(chapter_id) = current_chapter_id.as_ref() {
             persist_writer_base_snapshot(
                 client,
                 command,
-                chapter_id,
+                chapter_id.as_ref(),
                 &sequences.snapshot_id,
                 project_activity_position,
             )
@@ -310,10 +314,19 @@ pub(super) async fn persist_delete_volume(
             resulting_manuscript_tree_revision: *tree_revision,
         });
     }
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: project_title,
+        current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
     client
         .execute(
             "UPDATE storyos.command_idempotency
-                SET outcome_kind = 'settled', result_reference = $3
+                SET outcome_kind = 'settled',
+                    result_reference = $3,
+                    acknowledgement_format = $5,
+                    response_project = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'deleteVolume' AND idempotency_key = $4::text::uuid",
             &[
@@ -321,6 +334,8 @@ pub(super) async fn persist_delete_volume(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
             ],
         )
         .await
@@ -332,6 +347,7 @@ pub(super) async fn persist_delete_volume(
         project_activity_position,
         project_activity_event_id,
         authority,
+        response_project,
     })
 }
 

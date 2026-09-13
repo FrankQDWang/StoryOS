@@ -4,6 +4,7 @@ import {
   getEditorSession,
   undoLatestAuthorAction,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 import type {
   EditorBaseSnapshot,
   UndoLatestAuthorActionResponse,
@@ -97,7 +98,10 @@ export async function undoOwnedLatestAuthorAction(options: {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
-  } catch {
+  } catch (error) {
+    if (historicalAcknowledgementUnavailable(error)) {
+      throw error;
+    }
     const settled = await submitUndo(options, frontier, expectedHead, flight);
     inFlight.delete(identity);
     if (settled.effect.kind === "compensated") {

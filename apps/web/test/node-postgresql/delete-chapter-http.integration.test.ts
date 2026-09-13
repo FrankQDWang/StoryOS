@@ -17,9 +17,11 @@ import {
   digestCreateEditorSession,
   digestCreateVolume,
   digestDeleteChapter,
+  digestUpdateProject,
   getChapter,
   getManuscriptTree,
   getProject,
+  updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
@@ -28,9 +30,11 @@ import type {
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
   DeleteChapterRequest,
+  UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
+  queryStoryOSPostgres as queryPostgres,
   requireStoryOSProtocolError,
   sessionFetch as browserFetch,
   startStoryOSServer,
@@ -484,6 +488,395 @@ test("deleteChapter refuses a missing Chapter join and an archived Project", asy
     if (refused.effect.kind === "refused") {
       assert.equal(refused.effect.reason, "archived_project");
     }
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+function capturingDelete(
+  inner: typeof fetch,
+): { fetchImpl: typeof fetch; lastDeleteBody: () => string } {
+  let lastDeleteBody = "";
+  return {
+    fetchImpl: async (input, init) => {
+      const response = await inner(input, init);
+      const url = String(input instanceof Request ? input.url : input);
+      if (response.ok && (init?.method ?? "GET") === "DELETE" && url.includes("/chapters/")) {
+        lastDeleteBody = await response.clone().text();
+      }
+      return response;
+    },
+    lastDeleteBody: () => lastDeleteBody,
+  };
+}
+
+function problemCode(error: unknown): string | undefined {
+  const protocol = requireStoryOSProtocolError(error);
+  if (protocol.responseBody === undefined) return undefined;
+  try {
+    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
+  } catch {
+    return undefined;
+  }
+}
+
+function renameRequest(title: string, expectedProjectRevision: string, correlationId: string): UpdateProjectRequest {
+  return {
+    command_schema: "storyos.command.update-project.request.v1",
+    update_project_input: {
+      title,
+      expected_project_revision: expectedProjectRevision,
+      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: "storyos.web-security-policy.release-1.v1",
+      correlation_id: correlationId,
+    },
+  };
+}
+
+async function deleteOwnedWithChallenge(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  chapterId: string,
+  idempotencyKey: string,
+  request: DeleteChapterRequest,
+) {
+  const digest = await digestDeleteChapter(request);
+  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+    baseUrl,
+    projectId,
+    fetchImpl,
+    request: {
+      method: "DELETE",
+      route_template: "/api/v1/projects/{project_id}/chapters/{chapter_id}",
+      command_schema: "storyos.command.delete-chapter.request.v1",
+      canonical_command_digest: digest,
+      idempotency_key: idempotencyKey,
+    },
+  }));
+  const deleted = await deleteChapter({
+    baseUrl,
+    projectId,
+    chapterId,
+    fetchImpl,
+    idempotencyKey,
+    antiForgery: challenge.nonce,
+    request,
+  });
+  return { challenge, deleted };
+}
+
+// One Project admits at most 10 Command Challenges in one 60-second window.
+test("deleteChapter freezes applied empty Current Chapter, no-effect, and conflict acknowledgements after later title and Current Chapter changes", async () => {
+  let { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-00000000e900",
+      "Delete Chapter Freeze Novel",
+      "018f0000-0000-7001-8000-00000000e901",
+    );
+    const volume = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-00000000e902",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-00000000e903"),
+    );
+    assert.equal(volume.effect.kind, "authoritative_applied");
+    if (volume.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const chapterA = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-00000000e904",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-00000000e905"),
+    );
+    const chapterAId = appliedId(chapterA);
+    const appliedRequest = deleteRequest("3", "018f0000-0000-7001-8000-00000000e907");
+    const appliedCapture = capturingDelete(first.fetchImpl);
+    const applied = await deleteOwnedWithChallenge(
+      baseUrl,
+      appliedCapture.fetchImpl,
+      first.projectId,
+      chapterAId,
+      "018f0000-0000-7001-8000-00000000e906",
+      appliedRequest,
+    );
+    const appliedBody = appliedCapture.lastDeleteBody();
+    assert.equal(applied.deleted.effect.kind, "authoritative_applied");
+    assert.equal(applied.deleted.project.title, "Delete Chapter Freeze Novel");
+    assert.equal(applied.deleted.project.open.kind, "empty");
+    const unchangedRequest = deleteRequest("4", "018f0000-0000-7001-8000-00000000e909");
+    const unchangedCapture = capturingDelete(first.fetchImpl);
+    const unchanged = await deleteOwnedWithChallenge(
+      baseUrl,
+      unchangedCapture.fetchImpl,
+      first.projectId,
+      chapterAId,
+      "018f0000-0000-7001-8000-00000000e908",
+      unchangedRequest,
+    );
+    const unchangedBody = unchangedCapture.lastDeleteBody();
+    assert.equal(unchanged.deleted.receipt.result, "no_effect");
+    assert.equal(unchanged.deleted.project.open.kind, "empty");
+    const staleRequest = deleteRequest("3", "018f0000-0000-7001-8000-00000000e90b");
+    const staleCapture = capturingDelete(first.fetchImpl);
+    const stale = await deleteOwnedWithChallenge(
+      baseUrl,
+      staleCapture.fetchImpl,
+      first.projectId,
+      chapterAId,
+      "018f0000-0000-7001-8000-00000000e90a",
+      staleRequest,
+    );
+    const staleBody = staleCapture.lastDeleteBody();
+    assert.equal(stale.deleted.receipt.result, "conflicted");
+    const laterDigest = await digestUpdateProject(
+      renameRequest("Later Delete Chapter Title", "1", "018f0000-0000-7001-8000-00000000e90d"),
+    );
+    const laterChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "PATCH",
+        route_template: "/api/v1/projects/{project_id}",
+        command_schema: "storyos.command.update-project.request.v1",
+        canonical_command_digest: laterDigest,
+        idempotency_key: "018f0000-0000-7001-8000-00000000e90c",
+      },
+    }));
+    const later = await updateProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e90c",
+      antiForgery: laterChallenge.nonce,
+      request: renameRequest("Later Delete Chapter Title", "1", "018f0000-0000-7001-8000-00000000e90d"),
+    });
+    assert.equal(later.project.title, "Later Delete Chapter Title");
+    const laterChapter = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-00000000e90e",
+      chapterRequest("Chapter C", "4", "018f0000-0000-7001-8000-00000000e90f"),
+    );
+    assert.equal(laterChapter.effect.kind, "authoritative_applied");
+    if (laterChapter.effect.kind !== "authoritative_applied") {
+      throw new Error("later Create Chapter must apply");
+    }
+    const frozenCapture = capturingDelete(first.fetchImpl);
+    const frozen = await deleteChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: chapterAId,
+      fetchImpl: frozenCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e906",
+      antiForgery: applied.challenge.nonce,
+      request: appliedRequest,
+    });
+    assert.deepEqual(frozen, applied.deleted);
+    assert.equal(frozenCapture.lastDeleteBody(), appliedBody);
+    assert.equal(frozen.project.title, "Delete Chapter Freeze Novel");
+    assert.equal(frozen.project.open.kind, "empty");
+    const frozenUnchangedCapture = capturingDelete(first.fetchImpl);
+    const frozenUnchanged = await deleteChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: chapterAId,
+      fetchImpl: frozenUnchangedCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e908",
+      antiForgery: unchanged.challenge.nonce,
+      request: unchangedRequest,
+    });
+    assert.deepEqual(frozenUnchanged, unchanged.deleted);
+    assert.equal(frozenUnchangedCapture.lastDeleteBody(), unchangedBody);
+    const frozenStaleCapture = capturingDelete(first.fetchImpl);
+    const frozenStale = await deleteChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: chapterAId,
+      fetchImpl: frozenStaleCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e90a",
+      antiForgery: stale.challenge.nonce,
+      request: staleRequest,
+    });
+    assert.deepEqual(frozenStale, stale.deleted);
+    assert.equal(frozenStaleCapture.lastDeleteBody(), staleBody);
+    const opened = await getProject({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+    });
+    assert.equal(opened.project.title, "Later Delete Chapter Title");
+    assert.equal(opened.project.open.kind, "current_chapter");
+    if (opened.project.open.kind !== "current_chapter") {
+      throw new Error("GET must report Chapter C");
+    }
+    assert.equal(opened.project.open.current_chapter_id, laterChapter.effect.chapter_id);
+    const receiptCount = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'deleteChapter';
+    `);
+    assert.equal(receiptCount, "3");
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.authoritative_commits
+         WHERE project_id = '${first.projectId}'::uuid
+           AND receipt_id = '${applied.deleted.receipt.receipt_id}'::uuid;
+      `),
+      "1",
+    );
+    await stopRealServer(server);
+    ({ baseUrl, server } = await startRealServer());
+    const restartedFetch = browserFetch(baseUrl, "session-a");
+    const afterRestartCapture = capturingDelete(restartedFetch);
+    const afterRestart = await deleteChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: chapterAId,
+      fetchImpl: afterRestartCapture.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000e906",
+      antiForgery: applied.challenge.nonce,
+      request: appliedRequest,
+    });
+    assert.deepEqual(afterRestart, applied.deleted);
+    assert.equal(afterRestartCapture.lastDeleteBody(), appliedBody);
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'deleteChapter';
+      `),
+      receiptCount,
+    );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("deleteChapter distinguishes historical absence from damaged new-format evidence", async () => {
+  const { baseUrl, server } = await startRealServer();
+  try {
+    const first = await createEmpty(
+      baseUrl,
+      "session-a",
+      "018f0000-0000-7001-8000-00000000e920",
+      "Delete Chapter History Novel",
+      "018f0000-0000-7001-8000-00000000e921",
+    );
+    const volume = await postVolume(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      "018f0000-0000-7001-8000-00000000e922",
+      volumeRequest("Volume A", "1", "018f0000-0000-7001-8000-00000000e923"),
+    );
+    if (volume.effect.kind !== "authoritative_applied") {
+      throw new Error("Create Volume must apply");
+    }
+    const chapter = await postChapter(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      volume.effect.volume_id,
+      "018f0000-0000-7001-8000-00000000e924",
+      chapterRequest("Chapter A", "2", "018f0000-0000-7001-8000-00000000e925"),
+    );
+    const chapterId = appliedId(chapter);
+    const request = deleteRequest("3", "018f0000-0000-7001-8000-00000000e927");
+    const applied = await deleteOwnedWithChallenge(
+      baseUrl,
+      first.fetchImpl,
+      first.projectId,
+      chapterId,
+      "018f0000-0000-7001-8000-00000000e926",
+      request,
+    );
+    const novelsBefore = await queryPostgres(`
+      SELECT title || ' ' || count(*)::text FROM storyos.projects
+       WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
+    `);
+    const receiptsBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.domain_receipts
+       WHERE project_id = '${first.projectId}'::uuid;
+    `);
+    const removalsBefore = await queryPostgres(`
+      SELECT count(*) FROM storyos.chapter_removal_decisions
+       WHERE project_id = '${first.projectId}'::uuid;
+    `);
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = NULL, response_project = NULL
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-00000000e926'::uuid;
+    `);
+    await assert.rejects(
+      deleteChapter({
+        baseUrl,
+        projectId: first.projectId,
+        chapterId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-00000000e926",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 409
+          && problemCode(error) === "historical_acknowledgement_unavailable";
+      },
+    );
+    await queryPostgres(`
+      UPDATE storyos.command_idempotency
+         SET acknowledgement_format = 'command_response_project.v1',
+             response_project = '{"broken":true}'::jsonb
+       WHERE project_id = '${first.projectId}'::uuid
+         AND idempotency_key = '018f0000-0000-7001-8000-00000000e926'::uuid;
+    `);
+    await assert.rejects(
+      deleteChapter({
+        baseUrl,
+        projectId: first.projectId,
+        chapterId,
+        fetchImpl: first.fetchImpl,
+        idempotencyKey: "018f0000-0000-7001-8000-00000000e926",
+        antiForgery: applied.challenge.nonce,
+        request,
+      }),
+      (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 503
+          && problemCode(error) !== "historical_acknowledgement_unavailable";
+      },
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT title || ' ' || count(*)::text FROM storyos.projects
+         WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
+      `),
+      novelsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.domain_receipts
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      receiptsBefore,
+    );
+    assert.equal(
+      await queryPostgres(`
+        SELECT count(*) FROM storyos.chapter_removal_decisions
+         WHERE project_id = '${first.projectId}'::uuid;
+      `),
+      removalsBefore,
+    );
   } finally {
     await stopRealServer(server);
   }

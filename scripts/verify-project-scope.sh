@@ -591,6 +591,7 @@ run_http_files \
   test/node-postgresql/set-current-chapter-http.integration.test.ts \
   test/node-postgresql/delete-chapter-http.integration.test.ts \
   test/node-postgresql/delete-volume-http.integration.test.ts \
+  test/node-postgresql/undo-latest-author-action-http.integration.test.ts \
   test/node-postgresql/manuscript-tree-http.integration.test.ts \
   test/node-postgresql/manuscript-search-http.integration.test.ts \
   test/node-postgresql/takeover-http.integration.test.ts \

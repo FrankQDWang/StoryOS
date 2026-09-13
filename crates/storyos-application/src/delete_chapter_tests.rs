@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::{ChapterId, ProjectId, UserId};
+use crate::{ChapterId, Project, ProjectId, UserId};
 
 struct Store(Mutex<usize>);
 
@@ -22,6 +22,11 @@ impl DeleteChapterStore for Store {
             project_activity_position: 5,
             project_activity_event_id: "event".to_owned(),
             authority: None,
+            response_project: Project {
+                project_id: command.project_scope.project_id.clone(),
+                title: "Empty Novel".to_owned(),
+                current_chapter_id: None,
+            },
         })
     }
 }

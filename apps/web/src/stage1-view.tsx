@@ -317,8 +317,12 @@ function ProjectReadyView({
         });
         if (generation !== switchGenerationRef.current) return;
         onReopened(next);
-      } catch {
-        setSwitchRecovery("无法删除章节。");
+      } catch (error: unknown) {
+        setSwitchRecovery(
+          historicalAcknowledgementUnavailable(error)
+            ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
+            : "无法删除章节。",
+        );
       } finally {
         makeCurrentInFlightRef.current = false;
       }
@@ -387,8 +391,12 @@ function ProjectReadyView({
         });
         if (generation !== switchGenerationRef.current) return;
         onReopened(next);
-      } catch {
-        setSwitchRecovery("无法删除卷。");
+      } catch (error: unknown) {
+        setSwitchRecovery(
+          historicalAcknowledgementUnavailable(error)
+            ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
+            : "无法删除卷。",
+        );
       } finally {
         makeCurrentInFlightRef.current = false;
       }
@@ -521,6 +529,10 @@ function ProjectReadyView({
               if (projection.save_state !== "needs_attention") setEditorFailure(undefined);
             }}
             onFailure={(error) => {
+              if (historicalAcknowledgementUnavailable(error)) {
+                setSwitchRecovery(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
+                return;
+              }
               setReadOnly(true);
               setSaveState("needs_attention");
               setEditorFailure(
@@ -766,7 +778,11 @@ function EmptyProjectReadyView({
                   return;
                 }
                 onChapterCreated();
-              }).catch(() => {});
+              }).catch((error: unknown) => {
+                if (historicalAcknowledgementUnavailable(error)) {
+                  setVolumeRemoval(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
+                }
+              });
             }}
             onRemoveVolume={(volumeId) => {
               void deleteOwnedVolume({
@@ -785,8 +801,12 @@ function EmptyProjectReadyView({
                   return;
                 }
                 onVolumeCreated();
-              }).catch(() => {
-                setVolumeRemoval("无法删除卷。");
+              }).catch((error: unknown) => {
+                setVolumeRemoval(
+                  historicalAcknowledgementUnavailable(error)
+                    ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
+                    : "无法删除卷。",
+                );
               });
             }}
           />
