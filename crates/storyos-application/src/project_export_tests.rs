@@ -1,7 +1,7 @@
 use std::sync::Mutex;
 
 use super::*;
-use crate::{ProjectId, UserId};
+use crate::{Project, ProjectId, UserId};
 
 struct Store(Mutex<usize>);
 
@@ -18,6 +18,11 @@ impl ExportProjectArchiveStore for Store {
                 archive_profile: command.archive_profile.clone(),
                 archive_path_profile: command.archive_path_profile.clone(),
                 source_snapshot: Box::new(snapshot()),
+            },
+            response_project: Project {
+                project_id: command.project_scope.project_id.clone(),
+                title: "Empty Novel".to_owned(),
+                current_chapter_id: None,
             },
         })
     }

@@ -609,11 +609,14 @@ arbitrates concurrent first attempts.
 `acknowledgement_format` is the capture marker. Converted families write
 `command_response_project.v1` and the three-field response Project in the same
 transaction as the Receipt and result reference. Update Project is the first
-converted family. Unconverted families keep their current acknowledgement
-composition and leave those columns null.
+converted family. Export Project Archive and Export Human-Readable Manuscript
+write that capture in the durable admission transaction while the idempotency
+outcome remains in progress. Worker settlement does not rewrite the capture.
+Unconverted families keep their current acknowledgement composition and leave
+those columns null.
 
-- a settled row with a null format is a known pre-capture command and cannot
-  replay a complete original acknowledgement;
+- a converted-family row with a null format is a known pre-capture command and
+  cannot replay a complete original acknowledgement;
 - a present format with a valid response Project is the immutable replay source
   for that command's public Project fields;
 - a present format with a missing or invalid response Project is a storage

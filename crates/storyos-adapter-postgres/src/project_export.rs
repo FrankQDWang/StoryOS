@@ -1,9 +1,14 @@
+use crate::command_response_project::{
+    COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
+    encode_command_response_project, read_command_response_project,
+};
 use storyos_application::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, ExportOperationPage, ExportOperationProgress,
-    ExportOperationReader, ExportProjectArchiveAdmission, ExportProjectArchiveAdmissionEffect,
-    ExportProjectArchiveCommand, ExportProjectArchiveError, ExportProjectArchiveStore,
-    GetExportOperation, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE, PROJECT_EXPORT_ARCHIVE_PROFILE,
-    ProjectCommandChallengeError, ProjectCommandChallengeUse, ProjectReadError, ProjectScope,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, ChapterId, ExportOperationPage,
+    ExportOperationProgress, ExportOperationReader, ExportProjectArchiveAdmission,
+    ExportProjectArchiveAdmissionEffect, ExportProjectArchiveCommand, ExportProjectArchiveError,
+    ExportProjectArchiveStore, GetExportOperation, PROJECT_EXPORT_ARCHIVE_PATH_PROFILE,
+    PROJECT_EXPORT_ARCHIVE_PROFILE, Project, ProjectCommandChallengeError,
+    ProjectCommandChallengeUse, ProjectReadError, ProjectScope,
 };
 use storyos_core::{
     ExportProjectArchive as CoreExport, ExportProjectArchiveResult, ProjectLifecycle,
@@ -247,7 +252,8 @@ async fn persist_export(
 ) -> Result<ExportProjectArchiveAdmission, ExportProjectArchiveError> {
     let row = client
         .query_opt(
-            "SELECT lifecycle_state FROM storyos.projects
+            "SELECT lifecycle_state, title, current_chapter_id::text
+               FROM storyos.projects
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
               FOR UPDATE",
             &[
@@ -260,6 +266,8 @@ async fn persist_export(
     let Some(row) = row else {
         return Err(ExportProjectArchiveError::MissingProject);
     };
+    let project_title = row.get::<_, String>(1);
+    let current_chapter_id = row.get::<_, Option<String>>(2).map(ChapterId::new);
     let current_lifecycle = match row.get::<_, String>(0).as_str() {
         "active" => ProjectLifecycle::Active,
         "archived" => ProjectLifecycle::Archived,
@@ -302,6 +310,30 @@ async fn persist_export(
         &families,
     )
     .await?;
+    let response_project = Project {
+        project_id: command.project_scope.project_id.clone(),
+        title: project_title,
+        current_chapter_id,
+    };
+    let encoded_project = encode_command_response_project(&response_project);
+    client
+        .execute(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = $4,
+                    response_project = $5::text::jsonb
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND command_kind = 'exportProjectArchive'
+                AND idempotency_key = $3::text::uuid",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.challenge_binding.idempotency_key,
+                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &encoded_project,
+            ],
+        )
+        .await
+        .map_err(export_database_error)?;
     Ok(ExportProjectArchiveAdmission {
         ids: command.ids.clone(),
         export_id: command.export_id.clone(),
@@ -310,6 +342,7 @@ async fn persist_export(
             archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
             source_snapshot: Box::new(snapshot),
         },
+        response_project,
     })
 }
 
@@ -421,7 +454,9 @@ async fn read_admitted_operation(
                 "SELECT operation.export_id::text,
                         operation.command_id::text,
                         operation.author_command_admission_id::text,
-                        operation.source_snapshot_id::text
+                        operation.source_snapshot_id::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.project_export_operations AS operation
                    JOIN storyos.command_idempotency AS idempotency
                      ON (idempotency.owner_user_id, idempotency.project_id,
@@ -465,6 +500,10 @@ async fn read_admitted_operation(
                 archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
                 source_snapshot: Box::new(source_snapshot),
             },
+            response_project: replay_response_project(
+                row.get::<_, Option<String>>(4).as_deref(),
+                row.get::<_, Option<String>>(5).as_deref(),
+            )?,
         })
     }
     .await;
@@ -499,7 +538,9 @@ async fn read_settled_admission(
                         export.export_id::text,
                         export.source_snapshot_id,
                         operation.export_id::text,
-                        operation.source_snapshot_id::text
+                        operation.source_snapshot_id::text,
+                        idempotency.acknowledgement_format,
+                        idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -576,6 +617,10 @@ async fn read_settled_admission(
                 archive_path_profile: PROJECT_EXPORT_ARCHIVE_PATH_PROFILE.to_owned(),
                 source_snapshot: Box::new(source_snapshot),
             },
+            response_project: replay_response_project(
+                row.get::<_, Option<String>>(9).as_deref(),
+                row.get::<_, Option<String>>(10).as_deref(),
+            )?,
         })
     }
     .await;
@@ -622,6 +667,21 @@ fn snapshot_from_joined_row(
             .parse()
             .map_err(ProjectReadError::unavailable)?,
     })
+}
+
+fn replay_response_project(
+    format: Option<&str>,
+    payload: Option<&str>,
+) -> Result<Project, ExportProjectArchiveError> {
+    match read_command_response_project(format, payload) {
+        Ok(CommandResponseProjectEvidence::Captured(project)) => Ok(project),
+        Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+            Err(ExportProjectArchiveError::HistoricalAcknowledgementUnavailable)
+        }
+        Err(()) => Err(ExportProjectArchiveError::Unavailable(Box::new(
+            std::io::Error::other("Project Export Archive acknowledgement evidence is damaged"),
+        ))),
+    }
 }
 
 fn export_challenge_error(error: ProjectCommandChallengeError) -> ExportProjectArchiveError {

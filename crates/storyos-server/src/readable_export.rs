@@ -115,17 +115,12 @@ pub(super) async fn export_human_readable_manuscript(
     )
     .await
     .map_err(export_error)?;
-    let project = open_project(&store, &scope)
-        .await
-        .map_err(service_unavailable)?
-        .ok_or_else(resource_unavailable)?;
-    export_response(&scope, &input.correlation_id, project, admission)
+    export_response(&scope, &input.correlation_id, admission)
 }
 
 fn export_response(
     scope: &ApplicationScope,
     correlation_id: &str,
-    project: storyos_application::Project,
     admission: storyos_application::ExportHumanReadableManuscriptAdmission,
 ) -> Result<
     (
@@ -134,6 +129,7 @@ fn export_response(
     ),
     ApiError,
 > {
+    let project = admission.response_project;
     let (effect, operation_ref) = match admission.effect {
         ExportHumanReadableManuscriptAdmissionEffect::Admitted { source_snapshot } => (
             contracts::ExportHumanReadableManuscriptEffect::Admitted {
@@ -324,6 +320,11 @@ fn export_error(error: ExportHumanReadableManuscriptError) -> ApiError {
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",
             "The human-readable export binding conflicts.",
+        ),
+        ExportHumanReadableManuscriptError::HistoricalAcknowledgementUnavailable => problem(
+            StatusCode::CONFLICT,
+            "historical_acknowledgement_unavailable",
+            "The original human-readable export acknowledgement cannot be recovered. Refresh to inspect the current Project.",
         ),
         ExportHumanReadableManuscriptError::InvalidChallenge => problem(
             StatusCode::UNPROCESSABLE_ENTITY,

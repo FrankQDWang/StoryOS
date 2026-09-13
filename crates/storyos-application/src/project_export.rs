@@ -3,7 +3,7 @@ use std::future::Future;
 use storyos_core::ProjectArchiveBuildRefusal;
 
 use crate::{
-    AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding,
+    AuthorCommandAdmissionIds, CanonicalSnapshot, EditorClientBinding, Project,
     ProjectCommandChallengeBinding, ProjectReadError, ProjectScope,
 };
 
@@ -36,6 +36,7 @@ pub struct ExportProjectArchiveAdmission {
     pub ids: AuthorCommandAdmissionIds,
     pub export_id: String,
     pub effect: ExportProjectArchiveAdmissionEffect,
+    pub response_project: Project,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,6 +51,7 @@ pub enum ExportProjectArchiveAdmissionEffect {
 #[derive(Debug)]
 pub enum ExportProjectArchiveError {
     BindingConflict,
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
     ArchivedProject,
@@ -63,6 +65,9 @@ impl std::fmt::Display for ExportProjectArchiveError {
             Self::BindingConflict => {
                 formatter.write_str("The Project Export Archive binding conflicts")
             }
+            Self::HistoricalAcknowledgementUnavailable => formatter.write_str(
+                "The original Project Export Archive acknowledgement cannot be recovered",
+            ),
             Self::InvalidChallenge => {
                 formatter.write_str("The Project Export Archive challenge is invalid")
             }
@@ -83,6 +88,7 @@ impl std::error::Error for ExportProjectArchiveError {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
             Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
             | Self::MissingProject
             | Self::ArchivedProject
