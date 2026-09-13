@@ -135,8 +135,14 @@ fn archive_row_sort_keys_follow_canonical_object_bytes() {
     let later = serde_json::json!({"z": "1", "m": []});
     let earlier = serde_json::json!({"a": "1"});
     let mut rows = vec![later.clone(), earlier.clone()];
-    rows.sort_by_key(canonical_json);
-    assert_eq!(rows, vec![earlier, later]);
+    rows.sort_by_cached_key(canonical_json);
+    assert_eq!(rows, vec![earlier, later.clone()]);
+
+    let equal_left = serde_json::json!({"k": "same", "n": 1});
+    let equal_right = serde_json::json!({"n": 1, "k": "same"});
+    let mut equal_keys = vec![equal_right.clone(), later.clone(), equal_left.clone()];
+    equal_keys.sort_by_cached_key(canonical_json);
+    assert_eq!(equal_keys, vec![equal_right, equal_left, later]);
 }
 
 #[test]

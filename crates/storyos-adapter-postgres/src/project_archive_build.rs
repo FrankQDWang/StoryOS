@@ -390,7 +390,7 @@ async fn load_table_json(
             .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
         values.push(value);
     }
-    values.sort_by_key(canonical_json);
+    values.sort_by_cached_key(canonical_json);
     Ok(values)
 }
 
