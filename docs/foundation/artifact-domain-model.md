@@ -90,7 +90,7 @@ typed producer cause is closed in section 8.6.
 
 | Concept | Positive class and lifecycle | Producer | Semantic owner |
 | --- | --- | --- | --- |
-| Authoritative State | Author-owned current truth projected from each authoritative object's immutable Revision Head; it has no Artifact or Operational Record lifecycle | StoryOS Core only, through the closed authority-changing transitions | this specification |
+| Authoritative State | Author-owned current truth projected from current Heads for object families that use Authoritative Revisions and from the current Manuscript Tree Revision for manuscript structure; it has no Artifact or Operational Record lifecycle | StoryOS Core only, through the closed authority-changing transitions | this specification |
 | `Artifact` | Durable typed content/evidence/view with immutable linear revisions, provenance, and the lifecycle owned by its Core family or safe extension envelope | one exact closed Artifact Creator | this specification |
 | `Draft` | Non-authoritative Core Artifact with immutable revisions, common retention, and reversible `open \| closed` Draft closure | `Author \| AgentRunStep \| ToolCall \| CoreTransition \| EditorRecovery`, further restricted by Draft subtype | this specification |
 | Operational Record | Durable execution/context/authorization/usage/validation/transition evidence with only its owning record's append-only or immutable lifecycle and no Artifact lifecycle | the exact StoryOS component named by the closed record type | this specification |
@@ -104,7 +104,7 @@ typed producer cause is closed in section 8.6.
 | `ProposalConflict` | The `conflicted` condition on an exact Proposal Revision's validation axis, projected from immutable Core Receipt/Event evidence; the condition is not a fourth durable space, another Artifact, or the Operational Record that detected it | StoryOS Core validation or target-drift detection | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `ProposalRecoveryConflict` | Fail-closed recovery condition on a preserved Proposal surface when exact Heads, stream/fence order, Anchors, digests, or checkpoint evidence cannot prove one review projection; it is neither an Artifact nor a Receipt | StoryOS Core recovery classification over exact durable Core and Host recovery evidence | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md); the [Web Editor Session contract](web-editor-session-synchronization-and-recovery-semantics.md) owns journal, checkpoint, and takeover evidence |
 | `Proposal` | `Proposal` Core Artifact with immutable revisions, retention, and the orthogonal generation, validation, closure, and per-Operation resolution axes | `Author \| AgentRunStep \| ToolCall`, plus `CoreTransition` only for a typed Reversal Proposal | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
-| `AuthoritativeRevision` | Immutable version of an authoritative domain object in Authoritative State, guarded by an expected prior Revision and selected through current Heads | StoryOS Core in a committed Direct Author Action, Acceptance, or safe compensation | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
+| `AuthoritativeRevision` | Immutable version of one object in Authoritative State other than manuscript structure, guarded by an expected prior Revision and selected through current Heads; it is not a Manuscript Tree Revision | StoryOS Core in a committed Direct Author Action, Acceptance, or safe compensation | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 | `Acceptance` | Author-admitted Core command and attempt over one exact eligible Proposal Revision; its durable admission, Command, Author Action when applied, and Receipt evidence are Operational Records, while its result may create new Authoritative Revisions | StoryOS Core under one exact Author Command Admission | [Manuscript Revision and Proposal State Machine](manuscript-revision-proposal-state-machine.md) |
 
 Admission permits one exact Core command evaluation but is neither an Artifact,
@@ -604,7 +604,7 @@ Receipts are displayable in the Run Timeline and any future observation surface,
 
 ## 9. Authoritative revision model
 
-Each authoritative domain object has a stable identity and immutable linear Authoritative Revisions guarded by an expected prior revision.
+Each object family in Authoritative State that uses Authoritative Revisions has a stable identity and immutable linear Authoritative Revisions guarded by an expected prior revision. A normal prose edit still uses those Authoritative Revision and Head rules. Manuscript structure is Authoritative State versioned by Manuscript Tree Revision. A newly created Volume is Authoritative State through the resulting Manuscript Tree Revision; it does not receive a fake prose Revision or a current Head.
 
 Every author-authorized domain transaction that changes Authoritative State also creates one Project Scope-ordered `AuthoritativeCommit` containing:
 
@@ -616,7 +616,7 @@ Every author-authorized domain transaction that changes Authoritative State also
 
 A Current Chapter change allocates no Authoritative Commit.
 
-This provides precise object conflict checks and a single atomic Project Scope order without creating a complete project snapshot for every edit. Current Authoritative State is a projection over each object's current revision.
+This provides precise object conflict checks and a single atomic Project Scope order without creating a complete project snapshot for every edit. Current Authoritative State is the current Heads of object families that use Authoritative Revisions together with the current live Canonical Manuscript Tree. A Canonical Query Snapshot is the reading boundary for that tree, not a second structure authority. An `AuthoritativeCommit` names an applied Manuscript Structure Transition by prior and resulting Manuscript Tree Revision and may contain no prose Revision pairs. The live Canonical Manuscript Tree, that Snapshot, and that Commit do not store a historical tree.
 
 ## 10. Specialized Artifact behavior
 

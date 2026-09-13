@@ -200,8 +200,8 @@ The holder or in-fiction source and epistemic relation that frames a Proposition
 _Avoid_: Belief owner only, narrator truth, automatic knowledge propagation
 
 **Authoritative Revision**:
-An immutable version of one authoritative domain object, appended only by StoryOS Core through a Direct Author Action, Acceptance, or safe compensation and guarded by an expected prior revision.
-_Avoid_: Artifact Revision, mutable row
+An immutable version of one object in Authoritative State other than manuscript structure, appended only by StoryOS Core through a Direct Author Action, Acceptance, or safe compensation and guarded by an expected prior revision.
+_Avoid_: Artifact Revision, mutable row, Manuscript Tree Revision
 
 **Authoritative Commit**:
 The Project Scope-ordered atomic record of one author-authorized domain transaction, identifying its Project Scope, actor, cause, every prior and resulting Authoritative Revision, and any Manuscript Structure Transition by its prior and resulting Manuscript Tree Revision plus the affected Volume or Chapter identities. Its scope-local sequence begins at one and advances without gaps only when Authoritative State changes; a Current Chapter change, and refused, failed, or no-change attempts, allocate none.
