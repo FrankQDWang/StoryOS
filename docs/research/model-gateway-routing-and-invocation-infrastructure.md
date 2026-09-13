@@ -1,10 +1,12 @@
 # Model Gateway routing and invocation infrastructure: source research and StoryOS implications
 
-- Status: research complete; incorporated into the accepted Wayfinder resolution, not implementation authorization
-- Decision: [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) — [resolution](https://github.com/FrankQDWang/StoryOS/issues/50#issuecomment-4987328100)
+- Status: historical research for the earlier Model Gateway decision and input to its Responses revision
+- Decision owner: [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) — [owner evidence](https://github.com/FrankQDWang/StoryOS/issues/50#issuecomment-4987328100)
 - Reference baseline: [`openai/codex@1f0566d3f59298d1bb88820a0d35294f1eeb07ea`](https://github.com/openai/codex/tree/1f0566d3f59298d1bb88820a0d35294f1eeb07ea), pinned in read-only `.reference/codex`
 - Web sources checked: official OpenAI, Anthropic, OpenTelemetry, Temporal, Google Cloud, and AWS documentation or first-party source, 2026-07-15
 - Scope: the ticket boundary, model-call control-plane responsibilities, streaming and usage evidence, retries and fallback, and whether one logical invocation must be separated from concrete provider attempts
+
+The current Responses contract is [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md), with a separate dated [Agent Plan capability preflight](agent-plan-responses-capability-preflight.md). This earlier research does not establish Agent Plan capability. Its unaffected Invocation, Attempt, recovery, and evidence boundaries remain inputs to that contract.
 
 ## Executive conclusion
 
@@ -174,7 +176,7 @@ For every Model Attempt, preserve at minimum:
 
 OpenTelemetry GenAI and nested HTTP spans should be emitted as projections of these durable records. They do not replace StoryOS records because telemetry can be sampled, dropped, redacted, or retained under a different policy.
 
-## HITL decisions resolved
+## Earlier HITL decisions
 
 1. A Model Invocation succeeds only after the Host validates and durably records one typed Agent Decision; provider completion terminates only its Model Attempt.
 2. Retryability is a Host Recovery Decision after live revalidation. Confirmed transient failures may retry within policy and budget, deterministic invalid requests may not retry unchanged, and ambiguous submission follows the OutcomeUnknown rules.
@@ -183,8 +185,8 @@ OpenTelemetry GenAI and nested HTTP spans should be emitted as projections of th
 5. Provider- or SDK-managed model routing and fallback are forbidden in the first slice. Any future composite router requires a separately specified Registration contract.
 6. OutcomeUnknown retains enforceable worst-case reservation. A successor requires authorization for another disclosure and budget for both Attempts; late usage reconciles the reservation and never rewrites earlier evidence.
 
-## Direct answer for the current Wayfinder question
+## Earlier Invocation and Attempt conclusion
 
 The proposed statement — one Model Invocation owns multiple ordered Model Attempts, and every Attempt represents one exact concrete provider submission — is supported, with one refinement: create the Attempt durably **before** outbound I/O and record whether provider receipt was confirmed or remains unknown. This preserves crashes and timeouts that cannot prove whether submission completed.
 
-The accepted resolution adopts this separation together with Host-owned routing, request projection, streaming, Tool-request validation, failure recovery, fallback, usage settlement, cancellation, and telemetry boundaries.
+The earlier resolution adopted this separation together with Host-owned routing, request projection, streaming, Tool-request validation, failure recovery, fallback, usage settlement, cancellation, and telemetry boundaries. ADR 0033 preserves these duties while it defines the Responses continuation and capability contract.

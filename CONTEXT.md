@@ -1096,7 +1096,7 @@ The sole StoryOS-owned boundary through which any RunStep invokes a configured e
 _Avoid_: Provider client, model SDK, Tool Gateway, direct provider call
 
 **Model Provider Adapter**:
-The host-controlled protocol projection used by the Model Gateway to exchange one exact invocation with an external model Provider API and report provider-declared capabilities and failure evidence. It cannot decide retryability, select or substitute a model, initiate fallback, execute ToolCalls, grant authority, or become durable Run truth; Bailian or any other configured Provider is an Adapter choice rather than a kernel requirement.
+The Host-controlled protocol projection that preserves a Model Attempt's typed native items, item order, call correlation, provisional and terminal events, complete output, usage, failure evidence, and any required opaque replay data bound to its original destination and mapping. It cannot decide retryability, select or substitute a model, initiate fallback, execute StoryOS ToolCalls, grant authority, or become durable Run truth; a Provider is an Adapter choice rather than a kernel requirement.
 _Avoid_: Provider Adapter, provider-owned router, silent fallback, Tool executor
 
 **Model Registration**:
@@ -1112,8 +1112,12 @@ The durable Active, Quarantined, or Retired global contract-eligibility state of
 _Avoid_: Provider health, credential availability, model version, mutable Registration
 
 **Model Capability Profile**:
-The immutable, versioned, provider-neutral semantic envelope trusted for one Model Registration, covering supported input and output modalities, context and output bounds, streaming, Tool-request and structured-output semantics and their exact native or Host-compiled projection modes, generation controls, and reportable usage dimensions. Provider claims enter it only through Host mapping or validation, and an unknown required capability makes the Registration ineligible.
+The immutable, versioned, provider-neutral semantic envelope for one Model Registration, distinguishing modalities, context and output bounds, typed streaming, stored continuation, implicit and explicit cache, function calling, hosted tools, structured output, context editing, response retrieval, cancellation, generation controls, usage, and their supported combinations and native or Host-compiled mappings. Public claims and exact-model validation remain distinct evidence; an unknown required capability makes the route ineligible, while current account availability belongs to the scoped Model Operational Snapshot.
 _Avoid_: Provider model card, Model Operational Snapshot, benchmark score, availability state
+
+**Model Continuation Binding**:
+The immutable, non-authorizing Operational Record that associates a Provider continuation reference with its original Model Attempt, exact Project Scope and Project Conversation, Processing Destination Identity and evidence revision, Model Registration, Adapter mapping, and original project-use and compatibility evidence. Eligible reuse may span AgentRuns in that Project Conversation only after current admission; the binding is neither Project Agent identity nor durable conversation history and cannot carry a Provider chain into another Project Conversation.
+_Avoid_: Project Model Use Binding, Project Agent identity, AgentRun, conversation identity, authorization, shared project-wide Provider session
 
 **Model Operational Snapshot**:
 An immutable, attributable, exact Project Scope-bound point-in-time observation of one Project Model Use Binding, its global Model Registration, and the separate External Contract Compatibility Decision for that pair, including current Credential Reference binding availability when required, destination eligibility, provider health, rate-limit or quota state, latency, pricing reference, and other dynamic routing facts. Project-free provider observations may be shared only as non-authorizing inputs; the Snapshot repeats the exact binding and Decision before they can affect route eligibility. It may change current eligibility without changing the Registration or Model Capability Profile and never proves semantic capability.
@@ -1518,6 +1522,10 @@ _Avoid_: Proposal, authoritative draft
 **Message**:
 A Core Artifact representing one visible contribution to a project transcript. It references exact Artifact Revisions for embedded results and views rather than copying their payloads or resolving mutable latest versions.
 _Avoid_: Run Event, hidden reasoning
+
+**Project Conversation**:
+The durable, author-visible grouping of Messages under one stable identity and exact Project Scope, which can contain contributions from multiple AgentRuns. A new Project Conversation has a separate identity and Provider continuation boundary without changing Project Agent identity; no AgentRun, browser session, or Provider reference defines that identity.
+_Avoid_: AgentRun, Provider session, Project Agent identity, browser tab
 
 **Research Artifact**:
 A Core Artifact that captures or synthesizes source-backed research for later inspection and use. It can support a Proposal but cannot directly change Authoritative State.
