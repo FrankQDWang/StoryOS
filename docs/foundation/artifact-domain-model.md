@@ -616,7 +616,7 @@ Every author-authorized domain transaction that changes Authoritative State also
 
 A Current Chapter change allocates no Authoritative Commit.
 
-This provides precise object conflict checks and a single atomic Project Scope order without creating a complete project snapshot for every edit. Current Authoritative State is the current Heads of object families that use Authoritative Revisions together with the current live Canonical Manuscript Tree. A Canonical Query Snapshot is the reading boundary for that tree, not a second structure authority. An `AuthoritativeCommit` names an applied Manuscript Structure Transition by prior and resulting Manuscript Tree Revision and may contain no prose Revision pairs. The live Canonical Manuscript Tree, that Snapshot, and that Commit do not store a historical tree.
+This provides precise object conflict checks and a single atomic Project Scope order without creating a complete project snapshot for every edit. Current Authoritative State is the current Heads of object families that use Authoritative Revisions together with the Canonical Manuscript Tree, which is the live authoritative hierarchy. A Canonical Query Snapshot is the reading boundary at which that hierarchy is observed, not a second structure authority. An `AuthoritativeCommit` names an applied Manuscript Structure Transition by prior and resulting Manuscript Tree Revision and may contain no prose Revision pairs. The live Canonical Manuscript Tree, that Snapshot, and that Commit do not store a historical tree.
 
 ## 10. Specialized Artifact behavior
 
