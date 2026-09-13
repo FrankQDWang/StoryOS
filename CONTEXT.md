@@ -176,7 +176,7 @@ The immutable terminal lifecycle decision reached after a Project Deletion Reque
 _Avoid_: Immediate disk wipe, cancelled request, restored Project, forgotten external effect
 
 **Effective Model Context**:
-The Effective Destination Context for one Model Attempt, including the AgentRun's bound Project Instruction Revision whenever one exists. Compaction, window management, provider cache, prior-response, and continuity mechanisms may optimize transport only when StoryOS can prove the bound instruction remains logically present; otherwise it is retransmitted or the Attempt is blocked.
+The Effective Destination Context for one Model Attempt, including the AgentRun's bound Project Instruction Revision whenever one exists. Its evidence distinguishes StoryOS-held input, sent content, known continuation references, Provider reports, and opaque internal state; required current instructions must be supplied under the validated profile without claiming knowledge of model attention or all Provider-internal content.
 _Avoid_: Request delta, initial prompt only, provider session assumption
 
 **Instruction Precedence**:
@@ -1112,11 +1112,11 @@ The durable Active, Quarantined, or Retired global contract-eligibility state of
 _Avoid_: Provider health, credential availability, model version, mutable Registration
 
 **Model Capability Profile**:
-The immutable, versioned, provider-neutral semantic envelope for one Model Registration, distinguishing modalities, context and output bounds, typed streaming, stored continuation, implicit and explicit cache, function calling, hosted tools, structured output, context editing, response retrieval, cancellation, generation controls, usage, and their supported combinations and native or Host-compiled mappings. Public claims and exact-model validation remain distinct evidence; an unknown required capability makes the route ineligible, while current account availability belongs to the scoped Model Operational Snapshot.
+The immutable, versioned, provider-neutral semantic envelope for one Model Registration, distinguishing modalities, context and output bounds, Responses transport, typed streaming, stored continuation, implicit and explicit cache, function calling, hosted tools, structured output, context editing, native compaction, response retrieval, cancellation, generation controls, usage, and their supported combinations and native or Host-compiled mappings. Public claims and exact-model validation remain distinct evidence; an unknown required capability makes the route ineligible, while current account availability belongs to the scoped Model Operational Snapshot.
 _Avoid_: Provider model card, Model Operational Snapshot, benchmark score, availability state
 
 **Model Continuation Binding**:
-The immutable, non-authorizing Operational Record that associates a Provider continuation reference with its original Model Attempt, exact Project Scope and Project Conversation, Processing Destination Identity and evidence revision, Model Registration, Adapter mapping, and original project-use and compatibility evidence. Eligible reuse may span AgentRuns in that Project Conversation only after current admission; the binding is neither Project Agent identity nor durable conversation history and cannot carry a Provider chain into another Project Conversation.
+The immutable, non-authorizing Operational Record that associates a Provider continuation reference with its original Model Attempt, exact Project Scope and Project Conversation, Processing Destination Identity and evidence revision, Model Registration, Adapter mapping, and original project-use and compatibility evidence. Eligible reuse may span AgentRuns only within that Project Conversation after current admission; replacing the transport continuation does not itself replace conversation identity or durable history.
 _Avoid_: Project Model Use Binding, Project Agent identity, AgentRun, conversation identity, authorization, shared project-wide Provider session
 
 **Model Operational Snapshot**:
