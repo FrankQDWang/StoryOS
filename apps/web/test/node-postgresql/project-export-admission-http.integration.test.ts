@@ -10,17 +10,13 @@ import {
   createProjectCommandChallenge,
   digestArchiveProject,
   digestExportProjectArchive,
-  digestUpdateProject,
   exportProjectArchive,
   getExportOperation,
-  getProject,
-  updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ArchiveProjectRequest,
   CreateProjectChallengeRequest,
   ExportProjectArchiveRequest,
-  UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
@@ -33,6 +29,10 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeRetry,
 } from "../support/node-integration.ts";
+import {
+  assertExportAdmissionFreezes,
+  assertExportHistoricalEvidence,
+} from "./export-acknowledgement-support.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
@@ -126,7 +126,7 @@ async function createEmpty(baseUrl: string, session: string, idempotencyKey: str
 
 async function postExport(
   baseUrl: string,
-  fetchImpl: typeof fetch,
+  fetchImpl: ReturnType<typeof browserFetch>,
   projectId: string,
   idempotencyKey: string,
   request: ExportProjectArchiveRequest,
@@ -811,308 +811,52 @@ test("the Worker settles failed when the pinned Snapshot is unavailable before o
   }
 });
 
-function capturingExportPost(inner: typeof fetch): { fetchImpl: typeof fetch; lastPostBody: () => string } {
-  let lastPostBody = "";
-  return {
-    fetchImpl: async (input, init) => {
-      const response = await inner(input, init);
-      const url = String(input instanceof Request ? input.url : input);
-      if (response.ok && (init?.method ?? "GET") === "POST" && /\/exports$/.test(url)) {
-        lastPostBody = await response.clone().text();
-      }
-      return response;
+test("exportProjectArchive freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement", async () => {
+  await assertExportAdmissionFreezes({
+    startServer: startRealServer,
+    stopServer: stopRealServer,
+    createEmpty,
+    exportPath: /\/exports$/,
+    operationsTable: "project_export_operations",
+    exportRequest: (correlationId) => exportRequest(correlationId),
+    postExport,
+    replayExport: exportProjectArchive,
+    getOperation: getExportOperation,
+    admitMessage: "Project Export must admit",
+    titles: { original: "Export Freeze Novel", later: "Later Export Title" },
+    ids: {
+      projectKey: "018f0000-0000-7001-8000-00000000eb00",
+      exportCorrelation: "018f0000-0000-7001-8000-00000000eb11",
+      exportKey: "018f0000-0000-7001-8000-00000000eb21",
+      volumeCorrelation: "018f0000-0000-7001-8000-00000000eb14",
+      volumeKey: "018f0000-0000-7001-8000-00000000eb24",
+      chapterCorrelation: "018f0000-0000-7001-8000-00000000eb15",
+      chapterKey: "018f0000-0000-7001-8000-00000000eb25",
+      renameCorrelation: "018f0000-0000-7001-8000-00000000eb12",
+      renameKey: "018f0000-0000-7001-8000-00000000eb22",
     },
-    lastPostBody: () => lastPostBody,
-  };
-}
-
-function problemCode(error: unknown): string | undefined {
-  const protocol = requireStoryOSProtocolError(error);
-  if (protocol.responseBody === undefined) return undefined;
-  try {
-    return (JSON.parse(protocol.responseBody) as { code?: string }).code;
-  } catch {
-    return undefined;
-  }
-}
-
-function renameRequest(title: string, expectedProjectRevision: string, correlationId: string): UpdateProjectRequest {
-  return {
-    command_schema: "storyos.command.update-project.request.v1",
-    update_project_input: {
-      title,
-      expected_project_revision: expectedProjectRevision,
-      client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: "storyos.web-security-policy.release-1.v1",
-      correlation_id: correlationId,
-    },
-  };
-}
-
-async function renameOpenProject(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  projectId: string,
-  title: string,
-  expectedProjectRevision: string,
-  correlationId: string,
-  idempotencyKey: string,
-) {
-  const request = renameRequest(title, expectedProjectRevision, correlationId);
-  const digest = await digestUpdateProject(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    request: {
-      method: "PATCH",
-      route_template: "/api/v1/projects/{project_id}",
-      command_schema: request.command_schema,
-      canonical_command_digest: digest,
-      idempotency_key: idempotencyKey,
-    },
-  }));
-  return updateProject({
-    baseUrl,
-    projectId,
-    fetchImpl,
-    idempotencyKey,
-    antiForgery: challenge.nonce,
-    request,
+    repositoryRoot,
+    workerBinary,
   });
-}
-
-test("exportProjectArchive freezes the Accepted acknowledgement after a later title change and Worker settlement", async () => {
-  let { baseUrl, server } = await startRealServer();
-  try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000eb00", "Export Freeze Novel");
-    const request = exportRequest("018f0000-0000-7001-8000-00000000eb11");
-    const firstCapture = capturingExportPost(first.fetchImpl);
-    const applied = await postExport(
-      baseUrl,
-      firstCapture.fetchImpl,
-      first.projectId,
-      "018f0000-0000-7001-8000-00000000eb21",
-      request,
-    );
-    const firstBody = firstCapture.lastPostBody();
-    assert.equal(applied.admitted.acknowledgement, "accepted");
-    assert.equal(applied.admitted.project.title, "Export Freeze Novel");
-    assert.equal(applied.admitted.project.open.kind, "empty");
-    if (applied.admitted.effect.kind !== "admitted") {
-      throw new Error("Project Export must admit");
-    }
-    const renamed = await renameOpenProject(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "Later Export Title",
-      "1",
-      "018f0000-0000-7001-8000-00000000eb12",
-      "018f0000-0000-7001-8000-00000000eb22",
-    );
-    assert.equal(renamed.project.title, "Later Export Title");
-    const opened = await getProject({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(opened.project.title, "Later Export Title");
-    const frozenCapture = capturingExportPost(first.fetchImpl);
-    const frozen = await exportProjectArchive({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: frozenCapture.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000eb21",
-      antiForgery: applied.challenge.nonce,
-      request,
-    });
-    assert.deepEqual(frozen, applied.admitted);
-    assert.equal(frozenCapture.lastPostBody(), firstBody);
-    assert.equal(frozen.project.title, "Export Freeze Novel");
-    assert.equal(frozen.project.open.kind, "empty");
-    const stillInProgress = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(stillInProgress.status, "in_progress");
-    assert.equal(
-      await queryPostgres(`
-        SELECT count(*) FROM storyos.project_export_operations
-         WHERE project_id = '${first.projectId}'::uuid;
-      `),
-      "1",
-    );
-    assert.equal(
-      await queryPostgres(`
-        SELECT count(*) FROM storyos.pinned_export_sources
-         WHERE project_id = '${first.projectId}'::uuid;
-      `),
-      "1",
-    );
-    await runStoryOSWorker({
-      repositoryRoot,
-      workerBinary,
-      args: ["--once"],
-    });
-    const ready = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(ready.status, "ready");
-    const settledCapture = capturingExportPost(first.fetchImpl);
-    const settled = await exportProjectArchive({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: settledCapture.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000eb21",
-      antiForgery: applied.challenge.nonce,
-      request,
-    });
-    assert.deepEqual(settled, applied.admitted);
-    assert.equal(settledCapture.lastPostBody(), firstBody);
-    assert.equal(settled.acknowledgement, "accepted");
-    assert.equal(settled.project.title, "Export Freeze Novel");
-    const stillReady = await getExportOperation({
-      baseUrl,
-      projectId: first.projectId,
-      exportId: applied.admitted.effect.export_id,
-      fetchImpl: first.fetchImpl,
-    });
-    assert.equal(stillReady.status, "ready");
-    assert.equal(
-      await queryPostgres(`
-        SELECT count(*) FROM storyos.project_export_operations
-         WHERE project_id = '${first.projectId}'::uuid;
-      `),
-      "1",
-    );
-    await stopRealServer(server);
-    ({ baseUrl, server } = await startRealServer());
-    const restartedFetch = browserFetch(baseUrl, "session-a");
-    const afterRestartCapture = capturingExportPost(restartedFetch);
-    const afterRestart = await exportProjectArchive({
-      baseUrl,
-      projectId: first.projectId,
-      fetchImpl: afterRestartCapture.fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-00000000eb21",
-      antiForgery: applied.challenge.nonce,
-      request,
-    });
-    assert.deepEqual(afterRestart, applied.admitted);
-    assert.equal(afterRestartCapture.lastPostBody(), firstBody);
-  } finally {
-    await stopRealServer(server);
-  }
 });
 
 test("exportProjectArchive distinguishes historical absence from damaged new-format evidence", async () => {
-  const { baseUrl, server } = await startRealServer();
-  try {
-    const first = await createEmpty(baseUrl, "session-a", "018f0000-0000-7001-8000-00000000eb01", "Export History Novel");
-    const request = exportRequest("018f0000-0000-7001-8000-00000000eb13");
-    const applied = await postExport(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      "018f0000-0000-7001-8000-00000000eb23",
-      request,
-    );
-    assert.equal(applied.admitted.project.title, "Export History Novel");
-    const novelsBefore = await queryPostgres(`
-      SELECT title || ' ' || count(*)::text FROM storyos.projects
-       WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
-    `);
-    const operationsBefore = await queryPostgres(`
-      SELECT count(*) FROM storyos.project_export_operations
-       WHERE project_id = '${first.projectId}'::uuid;
-    `);
-    const keysBefore = await queryPostgres(`
-      SELECT count(*) FROM storyos.command_idempotency
-       WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'exportProjectArchive';
-    `);
-    const pinnedBefore = await queryPostgres(`
-      SELECT count(*) FROM storyos.pinned_export_sources
-       WHERE project_id = '${first.projectId}'::uuid;
-    `);
-    await queryPostgres(`
-      UPDATE storyos.command_idempotency
-         SET acknowledgement_format = NULL, response_project = NULL
-       WHERE project_id = '${first.projectId}'::uuid
-         AND idempotency_key = '018f0000-0000-7001-8000-00000000eb23'::uuid;
-    `);
-    await assert.rejects(
-      exportProjectArchive({
-        baseUrl,
-        projectId: first.projectId,
-        fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000eb23",
-        antiForgery: applied.challenge.nonce,
-        request,
-      }),
-      (error) => {
-        const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 409
-          && problemCode(error) === "historical_acknowledgement_unavailable";
-      },
-    );
-    await queryPostgres(`
-      UPDATE storyos.command_idempotency
-         SET acknowledgement_format = 'command_response_project.v1',
-             response_project = '{"broken":true}'::jsonb
-       WHERE project_id = '${first.projectId}'::uuid
-         AND idempotency_key = '018f0000-0000-7001-8000-00000000eb23'::uuid;
-    `);
-    await assert.rejects(
-      exportProjectArchive({
-        baseUrl,
-        projectId: first.projectId,
-        fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-00000000eb23",
-        antiForgery: applied.challenge.nonce,
-        request,
-      }),
-      (error) => {
-        const protocol = requireStoryOSProtocolError(error);
-        return protocol.status === 503
-          && problemCode(error) !== "historical_acknowledgement_unavailable";
-      },
-    );
-    assert.equal(
-      await queryPostgres(`
-        SELECT title || ' ' || count(*)::text FROM storyos.projects
-         WHERE project_id = '${first.projectId}'::uuid GROUP BY title;
-      `),
-      novelsBefore,
-    );
-    assert.equal(
-      await queryPostgres(`
-        SELECT count(*) FROM storyos.project_export_operations
-         WHERE project_id = '${first.projectId}'::uuid;
-      `),
-      operationsBefore,
-    );
-    assert.equal(
-      await queryPostgres(`
-        SELECT count(*) FROM storyos.command_idempotency
-         WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'exportProjectArchive';
-      `),
-      keysBefore,
-    );
-    assert.equal(
-      await queryPostgres(`
-        SELECT count(*) FROM storyos.pinned_export_sources
-         WHERE project_id = '${first.projectId}'::uuid;
-      `),
-      pinnedBefore,
-    );
-  } finally {
-    await stopRealServer(server);
-  }
+  await assertExportHistoricalEvidence({
+    startServer: startRealServer,
+    stopServer: stopRealServer,
+    createEmpty,
+    operationsTable: "project_export_operations",
+    commandKind: "exportProjectArchive",
+    exportRequest: (correlationId) => exportRequest(correlationId),
+    postExport,
+    replayExport: exportProjectArchive,
+    title: "Export History Novel",
+    ids: {
+      projectKey: "018f0000-0000-7001-8000-00000000eb01",
+      exportCorrelation: "018f0000-0000-7001-8000-00000000eb13",
+      exportKey: "018f0000-0000-7001-8000-00000000eb23",
+    },
+  });
 });
 
 /** StoryOS Project Export ZIP files use STORE only. */
