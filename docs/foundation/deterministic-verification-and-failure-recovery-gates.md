@@ -739,9 +739,10 @@ properties:
    complete write set; an `ApplyAuthorEdit.AuthoritativeApplied` result has its
    exact Receipt, Author Action, Revision/Head, and Project Activity relation.
    `ApplyAuthorEdit.ProposalRevised` has one Forward Author Action and a
-   Proposal Revision with no Authoritative Commit. Refusal, conflict, and
-   no-effect may have their required no-change Receipt but never Project
-   Activity or a partial authority effect.
+   Proposal Revision with no Authoritative Commit. Author Edit refusal,
+   conflict, and no-effect may have their required no-change Receipt but never
+   Project Activity or a partial authority effect. Takeover `no_effect`
+   Activity remains valid without a change to Authoritative State.
 4. **Monotonic fencing:** no stale, duplicate, expired, cancelled, or
    superseded lease/fence holder may settle, publish, or consume new authority.
 5. **Attempt separation:** retry, resend, redispatch, repair, fallback, or

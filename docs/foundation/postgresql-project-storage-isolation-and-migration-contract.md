@@ -500,7 +500,7 @@ row, no Author Action, and no Project Activity row. Other commands and results
 use their owner-defined allocation matrices. A successful Current Chapter
 change writes a Forward Author Action, Activity, and Snapshot. It does not
 change Authoritative State or Manuscript Tree Revision and writes no
-Authoritative Commit or prose Revision. A Manuscript Structure Transition
+Authoritative Commit or Authoritative Revision. A Manuscript Structure Transition
 writes an Authoritative Commit that may contain empty prose Revision pairs.
 `ApplyAuthorEdit.ProposalRevised` writes one Forward Author Action and a
 Proposal Revision and writes no Authoritative Commit. Takeover `no_effect`
@@ -542,7 +542,7 @@ The physical mapping is closed as follows:
 | Editor Session, current writer generation, Input Fence, and Proposal Pause Fence | `operational-admission-editor` | Scope-bound operational evidence; stale generations are fenced and no browser Local Edit Journal row becomes PostgreSQL authority |
 | Application Wire Record | `operational-wire-history` | Store exact accepted schema-valid message-content bytes once with route, method, release, schema, content type, digest profile, idempotency/Command reference, and resulting identity; never store cookies, headers, nonces, secrets, malformed bodies, or query-response archives |
 | Public Event wire representation | `operational-wire-history` | Store the first compact JSON representation with Event identity, Activity profile, schema, redaction profile, and representation digest; duplicate delivery is not another Wire Record |
-| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position` only when the result has client-visible Activity; for direct `ApplyAuthorEdit.AuthoritativeApplied` this is one exact Receipt, Commit, Revision, and Author Action relation; other commands follow their owner-defined Activity allocation |
+| Project Activity Event and position | `operational-project-activity` | Append one immutable Event and scoped `project_activity_position` only when the result has client-visible Activity; for direct `ApplyAuthorEdit.AuthoritativeApplied` this is one exact Receipt, Commit, Revision, and Author Action relation; other Author Edit results and other commands follow their owner-defined Activity allocation |
 | Snapshot, cursor, replay floor, generation, and handoff evidence | `operational-snapshot-replay` and `operational-project-activity` | Snapshot is an authorized Server reading boundary; cursor is bound to Scope/requester/filter/profile/generation; an old-generation cursor returns `activity_cursor_too_old`; the client obtains a fresh authorized Snapshot and resumes after the Snapshot Activity position; handoff evidence preserves the old closing position, new generation, new floor, and Snapshot identity; that evidence is not an executable cursor map |
 | Run Event, Mailbox, Transcript, Approval, Attempt, budget, lease, and outbox evidence | `operational-run-mailbox` and `operational-context-disclosure` | Immutable events and delivery evidence plus fenced live state; retention/compaction semantics remain owned by [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) |
 | Context Assembly Manifest, external-use binding, compatibility Decision, Destination Attempt, disclosure, and external wire projection | `operational-context-disclosure` | Manifest and exact non-secret wire projection commit before dispatch claim; OutcomeUnknown disclosure is durable before possible I/O; binding and Decision are separate records |
@@ -1335,10 +1335,11 @@ covers at least:
 25. the catalog's protocol route-catalog digest and migration-chain digest
     agree with the checked-in Release 1 inputs, so a same-release activation
     cannot skip storage migration by reusing a public protocol identity.
-26. one applied Author Edit plus `NoEffect`, `Conflicted`, and `Refused`
-    produces four typed Domain Receipts but only one Activity Event, Revision,
-    payload, Commit, Head change, and Author Action; exact retry returns each
-    original settlement and refuses every impossible authority relation.
+26. one `ApplyAuthorEdit.AuthoritativeApplied` plus `NoEffect`, `Conflicted`,
+    and `Refused` produces four typed Domain Receipts but only one Activity
+    Event, Authoritative Revision, payload, Authoritative Commit, Head change,
+    and Author Action; exact retry returns each original settlement and
+    refuses every impossible authority relation.
 
 ## 12. Normative invariants and handoff
 
