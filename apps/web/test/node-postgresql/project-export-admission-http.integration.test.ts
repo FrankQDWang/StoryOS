@@ -29,6 +29,10 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeRetry,
 } from "../support/node-integration.ts";
+import {
+  assertExportAdmissionFreezes,
+  assertExportHistoricalEvidence,
+} from "./export-acknowledgement-support.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
@@ -122,7 +126,7 @@ async function createEmpty(baseUrl: string, session: string, idempotencyKey: str
 
 async function postExport(
   baseUrl: string,
-  fetchImpl: typeof fetch,
+  fetchImpl: ReturnType<typeof browserFetch>,
   projectId: string,
   idempotencyKey: string,
   request: ExportProjectArchiveRequest,
@@ -805,6 +809,52 @@ test("the Worker settles failed when the pinned Snapshot is unavailable before o
   } finally {
     await stopRealServer(server);
   }
+});
+
+test("exportProjectArchive freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement", async () => {
+  await assertExportAdmissionFreezes({
+    startServer: startRealServer,
+    stopServer: stopRealServer,
+    createEmpty,
+    exportPath: /\/exports$/,
+    operationsTable: "project_export_operations",
+    exportRequest: (correlationId) => exportRequest(correlationId),
+    postExport,
+    replayExport: exportProjectArchive,
+    getOperation: getExportOperation,
+    admitMessage: "Project Export must admit",
+    titles: { original: "Export Freeze Novel", later: "Later Export Title" },
+    ids: {
+      projectKey: "018f0000-0000-7001-8000-00000000eb00",
+      exportCorrelation: "018f0000-0000-7001-8000-00000000eb11",
+      exportKey: "018f0000-0000-7001-8000-00000000eb21",
+      volumeCorrelation: "018f0000-0000-7001-8000-00000000eb14",
+      volumeKey: "018f0000-0000-7001-8000-00000000eb24",
+      chapterCorrelation: "018f0000-0000-7001-8000-00000000eb15",
+      chapterKey: "018f0000-0000-7001-8000-00000000eb25",
+      renameCorrelation: "018f0000-0000-7001-8000-00000000eb12",
+      renameKey: "018f0000-0000-7001-8000-00000000eb22",
+    },
+  });
+});
+
+test("exportProjectArchive distinguishes historical absence from damaged new-format evidence", async () => {
+  await assertExportHistoricalEvidence({
+    startServer: startRealServer,
+    stopServer: stopRealServer,
+    createEmpty,
+    operationsTable: "project_export_operations",
+    commandKind: "exportProjectArchive",
+    exportRequest: (correlationId) => exportRequest(correlationId),
+    postExport,
+    replayExport: exportProjectArchive,
+    title: "Export History Novel",
+    ids: {
+      projectKey: "018f0000-0000-7001-8000-00000000eb01",
+      exportCorrelation: "018f0000-0000-7001-8000-00000000eb13",
+      exportKey: "018f0000-0000-7001-8000-00000000eb23",
+    },
+  });
 });
 
 /** StoryOS Project Export ZIP files use STORE only. */

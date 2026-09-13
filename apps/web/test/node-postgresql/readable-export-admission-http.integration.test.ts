@@ -30,6 +30,10 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeRetry,
 } from "../support/node-integration.ts";
+import {
+  assertExportAdmissionFreezes,
+  assertExportHistoricalEvidence,
+} from "./export-acknowledgement-support.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const serverBinary = join(repositoryRoot, "target", "release-package", process.platform === "win32" ? "storyos-server.exe" : "storyos-server");
@@ -116,7 +120,7 @@ async function createEmpty(baseUrl: string, session: string, idempotencyKey: str
 
 async function postExport(
   baseUrl: string,
-  fetchImpl: typeof fetch,
+  fetchImpl: ReturnType<typeof browserFetch>,
   projectId: string,
   idempotencyKey: string,
   request: ExportHumanReadableManuscriptRequest,
@@ -678,4 +682,50 @@ test("the Worker settles failed when the pinned Snapshot is unavailable before o
   } finally {
     await stopRealServer(server);
   }
+});
+
+test("exportHumanReadableManuscript freezes the Accepted acknowledgement after later title and Current Chapter changes and Worker settlement", async () => {
+  await assertExportAdmissionFreezes({
+    startServer: startRealServer,
+    stopServer: stopRealServer,
+    createEmpty,
+    exportPath: /\/manuscript\/exports$/,
+    operationsTable: "human_readable_manuscript_export_operations",
+    exportRequest,
+    postExport,
+    replayExport: exportHumanReadableManuscript,
+    getOperation: getHumanReadableManuscriptExport,
+    admitMessage: "Human-readable export must admit",
+    titles: { original: "Readable Freeze Novel", later: "Later Readable Title" },
+    ids: {
+      projectKey: "018f0000-0000-7001-8000-00000000ec00",
+      exportCorrelation: "018f0000-0000-7001-8000-00000000ec11",
+      exportKey: "018f0000-0000-7001-8000-00000000ec21",
+      volumeCorrelation: "018f0000-0000-7001-8000-00000000ec14",
+      volumeKey: "018f0000-0000-7001-8000-00000000ec24",
+      chapterCorrelation: "018f0000-0000-7001-8000-00000000ec15",
+      chapterKey: "018f0000-0000-7001-8000-00000000ec25",
+      renameCorrelation: "018f0000-0000-7001-8000-00000000ec12",
+      renameKey: "018f0000-0000-7001-8000-00000000ec22",
+    },
+  });
+});
+
+test("exportHumanReadableManuscript distinguishes historical absence from damaged new-format evidence", async () => {
+  await assertExportHistoricalEvidence({
+    startServer: startRealServer,
+    stopServer: stopRealServer,
+    createEmpty,
+    operationsTable: "human_readable_manuscript_export_operations",
+    commandKind: "exportHumanReadableManuscript",
+    exportRequest,
+    postExport,
+    replayExport: exportHumanReadableManuscript,
+    title: "Readable History Novel",
+    ids: {
+      projectKey: "018f0000-0000-7001-8000-00000000ec01",
+      exportCorrelation: "018f0000-0000-7001-8000-00000000ec13",
+      exportKey: "018f0000-0000-7001-8000-00000000ec23",
+    },
+  });
 });

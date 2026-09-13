@@ -4,7 +4,7 @@ use storyos_core::{READABLE_EXPORT_UNAVAILABLE_MARKER, render_readable_manuscrip
 
 use super::*;
 use crate::{
-    CanonicalSnapshot, ChapterFact, ChapterId, ProjectId, UserId, VolumeFact, VolumeId,
+    CanonicalSnapshot, ChapterFact, ChapterId, Project, ProjectId, UserId, VolumeFact, VolumeId,
     manuscript_search::{ManuscriptSearchBlockFact, ManuscriptSearchChapterFact},
 };
 
@@ -21,6 +21,11 @@ impl ExportHumanReadableManuscriptStore for Store {
             export_id: command.export_id.clone(),
             effect: ExportHumanReadableManuscriptAdmissionEffect::Admitted {
                 source_snapshot: Box::new(snapshot()),
+            },
+            response_project: Project {
+                project_id: command.project_scope.project_id.clone(),
+                title: "Empty Novel".to_owned(),
+                current_chapter_id: None,
             },
         })
     }

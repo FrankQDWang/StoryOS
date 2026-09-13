@@ -6,6 +6,10 @@ import {
   type GetHumanReadableManuscriptExportResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requestOwnedHumanReadableExport } from "./export-human-readable.ts";
+import {
+  HISTORICAL_ACKNOWLEDGEMENT_MESSAGE,
+  historicalAcknowledgementUnavailable,
+} from "./historical-acknowledgement.ts";
 
 type ReadyExportPage = Extract<GetHumanReadableManuscriptExportResponse, { status: "ready" }>;
 
@@ -14,7 +18,8 @@ type ExportOutcome =
   | { kind: "ready"; page: ReadyExportPage; downloadSha256: string }
   | { kind: "failed" }
   | { kind: "outcome_unknown" }
-  | { kind: "unavailable" };
+  | { kind: "unavailable" }
+  | { kind: "historical" };
 
 export function ManuscriptReadableExportPanel({
   projectId,
@@ -58,8 +63,12 @@ export function ManuscriptReadableExportPanel({
       }
       setBusy(false);
       await pollExport(exportId, generation);
-    } catch {
-      setOutcome({ kind: "unavailable" });
+    } catch (error) {
+      setOutcome(
+        historicalAcknowledgementUnavailable(error)
+          ? { kind: "historical" }
+          : { kind: "unavailable" },
+      );
     } finally {
       if (pollGeneration.current === generation) {
         setBusy(false);
@@ -146,6 +155,9 @@ export function ManuscriptReadableExportPanel({
       <button type="button" disabled={busy} onClick={() => void requestExport()}>
         导出可读稿件
       </button>
+      {outcome?.kind === "historical" ? (
+        <p data-readable-export-error="">{HISTORICAL_ACKNOWLEDGEMENT_MESSAGE}</p>
+      ) : null}
       {outcome?.kind === "unavailable" ? <p>无法导出可读稿件。</p> : null}
       {outcome?.kind === "failed" ? <p>可读稿件导出失败。</p> : null}
       {outcome?.kind === "outcome_unknown" ? <p>可读稿件导出结果未知。</p> : null}

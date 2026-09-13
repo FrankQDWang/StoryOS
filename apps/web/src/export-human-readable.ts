@@ -5,6 +5,7 @@ import {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ExportHumanReadableManuscriptResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
@@ -46,7 +47,10 @@ export async function requestOwnedHumanReadableExport(options: {
     const accepted = await submitExport(options, flight);
     inFlightExports.delete(options.projectId);
     return accepted;
-  } catch {
+  } catch (error) {
+    if (historicalAcknowledgementUnavailable(error)) {
+      throw error;
+    }
     const accepted = await submitExport(options, flight);
     inFlightExports.delete(options.projectId);
     return accepted;

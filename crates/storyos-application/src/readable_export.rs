@@ -4,7 +4,8 @@ use storyos_core::{ReadableExportChapter, ReadableExportVolume, render_readable_
 
 use crate::{
     AuthorCommandAdmissionIds, CanonicalSnapshot, CanonicalTreeFacts, EditorClientBinding,
-    ManuscriptSearchChapterFact, ProjectCommandChallengeBinding, ProjectReadError, ProjectScope,
+    ManuscriptSearchChapterFact, Project, ProjectCommandChallengeBinding, ProjectReadError,
+    ProjectScope,
 };
 
 pub const HUMAN_READABLE_EXPORT_COMMAND_KIND: &str = "exportHumanReadableManuscript";
@@ -31,6 +32,7 @@ pub struct ExportHumanReadableManuscriptAdmission {
     pub ids: AuthorCommandAdmissionIds,
     pub export_id: String,
     pub effect: ExportHumanReadableManuscriptAdmissionEffect,
+    pub response_project: Project,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -46,6 +48,7 @@ pub enum ExportHumanReadableManuscriptAdmissionEffect {
 #[derive(Debug)]
 pub enum ExportHumanReadableManuscriptError {
     BindingConflict,
+    HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
     MissingProject,
     ArchivedProject,
@@ -58,6 +61,9 @@ impl std::fmt::Display for ExportHumanReadableManuscriptError {
             Self::BindingConflict => {
                 formatter.write_str("The human-readable export binding conflicts")
             }
+            Self::HistoricalAcknowledgementUnavailable => formatter.write_str(
+                "The original human-readable export acknowledgement cannot be recovered",
+            ),
             Self::InvalidChallenge => {
                 formatter.write_str("The human-readable export challenge is invalid")
             }
@@ -75,6 +81,7 @@ impl std::error::Error for ExportHumanReadableManuscriptError {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
             Self::BindingConflict
+            | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
             | Self::MissingProject
             | Self::ArchivedProject => None,
