@@ -634,18 +634,6 @@ test("deleteVolume freezes applied, no-effect, conflict, and refusal acknowledge
       request: renameRequest("Later Delete Volume Title", "1", "018f0000-0000-7001-8000-00000000e811"),
     });
     assert.equal(later.project.title, "Later Delete Volume Title");
-    const laterChapter = await postChapter(
-      baseUrl,
-      first.fetchImpl,
-      first.projectId,
-      volumeBId,
-      "018f0000-0000-7001-8000-00000000e812",
-      chapterRequest("Chapter C", "5", "018f0000-0000-7001-8000-00000000e813"),
-    );
-    assert.equal(laterChapter.effect.kind, "authoritative_applied");
-    if (laterChapter.effect.kind !== "authoritative_applied") {
-      throw new Error("later Create Chapter must apply");
-    }
     const frozenCapture = capturingDelete(first.fetchImpl);
     const frozen = await deleteVolume({
       baseUrl,
@@ -707,9 +695,9 @@ test("deleteVolume freezes applied, no-effect, conflict, and refusal acknowledge
     assert.equal(opened.project.title, "Later Delete Volume Title");
     assert.equal(opened.project.open.kind, "current_chapter");
     if (opened.project.open.kind !== "current_chapter") {
-      throw new Error("GET must report Chapter C");
+      throw new Error("GET must report Chapter B");
     }
-    assert.equal(opened.project.open.current_chapter_id, laterChapter.effect.chapter_id);
+    assert.equal(opened.project.open.current_chapter_id, chapterId);
     const receiptCount = await queryPostgres(`
       SELECT count(*) FROM storyos.domain_receipts
        WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'deleteVolume';

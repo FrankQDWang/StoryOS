@@ -15,9 +15,12 @@ import {
   digestCreateEditorSession,
   digestCreateVolume,
   digestDeleteChapter,
+  digestSetCurrentChapter,
   digestUndoLatestAuthorAction,
   digestUpdateProject,
+  getChapter,
   getProject,
+  setCurrentChapter,
   undoLatestAuthorAction,
   updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -27,6 +30,7 @@ import type {
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
   DeleteChapterRequest,
+  SetCurrentChapterRequest,
   UndoLatestAuthorActionRequest,
   UpdateProjectRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -108,6 +112,27 @@ function undoRequest(options: {
     undo_latest_author_action_input: {
       expected_author_undo_frontier_sequence: options.expectedFrontier,
       expected_authoritative_revision_id: options.expectedRevisionId,
+      editor_session_id: options.editorSessionId,
+      client_contract_revision: CLIENT,
+      security_policy_revision: SECURITY,
+      correlation_id: options.correlationId,
+    },
+  };
+}
+
+function currentRequest(options: {
+  chapterId: string;
+  expectedCurrentChapterId: string;
+  expectedTargetRevisionId: string;
+  editorSessionId: string;
+  correlationId: string;
+}): SetCurrentChapterRequest {
+  return {
+    command_schema: "storyos.command.set-current-chapter.request.v1",
+    set_current_chapter_input: {
+      chapter_id: options.chapterId,
+      expected_current_chapter_id: options.expectedCurrentChapterId,
+      expected_target_revision_id: options.expectedTargetRevisionId,
       editor_session_id: options.editorSessionId,
       client_contract_revision: CLIENT,
       security_policy_revision: SECURITY,
@@ -455,6 +480,47 @@ test("undoLatestAuthorAction freezes compensation and conflict acknowledgements 
     if (laterChapter.effect.kind !== "authoritative_applied") {
       throw new Error("later Create Chapter must apply");
     }
+    const laterChapterId = laterChapter.effect.chapter_id;
+    const openedLater = await getChapter({
+      baseUrl,
+      projectId: first.projectId,
+      chapterId: laterChapterId,
+      fetchImpl: first.fetchImpl,
+    });
+    const laterCurrentDigest = await digestSetCurrentChapter(currentRequest({
+      chapterId: laterChapterId,
+      expectedCurrentChapterId: chapterAId,
+      expectedTargetRevisionId: openedLater.chapter.current_revision.revision_id,
+      editorSessionId: session.editor_session.editor_session_id,
+      correlationId: "018f0000-0000-7001-8000-00000000ea13",
+    }));
+    const laterCurrentChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      request: {
+        method: "PUT",
+        route_template: "/api/v1/projects/{project_id}/current-chapter",
+        command_schema: "storyos.command.set-current-chapter.request.v1",
+        canonical_command_digest: laterCurrentDigest,
+        idempotency_key: "018f0000-0000-7001-8000-00000000ea12",
+      },
+    }));
+    const laterCurrent = await setCurrentChapter({
+      baseUrl,
+      projectId: first.projectId,
+      fetchImpl: first.fetchImpl,
+      idempotencyKey: "018f0000-0000-7001-8000-00000000ea12",
+      antiForgery: laterCurrentChallenge.nonce,
+      request: currentRequest({
+        chapterId: laterChapterId,
+        expectedCurrentChapterId: chapterAId,
+        expectedTargetRevisionId: openedLater.chapter.current_revision.revision_id,
+        editorSessionId: session.editor_session.editor_session_id,
+        correlationId: "018f0000-0000-7001-8000-00000000ea13",
+      }),
+    });
+    assert.equal(laterCurrent.effect.kind, "authoritative_applied");
     const frozenCapture = capturingUndo(first.fetchImpl);
     const frozen = await undoLatestAuthorAction({
       baseUrl,
@@ -492,7 +558,7 @@ test("undoLatestAuthorAction freezes compensation and conflict acknowledgements 
     if (opened.project.open.kind !== "current_chapter") {
       throw new Error("GET must report Chapter B");
     }
-    assert.equal(opened.project.open.current_chapter_id, laterChapter.effect.chapter_id);
+    assert.equal(opened.project.open.current_chapter_id, laterChapterId);
     const receiptCount = await queryPostgres(`
       SELECT count(*) FROM storyos.domain_receipts
        WHERE project_id = '${first.projectId}'::uuid AND command_kind = 'undoLatestAuthorAction';
