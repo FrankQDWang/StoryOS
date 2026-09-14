@@ -323,6 +323,10 @@ _Avoid_: Artifact, temporary log
 Project Scope-bound, inspectable, generated reference material that helps the Agent carry useful context across Project Conversations and AgentRuns. It can be corrected and read selectively, but grants no authority, instruction priority, execution permission, or guarantee of current truth.
 _Avoid_: Authoritative State, Provider continuation, active context compaction, hidden persistent memory
 
+**Conversation Memory Settings**:
+The independent author settings on one exact Project Conversation that control new Agent Memory reads and that conversation's eligibility for future Memory extraction. They may change only when every associated foreground root AgentRun is Terminal, or none exists; independent background Memory work does not prevent the change, which neither deletes published Memory nor rewrites recorded context or earlier disclosure.
+_Avoid_: Project-wide memory switch, semantic suppression, deletion request, active-loop steering
+
 **Working Context**:
 The operation-bounded view of live author input, in-progress model or Tool activity, short-term plans, and other unsettled material needed to continue active work. Only an immutable item version captured by the applicable Operation Input Snapshot may become a Context Candidate; for a RunStep, its Step Snapshot fulfills that boundary. A live mutable buffer, stream, or process object cannot be injected directly. Working Context evidence may remain in Operational Records for recovery; Memory extraction later reads eligible durable conversation snapshots, never the live buffer itself.
 _Avoid_: Agent Memory, durable project knowledge, hidden cross-Run memory

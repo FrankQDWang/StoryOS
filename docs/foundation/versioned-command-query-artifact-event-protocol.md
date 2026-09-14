@@ -2,7 +2,7 @@
 
 Status: accepted Foundation protocol specification
 
-Contract revision: `release1-wire-catalog-2026-08-16-author-edit-response-v2`
+Contract revision: `release1-wire-catalog-2026-09-14-responses-memory`
 
 Decision owner: [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58)
 
@@ -36,8 +36,9 @@ The protocol preserves these fixed product boundaries:
 - PostgreSQL is authoritative. A Project is never a directory, database, file,
   SQLite database, vector store, Neo4j graph, microservice, broker topic, or
   event-sourced aggregate.
-- Models and embeddings use external APIs. Provider contracts remain neutral;
-  Bailian is only a current test Provider.
+- Models and embeddings use external APIs. Volcengine Agent Plan Responses is
+  the first selected model path under ADR 0033; exact capabilities still need
+  endpoint, model, and account evidence.
 - Tool, MCP, MCP App, Provider, research, import, and author-provided content is
   untrusted and non-authoritative. Only an admitted StoryOS Host/Core command,
   and where required Proposal plus explicit Acceptance, may change
@@ -1670,7 +1671,7 @@ new Route Decision and uses the selected route's own binding, Credential
 generation, and compatibility Decision. No route, Snapshot, fallback, Provider
 alias, or globally cached compatibility result can create or inherit a
 credential namespace. These are Host contracts beneath the zero-configuration
-author experience; Bailian remains only a test Adapter choice.
+author experience; Provider selection follows ADR 0033.
 
 ### 13.4 Tool and MCP invocation
 
@@ -1718,7 +1719,7 @@ ToolInvocationRequest {
 
 The Context Assembly Manifest, Destination Context Manifest, Destination
 Attempt, and final Destination Attempt Admission Decision are mandatory for
-every Tool or MCP execution, including a controlled built-in destination. The
+every StoryOS-dispatched Tool or MCP execution, including a controlled built-in destination. The
 external processing variant, its Outbound Disclosure Manifest, and its Wire
 Payload Projection are additionally mandatory for an External Processing
 Destination; a controlled destination
@@ -1742,7 +1743,7 @@ explicit Acceptance.
 
 A Tool or MCP result is retained as a bounded typed result and provenance
 source. If any part later enters model, Tool, App, research, or other
-destination context, it becomes a new Context Candidate and crosses the full
+StoryOS-controlled destination context, it becomes a new Context Candidate and crosses the full
 seven gates again, producing new Projection and manifest evidence for that
 new use. The earlier ToolCall, result validation, disclosure, or admitted
 Decision is never reusable context eligibility or outbound authority.
@@ -1998,8 +1999,8 @@ DestinationManifestBinding {
 }
 ```
 
-The Host admits the destination, source Revisions, lifecycle, Memory
-Suppression, Context Exclude, Purpose, project grant, exact disclosure Approval
+The Host admits the destination, source versions, applicable lifecycle and
+current Memory-use settings for fresh reads, Purpose, project grant, exact disclosure Approval
 when required, Credential Reference, policy, and budgets immediately before
 dispatch. The final Admission Decision freezes the actual effective bounds and
 is referenced by the manifest binding, Destination Attempt, dispatch claim,
@@ -2016,6 +2017,171 @@ limits, and no ambient cookies, cloud metadata credentials, proxy credentials,
 or internal network access. Downloaded content is untrusted source evidence,
 not instruction or authority. Embedding operations cross the same disclosure
 and Attempt boundary as model calls; projection rebuild grants no exception.
+
+### 13.9 Responses, hosted operations, and inspection
+
+The Model, Tool, Context, and threat owners retain the semantics in ADRs 0033
+and 0034. Their protocol records compose the existing Model Invocation,
+Execution Attempt, ModelRouteUseEvidence, OperationAuthorityEvidence, and
+DestinationManifestBinding. No Provider DTO becomes a Core or browser API.
+
+`createAgentRun` request v2 requires a closed `conversation` selection:
+`{ kind: new }` or `{ kind: existing, conversation_id }`. There is no inferred
+current conversation. For `new`, the Server creates a UUIDv7 Project Conversation
+and its initial Memory Settings from release defaults in the same transaction
+as Run admission. For `existing`, it validates the exact identity under current
+Project Scope and access; an absent or inaccessible identity never creates one.
+The accepted response v2 returns the durable `conversation_id` and captured
+`memory_settings_revision` with the Run reference. `getAgentRun` response v2
+preserves both fields. The Client uses that conversation identity for later
+Runs, Memory inspection, and settings changes; it never uses a Provider id.
+An exact retry returns the original conversation, settings revision, and Run
+identities. Reusing its key with changed input fails the normal digest check.
+A fresh `new` command key creates a separate conversation and continuation
+chain. Failed admission creates neither a conversation nor a Run. Creating a
+conversation requires no separate public command or business handler here.
+
+`ModelContinuationBinding` is an immutable Operational Record with its own
+identity, original Model Attempt, Project Scope, Project Conversation,
+Processing Destination Identity and evidence revision, Model Registration,
+Adapter mapping, original use binding and compatibility Decision, and a bounded
+access-controlled Provider-reference evidence locator. Each new Model Attempt
+pins its prior binding and its own current admission. A new conversation cannot
+reuse another conversation's binding. Only a selected complete result whose
+whole Agent Decision validates and becomes durable can advance continuation.
+Partial, rejected, cancelled, and fenced output remains evidence only.
+
+Represent context evidence with a closed `evidence_kind`:
+`sent_content` identifies exact retained non-secret wire content;
+`stored_reference` identifies exact StoryOS-held input or prior projection;
+`provider_report` identifies an attributable bounded report;
+`provider_opaque` identifies a validated opaque reference and explicit unknowns.
+Each variant binds its owning Attempt, source/version or reference identity,
+and current availability. Secret injection uses opaque placeholders, never a
+secret or secret digest. Unknown internal content is not an empty input list.
+Public inspection projects these records through `getAgentRun` request/response
+v2. An optional exact `model_attempt_id` selects only evidence within that Run;
+without it, the Query returns a bounded summary and references. Existing Snapshot
+pagination, current redaction, and non-oracular Scope checks apply.
+Provider identifiers are evidence, never public authorization or Core identity.
+
+`ProviderHostedOperation` is an Operational Record bound to one Model Attempt,
+with exact hosted Registration set, explicit intake and intentionally referenced
+state, permitted processors and destinations, effect ceiling, authority,
+Approval target when required, manifest references, finite resource bounds,
+and returned evidence. The entire enabled set is admitted before submission.
+It has no Ambient Context or inherited conversation grants. The initial effects
+are search, reading, and bounded temporary computation. Unknown required bounds
+make it ineligible. A best-effort Provider counter is not a hard bound.
+
+The owning Model Attempt is the single physical submission and accounting
+boundary. Do not invent internal Host ToolCalls, dispatches, DNS checks, or
+pre-consumption gates for invisible Provider steps. Keep Host observations,
+Provider reports, and unknown effects separate. A complete validated outer
+result may contain complete sub-results and an unmet research objective;
+an incomplete stream cannot become that result. Rejecting output does not undo
+earlier disclosure, cost, or hosted effects. StoryOS-controlled nested dispatch
+and later use of returned content still cross their own admission gates.
+
+The existing `decideApproval` route uses request/response v2 for a closed target:
+`tool_call { tool_call_id, request_digest }` or
+`provider_hosted_operation { operation_id, model_attempt_id, request_digest }`.
+Scope and authority evidence bind the complete target. Neither variant approves
+the other. The Approval query/Event projection preserves the target and exact
+request digest; the Approval Event schema advances to v2. This is a planned
+Stage 5 schema change, not a new handler or a completed Approval.
+
+Host cancellation is durable before best-effort abort. Known non-submission,
+confirmed outcome, and OutcomeUnknown stay distinct. ADR 0033's one automatic
+successor requires the same request/route, current admission, budget for both
+Attempts, and no unresolved Tool or hosted effect. Its predecessor fence and
+spent allowance survive restart. Cancellation prohibits that successor.
+Late results may reconcile evidence and usage, not revive execution or advance
+continuation. Confirmed reference expiry uses the separate eligible-context
+rebuild path. Ordinary corrections remain Messages or Steering Input and do
+not create semantic exclusions or automatic continuation resets.
+
+Active compaction records exact known inputs/prior projections, producer and
+mapping, output or validated opaque reference, and loss/unknown facts for a
+later request. It does not rewrite history. Continuation, cache, hosted Tools,
+native compaction, retrieval, and cancellation remain separately qualified
+capabilities; Agent Plan entitlement is not proof of every Ark capability.
+
+### 13.10 Conversation Memory protocol
+
+The [Memory owner](fiction-memory-and-research-provenance-semantics.md) defines
+the documents and maintenance mechanism. Memory Documents and Memory Notes use
+versioned content roles within the existing Tool Artifact family, not new
+top-level Artifact kinds or per-claim Admission/Suppression records.
+`storyos.artifact.memory-document.v1` contains a closed content role
+`conversation_summary | consolidated_notes | navigation_summary`, bounded
+Markdown payload/reference, and exact known input/source references.
+`storyos.artifact.memory-note.v1` contains bounded plain-language guidance and
+its requesting Message revision. Both retain the existing Artifact envelope,
+Creator, revision, digest, payload availability, and Project Scope contract.
+
+`ConversationMemorySettings` binds exact Project Scope, Project Conversation,
+an opaque UUIDv7 settings revision, `use_enabled`, and `contribution_enabled`. Both values are
+required independent booleans; there is no Project-wide override or implicit
+inheritance. The release owner fixes defaults. `updateConversationMemorySettings`
+uses the catalogued conversation resource, ordinary author-command admission,
+idempotency, and an exact expected settings revision. It sets both values as
+one atomic change. The previous semantic `updateContextControls` route, schemas,
+and Event are retired without an alias.
+
+A settings change is eligible only when no foreground root Run associated with
+that conversation is Queued or Active. Wait, Pause, Hold, cancellation, recovery,
+and finalization remain busy. The finalization gate owns child and in-flight
+settlement; a stopped stream or expired lease proves no idle state. Independent
+background Memory jobs do not make the foreground conversation busy.
+The Server serializes the idle check and settings update against foreground
+Run admission/start under that exact conversation. A competing Run or stale
+revision returns the existing typed conflict outcome without a partial change;
+it is never queued for later application. An exact successful retry replays its
+original acknowledgement even if a Run has since started. The UI shows the
+current values and disables changes while busy; it cannot supply the idle proof.
+Foreground admission captures the settings revision for the whole Run tree.
+
+Use controls new summary, search, and Memory-document intake by that
+conversation's Agent; contribution controls future extraction from its settled
+conversation snapshots. Setting checks still occur before source reads and
+dispatch. Already sent background work retains its Attempt and outcome evidence
+and follows the existing publication gate; changing a setting is not cancellation
+or a revocation of publication permission. Real access and covered-copy
+restrictions still apply. Neither setting deletes published Memory, rewrites
+recorded context, retracts disclosure, or promises semantic forgetting.
+
+`getConversationMemory` is an author inspection Query at a canonical Snapshot.
+It returns settings and change eligibility, the current published-set identity,
+bounded navigation summary reference, document/Note revision references, known
+source availability, and bounded maintenance outcome references. Empty,
+unavailable, and no-publication-yet are explicit states, not an empty success
+for a failed read. Pagination uses the existing Snapshot contract. Author
+inspection remains available when Agent use is disabled, under current access.
+`getArtifact` reads exact document/Note revisions; `retrieveContext` provides
+bounded Agent search/read through current publication and use checks. Neither
+index hits nor a latest Artifact alias can replace a published-set identity.
+
+The internal `RecordMemoryNote` Tool operation requires the exact requesting
+author Message and a validated Agent Decision/ToolCall. It records plain-language
+guidance and its source, then exposes `note_recorded` with the exact Note revision.
+Untrusted text cannot supply the author request. Recording a Note does not claim
+that consolidation incorporated it or that a requested forgetting succeeded.
+An explicit change request remains independent from automatic conversation
+contribution; its governed Tool call cannot bypass actual source restrictions.
+
+Internal Memory maintenance records exact permitted inputs, model/prompt
+versions, producer, current publication revision, bounds, and outcome. It
+publishes a complete generated-document set atomically under the storage-owned
+concurrency gate. A stale job cannot overwrite a newer publication. The public
+`memory-maintenance-settled.v1` Event carries the operation, phase, and closed
+outcome `published | no_op | failed | source_unavailable`, plus the exact
+publication reference only for `published`. Failures do not replace the current
+set. `memory-note-recorded.v1` carries the exact Note and source Message; the
+settings Event carries the committed settings revision. All remain scoped
+Project Activity projections after durable commit, not authoritative prose.
+The catalog maps these Events to explicit internal producers without inventing
+a public command that forces immediate Memory generation.
 
 ## 14. Versioning and compatibility
 
@@ -2324,15 +2490,15 @@ digest coverage descriptors, historical projections, and Protocol Limit
 Profiles. Generated artifacts are reviewed and checked in, but never edited as
 independent truth.
 
-Before the Rust contracts crate exists, this ticket's
-[Release 1 route catalog](versioned-protocol-release-1-route-catalog.json) is
-the review manifest for the public wire surface. It is deliberately limited to
+The [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
+is the review manifest for the full planned public wire surface. It is limited to
 route placement, compatibility identity, schema naming, generated coverage,
 fixture identity, and Project Activity/Event mapping; its `owners` references
 point back to the semantic contracts and do not create a second domain owner.
-The eventual generator consumes the Rust source and regenerates this manifest
-and all listed artifacts rather than treating the JSON file as a permanent
-hand-maintained source.
+Current generation checks this manifest's digest and emits the implemented
+Rust subset; planned schema names are not proof of generated types or handlers.
+The eventual complete generator must regenerate the manifest from Rust rather
+than make it a second editable source of implemented DTOs.
 
 The generator emits, from the same contract graph:
 
@@ -2796,11 +2962,53 @@ manifest-before-egress, immutable history, rebuildable projections,
 Proposal/Acceptance, Capability/Approval, Attempt/OutcomeUnknown, or fenced
 recovery.
 
-This is a pre-implementation Foundation decision, so it requires no production
-data migration now. Its first implementation is nevertheless a new public and
-persisted contract and must establish API release 1, schema catalog, wire
-corpus, and limit profile atomically. Later changes apply the classifications
-in section 14 and the database migration, backup, restore, and validation discipline.
+Current main implements the editor subset. This revision changes its catalog
+bindings and retires an admitted challenge target, but adds no Agent handler,
+Memory table, or feature schema implementation. The generator still consumes
+the full review catalog and emits only implemented Rust contracts. Catalog
+changes update the current graph/release digest and generated profile evidence;
+unchanged editor DTOs and historical Stage 1/2 evidence stay unchanged.
+
+The packaged Storage Activation identity also binds the route-catalog digest.
+An old proof does not authorize the new package: runtime start and repeated
+activation fail closed on mismatch. No proof rewrite, data deletion, migration,
+or generator redesign is included. Verify the new identity on isolated fresh
+storage; an existing deployment needs an explicitly owned upgrade/reprovision
+path before adopting the package. This planning correction is not that approval.
+
+The following matrix expands `{request,response}` into two schema ids. `Ledger`
+means this document and the route catalog; it is the current editable planning
+source. `Rust` means `crates/storyos-contracts/src/`, the implemented schema and
+profile source. `Wire set` means generated OpenAPI, JSON Schema, TypeScript,
+fixtures, and golden wire records. A planned row has no generated feature schema
+today: its named stage must add Rust source and generate that complete Wire set.
+All rows bind the same-release profile; additive does not permit mixed releases.
+
+| Contract delta | Editable source | Generated output | Compatibility impact | Owner |
+| --- | --- | --- | --- | --- |
+| `storyos.command.create-agent-run.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking closed conversation selection and exact identity/settings binding; security-sensitive | Stage 3 |
+| `storyos.query.agent-run.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking evidence variants and exact Attempt filter; security-sensitive redaction | Stage 3; Stage 4 Provider proof |
+| `ModelContinuationBinding`, context evidence, active compaction records | Ledger; later owning Rust modules | planned projections through Agent Run v2; no independent public schema | new records; security-sensitive continuation, disclosure, cancellation, and recovery bindings | Stage 3; Stage 4 Provider proof |
+| `storyos.command.decide-approval.{request,response}.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking closed ToolCall/hosted target; security-sensitive | Stage 5 |
+| `storyos.event.approval-decision-recorded.v1` → `.v2` | Ledger; later Rust | planned Wire set | breaking target meaning; security-sensitive; Activity envelope v1 stays | Stage 5 |
+| `ProviderHostedOperation` and whole-operation admission/accounting | Ledger; later owning Rust modules | planned Run/Approval projections; no Provider DTO | new records; security-sensitive effect, resource, and authority boundary | Stage 5 |
+| `updateContextControls`, `storyos.command.update-context-controls.{request,response}.v1`, `storyos.event.context-controls-updated.v1` → retired | Ledger and Rust challenge targets | current profile bindings; no legacy feature schema emitted | breaking removal without alias; old challenge target is refused now | Protocol now; Stage 7 removes legacy semantics |
+| none → `storyos.command.update-conversation-memory-settings.{request,response}.v1` | Ledger and Rust challenge targets; later Rust payload | current profile bindings; planned Wire set | additive route; security-sensitive author, revision, and atomic idle gate | Protocol binding now; Stage 7 behavior |
+| none → `storyos.query.conversation-memory.{request,response}.v1` | Ledger; later Rust | planned Wire set | additive Query; security-sensitive scoped inspection and source availability | Stage 7 |
+| none → `storyos.event.conversation-memory-settings-updated.v1` | Ledger; later Rust | planned Wire set | additive Event with closed revision meaning; security-sensitive | Stage 7 |
+| none → `storyos.event.memory-note-recorded.v1` and `storyos.event.memory-maintenance-settled.v1` | Ledger and internal-producer validator; later Rust | planned Wire set | additive Events; exact source/publication and closed outcomes; no public generation command | Stage 7 |
+| none → `storyos.artifact.memory-document.v1` and `storyos.artifact.memory-note.v1` | Ledger; later Rust | planned Wire set for content schemas | additive Tool Artifact payloads; existing envelope unchanged; source restrictions remain | Stage 7 |
+| current challenge target list and release/profile component digests | Rust `project_command_targets.rs`, `release1.rs`, `release1_artifacts.rs`; Ledger | current release profile, profile goldens, fixture manifest, OpenAPI metadata | breaking same-release hard cut; challenge/profile schema ids stay; implemented editor DTOs stay | Protocol now |
+| protocol revision/digest and operation mappings in persistence catalog | persistence catalog and its owning document | packaged catalog embedding; no DDL or migration output | breaking Storage Activation identity as stated above; table and migration-chain identities stay | Protocol references now; storage upgrade owner |
+
+The storage and retention owners receive the record and Event deltas above;
+the release owner receives the stage boundaries and still fixes defaults.
+
+Storage must map Conversation identities/settings and publication concurrency
+to its existing families, remove obsolete Memory Candidate/Admission/Suppression
+families, and own export/restore, unavailable sets, and rebuild. Retention owns
+document/Note/job lifetimes, copy restrictions, and active versus historical
+compaction. These remain explicit downstream work, not completed by this ledger.
 
 No new ADR is required: this specification is the designated owner of the
 wire protocol detail, while the durable architectural premises are already
@@ -2837,9 +3045,10 @@ An implementation conforms only if all of these remain true:
 10. Every physical retry, resend, fallback, or repair has a new Attempt; stale
     fences cannot settle or publish late work.
 11. Tool, MCP, App, Provider, research, import, and external contents remain
-    untrusted. Every Tool/MCP use crosses all seven gates, results repeat them
-    before later context use, final admission and manifests commit before
-    egress, and only Host/Core authority can change authoritative state.
+    untrusted. Every StoryOS-controlled dispatch crosses all seven gates;
+    hosted work has whole-operation admission without invented internal gates.
+    Later Host-controlled use crosses fresh gates. Only Host/Core authority
+    can change authoritative state.
 12. Commands and control inputs are closed; public outputs evolve additively
     only where unknown meaning is presentation-safe.
 13. The public runtime uses one coordinated same-release contract; external

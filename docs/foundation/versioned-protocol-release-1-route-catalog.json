@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.public.route-catalog.release-1.v1",
-  "contract_revision": "release1-wire-catalog-2026-09-05-chapter-created-order-v2",
+  "contract_revision": "release1-wire-catalog-2026-09-14-responses-memory",
   "api_root": "/api/v1",
   "public_release": "storyos.public.release.1",
   "compatibility_profile": "storyos.public.same-release.v1",
@@ -17,7 +17,8 @@
     "retention": "docs/foundation/run-event-mailbox-snapshot-retention-and-archival-semantics.md#10-explicit-project-deletion-lifecycle",
     "deletion": "docs/adr/0011-require-explicit-project-deletion-settlement.md",
     "release": "docs/foundation/ai-independent-editor-first-release-baseline-and-handoff-criteria.md#3-complete-acceptance-journey",
-    "context": "docs/foundation/context-assembly-retrieval-and-outbound-disclosure-semantics.md#15-required-verification-scenarios"
+    "context": "docs/foundation/context-assembly-retrieval-and-outbound-disclosure-semantics.md#15-required-verification-scenarios",
+    "memory": "docs/foundation/fiction-memory-and-research-provenance-semantics.md#11-author-interaction"
   },
   "release_identity": {
     "schema_id": "storyos.compatibility.release-identity.v1",
@@ -3362,8 +3363,8 @@
       "semantic_owner": "context",
       "wire_owner": "protocol",
       "schemas": {
-        "request": "storyos.command.create-agent-run.request.v1",
-        "response": "storyos.command.create-agent-run.response.v1",
+        "request": "storyos.command.create-agent-run.request.v2",
+        "response": "storyos.command.create-agent-run.response.v2",
         "request_source": "protocol",
         "response_source": "protocol",
         "semantic_source": "context"
@@ -3429,14 +3430,15 @@
         "openapi_operation_id": "createAgentRun",
         "typescript_operation": "createAgentRun",
         "json_schema_ids": [
-          "storyos.command.create-agent-run.request.v1",
-          "storyos.command.create-agent-run.response.v1"
+          "storyos.command.create-agent-run.request.v2",
+          "storyos.command.create-agent-run.response.v2"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
         "typescript_client": true,
         "golden_wire_corpus": true
-      }
+      },
+      "notes": "Stage 3 planned v2: closed conversation selection new or existing with exact conversation_id; atomic new identity/settings and Run admission; accepted response and getAgentRun return conversation_id and captured memory_settings_revision; exact retries reuse all identities. See protocol section 13.9. Foreground admission serializes with settings changes."
     },
     {
       "operation_id": "pauseAgentRun",
@@ -3771,8 +3773,8 @@
       "semantic_owner": "context",
       "wire_owner": "protocol",
       "schemas": {
-        "request": "storyos.command.decide-approval.request.v1",
-        "response": "storyos.command.decide-approval.response.v1",
+        "request": "storyos.command.decide-approval.request.v2",
+        "response": "storyos.command.decide-approval.response.v2",
         "request_source": "protocol",
         "response_source": "protocol",
         "semantic_source": "context"
@@ -3820,7 +3822,7 @@
       "activity": {
         "success": [
           "storyos.event.domain-receipt-settled.v1",
-          "storyos.event.approval-decision-recorded.v1"
+          "storyos.event.approval-decision-recorded.v2"
         ],
         "no_effect": [
           "storyos.event.domain-receipt-settled.v1"
@@ -3839,29 +3841,30 @@
         "openapi_operation_id": "decideApproval",
         "typescript_operation": "decideApproval",
         "json_schema_ids": [
-          "storyos.command.decide-approval.request.v1",
-          "storyos.command.decide-approval.response.v1"
+          "storyos.command.decide-approval.request.v2",
+          "storyos.command.decide-approval.response.v2"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
         "typescript_client": true,
         "golden_wire_corpus": true
-      }
+      },
+      "notes": "Stage 5 planned v2: closed ToolCall or ProviderHostedOperation target and exact request digest; neither target authorizes the other."
     },
     {
-      "operation_id": "updateContextControls",
+      "operation_id": "updateConversationMemorySettings",
       "kind": "command",
       "method": "POST",
-      "path": "/api/v1/projects/{project_id}/context-controls",
-      "shape": "context:control",
-      "semantic_owner": "context",
+      "path": "/api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings",
+      "shape": "conversation:memory-settings",
+      "semantic_owner": "memory",
       "wire_owner": "protocol",
       "schemas": {
-        "request": "storyos.command.update-context-controls.request.v1",
-        "response": "storyos.command.update-context-controls.response.v1",
+        "request": "storyos.command.update-conversation-memory-settings.request.v1",
+        "response": "storyos.command.update-conversation-memory-settings.response.v1",
         "request_source": "protocol",
         "response_source": "protocol",
-        "semantic_source": "context"
+        "semantic_source": "memory"
       },
       "action_class": "explicit_project_command",
       "admission": "author_command",
@@ -3873,8 +3876,10 @@
       "idempotency": "header_and_admission_record",
       "preconditions": [
         "server_derived_project_scope",
-        "current_policy_revision",
-        "control_change_explicit"
+        "conversation_scope_join",
+        "expected_settings_revision",
+        "no_nonterminal_foreground_run",
+        "serialize_with_foreground_run_admission"
       ],
       "settlement": {
         "mode": "sync",
@@ -3905,7 +3910,7 @@
       "activity": {
         "success": [
           "storyos.event.domain-receipt-settled.v1",
-          "storyos.event.context-controls-updated.v1"
+          "storyos.event.conversation-memory-settings-updated.v1"
         ],
         "no_effect": [
           "storyos.event.domain-receipt-settled.v1"
@@ -3914,24 +3919,25 @@
         "visibility": "only after the durable transition or async settlement named by the operation"
       },
       "fixtures": {
-        "positive": "storyos.golden.updateContextControls.positive.v1",
+        "positive": "storyos.golden.updateConversationMemorySettings.positive.v1",
         "negative": [
-          "storyos.golden.updateContextControls.invalid.v1",
-          "storyos.golden.updateContextControls.boundary.v1"
+          "storyos.golden.updateConversationMemorySettings.invalid.v1",
+          "storyos.golden.updateConversationMemorySettings.boundary.v1"
         ]
       },
       "generated": {
-        "openapi_operation_id": "updateContextControls",
-        "typescript_operation": "updateContextControls",
+        "openapi_operation_id": "updateConversationMemorySettings",
+        "typescript_operation": "updateConversationMemorySettings",
         "json_schema_ids": [
-          "storyos.command.update-context-controls.request.v1",
-          "storyos.command.update-context-controls.response.v1"
+          "storyos.command.update-conversation-memory-settings.request.v1",
+          "storyos.command.update-conversation-memory-settings.response.v1"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
         "typescript_client": true,
         "golden_wire_corpus": true
-      }
+      },
+      "notes": "Stage 7 planned contract: required use_enabled and contribution_enabled; both values change atomically only while all foreground root Runs are Terminal or absent. Wait/Pause remains busy; background Memory work does not block. Exact retry replays the original acknowledgement. See protocol section 13.10."
     },
     {
       "operation_id": "importProjectArchive",
@@ -4565,6 +4571,83 @@
       "notes": "The Artifact projection covers retained RefusedEditDraft and RecoveryDraft revisions; there is no alternate Draft upload or browser-cache ingress."
     },
     {
+      "operation_id": "getConversationMemory",
+      "kind": "query",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/conversations/{conversation_id}/memory",
+      "shape": "conversation:memory-read",
+      "semantic_owner": "memory",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.query.conversation-memory.request.v1",
+        "response": "storyos.query.conversation-memory.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "memory"
+      },
+      "action_class": "none",
+      "admission": "query",
+      "editor": {
+        "session": "optional",
+        "writer_generation": "not-applicable",
+        "takeover": "no"
+      },
+      "idempotency": "none",
+      "preconditions": [
+        "conversation_scope_join",
+        "canonical_snapshot",
+        "current_memory_publication",
+        "redaction_profile"
+      ],
+      "settlement": {
+        "mode": "read",
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "query_canonical",
+      "activity": {
+        "success": [],
+        "no_effect": [],
+        "pre_admission": "none",
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.getConversationMemory.positive.v1",
+        "negative": [
+          "storyos.golden.getConversationMemory.invalid.v1",
+          "storyos.golden.getConversationMemory.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "getConversationMemory",
+        "typescript_operation": "getConversationMemory",
+        "json_schema_ids": [
+          "storyos.query.conversation-memory.request.v1",
+          "storyos.query.conversation-memory.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      },
+      "notes": "Stage 7 planned author inspection: settings/change eligibility, current publication, bounded summary/document/Note revisions, source availability and maintenance outcomes. Agent use disabled does not deny authorized author inspection. Pagination binds one Snapshot."
+    },
+    {
       "operation_id": "getAgentRun",
       "kind": "query",
       "method": "GET",
@@ -4573,8 +4656,8 @@
       "semantic_owner": "context",
       "wire_owner": "protocol",
       "schemas": {
-        "request": "storyos.query.agent-run.request.v1",
-        "response": "storyos.query.agent-run.response.v1",
+        "request": "storyos.query.agent-run.request.v2",
+        "response": "storyos.query.agent-run.response.v2",
         "request_source": "protocol",
         "response_source": "protocol",
         "semantic_source": "context"
@@ -4629,14 +4712,15 @@
         "openapi_operation_id": "getAgentRun",
         "typescript_operation": "getAgentRun",
         "json_schema_ids": [
-          "storyos.query.agent-run.request.v1",
-          "storyos.query.agent-run.response.v1"
+          "storyos.query.agent-run.request.v2",
+          "storyos.query.agent-run.response.v2"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
         "typescript_client": true,
         "golden_wire_corpus": true
-      }
+      },
+      "notes": "Stage 3 planned v2 inspection: exact conversation/settings binding, bounded Attempt/continuation/hosted-operation evidence, typed known/reported/opaque content and availability. Real Provider capability proof remains Stage 4/5."
     },
     {
       "operation_id": "getApplyAuthorEditOutcome",
@@ -5932,22 +6016,22 @@
       "negative_fixture": "storyos.golden.storyos.event.wait-resolution-recorded.v1.negative.v1"
     },
     {
-      "schema_id": "storyos.event.approval-decision-recorded.v1",
+      "schema_id": "storyos.event.approval-decision-recorded.v2",
       "event_kind": "approval_decision_recorded",
       "semantic_owner": "context",
       "wire_profile": "storyos.project-activity.v1",
-      "description": "",
-      "positive_fixture": "storyos.golden.storyos.event.approval-decision-recorded.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.approval-decision-recorded.v1.negative.v1"
+      "description": "Approval decision for an exact closed ToolCall or ProviderHostedOperation target and request digest; no cross-target authority.",
+      "positive_fixture": "storyos.golden.storyos.event.approval-decision-recorded.v2.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.approval-decision-recorded.v2.negative.v1"
     },
     {
-      "schema_id": "storyos.event.context-controls-updated.v1",
-      "event_kind": "context_controls_updated",
-      "semantic_owner": "context",
+      "schema_id": "storyos.event.conversation-memory-settings-updated.v1",
+      "event_kind": "conversation_memory_settings_updated",
+      "semantic_owner": "memory",
       "wire_profile": "storyos.project-activity.v1",
-      "description": "",
-      "positive_fixture": "storyos.golden.storyos.event.context-controls-updated.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.context-controls-updated.v1.negative.v1"
+      "description": "Conversation Memory Settings committed at the idle gate; carries the exact settings revision.",
+      "positive_fixture": "storyos.golden.storyos.event.conversation-memory-settings-updated.v1.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.conversation-memory-settings-updated.v1.negative.v1"
     },
     {
       "schema_id": "storyos.event.project-import-settled.v1",
@@ -5975,6 +6059,24 @@
       "description": "Human-readable manuscript export settled from a deterministic volume/chapter source order; unavailable content is represented by the export profile.",
       "positive_fixture": "storyos.golden.storyos.event.human-readable-manuscript-export-settled.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.human-readable-manuscript-export-settled.v1.negative.v1"
+    },
+    {
+      "schema_id": "storyos.event.memory-note-recorded.v1",
+      "event_kind": "memory_note_recorded",
+      "semantic_owner": "memory",
+      "wire_profile": "storyos.project-activity.v1",
+      "description": "Exact Memory Note revision and requesting author Message recorded; no publication or deletion claim.",
+      "positive_fixture": "storyos.golden.storyos.event.memory-note-recorded.v1.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.memory-note-recorded.v1.negative.v1"
+    },
+    {
+      "schema_id": "storyos.event.memory-maintenance-settled.v1",
+      "event_kind": "memory_maintenance_settled",
+      "semantic_owner": "memory",
+      "wire_profile": "storyos.project-activity.v1",
+      "description": "Internal maintenance outcome published, no_op, failed, or source_unavailable; only published carries the exact new publication reference.",
+      "positive_fixture": "storyos.golden.storyos.event.memory-maintenance-settled.v1.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.memory-maintenance-settled.v1.negative.v1"
     }
   ],
   "non_public_operations": [
@@ -6007,6 +6109,24 @@
       "source": "context",
       "public_route": null,
       "reason": "External attempts use internal manifest-before-egress boundaries and are not author-selectable public routes."
+    },
+    {
+      "name": "RecordMemoryNote",
+      "source": "memory",
+      "public_route": null,
+      "public_events": [
+        "storyos.event.memory-note-recorded.v1"
+      ],
+      "reason": "Author-requested ToolCall records a Note Artifact, not an immediate Memory publication."
+    },
+    {
+      "name": "MaintainProjectMemory",
+      "source": "memory",
+      "public_route": null,
+      "public_events": [
+        "storyos.event.memory-maintenance-settled.v1"
+      ],
+      "reason": "Bounded extraction/consolidation uses existing jobs and publishes through the storage-owned atomic gate."
     }
   ],
   "non_public_events": [

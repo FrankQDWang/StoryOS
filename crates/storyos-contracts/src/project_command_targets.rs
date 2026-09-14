@@ -181,7 +181,7 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "createAgentRun",
         "POST",
         "/api/v1/projects/{project_id}/agent-runs",
-        "storyos.command.create-agent-run.request.v1",
+        "storyos.command.create-agent-run.request.v2",
     ),
     target(
         "pauseAgentRun",
@@ -211,13 +211,13 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "decideApproval",
         "POST",
         "/api/v1/projects/{project_id}/approvals/{approval_id}/decisions",
-        "storyos.command.decide-approval.request.v1",
+        "storyos.command.decide-approval.request.v2",
     ),
     target(
-        "updateContextControls",
+        "updateConversationMemorySettings",
         "POST",
-        "/api/v1/projects/{project_id}/context-controls",
-        "storyos.command.update-context-controls.request.v1",
+        "/api/v1/projects/{project_id}/conversations/{conversation_id}/memory-settings",
+        "storyos.command.update-conversation-memory-settings.request.v1",
     ),
     target(
         "importProjectArchive",

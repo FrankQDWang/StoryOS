@@ -67,11 +67,12 @@ Existing source objects remain independently readable and inspectable.
 
 ## 3. Background extraction
 
-Memory generation and use can be enabled or disabled separately. A Project
-Conversation can be excluded from future generation without deleting it or
-rewriting the active model context. These are explicit settings on identified
-resources; the Agent need not prove the meaning of every sentence to enforce
-them. Setting defaults and exact routes belong to release and protocol owners.
+Conversation Memory Settings independently control Agent use and contribution
+for each exact Project Conversation. They change only when all associated
+foreground root Runs are Terminal or absent; independent background Memory
+work does not block adjustment. The [protocol owner](versioned-command-query-artifact-event-protocol.md#1310-conversation-memory-protocol)
+defines the atomic idle gate and exact routes. Changing a setting neither
+deletes Memory nor rewrites recorded context. The release owner fixes defaults.
 
 An eligible input is a durable snapshot of a prior, sufficiently idle Project
 Conversation that permits generation and whose records the job may read. Skip
