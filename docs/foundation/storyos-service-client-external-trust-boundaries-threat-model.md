@@ -738,8 +738,9 @@ or a new transport continuation without changing conversation identity.
 Validate Responses transport, continuation, cache, compaction, hosted Tools,
 retrieval, and cancellation separately, including their supported combinations.
 Agent Plan entitlement is not general Ark endpoint or exact model/account proof.
-Unknown required behavior blocks the route. Hidden SDK retries and model fallback
-are ineligible; each physical resubmission has fresh admission and Attempt
+Unknown required behavior blocks the route. Hidden SDK retries and
+Provider-controlled model fallback are ineligible; each physical resubmission
+has fresh admission and Attempt
 and disclosure evidence. One hosted submission uses its owning Model Attempt
 once; invisible internal steps are not separate Host submissions. [S7] [S8]
 
