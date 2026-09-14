@@ -1,10 +1,10 @@
 # AI-Independent Editor-First Release Baseline and Handoff Criteria
 
 - Status: current
-- Contract revision: `product-delivery-mvp-boundary-2026-08-29-v1`
+- Contract revision: `release-responses-memory-2026-09-14-v1`
 - Canonical issue: [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62)
-- Exact planning baseline: `main@00c6cadba54733c4fb38472b8b6b1a423103499b`
-- Exact planning tree: `0123d0074e8d9d159a83ff7c48818d64a4720106`
+- Exact planning baseline: `main@38552dd3ecaf76dace80ff8d7f80caa381972ac0`
+- Exact planning tree: `29753b24816dcfd3b778309836531bc25f998ed1`
 - Product goal: [GOAL.md](../../GOAL.md)
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Issue execution rules: [Issue-Tracker Execution Contract](../agents/issue-tracker.md)
@@ -84,6 +84,9 @@ linked contract continues to define what that capability means.
 | PostgreSQL authority, Project Scope integrity, forced RLS, migrations, backup, restore, and portability | [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md) |
 | Retention Profiles and Decisions, compaction, archive, replay generations, deletion, and recovery visibility | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) |
 | Context Assembly, retrieval eligibility, projection, manifests, disclosure, and destination attempts | [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md) |
+| Responses continuation, typed output, capability combinations, and bounded recovery | [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md) |
+| Whole-operation hosted admission beside StoryOS ToolCalls | [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md) |
+| Background Memory, documents, Notes, source evidence, and independent conversation settings | [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md) and [ADR 0035](../adr/0035-use-background-generated-project-memory.md) |
 | Author-facing discovery-writing intent and Proposal request interpretation | [Plain-Language Discovery-Writing Assistance Semantics](plain-language-discovery-writing-assistance-semantics.md) |
 | AgentRun, Tool, MCP, Skill, Model Gateway, and external-destination meaning | The existing AgentRun, Tool/MCP, and Model Gateway contracts named by [the current product map](https://github.com/FrankQDWang/StoryOS/issues/1) |
 | Threat boundaries, Host/Origin, credential references, and disclosure safety | [StoryOS Service, Client, and External Trust Boundaries](storyos-service-client-external-trust-boundaries-threat-model.md) |
@@ -109,8 +112,8 @@ The stage names below are contract identifiers, not separate workflow runtimes:
    Agent path with deterministic fake destination behavior while preserving the
    editor and Proposal/Acceptance boundary.
 4. **One real external model with disclosure evidence.** Add one separately
-   admitted real external-model path and prove StoryOS-owned disclosure and
-   uncertainty evidence without claiming opaque Provider internals.
+   admitted Volcengine Agent Plan Responses path and prove StoryOS-owned
+   disclosure and uncertainty evidence without claiming opaque Provider internals.
 5. **Governed Tools, MCP servers, and source-backed research.** Deliver the
    ordinary research conversation through the existing Tool and disclosure
    boundaries, with inspectable sources and no direct creative authority.
@@ -119,7 +122,8 @@ The stage names below are contract identifiers, not separate workflow runtimes:
    inspectable outcomes through the same Agent Loop.
 7. **Structured project continuity and Memory.** Deliver author-owned fiction
    facts, preferences, optional Project Instruction, cross-thread continuity,
-   and inspectable, source-bearing retrieval without a second truth store.
+   background-generated Memory Documents, and selective recall. Fiction authority,
+   Research evidence, active compaction, and Provider continuation stay distinct.
 8. **Transcript MCP Apps.** Deliver the accepted dynamic domain views,
    mediated actions, replay, and safe fallback inside the Agent transcript.
 9. **Complete Run control and orchestration.** Deliver bounded long work,
@@ -133,11 +137,11 @@ technical dependency. Implementation blockers name actual inputs, interfaces,
 or acceptance gates. Existing Stage 1 evidence remains bound to its historical
 contract; it is not rewritten to certify the expanded route.
 
-The terminal planning handoff issue, [Create and Lock the First Editor-First
-Implementation Issue](https://github.com/FrankQDWang/StoryOS/issues/77), creates
-and locks the first implementation issue only after the preceding contract and
-proof work is complete. This document creates no implementation issue and no
-product Rust, TypeScript, SQL, UI, runtime, or deployment change.
+The original [Create and Lock the First Editor-First Implementation
+Issue](https://github.com/FrankQDWang/StoryOS/issues/77) handoff remains closed as
+historical evidence. Current release and proof alignment precedes updates to
+the existing stage specifications and approved child graph under section 9.
+This document creates no implementation issue or product implementation.
 
 Controlled-cloud deployment is a later gate that checks deployment identity,
 operational recovery, security, cache refresh, same-release activation, and
@@ -147,6 +151,50 @@ configuration, collaboration, billing, or service-fleet work into local
 Release 1. Its original entry remains completion of the first four stages.
 The gate names the exact released local stage it validates; it does not claim
 that later capabilities are complete or require their completion first.
+
+### 2.1 Conversation Memory defaults and stage admission
+
+New Project Conversations default to `use_enabled = true` and
+`contribution_enabled = true`. The author confirmed both defaults on
+2026-09-14. They are independent settings on each exact conversation, not a
+Project override or inherited policy. The [conversation protocol](versioned-command-query-artifact-event-protocol.md#1310-conversation-memory-protocol)
+owns their meaning, revisions, atomic idle gate, and Run binding.
+
+Stage 3 creates the conversation and these initial settings with Run admission.
+Stages 3 through 6 record the settings but execute no Memory read, extraction,
+consolidation, or Memory Note Tool. Stage 7 activates those capabilities under
+the recorded settings and current source, authority, budget, and disclosure
+gates. Activation does not replace existing settings revisions or grants.
+Defaults are not permission to send data to an unapproved destination.
+
+Stage 7 lets the author inspect Memory and change both settings independently
+when that conversation is idle. Disabling Agent use does not disable author
+inspection. A change affects the owning protocol's new reads or extraction;
+it does not delete published Memory, rewrite history, or retract earlier
+disclosure. Ordinary writing needs no Memory setup or per-item confirmation.
+
+### 2.2 Capability and lifecycle allocation
+
+| Stage | Required allocation from current semantic owners |
+| --- | --- |
+| 3 | Real conversation, Host, Context, persistence, AgentRun, and Proposal boundaries with a Contract-Faithful Fake Destination; typed streams, incremental/full input, current target and instruction updates, active compaction, continuation, and recovery fences. |
+| 4 | One qualified Agent Plan Responses journey with native continuation, streaming, valid caching behavior, response retrieval, truthful use evidence, and the accepted expiry and unknown-create recovery policies. |
+| 5 | StoryOS ToolCalls and separately admitted Provider-hosted Operations; native function/result correlation, research evidence, exact Approval targets, enforced bounds, and uncertain effects. |
+| 7 | Background extraction and consolidation, complete Memory Publications, document/Note inspection, selective recall, independent settings, source restrictions, and Memory lifecycle/export/restore. |
+
+Each stage must qualify the resource and retention profiles needed by its new
+work before that work is enabled. Stage 3 uses controlled fake workloads;
+Stage 4 qualifies the real model path; Stage 5 qualifies each admitted Tool or
+hosted mode; Stage 7 qualifies Memory maintenance and generated-payload cleanup.
+Numeric adoption stays with the [retention owner](run-event-mailbox-snapshot-retention-and-archival-semantics.md#24-quantitative-evidence-and-profile-adoption)
+and the applicable resource owner. This release sets no duration, capacity, or
+Provider guarantee. Unknown required bounds block the affected capability.
+
+The [protocol compatibility matrix](versioned-command-query-artifact-event-protocol.md#18-downstream-ownership-and-migration-impact)
+and the storage owner govern each new record family and same-release change.
+An existing deployment whose Storage Activation no longer matches requires its
+own authorized upgrade or reprovision path before it uses the new package;
+planning closure is not upgrade evidence.
 
 ## 3. Complete acceptance journey
 
@@ -388,10 +436,10 @@ durable AgentRun, or recovery foundations already required here.
 | --- | --- | --- |
 | S3-REQ-001 | Keep the complete Stage 2 editor usable while one general, Project-scoped Agent Loop appears adjacent to the current passage and editor. | Product map, AgentRun, and Web Editor Session owners |
 | S3-REQ-002 | Interpret a bounded current author request using the existing discovery-writing intent contract; discussion, explanation, brainstorming, and prose-change scope remain distinct. | Plain-Language Discovery-Writing Assistance owner |
-| S3-REQ-003 | Route the fake-model operation through the real Host, Project Scope, Context Assembly, selection/projection, manifest-before-egress, destination Attempt, fence, recovery, and durable AgentRun path. | Context/Disclosure, AgentRun, Model Gateway, Protocol, PostgreSQL, and trust owners |
+| S3-REQ-003 | Route the fake-model operation through the real Host, Project Scope, Context Assembly, selection/projection, manifest-before-egress, destination Attempt, fence, recovery, and durable AgentRun path. `createAgentRun` v2 atomically creates a new Project Conversation with the section 2.1 defaults or selects an existing conversation with its recorded settings. Expose the exact conversation, captured settings revision, and selected Attempt evidence through the owning queries. | Context/Disclosure, AgentRun, Model Gateway, Protocol, PostgreSQL, and trust owners |
 | S3-REQ-004 | Present generated prose as an editable, anchored Core Proposal in the editor, with validation, refusal, conflict, recovery, explicit Acceptance, and explicit Rejection on the existing owner paths. | Core/Proposal, Artifact, Web Editor Session, Admission, and Protocol owners |
 | S3-REQ-005 | Keep chat adjacent to and non-authoritative over the editor; a fake result, transcript message, MCP App, or Agent action cannot write authoritative prose or an outline. | Artifact, Core/Proposal, MCP App, and product-map owners |
-| S3-REQ-006 | Record a bounded, inspectable fake-model result and uncertainty/recovery evidence without claiming model understanding, literary quality, Provider behavior, or external retention. | Model Gateway, Context/Disclosure, deterministic verification, and retention owners |
+| S3-REQ-006 | Preserve typed native items, ordering, correlation, and provisional/complete/unknown outcomes. Exercise incremental and full-input continuation, current instructions and target updates, compaction between calls, confirmed expiry rebuild, original-result lookup, bounded unknown-create recovery, and cancellation. Only one complete validated durable Agent Decision may advance continuation. Inspect exact sent input, references, Provider reports, and opaque or missing evidence without claiming model understanding or Provider behavior. | Model Gateway, Context/Disclosure, deterministic verification, and retention owners |
 | S3-REQ-007 | Preserve the Stage 2 AI-independent journey as a release requirement even when the fake path is unavailable. | AI-independent editor owners and repository governance |
 | S3-REQ-008 | Deliver the complete accepted Proposal interaction contract: inline and Block scope, stable Operations, non-overlapping Proposals, author input that pauses generation, safe Undo Accept that reopens the Proposal, and redo through a fresh Acceptance. Derive optional comparison from exact revisions and normalize adjacent fragmented matches into coherent replacement spans in comparison or diagnostics. This does not replace the editable candidate with a default diff interface. | Core/Proposal and Web Editor Session owners |
 
@@ -402,9 +450,11 @@ Tool, MCP, research, embedding, Memory, Skill, Subrun, or Eval execution,
 including bounded request variants or any other execution mode for those
 surfaces. It also does not include a new task-specific workflow runtime, an
 Agent-authored outline, automatic Acceptance, automatic authoritative write, or
-a Proposal editor outside the main StoryOS editor. Any attempted Tool-request mode fails closed,
-as do MCP-request, research, embedding, Memory, Skill,
-Subrun, or Eval execution modes, without authority or disclosure.
+a Proposal editor outside the main StoryOS editor. A scripted typed request or
+hosted item can test parsing, correlation, and refusal, but cannot enable its
+execution. Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval
+execution requests fail closed without dispatch or authority. Conversation
+settings and active compaction records do not activate cross-conversation Memory.
 
 ### 6.3 Entry, author journey, and completion
 
@@ -419,12 +469,18 @@ must bind to that main and the current owner contracts.
 2. Ask the adjacent Agent for bounded help with that passage, and verify that
    the current Working Target and request scope are preserved.
 3. Observe the fake-model operation traverse the real Host, Context Assembly,
-   manifest, Attempt, fence, recovery, and AgentRun records.
+   manifest, Attempt, fence, recovery, and AgentRun records. Continue in the
+   same Project Conversation across Runs, then create a separate conversation
+   and verify distinct identity and continuation with the section 2.1 defaults.
 4. Edit the anchored Proposal in the main editor, then explicitly Accept it
    and verify the Core transition, Receipt, Author Action, and authoritative
    revision; repeat with explicit Rejection and verify no authority change.
 5. Exercise a refused, conflicted, or interrupted Proposal through its
    existing recovery path and verify that late or stale work cannot publish.
+   Add an ordinary correction, change the Working Target, and compact between
+   calls. Inspect incremental/full input and unchanged historical records.
+   Exercise confirmed reference expiry, original-result lookup, the permitted
+   single unknown-create successor, and cancellation with scripted outcomes.
 6. Exercise inline and Block Proposals, multiple non-overlapping candidates,
    author editing during generation, stable Operation decisions, Undo Accept,
    and redo. Verify the exact accepted state-machine outcomes.
@@ -442,11 +498,11 @@ passes with the fake destination unavailable.
 | ID | Mandatory evidence category |
 | --- | --- |
 | S3-EVD-001 | Adjacent-Agent and intent-scope evidence showing one general loop, current-passage grounding, and no second workflow runtime. |
-| S3-EVD-002 | Host, Project Scope, Context Assembly, manifest, destination Attempt, fence, recovery, and AgentRun provenance evidence for the fake operation. |
+| S3-EVD-002 | Host, Scope, Context, manifest, Attempt, and durable Run evidence, including atomic conversation creation/settings, exact retry identities, current instruction/target bindings, and conversation isolation for continuation. |
 | S3-EVD-003 | Editable Proposal evidence for anchors, validation, refusal, conflict, recovery, and editor-owned presentation. |
 | S3-EVD-004 | Acceptance evidence for the exact Core transition, Receipt, Author Action, and Authoritative Revision, plus Rejection evidence proving non-destructive settlement. |
-| S3-EVD-005 | Interruption, late-result, stale-fence, and recovery evidence showing no blind retry, duplicate authority, or hidden disclosure. |
-| S3-EVD-006 | Fake-destination limitation evidence that separates StoryOS-owned facts from Provider-internal, model-quality, and literary-quality claims. |
+| S3-EVD-005 | Interruption, expiry rebuild, original-result lookup, one-successor allowance across restart, cancellation, late-result fencing, retained unknown usage/reservations, and fresh admission evidence. Active compaction preserves source history and recovery inputs; real retained-copy restrictions block reuse. |
+| S3-EVD-006 | Typed provisional and complete results, selected-decision continuation, incremental/full input, immutable compaction evidence, and explicit gaps. Fake observations prove StoryOS contracts only, not live Provider capability, model attention, semantic preservation, or literary quality. |
 | S3-EVD-007 | AI-independent regression evidence proving that the complete Stage 2 editor remains usable with the fake path unavailable. |
 | S3-EVD-008 | Complete Proposal interaction evidence for scope, stable Operations, non-overlap, input pause, exact-version comparison with normalized replacement spans, safe compensation, reopened Proposal, and fresh-Acceptance redo. Adjacent fragmented matches must form coherent spans without changing operation identity or authority. |
 
@@ -456,7 +512,7 @@ the real Proposal path is not a passing substitute.
 
 ## 7. Stage 4 — one real external model with disclosure evidence
 
-Stage 4 adds exactly one separately admitted real external-model operation. It
+Stage 4 adds one separately admitted Volcengine Agent Plan Responses path. It
 does not make the Provider a StoryOS authority and does not weaken the
 AI-independent editor.
 
@@ -468,28 +524,39 @@ continuation stage passes its own admission and release gates.
 
 | ID | Required capability | Normative owner |
 | --- | --- | --- |
-| S4-REQ-001 | Admit one Provider-neutral real external-model route under the existing Registration, Model Use Binding, compatibility, capability, credential-reference, and policy contracts. | Model Gateway, trust-boundary, and Protocol owners |
+| S4-REQ-001 | Admit one Volcengine Agent Plan Responses route through the Provider-neutral contracts. Qualify the exact endpoint, model, account/product entitlement, Registration, Use Binding, compatibility, credential reference, authorization, and budget. Validate native continuation, streaming, caching behavior, response retrieval, and supported combinations; general Ark documentation alone is insufficient. | Model Gateway, trust-boundary, and Protocol owners |
 | S4-REQ-002 | Use the same Host, Context Assembly, bounded projection, manifest-before-egress, destination identity, Attempt, dispatch fence, recovery, and Proposal paths proven by the fake stage. | Context/Disclosure, Model Gateway, PostgreSQL, Protocol, and Core/Proposal owners |
-| S4-REQ-003 | Preserve minimum-necessary disclosure evidence: exact Project Scope, source/provenance, destination identity, binding/profile revisions, wire/digest evidence, usage classification, and no credential value in project records or ordinary logs. | Context/Disclosure, trust-boundary, PostgreSQL, and retention owners |
-| S4-REQ-004 | Treat a crash, timeout, disconnect, or post-dispatch uncertainty as the existing OutcomeUnknown boundary; late results are fenced, blind resend is forbidden, and any reconciliation or successor is separately admitted. | Model Gateway, Run/Mailbox, Protocol, PostgreSQL, and retention owners |
+| S4-REQ-003 | Preserve minimum-necessary disclosure evidence: exact Scope, source/provenance, destination, binding/profile revisions, non-secret wire/digest, and usage classification. Distinguish actual sent input, known references, Provider reports, opaque state, and reported/estimated/unknown usage. A stored response or cache setting proves neither a hit nor savings; credentials stay outside project records and ordinary logs. | Context/Disclosure, trust-boundary, PostgreSQL, and retention owners |
+| S4-REQ-004 | Apply ADR 0033 recovery: confirmed reference expiry can rebuild eligible context under current authority and budget; unknown create first attempts supported original-result retrieval and permits at most one automatic additional Attempt only under all owning conditions. Fence the predecessor first, retain its unknown outcome and worst-case reservation, and preserve the allowance across restart. Run Cancellation prohibits that successor; a changed Effective Model Context requires a new RunStep and Invocation. | Model Gateway, Run/Mailbox, Protocol, PostgreSQL, and retention owners |
 | S4-REQ-005 | Keep every generated prose change as an editable Core Proposal requiring explicit author Acceptance or Rejection, with the existing refusal, conflict, and recovery semantics. | Core/Proposal, Web Editor Session, Admission, and Artifact owners |
 | S4-REQ-006 | Include a real-author session that can write manually, request bounded assistance, inspect/edit a Proposal, Accept and Reject it, and recover the Run, Proposal, disclosure, and authoritative facts. | Web Editor Session, Core/Proposal, Context/Disclosure, and AgentRun owners |
 | S4-REQ-007 | Limit the claim to StoryOS-owned disclosure and recovery evidence; do not claim Provider attention, Provider retention/training, hidden SDK behavior, or literary quality. | Context/Disclosure, Model Gateway, trust-boundary, and deterministic verification owners |
 
 ### 7.2 Explicitly absent or prohibited
 
-Stage 4 does not add a second Provider, provider-specific authority, local
+Stage 4 defers OpenAI Responses and Anthropic-format Adapter implementations.
+It does not add a second Provider, provider-specific authority, local
 inference fallback, hidden SDK retry, or any Tool, MCP, research, embedding,
 Memory, Skill, Subrun, or Eval execution or execution mode, including bounded
 request variants or any other execution mode for those surfaces. It also does
 not add automatic authority, an Agent-authored outline,
 or a cloud implementation stage. Stage 4 adds only one real external-model
-path. Any attempted Tool-request mode fails closed, as do MCP-request,
-research, embedding, Memory, Skill, Subrun, or Eval execution modes. Provider
-availability is not allowed to become a dependency of the complete
+path. Tool, MCP, research, embedding, Memory, Skill, Subrun, and Eval execution
+requests fail closed; typed observations and refusal proofs grant no execution.
+Provider availability is not allowed to become a dependency of the complete
 AI-independent editor. A Provider result that cannot satisfy the existing Host,
 disclosure, Attempt, fence, recovery, or Proposal contract is rejected or held
 without an authority effect.
+
+Continuation, implicit/explicit cache, structured output, native compaction,
+retrieval, and abort remain independently qualified capabilities. Optional
+cache incompatibility or a miss cannot weaken required instructions, Tool
+definitions, or output semantics. Native text is valid for ordinary discussion;
+validated Host-managed summary can supply active compaction. Neither native
+compaction nor an explicit-cache hit is an added universal release gate.
+Original-response retrieval does not prove resumable streaming or create
+idempotency. Future Provider changes preserve StoryOS records and rebuild
+eligible context without promising opaque-state portability.
 
 ### 7.3 Entry, author journey, and completion
 
@@ -507,11 +574,16 @@ admitted binding under the existing owner contracts.
 3. Verify that the Host commits the manifest and disclosure evidence before
    the real external attempt, binds the exact destination and credential
    reference without exposing its value, and records the Attempt and fence.
+   Continue across Runs in that conversation with native typed streaming and
+   validated continuation; inspect cache behavior and truthful usage. Test
+   current instruction/target changes and active compaction under that profile.
 4. Inspect and edit the returned Proposal in the main editor, then explicitly
    Accept it in one run and explicitly Reject it in another.
 5. Interrupt one operation after the external dispatch boundary and verify
-   OutcomeUnknown, fencing, late-result quarantine, and no blind resend or
-   automatic successor.
+   OutcomeUnknown, fencing, original-result retrieval where available, and
+   the permitted bounded recovery path. Verify that spent allowance, missing
+   authority or budget, unresolved effects, and cancellation prevent an
+   automatic successor. Separately exercise confirmed reference expiry.
 6. Complete the required reconciliation or separately admitted recovery path,
    then inspect Run, Proposal, disclosure, Receipt, and authoritative facts.
 7. Disable the external model and repeat the complete AI-independent journey;
@@ -526,9 +598,9 @@ remain explicitly out of scope.
 
 | ID | Mandatory evidence category |
 | --- | --- |
-| S4-EVD-001 | Real-destination identity, Registration, Use Binding, compatibility, capability, policy, and credential-reference evidence. |
-| S4-EVD-002 | Ordered Context Assembly, bounded projection, manifest-before-egress, disclosure, wire/digest, and exact Project Scope evidence. |
-| S4-EVD-003 | Attempt, dispatch fence, usage classification, OutcomeUnknown, reconciliation, and late-result recovery evidence. |
+| S4-EVD-001 | Exact Agent Plan endpoint/model/account qualification and current use authority; separately evidenced continuation, streaming, caching combinations, response retrieval, and capability gaps. Required unknown behavior blocks the real path. |
+| S4-EVD-002 | Ordered Context Assembly, current instructions/target, incremental/full input, admitted compaction, manifest-before-egress, disclosure, non-secret wire/reference evidence, and exact conversation/Project Scope. |
+| S4-EVD-003 | Attempt, dispatch/cancellation fences, reported/estimated/unknown usage, confirmed-expiry recovery, original-result retrieval, bounded unknown-create successor, and late-result reconciliation with no duplicate decision or reset allowance. |
 | S4-EVD-004 | Proposal editing, Acceptance, Rejection, Receipt, Author Action, conflict, and recovery evidence for a real-author session. |
 | S4-EVD-005 | Negative evidence for credential exposure, cross-Scope disclosure, hidden retry, stale binding, automatic authority, and Agent-authored outline. |
 | S4-EVD-006 | Provider-boundary evidence that labels model quality, Provider attention, retention/training, and literary quality as unclaimed rather than silently passing them. |
@@ -587,8 +659,13 @@ Evidence dispositions are strict:
   boundary; it blocks a release claim even if the original run looked green.
 - **OutcomeUnknown** remains the owning operational uncertainty, not a failed
   request and not permission to retry blindly.
-- **Advisory** evidence, including real-model observations or measurements not
+- **Advisory** evidence, including model-quality observations or measurements not
   adopted by their owner, cannot satisfy a mandatory release obligation.
+
+Stage 4's required real-integration and exact-capability evidence remains a
+separate release obligation. It is not a deterministic CI dependency. Controlled
+fake faults prove local recovery transitions; real observations establish only
+the qualified route and observed facts, never repeatable Provider internals.
 
 No stage may be marked complete by omitting a failed case, relabelling
 unrun/unreplayable evidence, or treating a later stage's evidence as proof of
@@ -601,7 +678,7 @@ ownership from cycling:
 
 | ID | Gate | Passing condition | If not passed |
 | --- | --- | --- | --- |
-| HND-001 | Planning closure | The tracked owners and current Map agree on one exact main; this baseline, its continuation contract, and the retained-source coverage have no unresolved contradiction or unowned obligation. | Planning closure and implementation handoff remain blocked. An upstream owner can resolve its own correction before the downstream proof and specification corrections, without claiming this gate. |
+| HND-001 | Planning closure | The tracked owners and current Map agree on one exact main; release, proof, affected stage specifications, approved child graph, and retained-source coverage match the accepted revisions with no unresolved contradiction or unowned obligation. | Planning closure and implementation handoff remain blocked. This release owner can resolve before downstream alignment without claiming this gate. |
 | HND-002 | Implementation handoff | The initial Stage 1 handoff remains historical. Each later stage consumes the current release and proof contracts through its parent specification, then presents the tracer-bullet child breakdown and real dependencies for user approval before publication. | No unapproved child graph or product implementation begins. |
 | HND-003 | Stage implementation evidence | The applicable stage issue runs the evidence obligations against the exact implementation baseline and records complete, attributable evidence. | The stage is incomplete; the issue cannot claim release. |
 | HND-004 | Stage release | The stage author journey passes, every mandatory obligation passes, and the resulting main is the next stage's exact input. | The current stage remains the active implementation frontier; no next stage starts. |
@@ -615,6 +692,15 @@ planning contradiction or redefine an owner. The release owner updates this
 contract and its continuation/source coverage. The Map indexes the current
 answer and execution hold; the separate proof owner consumes the exact
 release revision before implementation can resume.
+
+For this revision, the proof owner next consumes typed continuation, active
+compaction, bounded recovery, hosted-operation admission, and Memory publication,
+settings, restriction, cleanup, and restore obligations. Then `/to-spec` refreshes
+the existing Stage 3, 4, 5, and 7 parent specifications, and `/to-tickets` presents
+any changed child breakdown and native blockers for approval before publication.
+Reuse current owners and stable Requirement IDs. No old child body can stand in
+for that alignment. All Stage 3 and later product implementation remains
+EXECUTION HOLD until the author explicitly resumes it after the gates pass.
 
 ## 10. Explicit non-scope of this contract
 
@@ -637,5 +723,6 @@ This contract does not:
 - treat .reference/** as product input, dependency, build/test/package input,
   evidence authority, or implementation substitute.
 
-The only planned primary document change for this ticket is this tracked
-editor-first release baseline and handoff contract.
+This owner updates this release baseline and its linked continuation/source
+coverage contract. The proof, stage specifications, and child contracts remain
+their named downstream owners' work.

@@ -1,10 +1,10 @@
 # StoryOS Product Delivery Continuation
 
 - Status: current release contract; product implementation is not claimed.
-- Contract revision: `product-delivery-mvp-boundary-2026-08-29-v1`.
+- Contract revision: `release-responses-memory-2026-09-14-v1`.
 - Release owner: [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 - Entry contract: [AI-Independent Editor-First Release Baseline and Handoff Criteria](ai-independent-editor-first-release-baseline-and-handoff-criteria.md).
-- Planning baseline: `main@00c6cadba54733c4fb38472b8b6b1a423103499b`, tree `0123d0074e8d9d159a83ff7c48818d64a4720106`.
+- Planning baseline: `main@38552dd3ecaf76dace80ff8d7f80caa381972ac0`, tree `29753b24816dcfd3b778309836531bc25f998ed1`.
 
 This file defines the production destination for retained capabilities after
 the first four stages. It also records the source-to-delivery coverage needed
@@ -20,6 +20,11 @@ the real Host, Context Assembly, durable AgentRun, and recovery foundations;
 later stages do not postpone those requirements. Stage 4 proves one real
 model path. It is not completion of research, Tools, Skills, Memory, MCP Apps,
 or the full retained StoryOS product.
+
+The [release allocation and conversation defaults](ai-independent-editor-first-release-baseline-and-handoff-criteria.md#21-conversation-memory-defaults-and-stage-admission)
+apply from Stage 3. Active context compaction and conversation-bound Provider
+continuation arrive in Stages 3 and 4. Stage 7 adds background Project Memory;
+it does not postpone those earlier foundations or change their identities.
 
 The serial release order is Stage 5 through Stage 9 below. Each stage starts
 from the preceding released main. This order is a release gate, not a claim
@@ -48,25 +53,38 @@ approved browser, language, deployment, and safety scope is unchanged.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S5-REQ-001 | The ordinary Agent conversation can perform a bounded research request through the one Tool Gateway. ToolSpec, Registration, Enablement, Exposure, Capability, and Approval retain separate roles; read tools and domain-write commands retain their exact effect boundaries. | Tool/MCP owner and Context owner |
+| S5-REQ-001 | The ordinary Agent conversation can perform bounded research through StoryOS ToolCalls and separately admitted Provider-hosted Operations. StoryOS dispatch uses the one Tool Gateway; hosted search, reading, and bounded temporary computation use ADR 0034 whole-operation admission. ToolSpec, Registration, Enablement, Exposure, Capability, and Approval stay distinct. | Tool/MCP owner and Context owner |
 | S5-REQ-002 | A third-party MCP server is an untrusted registered integration. Bind its exact contract and Project use, reject incompatible drift, mediate each effect, and keep credentials outside project records and output. | Tool/MCP owner and trust owner |
-| S5-REQ-003 | Model Tool requests are normalized into the existing Tool contract. External results must pass Context Assembly again before later use; no Tool output becomes an instruction, permission, or authoritative fact by arrival. | Model Gateway and Context owners |
+| S5-REQ-003 | Preserve native function-call/result correlation and validate the complete model-requested business-tool batch before deriving StoryOS ToolCalls. Hosted items remain evidence of the separately admitted whole operation, not invented Host ToolCalls. Returned content passes Context Assembly before a later StoryOS-controlled submission; invisible Provider-internal steps do not claim Host gates. Results grant no instruction, permission, or authority. | Model Gateway and Context owners |
 | S5-REQ-004 | The author can inspect a research synthesis, its claims, exact sources, and supporting, conflicting, or limiting evidence. A missing or unavailable source remains visible as a gap, not an invented citation. | Research/Memory owner |
-| S5-REQ-005 | Tool cancellation, interruption, and uncertain external effects remain durable and inspectable. Resume and reconciliation obey the existing fences and effect contract; a timeout does not authorize blind resend. | AgentRun, Tool/MCP, and retention owners |
+| S5-REQ-005 | Tool and hosted-operation cancellation, interruption, unknown effects, and unknown usage stay durable and inspectable. Enforce registered intake, actual outward-processing bounds, and finite worst-case reservations before submission. Resume/reconciliation obey existing fences; a timeout proves neither remote stop nor retry permission. Incomplete, rejected, cancelled, or fenced hosted output cannot advance normal continuation. | AgentRun, Tool/MCP, and retention owners |
 | S5-REQ-006 | Research, Tool, and MCP results can supply bounded assistance or an editable Proposal. They cannot directly change prose, fiction facts, preferences, or manuscript structure. | Artifact, Core/Proposal, and Admission owners |
 
 **Author journey S5-JRN-001.** Ask a research question in the normal Agent
-panel; inspect the proposed operation and any required Approval; run one
-authorized real integration; inspect sources and uncertainty; use a result
-as bounded discussion or a Proposal; reject one proposed creative change;
-interrupt an external operation and recover its exact disposition; disable
-the integration and continue manual writing.
+panel. Use a real StoryOS Tool/MCP path and a qualified real Provider-hosted
+operation; inspect each operation's scope and any required Approval. Continue
+with the exact native function/result correlation. Inspect returned sources,
+reports, known gaps, and a validated partial result with its limitations. Use
+a result as discussion or a Proposal and reject one creative change. Interrupt
+an external operation, recover its exact disposition, then disable the
+integrations and continue manual writing.
+
+The hosted request admits its complete enabled Tool set before submission,
+even when the Provider ultimately uses none. Existing grants cover unchanged
+in-scope work without another prompt. Expanded authority uses the exact Tool
+Approval target; disclosure Approval remains distinct. No Ambient Context,
+unbounded remote cost, external business write, message, publication, or direct
+StoryOS write enters the hosted scope. A separate StoryOS ToolCall retains its
+own permitted effects and Approval. Unobserved internal steps stay unknown;
+one physical submission is not charged or disclosed twice. If Agent Plan
+cannot prove a required hosted boundary, Stage 5 remains blocked rather than
+claiming it from a fake, a prompt, or general Ark documentation.
 
 | ID | Mandatory evidence |
 | --- | --- |
-| S5-EVD-001 | Real Tool/MCP registration, Project use, capability, approval, effect, and contract-drift evidence, including refusal and zero-authority cases. |
-| S5-EVD-002 | Research source, claim, synthesis, provenance, availability-gap, and result-reentry evidence through the complete Context/disclosure boundary. |
-| S5-EVD-003 | Durable interruption and unknown-effect recovery, Proposal-only creative change, and AI-independent regression evidence. |
+| S5-EVD-001 | Real Tool/MCP and exact hosted-mode qualification, registration, use, complete-set intake, bounds, grants, distinct Approval targets, and contract-drift evidence. Unauthorized or unbounded operations refuse before dispatch. |
+| S5-EVD-002 | Native function/result correlation, complete batch validation, research claims and exact available evidence, truthful gaps/partial results, and re-entry at StoryOS-controlled submissions. Provider reports remain distinct from Host observations and opaque internal work. |
+| S5-EVD-003 | Durable interruption, cancellation, unknown-effect/usage recovery, single accounting, selected-result continuation, Proposal-only creative change, and AI-independent regression evidence. |
 
 ## 3. Stage 6: Production Skill packages and composition
 
@@ -92,26 +110,52 @@ the Skill is unavailable.
 
 | ID | Production obligation | Semantic owner |
 | --- | --- | --- |
-| S7-REQ-001 | Preserve one Project main Agent across multiple threads. Use eligible, exact project sources for continuity instead of a hidden persistent memory store or the entire transcript by default. | Project Agent and Context owners |
+| S7-REQ-001 | Preserve one Project main Agent across distinct Project Conversations using their existing identities. Cross-conversation continuity uses eligible Project sources and generated Memory; each conversation retains its own Provider continuation. Do not load the entire transcript or Memory collection by default. | Project Agent and Context owners |
 | S7-REQ-002 | Represent author-owned world facts, characters, relationships, and timeline with the accepted fiction assertion, Story Scope, and Epistemic Scope semantics. Conflicting claims remain distinguishable; generated claims need explicit author-authorized settlement before authority. | Artifact and Research/Memory owners |
 | S7-REQ-003 | Keep current feedback, explicit future-facing Author Preferences, and Inferred Preferences distinct. Inference is never an automatic lasting rule. The author can inspect and change explicit preferences through their owning commands. | Research/Memory and Admission owners |
 | S7-REQ-004 | Support optional author-edited Project Instruction, immutable revisions, and exact top-level Run binding. Existing bindings stay fixed across Subruns and context compaction; absence does not block ordinary assistance. This does not defer any instruction binding already required in an earlier stage. | Context and AgentRun owners |
-| S7-REQ-005 | Build inspectable, source-bearing Memory and retrieval projections over eligible canonical sources. Admission, invalidation, suppression, source conflict, lifecycle gaps, and rebuild are explicit; live Working Context is not long-term Memory. | Research/Memory and retention owners |
-| S7-REQ-006 | Provide the accepted context inspection and include, pin, or exclude controls without requiring routine configuration or interrupting writing. Mandatory context, dynamic retrieval, budgets, eligibility, projection, manifests, and disclosure remain separate. | Context owner |
-| S7-REQ-007 | Embedding, retrieval, compaction, cache, and Provider continuity use exact source and destination bindings. They do not restore unavailable content, bypass disclosure, or replace author-owned truth. | Context, Model Gateway, persistence, and retention owners |
+| S7-REQ-005 | Extract from bounded eligible idle conversation snapshots and consolidate generated Memory Documents through fenced background work. Publish one complete set of exact revisions and a bounded navigation summary atomically. Keep source references, model/prompt/input identities, pending Notes, and maintenance outcomes inspectable. Search/read tools use currently permitted publications; indexes rebuild from retained documents without model calls. Generation is separate and need not reproduce identical text. | Research/Memory, storage, trust, and retention owners |
+| S7-REQ-006 | Apply the release's independent conversation Memory defaults and atomic idle-only settings contract. Offer author inspection of settings, publication, documents, Notes, sources, and maintenance outcomes even with Agent use disabled. Ordinary corrections remain Messages; an explicit lasting Memory request may record a Note for later consolidation. Note-recorded, published, no-op, failed, and unavailable are distinct. Retire semantic Include/Pin/Exclude and per-claim Admission/Suppression controls without aliases. | Context, Memory, and Protocol owners |
+| S7-REQ-007 | Deliver Memory source restrictions, lifecycle, qualified generated-payload cleanup, archive/export/restore, and recovery under exact source/destination bindings. Preserve current publication/Artifact Head/author/active-work/shared-payload protections and identity/use/Decision/gap evidence. Real covered-copy restrictions fence stale work and retained copies; ordinary corrections do not reset continuation. Existing active compaction and Provider continuation stay separate. Independently enabled embedding keeps its own capability, permission, budget, and disclosure gates; basic Memory recall does not require embedding. | Context, Model Gateway, persistence, and retention owners |
 
-**Author journey S7-JRN-001.** Write and explicitly establish a fiction fact
-or preference; continue in a second thread; inspect which exact sources were
-used; correct a conflicting inference without changing author truth; edit an
-optional Project Instruction and verify old/new Run bindings; exclude or
-suppress a source; rebuild retrieval; verify that unavailable content stays
-unavailable and ordinary writing remains undisturbed.
+**Author journey S7-JRN-001.**
+
+1. Write and explicitly establish a fiction fact or Author Preference. Let an
+   eligible settled conversation contribute to background extraction and
+   consolidation, then inspect its complete publication and source references.
+2. Continue in a second Project Conversation with the release defaults. Inspect
+   bounded navigation and on-demand reads, distinguishing read/sent evidence
+   from model attention and generated recall from author-owned truth.
+3. Correct an inference through ordinary conversation. Explicitly request a
+   lasting Memory change, inspect its recorded Note, and later inspect the
+   separate maintenance outcome. Neither acknowledgement promises exact forgetting.
+4. Change use and contribution independently while idle. Verify refusal while
+   foreground work is busy, captured Run settings, disabled new reads or
+   extraction, and continued author inspection. Inspect no-publication-yet,
+   valid empty publication, and unavailable publication as distinct states.
+5. Edit an optional Project Instruction and verify old/new Run bindings.
+   Exercise a real source/copy restriction, its narrow or conservative set-wide
+   unavailability, and reconstruction from allowed inputs without lifting old
+   payload fences. Ordinary source edits do not rewrite conversation history.
+6. Recover interrupted or stale maintenance without partial publication; rebuild
+   the index without a model call. Exercise qualified old generated-payload
+   cleanup and inspect retained identity, use records, and explicit gaps.
+   Export and restore the allowed documents, pending work, and lifecycle evidence;
+   missing evidence keeps recovery on Hold. Continue writing with Memory unavailable.
+
+Stage 7 adds no semantic exclusion classifier, per-claim memory confirmation,
+precise-forgetting oracle, or required project policy made from generated text.
+Background maintenance does not block the editor and may change only its
+admitted generated-document set. It cannot change Skills, ToolSpecs, policy,
+credentials, Author Preferences, or Authoritative State. The current Memory
+and retention contracts own publication concurrency and cleanup conditions;
+this stage supplies their implementation and measured profile qualification.
 
 | ID | Mandatory evidence |
 | --- | --- |
-| S7-EVD-001 | Cross-thread identity, structured truth, explicit preference, instruction revision/binding, and author-authority evidence. |
-| S7-EVD-002 | Source eligibility, Memory admission/invalidation/suppression, inspection controls, rebuild, lifecycle, and non-revival evidence. |
-| S7-EVD-003 | Complete context/embedding/disclosure, bounded continuity, cache/compaction, recovery, and editor-regression evidence. |
+| S7-EVD-001 | Cross-conversation identity, structured truth, explicit preference, instruction revision/binding, generated-recall limitations, and author-authority evidence. |
+| S7-EVD-002 | Independent default/settings behavior and idle/admission race, eligible extraction, complete publication, stale/duplicate work refusal, bounded recall, author inspection, Note origin and distinct maintenance outcomes. Include AP-22 hostile-input, wrong-Scope, forbidden-write, secret, oversize, disabled, and unavailable-source cases; inspect records and effects, not semantic truth. |
+| S7-EVD-003 | Context and independently enabled embedding/disclosure, exact publication reads, active-compaction separation, real covered-copy restrictions, allowed-input/index rebuild, and Memory recovery/portability. Cover cleanup racing publication or byte acquisition, protected/shared payloads, pending Notes, failed maintenance, missing lifecycle evidence, and truthful gaps with the editor still usable. |
 
 ## 5. Stage 8: Transcript MCP Apps
 
@@ -247,23 +291,23 @@ proof owner maps these obligations to exact executable evidence.
 | [Validate Production Proposal Refusal, Conflict, and Recovery UX](https://github.com/FrankQDWang/StoryOS/issues/45) | Retained prototype evidence; S2 workspace and S3 production recovery. | `S2-REQ-009`; `S3-REQ-004`; `S3-REQ-008` |
 | [Specify the Manuscript Revision and Proposal State Machine](https://github.com/FrankQDWang/StoryOS/issues/46) | Canonical Core/Proposal owner; S1–S4 and later creative changes. | `S2-REQ-004`; `S3-REQ-004`; `S3-REQ-008` |
 | [Specify Persistent Agent Run and Orchestration Semantics](https://github.com/FrankQDWang/StoryOS/issues/47) | Canonical AgentRun owner; S3 foundations and S9 complete modes. | `S3-REQ-003`; `S9-REQ-001`; `S9-REQ-005` |
-| [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48) | Canonical Tool/MCP owner; S5 and later callers. | `S5-REQ-001`; `S5-REQ-002`; `S5-REQ-005` |
+| [Specify ToolSpec, Capability, Approval, and MCP Trust Semantics](https://github.com/FrankQDWang/StoryOS/issues/48) | Canonical Tool/MCP and ADR 0034 hosted-operation owner; S5 and later callers. | `S5-REQ-001`; `S5-REQ-002`; `S5-REQ-003`; `S5-REQ-005` |
 | [Specify SkillPackage and Task-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/49) | Canonical Skill owner; S6. | `S6-REQ-001`; `S6-REQ-002`; `S6-REQ-003`; `S6-REQ-004` |
-| [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) | Canonical Model Gateway owner; S3/S4, S5 Tool requests, S9 policy. | `S3-REQ-003`; `S4-REQ-001`; `S5-REQ-003`; `S9-REQ-006` |
-| [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51) | Canonical research/Memory owner; S5 research and S7 continuity. | `S5-REQ-004`; `S7-REQ-002`; `S7-REQ-003`; `S7-REQ-005` |
+| [Specify ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50) | Canonical Model Gateway and ADR 0033 owner; S3 fake continuation/compaction, S4 Agent Plan, S5 functions/hosted work, S9 policy. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-001`; `S4-REQ-004`; `S5-REQ-003`; `S9-REQ-006` |
+| [Specify Fiction Memory and Research Provenance Semantics](https://github.com/FrankQDWang/StoryOS/issues/51) | Canonical Memory and ADR 0035 owner; S3 conversation defaults, S5 research evidence, S7 background Memory. | `S3-REQ-003`; `S5-REQ-004`; `S7-REQ-002`; `S7-REQ-003`; `S7-REQ-005`; `S7-REQ-006` |
 | [Validate a Transcript-Embedded MCP Apps Host](https://github.com/FrankQDWang/StoryOS/issues/52) | Retained prototype evidence; S8 production Host. | `S8-REQ-002`; `S8-REQ-003`; `S8-REQ-004` |
 | [Specify Transcript and MCP App Lifecycle Semantics](https://github.com/FrankQDWang/StoryOS/issues/53) | Canonical MCP App owner; S8. | `S8-REQ-001`; `S8-REQ-002`; `S8-REQ-003`; `S8-REQ-004` |
-| [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | Canonical Context owner; S3 onward. | `S3-REQ-003`; `S7-REQ-004`; `S7-REQ-006`; `S7-REQ-007` |
+| [Specify Context Assembly, Retrieval, and Outbound Disclosure Semantics](https://github.com/FrankQDWang/StoryOS/issues/54) | Canonical Context owner; S3 onward, with Host-controlled submissions distinct from opaque hosted steps and Memory distinct from active history. | `S3-REQ-003`; `S3-REQ-006`; `S4-REQ-003`; `S5-REQ-003`; `S7-REQ-004`; `S7-REQ-006`; `S7-REQ-007` |
 | [Prototype the Fixed Workspace Shell and Dynamic Surface Boundary](https://github.com/FrankQDWang/StoryOS/issues/55) | Approved visual/surface evidence; S2 production workspace, S8 Apps. | `S2-REQ-009`; `S8-REQ-001` |
-| [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | Canonical persistence owner; S1/S2 and every added record family. | `REL-003`; `S2-REQ-005`; `S2-REQ-007` |
-| [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | Trust invariant and each new crossing; all stages. | `REL-002`; `REL-003`; `S5-REQ-002`; `S8-REQ-002` |
-| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | Canonical protocol owner; all stages. | `REL-003`; `S2-REQ-005`; `S3-REQ-003` |
+| [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56) | Canonical persistence owner; each new conversation, continuation, hosted-operation, and Memory family includes Scope, lifecycle, export/restore, and separate deployed-upgrade gates. | `REL-003`; `S2-REQ-005`; `S2-REQ-007`; `S3-REQ-003`; `S7-REQ-005`; `S7-REQ-007` |
+| [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | Trust invariant at each crossing, including bounded recovery, hosted opacity, and AP-22 Memory maintenance. | `REL-002`; `REL-003`; `S3-REQ-006`; `S4-REQ-004`; `S5-REQ-002`; `S7-REQ-005`; `S7-REQ-006`; `S8-REQ-002` |
+| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | Canonical protocol and compatibility-matrix owner; S3 conversation/Run v2, S5 Approval targets, S7 Memory behavior and retired semantic controls. | `REL-003`; `S2-REQ-005`; `S3-REQ-003`; `S5-REQ-001`; `S7-REQ-006` |
 | [Define the Modular-Monolith and Repository Governance Boundaries](https://github.com/FrankQDWang/StoryOS/issues/59) | Architecture/governance invariant; all stages. | `REL-003`; `REL-006` |
 | [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | Proof owner; consume every current release requirement and stage. | `REL-005`; `REL-007`; `HND-006` |
 | [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61) | Deferred outside MVP; the Eval boundary owner retains only the future observation concept. | None; outside MVP. |
 | [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | Release owner for this complete route and its coverage. | `REL-004`; `REL-007` |
 | [Specify Subrun Control-Plane, Mailbox, and Observability Semantics](https://github.com/FrankQDWang/StoryOS/issues/63) | Canonical Subrun owner; S9. | `S9-REQ-002`; `S9-REQ-003` |
-| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Canonical retention owner; S1/S2 and each added execution/data family. | `S2-REQ-005`; `S2-REQ-007`; `S7-REQ-005`; `S8-REQ-003`; `S9-REQ-003` |
+| [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64) | Canonical retention owner; existing invariants and RET-015 through RET-018 cover generated cleanup, active compaction, covered-copy restrictions, and Memory portability in their allocated stages. | `S2-REQ-005`; `S2-REQ-007`; `S3-REQ-006`; `S4-REQ-004`; `S7-REQ-005`; `S7-REQ-007`; `S8-REQ-003`; `S9-REQ-003` |
 | [Research Durable, Inspectable Agent Memory Architecture](https://github.com/FrankQDWang/StoryOS/issues/65) | Retained research evidence; S7 implementation and proof. | `S7-REQ-005`; `S7-REQ-007` |
 | [Research Trustworthy Browser Author-Intent Attestation Boundaries](https://github.com/FrankQDWang/StoryOS/issues/67) | Retained research evidence; Admission/trust invariant from S1. | `REL-002`; `S2-REQ-003`; `S2-REQ-004` |
 | [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | Canonical Admission owner; every author-command surface. | `REL-002`; `S2-REQ-003`; `S2-REQ-004`; `S8-REQ-004` |
@@ -288,15 +332,21 @@ stage, and successor without treating the historical Stage 1 crosswalk as
 current route verification. It also owns the mechanism that detects a missing
 source disposition, duplicate owner, unknown identifier, or stale ticket graph.
 
-The corrected Stage 2 parent and later stage specifications must reference
-their exact applicable requirements and semantic sources. Their implementation
-tickets are not published by this document. Each proposed breakdown must show
-its complete author-visible slice and actual blocking edges, receive user
-approval, and pass an independent forward/reverse coverage audit before it
-becomes executable. The existing implementation hold remains in force until
-release, proof, specification, and native graph agree on current main.
+After the proof owner consumes this release revision, `/to-spec` refreshes the
+existing [Deliver Stage 3: The Complete Fake-Model Proposal Loop](https://github.com/FrankQDWang/StoryOS/issues/361),
+[Deliver Stage 4: One Authorized Real-Model Journey](https://github.com/FrankQDWang/StoryOS/issues/362),
+[Deliver Stage 5: Governed Research Tools and MCP](https://github.com/FrankQDWang/StoryOS/issues/363), and
+[Deliver Stage 7: Project Continuity and Inspectable Memory](https://github.com/FrankQDWang/StoryOS/issues/365)
+parent specifications.
+Then `/to-tickets` presents any changed child breakdown and actual native
+blocking edges for user approval before publication. Reuse current child
+owners and stable requirements, preserve Stage 1/2 historical evidence and
+unaffected Stage 6/8/9 promises, and audit forward/reverse coverage. Existing
+old bodies do not certify these changes. Stage 3 and later implementation
+remains EXECUTION HOLD until alignment passes and the author explicitly
+resumes execution; this decision creates no implementation ticket or stage release.
 
-No further product-direction decision blocks this release correction. Concrete
+The two conversation defaults are recorded in the release baseline. Concrete
 external services, accounts, spending, and destination authorization remain
 explicit prerequisites of the affected real-integration ticket. No Eval
 definition, evaluator, rubric, or API decision blocks MVP planning or delivery.
