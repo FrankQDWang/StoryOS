@@ -2,7 +2,7 @@
 
 - Status: accepted
 - Wayfinder resolution: [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57)
-- Repository baseline: `15a6c4d343145c9f825d52067f13d09eec6ead37`
+- Repository baseline: `dd4775c982f903e04ea5a9cf047968d489808a01`
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Protected-client decision: [ADR 0013](../adr/0013-trust-the-storyos-web-client-for-author-command-admission.md)
 - Author-command admission: [Author Command Admission](author-command-admission.md)
@@ -13,7 +13,10 @@
 - Storage contract: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
 - Context and egress contract: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
 - MCP App lifecycle: [ADR 0002](../adr/0002-specify-transcript-and-mcp-app-lifecycle-semantics.md)
-- Deployment and isolation boundary: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
+- Deployment and isolation boundary: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md) and [ADR 0022](../adr/0022-prefer-widely-validated-hosted-infrastructure.md)
+- Model continuation: [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md)
+- Hosted operations: [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md)
+- Generated Memory: [ADR 0035](../adr/0035-use-background-generated-project-memory.md)
 
 # Overview
 
@@ -40,6 +43,25 @@ guarantees. A no-training, zero-retention, encryption, or compliance statement
 never means that no Outbound Disclosure occurred and never replaces
 StoryOS-owned admission, minimization, Attempt, or disclosure evidence.
 
+### 1.1 Current Provider evidence limits
+
+Official pages were rechecked on 2026-09-14. The rows below are source facts
+and limited inferences; they do not certify an account or selected model.
+
+| Source fact | Threat-model implication |
+|---|---|
+| Agent Plan documents its own `/api/plan/v3` route and key; general Ark Responses uses `/api/v3/responses`. [E3] [E4] | A general API field is not proof of Agent Plan route/model/account support. |
+| A prior-response reference includes earlier input/output but does not inherit `instructions`. [E4] | Supply required current instructions; do not infer cross-account, key, endpoint, or model portability from a handle. The inspected pages give no such guarantee. |
+| Response storage has expiry; implicit cache is automatically enabled on supported models and cannot be disabled through that cache feature. [E4] [E5] | `store=false`, expiry, or deleting a response does not establish zero retention or erasure of every Provider copy. |
+| Explicit caching retains initial Tool definitions, restricts later Tool configuration, excludes `instructions`, and has `json_schema` combination limits. [E5] | Validate the whole request mapping; cached Tools grant no current permission. |
+| `max_tool_calls` is best effort and limits rounds, not calls per round. The Doubao search mode ignores `limit`, `max_keyword`, and `user_location`. [E4] | Those fields alone do not prove a finite maximum cost, Tool count, or outward-processing boundary. |
+| Remote MCP exposes `server_url`, Tool-name filtering, and approval controls. [E4] | Configuration alone does not prove parameter-level resource, effect, or egress isolation. |
+| Retrieval returns a completed result; deletion reports removal by ID. The pages do not promise create idempotency, resumed streams, or remote termination. [E6] | Reconcile original evidence without treating deletion, stream loss, or expiry as non-execution. |
+| ArkCLI can configure search MCP separately without changing the model Provider or base URL. [E7] | Harness Tool availability does not certify in-Response sandbox support or its intake/network/resource controls. |
+
+Unknown scope or capability is not proof of a Provider vulnerability. It is
+insufficient evidence to enable a StoryOS path that requires that property.
+
 ## 2. Product and deployment outline
 
 StoryOS supports Dean Koontz-style Discovery Writing: the author develops the
@@ -49,11 +71,17 @@ structure. One stable User owns each Project and acts as its sole Project
 Author. Authoritative State changes only through a narrow Direct Author Action
 or an inspectable Core Proposal followed by explicit author Acceptance.
 
-The Foundation Validation Deployment runs one StoryOS Server and PostgreSQL
-locally for one bootstrapped User. The same logical service may later run in a
-controlled cloud deployment for many mutually isolated Users. Model and
-embedding inference always use external APIs. Bailian is one current test
-Provider, not an architectural dependency.
+Local development uses a Mac and OrbStack PostgreSQL. Under ADR 0022,
+production PostgreSQL is hosted Supabase; Server, Worker, and Web stay paired
+on a Linux VPS behind TLS. One bootstrapped User exercises the same Project
+Isolation required by a later multi-User service. Hosted compatibility and
+recovery acceptance remain deferred to deployment preparation. [S10]
+
+Volcengine Agent Plan Responses is the selected first real-model path, subject
+to exact route, account, model, and capability validation. Continuation, cache,
+native compaction, retrieval, cancellation, and hosted Tools are separate
+capabilities. Codex CLI supplies the primary general Agent design reference,
+not runtime code or evidence of Volcengine support. [S7]
 
 Release 1 has one Protected Web Client: the exact controlled StoryOS Web
 application build named by its immutable asset set, accepted client-contract
@@ -68,8 +96,12 @@ non-authoritative continuity state.
 PostgreSQL is the authoritative database. A Project is never identified by a
 directory, database file, or filesystem path. Project Export Archives and
 author-provided files are untrusted inputs or portable evidence, not alternate
-authority stores. There is no per-Project database, SQLite, Neo4j, standalone
-vector database, message broker, microservice split, whole-system Event
+authority stores. Messages, captured Research, Memory Documents, and recoverable
+context records use PostgreSQL. Markdown is a content form, not a second
+Server file store. Active request assembly may use process memory; Provider
+state cannot replace the durable record. There is no per-Project database,
+SQLite, Neo4j, standalone vector database, message broker, microservice split,
+whole-system Event
 Sourcing, arbitrary shell, or unrestricted filesystem access.
 
 ## 3. Security objectives
@@ -89,9 +121,11 @@ The Foundation must preserve these security objectives:
 3. **Durable truth.** PostgreSQL canonical facts, immutable payloads, exact
    Revisions, Receipts, manifests, Attempts, and uncertainty records outrank
    network, browser, process, cache, projection, and Provider state.
-4. **Minimum-necessary external processing.** Every model, embedding, Tool,
-   MCP, research, telemetry, or nested external call receives only an exact,
-   currently eligible, purpose-bound Projection after manifest-before-egress.
+4. **Minimum-necessary external processing.** Every StoryOS-controlled
+   submission receives only admitted input or references after
+   manifest-before-egress. Hosted work has its complete input, Tool set,
+   outward processing, effects, and resource scope bounded before submission;
+   invisible internal steps are not claimed as separate Host-gated calls.
 5. **Secret confinement.** Only the narrow execution boundary resolves a
    Credential Reference. Secret values and value digests never enter ordinary
    records, Tool arguments or outputs, model context, MCP Apps, logs, backups,
@@ -121,7 +155,8 @@ The Foundation must preserve these security objectives:
 | Artifacts, Proposals, Receipts, and Provenance | exact identity, source lineage, integrity, lifecycle, and no implicit authority |
 | AgentRun, Subrun, Transcript, Mailbox, and recovery facts | durable ordering, idempotency, fencing, uncertainty, and replay correctness |
 | Project Scope and requester identity | no cross-User or cross-Project discovery, existence oracle, join, reuse, delivery, or disclosure |
-| Context and disclosure evidence | seven ordered gates, exact source closure, minimum disclosure, and manifest-before-egress |
+| Context and disclosure evidence | seven ordered gates at StoryOS submissions, known input/reference dependencies, bounded hosted scope, and manifest-before-egress |
+| Generated Memory and publication | exact Project Scope and source/publication versions, bounded maintenance, no authority promotion, and no stale or partial publication |
 | Credential values and resolver authority | never model-, Client-, Tool-, App-, database-payload-, log-, backup-, or export-visible |
 | PostgreSQL schema, roles, constraints, and migration ledger | least privilege, forced RLS, same-scope references, checksum and compatibility integrity |
 | Project Export Archives, backups, and WAL | confidentiality, integrity, complete recovery chain, exact-scope restore, and no secret material |
@@ -139,7 +174,8 @@ The Foundation must preserve these security objectives:
 | Untrusted web origin or page script | can cause browser requests allowed by the web platform, open EventSource connections where policy permits, and send postMessage traffic to reachable windows |
 | Protected Web Client | runs the exact controlled StoryOS application build admitted by matching asset, client-contract, security-policy, Client Session, Editor Session, and writer-generation evidence; it requests but never creates or supplies Author Command Admission identity |
 | Untrusted browser-side influence | controls rendered/imported content, model/Tool/MCP/App output, third-party script or dependency input, browser extensions, cached or stale client state, and DOM/bridge messages without gaining a trusted-client identity |
-| Malicious model output or Provider response | can emit persuasive text, malformed streams, forged Tool requests, oversized output, or misleading identity/usage evidence |
+| Malicious model output or Provider response | can emit persuasive text, forged or partial events, substituted continuation/call identities, oversized output, or false status, source, and usage reports |
+| Poisoned Memory input or stale maintenance job | can repeat false or imperative content through extraction, consolidation, navigation, and recall, or try to publish with stale scope, permissions, or generation |
 | Malicious Tool, MCP server, or MCP App | controls discovered metadata, schemas, results, HTML, bridge messages, redirects, and declared annotations within its reachable Registration |
 | Malicious research source or author-provided file | controls content, imperative text, URLs, parser inputs, archive entries, compression ratio, and embedded metadata |
 | Duplicate or stale worker | retains old process state, lease token, queued work, sockets, or late external responses across recovery |
@@ -164,8 +200,18 @@ both deployments even though the local deployment bootstraps its one User
 without login UX.
 
 Provider-internal training, retention, logging, hidden cache, subprocessors,
-and model attention remain outside StoryOS durable truth. Browser or sandbox
-zero-days, OS credential theft after full host compromise, and cryptographic
+and model attention remain outside StoryOS durable truth. A hosted mode must
+have a validated way to constrain admitted intake, Tool set, outward processing,
+effects, and finite resource use; a prompt or service label alone is insufficient.
+Invisible internal events remain Provider-reported or unknown. Host checks prove
+admission and local handling, not that the Provider obeyed every bound. [S8]
+
+Ordinary creative corrections and non-use guidance remain Messages or Steering
+Input for the Agent. They are not access revocations or a deterministic semantic
+exclusion mechanism. The Host enforces actual permissions, Project Isolation,
+and retained-copy restrictions without proving all past model influence was
+removed. Model adherence, Memory truth, and exact forgetting are not security
+oracles. Browser or sandbox zero-days, OS credential theft after full host compromise, and cryptographic
 primitive failure are residual platform risks rather than Foundation features.
 
 A pure browser claim is intentionally narrower than physical-human
@@ -185,13 +231,15 @@ the selected Release 1 boundary.
 | TB-3 Server/runtime ↔ PostgreSQL | canonical facts, payloads, scope settings, projections, outbox | non-owner runtime, forced RLS, composite scope constraints, atomic transitions |
 | TB-4 Maintenance ↔ PostgreSQL | migrations, whole-service backup/restore, role/grant manifests | separate non-request credentials, isolated execution, checksum and restore validation |
 | TB-5 Server/worker ↔ Credential Resolver | opaque reference, ephemeral resolved value, availability | resolve only after admitted operation; value reaches only the exact transport boundary |
-| TB-6 Model/embedding destination | minimum context, wire projection, ephemeral credential, returned output | exact destination identity, grant, manifest, Attempt, Disclosure Event, and no cross-scope batch/cache |
+| TB-6 Model/embedding destination | admitted input and prior references, wire projection, ephemeral credential, returned output | exact Scope and applicable conversation/destination bindings, current admission, manifest, Attempt, disclosure evidence, and no cross-scope reuse |
+| TB-6a Provider-hosted operation | explicit intake and intentionally referenced state, enabled Tool set, outward processing, returned reports | bound the whole operation before its owning Model Attempt submits; no Ambient Context, invented internal Host gates, or duplicate accounting |
 | TB-7 Tool Gateway ↔ Tool/MCP server | declared inputs, effects, credentials, results, nested destinations | exact Registration and ToolSpec, non-escalating grant, Approval, effect evidence, contract-drift fence |
 | TB-8 MCP App iframe ↔ Host bridge | UI resource, instance negotiation, presentation signals, App Action Requests | cross-origin sandbox, exact instance/source/origin, schema and capability mediation, no auto-forward |
 | TB-9 Research fetcher ↔ network | generated or supplied URL/query, redirects, response bytes | public-network-only policy, no ambient credentials, bounded capture and exact provenance |
 | TB-10 Import/export ↔ author-provided bytes | Project Export Archive or imported source | stage and validate without authority, path, parser, secret, or scope escape |
 | TB-11 PostgreSQL ↔ backup/WAL store | whole-service canonical data and recovery metadata | independent restricted failure domain, confidentiality, integrity, gap detection, restore proof |
-| TB-12 Durable store ↔ journals/projections/caches/UI | journaled, indexed, summarized, replayed, cached, or displayed views | current scope, generation, eligibility, and exact dependency closure; browser state and projections never become truth, authorization, settlement, or a recovery oracle |
+| TB-12 Durable store ↔ journals/projections/caches/UI | journaled, indexed, summarized, replayed, cached, or displayed views | current scope, generation, access, and required versioned dependencies; views never become authority, settlement, or a recovery oracle |
+| TB-13 Conversation records ↔ Memory maintenance ↔ recall | bounded settled inputs, generated documents, Memory Notes, publication, summary, and tool reads | one Project Scope, separate generation/use settings, bounded maintenance permission, atomic current publication, and Data-only Context |
 
 ### 7.1 Exact Release 1 protected-client trust inputs
 
@@ -243,8 +291,9 @@ endpoint and reconnect cursor, file/import endpoints, Project Export/Restore
 maintenance commands, model and embedding responses, Tool and MCP discovery
 and results, MCP App resources and bridge messages, research URLs and fetched
 bytes, secret-rebind commands, migration/backup/restore tooling, outbox and
-wakeup delivery, worker lease recovery, and every disposable cache/index
-rebuild reader.
+wakeup delivery, worker lease recovery, Provider continuation and compaction
+references, Memory generation/settings/publication/read paths, and every
+disposable cache/index rebuild reader.
 
 # Attack Surface, Mitigations, and Attacker Stories
 
@@ -501,15 +550,38 @@ Same-server App visibility is only eligibility. MCP HTTP authorization must
 validate audience/resource and use distinct downstream credentials; local
 servers default to stdio or authenticated restricted IPC and least OS/network
 privilege. Host credentials are injected after admission and are never
-available to the model, App, generated program, or arguments. Every nested
-external call is a separate destination operation; no controlled adapter may
-be an unrecorded egress proxy.
+available to the model, App, generated program, or arguments. Every
+StoryOS-controlled nested external dispatch is a separate destination
+operation; no controlled adapter may be an unrecorded egress proxy.
+
+A Provider-hosted operation instead binds its complete enabled Tool set,
+Registrations, ToolSpecs, explicit intake, permitted processors and outward
+destinations, effect ceiling, current authority, required Approval, and finite
+bounds before the owning Model Attempt submits. A shared Provider or previous
+response reference gives a hosted Tool no Ambient Context. If the mode cannot
+restrict intake or outward processing, refuse it; use a separate bounded
+request only when it meets the same contract. Internal query values may be
+unknown. Do not invent Host ToolCalls or dispatches for them. [S8]
+
+Tool Approval targets one exact StoryOS ToolCall or one exact hosted operation;
+neither approves the other. Destination Disclosure Approval grants no Tool
+execution. An operation covered by the current Run Grant needs no extra
+confirmation. Provider approval callbacks grant no author authority; a selected
+callback path needs validated correlation and current admission before use.
+The first hosted scope permits search, reading, and bounded temporary
+computation. External business writes, messages, publication, and direct StoryOS
+writes are excluded. Scratch files are not durable results; importing returned
+files is a separate validated Host operation. Business writes use separately
+authorized StoryOS ToolCalls, and creative changes retain Proposal/Acceptance.
 
 **Verifiable evidence.** Tests mutate each contract field and annotation,
 reuse names across servers, substitute token audience, attempt token
 passthrough, invoke a hidden or app-only Tool, request undeclared effects,
-redirect nested egress, and return invalid/oversized results. Exposure clears
-or the call fails closed before execution.
+redirect controlled nested egress, and return invalid/oversized results.
+Hosted fixtures vary enabled tools, input access, outward destinations, effects,
+Approval target, and enforceable bounds before submission. An unknown required
+bound refuses the mode. Reported violations fence later Host work; they do not
+retroactively undo internal work or become proof of per-step Host inspection.
 
 **Residual risk and owner.** An external service can misuse data that was
 legitimately disclosed within an exact grant; StoryOS records but cannot
@@ -524,7 +596,9 @@ contract-drift and deputy tests belong to
 author-owned outline, MCP resource, Tool result, App context contribution, or
 model output contains imperative text telling the Agent to ignore policy,
 retrieve another Project, disclose prose, invoke a Tool, change a credential,
-or write story structure. If content position, signature, ownership,
+or write story structure. Extraction, consolidation, or compaction can repeat
+that text in apparently familiar summaries. If content position, signature,
+ownership,
 repetition, or execution trust grants Instruction Authority, the injection can
 reach Tool Gateway, a Provider, or Authoritative State.
 
@@ -545,17 +619,24 @@ validates the complete model decision and Tool-request batch against the exact
 Step Snapshot, Tool Exposure, schemas, scope, grants, and effects; one invalid
 member rejects the batch. Non-model destinations receive no Ambient Context.
 No output can create an Author Command Admission, Approval, Acceptance,
-Credential Reference selection, or destination grant.
+Credential Reference selection, or destination grant. Generated Memory and
+compaction retain source roles and known input evidence; neither becomes a new
+Host policy. General prompts guide model behavior but are not the enforcement
+boundary. A returned-result rejection cannot undo already admitted hosted work;
+its disclosure, effect, and uncertainty evidence must remain intact.
 
 **Verifiable evidence.** A versioned adversarial corpus places equivalent
 instructions in every source class, encoding, nested summary, Tool field,
 App contribution, and retrieval rank. Tests prove the data may influence an
-ordinary draft but cannot widen discovery, cross scope, select credentials,
-cause unapproved egress/effects, or bypass Proposal/Acceptance.
+ordinary draft but cannot widen permitted discovery scope, cross scope, select
+credentials, cause unapproved egress/effects, or bypass Proposal/Acceptance.
 
 **Residual risk and owner.** A model may still produce poor or misleading
 creative output from eligible malicious data; author inspection and evidence
-quality address that product risk. Hard security effects remain Host-gated.
+quality address that product risk. Each StoryOS-controlled effect remains
+Host-gated; hosted effects remain limited to the pre-admitted operation with
+Provider-internal compliance uncertainty. A later result check cannot prevent
+earlier internal consumption.
 Exact input/output discriminants belong to
 [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58);
 the injection matrix belongs to
@@ -592,6 +673,14 @@ address class, redirect chain, headers needed for provenance, content digest,
 and truncation/failure evidence. Network isolation should make internal
 destinations unreachable even if validation fails.
 
+These hop-level checks apply to a StoryOS-controlled fetcher. For hosted search
+or reading, ADR 0034 requires a validated way to bound intake, resources,
+outward destinations, and effects before submission. StoryOS cannot claim to
+observe or validate every internal DNS result or redirect. Unknown required
+network controls make that mode ineligible. Returned URLs remain untrusted;
+a later StoryOS fetch passes this full fetcher boundary. A Provider source
+report is not a captured Research Source Snapshot.
+
 **Verifiable evidence.** Tests cover IPv4/IPv6 textual variants, localhost,
 private/link-local/metadata addresses, userinfo, mixed schemes, DNS rebinding,
 multiple answers, public-to-private redirects, redirect loops, file/gopher/
@@ -608,49 +697,88 @@ SSRF and parser tests belong to
 the isolated minimal fetcher belongs to
 [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
 
-## 17. AP-09: Provider or embedding disclosure escapes its admitted manifest
+## 17. AP-09: Provider continuation or hosted disclosure escapes admission
 
-**Source to sink.** A routing default, adapter revision, fallback, hidden retry,
-cross-Project batch, attachment helper, embedding cache, or Provider feature
-adds content or changes destination after admission. Project prose, research,
-identifiers, or another Project's vector input then reaches an external API
-without a matching manifest. Provider retention and training behavior varies
-by provider, endpoint, feature, account, region, and time; Provider statements
-cannot make an unrecorded disclosure safe. [E1] [E2]
+**Source to sink.** A substituted prior-response ID, account, endpoint, model,
+Adapter, cache entry, implicit attachment, or hosted Tool exposes a different
+conversation or wider input than the new request admits. A forged, partial,
+rejected, or late result advances the active chain, or a small transport delta
+conceals intentionally referenced prior state. A Provider cache flag or service
+entitlement is mistaken for current permission or exact capability evidence.
 
 **Affected assets.** Project confidentiality, Project Isolation, author intent,
-disclosure provenance, Credential confinement, and accurate Attempt history.
+continuation integrity, Credential confinement, and truthful disclosure history.
 
-**Accepted controls.** The seven Context Assembly gates finish before egress;
-the immutable manifest records destination, wire projection, purpose, grant,
-source closure, adapter revision, credential reference, and budgets; an
-Attempt is durable before sending. Model and embedding results are
-non-authoritative and Bailian is only a test Provider. [S5]
+**Accepted controls.** Volcengine Agent Plan Responses is the first selected
+route, not a blanket capability certification. The seven gates govern each
+StoryOS submission. Current admission binds the actual input and required prior
+references; the durable dispatch claim precedes I/O and initially records
+OutcomeUnknown. Provider acknowledgement is not model-attention evidence. [S5] [S7]
+Model and embedding submissions still bind exact purpose, destination, input,
+wire payload, and Credential Reference. Implicit attachments and cross-Project
+batches remain forbidden; embedding/cache keys retain the source, projection,
+and Provider/model identity under AP-15.
 
-**Required structural mitigation.** Admission binds the exact provider,
-endpoint, account/region when relevant, feature set, adapter revision, wire
-bytes or canonical digest, and one Project Scope. Fallback, retry, batching,
-tool-mediated nested egress, and destination changes require a new admission
-decision and Attempt. Embedding/index/cache keys include exact scope, source
-revision, eligibility policy, provider/model and projection revision. Provider
-credentials are resolved only for the admitted destination.
+**Required structural mitigation.** Preserve the immutable Model Continuation
+Binding to its original Model Attempt, exact Project Scope and Project
+Conversation, destination identity/evidence, Model Registration, Adapter mapping,
+and original use/compatibility records. Every later Attempt obtains current
+admission with its own use and compatibility facts. A reference grants no
+permission, budget, or instruction authority. A new conversation cannot attach
+to another conversation's chain, even inside the same Project. [S7]
 
-**Verifiable evidence.** Adapter contract tests capture the actual request and
-compare its destination, headers, fields, attachments, and canonical payload
-to the admitted manifest. Tests change route, feature, adapter, Project,
-embedding source, batch composition, and retry point and prove fail-closed
-behavior or a distinct recorded Attempt.
+A changed account boundary, destination, Registration, or Adapter cannot silently
+reuse the old binding. Credential rotation alone does not prove account identity.
+New runs bind their current grants and Project Instruction. Supply required
+current instructions and the exact Working Target under the validated profile;
+a cache or summary cannot silently replace them. Use a delta/reference only
+under a mapping that represents the current request. Otherwise admit full input
+or a new transport continuation without changing conversation identity.
 
-**Residual risk and owner.** StoryOS cannot prove a Provider's internal
-retention, training, breach response, or legal disclosure; it can prove what
-it sent, where, why, and what outcome it observed. Wire and retry contracts
-belong to [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58),
-retention evidence to
-[Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md),
-adapter proofs to
-[Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60),
-and the first admitted Provider path to
-[Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+Validate Responses transport, continuation, cache, compaction, hosted Tools,
+retrieval, and cancellation separately, including their supported combinations.
+Agent Plan entitlement is not general Ark endpoint or exact model/account proof.
+Unknown required behavior blocks the route. Hidden SDK retries and
+Provider-controlled model fallback are ineligible; each physical resubmission
+has fresh admission and Attempt
+and disclosure evidence. One hosted submission uses its owning Model Attempt
+once; invisible internal steps are not separate Host submissions. [S7] [S8]
+
+Preserve native item/call identities and result correlation. Only the selected
+complete output whose entire Agent Decision validates and becomes durable may
+advance ordinary continuation. Provider completion alone, partial arguments,
+rejected output, cancelled work, and fenced late results cannot do so. A repair
+path may use admitted Host validation diagnostics, not a rejected response's
+whole prior-state handle. Retrieval for reconciliation is separately admitted
+and never re-executes the original work. A complete validated outer result may
+report an incomplete research objective with complete sub-results, sources,
+and remaining gaps. It is distinct from an incomplete stream, and cannot
+hide unknown effects or be presented as full task success.
+
+Inspectors distinguish exact application-held and sent input, known references,
+Provider reports, and opaque internal state. Preserve submission uncertainty;
+do not infer exact internal content or minimum disclosure from a request delta,
+cache hit, source citation, or final answer. Provider retention and training
+statements are external claims, not local execution guarantees.
+
+**Verifiable evidence.** Adapter and fake-destination fixtures substitute each
+Scope, conversation, account, destination, credential generation, Registration,
+use binding, compatibility Decision, prior reference, and native call identity.
+They prove current admission, exact Host wire/reference association, immutable
+original bindings, no cross-conversation reuse, and refusal of unsupported
+combinations. Duplicate, reordered, forged, partial, rejected, and late output
+cannot settle another Attempt or advance a fenced chain. Hosted fixtures test
+whole-operation admission and single accounting, not simulated proof of unseen
+Provider steps. Real-route checks qualify only the behavior actually observed.
+
+**Residual risk and owner.** StoryOS cannot prove Provider attention, retention,
+internal queries, enforcement, or legal disclosure. It can prove prepared input,
+local dispatch, attributable reports, and best-known receipt. Observed scope
+violations block later work and ordinary intake under the existing drift and
+safety contract, while preserving prior disclosure and unknown effects.
+The Model, Tool, and Context owners retain these semantics; protocol represents
+them, retention preserves their evidence, and the existing proof/release owners
+validate the accepted boundary before its product stage is released.
 
 ## 18. AP-10: Credential Reference resolution leaks or crosses authority
 
@@ -748,11 +876,11 @@ and database-level validation. [P3] [P4]
 **Affected assets.** Every User and Project, immutable history, credentials if
 incorrectly persisted, migration and role posture, RPO/RTO, and availability.
 
-**Accepted controls.** Base backup plus continuous WAL is the Foundation
-recovery unit; stores use an independent restricted failure domain; RPO is at
-most 15 minutes and RTO at most 2 hours; restore proves schema, roles, forced
-RLS, projections, and credentials before service. A Project Export Archive is
-not a database backup. [S4]
+**Accepted controls.** ADR 0021 and ADR 0022 own current recovery custody:
+hosted production uses vendor-held daily physical backups; StoryOS does not possess production WAL
+files. The existing local OrbStack drill proves isolated recovery mechanics,
+not hosted acceptance. Production compatibility and recovery remain deferred
+to deployment preparation. A Project Export Archive is not a database backup. [S10]
 
 **Required structural mitigation.** Backup and archive roles remain separate
 from runtime and migration, and reader/writer privileges remain separate where
@@ -763,10 +891,12 @@ externalized configuration, role grants, migration checksums, credential
 references, and scope invariants are re-established before cutover.
 
 **Verifiable evidence.** Each release-candidate recovery drill combines
-manifest/checksum verification with an actual startup, point-in-time restore,
+manifest/checksum verification with actual startup of an isolated restore,
 role/grant and forced-RLS inspection, cross-scope negative tests, projection
-rebuild equality, canary secret scan, missing/corrupt/duplicate WAL failures,
-and measured RPO/RTO.
+rebuild equality, canary secret scan, and measured recovery bounds. WAL-specific
+checks apply to the local physical-chain oracle. Hosted proof needs vendor
+backup evidence and a restored non-live project that passes visibility and
+continued-writing checks; local success certifies neither vendor RPO nor custody.
 
 **Residual risk and owner.** Infrastructure administrators retain broad access,
 and correlated loss of database plus recovery stores remains environmental
@@ -858,14 +988,30 @@ unrecoverable intent require visible reconfirmation and a new Admission.
 A missing observation after possible external egress becomes OutcomeUnknown
 and requires destination-specific reconciliation or author-visible resolution,
 never blind retry or invented success. Late results can settle only their exact
-still-current Attempt or Admission under its owning contract.
+Attempt or Admission under its owning contract. A stale or cancelled result may
+reconcile external evidence and usage; it cannot supply a new Agent Decision,
+execute business Tools, or advance a fenced continuation.
+
+Model recovery distinguishes confirmed continuation unavailability from an
+unknown create outcome. Settled expiry may rebuild admitted context. For an
+unknown create, try permitted retrieval first. ADR 0033 allows at most one
+automatic successor only with the same request/route, fresh current admission,
+budget for both Attempts, and no unresolved Tool or hosted effect. Persist the
+predecessor fence before that successor; restart cannot reset the allowance.
+Cancellation prohibits it. Read-only intent does not prove that a lost hosted
+operation had no effect, cost, or disclosure. A local timeout or requested abort
+does not prove remote termination. Persist the Host cancellation fence before
+best-effort Provider abort. Revocation and observed bound violations fence new
+Host work without promising remote rollback. [S7] [S8]
 
 **Verifiable evidence.** Crash injection at every durability/egress/response
 edge plus acknowledgement-before/after-SSE permutations, tab reload, stale
 writer takeover, duplicated, reordered, and delayed deliveries proves one
 canonical effect, stable replay, preserved uncertainty, exactly one terminal
 Admission settlement, Draft preservation where required, and no cross-scope
-key collision.
+key collision. Model fixtures also distinguish expiry from unknown create,
+retain reservation and late evidence, enforce the one-successor limit across
+restart, and forbid it after cancellation or unresolved hosted work.
 
 **Residual risk and owner.** Some destinations offer no authoritative lookup;
 uncertainty may remain permanently visible, and a lost human intention cannot
@@ -878,38 +1024,56 @@ wire/idempotency by
 and `DVG-03`, `DVG-07`, `DVG-08`, and `DVG-11` own fault, replay, and
 zero-duplicate evidence.
 
-## 23. AP-15: Retrieval, embedding, or cache poisoning changes eligible context
+## 23. AP-15: Retrieval or cache reuse bypasses current access
 
-**Source to sink.** Malicious or stale source content, forged provenance,
-cross-scope embedding rows, global cache keys, deleted/revised sources, or a
-changed ranking/provider revision enters retrieval. If ranking or cached output
-is treated as authorization, ineligible or another Project's content reaches
-model context, an App, or an Outbound Disclosure. [R1]
+**Source to sink.** Poisoned content, forged source identity, cross-scope index
+rows, global cache keys, or a revoked grant enters fresh retrieval or a reused
+context reference. Ranking is mistaken for permission, or an ordinary creative
+correction is incorrectly treated as proof that every recorded copy and past
+model influence has been erased. [R1]
 
-**Affected assets.** Project Isolation, Context eligibility, provenance,
-minimum disclosure, and deterministic rebuilds.
+**Affected assets.** Project Isolation, current source access, recorded history,
+minimum disclosure, and honest inspection of stale or unavailable material.
 
-**Accepted controls.** Indexes, embeddings, rankings, and caches are
-PostgreSQL-hosted rebuildable projections, never authority; the seven Context
-gates cap, authorize, and manifest final context. [S5]
+**Accepted controls.** Indexes and retrieval caches are rebuildable projections.
+Recorded Messages, captured results, and Memory Documents have their own durable
+identities and lifecycle. Current source reads and recorded history are distinct;
+ordinary source edits, deletion, or non-use guidance do not rewrite history or
+automatically invalidate its continuation chain. [S5] [S9]
 
-**Required structural mitigation.** Every projected item and key binds exact
-Project Scope, source identity/revision/digest, eligibility policy, projection
-and provider/model revision. Scope and current eligibility filter the candidate
-set before ranking; ranks never grant access. Deletion or supersession
-invalidates dependencies.
+**Required structural mitigation.** Bind fresh reads and retrieval keys to exact
+Project Scope, current source/publication identity, applicable lifecycle/access,
+projection revision, and Provider/model when used. Apply eligibility before
+ranking and check the actual dependencies again at final admission. Indexes,
+cache hits, known links, and prior grants never grant access.
 
-**Verifiable evidence.** Cross-User/Project corpora, poisoned chunks, cache-key
-collisions, stale revisions, changed Provider models, deletion, corruption,
-and full rebuilds prove no ineligible hit and equality of eligible outputs and
-dependency closure.
+Enforce actual access revocation, retained-copy redaction/deletion, and Project
+Isolation on every copy covered by the owning policy. Stop opaque-reference
+reuse when these restrictions cannot be enforced; any rebuilt input needs
+current admission. If affected generated content cannot be safely isolated,
+use the conservative document-set unavailability/rebuild boundary defined by
+storage and retention, not a model-generated semantic influence graph.
 
-**Residual risk and owner.** Authorized malicious prose can still influence
-model quality, but cannot obtain authority. Projection schemas belong to
-[Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58), invalidation and
-retention to [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md), adversarial
-rebuild proof to [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60), and
-the first bounded retrieval slice to [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62).
+Append ordinary corrections as Messages or Steering Input. A Memory Note asks
+for later consolidation; it is neither a deletion receipt nor an access ban.
+Current-source unavailability and stale remembered context remain inspectable.
+No semantic exclusion classifier, per-claim Memory admission, or automatic
+ordinary-correction chain reset is introduced. A missing required current input
+can still block the next request. General compaction can prepare a later call
+without erasing earlier requests or certifying precise forgetting.
+
+**Verifiable evidence.** Fixtures substitute source/publication revisions,
+Scope, policy, use/generation settings, and grants before reads and dispatch.
+They prove denied fresh access and refusal of forbidden retained-copy reuse.
+Separate cases show that ordinary steering appends input without rewriting prior
+records or triggering a semantic reset. Deterministic index rebuilds preserve
+eligible stored inputs; regenerated Memory or compaction wording need not match.
+No assertion claims that the model forgot a fact or stopped all semantic use.
+
+**Residual risk and owner.** Permitted stale or hostile data may affect quality.
+The Context and Memory contracts own interpretation and intake; storage and
+retention own real-copy restrictions and publication, protocol exposes these
+facts, and the proof owner tests observable access and history boundaries.
 
 ## 24. AP-16: Historical evidence or provenance is rewritten after the fact
 
@@ -926,12 +1090,19 @@ history, conflict decisions, and recovery correctness.
 rebuildable from canonical PostgreSQL facts.
 
 **Required structural mitigation.** Corrections append typed facts. Facts
-carry stable identity, schema/version, timestamps, source closure,
+carry stable identity, schema/version, timestamps, known source references,
 actor/authority basis, and digest
 where defined. A projection is disposable and reconstructs from canonical
 facts; retention or redaction creates explicit tombstone/summary evidence and
 cannot silently change the meaning of surviving references. Migration and
 restore preserve or explicitly transform facts under checksummed versions.
+
+Active context compaction records known inputs/prior projections, producer,
+output or validated opaque reference, and loss/unknown facts for a later request.
+It preserves earlier Messages, results, Steps, and request evidence under their
+retention contract. Additional model work is separately admitted. A known input
+list is not a complete semantic influence closure, and a generated summary is
+not a replacement for original Research evidence or instruction authority.
 
 **Verifiable evidence.** Runtime cannot mutate historical payloads; deliberate
 corruption is detected. Rebuild-from-empty equals the stored projection;
@@ -990,7 +1161,8 @@ One Project can starve recovery or another User even without crossing data.
 external spend, and the bounded-context invariant.
 
 **Accepted controls.** Context Assembly is incrementally built, attributable,
-inspectable, and bounded; one injected item may never exceed 10K tokens.
+inspectable, and bounded; one Host-injected item may never exceed 10K tokens.
+This is not a claim to count opaque Provider-internal items.
 
 **Required structural mitigation.** Every remaining crossing declares byte,
 item, time, token, depth, and attempt budgets with hard server-side ceilings.
@@ -998,7 +1170,14 @@ Work admission and queues are
 scope-aware, cancellable, and backpressured; partial results cannot bypass
 validation. Replay past the retained or bounded window requires a Snapshot
 handoff. Recovery capacity and maintenance connections are reserved from
-ordinary work.
+ordinary work. Memory extraction, consolidation, publication, navigation, and
+reads have separate finite input/work bounds and cannot block ordinary writing.
+
+Hosted profiles identify the actual controls and finite worst-case reservation
+for cost, output, Tool use, time, and resources. A best-effort Tool counter is not
+a hard ceiling; a local timeout bounds Host waiting, not remote cost or execution.
+Refuse a route whose required bound is unknown or unenforceable. Settle one
+physical use once, and retain unknown usage and its required reservation. [S8]
 
 **Verifiable evidence.** Boundary-size, over-limit, slow-loris, infinite-stream,
 decompression, replay-gap, retry-storm, and concurrent noisy-neighbor tests
@@ -1151,9 +1330,12 @@ credential generation, TLS peer identity, policy revision, and Project-scoped
 data path. Controlled services preserve server-derived User and Project Scope
 through scope-keyed pools, queues, caches, storage, logs, and support evidence,
 with runtime and maintenance roles separated. Any destination lacking that
-complete controlled registration is external and must pass the seven disclosure
-gates, manifest-before-egress, Credential Resolver, and ordinary
-OutcomeUnknown handling. Shared infrastructure never aliases User, Project,
+complete controlled registration is external. Its StoryOS-controlled submission
+passes the seven gates, manifest-before-egress, Credential Resolver, and ordinary
+OutcomeUnknown handling. A Provider-hosted internal processor remains external
+and is bounded through the owning operation before submission, not reclassified
+as controlled or represented by an invented Host gate. Its unobserved transfers
+remain unknown. Shared infrastructure never aliases User, Project,
 credential, cache, or idempotency identities.
 
 **Verifiable evidence.** Multi-User deployment fixtures vary hostname, region,
@@ -1161,8 +1343,9 @@ VPC/private link, provider/account ownership, shared pool/queue/cache,
 maintenance credential, TLS identity, telemetry route, and registration
 revision independently. Only exact controlled registrations retain the
 classification; every other path either preserves complete Project Isolation
-under its controlled contract or emits an authorized external-disclosure
-manifest before bytes leave.
+under its controlled contract or has prior external-disclosure admission at the
+actual Host boundary. Hosted fixtures refuse unbounded modes and preserve
+reported/unknown internal processing without certifying every internal hop.
 
 **Residual risk and owner.** A privileged cloud control-plane or platform
 administrator remains capable of violating its intended boundary and requires
@@ -1171,6 +1354,69 @@ destination and disclosure semantics remain with their existing Context,
 Provider, Tool/MCP, Protocol, PostgreSQL, and retention owners; `DVG-02`,
 `DVG-04`, `DVG-05`, `DVG-10`, and `DVG-11` own classification, isolation,
 egress, credential, and restore evidence.
+
+## 30. AP-22: Generated Memory launders content or maintenance authority
+
+**Source to sink.** Hostile or stale Messages, source material, prior summaries,
+or forged Memory Notes pass through extraction and consolidation into familiar
+navigation and recall text. An injected procedure asks a maintenance Agent to
+alter policy, Skills, another Project, or Authoritative State. A stale worker
+publishes over newer documents, or a note is reported as completed erasure.
+
+**Affected assets.** Project Isolation, fiction authority, maintenance grants,
+source evidence, current publication, and truthful recall/change status.
+
+**Accepted controls.** Memory Documents are versioned, non-authoritative
+Artifacts generated from eligible prior conversation snapshots. Separate settings control generation
+and use. Background extraction, consolidation, active compaction, and Provider
+continuation are distinct. Known source references do not prove each statement
+or complete semantic ancestry. Markdown does not create a file store. [S9]
+
+**Required structural mitigation.** Extract only bounded durable snapshots of
+sufficiently idle conversations whose scope, access, and generation settings
+permit that job. Provisional streams and active editor buffers are not inputs.
+Bind exact inputs, model/prompt versions, job/ToolCall authority, and current
+publication version. Model work uses normal Context/disclosure admission.
+
+Memory maintenance may update only its admitted generated-document set. It
+cannot install Skills, change ToolSpecs, select credentials, widen policy,
+create Author Preferences, or write Authoritative State. Direct Memory-update
+tools require an author request; background extraction uses its separate
+eligible-input contract. A source telling the model to create a note cannot
+supply that author request. Validate result role, scope, source associations,
+size, and secret handling without pretending to validate every claim's truth.
+
+Only one publication advances the Project's current set at a time; fence stale
+jobs and publish the complete set atomically. Revalidate current maintenance
+permission and any source or retained-copy restriction that governs publication.
+A job cannot publish forbidden content merely because it was eligible at dispatch.
+Generation settings govern new extraction; disabling use does not itself delete
+published documents or rewrite recorded context.
+Preserve earlier revision identities used by recorded contexts under retention.
+Summary and search/read tools expose only currently permitted published content
+within their bounds, and never treat a citation or read count as model attention.
+
+A Memory Note records a requested later change, not a published update, access
+prohibition, or physical deletion. Apply AP-15 to actual copy restrictions.
+General prompts may ask for uncertainty, current-source checks, and useful
+recall. They do not create a semantic classifier or require per-claim approval.
+
+**Verifiable evidence.** Feed hostile instructions and false citations through
+both phases and recall tools; observe requested maintenance operations at the
+real Host boundary. Wrong Scope, prohibited writes, forged author-note origin,
+disabled generation, unavailable inputs, oversized output, duplicate delivery,
+stale publication, and partial document sets are refused without authority
+change. Disable use independently of generation; distinguish note-recorded,
+publication-success, no-op, failure, and unavailable-source observations.
+Rebuild indexes from published documents without model calls. Tests do not
+require identical regenerated prose, truthful inference, or exact forgetting.
+
+**Residual risk and owner.** Memory may preserve bad advice, lose useful context,
+or repeat old material even when every access check succeeds. Inspection,
+current author guidance, and current sources help the Agent; they are not
+semantic guarantees. The Memory owner retains its mechanism, storage and
+retention define current publication and covered-copy restrictions, protocol
+exposes inspectable outcomes, and proof/release own later implementation gates.
 
 # Attack-Path Completeness and Deterministic Gate Handoff
 
@@ -1190,7 +1436,10 @@ not by generic control labels:
 | credentials | opaque or cross-scope reference/secret-bearing diagnostics → wrong destination or disclosure channel | AP-02, AP-05, AP-08–AP-11, AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
 | Tool, MCP, and App authority | untrusted schema/result/App bridge → Tool execution, context, credential, or author-state sink | AP-05–AP-07, AP-09–AP-10, AP-14, AP-18 | `DVG-04`, `DVG-05`, `DVG-08`, `DVG-11` |
 | controlled cloud | topology/account/provider inference or shared runtime state → cross-Project access or unmanifested egress | AP-01–AP-03, AP-08–AP-12, AP-16, AP-18, AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
-| Project isolation | client, runtime, DB, cache, cursor, archive, backup, destination, or recovery input → another User/Project | AP-01–AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-07`–`DVG-11` |
+| Project isolation | client, runtime, DB, cache, cursor, archive, backup, destination, Memory, or recovery input → another User/Project | AP-01–AP-22 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-07`–`DVG-11` |
+| Provider continuation and hosted work | substituted reference/account, implicit Tool intake, or forged result → wider disclosure or active-chain advancement | AP-06, AP-08, AP-09, AP-14, AP-18, AP-21 | `DVG-04`–`DVG-08`, `DVG-11` |
+| ordinary steering, compaction, and real revocation | old source or generated summary → false erasure claim, forbidden reuse, or rewritten history | AP-07, AP-15, AP-16 | `DVG-04`, `DVG-07`–`DVG-09`, `DVG-11` |
+| generated Memory and maintenance | poisoned prior records or stale job → authority promotion, cross-scope recall, or partial publication | AP-07, AP-15, AP-22 | `DVG-04`–`DVG-07`, `DVG-09`, `DVG-11` |
 
 Every path also has one explicit deterministic proof owner:
 
@@ -1217,6 +1466,7 @@ Every path also has one explicit deterministic proof owner:
 | AP-19 | `DVG-01`, `DVG-02`, `DVG-03`, `DVG-11` |
 | AP-20 | `DVG-02`, `DVG-03`, `DVG-07`, `DVG-11` |
 | AP-21 | `DVG-02`, `DVG-04`, `DVG-05`, `DVG-10`, `DVG-11` |
+| AP-22 | `DVG-04`, `DVG-05`, `DVG-06`, `DVG-07`, `DVG-09`, `DVG-11` |
 
 # Severity Calibration
 
@@ -1236,7 +1486,9 @@ The highest applicable impact controls triage when paths compose. For example,
 a low-information error oracle becomes Critical if it supplies the object
 identity needed for AP-01, and prompt injection becomes Critical only when a
 broken downstream authority boundary lets it cross into Acceptance, secret
-resolution, or unmanifested egress.
+resolution, or unmanifested egress. AP-22 is calibrated by the same actual
+impact: bad remembered advice is a quality limit; cross-scope recall or an
+unauthorized maintenance write is a security failure.
 
 # Downstream Security Handoff
 
@@ -1248,18 +1500,38 @@ Wayfinder owner:
 |---|---|---|
 | [Specify Author Command Admission](https://github.com/FrankQDWang/StoryOS/issues/68) | exact protected-client, User, existing/prospective Project Scope, editor/writer, action, digest, nonce/idempotency, and lifetime binding; bounded claim ceiling; one append-only lifecycle and terminal settlement; direct-versus-explicit recovery | AP-01, AP-03, AP-14, AP-20 |
 | [Specify Web Editor Session, Local Journal, Projection, Synchronization, and Recovery Semantics](https://github.com/FrankQDWang/StoryOS/issues/70) | Local Edit Journal validation; non-authoritative pending projection; one Project writer generation; stale-tab fencing; acknowledgement/Event convergence; resync; Draft preservation; explicit-command reconfirmation | AP-01, AP-03, AP-04, AP-14, AP-17, AP-18, AP-20 |
-| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact protected-client/requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; build, client-contract, security-policy and session identities; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; controlled/external destination manifests; explicit hard budgets | AP-01, AP-03–AP-10, AP-13–AP-21 |
-| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Admission/Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and source closure; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention | AP-04, AP-09–AP-12, AP-14–AP-18, AP-20–AP-21 |
-| [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin, XSS/DOM, asset/dependency, third-party-script, extension, stale-build/tab, controlled-cloud, bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; claim-ceiling checks; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-21 |
-| [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates exact Protected Web Client release identity, non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-21 |
+| [Specify the Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | exact protected-client/requester/scope envelopes; non-oracular errors; CSRF and Origin/Host inputs; build, client-contract, security-policy and session identities; scoped SSE cursors and Snapshot handoff; idempotency/Attempt/OutcomeUnknown/fence states; Capability, bridge, Tool/MCP and credential-reference contracts; import/export schema; controlled/external destination manifests; explicit hard budgets; continuation bindings, hosted Approval targets and report/unknown evidence; Memory notes/settings/publication | AP-01, AP-03–AP-10, AP-13–AP-22 |
+| [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | replay floors and Snapshot semantics; Admission/Attempt/outbox/Mailbox/late-result evidence; immutable-history compaction, redaction, tombstones and known source references; logs/support/telemetry classification and expiry; disclosure, export, backup/WAL and restore-proof retention; known Memory inputs, document revisions and actual copy restrictions | AP-04, AP-09–AP-12, AP-14–AP-18, AP-20–AP-22 |
+| [Define Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | cross-scope and role/RLS tests; hostile-origin, XSS/DOM, asset/dependency, third-party-script, extension, stale-build/tab, controlled-cloud, bridge/Tool/MCP/prompt/SSRF/provider/archive corpora; claim-ceiling checks; secret and log leak scanning; adapter-wire comparison; fault, retry, fence, replay, rebuild, tamper, restore and resource-bound proofs | AP-01–AP-22 |
+| [Define the AI-Independent Editor-First Release Baseline and Handoff Criteria](https://github.com/FrankQDWang/StoryOS/issues/62) | refuse production-shaped handoff until the slice demonstrates exact Protected Web Client release identity, non-owner forced-RLS runtime, exact-scoped HTTP/SSE, manifest-before-egress with Credential Resolver, mediated Tool/MCP boundary, durable Attempt/recovery, bounded input, safe operational defaults and actual restore evidence at the slice's accepted scope | AP-01–AP-22 |
+
+The [PostgreSQL storage owner](postgresql-project-storage-isolation-and-migration-contract.md)
+receives AP-09, AP-15, AP-16, and AP-22: scoped immutable associations, current
+publication, rebuildable indexes, and conservative enforcement of covered-copy
+restrictions. It owns physical representation and any required migration.
+
+The protocol owner next maps continuation/reference identity, whole hosted
+operation/Approval targets, native result correlation, evidence classes, and
+Memory settings/notes/publication to versioned records. Storage and retention
+then align physical families, current reads, publication, exports, and real-copy
+restrictions. Proof and release must update their existing crosswalks for AP-22,
+ordinary steering, compaction, hosted opacity, and bounded model recovery.
+Deterministic proof observes Host gates and records, not model truth, attention,
+exact forgetting, or every internal Provider hop. Source drift or an unbounded
+selected mode returns to the original semantic owner before acceptance.
+
+This document changes no runtime, persisted format, generated API, or security
+platform. Existing editor implementation remains the code truth; the new Agent
+obligations are not claimed as implemented or tested product behavior. Stage 3
+and later implementation stays on EXECUTION HOLD until the existing protocol,
+storage, retention, release, proof, specification, and ticket chain is aligned.
 
 No separate parallel security map or security runtime follows from this threat
 model. This contract owns trusted-computing boundaries, source-to-sink attack
 analysis, structural mitigations, and residual risks. It does not re-own the
 evidence classification fixed by the Artifact contract, Admission
-identity/lifecycle/settlement fixed by issue #68, Core effects, editor
-recovery fixed by issue #70, wire shapes fixed by issue #58, or gate selection
-fixed by issue #60. Those owners must close their assigned contracts and
+identity/lifecycle/settlement, Core effects, editor recovery, versioned wire
+shapes, or deterministic gate selection owned by the linked contracts above. Those owners must close their assigned contracts and
 deterministic negative evidence in the map's single serial chain before the
 editor-first implementation handoff.
 
@@ -1268,7 +1540,9 @@ editor-first implementation handoff.
 Repository sources are fixed StoryOS facts; external sources establish only
 the cited platform or protocol behavior. Existing external sources were
 accessed for the original model on 2026-07-21; the protected-client primary
-source review records its own 2026-07-24 access date.
+source review records its own 2026-07-24 access date. The Model, hosted Tool,
+Context, and Memory revision uses accepted September 2026 contract inputs;
+external capability evidence remains distinct from exact account acceptance.
 
 - **[S1]** [StoryOS repository instructions](../../AGENTS.md): product,
   authority, Project Scope, disclosure, durability, and App/editor invariants.
@@ -1284,6 +1558,20 @@ source review records its own 2026-07-24 access date.
   browser-enforced script, DOM-injection, asset-integrity, extension, and
   update/cache limits used to calibrate AP-19 without upgrading platform
   guidance into StoryOS authority.
+- **[S7]** [ADR 0033](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md):
+  selected Provider, continuation bindings, current admission, complete results,
+  compaction, one-successor recovery, and cancellation fences.
+- **[S8]** [ADR 0034](../adr/0034-bound-provider-hosted-tool-operations.md):
+  complete hosted intake/Tool/outward/effect/resource bounds, Approval targets,
+  single physical accounting, report/unknown evidence, and result/recovery limits.
+- **[S9]** [Memory contract](fiction-memory-and-research-provenance-semantics.md)
+  and [ADR 0035](../adr/0035-use-background-generated-project-memory.md):
+  bounded extraction/consolidation, publication, selective recall, ordinary
+  corrections, fallible source links, and actual retained-copy restrictions.
+- **[S10]** [ADR 0022](../adr/0022-prefer-widely-validated-hosted-infrastructure.md)
+  and [ADR 0021](../adr/0021-own-release-1-recovery-chain-outside-the-runtime.md):
+  hosted production data and recovery custody, local development, and separate
+  deployment acceptance.
 - **[P1]** [PostgreSQL Row Security Policies](https://www.postgresql.org/docs/current/ddl-rowsecurity.html):
   policy combination, owner/superuser/BYPASSRLS behavior, FORCE RLS, and
   operations outside row-security policy control.
@@ -1326,6 +1614,20 @@ source review records its own 2026-07-24 access date.
 - **[E2]** [Alibaba Cloud Model Studio privacy notice](https://www.alibabacloud.com/help/en/model-studio/privacy-notice):
   Bailian provider statements, treated as external claims rather than StoryOS
   guarantees.
+- **[E3]** [Volcengine Agent Plan Codex setup](https://docs.volcengine.com/docs/82379/2556054?lang=zh):
+  Agent Plan route, Responses configuration, and dedicated key instructions.
+- **[E4]** [Volcengine Create Response](https://docs.volcengine.com/docs/82379/1569618?lang=zh)
+  and [Base URL and authentication](https://docs.volcengine.com/docs/82379/1298459?lang=zh):
+  general Ark input/reference, storage, hosted Tool, and best-effort limit fields;
+  not exact Agent Plan account acceptance.
+- **[E5]** [Volcengine context cache](https://docs.volcengine.com/docs/82379/1398933?lang=zh):
+  separate implicit/explicit cache, lifecycle, initial Tool definitions, and
+  instruction/structured-output combination restrictions.
+- **[E6]** [Volcengine Retrieve Response](https://docs.volcengine.com/docs/82379/1783709?lang=zh)
+  and [Delete Response](https://docs.volcengine.com/docs/82379/1584286?lang=zh):
+  documented retrieval/deletion behavior, not cancellation or create-idempotency proof.
+- **[E7]** [Official ArkCLI helper](https://github.com/volcengine/ark-cli/blob/main/skills/arkcli-helper/references/arkcli-helper.md):
+  independently configured search MCP and Harness capability boundaries.
 - **[K1]** [Apple Keychain Services](https://developer.apple.com/documentation/security/keychain-services/):
   protected credential storage and controlled item access on the local host.
 - **[F1]** [Python tarfile extraction filters](https://docs.python.org/3/library/tarfile.html#extraction-filters):
@@ -1336,4 +1638,4 @@ source review records its own 2026-07-24 access date.
 
 Repository: FrankQDWang/StoryOS
 
-Version: 15a6c4d343145c9f825d52067f13d09eec6ead37
+Version: codex-trust-contract-2026-09-14-v1
