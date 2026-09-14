@@ -1107,7 +1107,7 @@ make it available; matching a locator string never silently binds a secret.
 Archive changes ordinary visibility while retaining canonical content and
 history. Tombstone records that a source is no longer live and controls future
 use according to its owning domain. These facts remain distinct from Memory
-Notes and Conversation settings. Ordinary corrections and requests to forget a
+Notes and Conversation settings. Ordinary Memory corrections and requests to forget a
 preference let the foreground Agent record guidance for background model editing;
 they do not make the Project's generated Memory unavailable.
 
@@ -1572,8 +1572,9 @@ covers at least:
 10. Secret material never enters ordinary domain persistence or portable data;
     Credential References fail closed and rebind explicitly.
 11. Lifecycle changes invalidate only their governed uses without rewriting
-    historical evidence. Ordinary corrections use Memory Notes; an explicit
-    covered-copy prohibition may require a conservative generated-set fence.
+    historical evidence. Ordinary corrections remain Messages; explicit
+    Memory-change requests may produce Notes. A covered-copy prohibition may
+    require a conservative generated-set fence.
     Retention purge preserves required Tombstones and provenance gaps.
 12. Migration release identity is declared and verified; schema drift and
     partial phase completion block startup or writes.
