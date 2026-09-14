@@ -1,7 +1,7 @@
 # Run Event, Mailbox, Snapshot, Retention, and Archival Semantics
 
 - Status: current
-- Contract revision: `release1-retention-contract-2026-07-31`
+- Contract revision: `release1-retention-contract-2026-09-14-generated-memory`
 - Wayfinder resolution: [Specify Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](https://github.com/FrankQDWang/StoryOS/issues/64)
 - Canonical glossary: [CONTEXT.md](../../CONTEXT.md)
 - Storage and isolation boundary: [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md)
@@ -9,6 +9,7 @@
 - Protocol boundary: [Versioned Command, Query, Artifact, and Event Protocol](versioned-command-query-artifact-event-protocol.md)
 - Public route/Event source of truth: [Release 1 route catalog](versioned-protocol-release-1-route-catalog.json)
 - Context and disclosure boundary: [Context Assembly, Retrieval, and Outbound Disclosure Semantics](context-assembly-retrieval-and-outbound-disclosure-semantics.md)
+- Memory boundary: [Fiction Memory and Research Provenance Semantics](fiction-memory-and-research-provenance-semantics.md) and [ADR 0035](../adr/0035-use-background-generated-project-memory.md)
 - Trust boundary: [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md)
 - Deferred scope note: [Eval Observation Boundary](eval-evidence-foundation.md); no MVP design or implementation dependency.
 - Measurement input: [Representative Writing-Path Performance and Storage-Growth Envelope](https://github.com/FrankQDWang/StoryOS/issues/76)
@@ -138,12 +139,13 @@ derived family/table counts must continue to come from the existing catalog
 verifier. For each named sub-class, its existing contract remains the sole
 owner of meaning; #64 is the sole owner of the Retention Profile, Decision,
 and availability treatment, while #56 remains the physical-storage owner.
-Artifact Tombstone remains the explicit Artifact-contract exception.
+Artifact Tombstone remains owned by the Artifact contract. Section 2.10
+defines the narrower retention purge of superseded generated Memory payloads.
 
 | Logical record class | #56 catalog family | Why the record exists and minimum retain floor | Compact or rebuild rule | Archive, tombstone, and delete rule | Meaning owner, unchanged per named sub-class |
 | --- | --- | --- | --- | --- | --- |
 | Project identity, instructions, policy, authoritative heads, revisions, and commits | `project-canonical` | It is the current Project-authoritative state. Retain while the Scope exists and through every accepted author settlement, export, restore, and deletion settlement. | Never compact or rebuild the source. A projection may be rebuilt from it. | Never archive as a substitute for current authority. Project deletion follows section 10 and retains deletion evidence after payload cleanup. | Project/Core contract for canonical state; #56 owns physical storage. |
-| Artifact, Proposal, Draft, source, research, and Artifact lifecycle records | `artifact-proposal-draft` | They preserve author-owned creative state, inspectable proposals, drafts, provenance, and their lifecycle. Retain through the owning contract's settlement and any operational reference or author inspection that names them. | Never infer authority from a rebuildable view. Operational summaries may be rebuilt only from the retained canonical record. | Artifact Tombstone and creative deletion remain with the Artifact contract. #64 preserves the operational reference, reason, digest, and gap but cannot tombstone or delete an Artifact. | Artifact/domain contract for Artifacts; Core/Proposal contracts for their named Proposal/Draft records. |
+| Artifact, Proposal, Draft, source, research, and Artifact lifecycle records | `artifact-proposal-draft` | They preserve author-owned creative state, inspectable proposals, drafts, provenance, and their lifecycle. Retain through the owning contract's settlement and any operational reference or author inspection that names them. | Never infer authority from a rebuildable view. A regenerated summary is new model output, not restored source evidence. | Artifact Tombstone and creative deletion remain with the Artifact contract. Section 2.10 permits only qualified generated Memory payload cleanup; it preserves the Artifact identity, current Head, common retention axis, and required evidence. | Artifact/domain contract for Artifacts; Core/Proposal contracts for their named Proposal/Draft records. |
 | Typed Receipts, validation/acceptance/undo settlement, Author Actions, command idempotency, and receipt settlements | `operational-receipts-actions` | They prove exact author admission, effect identity, acknowledgement, retry, undo, and settlement. The command-response Project capture on a converted idempotency row follows that same lifecycle. Retain until the command/effect is terminal, every exact retry and inspection obligation is settled, and Project Deletion Settlement permits the reduced fence form. | Payload detail may be reduced only to an exact Receipt/Command Idempotency Fence; identity, digest, result, settlement, provenance, and captured response Project are not rebuildable substitutes. | Archive only with an inspectable manifest. Tombstone/delete only under settled project deletion with the minimum settlement, fence, digest, and gap evidence retained. | Core owns Receipts/Author Actions; Author Command Admission owns admission/idempotency binding. |
 | Admission, anti-forgery, editor session, writer generation, input fence, and proposal pause fence | `operational-admission-editor` | They prove which command or editor generation was admitted, whether takeover is safe, and whether a recovery retry is exact. Retain through terminal settlement, convergence or takeover proof, and all pending/unknown outcomes. | Never compact a pending or unknown binding. After settlement, only a verifiable fence/terminal descriptor may replace large payload detail. | Archive only after the editor/session owner’s recovery floor is satisfied. Deletion is fenced by Project Deletion Settlement and leaves the safe lifecycle evidence needed to reject reuse. | Author Command Admission and Web Editor Session owners; #64 governs retention treatment. |
 | Agent Run, Subrun, plan, step, grant, lease, execution attempt, result, recovery, usage, transcript, approval, steering, and worker fence | `operational-run-mailbox` | They explain execution state and recovery. Retain until Run/Subrun terminality, finalization, all relevant Attempts/effects/OutcomeUnknown states, and the root Mailbox Seal are durably settled. | Only settled high-volume payloads may be compacted. Run/Subrun identity, terminal transition, cause, result, recovery decision, and fences remain in the Evidence Floor; disposable projections may rebuild. | Archive settled bytes with a manifest or compact them with an explicit gap. Tombstone/delete only through the project lifecycle; never delete a record that could still decide a retry or effect. | AgentRun/Subrun contract for Run meaning; execution owners for their named records. |
@@ -153,8 +155,8 @@ Artifact Tombstone remains the explicit Artifact-contract exception.
 | Application Wire Records, wire payloads, and event representations | `operational-wire-history` | They bind a public or internal exchange to exact request/response/event identity, schema, digest, and cause. Retain the envelope through protocol settlement, replay, and author inspection. | Lossless compression or rebuild of a read projection is allowed; semantic wire identity and digest are not reconstructed from a cache. | Archive bytes with manifest/digest; redaction or project deletion exposes only permitted safe identity and gap, never a false successful or erased exchange. | Protocol/wire owner for meaning; #64 owns the retention class. |
 | Project Activity Events, payloads, positions, replay generations, floors, cursors, and handoffs | `operational-project-activity` | They provide the one public Project Activity chronology and exact cursor handoff. Retain immutable identity, sequence, cause, generation, floor, Snapshot handoff, and known gaps. | A generation boundary may compact old payloads only after publishing its closing position, new floor, Snapshot, and Decision. No cross-generation cursor mapping is rebuilt or guessed. | Archive/export/restore carries generation and gap evidence. Deletion retains the safe gap and handoff needed to return the protocol’s typed result, not a silent empty stream. | #58 owns wire/error meaning; #64 owns generation-retention transition. |
 | Run Checkpoints, Canonical Query Snapshots, Snapshot members, and generation handoffs | `operational-run-mailbox` + `operational-snapshot-replay` | A Run Checkpoint accelerates durable Run recovery; a Query Snapshot is an authorized read boundary; neither is source authority. Retain each until its declared validity, dependent generation handoff, or recovery proof is complete. | Rebuild Checkpoints/Snapshots from canonical facts when valid. Expiry discards the projection only after its typed resync path is available; it never deletes source history. | They are not backups or archives. A missing/expired Snapshot returns the existing typed resync result; a restored Scope publishes a new Snapshot rather than reusing an invalid token. | #64 owns policy/eligibility; #58 owns public Snapshot/cursor semantics; #56 owns physical persistence. |
-| Lifecycle, Retention Decision, archival decision, project Tombstone, redaction/suppression, and deletion records | `operational-lifecycle` | They explain why availability changed and are themselves evidence. Retain the Decision, Profile revision, eligibility proof, actor/policy, digest, due condition, gap, and settlement through the resulting state and any restore/deletion visibility proof. | Never rebuild or infer a lifecycle decision from current bytes. A later decision appends a new fact and cannot rewrite an earlier decision. | These records are the Tombstone/manifest/gap/provenance floor. Physical cleanup may delete named payload copies only after its Decision and proof; project deletion retains the minimum settlement and safe evidence. | #64. Artifact Tombstone semantics remain with the Artifact owner. |
-| Historical projections, retrieval/embedding indexes, context caches, read models, and generation-control projections | `projection-generation-control`, `projection-retrieval`, `projection-embedding`, `projection-context-cache`, `projection-read-model` | They accelerate authorized reads and are never the historical source. Retain only for their projection validity and rebuild dependencies. | Rebuild or invalidate from canonical facts and current lifecycle. A disposable projection may be deleted without creating a historical gap, but its source cannot be deleted early merely because it was rebuildable. | Never include as canonical Project Export/Restore content. Redaction/tombstone invalidates source-derived fields; cleanup is the projection owner’s responsibility. | Each projection owner for its own family; #64 supplies current eligibility and suppression facts. |
+| Lifecycle, Retention Decision, archival decision, project Tombstone, Redaction, access and covered-copy restrictions, and deletion records | `operational-lifecycle` | They explain why availability changed and are themselves evidence. Retain the Decision, Profile revision, eligibility proof, actor/policy, digest, due condition, gap, and settlement through the resulting state and any restore/deletion visibility proof. | Never rebuild or infer a lifecycle decision from current bytes. A later decision appends a new fact and cannot rewrite an earlier decision. | These records are the Tombstone/manifest/gap/provenance floor. Physical cleanup may delete named payload copies only after its Decision and proof; project deletion retains the minimum settlement and safe evidence. | #64. Artifact Tombstone semantics remain with the Artifact owner. |
+| Historical projections, retrieval/embedding indexes, context caches, read models, and generation-control projections | `projection-generation-control`, `projection-retrieval`, `projection-embedding`, `projection-context-cache`, `projection-read-model` | They accelerate authorized reads and are never the historical source. Retain only for their projection validity and rebuild dependencies. Context Compaction Projections instead belong to immutable context evidence. | Rebuild or invalidate from canonical facts and current lifecycle. A disposable projection may be deleted without creating a historical gap, but its source cannot be deleted early merely because it was rebuildable. | Never include as canonical Project Export/Restore content. Redaction/tombstone invalidates covered fields; cleanup is the projection owner’s responsibility. | Each projection owner for its own family; #64 supplies current availability and restriction facts. |
 | PostgreSQL base backup/WAL Recovery Copy and Project Export/Restore staging | `admin-recovery-copy` + `admin-project-portability` | Recovery Copies preserve the physical recovery chain; portability staging proves an exact-scope archive. Retain until the named recovery, export, import, lifecycle, and visibility proofs settle. | Never treat a logical export as a physical backup or a booted database as visible. Staging and derived indexes may rebuild after integrity proof. | Recovery Copy rotation and staging deletion follow their own adopted windows, but must retain lifecycle range, manifest/root digest, known gaps, and deletion evidence until proof allows cleanup. | #56 owns physical backup/restore/portability execution; #64 owns semantic lifecycle inclusion and visibility conditions. |
 
 The remaining catalog families (`identity-user`, `global-definitions`,
@@ -211,7 +213,8 @@ cannot mutate a prior Decision retroactively.
 
 A Retention Profile is a versioned policy contract selected for one exact
 Project Scope. It supplies the effective hot replay, checkpoint, archive,
-compaction, capacity, and retention values for each Operational Retention Class.
+compaction, capacity, and retention values for each Operational Retention Class
+and the generated Memory payload role in section 2.10.
 The default profile is a product policy, not routine author configuration, but
 its identity and effective values are inspectable to the author.
 
@@ -328,6 +331,88 @@ Disposable Projection invalidation or removal does not require a terminal or
 root-sealed Run. It must not weaken an active Run's recovery. It does not use
 the compaction eligibility predicate or Retention Decision transaction in
 section 2.8.
+
+### 2.10 Generated Memory retention
+
+The [storage contract, section 3.4](postgresql-project-storage-isolation-and-migration-contract.md#34-conversation-memory-and-context-record-placement)
+owns physical placement. The following roles refine the existing families;
+they add no durable space, Artifact kind, or table family.
+
+| Record role | Existing family | Retention treatment |
+| --- | --- | --- |
+| Generated conversation summaries, consolidated Memory Documents, and navigation summaries | `artifact-proposal-draft` | Retain exact document and revision identity, Creator, provenance, digest, and publication/use references. Current publication members and current Artifact Heads keep their payloads. Only superseded generated revision payloads can qualify for the cleanup below. |
+| Author Messages and Memory Notes, including author-edited revisions | `artifact-proposal-draft` | Preserve their own Artifact lifecycle. Publication replacement, a processed Note, Memory settings, and generated-payload cleanup do not delete them. A processed Note records consideration, not proof that the requested meaning was achieved. |
+| Conversation/settings revisions, Memory Publications, exact membership, extraction inputs/outcomes, pending Notes, and maintenance progress | `operational-run-mailbox` | Preserve admission/settings bindings, exact inputs, publication identity and membership, worker fences, pending work, and outcomes. Pending, leased, conflicted, or OutcomeUnknown work retains the bytes needed for settlement or recovery. Settled redundant execution payloads use section 2.8; publication identity is never a disposable index. |
+| Memory use, Attempts, continuation bindings, and Context Compaction Projections | `operational-context-disclosure` | Preserve known input references, producer, exact output digest/reference, Attempt, manifests, use observation, loss/unknown evidence, and availability. Known read, sent content, stored reference, Provider report, and Provider-opaque state remain distinct. |
+| Memory/settings/maintenance Activity and wire representations | `operational-project-activity`, `operational-wire-history` | Retain their source record identity, causal order, exact outcome, and known payload gaps under sections 2.7 and 3. |
+| Memory search fragments and cached reads | `projection-retrieval`, `projection-context-cache`, `projection-generation-control` | Disposable access paths rebuild from allowed retained publications. Losing an index cannot delete Documents, Notes, or conversations. Model regeneration is separate work and need not reproduce earlier wording. |
+
+Generated Memory Payload Cleanup is an automatic, policy-versioned retention
+purge of a superseded generated revision's bytes. It is separate from removing
+a document from the current Memory Publication, rebuilding an index, and
+Operational History Compaction. Removal from a publication alone does not
+authorize cleanup: a retired document can still have a current Artifact Head.
+Artifact classification, the common retention axis, and whole-Artifact
+Tombstone remain unchanged.
+
+Cleanup requires every condition below:
+
+1. The exact Project Scope, generated content role, revision, digest, and
+   effective Retention Profile are known. Author-authored or author-edited
+   revisions, Messages, Memory Notes, Research evidence, Proposals, Drafts,
+   and Authoritative State are outside this permission.
+2. The revision is neither a current publication member nor a current Artifact
+   Head. No unfinished Run, maintenance job, Attempt, recovery obligation,
+   or active inspection/export obligation requires its bytes. Run-associated
+   uses meet the applicable terminal, finalization, and root-Seal conditions
+   in section 2.8; background work retains its own settlement and worker fences.
+3. The adopted Profile's due condition is satisfied. A missing duration,
+   unknown payload role, pending dependency, or unverifiable lifecycle blocks
+   cleanup. Section 2.4 owns numeric adoption; this decision sets no duration.
+4. The Decision records revision/parent identity, Creator and provenance,
+   original digest, exact publication and recorded-use references, policy
+   authority, reason, time, and the unavailable-payload gap. Historical
+   references survive; a digest is not a replacement for the deleted bytes.
+
+The storage publication guard serializes cleanup eligibility and the durable
+availability transition with publication and acquisition of byte-dependent
+work. Once the Decision fences the revision, new work cannot acquire it as
+available. Cleanup commits that boundary and invalidates affected reads before
+an idempotent worker removes the named copies. A shared physical payload remains
+while another retained logical reference needs it; one revision's cleanup
+cannot erase another Artifact's bytes. Retaining a shared copy does not make
+the fenced revision readable again.
+
+This permission never removes a current Artifact Head or the complete Artifact.
+Whole-Artifact removal uses its owning lifecycle. Later inspection of a purged
+revision reports its exact identity and explicit gap, not `retained` content,
+a new per-revision Artifact retention state, or a fabricated Tombstone.
+Reconstruction produces new generated revisions from allowed inputs; it does
+not restore the purged revision or promise precise semantic forgetting.
+Archive, export, restore, and Recovery Copy handling preserve the Decision and
+cannot make that revision readable again. Physical Deletion Completion still
+requires the per-copy proof in section 8.
+
+### 2.11 Active context compaction
+
+Active context compaction replaces the bounded input used by a later model
+call. The Context owner permits it within an active Run, including between
+calls in one turn. Creating a Context Compaction Projection therefore does not
+require Run terminality or a root Seal. It neither deletes source history nor
+creates cross-conversation Memory.
+
+The projection is an immutable Operational Record even though its name includes
+Projection. Keep the known input and prior projection references, producer,
+output or native opaque reference, reported usage, and loss/unknown evidence.
+It never rewrites Messages, Run Events, Tool results, Step Snapshots, manifests,
+or earlier requests. Bytes needed by an active call or recovery stay available.
+Later removal of eligible operational bytes follows section 2.8, with the
+evidence envelope and gap retained. Disposable cache cleanup cannot substitute
+for that decision.
+
+Provider continuation and native compaction remain separate capabilities.
+An opaque reference proves only the recorded reference and reported evidence;
+it does not prove recoverable bytes, complete internal content, or erasure.
 
 ## 3. Bounded replay generations and Snapshot resync
 
@@ -452,6 +537,11 @@ Manuscript Revisions, Proposals, or author-owned Artifact payloads. Only the
 separate author-owned Project Deletion Settlement in section 10 may begin
 whole-Scope deletion.
 
+Generated Memory Payload Cleanup changes only a qualified historical revision's
+payload availability under section 2.10. It does not invoke or redefine
+`TombstoneArtifact`, change the Artifact's common retention state, or turn a
+payload gap into an Artifact Revision Tombstone or `PurgedSourceRef`.
+
 ## 7. Redaction commits before physical cleanup
 
 A Redaction Decision is an immutable, Project Scope-bound lifecycle fact. Its
@@ -476,6 +566,37 @@ records and the Redaction Decision, lifecycle, digest, provenance, and safe
 availability-gap evidence; it excludes the redacted payload. Project Restore
 preserves that gap and cannot recreate it from archive, cache, export, backup,
 or external destination state.
+
+### 7.1 Generated copies and historical context
+
+Ordinary author corrections remain conversation Messages. A Memory Note asks
+for later model editing; a processed Note or changed Conversation Memory
+Settings does not delete published Memory or invalidate earlier context.
+
+An explicit prohibition on reading data and its generated copies uses the
+[storage owner's restriction boundary](postgresql-project-storage-isolation-and-migration-contract.md#83-explicit-prohibition-on-reading-data-and-generated-copies).
+The restriction records the exact Scope and covered payloads. Reliable physical
+isolation permits a narrow fence; otherwise the complete Project generated
+Memory set becomes unavailable, including covered historical generated revisions.
+This broader fence does not delete unrelated Messages, Memory Notes, or
+Authoritative State. These records retain their own access rules.
+
+Apply the fence before further reads, publication, context reuse, or export.
+Covered staged outputs, old jobs, Artifact revision reads, indexes, caches,
+captured export inputs and downloads, and restore paths cannot bypass it.
+Context compaction outputs and retained historical inputs follow the coverage
+of their actual copy restrictions. An opaque Provider reference that cannot
+satisfy a real restriction is not reused. Admit new work from allowed local
+inputs or keep it on Hold under the Context contract; ordinary correction does
+not require a continuation reset.
+
+Reconstruction uses a fresh permitted input set and the current availability
+fence. A complete new publication may restore Memory availability, but cannot
+lift an old payload restriction. Insufficient allowed inputs leave Memory
+unavailable while the editor and independently authorized Agent work continue.
+The lifecycle evidence records no publication, valid empty publication, and
+unavailable publication distinctly. Model citations do not prove complete
+influence isolation, and cleanup does not promise precise semantic erasure.
 
 ## 8. Recovery Copy retention and deletion completion
 
@@ -602,8 +723,19 @@ non-secret canonical record and payload, including authorized archived content,
 along with the exact Retention Profile and Decisions, Replay Generation
 boundaries, Mailbox Seals and Fences, idempotency outcomes, lifecycle,
 provenance, and known availability gaps required to interpret the Project. It
-excludes caches, indexes, embeddings, Diagnostic Projections, Query/Snapshot
-results, Credential values and value digests, and Provider-held state.
+excludes caches, indexes, embeddings, Diagnostic Projections, disposable query
+results, Credential values and value digests, and Provider-held state. Retained
+Step Snapshot and Context Compaction Projection evidence is Operational Record
+content, not a disposable query result. A recorded opaque Provider reference
+does not export the Provider's internal state or grant reusable authority.
+
+Memory export preserves permitted Document and Note revisions, exact publication
+membership, Conversation/settings bindings, maintenance outcomes and pending
+inputs, and availability/cleanup Decisions. Missing generated bytes remain an
+explicit gap. Restore applies later restrictions before visibility and fences
+pre-restore jobs before reconciling unsettled maintenance. Missing lifecycle
+evidence keeps affected data on Hold. Optional Memory indexes rebuild from
+allowed retained documents; generating new Memory is not export restoration.
 
 Compacted, redacted, tombstoned, or physically deleted payloads are represented
 only by their permitted identity, digest, lifecycle/provenance, and explicit
@@ -627,12 +759,21 @@ or their author-initiated deletion path. It does not edit prior Run Events,
 Manifests, Attempts, disclosure evidence, source closures, or the public
 Project Activity chronology.
 
-It also does not waive current eligibility. A cache, Provider continuity handle,
-archived payload, summary, or later reconstruction remains subject to the
-current lifecycle, permission, retention, suppression, Context Assembly, and
-destination-disclosure checks. A compacted or unavailable payload cannot be
-silently redisclosed or resurrected through a cache, Provider, export, or
-restore.
+It also does not waive current eligibility. New source reads and their caches
+check current source facts. Generated Memory reads check the exact published
+documents and their own availability and access restrictions. Historical
+Messages, summaries, Tool results, and Provider continuation keep their recorded
+input identity and applicable retained-copy restrictions; they do not resolve
+every mentioned source to its latest revision. Ordinary source edits or deletion
+do not recursively remove generated paraphrases or past model influence.
+
+Source closure in this contract means the actual retained input records and
+known reference dependencies needed by the operation. It is neither a semantic
+influence graph nor proof of each inferred claim. Reconstruction and fresh
+disclosure still pass the Context owner's current gates. A purged, compacted,
+or restricted payload cannot become readable again through a cache, Provider,
+export, or restore. Past disclosure remains a historical fact; Provider-internal
+retention or erasure is reported only to the extent the evidence establishes.
 
 ## 14. Required invariants and completion constraints
 
@@ -657,6 +798,10 @@ obligations without creating a second physical-table, route, or Event ledger.
 | RET-012 | Author inspection reports retained/archived/compacted/redacted/tombstoned/recovery-hold/deletion state without inventing completeness or dispatch. | #64 and the editor-first author journey. |
 | RET-013 | Every numeric input is classified as accepted hard contract, observation, controlled synthetic result, modelled projection, or candidate band with workload/environment/headroom/owner; unmeasured values remain unresolved. | #64 adoption rule; #76 evidence only. |
 | RET-014 | The #56/#58 catalogs and their verifiers remain the mechanical source for physical-family, route/settlement, public Event, and Activity/Snapshot/cursor consistency; this document adds only a reviewable retention crosswalk and owner boundary, not a second ledger or verifier claim. | Existing catalog verifiers for mechanical facts; review of this crosswalk for retention semantics; #60 later supplies executable proof. |
+| RET-015 | Generated Memory payload cleanup preserves current publications, Artifact Heads, author records, unsettled work, shared retained bytes, and exact identity/use/Decision/gap evidence. | #64 eligibility; Artifact and storage owners retain their lifecycle and physical boundaries. |
+| RET-016 | Active context compaction may occur between calls in an active Run without deleting history; its immutable evidence is not a disposable cache. Later operational-byte cleanup requires settlement and Seal where applicable. | Context owner for active compaction; #64 for retention. |
+| RET-017 | Ordinary corrections and Memory Notes do not cause semantic suppression or a continuation reset. Real covered-copy restrictions fence all owned access and reconstruction paths before cleanup. | Memory/Context/storage owners for meaning and fences; #64 for cleanup and retained evidence. |
+| RET-018 | Memory export and restore preserve permitted revisions, publication membership, pending work, and lifecycle gaps. Missing evidence blocks visibility; index rebuild and new model generation remain distinct. | #56 physical portability; #64 lifecycle inclusion; #60 later executable proof. |
 
 ### 14.2 Required invariants and completion constraints
 
@@ -683,7 +828,20 @@ Later deterministic verification must demonstrate at least that:
 8. a restored Scope with a missing lifecycle range remains in recovery hold;
    a deleted Scope never becomes readable through Project Restore; and
 9. every state, fence, lifecycle decision, export, restore, Query, cache, and
-   cleanup action fails closed across User or Project Scope.
+   cleanup action fails closed across User or Project Scope;
+10. cleanup refuses current publication members, Artifact Heads, author-edited
+    revisions, active byte dependencies, and unqualified policy values;
+11. a qualified old generated payload can become unavailable while its original
+    identity, provenance, digest, publication/use records, and cleanup gap remain;
+    a shared payload required by another retained reference stays physically present;
+12. active compaction preserves source history and recovery inputs; deleting a
+    cache never deletes the immutable compaction evidence;
+13. ordinary Notes leave the current Memory readable, while real covered-copy
+    restrictions block stale jobs, old reads, captured exports, and opaque reuse;
+    allowed-input reconstruction cannot lift an earlier payload fence; and
+14. recovery preserves pending Notes and publication/cleanup identity, shows
+    unavailable Memory truthfully, and never substitutes newly generated wording
+    for a missing historical revision.
 
 ### 14.3 Deterministic proof and downstream handoff
 
@@ -696,7 +854,12 @@ Project Deletion Settlement, archive-root proof, and Recovery Visibility Proof.
 Positive traces cover normal replay, compaction, archive inspection, restore,
 deletion, and exact idempotent retry. Negative traces cover unsettled
 authority, unknown effects, stale cursors, wrong Scope, missing lifecycle
-range, corrupt archive proof, and post-deletion access. This contract names
+range, corrupt archive proof, and post-deletion access. Memory traces also
+cover cleanup racing publication or byte-dependent work, failed maintenance,
+shared-payload retention, an active compaction followed by crash recovery,
+covered-copy restrictions during export, and restoration with missing lifecycle
+evidence. Oracles check exact records, fences, and explicit gaps rather than
+semantic forgetting or byte-identical model regeneration. This contract names
 those proof obligations but does not implement the harness or choose release
 stages; [the release-baseline owner](https://github.com/FrankQDWang/StoryOS/issues/62)
 consumes the finalized semantics, and the terminal audit remains downstream.

@@ -248,7 +248,7 @@ An immutable versioned contract fixing public validity ceilings and counting mea
 _Avoid_: Scattered magic limit, client-requested expansion, same-revision narrowing, unversioned token counting, author-facing protocol tuning
 
 **Retention Profile**:
-A versioned policy contract that supplies the bounded time, capacity, replay, checkpoint, archive, and compaction values for one Project Scope's Operational Retention Classes. Every lifecycle action binds its exact Profile Revision and frozen effective values; a new revision applies prospectively, while affecting an existing record requires a new inspectable Retention Decision rather than a silent retroactive expiry.
+A versioned policy contract that supplies the bounded time, capacity, replay, checkpoint, archive, compaction, and generated Memory payload retention values for one Project Scope. Every lifecycle action binds its exact Profile Revision and frozen effective values; a new revision applies prospectively, while affecting an existing record requires a new inspectable Retention Decision rather than a silent retroactive expiry.
 _Avoid_: Global mutable TTL, host configuration switch, per-Run author setting
 
 **Retention Decision**:
@@ -894,6 +894,10 @@ _Avoid_: Source of truth, backup, Step Snapshot, live session
 **Operational History Compaction**:
 A policy-versioned automatic retention transition for an eligible terminal, root-sealed Run or Subrun that makes a Compactable Operational Payload unavailable while retaining its Operational Evidence Floor, digest, checkpoint or snapshot evidence, and explicit availability gap. It is distinct from Operational Archive and never changes Authoritative State, an Artifact, or prior context or disclosure history; Artifact Tombstone and author-initiated deletion are separate.
 _Avoid_: History rewrite, Artifact Tombstone, cache eviction, silent log deletion
+
+**Generated Memory Payload Cleanup**:
+A policy-versioned retention purge of a superseded generated Memory revision's bytes after current publication, Artifact Head, author-edit, active-work, recovery, and shared-payload protections pass. It preserves revision identity, provenance, digest, recorded uses, the Retention Decision, and an explicit availability gap without changing the Artifact's common Retention State.
+_Avoid_: Artifact Tombstone, index eviction, Memory Note completion, precise semantic forgetting
 
 **Operational Retention Class**:
 The policy-versioned classification of one exact Operational Record fact or payload role as either an Operational Evidence Floor or a Compactable Operational Payload, independently of the enclosing Run's lifetime. An unknown or unclassified role fails closed to the evidence floor rather than inheriting a Run-wide TTL.
