@@ -1483,6 +1483,10 @@ _Avoid_: Authoritative fact, per-claim Candidate, Admission Decision, hidden mod
 An inspectable, author-requested Artifact containing plain-language guidance to add, correct, or forget generated Memory, linked to the requesting author Message. Recording the note requests later consolidation; it does not prove publication, physical deletion, an access prohibition, or a change to Authoritative State.
 _Avoid_: Author Preference, semantic suppression rule, deletion receipt, context exclusion
 
+**Memory Publication**:
+The durable, Project Scope-bound identity of one complete published set of exact Memory Document revisions and its navigation summary, linked to the maintenance outcome that produced it. Current publication and current read availability are separate: a newer set does not rewrite earlier inputs or make a restricted older payload readable.
+_Avoid_: Latest Artifact alias, search index, authoritative fact, semantic correctness proof
+
 **Inferred Preference**:
 A non-binding interpretation of prior author action or feedback that can appear in Agent Memory with its sources and uncertainty. Repetition, confidence, author silence, or prior use never turns it into an authoritative constraint or lets it override a current author instruction.
 _Avoid_: Hidden policy, binding preference, implicit instruction, procedural memory

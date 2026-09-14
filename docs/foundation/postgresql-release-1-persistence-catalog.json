@@ -1,6 +1,6 @@
 {
   "catalog_id": "storyos.persistence.catalog.release-1.v3",
-  "contract_revision": "release1-storage-contract-2026-08-19-takeover-admission-activity",
+  "contract_revision": "release1-storage-contract-2026-09-14-generated-memory",
   "database_schema": "storyos",
   "physical_ledger": {
     "authority": "sole_exhaustive_table_family_ledger",
@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:94df8bcbc2db3d26d0525d8b599d5dfef383a1e51a0e7765c68357c570e35cdf"
+    "digest": "sha256:6199406b8dce00355c357fbde2acaf11afa1b490d0ac3c096b99da24e23c525d"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -524,7 +524,7 @@
     },
     {
       "family_id": "project-canonical",
-      "table_families": ["projects", "project_instruction_revisions", "project_instruction_heads", "author_preference_revisions", "project_policy_revisions", "project_destination_grants", "project_tool_enablements", "context_controls", "proactive_trigger_revisions", "trigger_occurrences", "trigger_admission_decisions", "authoritative_objects", "authoritative_revisions", "authoritative_payloads", "authoritative_heads", "authoritative_revision_envelopes", "authoritative_commits", "authoritative_commit_members", "manuscript_objects", "manuscript_blocks", "manuscript_revision_members", "revision_anchors", "scope_counters", "aggregate_counters", "human_readable_manuscript_exports"],
+      "table_families": ["projects", "project_instruction_revisions", "project_instruction_heads", "author_preference_revisions", "project_policy_revisions", "project_destination_grants", "project_tool_enablements", "proactive_trigger_revisions", "trigger_occurrences", "trigger_admission_decisions", "authoritative_objects", "authoritative_revisions", "authoritative_payloads", "authoritative_heads", "authoritative_revision_envelopes", "authoritative_commits", "authoritative_commit_members", "manuscript_objects", "manuscript_blocks", "manuscript_revision_members", "revision_anchors", "scope_counters", "aggregate_counters", "human_readable_manuscript_exports"],
       "owner": "core",
       "authority_class": "canonical",
       "durability_class": "immutable_with_current_heads",
@@ -540,7 +540,7 @@
     },
     {
       "family_id": "artifact-proposal-draft",
-      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_operation_resolutions", "proposal_generations", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "memory_candidates", "memory_admissions", "memory_suppressions", "research_claims", "research_evidence_edges", "source_snapshots"],
+      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_operation_resolutions", "proposal_generations", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "research_claims", "research_evidence_edges", "source_snapshots"],
       "owner": "artifact",
       "authority_class": "artifact",
       "durability_class": "immutable_revisions_with_heads",
@@ -594,7 +594,7 @@
       "durability_class": "immutable_events_with_fenced_live_state",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
       "schema": {"current": "storyos.persistence.release-1.v3", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
-      "dependencies": ["project-canonical", "operational-admission-editor"],
+      "dependencies": ["project-canonical", "operational-admission-editor", "artifact-proposal-draft"],
       "transaction_group": "run_transition_and_outbox",
       "immutability": "immutable_events_and_receipts_with_fenced_heads",
       "head": "run_lane_and_worker_fence",
@@ -610,7 +610,7 @@
       "durability_class": "immutable_manifests_attempts_and_disclosure_events",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
       "schema": {"current": "storyos.persistence.release-1.v3", "supported_predecessors": [], "migration_class": "mixed_transactional_and_nontransactional"},
-      "dependencies": ["project-canonical", "credential-references", "global-definitions"],
+      "dependencies": ["project-canonical", "credential-references", "global-definitions", "artifact-proposal-draft", "operational-run-mailbox"],
       "transaction_group": "manifest_and_destination_attempt",
       "immutability": "append_only_manifest_wire_and_disclosure_evidence",
       "head": "destination_attempt_fence",
@@ -668,7 +668,7 @@
     },
     {
       "family_id": "operational-lifecycle",
-      "table_families": ["artifact_lifecycle_events", "project_archival_decisions", "chapter_removal_decisions", "volume_removal_decisions", "project_tombstones", "memory_suppression_decisions", "retention_decisions", "project_deletion_records"],
+      "table_families": ["artifact_lifecycle_events", "project_archival_decisions", "chapter_removal_decisions", "volume_removal_decisions", "project_tombstones", "retention_decisions", "project_deletion_records"],
       "owner": "retention",
       "authority_class": "operational",
       "durability_class": "immutable_lifecycle_decisions",
@@ -690,11 +690,11 @@
       "durability_class": "append_only_invalidation_with_generation_pointer",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
       "schema": {"current": "storyos.persistence.release-1.v3", "supported_predecessors": [], "migration_class": "transactional"},
-      "dependencies": ["project-canonical", "operational-lifecycle"],
+      "dependencies": ["project-canonical", "operational-lifecycle", "operational-run-mailbox"],
       "transaction_group": "canonical_transition_and_projection_invalidation",
       "immutability": "invalidation_append_only_generation_staged",
       "head": "scoped_generation_pointer",
-      "projection": {"kind": "projection_control", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "operational-lifecycle"], "dependency_closure": ["source_revision", "source_digest", "lifecycle_state", "grant_and_policy_facts", "projection_profile"], "generation_field": "projection_generation", "watermark_field": "canonical_commit_sequence", "invalidation_families": ["project-canonical", "artifact-proposal-draft", "operational-lifecycle"], "rebuild": "stage_validate_and_atomic_generation_switch", "visibility_gate": "generation_complete_and_watermark_at_or_beyond_required_position"},
+      "projection": {"kind": "projection_control", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "operational-lifecycle", "operational-run-mailbox"], "dependency_closure": ["source_revision", "source_digest", "lifecycle_state", "grant_and_policy_facts", "projection_profile"], "generation_field": "projection_generation", "watermark_field": "canonical_commit_sequence", "invalidation_families": ["project-canonical", "artifact-proposal-draft", "operational-lifecycle", "operational-run-mailbox"], "rebuild": "stage_validate_and_atomic_generation_switch", "visibility_gate": "generation_complete_and_watermark_at_or_beyond_required_position"},
       "portability": {"physical_backup": "metadata_only", "whole_service_restore": "restore_metadata_then_rebuild", "project_export": "exclude", "project_restore": "rebuild", "secret_exclusion": "no_secret_material"},
       "public_contract": {"mapping_role": "projection_control", "operation_ids": [], "operation_selector": null, "event_selector": null, "settlement_modes": [], "activity_profile": null, "wire_history": "not_applicable", "internal_only": true}
     },
@@ -706,11 +706,11 @@
       "durability_class": "disposable_generation",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
       "schema": {"current": "storyos.persistence.release-1.v3", "supported_predecessors": [], "migration_class": "nontransactional_rebuildable"},
-      "dependencies": ["project-canonical", "artifact-proposal-draft", "projection-generation-control"],
+      "dependencies": ["project-canonical", "artifact-proposal-draft", "projection-generation-control", "operational-run-mailbox"],
       "transaction_group": "projection_rebuild_job",
       "immutability": "replaceable_generation_rows",
       "head": "scoped_generation_pointer",
-      "projection": {"kind": "disposable", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "projection-generation-control"], "dependency_closure": ["source_identity", "source_revision", "source_digest", "qualification_dependencies", "fragment_profile"], "generation_field": "projection_generation", "watermark_field": "canonical_commit_sequence", "invalidation_families": ["project-canonical", "artifact-proposal-draft", "operational-lifecycle"], "rebuild": "drop_or_quarantine_then_rebuild_from_canonical", "visibility_gate": "dependency_complete_generation_and_watermark_verified"},
+      "projection": {"kind": "disposable", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "projection-generation-control", "operational-run-mailbox"], "dependency_closure": ["source_identity", "source_revision", "source_digest", "qualification_dependencies", "fragment_profile", "memory_publication_when_applicable", "conversation_use_settings_when_applicable", "covered_copy_restrictions", "source_watermark_kind"], "generation_field": "projection_generation", "watermark_field": "source_watermark", "invalidation_families": ["project-canonical", "artifact-proposal-draft", "operational-lifecycle", "operational-run-mailbox"], "rebuild": "drop_or_quarantine_then_rebuild_from_canonical", "visibility_gate": "dependency_complete_generation_and_watermark_verified"},
       "portability": {"physical_backup": "metadata_only", "whole_service_restore": "rebuild", "project_export": "exclude", "project_restore": "rebuild", "secret_exclusion": "no_secret_material"},
       "public_contract": {"mapping_role": "projection_persistence", "operation_ids": ["searchManuscript", "retrieveContext"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read"], "activity_profile": null, "wire_history": "not_applicable", "internal_only": false}
     },
@@ -738,11 +738,11 @@
       "durability_class": "disposable_dependency_bound",
       "scope": {"kind": "project", "requires_project_scope": true, "profile": "project_forced_rls"},
       "schema": {"current": "storyos.persistence.release-1.v3", "supported_predecessors": [], "migration_class": "nontransactional_rebuildable"},
-      "dependencies": ["project-canonical", "operational-context-disclosure", "projection-generation-control"],
+      "dependencies": ["project-canonical", "operational-context-disclosure", "projection-generation-control", "operational-run-mailbox"],
       "transaction_group": "projection_rebuild_job",
       "immutability": "replaceable_generation_rows",
       "head": "scoped_generation_pointer",
-      "projection": {"kind": "disposable", "source_family_ids": ["project-canonical", "operational-context-disclosure", "projection-generation-control"], "dependency_closure": ["source_revisions", "selection_digest", "manifest_profile", "qualification_dependencies", "generation"], "generation_field": "projection_generation", "watermark_field": "canonical_commit_sequence", "invalidation_families": ["project-canonical", "operational-context-disclosure", "operational-lifecycle"], "rebuild": "stage_validate_and_atomic_generation_switch", "visibility_gate": "dependency_complete_generation_verified"},
+      "projection": {"kind": "disposable", "source_family_ids": ["project-canonical", "operational-context-disclosure", "projection-generation-control", "operational-run-mailbox"], "dependency_closure": ["source_revisions", "selection_digest", "manifest_profile", "qualification_dependencies", "generation", "memory_publication_when_applicable", "conversation_use_settings_when_applicable", "covered_copy_restrictions", "source_watermark_kind", "input_role_current_read_or_history"], "generation_field": "projection_generation", "watermark_field": "source_watermark", "invalidation_families": ["project-canonical", "operational-context-disclosure", "operational-lifecycle", "operational-run-mailbox"], "rebuild": "stage_validate_and_atomic_generation_switch", "visibility_gate": "dependency_complete_generation_verified"},
       "portability": {"physical_backup": "metadata_only", "whole_service_restore": "rebuild", "project_export": "exclude", "project_restore": "rebuild", "secret_exclusion": "no_secret_material"},
       "public_contract": {"mapping_role": "projection_persistence", "operation_ids": ["retrieveContext"], "operation_selector": null, "event_selector": null, "settlement_modes": ["read"], "activity_profile": null, "wire_history": "not_applicable", "internal_only": false}
     },

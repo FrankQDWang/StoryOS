@@ -46,7 +46,7 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
         fail(errors, "catalog identity does not bind persisted-format identity")
     if catalog.get("catalog_id") != "storyos.persistence.catalog.release-1.v3":
         fail(errors, "catalog identity must equal the hard-cut Release 1 catalog v3")
-    if catalog.get("contract_revision") != "release1-storage-contract-2026-08-19-takeover-admission-activity":
+    if catalog.get("contract_revision") != "release1-storage-contract-2026-09-14-generated-memory":
         fail(errors, "unexpected storage contract revision")
     binding = catalog.get("schema_identity", {}).get("protocol_binding", {})
     for key, expected in {

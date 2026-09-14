@@ -1,7 +1,7 @@
 # PostgreSQL Project Storage, Isolation, and Migration Contract
 
 - Status: accepted
-- Contract revision: `release1-storage-contract-2026-08-19-takeover-admission-activity`
+- Contract revision: `release1-storage-contract-2026-09-14-generated-memory`
 - Wayfinder resolution: [Specify the PostgreSQL Project Storage, Isolation, and Migration Contract](https://github.com/FrankQDWang/StoryOS/issues/56)
 - Canonical glossary: [`CONTEXT.md`](../../CONTEXT.md)
 - Deployment decision: [ADR 0004: Adopt a PostgreSQL Service and Project Isolation Boundary](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
@@ -187,6 +187,31 @@ Volume, Chapter, or manuscript payload. The current-chapter foreign key uses
 project-bearing read and write uses exact Project Scope. Recovery Visibility
 Proof does not count this SQL NULL current Chapter as a Chapter gap.
 
+### 0.5 Generated Memory planning and deployed storage
+
+This revision aligns the planning catalog with the accepted Memory, Context,
+and protocol contracts. It removes the retired Memory Candidate, Admission,
+Suppression, and semantic context-control table families. None exists in the
+current bootstrap SQL. This change adds no Memory runtime table, migration,
+handler, or generated feature schema and changes no released editor persistence.
+The later implementation owner must supply typed physical relations within the
+families below and the corresponding schema, export, and recovery proof.
+
+The table-family registry digest binds the planning ledger. It is distinct from
+the packaged activation identity: the current runner's `catalog_checksum` is
+the bootstrap manifest digest, not a hash of the whole JSON catalog. Updating
+only this ledger and its review-time revision does not change that identity.
+The existing protocol route digest remains part of the activation identity.
+The preceding protocol revision changed that digest; an older activation proof
+does not authorize the current package.
+
+The runner supports an exact already-active identity or an empty installation,
+not an upgrade of an existing deployment. Do not rewrite activation evidence,
+delete data, or invent a migration edge to make a mismatch pass. An existing
+deployment requires a separately authorized storage upgrade or reprovision
+path. This planning revision authorizes neither. Stage 3 and later product
+implementation remains on EXECUTION HOLD.
+
 ## 1. Scope and authority
 
 This specification defines the Foundation physical persistence contract for all
@@ -357,7 +382,7 @@ no one family crosses an authority or durability boundary:
 | `operational-wire-history` | Historical Operational Records | Immutable Application Wire Records and first materialized public Event representations | Public commands/Events are represented; query-response bytes and transport framing are not |
 | `operational-project-activity` | Historical Operational Records | Project Activity Events, positions, replay generations, replay floors, and handoff evidence | One canonical Project Activity stream |
 | `operational-snapshot-replay` | Historical Operational Records | Authorized Snapshot reading boundaries, cursor evidence, and generation handoffs | Snapshot/resync/query-history routes |
-| `operational-lifecycle` | Operational Records | Archive, Tombstone, Suppression, retention, and deletion decisions | Lifecycle owner; physical cleanup remains downstream policy |
+| `operational-lifecycle` | Operational Records | Archive, Tombstone, access and covered-copy restrictions, retention, and deletion decisions | Lifecycle owner; physical cleanup remains downstream policy |
 | `projection-generation-control` | Disposable projections | Dependency closure, invalidations, generation pointers, and source watermarks | Internal rebuild control; never an authority source |
 | `projection-retrieval` | Disposable projections | Retrieval documents, fragments, and lexical terms | Search/retrieval read path; rebuildable |
 | `projection-embedding` | Disposable projections | Scope-bound embedding observations and their exact external-use dependencies | Retrieval acceleration; unavailable is explicit |
@@ -377,6 +402,29 @@ projection may reference any of them through exact scoped dependencies, but it
 cannot become their source, and a projection family cannot be included in a
 Project Export as a substitute for canonical or historical evidence. The
 catalog's table-family uniqueness check rejects accidental merging.
+
+### 3.4 Conversation, Memory, and context record placement
+
+The accepted protocol records use these existing catalog families. This is a
+logical placement contract, not new DDL or a second physical table ledger.
+Typed records retain their own identities and constraints; a family is not a
+generic event or JSON bucket.
+
+| Record | Catalog family | Durable meaning |
+|---|---|---|
+| Conversation Messages, Memory Document revisions, source summaries, and Memory Notes | `artifact-proposal-draft` | Messages keep their own kind; Memory Documents and Notes use the existing Tool Artifact envelope, Creator, payload, revision, and provenance rules |
+| Project Conversation identity, current Memory settings and revision history, and Run settings binding | `operational-run-mailbox` | Conversation-scoped state and admission evidence; neither manuscript authority nor a Provider session |
+| Memory Publication, exact member revisions, current publication pointer, extraction inputs and outcomes, and consolidation progress | `operational-run-mailbox` | Durable maintenance and publication evidence with fenced live state; references Artifact payloads without copying them |
+| ModelContinuationBinding, Context Compaction Projection, exact Attempt and known input/source references | `operational-context-disclosure` | Immutable context and external-operation evidence; preserves sent content, stored reference, Provider report, and Provider-opaque distinctions |
+| Memory Note and maintenance Activity, settings Activity, and their wire representations | `operational-project-activity`, `operational-wire-history` | Exact committed source records projected through the protocol's existing Events |
+| Covered-copy restriction and Memory availability fence | `operational-lifecycle` | Durable current-read and recovery restriction; not a semantic suppression rule |
+| Memory text search, fragments, and cached reads | `projection-retrieval`, `projection-context-cache`, `projection-generation-control` | Disposable access paths over exact allowed document revisions and publication identity |
+
+Authoritative State remains independent. A Memory Note does not become an
+Author Preference, and a publication does not create an Authoritative Commit.
+Markdown is the bounded readable payload form. PostgreSQL owns its exact bytes,
+revisions, publication membership, and recoverable work; a Tool-visible view
+cannot become a second unmanaged local truth store.
 
 ## 4. Keys, constraints, and fail-closed references
 
@@ -746,7 +794,7 @@ External egress obeys this order:
 2. prepare and commit the exact non-secret Wire Payload Projection and pending
    Destination Attempt;
 3. in a short dispatch transaction, revalidate current scope, lifecycle,
-   suppression, grant, budget, destination, and credential-reference
+   applicable source/copy restrictions, grant, budget, destination, and credential-reference
    availability, then acquire a fenced claim;
 4. atomically append the OutcomeUnknown Outbound Disclosure Event and bind it
    to that claim;
@@ -759,6 +807,74 @@ after step 5 remains OutcomeUnknown even when bytes may not have left. A resend
 is a new Destination Attempt and a new disclosure decision; it never rewrites
 the predecessor. Queue claims, responses, sockets, and Provider logs are not
 transaction authority.
+
+### 5.7 Conversation and Memory transactions
+
+One exact Project Conversation guard serializes foreground Run admission/start
+with the protocol's Memory settings update. A new Conversation, its initial
+settings, and its first Run admission commit together. An existing Conversation
+must resolve within the same Scope. The two settings change together against
+the expected settings revision, only when every associated foreground root Run
+is Terminal or absent. Queued, waiting, paused, blocked, cancelling, recovering,
+and finalizing work is not idle. Independent background Memory jobs do not
+block the update. Admission captures the settings revision for the Run tree.
+Exact successful retry returns the original acknowledgement even if the
+Conversation has since become busy. Defaults remain release-owned.
+
+Memory extraction claims a bounded, permitted, settled conversation snapshot.
+Its durable input binds Scope, Conversation, snapshot/message revision range,
+contribution settings, model/prompt versions, bounds, and producer. A newer
+conversation snapshot is a new input, not a rewrite of an earlier extraction.
+An exact delivery retry resolves the same input/outcome. A new physical model
+Attempt retains separate dispatch and disclosure evidence. A stale worker
+cannot replace a newer accepted extraction: settlement checks its lease and
+the exact expected input/head binding under the owning guard.
+
+`RecordMemoryNote` commits the Tool Artifact revision, exact requesting author
+Message and validated ToolCall/Decision references, pending maintenance intent,
+and Note Activity together. A duplicate delivery returns the same Note. An
+ordinary Memory correction or request to forget a preference queues model editing;
+recording it does not make the published Memory unavailable or claim success.
+
+One Project-scoped publication guard owns the current Memory Publication.
+Each publication has a stable identity, an ordered exact member-revision set,
+its navigation-summary reference when present, previous publication reference when present,
+and the maintenance operation that produced it. Members, summary, Notes,
+inputs, and producer references retain full Scope and immutable digests.
+The current pointer and its monotonic generation are durable Operational
+Records, not a disposable index or an Artifact's mutable latest alias.
+
+Consolidation captures the current publication, bounded extraction outputs,
+pending Note revisions, and the current availability fence before model work.
+Generated output is staged and cannot enter ordinary reads, recall, or export
+as a published set. Publication uses one short transaction, after all model
+I/O, in the lock order of section 5.2. It checks the exact lease generation and
+token, expected publication generation, input bindings, complete member set,
+and current permissions and covered-copy restrictions. It atomically commits
+the new publication and current document Heads, advances the pointer, records
+which exact inputs/Notes were processed, appends the maintenance outcome and
+required Activity, and invalidates old current-read projections. No reader
+can combine a new summary with old set membership.
+
+A publication conflict cannot overwrite the winner. Retry rereads the new
+publication and pending inputs; it cannot merely relabel stale generated
+output. Failure or `source_unavailable` leaves the previous publication pointer
+unchanged. If that set has a real read restriction, it remains unavailable.
+A verified `no_op` may record processed inputs/Notes and its outcome under the
+same guard without a new publication. A processed Note proves only that the
+job considered it, not that a semantic request was satisfied. Notes outside
+the captured input set remain pending. A crash before settlement advances
+nothing; a lost acknowledgement after commit replays that exact settlement.
+The protocol's outcome Event carries a publication reference only for
+`published`.
+
+Settings are checked before applicable new reads and dispatch. Turning off
+contribution does not revoke publication permission for work already sent, and
+turning off use does not block author inspection or delete Memory. Neither
+setting is a covered-copy restriction. Actual access and deletion restrictions
+still apply at publication. Historical document revisions stay addressable
+under their own current access and retention rules; removal from the current
+set is not physical deletion or a rewrite of recorded model input.
 
 ## 6. Canonical payload placement
 
@@ -834,12 +950,13 @@ authoritative, proves eligibility, or becomes the sole copy of content.
 
 ### 7.2 Qualification before ranking
 
-Every retrieval use first reapplies current Project Scope and owning-domain
-qualification: source Revision and digest, lifecycle and retention, Memory
-Admission and applicable Memory Suppression, permission, Purpose, destination,
-grant, Adapter, and policy. An unavailable or unverifiable dependency excludes
-the candidate before similarity or lexical rank. Rank can choose only among
-eligible rows and uses a stable tie-break over typed source and fragment IDs.
+Every new retrieval reapplies current Project Scope and owning-domain
+qualification: exact source Revision and digest, lifecycle and retention,
+permission, Purpose, destination, grant, Adapter, and policy. Memory intake
+also checks the current publication and applicable Conversation use setting.
+There is no per-claim Memory Admission or Suppression gate. An unavailable or
+unverifiable required input excludes the candidate before similarity or lexical
+rank. Rank uses a stable tie-break over typed source and fragment IDs.
 
 An RLS-safe index hit is still only discovery. The canonical source is joined
 or batch-rechecked in the same scoped operation. A cache entry is reusable only
@@ -854,11 +971,22 @@ canonical commit even when physical cleanup is delayed. Readers compare the
 stored dependency closure and generation against current canonical facts; stale
 or unknown rows are invisible.
 
-Tombstone, Archive, Memory Suppression, Context Exclude, grant revocation,
-retention expiry, source correction, and destination change propagate only to
-the uses each semantic control governs. They are not collapsed into one delete
-bit. Historical manifests and prior disclosure evidence remain unchanged while
-current inspection may report that their dependencies are now invalid.
+Tombstone, Archive, grant revocation, retention expiry, source correction, and
+destination change affect only the uses their owning controls govern. New
+source reads and their caches check current sources. Generated Memory reads
+check the published documents and their actual access/availability restrictions,
+not the latest state of every source mentioned in their text. Ordinary edits,
+source deletion, Memory Notes, or changed settings do not recursively erase
+generated paraphrases, historical Messages, summaries, or Provider references.
+
+Historical-input caches bind exact retained records and covered-copy rules;
+they do not claim current-source truth. Immutable manifests, Attempts, and
+disclosure evidence keep their original identities, with unavailable payload
+reported truthfully. A real restriction that includes retained copies must
+also fence their cached uses. If an opaque Provider reference cannot satisfy
+that restriction, stop reusing it; admit reconstruction from allowed local
+inputs or remain on Hold under the Context contract. Do not reset continuation
+for ordinary creative correction or claim to erase past model influence.
 
 ### 7.4 Rebuild boundary
 
@@ -893,15 +1021,18 @@ ProjectionIdentity {
 }
 ```
 
-The dependency closure includes every source identity and exact Revision or
-payload digest, Project Scope, lifecycle/retention and suppression facts,
+The dependency closure includes every recorded input identity and exact Revision or
+payload digest, Project Scope, applicable lifecycle/retention and copy restrictions,
 authorization/grant and destination facts when applicable, external
 Registration/Adapter/Model profiles when applicable, and the canonical input
 projection. A cache key, Event position, or source ID without this closure is
-not a valid projection row. `projection_generation` is scoped and monotonic;
-the `source_watermark` is the exact canonical Commit or Project Activity
-position that the generation has processed. It is not a wall-clock timestamp,
-UUID order, or browser local sequence.
+not a valid projection row. This is a physical input closure, not a semantic
+influence graph inferred from citations or text. Current-read and historical
+dependencies follow section 7.3. `projection_generation` is scoped and monotonic;
+the `source_watermark` names its order kind and exact processed position:
+canonical Commit, Project Activity, or Memory Publication generation as
+applicable. Memory publication does not allocate a fictional-authority Commit.
+A watermark is not wall time, UUID order, or a browser local sequence.
 
 The owning canonical transaction appends an invalidation or advances the
 scoped generation epoch before commit. Readers compare the full closure,
@@ -937,9 +1068,17 @@ projection is `ready` at or beyond the required watermark or has a typed
 `unavailable` fallback; a fresh authorized Snapshot/resync boundary is
 available; the replay floor and cursor generation are coherent; and the
 Recovery Visibility Proof demonstrates that later Redaction, Tombstone,
-Archive, Suppression, retention, and availability facts have been applied. A
+Archive, covered-copy restrictions, retention, and availability facts have been applied. A
 database that is physically restorable but fails any lifecycle or projection
 proof remains in `recovery_hold` or `read_only`; it is not exposed as current.
+
+Memory index rebuild reads the allowed published document revisions, validates
+their publication identity, and atomically switches a staged index generation.
+It does not call a model or reconstruct missing canonical Memory from an index.
+Generating a replacement Memory set is separate model work under section 5.7;
+its wording need not match a lost or earlier set. A lost optional Memory index
+can use a bounded authorized document-read path or report unavailable without
+blocking independent editor recovery. Required editor projection gates remain.
 
 ## 8. Credentials, lifecycle, and retention handoff
 
@@ -963,14 +1102,14 @@ A Project Restore preserves reference identity and non-secret metadata but
 marks any unresolved binding Unbound. Only an authorized explicit rebind may
 make it available; matching a locator string never silently binds a secret.
 
-### 8.2 Archive, Tombstone, Suppression, and purge
+### 8.2 Archive, Tombstone, covered-copy restrictions, and purge
 
 Archive changes ordinary visibility while retaining canonical content and
 history. Tombstone records that a source is no longer live and controls future
-use according to its owning domain. Memory Suppression prevents memory-derived
-or ordinary-recall use without deleting or rewriting the raw source. Context
-Exclude applies to its exact operation requirement. These states have distinct
-tables or typed lifecycle events and distinct qualification predicates.
+use according to its owning domain. These facts remain distinct from Memory
+Notes and Conversation settings. Ordinary corrections and requests to forget a
+preference let the foreground Agent record guidance for background model editing;
+they do not make the Project's generated Memory unavailable.
 
 The owning transition writes the lifecycle fact and projection invalidation in
 one transaction. Physical cache and index deletion may lag; eligibility may
@@ -980,9 +1119,52 @@ policy authorizes, and preserves required Tombstones, immutable decisions,
 disclosure history, and explicit provenance gaps. A later purge cannot rewrite
 what an earlier Run considered, selected, prepared, or may have disclosed.
 
-Project Export includes active Archive, Tombstone, Suppression, lifecycle,
+Project Export includes applicable Archive, Tombstone, copy restrictions, lifecycle,
 retention, and provenance facts needed to reproduce current eligibility. It
 does not resurrect purged payload or pretend a known gap is complete.
+
+### 8.3 Explicit prohibition on reading data and generated copies
+
+When the author explicitly requires that named data and its generated copies
+must no longer be readable, the owning lifecycle operation records the exact
+Scope, requested coverage, and read restriction. It is distinct from a Memory
+Note. Storage does not infer this request from ordinary creative language or
+compile a natural-language semantic deletion registry.
+
+If reliable physical boundaries isolate the covered generated content, fence
+that content. Only when they cannot do so may the complete Project generated
+Memory set become temporarily unavailable. Model citations are not proof of
+a complete influence graph and cannot justify a narrower fence. The broader
+fence covers generated document payloads and historical generated revisions
+within that Project; it does not delete unrelated author Messages, Memory
+Notes, or Authoritative State. Those records retain their own access rules.
+
+The lifecycle transaction advances a durable Scope-bound availability fence
+under the same publication guard, records unavailable coverage, and invalidates
+affected reads before commit. Physical purge may follow later; read blocking
+may not. Old publication pointers, Artifact revision reads, jobs, indexes,
+caches, staged output, export construction/download, and restore paths must
+check that fence and cannot expose a covered copy. Restriction checks include
+already captured export inputs, not only new source selection.
+
+Reconstruction starts with a fresh permitted input set and current fence.
+It cannot reuse the fenced generated documents, cached copies, or an opaque
+Provider continuation that may contain covered input. Retained conversations,
+Notes, and extraction outputs are inputs only where their own covered-copy
+rules permit reading them. If allowed inputs are insufficient, Memory remains
+unavailable; the editor and independently authorized Agent work can continue.
+A complete replacement publishes atomically under section 5.7 after validating
+current restrictions and the exact reconstruction inputs. That publication can
+restore current Memory availability but cannot lift the old payload fence.
+
+Inspection distinguishes no publication yet, a valid empty set, and an
+unavailable set, retaining only permitted identity/status and gap evidence.
+Export and restore preserve restrictions and apply later lifecycle evidence
+before visibility; missing evidence keeps the affected data on Hold. Previously
+delivered exports and Provider-held data remain outside a local erasure claim.
+Retention owns physical cleanup eligibility, durations, Recovery Copy cleanup,
+and the minimum retained evidence. This contract defines no precise semantic
+deletion system and gives no guarantee against a similar future inference.
 
 ## 9. Schema migration and compatibility
 
@@ -1198,6 +1380,16 @@ then becomes visible through one atomic promotion. Any failure removes or
 quarantines staging and changes no live Project. Projections rebuild afterward;
 Credential References that cannot resolve become Unbound.
 
+Memory portability retains permitted document and Note revisions, exact
+publication membership and current pointer, Conversation/settings bindings,
+maintenance inputs, pending Notes, outcomes, and availability fences. It does
+not substitute regenerated text for missing payload or lose a pending Note
+because a worker once claimed it. Restore validates these references and
+later restrictions before read visibility, fences pre-restore workers, and
+reconciles unsettled work before a new claim. Current Memory may remain
+explicitly unavailable while the independent editor passes its recovery gates.
+Optional indexes rebuild from the allowed publication, not Provider state.
+
 Restore never merges, overwrites, remaps IDs, changes owner, or creates a new
 Project. Copy, fork, ownership transfer, and collaboration require later
 domain commands.
@@ -1285,7 +1477,7 @@ covers at least:
 10. dumps, backups, Project exports, ordinary logs, tracing, support bundles,
     wire projections, and failure messages contain no credential value or
     value digest;
-11. Tombstone, Archive, Suppression, Exclude, grant revocation, source change,
+11. Tombstone, Archive, covered-copy restrictions, grant revocation, source change,
     and retention expiry immediately invalidate exactly their governed future
     uses while preserving historical manifests and disclosure evidence;
 12. deleting every disposable projection and rebuilding produces complete
@@ -1340,6 +1532,16 @@ covers at least:
     Event, Authoritative Revision, payload, Authoritative Commit, Head change,
     and Author Action; exact retry returns each original settlement and
     refuses every impossible authority relation.
+27. concurrent Conversation settings and foreground admission cannot bypass
+    the idle/revision gate; Note retries, failed extraction, stale publication,
+    and crash cuts neither lose pending inputs nor expose a partial set;
+28. ordinary Memory correction keeps the current set readable, while an
+    explicit covered-copy restriction fences exactly its reliable boundary or
+    the Project generated set; stale jobs, historical revisions, caches,
+    exports, and restores cannot bypass that fence;
+29. Memory index loss rebuilds from retained allowed publications without model
+    regeneration; a replacement generated from allowed inputs need not match
+    earlier wording and cannot revive fenced payloads.
 
 ## 12. Normative invariants and handoff
 
@@ -1369,9 +1571,10 @@ covers at least:
    scoped, dependency-complete, invalidatable, and rebuildable.
 10. Secret material never enters ordinary domain persistence or portable data;
     Credential References fail closed and rebind explicitly.
-11. Lifecycle changes invalidate future use without rewriting historical
-    evidence; retention purge preserves required Tombstones and provenance
-    gaps.
+11. Lifecycle changes invalidate only their governed uses without rewriting
+    historical evidence. Ordinary corrections use Memory Notes; an explicit
+    covered-copy prohibition may require a conservative generated-set fence.
+    Retention purge preserves required Tombstones and provenance gaps.
 12. Migration release identity is declared and verified; schema drift and
     partial phase completion block startup or writes.
 13. Backup success means a verified restore, and Project import means exact
@@ -1404,6 +1607,9 @@ covers at least:
     validates the result-specific relation cardinality. It never reconstructs
     a result from a fake Activity, nullable or sentinel authority value,
     compatibility view, wrapper, dual read, or dual write.
+21. Memory Documents and Notes are Artifacts; publication, maintenance, and
+    active compaction evidence are Operational Records. Atomic publication
+    and fenced recovery prove record identity, not semantic correctness.
 
 The versioned command/query/event protocol owns exact wire DTOs and byte-limit
 values while preserving every key, scope, digest, and compatibility field in
@@ -1444,3 +1650,4 @@ defined here, and this contract does not decide their unowned semantics.
 | PGS-BOUND-008 | Sections 10.1, 10.5, and 12.1 | owner anchors plus explicit non-normative measurement/retention boundaries |
 | PGS-VERIFY-009 | Sections 0, 11.19–11.25, and 12.2 | positive verifier, route/Event cross-check, Markdown links, and negative self-test |
 | PGS-RECEIPT-010 | Sections 4.5, 5.4, 11.26, and invariants 5 and 20 | `author_edit_receipt_activity`, SQL constraints, bootstrap checksums, and PostgreSQL/HTTP exact-retry gates |
+| PGS-MEMORY-011 | Sections 0.5, 3.4, 5.7, 7.2–7.5, 8.2–8.3, 11.27–11.29, and invariant 21 | Existing family ownership and registry digest; runtime publication, copy-restriction, and recovery proof remains with later implementation |
