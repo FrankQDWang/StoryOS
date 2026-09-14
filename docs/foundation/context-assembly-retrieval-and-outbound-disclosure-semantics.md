@@ -10,15 +10,17 @@
 - Model routing boundary: [ModelGateway and Model-Routing Semantics](https://github.com/FrankQDWang/StoryOS/issues/50)
 - Ownership and deployment decision: [ADR 0004](../adr/0004-adopt-postgresql-service-and-project-isolation-boundary.md)
 - Ordered assembly decision: [ADR 0005](../adr/0005-require-ordered-context-assembly-before-destination-disclosure.md)
+- Accepted inputs: [Model continuation](../adr/0033-use-volcengine-responses-for-the-first-real-model-path.md), [hosted operations](../adr/0034-bound-provider-hosted-tool-operations.md), and [Project Memory](../adr/0035-use-background-generated-project-memory.md)
 - Research evidence: [Context Assembly, Retrieval, and Outbound Disclosure Source Audit](../research/context-assembly-retrieval-outbound-disclosure-source-audit.md)
 
 ## 1. Purpose and authority
 
 This specification defines the logical contract by which StoryOS determines,
 discovers, qualifies, selects, projects, records, and discloses context for one
-operation. It applies before project-derived information enters a model, Tool,
-MCP server, embedding service, telemetry sink, or any other processing
-destination.
+operation. It governs each StoryOS-controlled submission to a model, Tool,
+MCP server, embedding service, telemetry sink, or other processing destination.
+ADR 0033 owns model continuation, ADR 0034 owns bounded Provider-hosted work,
+and ADR 0035 owns background Project Memory.
 
 The contract exists to make a stable editor-integrated discovery-writing Agent
 useful without turning retrieval, prompt construction, provider sessions, or
@@ -43,7 +45,7 @@ authoritative or instructional domain path.
 
 ## 2. Mother contract
 
-Every destination-bound context item may advance only through the following
+Every StoryOS-controlled destination submission advances through the following
 seven semantic gates in order:
 
 1. Operation Requirement Determination;
@@ -61,13 +63,17 @@ Blocked decision advances only far enough to preserve the applicable refusal,
 candidate, and manifest evidence and never enters gate seven. Internal
 optimization may pipeline work only when durable evidence still proves the
 same ordered decisions and no destination can receive content before gate six
-commits. Any content that reaches a destination has completed all seven gates.
+commits. These are Host decisions about the submitted operation, not a claim
+that every Provider-internal step has a StoryOS gate record.
 
 If generating a Projection requires a model, Tool, MCP server, embedding
 service, or other processing destination, that generation is a separate
-operation that recursively crosses all seven gates. A Tool or MCP result that
-may enter later model context is also a new source at a new context boundary
-and crosses the complete contract again.
+operation that crosses all seven gates before StoryOS submits it. A received
+Tool, MCP, or hosted result crosses the contract before StoryOS supplies or
+references it in a later model request. A separately authorized Provider-hosted
+Operation may consume internal results before StoryOS receives them. Its
+complete admitted intake, Tool set, outward processing, and effect bounds use
+ADR 0034; do not invent a Host-controlled dispatch for each invisible step.
 
 ### 2.1 Project ownership and isolation
 
@@ -116,8 +122,8 @@ This contract creates no fourth durable truth space. Operation Requirements,
 Operation Input Snapshots, recorded Context Candidate and eligibility
 decisions, selection and ranking results, Bounded Projections, compaction
 Projections, Context Assembly and destination manifests, Outbound Disclosure
-Manifests and Events, Project Destination Grants, author context-control
-records, and Destination Attempts are Operational Records or immutable payloads
+Manifests and Events, Project Destination Grants,
+and Destination Attempts are Operational Records or immutable payloads
 owned by those records.
 
 They never become Artifacts or Authoritative State, never use Artifact
@@ -128,8 +134,9 @@ Records. Retrieval indexes and Context Cache Entries remain disposable
 projections rather than a fourth durable space.
 
 Every generated Artifact Revision records the exact Context Assembly Manifest
-through an available_as_context relation. The Manifest owns the complete
-supplied Context Source Version closure. A direct item-level relation is added
+through an available_as_context relation. The Manifest records known supplied
+source references and input provenance, not a graph of model influence.
+A direct item-level relation is added
 only when that source is one of the provenance target kinds already admitted by
 the Artifact domain model and the relation's own semantics are established;
 the Host never widens the target union or invents a Revision merely because an
@@ -138,6 +145,33 @@ supported_by, opposed_by, qualified_by, responds_to, and other closed
 provenance relations are added separately only when their own semantics are
 established; none is inferred from inclusion, disclosure, or model output. The
 Artifact remains independently explainable without replaying the Run.
+
+The [storage contract, section 6](postgresql-project-storage-isolation-and-migration-contract.md#6-canonical-payload-placement)
+owns physical persistence. Messages, Research snapshots, Memory Documents,
+conversation records, and recoverable context/operation evidence use PostgreSQL
+under their existing domain ownership. Markdown, text, and JSON describe
+content representation, not a separate persistent directory on the Server.
+Active request assembly may use process memory; durable inputs and recovery
+records cannot exist only there. Temporary files, exports, and Recovery Copies
+retain their separate purposes. Provider-held state is external and cannot
+replace StoryOS records. This contract adds no object store or file database.
+
+### 2.4 Current sources, conversation history, and active context
+
+New retrieval reads the current available source under its owning access and
+lifecycle rules. Recorded conversation items have their own identities and
+retention boundaries. Editing or ordinarily deleting a source does not rewrite
+an earlier Message, captured result, or submitted request. Do not re-resolve
+historical bytes through a mutable latest source or require proof that their
+earlier semantic influence has disappeared.
+
+Append ordinary author corrections and incomplete requests as Messages or
+Steering Input for the next safe decision boundary. The Agent interprets them
+with its available context. Earlier material may remain in active context while
+later instructions guide the work. General compaction can reduce that context;
+ordinary language does not create a semantic exclusion registry or automatic
+Provider reset. Actual access revocation, Project deletion, redaction, and
+restrictions on retained copies remain enforceable business controls.
 
 ## 3. Gate one: Operation Requirement Determination
 
@@ -245,7 +279,7 @@ For a model step, the closed default obligations are:
 | Applicable explicit Author Preferences | Included only under their exact Story and operational scope |
 | Selected Skill Instruction Context and outcome contracts | Exact selected versions only; no unselected Skill body is injected |
 | Actual Tool contracts exposed for this step | Exact ToolSpec and exposure projection needed for valid model requests |
-| Author-required Include or Pin targets | Mandatory Context Candidates, still subject to all later gates |
+| Explicitly attached or requested sources | Resolve available references under current access; ordinary wording is interpreted by the Agent, not compiled into a persistent context-control policy |
 | Manifest and sufficiency boundary | Host Control and non-degradable |
 
 Whole transcripts, manuscripts, chapters, Agent Memory, Research collections,
@@ -319,11 +353,19 @@ Dynamic Retrieval has three authorizable modes:
 2. Agent Retrieval Request is a typed request in one persisted Agent Decision,
    declaring Purpose, source classes, scope, and budget. Its results can enter
    only a later RunStep under a new Context Assembly.
-3. Author-required Retrieval arises from an explicit author instruction and
-   makes the target mandatory for discovery within that instruction's scope.
+3. Author-requested Retrieval starts from an explicit source reference or an
+   Agent interpretation of the author's request. It resolves available sources
+   without requiring a formal source/version strategy from the author.
 
-Author origin does not grant source authority, any owning-domain qualification
-including Memory Admission, budget exemption, or Disclosure Eligibility.
+Author origin does not grant source authority, access, budget exemption, or
+Disclosure Eligibility. A request with an unresolved reference may be clarified
+through the ordinary Agent loop; no exclusion or suppression record is inferred.
+
+When Memory use is enabled, a bounded navigation summary can point to currently
+published Memory Documents. The Agent searches and reads selected documents
+through ordinary retrieval tools. Do not preload all Memory or require an
+embedding index. Apply the Memory owner's separate use and generation settings;
+a Memory Note is guidance for consolidation, not an access-control rule.
 
 Speculative Context Prefetch may warm a StoryOS-controlled Project Scope-bound
 index or cache. It selects and discloses nothing. Prefetch that itself calls an
@@ -337,8 +379,8 @@ for it.
 
 Full-text, vector, graph, and other indexes are disposable projections. Their
 internal IDs, scores, copied filters, and availability carry no durable
-identity, truth, authority, Memory Admission or any other owning-domain
-qualification, permission, or disclosure right.
+identity, truth, authority, owning-domain qualification, permission, or
+disclosure right.
 
 Every lookup is constrained by exact Project Scope, and every returned hit is
 resolved to the canonical source identity and Context Source Version before
@@ -365,11 +407,12 @@ actually considered is still recorded in the manifest. A mandatory exact
 source cannot be hidden by a discovery cap; inability to resolve it follows the
 declared Degraded or Blocked behavior.
 
-Every model-visible context fragment is structured, attributable, inspectable,
+Every StoryOS-injected context fragment is structured, attributable, inspectable,
 and hard-capped. No single injected item may exceed 10K tokens. Introducing a
 new item kind that can exceed 1K tokens requires explicit design review. These
 are repository invariants, not ranking-tuning defaults. Whole-project growth,
-pagination, cache warming, and provider continuity cannot expand them.
+pagination, cache warming, and provider continuity cannot expand the permitted
+Host input. These caps do not assert a count of opaque Provider-internal items.
 
 ## 5. Gate three: Source Eligibility Gate
 
@@ -381,11 +424,8 @@ every Context Candidate the Host checks:
    requester permission;
 3. current Source Integrity and retained payload availability when owned by the
    source kind;
-4. applicable owning-domain qualifications, including Memory Admission for a
-   memory-derived or ordinary-recall Context Candidate, Lifecycle, Archive,
-   Tombstone, and Retention State;
-5. applicable Memory Suppression for a memory-derived or ordinary-recall path,
-   plus Context Exclude controls;
+4. applicable owning-domain Lifecycle, Archive, Tombstone, and Retention State;
+5. current memory-use settings when newly reading a Memory Document or summary;
 6. exact Story Scope and Epistemic Scope when the source domain defines them;
 7. source supersession, invalidation, correction, and current qualification;
 8. source and destination data-category policy;
@@ -401,6 +441,13 @@ operation Blocked.
 A qualification that the owning source domain does not define is recorded as
 not applicable rather than fabricated. If the source domain does define it,
 missing or unverifiable current evidence fails closed.
+
+Apply these checks to the source actually read or referenced. A retained
+Message or result is not a fresh read of every source mentioned inside it.
+Ordinary source changes do not recursively disqualify conversation history,
+summaries, or Provider references. A real restriction that also covers retained
+copies still applies. When that restriction cannot be enforced for an opaque
+reference, stop its reuse and admit a permitted reconstruction or record a Hold.
 
 A globally or User-reusable ToolSpec, schema, policy, Adapter definition,
 public capability description, or other definition may remain source-unscoped
@@ -483,25 +530,31 @@ Each selected item uses exactly one mode:
 | Derived Summary | Create a new lossy, source-bearing Projection with explicit generator and loss evidence |
 | Reference Only | Reveal bounded catalog information and a qualified locator without the payload |
 
-Arbitrary token slicing, silent head-tail truncation, Provider-default
-summarization, and replacement of source evidence are forbidden.
+Unrecorded truncation, unqualified Provider-default summarization, and
+replacement of original source evidence are forbidden. Optional Tool output
+may use bounded excerpts with explicit cut boundaries; Exact Required content
+retains its complete-content requirement.
 
 Every lossy Projection records:
 
 - its own immutable identity;
 - exact Project Scope;
-- every exact Context Source Version and prior Projection;
+- known exact input Context Source Versions and prior Projections;
 - Purpose, exact Processing Destination Identity, and applicable destination
   intake and disclosure policy revisions;
 - projection mode and transformation-policy version;
 - deterministic or generated producer identity;
 - input and output extents;
-- omitted ranges, semantic classes, modalities, precision, and uncertainty;
+- known omitted ranges or modalities, expected loss, and explicit uncertainty;
 - one structured Projection Loss Indicator;
 - creation operation and manifest references.
 
 A Projection never overwrites its source, changes its source's authority, or
 masquerades as original evidence.
+
+Deterministic excerpts record their exact cuts. Generated summaries record
+their actual input, generator, output, and known loss; they cannot prove an
+exhaustive list of omitted meanings. Unknown semantic loss remains unknown.
 
 Outbound data categories follow exact provenance through every excerpt,
 summary, generated query, digest, de-identification, and other transformation.
@@ -512,20 +565,33 @@ retains the more restrictive source category.
 
 ### 7.1 Compaction
 
-Context compaction is an immutable Derived Summary over one exact bounded input
-range. It preserves a transitive Compaction Source Closure containing source
-Context Source Versions, prior Projection lineages, compaction boundaries, and accumulated
-loss evidence.
+General compaction prepares bounded active context for later model calls,
+including calls within the same conversation turn and active AgentRun. It uses
+general task, progress, decision, author-constraint, and pending-work guidance.
+It is not triggered by a special class of creative instruction and does not
+promise precise forgetting or exact semantic preservation.
 
-Compaction never rewrites Messages, Run Events, Tool results, Step Snapshots,
-manifests, Proposals, or original context history. A summary of a summary may
-be produced only when the complete source closure remains inspectable and the
-new accumulated loss is recorded.
+Record the known bounded input or prior compaction reference, producer and
+generation contract, output, reported usage, and loss or unknown-state evidence.
+Re-compaction keeps available prior references and any known gaps. It requires
+neither a complete semantic influence graph nor reconstruction of all earlier
+raw content. Retained-copy access restrictions still apply to the actual input.
 
-When a model, Tool, or external service generates compaction, that generation
-is an independent seven-gate operation and an Outbound Disclosure where
-applicable. An author may Exclude a compaction Projection or its protected
-provenance closure from future unsubmitted Destination Attempts without changing history.
+Install the result only for a later request. A changed Effective Model Context
+uses a new RunStep and Model Invocation under ADR 0033. Preserve Messages, Run
+Events, Tool results, Step Snapshots, manifests, and original request evidence
+under their owning retention rules. Active compaction is not Operational
+History Compaction, deletion, or background Memory consolidation.
+
+Each additional StoryOS-controlled model, Tool, or external compaction request
+is an admitted seven-gate operation. A returned summary or native compaction
+object must satisfy the selected route's validated result contract before
+later use. Record opaque Provider output under its original mapping, with
+unknown internals clearly marked. Native compaction, context editing, cache,
+and Responses transport are separate capabilities; unknown required behavior
+blocks that path. A Host-managed summary can use ordinary admitted model work
+without claiming native support. Preserve required current instructions,
+Working Target, native Tool correlation, and pending work at the next boundary.
 
 ### 7.2 Cache and continuity
 
@@ -533,20 +599,24 @@ A Context Cache Entry is a disposable acceleration product keyed by exact
 Project Scope, Context Source Versions, policy and transformation versions,
 qualification state, destination identity, grant, and Adapter mapping.
 
-Before reuse, a Context Cache Reuse Decision revalidates source identity and
-version, every applicable owning-domain qualification such as Lifecycle,
-Tombstone, and Retention plus Memory Admission and Memory Suppression for a
-memory-derived or ordinary-recall dependency, permission, policy, destination,
-grant, and Adapter dependencies. Changed or unverifiable dependencies make the
-entry unusable immediately, even if physical invalidation is delayed.
+Before reusing cached new-source reads, revalidate current source identity,
+version, Lifecycle, Retention, memory-use settings where applicable, permission,
+policy, destination, grant, and Adapter dependencies. A stale read cannot be
+served as current content. Cached historical input uses its recorded identity
+and current retained-copy access rules, not the latest version of every source
+it mentions. Physical cache cleanup may follow logical invalidation.
 
 Provider prompt caches, prior-response handles, encrypted compaction objects,
 and session continuity are Opaque Provider Continuity. They may optimize a Wire
 Payload Projection but cannot become StoryOS history, a Context Candidate, cached
-permission, or the only evidence of Effective Destination Context. If StoryOS
-cannot prove the complete local source closure remains eligible and logically
-present, it retransmits the necessary context or blocks the dependent
-Destination Attempt.
+permission, or the only evidence of Effective Destination Context. Use ADR 0033's
+current binding, authorization, and validated request mapping. A delta/reference
+can avoid resending prior input; it does not prove internal content or attention.
+If the mapping cannot represent the new request, use admitted full input or a
+new transport continuation without replacing Project Conversation identity.
+Ordinary source changes do not automatically reset the chain. Actual revocation,
+retained-copy restrictions, explicit reset, and unusable handles retain their
+own operational boundaries.
 
 ## 8. Gate six: Context Assembly Manifest Commit
 
@@ -561,18 +631,17 @@ ContextAssemblyManifest. Conceptually it records:
 - every mandatory obligation and allowed dynamic source class;
 - every considered Context Candidate, exact Context Source Version, discovery reason, and
   eligibility result;
-- every exclusion with typed reason and governing policy or author control;
+- every rejected candidate with its applicable access or policy reason;
 - Context Trust Assessments and destination Disclosure Eligibility;
 - Ranking Profile, ranking inputs, stable outcome, and selection reasons;
 - exact selected Context Source Versions and Projections;
-- projection modes, loss indicators, and source closures;
+- projection modes, loss indicators, known input references, and evidence gaps;
 - context budgets, allocation, omissions, and unmet needs;
 - Complete, Degraded, or Blocked Context Sufficiency Decision;
 - authorization policy, grant, approval-requirement, cache-reuse, and
   transformation versions, plus any Approval already effective when the
   manifest was committed;
-- links to any predecessor assembly cancelled and rebuilt after a prospective
-  control change.
+- links to any predecessor assembly replaced at a later request boundary.
 
 Failure to durably commit the manifest prevents destination I/O. A debug log,
 trace span, reconstructed transcript, provider request object, or cache entry
@@ -582,19 +651,24 @@ The manifest proves what StoryOS considered and logically prepared. It does not
 prove destination submission, exact wire bytes, Provider retention, model
 attention, internal model use, evidentiary reliance, or output correctness.
 
-Manifests are immutable historical evidence. Later correction, Memory Suppression,
-permission revocation, retention expiry, Project Instruction update, or source
-edit changes future eligibility and may be displayed alongside history as a
-current-invalidity annotation. It never rewrites what the earlier operation
-considered or prepared.
+Manifests are immutable historical evidence. Later source changes affect new
+reads; real permission, retention, and copy restrictions affect the records
+they govern. Show current availability separately without rewriting earlier
+preparation. Known references and Provider reports do not supply exact unknown
+internal content. In this contract, request or payload closure means the
+declared input and reference dependencies, never a semantic influence graph.
 
 ## 9. Gate seven: Destination-specific Disclosure and Attempt
 
-Every destination receives its own minimum-necessary projection after gate six.
+Every StoryOS-controlled submission has its minimum-necessary projection after gate six.
 Sharing a Provider, connection, SDK, Run, or cache never combines destination
 authority.
 
 ### 9.1 Processing boundary classifications
+
+This table describes actual StoryOS-controlled submissions. A bounded hosted
+operation uses its owning submission evidence under section 9.6, not a separate
+Host Attempt for every Provider-internal destination or query.
 
 | Class | Meaning | Evidence contract by execution stage |
 |---|---|---|
@@ -625,6 +699,8 @@ One immutable DestinationContextManifest binds:
 - one Purpose and the applicable owning intake contract: Model Capability
   Profile plus Model Attempt Request for a model, or Destination Context Intake
   Contract for a non-model destination;
+- when hosted work is enabled, the complete admitted operation and its explicit
+  intake, prior-state access, Tool set, and outward-processing bounds;
 - processing-boundary class;
 - minimum-necessary selected Projections;
 - applicable policy, Project Destination Grant, Capability Grant,
@@ -660,15 +736,15 @@ revalidates that Approval. This order prevents either an immutable manifest or
 Approval from referring to an Attempt that did not yet exist.
 
 Immediately before destination I/O, the Host records one fail-closed
-Destination Attempt Admission Decision over current Project Scope, every source
-and Projection dependency, Lifecycle, applicable Memory Suppression for a
-memory-derived or ordinary-recall dependency, Context Exclude, requester
+Destination Attempt Admission Decision over current Project Scope, the actual
+source and Projection dependencies, Lifecycle, retained-copy restrictions,
+memory-use settings for newly read Memory, requester
 permission, grants and exact Tool or Destination Disclosure Approval when
 required, destination identity and current evidence revision, Registration
 status, governing intake contract, policy, and budget. Only an admitted
 Decision may submit.
 
-Any changed, revoked, expired, mismatched, or unverifiable dependency preserves
+Any invalid required dependency preserves
 the committed manifests, settles or cancels the unsubmitted Destination
 Attempt, and requires new Context Assembly. No Outbound Disclosure Event is
 created when failure is confirmed before the durable local dispatch claim. The
@@ -738,9 +814,10 @@ StoryOS distinguishes:
 
 - exactly reconstructable logical and wire content;
 - content known through an exact StoryOS-held reference;
+- Provider-reported content, processing, or usage with its original association;
 - provider-opaque continuity or internal state.
 
-Inspection may report all three but never present the provider-opaque part as
+Inspection may report all four but never present the provider-opaque part as
 exact Effective Destination Context. Exact wire inspection is limited to the
 persisted non-secret application payload and opaque secret-injection
 placeholders; it never reconstructs credential-bearing transport envelopes.
@@ -809,8 +886,16 @@ destination has an exact Destination Context Intake Contract. Only declared
 fields, source classes, Purposes, and bounded data categories may be supplied.
 Ambient Context is forbidden.
 
-Provider-hosted Tools are separate External Processing Destinations. They do
-not inherit the Model Attempt's context, Capability, or disclosure grant.
+Provider-hosted Tools do not inherit the Model Attempt's context, Capability,
+or disclosure grant. ADR 0034 binds their complete enabled set, explicit intake
+including intentionally referenced state, permitted processors and outward
+destinations, and enforceable bounds before the owning Model Attempt submits.
+When this is one physical submission, use that Model/Destination Attempt and
+its disclosure evidence; do not double-count it or invent internal dispatches.
+If the Provider cannot limit access to admitted intake and outward processing,
+the mode is ineligible. A prompt instruction alone is not enforcement.
+Internal queries, consumption, and transfers that StoryOS cannot observe stay
+unknown; returned events are Provider reports, not Host gate decisions.
 
 A StoryOS Controlled Processing Destination cannot become an unrecorded egress
 proxy. If a controlled Tool, MCP adapter, or service needs to call a downstream
@@ -848,6 +933,17 @@ When a Tool or MCP result may enter a subsequent model step:
 4. selection and Bounded Projection operate on the qualified result;
 5. new manifests and Destination Attempt evidence are committed.
 
+For Provider-hosted work, these steps govern returned-result intake and later
+StoryOS submissions. They do not assert a Host check before internal Provider
+consumption. Preserve native item/call correlation, reported source identities,
+limits, and uncertainty. Validate the returned shape, size, and source binding.
+Only the selected complete Model Attempt whose entire Agent Decision validates
+and becomes durable can enter ordinary continuation. Incomplete, rejected,
+cancelled, unselected, or fenced output remains evidence only. A validated
+partial research deliverable retains its sources and unmet objective under
+ADR 0034. Provider-reported sources are not StoryOS-captured Research snapshots
+unless StoryOS actually captures and validates them through that domain path.
+
 An MCP App remains a sandboxed view or controller over StoryOS-owned typed
 records. Its Host Context, update-model-context contribution, Tool result, and
 App Action never become ambient model context or an authoritative write path.
@@ -868,7 +964,7 @@ historical:
 - OutboundDisclosureManifests;
 - exact non-secret wire deltas plus opaque secret-injection placeholders;
 - Disclosure Events and Destination Attempts;
-- exactly reconstructable, reference-known, and provider-opaque context.
+- exact content, known references, Provider reports, and opaque internal state.
 
 Historical inspection preserves facts at operation time. Current invalidity is
 shown separately and never rewrites history. Inspection obeys current
@@ -883,91 +979,45 @@ Ordinary already-authorized Context Assembly does not pause merely because it
 is inspectable. Only an exact Capability, Approval, or destination-policy
 requirement creates an Approval Wait.
 
-### 11.2 Include
+### 11.2 Ordinary steering and source requests
 
-Include binds one exact Operation Requirement and makes a named source,
-exact Context Source Version, fragment, or domain object a Mandatory Context
-Candidate for that operation. It does not follow updates, persist into later
-Runs, or grant authority, any owning-domain qualification including Memory
-Admission, budget exemption, or disclosure permission.
+Use the general Agent loop for use this, do not use this, corrections, and
+incomplete creative requests. Record the author's Message and any explicit
+source reference. The Agent decides what to read or how to continue under the
+existing instruction hierarchy; the Host does not compile that language into
+Include, Pin, Exclude, or Suppress records, persistent negative rules, or a
+semantic removal graph. Ordinary steering takes effect at the next safe
+RunStep and cannot mutate an already submitted Attempt.
 
-### 11.3 Pin
+A selected attachment identifies a source for ordinary retrieval. It grants
+no access, authority, or disclosure permission and does not require a permanent
+follow-version strategy. When the meaning matters and remains unclear, the
+Agent can ask a normal question. Context compaction remains general capacity
+management, not deterministic compliance with a semantic forgetting request.
 
-Pin is a prospective Author Context Requirement scoped to Next Operation,
-Current AgentRun, or Project. Its source-version strategy is Exact Context
-Source Version or Follow Source Identity.
+### 11.3 Settings, Memory Notes, and business operations
 
-An Exact Context Source Version remains fixed but is rechecked for current
-lifecycle, permission, destination eligibility, and applicable Memory
-Suppression when it resolves through a memory-derived or ordinary-recall path.
-An Artifact or Authoritative State source uses its exact Revision; another
-source family uses its owning immutable version boundary rather than inventing
-a Revision. Follow Source Identity resolves the current exact Context Source
-Version through the owning domain and repeats the full eligibility process.
-Ambiguous split, merge, or deletion makes the requirement unmet; the Host never
-guesses a replacement. Suppression does not block direct governed use of the
-unchanged raw source.
+Use the Memory contract's separate use and generation settings. An explicit
+memory-change request can produce a plain-language Memory Note for later
+consolidation; it is not a per-claim suppression or admission decision.
 
-Pin requires logical consideration, not disclosure to every destination. It is
-an underlying domain control, not a context-management form the author must
-learn or routinely operate.
+Project Instruction, source edits, Archive, Tombstone, Redaction, Project
+Deletion, access permissions, and destination grants retain their owning
+settings or commands. Disabling a destination changes its use authority while
+preserving its immutable identity. The Agent may help the author use an
+available business tool; the tool applies its existing validation and approval
+contract. No contextual preference grants new authority or overrides a real
+restriction on source or retained-copy access. No action recalls prior
+external disclosure or guarantees deletion of unknown Provider-internal state.
 
-### 11.4 Exclude
+### 11.4 Default context experience
 
-Exclude applies at Operation, AgentRun, or Destination scope to a source,
-Context Source Version, fragment, data category, and protected
-derived-provenance closure. It affects only future unsubmitted Destination
-Attempts.
-
-If a ContextAssemblyManifest already committed but disclosure has not occurred,
-StoryOS preserves it, cancels the pending Destination Attempt, and performs a
-new assembly. It never edits the old manifest. A resulting mandatory gap becomes Degraded
-only under a declared fallback; otherwise it is Blocked. Past disclosures
-cannot be withdrawn.
-
-### 11.5 Suppress
-
-Suppress retains the accepted Memory Suppression semantics: it is a persistent,
-auditable ban on future memory extraction, Memory Admission, and ordinary recall that
-survives replay, Worker recovery, and index rebuild. It is not a one-operation
-Exclude, does not alter the source, and never rewrites prior Runs. Lifting
-Suppression permits fresh eligibility evaluation and does not restore old
-Memory Admission.
-
-Suppression applies when content is memory-derived or enters through ordinary
-memory recall. It does not ban direct governed use of the unchanged raw source.
-An author who wants to bar a source, fragment, provenance closure, data
-category, or its use at a destination scope uses Context Exclude. Disabling use
-of a Processing Destination Identity changes or revokes its Project Destination
-Grant or governing policy while preserving the immutable Identity record as
-non-authorizing evidence. A hard policy or Tombstone continues through its
-owning domain command.
-
-### 11.6 Control precedence
-
-Positive author controls never override hard negative boundaries:
-
-1. Tombstone, current permission, Capability, and destination policy;
-2. Memory Suppression for a memory-derived or ordinary-recall Context
-   Candidate;
-3. applicable Exclude;
-4. Include and Pin;
-5. ordinary dynamic Context Candidate ranking.
-
-Archive, Tombstone, source editing, ownership, and other domain changes use
-their own commands rather than being hidden inside context controls.
-
-### 11.7 Default context experience
-
-StoryOS must first be a stable conversational Agent that can operate on the
-editor. It automatically receives the eligible Working Target and necessary
-bounded continuity without requiring a character sheet, manual source-version
-strategy, Pin configuration, Context Manifest review, or Project Instruction.
-
-Author controls should appear as plain-language or simple direct actions such
-as use this, do not use this, or show what was sent. The domain distinctions
-remain exact underneath the UI, but their complexity is not pushed onto the
-author.
+The editor Agent automatically receives the eligible current Working Target,
+current instructions, and bounded conversation continuity. Memory can provide
+summary navigation and on-demand reads when enabled. The author need not
+configure context scopes, source versions, a character sheet, pins, manifests,
+or Project Instruction before ordinary help works. Inspection stays on demand;
+ordinary already-authorized work has no additional confirmation ceremony.
 
 ## 12. Project Instruction
 
@@ -977,9 +1027,10 @@ explicit fact that none was configured. The binding never changes in place.
 
 The bound Revision is Mandatory Context for every model step in the AgentRun
 and every descendant Subrun, which must independently reference the same
-binding. Compaction, window trimming, cache, and prior-response continuity
-cannot make it logically disappear. If StoryOS cannot establish continued
-presence, it retransmits it or blocks the dependent step.
+binding. Each request supplies the required bound instruction under the
+validated profile. Compaction, cache, and continuation cannot replace it with
+stale summary text; an unsupported mapping requires retransmission or blocks
+the step. This proves request preparation, not model attention.
 
 Updating project settings creates a new Revision for new top-level AgentRuns.
 An active AgentRun continues with its bound Revision. Immediate changes use
@@ -1019,22 +1070,22 @@ evidence; an External Processing Destination additionally uses its Outbound
 Disclosure Event, and a Provider-backed destination uses available Provider
 evidence. Missing type-inapplicable evidence is not fabricated.
 
-A safe retry is a new Destination Attempt. It revalidates all current source,
-policy, applicable Memory Suppression for a memory-derived or ordinary-recall
-dependency, retention, grant, destination, and budget dependencies. If the
+A safe retry is a new Destination Attempt. It revalidates its actual input,
+retained-copy restrictions, current source-read permissions, policy, retention,
+grant, destination, and budget dependencies. If the
 prior Destination Attempt may have submitted, the successor requires authority
 and budget for an additional disclosure and cannot erase the predecessor's
 uncertainty.
 
-Source correction, permission revocation, and retention expiry invalidate the
-future retrieval, Projection, and cache dependencies they govern as soon as the
-canonical change is effective. Memory Suppression invalidates memory-derived
-and ordinary-recall dependencies, not direct governed use of the unchanged raw
-source. A Project Destination Grant change invalidates assemblies,
-Projections, Destination Attempts, and caches bound to that exact destination
-grant, not unrelated internal retrieval or another destination. Physical cache
-cleanup may occur later, but every affected stale dependency is immediately
-ineligible.
+Source changes affect future reads and caches of those reads, without rewriting
+captured conversation history or automatically invalidating its continuation.
+Real permission, redaction, deletion, or retention restrictions apply to the
+exact sources and retained copies they govern as soon as effective. A Project
+Destination Grant change affects operations bound to that grant, not unrelated
+internal retrieval or another destination. Physical cleanup may follow logical
+ineligibility. When permitted continuation is unusable, apply ADR 0033's bounded
+recovery; missing responses do not prove expiry or authorize unknown effects
+to be repeated. Cancellation and predecessor fences remain in force.
 
 No recovery, compaction, or cache process rewrites historical Context Candidates,
 manifests, Projections, Disclosure Events, Destination Attempts, or the exact context
@@ -1042,15 +1093,15 @@ evidence held by a prior Run.
 
 ### 13.1 Contract-change and migration impact
 
-This is a breaking semantic contract for future persisted context, disclosure,
-authorization, event, and recovery representations. At acceptance time StoryOS
-has no production Rust workspace, PostgreSQL schema, or persisted production
-runtime data; the existing prototypes are not production contract stores.
-Therefore no live-data migration or compatibility reader is required for this
-decision. The PostgreSQL and versioned-protocol tickets must implement only the
-accepted forms, exact identities, sequencing, and certainty distinctions in
-this specification. Any later change after those forms are persisted must
-provide an explicit schema, event, replay, cache, and recovery migration path.
+This revision changes planned context controls, compaction evidence, continuation,
+and hosted-result boundaries. StoryOS already has a Rust workspace, PostgreSQL
+schema, editor runtime, and generated contracts. This documentation revision
+changes none of those physical formats and is not a migration.
+The protocol, storage, and retention owners must compare their current forms
+and published tickets with this contract, remove obsolete semantic controls,
+and identify any affected persisted forms before implementation. A required
+schema, event, replay, cache, export, or recovery migration must be explicit;
+do not infer compatibility from this planning PR.
 
 ## 14. Downstream ownership
 
@@ -1060,8 +1111,8 @@ This specification fixes semantics and hands off physical or wire realization:
 |---|---|---|
 | [PostgreSQL Project Storage, Isolation, and Migration Contract](postgresql-project-storage-isolation-and-migration-contract.md) | tables, constraints, transactions, indexes, payload storage, migrations, backup, restore, export, and Credential Reference integration | manifest-before-egress durability, immutable history, exact Project Scope, cache invalidation, rebuildable indexes |
 | [StoryOS Service, Client, and External Trust Boundaries Threat Model](storyos-service-client-external-trust-boundaries-threat-model.md), resolving [Threat-Model the StoryOS Service, Client, and External Trust Boundaries](https://github.com/FrankQDWang/StoryOS/issues/57) | credible attack paths, structural mitigations, residual risks, verification evidence, and downstream security ownership | orthogonal trust axes, fail-closed eligibility, destination-specific grants, no ambient context |
-| [Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | DTOs, schemas, commands, event envelopes, compatibility, and errors | all exact identities, Revisions, manifests, controls, attempts, and Project Scope |
-| [Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | fake destinations, property tests, crash/retry/replay and isolation tests | seven ordered gates, no disclosure before commit, recursive boundaries, uncertainty preservation |
+| [Versioned Command, Query, Artifact, and Event Protocol](https://github.com/FrankQDWang/StoryOS/issues/58) | DTOs, schemas, commands, event envelopes, compatibility, and errors | exact identities, current settings, known/opaque context evidence, hosted operation, attempts, and Project Scope; remove obsolete semantic controls |
+| [Deterministic Verification and Failure-Recovery Gates](https://github.com/FrankQDWang/StoryOS/issues/60) | fake destinations, crash/retry/replay and isolation tests | seven gates at Host-controlled boundaries, bounded hosted intake, ordinary steering, compaction transitions, and uncertainty; no semantic-correctness oracle |
 | [Record the Deferred Eval Observation Boundary](https://github.com/FrankQDWang/StoryOS/issues/61) | Future observation surface outside MVP; no current design or implementation handoff | Existing Context and disclosure evidence keeps its independent runtime contract |
 | [AI-Independent Editor-First Release Baseline and Handoff](https://github.com/FrankQDWang/StoryOS/issues/62) | implementation slice and acceptance gate | zero-configuration manual editor, later external model and embedding APIs, Provider neutrality |
 | [Run Event, Mailbox, Snapshot, Retention, and Archival Semantics](run-event-mailbox-snapshot-retention-and-archival-semantics.md) | long-term retention, payload redaction, archival, export, and deletion | historical context truth, compaction lineage, manifest and disclosure evidence |
@@ -1069,6 +1120,10 @@ This specification fixes semantics and hands off physical or wire realization:
 No new follow-up ticket is required. These existing owners cover every
 remaining physical, security, protocol, verification, slice, and retention
 decision exposed by this contract.
+Their older contracts and stage tickets are not declared aligned by this
+revision. Release and proof revisions precede /to-spec and the user-approved
+/to-tickets refresh. Stage 3 and later product implementation remains on
+EXECUTION HOLD; exact Provider account/model qualification remains separate.
 
 ## 15. Required verification scenarios
 
@@ -1087,20 +1142,20 @@ Downstream implementation and verification must cover at least:
    authorization before disclosure.
 4. An ineligible mandatory source produces the declared Degraded outcome or
    Blocked and never survives as a lower-ranked warning.
-5. A suppressed high-similarity memory hit is excluded before ranking.
+5. Disabled Memory use prevents a new summary/document read even when its
+   retrieval score is high; an index hit grants no access.
 6. Ranking changes selection but cannot change source authority, evidence
    status, or disclosure permission.
 7. An Exact Required item that cannot fit blocks or reroutes and is never
    silently summarized.
-8. A model-generated compaction summary runs as a separate seven-gate operation
-   and retains complete source closure and loss evidence.
-9. Current applicable Memory Suppression for a memory-derived or
-   ordinary-recall dependency, or permission revocation, prevents reuse of an
-   otherwise valid Provider cache entry.
+8. Compaction between calls in one turn records its admitted input, output,
+   known references, and loss/unknown facts without changing prior requests.
+9. Real permission or retained-copy restrictions prevent an otherwise valid
+   cache or opaque reference from bypassing current admission.
 10. A Tool or MCP result becomes Data-only Context Candidate content for a later step
     and crosses all seven gates again.
-11. Exclude after assembly but before submission preserves the old manifest,
-    cancels pending work, and creates new assembly evidence.
+11. Ordinary non-use guidance appends a Message without creating an exclusion
+    registry, mutating past input, or automatically resetting continuation.
 12. Updating Project Instruction does not change an active AgentRun binding;
     a new top-level AgentRun receives the new Revision.
 13. A Subrun independently proves the same Project Instruction Binding and
@@ -1126,11 +1181,10 @@ Downstream implementation and verification must cover at least:
 20. Historical inspection preserves what an earlier operation considered,
     selected, projected, prepared, and durably claimed for dispatch, together
     with its best-known submission certainty, after later source correction or
-    Memory Suppression. It describes content as sent only when confirmation
+    Memory update. It describes content as sent only when confirmation
     evidence establishes ConfirmedSubmitted.
-21. A policy, permission, grant, applicable Memory Suppression for a
-    memory-derived or ordinary-recall dependency, Exclude, Lifecycle, or
-    destination change after manifest commit but before I/O makes final
+21. An invalid required policy, permission, grant, retained-copy, Lifecycle, or
+    destination dependency after manifest commit but before I/O makes final
     Destination Attempt admission fail, causes no dispatch, and requires new
     Context Assembly.
 22. A StoryOS-controlled Tool adapter that calls an external search API records
@@ -1141,12 +1195,27 @@ Downstream implementation and verification must cover at least:
     records explicit not-applicable Workspace Context and Working Target facts,
     its exact typed cause, and an Operation Input Snapshot rather than inventing
     an AgentRun, RunStep, editor selection, or author instruction.
+24. New source reads reflect source edits or deletion while retained conversation
+    items keep their identities and applicable access/retention boundaries.
+25. A bounded Memory summary navigates to on-demand document reads. Memory
+    updates and Notes do not rewrite history or become instruction authority.
+26. A hosted operation binds its complete intake and outward-processing bounds
+    before submission. Its actual submitted Attempt is counted once; invisible
+    internal queries remain unknown. Returned reports are not Host observations.
+27. Rejected, cancelled, incomplete, or fenced hosted output cannot advance
+    ordinary continuation; a complete validated partial result retains limits.
+28. An incompatible delta/reference mapping uses admitted full input or a new
+    transport continuation without changing conversation identity. Unknown
+    native compaction capability cannot be inferred from Responses support.
+
+These cases prove Host transitions and evidence, not that a model understood
+every instruction, forgot a source, or produced an exact semantic summary.
 
 ## 16. Normative invariants
 
 1. Every project-bearing fact binds one exact Project Scope.
-2. No Context Assembly gate is skipped, merged, inverted, or retroactively
-   simulated.
+2. No gate is skipped, merged, inverted, or retroactively simulated for a
+   StoryOS-controlled submission; hosted internal steps use ADR 0034's boundary.
 3. Purpose and destination permission exist before Candidate Discovery.
 4. Mandatory means considered, not automatically eligible or disclosed.
 5. Non-degradable context never disappears through ranking, budgeting,
@@ -1160,8 +1229,8 @@ Downstream implementation and verification must cover at least:
     Author Plan.
 11. Every lossy Projection is a new immutable, source-bearing item with explicit
     loss evidence.
-12. Excerpts preserve complete domain units and exact omission boundaries.
-13. External generation of a Projection recursively crosses all seven gates.
+12. Excerpts identify exact cut boundaries; required complete content is not cut.
+13. Each StoryOS-submitted Projection generation crosses all seven gates.
 14. Compaction never rewrites source or historical context evidence.
 15. Cache reuse revalidates all current eligibility and destination
     dependencies.
@@ -1175,7 +1244,8 @@ Downstream implementation and verification must cover at least:
 17. Opaque Provider Continuity is never StoryOS history or cached permission.
 18. A ContextAssemblyManifest commits before any destination submission.
 19. A manifest proves StoryOS preparation, not submission or destination use.
-20. Every destination receives a separately minimized and authorized context.
+20. Each submitted operation has minimized input and authorized destination
+    bounds, including its permitted hosted processors and outward processing.
 21. Every local outbound dispatch or redispatch has its own Disclosure Event
     and Destination Attempt evidence with explicit submission certainty;
     OutcomeUnknown is treated conservatively without being called confirmed
@@ -1184,11 +1254,10 @@ Downstream implementation and verification must cover at least:
 23. Provider promises and retention labels never undo Outbound Disclosure.
 24. Tool and MCP execution trust never grants truth or Instruction Authority to
     returned content.
-25. Tool and MCP results cross the entire contract again before later context
-    use.
-26. Positive author controls never override Tombstone, permission, Capability,
-    destination policy, applicable Memory Suppression for a memory-derived or
-    ordinary-recall Context Candidate, or applicable Exclude.
+25. Received Tool, MCP, and hosted results cross the contract before a later
+    StoryOS submission; invisible internal consumption is not Host admission.
+26. Author guidance never overrides source/retained-copy access, Capability,
+    destination policy, or actual Memory settings.
 27. Inspect never rewrites history or presents provider-opaque inference as
     exact fact.
 28. Project Instruction is optional for the author but mandatory model context
@@ -1202,7 +1271,7 @@ Downstream implementation and verification must cover at least:
     dependency.
 33. Current model and embedding inference always use external APIs.
 34. Historical context and disclosure evidence is never rewritten by later
-    source, policy, permission, Memory Suppression, retention, or cache changes.
+    source, policy, permission, Memory, retention, or cache changes.
 35. StoryOS never claims that a model internally used content merely because
     StoryOS selected, sent, or referenced it.
 36. Projection, summarization, query generation, hashing, and de-identification
