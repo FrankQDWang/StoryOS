@@ -40,6 +40,32 @@ def fail(message: str, errors: list[str]) -> None:
     errors.append(message)
 
 
+def internal_event_references(producers: list[dict[str, Any]], owners: dict[str, Any], events: dict[str, Any], errors: list[str]) -> set[str]:
+    names: set[str] = set()
+    references: set[str] = set()
+    for producer in producers:
+        name = producer.get("name")
+        if not isinstance(name, str) or not name or name in names:
+            fail(f"invalid or duplicate internal producer name: {name!r}", errors)
+        else:
+            names.add(name)
+        if producer.get("public_route") is not None:
+            fail(f"non-public operation {name} has a public route", errors)
+        if producer.get("source") not in owners:
+            fail(f"non-public operation {name} has unknown source owner", errors)
+        produced = producer.get("public_events", [])
+        if not isinstance(produced, list) or any(not isinstance(event, str) for event in produced):
+            fail(f"internal producer {name} has invalid Event references", errors)
+            continue
+        if len(produced) != len(set(produced)):
+            fail(f"internal producer {name} repeats an Event reference", errors)
+        for event in produced:
+            if event not in events:
+                fail(f"internal producer {name} references missing Event {event}", errors)
+            references.add(event)
+    return references
+
+
 def event_schema_family(schema_id: str, event_kind: str) -> str | None:
     dashed = event_kind.replace("_", "-")
     prefix = f"storyos.event.{dashed}.v"
@@ -685,11 +711,18 @@ def main() -> int:
             if boundary not in notes:
                 fail(f"getApplyAuthorEditOutcome notes omit boundary: {boundary}", errors)
 
-    for non_public in catalog.get("non_public_operations", []):
-        if non_public.get("public_route") is not None:
-            fail(f"non-public operation {non_public.get('name')} has a public route", errors)
-        if non_public.get("source") not in owners:
-            fail(f"non-public operation {non_public.get('name')} has unknown source owner", errors)
+    internal_events = internal_event_references(
+        catalog.get("non_public_operations", []), owners, event_by_id, errors
+    )
+    if "--self-test" in sys.argv:
+        producer = {"name": "fixture", "source": next(iter(owners)), "public_route": None, "public_events": [next(iter(event_by_id))]}
+        fixture_errors: list[str] = []
+        assert internal_event_references([producer], owners, event_by_id, fixture_errors) == set(producer["public_events"])
+        assert not fixture_errors
+        for invalid in ([producer, producer], [{**producer, "public_route": "/forbidden"}], [{**producer, "source": "missing"}], [{**producer, "public_events": ["missing"]}], [{**producer, "public_events": producer["public_events"] * 2}]):
+            fixture_errors = []
+            internal_event_references(invalid, owners, event_by_id, fixture_errors)
+            assert fixture_errors, "internal producer corruption must fail closed"
 
     for non_public in catalog.get("non_public_events", []):
         if non_public.get("public_schema") is not None:
@@ -697,7 +730,7 @@ def main() -> int:
         if non_public.get("source") not in owners:
             fail(f"non-public event {non_public.get('name')} has unknown source owner", errors)
 
-    referenced_events = set()
+    referenced_events = set(internal_events)
     for operation in operations:
         activity = operation.get("activity", {})
         if isinstance(activity, dict):

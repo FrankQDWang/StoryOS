@@ -140,6 +140,42 @@ async fn public_challenge_route_reaches_the_project_store_after_security_validat
 }
 
 #[tokio::test]
+async fn public_challenge_route_refuses_retired_semantic_context_controls() {
+    let mut request = challenge_request(Some(ORIGIN), /*referer*/ None);
+    *request.body_mut() = Body::from(
+        serde_json::json!({
+            "method": "POST",
+            "route_template": "/api/v1/projects/{project_id}/context-controls",
+            "command_schema": "storyos.command.update-context-controls.request.v1",
+            "canonical_command_digest": {
+                "algorithm": "sha256",
+                "profile": "storyos.command.updateContextControls.jcs.v1",
+                "value_hex_lowercase": "a".repeat(64)
+            },
+            "idempotency_key": "018f0000-0000-7001-8000-000000000004"
+        })
+        .to_string(),
+    );
+    let response = router_with_config(challenge_config())
+        .oneshot(request)
+        .await
+        .expect("public request should complete");
+
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = to_bytes(response.into_body(), /*limit*/ 4096)
+        .await
+        .expect("refusal body should be bounded");
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+        serde_json::json!({
+            "schema_id": "storyos.problem.v1",
+            "code": "command_target_refused",
+            "message": "The command target is not in the closed Release 1 contract."
+        })
+    );
+}
+
+#[tokio::test]
 async fn public_challenge_route_accepts_case_insensitive_json_content_type() {
     let mut request = challenge_request(Some(ORIGIN), None);
     request.headers_mut().insert(
