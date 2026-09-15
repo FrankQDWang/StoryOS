@@ -6,9 +6,13 @@ import { test } from "vitest";
 import {
   createProject,
   createProjectChallenge,
+  createProjectCommandChallenge,
+  digestUpdateProject,
   getProject,
+  updateProject,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { CreateProjectChallengeRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { UpdateProjectRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   queryStoryOSPostgres as queryPostgres,
@@ -181,6 +185,109 @@ test("createProject creates one empty Project, replays, and fails closed", async
       }),
       (error) => protocolFailure(error, 409),
     );
+  } finally {
+    await stopRealServer(server);
+  }
+});
+
+test("createProject replays its creation evidence after rename and restart", async () => {
+  let { baseUrl, server } = await startRealServer();
+  try {
+    const responseBodies: string[] = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      const response = await browserFetch(baseUrl, "session-a")(input, init);
+      if (response.ok && response.url.endsWith("/api/v1/projects")) {
+        responseBodies.push(await response.clone().text());
+      }
+      return response;
+    };
+    const idempotencyKey = "018f0000-0000-7001-8000-000000000503";
+    const challengeInput = challengeRequest(idempotencyKey, "Original Novel");
+    const challenge = await createProjectChallenge({ baseUrl, fetchImpl, request: challengeInput });
+    const projectId = challenge.prospective_project_id;
+    const request = {
+      command_schema: challengeInput.command_schema,
+      prospective_project_id: projectId,
+      create_project_input: challengeInput.create_project_input,
+    };
+    const submitCreate = () => createProject({
+      baseUrl, fetchImpl, idempotencyKey, antiForgery: challenge.nonce, request,
+    });
+    const first = await submitCreate();
+    const firstBody = responseBodies[0];
+    assert.ok(firstBody);
+    const renameRequest: UpdateProjectRequest = {
+      command_schema: "storyos.command.update-project.request.v1",
+      update_project_input: {
+        ...challengeInput.create_project_input,
+        title: "Current Novel",
+        expected_project_revision: "1",
+      },
+    };
+    const renameKey = "018f0000-0000-7001-8000-000000000504";
+    const renameChallenge = await createProjectCommandChallenge({
+      baseUrl, fetchImpl, projectId,
+      request: {
+        method: "PATCH",
+        route_template: "/api/v1/projects/{project_id}",
+        command_schema: renameRequest.command_schema,
+        canonical_command_digest: await digestUpdateProject(renameRequest),
+        idempotency_key: renameKey,
+      },
+    });
+    await updateProject({
+      baseUrl, fetchImpl, projectId, idempotencyKey: renameKey,
+      antiForgery: renameChallenge.nonce, request: renameRequest,
+    });
+    assert.deepEqual(await submitCreate(), first);
+    assert.equal(responseBodies.at(-1), firstBody);
+    await stopRealServer(server);
+    ({ baseUrl, server } = await startRealServer());
+    assert.deepEqual(await submitCreate(), first);
+    assert.equal(responseBodies.at(-1), firstBody);
+    const current = await getProject({ baseUrl, fetchImpl, projectId });
+    assert.equal(current.project.title, "Current Novel");
+
+    const countsQuery = `SELECT json_build_object(
+      'projects', (SELECT count(*) FROM storyos.projects
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid),
+      'receipts', (SELECT count(*) FROM storyos.domain_receipts
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND command_kind = 'createProject'),
+      'admissions', (SELECT count(*) FROM storyos.author_command_admissions
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND command_kind = 'createProject'),
+      'activities', (SELECT count(*) FROM storyos.project_activity_event_payloads
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+          AND event_kind = 'project_created'))::text`;
+    const counts: unknown = JSON.parse(await queryPostgres(countsQuery));
+    assert.deepEqual(counts, { projects: 1, receipts: 1, admissions: 1, activities: 1 });
+
+    await queryPostgres(`BEGIN; SET LOCAL session_replication_role = replica;
+      UPDATE storyos.project_activity_event_payloads
+         SET payload = jsonb_set(payload, '{title}', '"Damaged original title"'::jsonb)
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+         AND event_kind = 'project_created'; COMMIT`);
+    await assert.rejects(submitCreate(), (error) => {
+      const problem = requireStoryOSProtocolError(error);
+      return problem.status === 503
+        && JSON.parse(problem.responseBody ?? "{}").code === "project_store_unavailable";
+    });
+    assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), counts);
+    assert.deepEqual(await getProject({ baseUrl, fetchImpl, projectId }), current);
+    await queryPostgres(`BEGIN; SET LOCAL session_replication_role = replica;
+      DELETE FROM storyos.project_activity_event_payloads
+       WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
+         AND event_kind = 'project_created'; COMMIT`);
+    await assert.rejects(submitCreate(), (error) => {
+      const problem = requireStoryOSProtocolError(error);
+      return problem.status === 409
+        && JSON.parse(problem.responseBody ?? "{}").code === "idempotency_binding_conflict";
+    });
+    assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), {
+      projects: 1, receipts: 1, admissions: 1, activities: 0,
+    });
+    assert.deepEqual(await getProject({ baseUrl, fetchImpl, projectId }), current);
   } finally {
     await stopRealServer(server);
   }

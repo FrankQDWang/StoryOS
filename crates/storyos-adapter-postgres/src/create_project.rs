@@ -384,7 +384,7 @@ async fn read_create_project_settlement(
                         receipt.receipt_id::text,
                         to_char(receipt.created_at AT TIME ZONE 'UTC',
                                 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                        project.title,
+                        payload.payload::text,
                         payload.project_activity_position::text,
                         payload.project_activity_event_id::text
                    FROM storyos.domain_receipts AS receipt
@@ -424,6 +424,24 @@ async fn read_create_project_settlement(
             .await
             .map_err(create_project_database_error)?
             .ok_or(CreateProjectError::BindingConflict)?;
+        let creation: serde_json::Value = serde_json::from_str(&row.get::<_, String>(4))
+            .map_err(|error| CreateProjectError::Unavailable(Box::new(error)))?;
+        let title = creation
+            .as_object()
+            .filter(|payload| {
+                payload.len() == 3
+                    && payload.get("kind").and_then(serde_json::Value::as_str)
+                        == Some("project_created")
+                    && payload.get("open_kind").and_then(serde_json::Value::as_str) == Some("empty")
+            })
+            .and_then(|payload| payload.get("title"))
+            .and_then(serde_json::Value::as_str)
+            .filter(|title| *title == command.title)
+            .ok_or_else(|| {
+                CreateProjectError::Unavailable(Box::new(std::io::Error::other(
+                    "The original Create Project evidence is invalid",
+                )))
+            })?;
         Ok(CreateProjectSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -431,7 +449,7 @@ async fn read_create_project_settlement(
                 receipt_id: row.get(2),
             },
             receipt_created_at: row.get(3),
-            title: row.get(4),
+            title: title.to_owned(),
             project_activity_position: row
                 .get::<_, String>(5)
                 .parse::<u64>()
