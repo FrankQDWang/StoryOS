@@ -38,7 +38,7 @@ The migration must preserve all existing runtime named exports and all observabl
 
 External and persisted values enter Web Client code as `unknown`. The existing validation seams must narrow those values before use. These seams include protocol-profile, Project, Chapter, Editor Session, Local Edit Journal snapshot and payload-chain, Activity Event and Snapshot, outcome, and settlement validation. A generated declaration that describes the expected DTO does not replace runtime validation.
 
-IndexedDB remains version 3. Its stores remain `metadata`, `partitions`, `payload_chains`, `intents`, `submission_groups`, `transport_capsules`, `transport_attempts`, `protocol_observations`, `outcome_query_attempts`, and `outcome_query_observations`. Database names, session keys, strict durability, upgrade rules, and all recovery meaning remain unchanged. PostgreSQL schemas, queries, and transaction meaning remain unchanged.
+This adoption retained IndexedDB version 3. [ADR 0036](0036-bound-active-journal-reads-with-retained-history.md) now owns version 4 and its atomic version 3 upgrade. Its stores remain `metadata`, `partitions`, `payload_chains`, `intents`, `submission_groups`, `transport_capsules`, `transport_attempts`, `protocol_observations`, `outcome_query_attempts`, and `outcome_query_observations`. Database names, session keys, strict durability, and all recovery meaning remain unchanged. PostgreSQL schemas, queries, and transaction meaning remain unchanged.
 
 ## Generated Release 1 artifacts
 

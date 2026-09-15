@@ -280,6 +280,7 @@ export async function freezeOneIntentSubmission(
       covered_sequence_range: coveredSequenceRange }, cryptoImpl),
   ]);
   const group: JournalSubmissionGroup = {
+    working_set_partition_id: workspace.partition.journal_partition_id,
     journal_submission_group_id: uuidV7(cryptoImpl),
     journal_partition_id: workspace.partition.journal_partition_id,
     project_scope: workspace.partition.project_scope,
@@ -312,11 +313,11 @@ export async function freezeOneIntentSubmission(
       requestResult(transaction.objectStore("metadata").get("schema")),
       requestResult(transaction.objectStore("partitions")
         .get(workspace.partition.journal_partition_id)),
-      requestResult(transaction.objectStore("intents").index("partition")
+      requestResult(transaction.objectStore("intents").index("working_partition")
         .getAll(workspace.partition.journal_partition_id, 2401)),
-      requestResult(transaction.objectStore("payload_chains").index("partition")
+      requestResult(transaction.objectStore("payload_chains").index("working_partition")
         .getAll(workspace.partition.journal_partition_id, 2401)),
-      requestResult(durableGroups.index("partition")
+      requestResult(durableGroups.index("working_partition")
         .getAll(workspace.partition.journal_partition_id, 2401)),
     ]);
   if ((schema as { version?: unknown } | undefined)?.version !== JOURNAL_DATABASE_VERSION
