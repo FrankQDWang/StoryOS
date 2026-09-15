@@ -247,7 +247,11 @@ async fn post_chapter(
     chapter_id
 }
 
-async fn open_session(store: &PostgresProjectReader, scope: &ProjectScope, suffix: &str) -> String {
+pub(super) async fn open_session(
+    store: &PostgresProjectReader,
+    scope: &ProjectScope,
+    suffix: &str,
+) -> String {
     let issue = command_issue(
         scope,
         suffix,
@@ -342,7 +346,7 @@ async fn open_admin() -> tokio_postgres::Client {
     admin
 }
 
-async fn undo_named(
+pub(super) async fn undo_named(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     editor_session_id: &str,

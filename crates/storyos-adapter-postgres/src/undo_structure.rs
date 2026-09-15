@@ -343,37 +343,9 @@ async fn restore_volume_update_sibling_order(
     let mut ids = ordered_ids;
     let moved = ids.remove(current_index);
     ids.insert((*prior_order - 1) as usize, moved);
-    client
-        .execute(
-            "UPDATE storyos.manuscript_objects
-                SET tree_order = tree_order + 1000000
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND object_kind = 'volume'",
-            &[
-                &command.project_scope.owner_user_id.as_ref(),
-                &command.project_scope.project_id.as_ref(),
-            ],
-        )
+    crate::volume_storage_order::persist_volume_storage_order(client, &command.project_scope, &ids)
         .await
-        .map_err(undo_database_error)?;
-    for (index, live_volume_id) in ids.iter().enumerate() {
-        let tree_order = (index + 1).to_string();
-        client
-            .execute(
-                "UPDATE storyos.manuscript_objects
-                    SET tree_order = $3::text::bigint
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND manuscript_object_id = $4::text::uuid AND object_kind = 'volume'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                    &tree_order,
-                    live_volume_id,
-                ],
-            )
-            .await
-            .map_err(undo_database_error)?;
-    }
+        .map_err(UndoLatestAuthorActionError::Unavailable)?;
     Ok(())
 }
 

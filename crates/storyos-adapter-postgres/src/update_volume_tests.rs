@@ -16,6 +16,9 @@ use tokio_postgres::NoTls;
 #[path = "update_volume_rank_batch_tests.rs"]
 mod rank_batch_tests;
 
+#[path = "update_volume_storage_order_tests.rs"]
+mod storage_order_tests;
+
 const USER_A: &str = "018f0000-0000-7001-8000-000000000001";
 const USER_B: &str = "018f0000-0000-7001-8000-000000000101";
 const CLIENT: &str = "storyos.web-client.release-1.v3";

@@ -125,6 +125,7 @@ mod undo_structure;
 mod update_chapter;
 mod update_project;
 mod update_volume;
+mod volume_storage_order;
 
 use std::sync::Arc;
 use std::time::Duration;

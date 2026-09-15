@@ -18,6 +18,7 @@ async fn durable_project_rows(
         "author_action_entries",
         "project_snapshots",
         "command_idempotency",
+        "volume_removal_decisions",
     ] {
         let sql = format!(
             "SELECT jsonb_agg(to_jsonb(row) ORDER BY to_jsonb(row)::text)::text
@@ -37,13 +38,39 @@ async fn durable_project_rows(
     rows
 }
 
+async fn removed_volume_state(
+    admin: &tokio_postgres::Client,
+    scope: &ProjectScope,
+) -> serde_json::Value {
+    let json: String = admin
+        .query_one(
+            "SELECT jsonb_agg(jsonb_build_object('volume', to_jsonb(volume),
+                                                'removal', to_jsonb(removal))
+                              ORDER BY volume.manuscript_object_id)::text
+               FROM storyos.manuscript_objects AS volume
+               JOIN storyos.volume_removal_decisions AS removal
+                 ON removal.owner_user_id = volume.owner_user_id
+                AND removal.project_id = volume.project_id
+                AND removal.volume_id = volume.manuscript_object_id
+              WHERE volume.owner_user_id = $1::text::uuid AND volume.project_id = $2::text::uuid",
+            &[&scope.owner_user_id.as_ref(), &scope.project_id.as_ref()],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    serde_json::from_str(&json).unwrap()
+}
+
 #[tokio::test]
 #[ignore = "run through scripts/verify-project-scope.sh"]
 async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement() {
     let _test_guard = crate::author_edit::tests::AUTHOR_EDIT_TEST_LOCK
         .lock()
         .await;
-    let store = PostgresProjectReader::new(std::env::var("STORYOS_TEST_DATABASE_URL").unwrap());
+    let mut store = PostgresProjectReader {
+        challenge_rate_clock_unix_seconds: Some(60),
+        ..PostgresProjectReader::new(std::env::var("STORYOS_TEST_DATABASE_URL").unwrap())
+    };
     let (admin, connection) = tokio_postgres::connect(
         &std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL").unwrap(),
         NoTls,
@@ -92,7 +119,7 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
            SELECT count(*) INTO changed FROM new_rows n JOIN old_rows o
              USING (owner_user_id, project_id, manuscript_object_id)
             WHERE n.object_kind = 'volume' AND n.tree_order IS DISTINCT FROM o.tree_order
-              AND n.tree_order <= 1000000;
+              AND n.tree_order < o.tree_order;
            IF changed > 0 AND (SELECT fail_rank FROM public.storyos_issue_687_counts) THEN
              RAISE EXCEPTION 'injected Volume rank failure';
            END IF;
@@ -163,6 +190,39 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         .await
         .unwrap();
 
+    admin
+        .execute(
+            "UPDATE storyos.manuscript_objects SET tree_order = 9223372036854775807
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND manuscript_object_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &volumes[1],
+            ],
+        )
+        .await
+        .unwrap();
+    let before_overflow = durable_project_rows(&admin, &scope).await;
+    let Err(UpdateVolumeError::Unavailable(error)) = update_volume(&store, &command).await else {
+        panic!("storage-key exhaustion must fail atomically");
+    };
+    assert!(format!("{error:?}").contains("E22003"));
+    assert_eq!(durable_project_rows(&admin, &scope).await, before_overflow);
+    admin
+        .execute(
+            "UPDATE storyos.manuscript_objects SET tree_order = 2
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND manuscript_object_id = $3::text::uuid",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &volumes[1],
+            ],
+        )
+        .await
+        .unwrap();
+
     let mut first_command = None;
     let mut first_settlement = None;
     for (index, order, title, expected_ids, expected_titles, expected_calls) in [
@@ -176,13 +236,53 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
         ),
         (
             1,
+            3,
+            "Volume 4",
+            [0, 2, 3],
+            ["Volume 1", "Volume 3", "Volume 4"],
+            (4, 1, 3),
+        ),
+        (
+            2,
+            3,
+            "Renamed 4",
+            [0, 2, 3],
+            ["Volume 1", "Volume 3", "Renamed 4"],
+            (2, 0, 0),
+        ),
+        (
+            3,
             1,
             "Renamed 4",
             [3, 0, 2],
             ["Renamed 4", "Volume 1", "Volume 3"],
-            (2, 0, 0),
+            (4, 1, 3),
+        ),
+        (
+            4,
+            3,
+            "Renamed 4",
+            [0, 2, 3],
+            ["Volume 1", "Volume 3", "Renamed 4"],
+            (4, 1, 3),
         ),
     ] {
+        store.challenge_rate_clock_unix_seconds = Some(120 + index as i64 * 60);
+        if index == 3 {
+            admin
+                .execute(
+                    "UPDATE storyos.manuscript_objects SET tree_order = 1000002
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                        AND manuscript_object_id = $3::text::uuid",
+                    &[
+                        &scope.owner_user_id.as_ref(),
+                        &scope.project_id.as_ref(),
+                        &volumes[1],
+                    ],
+                )
+                .await
+                .unwrap();
+        }
         admin
             .execute(
                 "UPDATE public.storyos_issue_687_counts
@@ -191,8 +291,9 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
             )
             .await
             .unwrap();
+        let removed_before = removed_volume_state(&admin, &scope).await;
         let revision = 6 + index;
-        let suffix = format!("{:04x}", 0x6876 + index);
+        let suffix = format!("{:04x}", 0x7051 + index);
         let bytes = format!(
             r#"{{"expected_tree_revision":"{revision}","order":"{order}","title":"{title}"}}"#
         )
@@ -273,21 +374,7 @@ async fn volume_rank_batch_keeps_sparse_order_tombstones_and_atomic_settlement()
                 settlement.project_activity_position
             )
         );
-        let removed_key: i64 = admin
-            .query_one(
-                "SELECT tree_order FROM storyos.manuscript_objects
-              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND manuscript_object_id = $3::text::uuid",
-                &[
-                    &scope.owner_user_id.as_ref(),
-                    &scope.project_id.as_ref(),
-                    &volumes[1],
-                ],
-            )
-            .await
-            .unwrap()
-            .get(0);
-        assert_eq!(removed_key, 1_000_002);
+        assert_eq!(removed_volume_state(&admin, &scope).await, removed_before);
         if first_command.is_none() {
             first_command = Some(command);
             first_settlement = Some(settlement);
