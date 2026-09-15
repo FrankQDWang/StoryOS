@@ -362,7 +362,6 @@ least one point from this registry.
 | `CFP-RESTORE-AFTER-VISIBILITY` | Recovery Visibility Proof has passed; exact scope may resume ordinary writing under the restored authority. |
 | `CFP-DELETE-BEFORE-SETTLEMENT` | Deletion request fences new work and settles known/unknown work before irreversible completion. |
 | `CFP-DELETE-AFTER-SETTLEMENT` | Deleted scope is tombstoned/purged according to the owner contract and cannot be restored or revived. |
-
 | `CFP-CONVERSATION-BEFORE-ADMISSION` | Under the Conversation guard, pause before new Conversation/settings/Run commit or before idle-only settings commit. Competing admission, stale revision, failed commit, and exact retry must preserve one atomic outcome. |
 | `CFP-MODEL-BEFORE-DECISION` | Typed native items exist but the complete selected Agent Decision is not durable. Partial, invalid, rejected, cancelled, or fenced output cannot create business ToolCalls or advance continuation. |
 | `CFP-MODEL-AFTER-DECISION-BEFORE-CONTINUATION` | The complete selected Decision is durable before its continuation is exposed. Crash/replay must recover the same selected Decision and binding without resampling or selecting a second result. |
