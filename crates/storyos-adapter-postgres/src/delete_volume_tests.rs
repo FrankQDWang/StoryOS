@@ -241,7 +241,7 @@ async fn apply_chapter(
     chapter_id
 }
 
-async fn apply_delete(
+pub(super) async fn apply_delete(
     store: &PostgresProjectReader,
     scope: &ProjectScope,
     suffix: &str,
