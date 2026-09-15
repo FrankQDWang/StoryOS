@@ -822,11 +822,17 @@ implementation APIs:
 | `ORC-DISPATCH-DISCLOSURE` | Attempt, manifest, dispatch claim, fence, wire digest, and disclosure facts are ordered and scope-bound. |
 | `ORC-RUN-FINALIZATION` | One general run/mailbox path settles under Seal/Fence; duplicate or late records do not reopen authority. |
 | `ORC-RECOVERY-ATOMICITY` | Restart/takeover/replay recovers from durable facts, preserves uncertainty, and produces no stale or duplicate effect. |
-| `ORC-OUTCOME-UNKNOWN` | External post-claim unknown remains unknown until evidence settles that Attempt; a new successor does not settle its predecessor. No blind resend. The Model branch includes the exact one-successor, reservation, cancellation, and restart cases in companion section 2.2. Author Command acknowledgement loss queries the original durable identity first: `Committed` is `PASS-POS`, public `Rejected` is `PASS-REFUSAL`, `RequiresReconfirmation` is `PASS-REFUSAL`, and `StillUnknown` and Query failure are `PASS-HOLD`. A scheduled canonical security or input Problem is gate-level `PASS-REFUSAL` but leaves the Journal unresolved. No unresolved branch invents success, rejection, Receipt, Activity, authority, queue release, collection, or POST retry. |
+| `ORC-OUTCOME-UNKNOWN` | External post-claim unknown remains unknown until separately admitted reconciliation/new Attempt; no blind resend. Author Command acknowledgement loss queries the original durable identity first: `Committed` is `PASS-POS`, public `Rejected` is `PASS-REFUSAL`, `RequiresReconfirmation` is `PASS-REFUSAL`, and `StillUnknown` and Query failure are `PASS-HOLD`. A scheduled canonical security or input Problem is gate-level `PASS-REFUSAL` but leaves the Journal unresolved. No unresolved branch invents success, rejection, Receipt, Activity, authority, queue release, collection, or POST retry. |
 | `ORC-REPLAY-TRUTH` | Generation/floor/Snapshot/gap/availability/deletion facts remain distinct and are never guessed or revived. |
 | `ORC-RESTORE-LIFECYCLE` | Isolated restore is held until visibility/lifecycle proof, then continues in exact scope; deleted scope never returns. |
 | `ORC-NEGATIVE-CLOSURE` | Every prohibited substitution or absent capability has no unauthorized record/effect/disclosure and a non-oracular result. |
 | `ORC-CROSSWALK-COMPLETENESS` | Every required stable ID resolves to an existing owner, gate, evidence class, fixture, fault point, schedule, oracle, bundle, and disposition. |
+
+For the Model branch of `ORC-OUTCOME-UNKNOWN`, companion section 2.2 adds
+the exact one-successor, reservation, cancellation, and restart cases. A
+separately admitted successor does not settle its predecessor: the original
+Attempt remains unknown until evidence settles that Attempt. The historical
+Author Command acknowledgement-loss row and profile remain unchanged.
 
 ## 11. Stage boundaries and proof walks
 
