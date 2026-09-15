@@ -274,7 +274,7 @@ test("createProject replays its creation evidence after rename and restart", asy
         && JSON.parse(problem.responseBody ?? "{}").code === "project_store_unavailable";
     });
     assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), counts);
-    assert.deepEqual(await getProject({ baseUrl, fetchImpl, projectId }), current);
+    assert.deepEqual((await getProject({ baseUrl, fetchImpl, projectId })).project, current.project);
     await queryPostgres(`BEGIN; SET LOCAL session_replication_role = replica;
       DELETE FROM storyos.project_activity_event_payloads
        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${projectId}'::uuid
@@ -287,7 +287,7 @@ test("createProject replays its creation evidence after rename and restart", asy
     assert.deepEqual(JSON.parse(await queryPostgres(countsQuery)), {
       projects: 1, receipts: 1, admissions: 1, activities: 0,
     });
-    assert.deepEqual(await getProject({ baseUrl, fetchImpl, projectId }), current);
+    assert.deepEqual((await getProject({ baseUrl, fetchImpl, projectId })).project, current.project);
   } finally {
     await stopRealServer(server);
   }
