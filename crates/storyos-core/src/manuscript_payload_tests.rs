@@ -583,3 +583,51 @@ fn chapter_display_body_joins_current_paragraphs_with_one_line_break() {
         "A\nB"
     );
 }
+
+#[test]
+fn versioned_range_edits_preserve_unicode_and_reject_invalid_selections() {
+    for (from, to, text, expected) in [
+        (3, 3, "!", Ok("A😀!B\n雨")),
+        (3, 5, "", Ok("A😀雨")),
+        (1, 3, "", Ok("AB\n雨")),
+        (3, 1, "!", Err(AuthorEditRefusal::InvalidSelection)),
+        (1, 2, "!", Err(AuthorEditRefusal::InvalidSelection)),
+        (2, 3, "!", Err(AuthorEditRefusal::InvalidSelection)),
+        (3, 7, "!", Err(AuthorEditRefusal::InvalidSelection)),
+    ] {
+        let mut command = versioned_command();
+        let unit = &mut command.author_edit_units[0];
+        unit.selection_snapshot.from = from;
+        unit.selection_snapshot.to = to;
+        unit.normalized_primitives = vec![AuthorEditPrimitive::ReplaceBlockSelection {
+            manuscript_block_id: "block-1".to_owned(),
+            from,
+            to,
+            text: text.to_owned(),
+        }];
+        let expected = match expected {
+            Ok(text) => ApplyVersionedAuthorEditResult::AuthoritativeApplied {
+                payload: upgrade_legacy_manuscript(text, "block-1"),
+            },
+            Err(reason) => ApplyVersionedAuthorEditResult::Refused { reason },
+        };
+        assert_eq!(apply_versioned_author_edit(&command), expected);
+    }
+}
+
+#[test]
+fn a_versioned_range_replacement_with_the_same_text_has_no_effect() {
+    let mut command = versioned_command();
+    let AuthorEditPrimitive::ReplaceBlockSelection { text, .. } =
+        &mut command.author_edit_units[0].normalized_primitives[0]
+    else {
+        panic!("versioned command must target one block")
+    };
+    *text = "😀".to_owned();
+    assert_eq!(
+        apply_versioned_author_edit(&command),
+        ApplyVersionedAuthorEditResult::NoEffect {
+            reason: AuthorEditNoEffect::ContentUnchanged,
+        }
+    );
+}

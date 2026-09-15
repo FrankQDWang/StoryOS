@@ -271,16 +271,16 @@ pub(crate) fn replace_checked_utf16_range(
     let Some(from_byte) = utf16_offset_to_byte(body, from) else {
         return Err(AuthorEditRefusal::InvalidSelection);
     };
+    if from > to {
+        return Err(AuthorEditRefusal::InvalidSelection);
+    }
     let to_byte = if from == to {
         from_byte
-    } else if let Some(to_byte) = utf16_offset_to_byte(body, to) {
-        to_byte
+    } else if let Some(suffix_byte) = utf16_offset_to_byte(&body[from_byte..], to - from) {
+        from_byte + suffix_byte
     } else {
         return Err(AuthorEditRefusal::InvalidSelection);
     };
-    if from_byte > to_byte {
-        return Err(AuthorEditRefusal::InvalidSelection);
-    }
     let removed = to_byte - from_byte;
     if text.len() > removed {
         body.reserve(text.len() - removed);
