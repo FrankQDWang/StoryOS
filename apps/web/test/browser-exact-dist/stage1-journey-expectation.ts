@@ -232,6 +232,7 @@ function intentRecord(index: number, retainedUnit = false) {
     completed_intent_record_id: slot("intent", sequence),
     local_intent_sequence: sequence,
     journal_partition_id: PARTITION,
+    working_set_partition_id: PARTITION,
     project_scope: SCOPE,
     editor_session_id: "editor-session",
     writer_generation: "1",
@@ -288,6 +289,7 @@ function collectedGroup(index: number) {
   return {
     journal_submission_group_id: slot("group", sequence),
     journal_partition_id: PARTITION,
+    working_set_partition_id: PARTITION,
     project_scope: SCOPE,
     editor_session_id: "editor-session",
     writer_generation: "1",
