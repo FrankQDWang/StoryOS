@@ -12,8 +12,6 @@ use storyos_core::{
 
 use super::{update_volume_database_error, update_volume_parse_error};
 
-const VOLUME_STORAGE_KEY_OFFSET: usize = 1_000_000;
-
 pub(super) async fn persist_update_volume(
     client: &tokio_postgres::Client,
     command: &UpdateVolumeCommand,
@@ -379,57 +377,13 @@ async fn apply_volume_tree(
         let mut ids = ordered_ids.to_vec();
         let moved = ids.remove((current_order - 1) as usize);
         ids.insert((order - 1) as usize, moved);
-        client
-            .execute(
-                "UPDATE storyos.manuscript_objects
-                    SET tree_order = tree_order + 1000000
-                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                    AND object_kind = 'volume'",
-                &[
-                    &command.project_scope.owner_user_id.as_ref(),
-                    &command.project_scope.project_id.as_ref(),
-                ],
-            )
-            .await
-            .map_err(update_volume_database_error)?;
-        if ids.len() <= VOLUME_STORAGE_KEY_OFFSET {
-            let volume_ids: Vec<&str> = ids.iter().map(String::as_str).collect();
-            client
-                .execute(
-                    "UPDATE storyos.manuscript_objects AS volume
-                        SET tree_order = ranked.tree_order
-                      FROM unnest($3::text[]) WITH ORDINALITY AS ranked(volume_id, tree_order)
-                     WHERE volume.owner_user_id = $1::text::uuid AND volume.project_id = $2::text::uuid
-                       AND volume.manuscript_object_id = ranked.volume_id::uuid
-                       AND volume.object_kind = 'volume'",
-                    &[
-                        &command.project_scope.owner_user_id.as_ref(),
-                        &command.project_scope.project_id.as_ref(),
-                        &volume_ids,
-                    ],
-                )
-                .await
-                .map_err(update_volume_database_error)?;
-        } else {
-            for (index, volume_id) in ids.iter().enumerate() {
-                let tree_order = (index + 1).to_string();
-                client
-                    .execute(
-                        "UPDATE storyos.manuscript_objects
-                            SET tree_order = $3::text::bigint
-                          WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                            AND manuscript_object_id = $4::text::uuid AND object_kind = 'volume'",
-                        &[
-                            &command.project_scope.owner_user_id.as_ref(),
-                            &command.project_scope.project_id.as_ref(),
-                            &tree_order,
-                            volume_id,
-                        ],
-                    )
-                    .await
-                    .map_err(update_volume_database_error)?;
-            }
-        }
+        crate::volume_storage_order::persist_volume_storage_order(
+            client,
+            &command.project_scope,
+            &ids,
+        )
+        .await
+        .map_err(UpdateVolumeError::Unavailable)?;
     }
     let bumped = client
         .execute(
