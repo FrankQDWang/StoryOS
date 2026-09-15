@@ -1,15 +1,17 @@
-import { deleteJournal, requestResult } from "./scenario.ts";
+import { deleteJournal, requestResult, requireRecord } from "./scenario.ts";
 
 export async function restoreVersionThreeJournal(database: IDBDatabase): Promise<void> {
   const name = database.name;
   const transaction = database.transaction([...database.objectStoreNames]);
   const stores = await Promise.all([...database.objectStoreNames].map(async (name) => {
     const store = transaction.objectStore(name);
+    const rows: unknown = await requestResult(store.getAll());
+    if (!Array.isArray(rows)) throw new Error("Journal rows are unavailable");
     return { name, keyPath: store.keyPath, indexes: [...store.indexNames]
       .filter((name) => name !== "working_partition")
       .map((name) => ({ name, keyPath: store.index(name).keyPath,
         unique: store.index(name).unique })),
-      rows: await requestResult(store.getAll()),
+      rows: rows.map((row: unknown) => requireRecord(row, "Journal row")),
     };
   }));
   database.close();

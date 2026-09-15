@@ -87,7 +87,8 @@ async function openJournalDatabase(
       upgradeJournalWorkingIndexes(transaction);
       const schema = transaction.objectStore("metadata").get("schema");
       schema.onsuccess = () => {
-        if (schema.result?.version !== 3) transaction.abort();
+        const value: unknown = schema.result;
+        if (value === null || typeof value !== "object" || Reflect.get(value, "version") !== 3) transaction.abort();
         else transaction.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
       };
       return;

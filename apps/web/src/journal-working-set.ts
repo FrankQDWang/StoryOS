@@ -1,13 +1,25 @@
-import type { EditorWorkspace, ValidatedJournalSnapshot, JournalSubmissionGroup }
+import type { EditorWorkspace, ValidatedJournalSnapshot, JournalSubmissionGroup,
+  JournalIntentRecord, JournalPayloadChain }
   from "./editor-types.ts";
 
 export const MAX_WORKING_JOURNAL_ITEMS = 2400;
 const STORES = ["intents", "payload_chains", "submission_groups"] as const;
 const equal = (left: unknown, right: unknown) => JSON.stringify(left) === JSON.stringify(right);
-const result = <T>(request: IDBRequest<T>): Promise<T> => new Promise((resolve, reject) => {
+const result = (request: IDBRequest): Promise<unknown> => new Promise((resolve, reject) => {
   request.onsuccess = () => resolve(request.result);
   request.onerror = () => reject(request.error ?? new Error("Journal request failed"));
 });
+
+function objectValue(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Journal persisted object is corrupt");
+  }
+  return value as Record<string, unknown>;
+}
+
+function metadataValue(value: unknown): unknown {
+  return value === undefined ? undefined : objectValue(value).value;
+}
 
 export interface JournalWorkingBoundary {
   last_sequence: number;
@@ -24,9 +36,13 @@ export function upgradeJournalWorkingIndexes(transaction: IDBTransaction) {
     request.onsuccess = () => {
       const cursor = request.result;
       if (!cursor) return;
-      cursor.update({ ...cursor.value,
-        working_set_partition_id: cursor.value.journal_partition_id });
-      cursor.continue();
+      try {
+        const value: unknown = cursor.value;
+        const row = objectValue(value);
+        if (typeof row.journal_partition_id !== "string") throw new Error("Journal partition is corrupt");
+        cursor.update({ ...row, working_set_partition_id: row.journal_partition_id });
+        cursor.continue();
+      } catch { transaction.abort(); }
     };
   }
 }
@@ -38,17 +54,22 @@ export async function readJournalWorkingBoundary(
   const metadata = transaction.objectStore("metadata");
   const stored = await result(metadata.get(`working_boundary:${partitionId}`));
   if (stored === undefined) return undefined;
-  const boundary = stored.value as JournalWorkingBoundary;
-  if (!boundary || !Number.isSafeInteger(boundary.last_sequence) || boundary.last_sequence < 1
+  const candidate = objectValue(metadataValue(stored));
+  const boundary = candidate as Partial<JournalWorkingBoundary>;
+  if (typeof boundary.last_sequence !== "number"
+    || !Number.isSafeInteger(boundary.last_sequence) || boundary.last_sequence < 1
+    || typeof boundary.completed_intent_record_id !== "string"
     || typeof boundary.journal_submission_group_id !== "string"
     || typeof boundary.collection_fence_id !== "string") {
     throw new Error("Journal working boundary is corrupt");
   }
-  const [record, group, retainedFence] = await Promise.all([
+  const [recordValue, groupValue, retainedFence] = await Promise.all([
     result(transaction.objectStore("intents").get([partitionId, boundary.last_sequence])),
     result(transaction.objectStore("submission_groups").get(boundary.journal_submission_group_id)),
     result(metadata.get(`retained_collection_fence:${boundary.collection_fence_id}`)),
   ]);
+  const record = objectValue(recordValue);
+  const group = objectValue(groupValue) as Partial<JournalSubmissionGroup>;
   if (record?.completed_intent_record_id !== boundary.completed_intent_record_id
     || record?.author_edit_unit !== undefined || record?.working_set_partition_id !== undefined
     || group?.working_set_partition_id !== undefined
@@ -67,20 +88,26 @@ export async function readJournalWorkingBoundary(
       local_intent_sequence: boundary.last_sequence,
       intent_record_ref: boundary.completed_intent_record_id,
       payload_digest: record?.payload_digest,
-    }) || !collectionProofMatches(group, retainedFence?.value)) {
+    }) || !collectionProofMatches(group, metadataValue(retainedFence))) {
     throw new Error("Journal working boundary is corrupt");
   }
-  return boundary;
+  return { last_sequence: boundary.last_sequence,
+    completed_intent_record_id: boundary.completed_intent_record_id,
+    journal_submission_group_id: boundary.journal_submission_group_id,
+    collection_fence_id: boundary.collection_fence_id };
 }
 
-function collectionProofMatches(group: JournalSubmissionGroup, fence: unknown) {
+function collectionProofMatches(group: Partial<JournalSubmissionGroup>, fence: unknown) {
   if (fence === null || typeof fence !== "object"
     || group.payload_collection?.kind !== "collected"
     || group.settlement?.kind !== "applied_receipt_settled"
-    || group.reconciliation !== undefined) return false;
+    || group.reconciliation !== undefined
+    || !Array.isArray(group.ordered_coverage)) return false;
   const settlement = group.settlement;
   const successor = settlement.installed_base_snapshot;
-  return Reflect.get(fence, "collection_fence_id") === group.payload_collection.collection_fence_id
+  return Reflect.get(fence, "partition_disposition") === "current_writer_open"
+    && Reflect.get(fence, "resulting_writer_generation") === undefined
+    && Reflect.get(fence, "collection_fence_id") === group.payload_collection.collection_fence_id
     && Reflect.get(fence, "journal_partition_id") === group.journal_partition_id
     && Reflect.get(fence, "writer_generation") === group.writer_generation
     && equal(Reflect.get(fence, "project_scope"), group.project_scope)
@@ -160,13 +187,15 @@ export async function retireCollectedJournalPrefix(
       ...STORES.map((name) => result(transaction.objectStore(name).index("working_partition")
         .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1))),
     ]);
-    rows[0]!.sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
-    rows[2]!.sort((left, right) => left.covered_sequence_range.first - right.covered_sequence_range.first);
-    if (schema?.version !== workspace.database.version
-      || !equal(partition, workspace.partition) || !equal(activeBase?.value, snapshot.activeBase)
-      || !equal(watermark, snapshot.watermark) || !equal(boundary?.value, snapshot.workingBoundary)
-      || !equal(durableFences?.value ?? [], snapshot.fences)
-      || !equal(rows, [snapshot.records, snapshot.payloadChains, snapshot.groups])) {
+    if (rows.some((row) => !Array.isArray(row))) throw new Error("Journal working rows are corrupt");
+    const durableRows = rows as [JournalIntentRecord[], JournalPayloadChain[], JournalSubmissionGroup[]];
+    durableRows[0].sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
+    durableRows[2].sort((left, right) => left.covered_sequence_range.first - right.covered_sequence_range.first);
+    if (objectValue(schema).version !== workspace.database.version
+      || !equal(partition, workspace.partition) || !equal(metadataValue(activeBase), snapshot.activeBase)
+      || !equal(watermark, snapshot.watermark) || !equal(metadataValue(boundary), snapshot.workingBoundary)
+      || !equal(metadataValue(durableFences) ?? [], snapshot.fences)
+      || !equal(durableRows, [snapshot.records, snapshot.payloadChains, snapshot.groups])) {
       throw new Error("Local Edit Journal changed before working boundary advance");
     }
     const retired = [snapshot.records.slice(0, recordCount),

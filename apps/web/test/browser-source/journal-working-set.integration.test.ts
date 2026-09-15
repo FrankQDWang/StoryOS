@@ -5,6 +5,7 @@ import type { DigestValue, GetEditorSessionResponse }
 import { openEditorWorkspace, persistReplaceSelection, submitOnePendingAuthorEdit }
   from "../../src/editor-session.ts";
 import { collectEligibleJournalPayload } from "../../src/journal-payload-collection.ts";
+import type { JournalSnapshot } from "../../src/editor-types.ts";
 import { createJournalUuid, readJournalSnapshot } from "../../src/local-edit-journal.ts";
 import {
   OWNER, PROJECT, SESSION, chapterRevision, createAppliedAuthorEditResponse,
@@ -16,6 +17,7 @@ it("continues writing after 2400 saved and collected input intents", async () =>
   const scenario = createBrowserScenario();
   let body = "Base";
   let position = 0;
+  let firstUncollected: JournalSnapshot | undefined;
   let commandDigest: DigestValue | undefined;
   let session: GetEditorSessionResponse = {
     ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
@@ -79,6 +81,7 @@ it("continues writing after 2400 saved and collected input intents", async () =>
       expect(await submitOnePendingAuthorEdit({ workspace, baseUrl: location.origin,
         fetchImpl, cryptoImpl: crypto })).toMatchObject({ body, save_state: "saved",
         unsettled_intent_count: 0 });
+      if (batch === 0) firstUncollected = await readJournalSnapshot(workspace);
       await collectEligibleJournalPayload(workspace);
     }
     const saved = await readJournalSnapshot(workspace);
@@ -86,6 +89,25 @@ it("continues writing after 2400 saved and collected input intents", async () =>
     expect(saved.records.every((record) => record.author_edit_unit === undefined)).toBe(true);
     expect(saved.groups.every((group) => group.payload_collection?.kind === "collected")).toBe(true);
     await restoreVersionThreeJournal(workspace.database);
+    const putBeforeUpgrade = IDBObjectStore.prototype.put;
+    const failedUpgrade = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
+      this: IDBObjectStore, value: unknown, key?: IDBValidKey,
+    ) {
+      const request = key === undefined ? putBeforeUpgrade.call(this, value) : putBeforeUpgrade.call(this, value, key);
+      if (this.name === "metadata" && value !== null && typeof value === "object"
+        && Reflect.get(value, "key") === "schema" && Reflect.get(value, "version") === 4) this.transaction.abort();
+      return request;
+    });
+    try {
+      expect(await openEditorWorkspace({ baseUrl: location.origin,
+        project: scenario.project, chapter: scenario.chapter, profile: scenario.profile,
+        fetchImpl, indexedDBImpl: indexedDB, cryptoImpl: crypto }))
+        .toMatchObject({ kind: "editor-read-only-recovery", code: "local_journal_unavailable" });
+    } finally { failedUpgrade.mockRestore(); }
+    const prior = await requestResult(indexedDB.open(scenario.journalName));
+    expect(prior.version).toBe(3);
+    expect(prior.transaction("intents").objectStore("intents").indexNames.contains("working_partition")).toBe(false);
+    prior.close();
     workspace = await openEditorWorkspace({ baseUrl: location.origin,
       project: scenario.project, chapter: { ...scenario.chapter,
         project_activity_position: session.base_snapshot.project_activity_position,
@@ -96,6 +118,43 @@ it("continues writing after 2400 saved and collected input intents", async () =>
     requireEditorReady(workspace);
     expect(await readJournalSnapshot(workspace)).toEqual(saved);
     const partitionId = workspace.partition.journal_partition_id;
+    const ready = workspace;
+    async function replacePrefix(prefix: JournalSnapshot) {
+      const transaction = ready.database.transaction(["intents", "payload_chains", "submission_groups"], "readwrite");
+      const completed = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error);
+      });
+      for (const record of prefix.records.slice(0, 240)) transaction.objectStore("intents").put(record);
+      transaction.objectStore("payload_chains").put(prefix.payloadChains[0]!);
+      transaction.objectStore("submission_groups").put(prefix.groups[0]!);
+      await completed;
+    }
+    async function refusesFullWorkingSet() {
+      const before = await readJournalSnapshot(ready);
+      await expect(persistReplaceSelection(ready, { from: body.length, to: body.length,
+        text: "+", resultingBody: `${body}+`, inputOrigin: "typing" })).rejects.toThrow();
+      expect(await readJournalSnapshot(ready)).toEqual(before);
+    }
+    if (!firstUncollected) throw new Error("the first retained payload is unavailable");
+    await replacePrefix(firstUncollected);
+    await refusesFullWorkingSet();
+    await replacePrefix(saved);
+    const chain = saved.payloadChains[0]!;
+    await replacePrefix({ ...saved, payloadChains: [{ ...chain,
+      payload_collection: saved.payloadChains[1]!.payload_collection!,
+    }] });
+    await refusesFullWorkingSet();
+    await replacePrefix(saved);
+    const firstFence = saved.fences[0] as Record<string, unknown>;
+    const { partition_disposition: _disposition, ...incompleteFence } = firstFence;
+    const invalidFenceWrite = ready.database.transaction("metadata", "readwrite");
+    await requestResult(invalidFenceWrite.objectStore("metadata").put({
+      key: `collection_fences:${partitionId}`, value: [incompleteFence, ...saved.fences.slice(1)],
+    }));
+    await refusesFullWorkingSet();
+    await requestResult(ready.database.transaction("metadata", "readwrite").objectStore("metadata")
+      .put({ key: `collection_fences:${partitionId}`, value: saved.fences }));
     const put = IDBObjectStore.prototype.put;
     const interrupted = vi.spyOn(IDBObjectStore.prototype, "put").mockImplementation(function (
       this: IDBObjectStore, value: unknown, key?: IDBValidKey,
