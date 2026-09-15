@@ -111,7 +111,7 @@ fn stale_head_and_invalid_selections_fail_without_a_partial_result() {
         }
     );
 
-    for (start, end) in [(1, 2), (2, 2), (5, 5)] {
+    for (start, end) in [(1, 2), (2, 2), (5, 5), (3, 1), (2, 3), (1, 5)] {
         let mut invalid = command();
         let unit = &mut invalid.author_edit_units[0];
         unit.selection_snapshot.from = start;
