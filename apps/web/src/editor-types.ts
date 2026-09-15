@@ -1,3 +1,4 @@
+import type { JournalWorkingBoundary } from "./journal-working-set.ts";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
@@ -175,6 +176,7 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
 }
 
 export interface JournalSnapshot {
+  workingBoundary?: JournalWorkingBoundary;
   watermark: { key: string; value: number } | undefined;
   activeBase: EditorBaseSnapshot | undefined;
   records: JournalIntentRecord[];

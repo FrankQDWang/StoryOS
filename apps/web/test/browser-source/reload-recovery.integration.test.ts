@@ -1,3 +1,4 @@
+import { restoreVersionThreeJournal } from "./journal-version-three.ts";
 import { expect, it } from "vitest";
 
 import type {
@@ -181,7 +182,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
     });
     requireEditorReady(workspace);
     trackDatabase(workspace.database, openDatabases);
-    expect(workspace.database.version).toBe(3);
+    expect(workspace.database.version).toBe(4);
     expect([...workspace.database.objectStoreNames].sort()).toEqual([
       "intents",
       "metadata",
@@ -332,7 +333,7 @@ it("recovers ApplyAuthorEdit from a persisted capsule after reload without a sec
       unresolved.groupId,
     );
     expect(unavailableAttempts).toEqual([expectedUnavailable]);
-    unresolved.workspace.database.close();
+    await restoreVersionThreeJournal(unresolved.workspace.database);
 
     canonicalSession = { ...scenario.session, schema_id: "storyos.query.editor-session.response.v1" };
     outcomeMode = "committed";

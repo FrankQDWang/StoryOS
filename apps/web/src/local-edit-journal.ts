@@ -22,7 +22,11 @@ import type {
 import { flattenChapterBody } from "./manuscript-doc.ts";
 import type { ContiguousReplacementPrimitive } from "./manuscript-doc.ts";
 
-export const JOURNAL_DATABASE_VERSION = 3;
+import {
+  MAX_WORKING_JOURNAL_ITEMS, readJournalWorkingBoundary, retireCollectedJournalPrefix,
+} from "./journal-working-set.ts";
+
+export const JOURNAL_DATABASE_VERSION = 4;
 export const JOURNAL_OBJECT_STORES = Object.freeze([
   "metadata",
   "partitions",
@@ -43,7 +47,6 @@ export const AUTHOR_EDIT_MAX_UNITS = 240;
 export const AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES = 240;
 export const AUTHOR_EDIT_MAX_WIRE_BODY_BYTES = 1024 * 1024;
 
-const MAX_RETAINED_JOURNAL_ITEMS = 2400;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const INPUT_ORIGINS = new Set<InputOrigin>([
   "typing",
@@ -300,14 +303,15 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
       requestResult(transaction.objectStore("metadata")
         .get(`durable_high_watermark:${partitionId}`)),
       requestResult(transaction.objectStore("metadata").get(`active_base:${partitionId}`)),
-      requestResult(transaction.objectStore("intents").index("partition")
-        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-      requestResult(transaction.objectStore("payload_chains").index("partition")
-        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-      requestResult(transaction.objectStore("submission_groups").index("partition")
-        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("intents").index("working_partition")
+        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("payload_chains").index("working_partition")
+        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("submission_groups").index("working_partition")
+        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
       requestResult(transaction.objectStore("metadata").get(`collection_fences:${partitionId}`)),
     ]);
+  const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
   const schema = schemaValue as { version?: unknown } | undefined;
   const watermark = watermarkValue as JournalSnapshot["watermark"];
   const activeBaseRecord = activeBaseValue as { value?: EditorBaseSnapshot } | undefined;
@@ -318,9 +322,9 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   const storedFences = storedFencesValue as { value?: unknown[] } | undefined;
   const fences = storedFences?.value ?? [];
   if (schema?.version !== JOURNAL_DATABASE_VERSION
-    || records.length > MAX_RETAINED_JOURNAL_ITEMS
-    || payloadChains.length > MAX_RETAINED_JOURNAL_ITEMS
-    || groups.length > MAX_RETAINED_JOURNAL_ITEMS) {
+    || records.length > MAX_WORKING_JOURNAL_ITEMS
+    || payloadChains.length > MAX_WORKING_JOURNAL_ITEMS
+    || groups.length > MAX_WORKING_JOURNAL_ITEMS) {
     throw new Error("Local Edit Journal exceeds this Editor Session scope");
   }
   records.sort((left, right) => left.local_intent_sequence - right.local_intent_sequence);
@@ -328,6 +332,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
     - right.covered_sequence_range.first);
   return {
     watermark, activeBase, records, payloadChains, groups, fences,
+    ...(workingBoundary ? { workingBoundary } : {}),
   };
 }
 
@@ -533,7 +538,7 @@ export async function validateJournalSnapshot(
   snapshot: JournalSnapshot,
 ): Promise<ValidatedJournalSnapshot> {
   const { records, payloadChains, groups, watermark, activeBase } = snapshot;
-  let priorSequence = 0;
+  let priorSequence = snapshot.workingBoundary?.last_sequence ?? 0;
   for (const record of records) {
     if (record.journal_partition_id !== workspace.partition.journal_partition_id
       || record.editor_session_id !== workspace.partition.editor_session_id
@@ -558,8 +563,8 @@ export async function validateJournalSnapshot(
     }
     priorSequence = record.local_intent_sequence;
   }
-  if ((records.length === 0 && watermark !== undefined)
-    || (records.length > 0 && watermark?.value !== records.at(-1)!.local_intent_sequence)) {
+  if (watermark?.value !== (records.at(-1)?.local_intent_sequence
+    ?? snapshot.workingBoundary?.last_sequence)) {
     throw new Error("Local Edit Journal is corrupt");
   }
   if (activeBase !== undefined
@@ -636,12 +641,20 @@ export async function rebuildPendingProjection(
   return pendingProjectionFromSnapshot(workspace, snapshot);
 }
 
+async function prepareJournalAppend(workspace: EditorWorkspace) {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  if (await retireCollectedJournalPrefix(workspace, snapshot)) {
+    return validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  }
+  return snapshot;
+}
+
 export async function persistReplaceSelection(
   workspace: EditorWorkspace,
   edit: ReplaceSelectionEdit,
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const targetId = edit.manuscript_block_id
     ?? (projection.blocks.length === 1 ? projection.blocks[0]?.manuscript_block_id : undefined);
@@ -691,7 +704,7 @@ export async function persistSplitBlock(
   },
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const primitive: AuthorEditPrimitive = {
     kind: "split_block",
@@ -745,7 +758,7 @@ export async function persistJoinBlocks(
   },
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const primitive: AuthorEditPrimitive = {
     kind: "join_blocks",
@@ -801,7 +814,7 @@ export async function persistMoveBlock(
   },
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const primitive: AuthorEditPrimitive = {
     kind: "move_block",
@@ -859,7 +872,7 @@ export async function persistRetypeBlock(
   },
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const primitive: AuthorEditPrimitive = {
     kind: "retype_block",
@@ -914,7 +927,7 @@ export async function persistContiguousReplacement(
   },
   cryptoImpl: Crypto = globalThis.crypto,
 ): Promise<PendingEditProjection> {
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
   const primitives = edit.primitives.map((primitive): AuthorEditPrimitive => primitive);
   if (primitives.length < 1 || primitives.length > AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES) {
@@ -1023,20 +1036,21 @@ async function persistAuthorEditUnit(
   const intents = transaction.objectStore("intents");
   const partitionId = workspace.partition.journal_partition_id;
   const [schemaValue, partition, currentValue, watermarkValue, activeBaseValue,
-    durableRecordsValue, chainsValue, groupsValue, storedFencesValue] =
+    durableRecordsValue, chainsValue, groupsValue, storedFencesValue, boundaryValue] =
     await Promise.all([
       requestResult(metadata.get("schema")),
       requestResult(transaction.objectStore("partitions").get(partitionId)),
       requestResult(metadata.get("local_intent_sequence")),
       requestResult(metadata.get(`durable_high_watermark:${partitionId}`)),
       requestResult(metadata.get(`active_base:${partitionId}`)),
-      requestResult(intents.index("partition")
-        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-      requestResult(transaction.objectStore("payload_chains").index("partition")
-        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
-      requestResult(transaction.objectStore("submission_groups").index("partition")
-        .getAll(partitionId, MAX_RETAINED_JOURNAL_ITEMS + 1)),
+      requestResult(intents.index("working_partition")
+        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("payload_chains").index("working_partition")
+        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      requestResult(transaction.objectStore("submission_groups").index("working_partition")
+        .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
       requestResult(metadata.get(`collection_fences:${partitionId}`)),
+      requestResult(metadata.get(`working_boundary:${partitionId}`)),
     ]);
   const schema = schemaValue as { version?: unknown } | undefined;
   const activeBase = activeBaseValue as { value?: unknown } | undefined;
@@ -1054,6 +1068,8 @@ async function persistAuthorEditUnit(
   // The allocator is Project-wide. Another partition can advance it without
   // changing this partition's complete, linked projection history.
   if (!Number.isSafeInteger(currentSequence) || currentSequence < (snapshot.watermark?.value ?? 0)
+    || JSON.stringify((boundaryValue as { value?: unknown } | undefined)?.value)
+      !== JSON.stringify(snapshot.workingBoundary)
     || JSON.stringify(durableWatermark) !== JSON.stringify(snapshot.watermark)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(snapshot.activeBase)
     || JSON.stringify(durableRecords) !== JSON.stringify(snapshot.records)
@@ -1085,9 +1101,9 @@ async function persistAuthorEditUnit(
   if (schema?.version !== JOURNAL_DATABASE_VERSION
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(base)
-    || durableRecords.length >= MAX_RETAINED_JOURNAL_ITEMS
-    || chains.length >= MAX_RETAINED_JOURNAL_ITEMS
-    || groups.length > MAX_RETAINED_JOURNAL_ITEMS
+    || durableRecords.length >= MAX_WORKING_JOURNAL_ITEMS
+    || chains.length >= MAX_WORKING_JOURNAL_ITEMS
+    || groups.length > MAX_WORKING_JOURNAL_ITEMS
     || hasUnsettledGroup
     || !Number.isSafeInteger(sequence)) {
     transaction.abort();
@@ -1102,7 +1118,8 @@ async function persistAuthorEditUnit(
   }
   const isNewChain = existingPayloadChain === undefined;
   const payloadChain: JournalPayloadChain = existingPayloadChain ?? {
-      payload_chain_id: createJournalUuid(cryptoImpl),
+      working_set_partition_id: partitionId,
+    payload_chain_id: createJournalUuid(cryptoImpl),
       journal_partition_id: partitionId,
       checkpoint_ref: {
         chapter_object_id: base.chapter_id,
@@ -1121,6 +1138,7 @@ async function persistAuthorEditUnit(
     resulting_payload_digest: resultingPayloadDigest,
   });
   const record: JournalIntentRecord = {
+    working_set_partition_id: partitionId,
     completed_intent_record_id: completedIntentRecordId,
     local_intent_sequence: sequence,
     journal_partition_id: partitionId,
@@ -1179,7 +1197,7 @@ export async function reconfirmLegacyReplaceSelection(
     || !UUID.test(block.manuscript_block_id)) {
     throw new Error("Local Edit Journal limit failed");
   }
-  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const snapshot = await prepareJournalAppend(workspace);
   const covered = new Set(snapshot.groups.flatMap((group) =>
     (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
   if (snapshot.groups.some((group) => group.settlement?.kind === "unsettled")) {

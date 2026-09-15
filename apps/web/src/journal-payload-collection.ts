@@ -2,6 +2,7 @@ import {
   JOURNAL_DATABASE_VERSION,
   createJournalUuid,
 } from "./local-edit-journal.ts";
+import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
 import type { EditorWriterProjection }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -129,9 +130,9 @@ export async function collectEligibleJournalPayload(workspace: EditorWorkspace) 
       requestResult(transaction.objectStore("partitions").get(partitionId)),
       requestResult(metadata.get(key)),
       requestResult(metadata.get(`active_base:${partitionId}`)),
-      requestResult(intents.index("partition").getAll(partitionId)),
-      requestResult(chains.index("partition").getAll(partitionId)),
-      requestResult(groups.index("partition").getAll(partitionId)),
+      requestResult(intents.index("working_partition").getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      requestResult(chains.index("working_partition").getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+      requestResult(groups.index("working_partition").getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
     ]);
   const schema = schemaValue as { version?: unknown } | undefined;
   const activeBase = activeBaseValue as { value?: unknown } | undefined;
@@ -140,6 +141,9 @@ export async function collectEligibleJournalPayload(workspace: EditorWorkspace) 
   const payloadChains = payloadChainsValue as JournalPayloadChain[];
   const durableGroups = durableGroupsValue as JournalSubmissionGroup[];
   if (schema?.version !== JOURNAL_DATABASE_VERSION
+    || records.length > MAX_WORKING_JOURNAL_ITEMS
+    || payloadChains.length > MAX_WORKING_JOURNAL_ITEMS
+    || durableGroups.length > MAX_WORKING_JOURNAL_ITEMS
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || JSON.stringify(activeBase?.value) !== JSON.stringify(workspace.session.base_snapshot)) {
     throw new Error("Local Edit Journal schema is incompatible");

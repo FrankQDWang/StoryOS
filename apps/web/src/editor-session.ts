@@ -1,3 +1,4 @@
+import { upgradeJournalWorkingIndexes } from "./journal-working-set.ts";
 import {
   createEditorSession,
   createProjectCommandChallenge,
@@ -81,6 +82,17 @@ async function openJournalDatabase(
   const name = `storyos-local-edit-journal:${scope.owner_user_id}:${scope.project_id}`;
   const request = indexedDBImpl.open(name, JOURNAL_DATABASE_VERSION);
   request.onupgradeneeded = (event) => {
+    if (event.oldVersion === 3) {
+      const transaction = request.transaction!;
+      upgradeJournalWorkingIndexes(transaction);
+      const schema = transaction.objectStore("metadata").get("schema");
+      schema.onsuccess = () => {
+        const value: unknown = schema.result;
+        if (value === null || typeof value !== "object" || Reflect.get(value, "version") !== 3) transaction.abort();
+        else transaction.objectStore("metadata").put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
+      };
+      return;
+    }
     if (event.oldVersion !== 0) {
       request.transaction!.abort();
       return;
@@ -111,6 +123,7 @@ async function openJournalDatabase(
     database.createObjectStore("outcome_query_observations", {
       keyPath: "outcome_query_observation_id",
     }).createIndex("group", "journal_submission_group_id", { unique: false });
+    upgradeJournalWorkingIndexes(request.transaction!);
     request.transaction!.objectStore("metadata")
       .put({ key: "schema", version: JOURNAL_DATABASE_VERSION });
   };

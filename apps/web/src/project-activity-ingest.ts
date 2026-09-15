@@ -11,6 +11,7 @@ import type {
   ProjectActivityIngest,
 } from "./editor-types.ts";
 import { JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
+import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -332,11 +333,11 @@ export async function resyncProjectActivityFromSnapshot(workspace: EditorWorkspa
   const [schemaValue, partition] = await Promise.all([
     requestResult(metadata.get("schema")),
     requestResult(transaction.objectStore("partitions").get(partitionId)),
-    requestResult(transaction.objectStore("intents").index("partition").getAll(partitionId)),
-    requestResult(transaction.objectStore("payload_chains").index("partition")
-      .getAll(partitionId)),
-    requestResult(transaction.objectStore("submission_groups").index("partition")
-      .getAll(partitionId)),
+    requestResult(transaction.objectStore("intents").index("working_partition").getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+    requestResult(transaction.objectStore("payload_chains").index("working_partition")
+      .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
+    requestResult(transaction.objectStore("submission_groups").index("working_partition")
+      .getAll(partitionId, MAX_WORKING_JOURNAL_ITEMS + 1)),
   ]);
   const schema = schemaValue as { version?: unknown } | undefined;
   if (schema?.version !== JOURNAL_DATABASE_VERSION

@@ -12,6 +12,7 @@ import {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const SETTLED_A = "Alpha 中文 EN";
+const LONG_A = `Alpha${"a".repeat(2401)}`;
 
 let applicationFrame: HTMLIFrameElement | undefined;
 
@@ -76,7 +77,7 @@ async function waitSaved(root: Element, previousRevisionId?: string): Promise<vo
       return { ok: true as const, failure: "" };
     }
     return { ok: false as const, save, unsettled, failure, revision };
-  }, { timeout: 10_000 }).toEqual({ ok: true, failure: "" });
+  }, { timeout: 30_000 }).toEqual({ ok: true, failure: "" });
 }
 
 async function typeExpected(
@@ -114,7 +115,7 @@ async function makeCurrent(
 }
 
 it("repeats Chapter switching, Undo, search, and reload without losing work", {
-  timeout: 90_000,
+  timeout: 300_000,
 }, async () => {
   const started = performance.now();
   const frame = document.createElement("iframe");
@@ -197,6 +198,27 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   await expect.poll(() => manuscriptBody(manuscriptEditor(appRoot(frame), applicationWindow(frame))))
     .toBe("Alpha");
   await waitSaved(appRoot(frame));
+  const longEditor = manuscriptEditor(appRoot(frame), applicationWindow(frame));
+  longEditor.focus();
+  focusManuscriptEnd(longEditor, applicationWindow(frame));
+  let challengeWindow = Math.floor(Date.now() / 60_000);
+  for (let batch = 0; batch < 11; batch++) {
+    if (batch % 5 === 0) {
+      // The real package allows ten challenges per minute for this Project.
+      await expect.poll(() => Math.floor(Date.now() / 60_000), { timeout: 61_000 })
+        .toBeGreaterThan(challengeWindow);
+      challengeWindow = Math.floor(Date.now() / 60_000);
+    }
+    const count = batch === 10 ? 1 : 240;
+    for (let input = 0; input < count; input++) {
+      await applyTrustedInput({ operation: "insert_text", text: "a" });
+    }
+    await waitSaved(appRoot(frame));
+  }
+  expect(manuscriptBody(longEditor)).toBe(LONG_A);
+  await makeCurrent(frame, chapterBId, "Chapter B");
+  await typeExpected(frame, "!", "Beta!");
+  await makeCurrent(frame, chapterAId, "Chapter A");
   const inputMs = Math.round(performance.now() - inputStarted);
 
   const searchStarted = performance.now();
@@ -240,7 +262,8 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   }, { timeout: 10_000 }).toBe(true);
   const reopenedRoot = appRoot(frame);
   expect(reopenedRoot.querySelector("h2")?.textContent).toBe("Chapter A");
-  expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe("Alpha");
+  expect(manuscriptBody(manuscriptEditor(reopenedRoot, applicationWindow(frame)))).toBe(LONG_A);
+  await typeExpected(frame, "+", `${LONG_A}+`);
   await waitSaved(reopenedRoot);
   const childWindow = applicationWindow(frame);
   const [authoritativeA, authoritativeB] = await Promise.all([
@@ -257,8 +280,8 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
       fetchImpl: childWindow.fetch.bind(childWindow),
     }),
   ]);
-  expect(authoritativeA.chapter.current_revision.body).toBe("Alpha");
-  expect(authoritativeB.chapter.current_revision.body).toBe("Beta");
+  expect(authoritativeA.chapter.current_revision.body).toBe(`${LONG_A}+`);
+  expect(authoritativeB.chapter.current_revision.body).toBe("Beta!");
   const reloadMs = Math.round(performance.now() - reloadStarted);
   console.info(JSON.stringify({
     adopted_recovery_bounds: { rpo_seconds: 900, rto_seconds: 7200 },
