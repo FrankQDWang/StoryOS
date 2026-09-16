@@ -429,4 +429,5 @@ pub struct GetAgentRunResponse {
     pub evidence: Vec<AttemptEvidence>,
     pub items: Vec<AgentRunStreamItemInspect>,
     pub usage: AgentRunUsageInspect,
+    pub redaction_profile: String,
 }

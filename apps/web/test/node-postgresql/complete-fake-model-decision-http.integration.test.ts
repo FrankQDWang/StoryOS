@@ -209,12 +209,14 @@ async function admit(
   return created;
 }
 
-function assertEvidence(queried: GetAgentRunResponse) {
-  assert.deepEqual(queried.evidence.map((item) => [item.kind, item.availability]), [
-    ["sent_content", "current"],
-    ["stored_reference", "current"],
-    ["provider_report", "current"],
-    ["provider_opaque", "unknown"],
+function assertEvidence(queried: GetAgentRunResponse, sentContent: string) {
+  if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
+  const attemptId = queried.model_attempt.model_attempt_id;
+  assert.deepEqual(queried.evidence, [
+    { kind: "sent_content", attempt_id: attemptId, availability: "current", content: sentContent },
+    { kind: "stored_reference", attempt_id: attemptId, availability: "current", reference_id: queried.context.assembly_manifest_id },
+    { kind: "provider_report", attempt_id: attemptId, availability: "current", report: "host_fake_no_provider_usage" },
+    { kind: "provider_opaque", attempt_id: attemptId, availability: "unknown", unknown_facts: ["provider_internal_content"] },
   ]);
 }
 
@@ -254,7 +256,8 @@ test("Worker completes one Host-fake advisory Decision", async () => {
     if (queried.model_attempt.kind !== "present") throw new Error("expected attempt");
     assert.match(queried.model_attempt.model_attempt_id, UUID_V7);
     assert.equal(queried.model_attempt.dispatch_state, "settled");
-    assertEvidence(queried);
+    assertEvidence(queried, "Help with this passage.");
+    assert.equal(queried.redaction_profile, "storyos.author.v1");
     assert.equal(queried.items[0]?.state, "complete");
     assert.equal(queried.items[0]?.phase, "complete");
     assert.equal(queried.usage.kind, "unknown");
@@ -367,7 +370,7 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     const clarification = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb13"), "Which wording should I keep? The first clause.");
     await settleOnce();
     const waiting = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, clarification.effect.run_id);
-    assert.equal(waiting.status, "waiting");
+    assert.equal(waiting.status, "completed");
     assert.equal(waiting.decision.kind, "clarification");
     if (waiting.decision.kind !== "clarification") throw new Error("expected clarification");
     assert.equal(waiting.decision.selected, true);
@@ -384,7 +387,7 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     );
     assert.equal(beforeDecision.decision.kind, "absent");
     assert.equal(beforeDecision.context.destination_io.kind, "host_fake");
-    assertEvidence(beforeDecision);
+    assertEvidence(beforeDecision, "Help with this passage.");
     unlinkSync(dispatchHold);
     await dispatchWorker;
     writeFileSync(streamHold, "hold");
@@ -414,6 +417,7 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
       ["SCRIPT:invalid", "complete", "assistant"],
       ["SCRIPT:tool_partial", "provisional", "tool"],
       ["SCRIPT:hosted", "complete", "hosted"],
+      ["SCRIPT:refusal", "complete", "assistant"],
     ] as const) {
       const scripted = await admit(
         started.baseUrl,
@@ -430,6 +434,9 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
       assert.equal(inspect.items[0]?.state, state);
       assert.equal(inspect.items[0]?.phase, state);
       assert.equal(inspect.items[0]?.role, role);
+      if (text === "SCRIPT:refusal") {
+        assert.equal(inspect.items[0]?.refusal, "host_fake_refusal");
+      }
     }
 
     writeFileSync(decisionHold, "hold");

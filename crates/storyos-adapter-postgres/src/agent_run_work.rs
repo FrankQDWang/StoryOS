@@ -178,7 +178,19 @@ async fn settle_one_phase(
         if blocked || matches!(plan, FakeDispatchPlan::RefuseWithoutDispatch { .. }) {
             let settlement = match plan {
                 FakeDispatchPlan::RefuseWithoutDispatch { capability } => {
-                    serde_json::json!({"kind":"execution_refused","capability": capability_name(capability)})
+                    serde_json::json!({
+                        "kind": "execution_refused",
+                        "capability": match capability {
+                            ExecutionCapability::Tool => "tool",
+                            ExecutionCapability::Mcp => "mcp",
+                            ExecutionCapability::Research => "research",
+                            ExecutionCapability::Embedding => "embedding",
+                            ExecutionCapability::Memory => "memory",
+                            ExecutionCapability::Skill => "skill",
+                            ExecutionCapability::Subrun => "subrun",
+                            ExecutionCapability::Eval => "eval",
+                        }
+                    })
                 }
                 _ => serde_json::json!({"kind":"execution_refused","capability":"blocked_context"}),
             };
@@ -319,9 +331,7 @@ async fn persist_stream_and_decision(
         ) => {
             let id = (*selected).then(|| Uuid::now_v7().to_string());
             let hold = (*selected && *advances_continuation).then_some("decision");
-            let status = if matches!(kind, FakeDecisionKind::Clarification { .. }) {
-                "waiting"
-            } else if hold.is_some() {
+            let status = if hold.is_some() {
                 "claimed"
             } else {
                 "completed"
@@ -623,19 +633,6 @@ async fn update_run(
         .await
         .map_err(complete_database_error)?;
     Ok(())
-}
-
-fn capability_name(capability: ExecutionCapability) -> &'static str {
-    match capability {
-        ExecutionCapability::Tool => "tool",
-        ExecutionCapability::Mcp => "mcp",
-        ExecutionCapability::Research => "research",
-        ExecutionCapability::Embedding => "embedding",
-        ExecutionCapability::Memory => "memory",
-        ExecutionCapability::Skill => "skill",
-        ExecutionCapability::Subrun => "subrun",
-        ExecutionCapability::Eval => "eval",
-    }
 }
 
 async fn hold_if_requested(kind: &str) {

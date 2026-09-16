@@ -459,7 +459,8 @@ fn get_fixture() -> Value {
         "model_attempt": { "kind": "absent" },
         "evidence": [],
         "items": [],
-        "usage": { "kind": "unknown" }
+        "usage": { "kind": "unknown" },
+        "redaction_profile": "storyos.author.v1"
     })
 }
 

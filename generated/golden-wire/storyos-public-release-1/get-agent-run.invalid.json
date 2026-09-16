@@ -90,6 +90,7 @@
     "owner_user_id": "018f0000-0000-7001-8000-000000000001",
     "project_id": "018f0000-0000-7001-8000-000000000201"
   },
+  "redaction_profile": "storyos.author.v1",
   "run_id": "018f0000-0000-7001-8000-000000000a34",
   "schema_id": "storyos.query.agent-run.response.v2",
   "usage": {

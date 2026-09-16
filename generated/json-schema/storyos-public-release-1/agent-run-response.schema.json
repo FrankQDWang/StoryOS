@@ -954,6 +954,9 @@
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
     },
+    "redaction_profile": {
+      "type": "string"
+    },
     "run_id": {
       "format": "uuid",
       "type": "string"
@@ -983,7 +986,8 @@
     "model_attempt",
     "evidence",
     "items",
-    "usage"
+    "usage",
+    "redaction_profile"
   ],
   "title": "StoryOS Agent Run Response",
   "type": "object"

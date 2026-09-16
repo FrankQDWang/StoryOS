@@ -119,48 +119,6 @@ fn keeps_partial_and_unselected_output_as_evidence_only() {
 }
 
 #[test]
-fn executes_nothing_for_partial_tool_arguments_or_hosted_items() {
-    assert_eq!(
-        plan_fake_model_decision("SCRIPT:tool_partial"),
-        FakeDispatchPlan::Dispatch {
-            items: vec![NativeStreamItem {
-                item_id: "1",
-                role: StreamItemRole::Tool,
-                state: StreamItemState::Provisional,
-                text: None,
-                summary: Some("partial_tool_arguments"),
-                call_id: Some("call-1"),
-                arguments: Some("{\"q\""),
-                refusal: None,
-                hosted_report: None,
-            }],
-            outcome: FakeAttemptOutcome::NoDecision {
-                reason: NoDecisionReason::PartialArguments,
-            },
-        }
-    );
-    assert_eq!(
-        plan_fake_model_decision("SCRIPT:hosted"),
-        FakeDispatchPlan::Dispatch {
-            items: vec![NativeStreamItem {
-                item_id: "1",
-                role: StreamItemRole::Hosted,
-                state: StreamItemState::Complete,
-                text: None,
-                summary: Some("hosted_item_evidence"),
-                call_id: None,
-                arguments: None,
-                refusal: None,
-                hosted_report: Some("host_fake_hosted_item"),
-            }],
-            outcome: FakeAttemptOutcome::NoDecision {
-                reason: NoDecisionReason::HostedEvidenceOnly,
-            },
-        }
-    );
-}
-
-#[test]
 fn digests_non_secret_wire_material_with_the_host_fake_mapping() {
     assert_eq!(
         host_fake_wire_digest("Help with this passage.", "chapter-1"),

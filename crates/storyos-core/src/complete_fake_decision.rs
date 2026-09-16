@@ -244,6 +244,24 @@ fn scripted_plan(author_message: &str) -> Option<FakeDispatchPlan> {
                 },
             });
         }
+        "SCRIPT:refusal" => {
+            return Some(FakeDispatchPlan::Dispatch {
+                items: vec![NativeStreamItem {
+                    item_id: "1",
+                    role: StreamItemRole::Assistant,
+                    state: StreamItemState::Complete,
+                    text: None,
+                    summary: Some("host_fake_refusal"),
+                    call_id: None,
+                    arguments: None,
+                    refusal: Some("host_fake_refusal"),
+                    hosted_report: None,
+                }],
+                outcome: FakeAttemptOutcome::NoDecision {
+                    reason: NoDecisionReason::Invalid,
+                },
+            });
+        }
         _ => return None,
     };
     let state = match outcome {

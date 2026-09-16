@@ -226,6 +226,7 @@ pub(super) async fn get_agent_run(
                 .map(|model| model.usage_kind.clone())
                 .unwrap_or_else(|| "unknown".to_owned()),
         },
+        redaction_profile: "storyos.author.v1".to_owned(),
     }))
 }
 
