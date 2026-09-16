@@ -92,6 +92,7 @@ mod set_current_chapter_tests;
 #[path = "set_current_chapter_authority_tests.rs"]
 mod set_current_chapter_authority_tests;
 
+mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;

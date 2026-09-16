@@ -162,6 +162,10 @@ pub struct CreateAgentRunResponse {
 #[serde(rename_all = "snake_case")]
 pub enum AgentRunStatus {
     Queued,
+    Claimed,
+    Waiting,
+    Completed,
+    Refused,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -212,6 +216,7 @@ pub enum ContextRejectionReason {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum DestinationIo {
     None,
+    HostFake,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -298,6 +303,114 @@ pub struct AgentRunContextInspect {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalContinuationInspect {
+    Absent,
+    Present { continuation_binding_id: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceAvailability {
+    Current,
+    Unknown,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum AttemptEvidence {
+    SentContent {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        content: String,
+    },
+    StoredReference {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        reference_id: String,
+    },
+    ProviderReport {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        report: String,
+    },
+    ProviderOpaque {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        unknown_facts: Vec<String>,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalDecisionInspect {
+    Absent,
+    ExecutionRefused {
+        capability: String,
+    },
+    Advisory {
+        decision_id: String,
+        selected: bool,
+        text: String,
+        continuation: OptionalContinuationInspect,
+    },
+    ProseChange {
+        decision_id: String,
+        selected: bool,
+        text: String,
+        producer_input: String,
+        continuation: OptionalContinuationInspect,
+        authoritative: bool,
+    },
+    Clarification {
+        decision_id: String,
+        selected: bool,
+        question: String,
+        continuation: OptionalContinuationInspect,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalModelAttemptInspect {
+    Absent,
+    Present {
+        model_attempt_id: String,
+        destination_attempt_id: String,
+        outbound_disclosure_event_id: String,
+        model_invocation_id: String,
+        dispatch_state: String,
+    },
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct GetAgentRunRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model_attempt_id: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AgentRunStreamItemInspect {
+    pub item_id: String,
+    pub role: String,
+    pub state: String,
+    pub text: Option<String>,
+    pub summary: Option<String>,
+    pub call_id: Option<String>,
+    pub arguments: Option<String>,
+    pub refusal: Option<String>,
+    pub hosted_report: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AgentRunUsageInspect {
+    pub kind: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunResponse {
     pub schema_id: String,
@@ -309,4 +422,9 @@ pub struct GetAgentRunResponse {
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContextInspect,
+    pub decision: OptionalDecisionInspect,
+    pub model_attempt: OptionalModelAttemptInspect,
+    pub evidence: Vec<AttemptEvidence>,
+    pub items: Vec<AgentRunStreamItemInspect>,
+    pub usage: AgentRunUsageInspect,
 }

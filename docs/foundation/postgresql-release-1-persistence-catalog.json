@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:ebb255138e11caf6e77b81483ecc179b3cc735d7d6880fc6e1febc9e00b563ae",
+    "migration_chain_digest": "sha256:03ffa74bd63a5743797002bdc17a87273b3ffbd561d4290b5fd6ed7fda02dd2a",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -423,6 +423,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0047_context_assembly.sql",
           "lf_sha256": "sha256:708f8ef4eedbaeb6dd8d1a77e4283a7eb5b971585307ae6b5605ad4587bd51f0"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0048_complete_fake_model_decision.sql",
+          "lf_sha256": "sha256:d13a262417dc199efa4af4b81900b6310094577bb2bf0c24490628a4c1b43bc2"
         }
       ]
     },

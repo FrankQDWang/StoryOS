@@ -4,6 +4,7 @@ mod archive_path;
 mod archive_project;
 mod archive_zip;
 mod assemble_context;
+mod complete_fake_decision;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;
@@ -35,6 +36,11 @@ pub use assemble_context::{
     ContextBlockReason, ContextSourceClass, ContextSufficiency, CurrentPassageAssembly,
     CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput, RejectionReason,
     assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
+};
+pub use complete_fake_decision::{
+    ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
+    HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, NativeStreamItem, StreamItemRole,
+    StreamItemState, host_fake_wire_digest, plan_fake_model_decision,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,

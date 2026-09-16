@@ -222,12 +222,12 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/agent-run-request.schema.json",
       "schema_id": "storyos.query.agent-run.request.v2",
-      "sha256": "sha256:2733a387edfffbefea1790b5e0e7132190664504998fce43a07e93699c05d6cf"
+      "sha256": "sha256:811dfb51765acf875b0001f2a9411dabdfcab68185e0513de07f6a0a735bbb0c"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/agent-run-response.schema.json",
       "schema_id": "storyos.query.agent-run.response.v2",
-      "sha256": "sha256:771e695873ba9fb310b107782299125f23f89852c8b2e300e43beb5919d7f141"
+      "sha256": "sha256:22853053150be6b54824d57f191ee3a5ccc1de6ef7a4d56acc552015743cdb8c"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-request.schema.json",

@@ -1,4 +1,5 @@
 use axum::body::to_bytes;
+use axum::extract::Query;
 use sha2::{Digest, Sha256};
 use storyos_application::{
     AuthorCommandAdmissionIds, ConversationSelection, CreateAgentRunCommand, CreateAgentRunError,
@@ -167,6 +168,7 @@ pub(super) async fn create_agent_run(
 pub(super) async fn get_agent_run(
     State(state): State<Arc<ServerState>>,
     Path((project_id, run_id)): Path<(String, String)>,
+    Query(query): Query<contracts::GetAgentRunRequest>,
     headers: HeaderMap,
 ) -> Result<Json<contracts::GetAgentRunResponse>, ApiError> {
     let scope = authenticate_scope(
@@ -176,6 +178,9 @@ pub(super) async fn get_agent_run(
         RequestOriginPolicy::SensitiveSafeReadWithRefererFallback,
     )?;
     valid_uuid(&run_id)?;
+    if let Some(model_attempt_id) = query.model_attempt_id.as_deref() {
+        valid_uuid(model_attempt_id)?;
+    }
     let reader = project_reader(&state).await?;
     let Some(record) = open_agent_run(&reader, &scope, &run_id)
         .await
@@ -183,6 +188,15 @@ pub(super) async fn get_agent_run(
     else {
         return Err(resource_unavailable());
     };
+    if let Some(model_attempt_id) = query.model_attempt_id.as_deref() {
+        let matches = record
+            .model
+            .as_ref()
+            .is_some_and(|model| model.model_attempt_id == model_attempt_id);
+        if !matches {
+            return Err(resource_unavailable());
+        }
+    }
     Ok(Json(contracts::GetAgentRunResponse {
         schema_id: contracts::GET_AGENT_RUN_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: Uuid::now_v7().to_string(),
@@ -191,9 +205,193 @@ pub(super) async fn get_agent_run(
         conversation_id: record.conversation_id,
         memory_settings_revision: record.memory_settings_revision,
         run_id: record.run_id,
-        status: contracts::AgentRunStatus::Queued,
+        status: inspect_status(record.status),
         context: inspect_context(&record.context),
+        decision: inspect_decision(&record.decision),
+        model_attempt: inspect_model(record.model.as_ref()),
+        evidence: record
+            .model
+            .as_ref()
+            .map(|model| inspect_evidence(&model.evidence))
+            .unwrap_or_default(),
+        items: record
+            .model
+            .as_ref()
+            .map(|model| inspect_items(&model.items))
+            .unwrap_or_default(),
+        usage: contracts::AgentRunUsageInspect {
+            kind: record
+                .model
+                .as_ref()
+                .map(|model| model.usage_kind.clone())
+                .unwrap_or_else(|| "unknown".to_owned()),
+        },
     }))
+}
+
+fn inspect_status(status: storyos_application::AgentRunStatus) -> contracts::AgentRunStatus {
+    match status {
+        storyos_application::AgentRunStatus::Queued => contracts::AgentRunStatus::Queued,
+        storyos_application::AgentRunStatus::Claimed => contracts::AgentRunStatus::Claimed,
+        storyos_application::AgentRunStatus::Waiting => contracts::AgentRunStatus::Waiting,
+        storyos_application::AgentRunStatus::Completed => contracts::AgentRunStatus::Completed,
+        storyos_application::AgentRunStatus::Refused => contracts::AgentRunStatus::Refused,
+    }
+}
+
+fn inspect_decision(
+    decision: &storyos_application::AgentRunDecisionInspect,
+) -> contracts::OptionalDecisionInspect {
+    match decision {
+        storyos_application::AgentRunDecisionInspect::Absent => {
+            contracts::OptionalDecisionInspect::Absent
+        }
+        storyos_application::AgentRunDecisionInspect::ExecutionRefused { capability } => {
+            contracts::OptionalDecisionInspect::ExecutionRefused {
+                capability: capability.clone(),
+            }
+        }
+        storyos_application::AgentRunDecisionInspect::Advisory {
+            decision_id,
+            selected,
+            text,
+            continuation_binding_id,
+        } => contracts::OptionalDecisionInspect::Advisory {
+            decision_id: decision_id.clone(),
+            selected: *selected,
+            text: text.clone(),
+            continuation: inspect_continuation(continuation_binding_id.as_deref()),
+        },
+        storyos_application::AgentRunDecisionInspect::ProseChange {
+            decision_id,
+            selected,
+            text,
+            producer_input,
+            continuation_binding_id,
+        } => contracts::OptionalDecisionInspect::ProseChange {
+            decision_id: decision_id.clone(),
+            selected: *selected,
+            text: text.clone(),
+            producer_input: producer_input.clone(),
+            continuation: inspect_continuation(continuation_binding_id.as_deref()),
+            authoritative: false,
+        },
+        storyos_application::AgentRunDecisionInspect::Clarification {
+            decision_id,
+            selected,
+            question,
+            continuation_binding_id,
+        } => contracts::OptionalDecisionInspect::Clarification {
+            decision_id: decision_id.clone(),
+            selected: *selected,
+            question: question.clone(),
+            continuation: inspect_continuation(continuation_binding_id.as_deref()),
+        },
+    }
+}
+
+fn inspect_continuation(
+    continuation_binding_id: Option<&str>,
+) -> contracts::OptionalContinuationInspect {
+    match continuation_binding_id {
+        Some(continuation_binding_id) => contracts::OptionalContinuationInspect::Present {
+            continuation_binding_id: continuation_binding_id.to_owned(),
+        },
+        None => contracts::OptionalContinuationInspect::Absent,
+    }
+}
+
+fn inspect_model(
+    model: Option<&storyos_application::AgentRunModelInspect>,
+) -> contracts::OptionalModelAttemptInspect {
+    match model {
+        Some(model) => contracts::OptionalModelAttemptInspect::Present {
+            model_attempt_id: model.model_attempt_id.clone(),
+            destination_attempt_id: model.destination_attempt_id.clone(),
+            outbound_disclosure_event_id: model.outbound_disclosure_event_id.clone(),
+            model_invocation_id: model.model_invocation_id.clone(),
+            dispatch_state: model.dispatch_state.clone(),
+        },
+        None => contracts::OptionalModelAttemptInspect::Absent,
+    }
+}
+
+fn inspect_evidence(
+    evidence: &[storyos_application::AgentRunEvidence],
+) -> Vec<contracts::AttemptEvidence> {
+    evidence
+        .iter()
+        .map(|item| match item {
+            storyos_application::AgentRunEvidence::SentContent {
+                attempt_id,
+                availability,
+                content,
+            } => contracts::AttemptEvidence::SentContent {
+                attempt_id: attempt_id.clone(),
+                availability: inspect_availability(*availability),
+                content: content.clone(),
+            },
+            storyos_application::AgentRunEvidence::StoredReference {
+                attempt_id,
+                availability,
+                reference_id,
+            } => contracts::AttemptEvidence::StoredReference {
+                attempt_id: attempt_id.clone(),
+                availability: inspect_availability(*availability),
+                reference_id: reference_id.clone(),
+            },
+            storyos_application::AgentRunEvidence::ProviderReport {
+                attempt_id,
+                availability,
+                report,
+            } => contracts::AttemptEvidence::ProviderReport {
+                attempt_id: attempt_id.clone(),
+                availability: inspect_availability(*availability),
+                report: report.clone(),
+            },
+            storyos_application::AgentRunEvidence::ProviderOpaque {
+                attempt_id,
+                availability,
+                unknown_facts,
+            } => contracts::AttemptEvidence::ProviderOpaque {
+                attempt_id: attempt_id.clone(),
+                availability: inspect_availability(*availability),
+                unknown_facts: unknown_facts.clone(),
+            },
+        })
+        .collect()
+}
+
+fn inspect_items(
+    items: &[storyos_application::AgentRunStreamItem],
+) -> Vec<contracts::AgentRunStreamItemInspect> {
+    items
+        .iter()
+        .map(|item| contracts::AgentRunStreamItemInspect {
+            item_id: item.item_id.clone(),
+            role: item.role.clone(),
+            state: item.state.clone(),
+            text: item.text.clone(),
+            summary: item.summary.clone(),
+            call_id: item.call_id.clone(),
+            arguments: item.arguments.clone(),
+            refusal: item.refusal.clone(),
+            hosted_report: item.hosted_report.clone(),
+        })
+        .collect()
+}
+
+fn inspect_availability(
+    availability: storyos_application::EvidenceAvailability,
+) -> contracts::EvidenceAvailability {
+    match availability {
+        storyos_application::EvidenceAvailability::Current => {
+            contracts::EvidenceAvailability::Current
+        }
+        storyos_application::EvidenceAvailability::Unknown => {
+            contracts::EvidenceAvailability::Unknown
+        }
+    }
 }
 
 fn inspect_context(
@@ -201,6 +399,7 @@ fn inspect_context(
 ) -> contracts::AgentRunContextInspect {
     use storyos_core::{ContextBlockReason, ContextSufficiency, RejectionReason};
     let record = &context.record;
+    let dispatched = context.destination_context_manifest_id.is_some();
     contracts::AgentRunContextInspect {
         operation_requirement_id: record
             .operation_requirement
@@ -277,7 +476,7 @@ fn inspect_context(
             .collect(),
         host_control: contracts::HostControlInspect {
             distinct_from_destination: record.host_control.distinct_from_destination,
-            destination_visible: record.host_control.destination_visible,
+            destination_visible: dispatched || record.host_control.destination_visible,
         },
         assembly_manifest_id: context.assembly_manifest_id.clone(),
         destination_context_manifest: optional_manifest(
@@ -286,7 +485,11 @@ fn inspect_context(
         outbound_disclosure_manifest: optional_manifest(
             context.outbound_disclosure_manifest_id.as_deref(),
         ),
-        destination_io: contracts::DestinationIo::None,
+        destination_io: if dispatched {
+            contracts::DestinationIo::HostFake
+        } else {
+            contracts::DestinationIo::None
+        },
         current_availability: contracts::CurrentAvailabilityInspect {
             working_target: match &context.working_target_availability {
                 storyos_application::WorkingTargetAvailability::Current => {

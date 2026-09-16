@@ -52,11 +52,99 @@ pub struct AgentRunRecord {
     pub run_id: String,
     pub status: AgentRunStatus,
     pub context: AgentRunContext,
+    pub decision: AgentRunDecisionInspect,
+    pub model: Option<AgentRunModelInspect>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AgentRunStatus {
     Queued,
+    Claimed,
+    Waiting,
+    Completed,
+    Refused,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AgentRunDecisionInspect {
+    Absent,
+    ExecutionRefused {
+        capability: String,
+    },
+    Advisory {
+        decision_id: String,
+        selected: bool,
+        text: String,
+        continuation_binding_id: Option<String>,
+    },
+    ProseChange {
+        decision_id: String,
+        selected: bool,
+        text: String,
+        producer_input: String,
+        continuation_binding_id: Option<String>,
+    },
+    Clarification {
+        decision_id: String,
+        selected: bool,
+        question: String,
+        continuation_binding_id: Option<String>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRunModelInspect {
+    pub model_attempt_id: String,
+    pub destination_attempt_id: String,
+    pub outbound_disclosure_event_id: String,
+    pub model_invocation_id: String,
+    pub dispatch_state: String,
+    pub evidence: Vec<AgentRunEvidence>,
+    pub items: Vec<AgentRunStreamItem>,
+    pub usage_kind: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRunStreamItem {
+    pub item_id: String,
+    pub role: String,
+    pub state: String,
+    pub text: Option<String>,
+    pub summary: Option<String>,
+    pub call_id: Option<String>,
+    pub arguments: Option<String>,
+    pub refusal: Option<String>,
+    pub hosted_report: Option<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AgentRunEvidence {
+    SentContent {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        content: String,
+    },
+    StoredReference {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        reference_id: String,
+    },
+    ProviderReport {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        report: String,
+    },
+    ProviderOpaque {
+        attempt_id: String,
+        availability: EvidenceAvailability,
+        unknown_facts: Vec<String>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum EvidenceAvailability {
+    Current,
+    Unknown,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -2,7 +2,15 @@
   "$id": "storyos.query.agent-run.request.v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "maxProperties": 0,
+  "properties": {
+    "model_attempt_id": {
+      "format": "uuid",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
   "title": "StoryOS Agent Run Request",
   "type": "object"
 }

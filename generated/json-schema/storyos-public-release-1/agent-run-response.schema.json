@@ -78,9 +78,193 @@
     },
     "AgentRunStatus": {
       "enum": [
-        "queued"
+        "queued",
+        "claimed",
+        "waiting",
+        "completed",
+        "refused"
       ],
       "type": "string"
+    },
+    "AgentRunStreamItemInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "arguments": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "call_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hosted_report": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "item_id": {
+          "type": "string"
+        },
+        "refusal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "type": "string"
+        },
+        "state": {
+          "type": "string"
+        },
+        "summary": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "item_id",
+        "role",
+        "state"
+      ],
+      "type": "object"
+    },
+    "AgentRunUsageInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "type": "object"
+    },
+    "AttemptEvidence": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "availability": {
+              "$ref": "#/$defs/EvidenceAvailability"
+            },
+            "content": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "sent_content",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "attempt_id",
+            "availability",
+            "content"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "availability": {
+              "$ref": "#/$defs/EvidenceAvailability"
+            },
+            "kind": {
+              "const": "stored_reference",
+              "type": "string"
+            },
+            "reference_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "attempt_id",
+            "availability",
+            "reference_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "availability": {
+              "$ref": "#/$defs/EvidenceAvailability"
+            },
+            "kind": {
+              "const": "provider_report",
+              "type": "string"
+            },
+            "report": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "attempt_id",
+            "availability",
+            "report"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "availability": {
+              "$ref": "#/$defs/EvidenceAvailability"
+            },
+            "kind": {
+              "const": "provider_opaque",
+              "type": "string"
+            },
+            "unknown_facts": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "attempt_id",
+            "availability",
+            "unknown_facts"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ContextBlockReason": {
       "oneOf": [
@@ -329,8 +513,28 @@
             "kind"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "host_fake",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
+    },
+    "EvidenceAvailability": {
+      "enum": [
+        "current",
+        "unknown"
+      ],
+      "type": "string"
     },
     "HostControlInspect": {
       "additionalProperties": false,
@@ -347,6 +551,173 @@
         "destination_visible"
       ],
       "type": "object"
+    },
+    "OptionalContinuationInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "continuation_binding_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "continuation_binding_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OptionalDecisionInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "execution_refused",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "capability"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "continuation": {
+              "$ref": "#/$defs/OptionalContinuationInspect"
+            },
+            "decision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "advisory",
+              "type": "string"
+            },
+            "selected": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "selected",
+            "text",
+            "continuation"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "authoritative": {
+              "type": "boolean"
+            },
+            "continuation": {
+              "$ref": "#/$defs/OptionalContinuationInspect"
+            },
+            "decision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "prose_change",
+              "type": "string"
+            },
+            "producer_input": {
+              "type": "string"
+            },
+            "selected": {
+              "type": "boolean"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "selected",
+            "text",
+            "producer_input",
+            "continuation",
+            "authoritative"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "continuation": {
+              "$ref": "#/$defs/OptionalContinuationInspect"
+            },
+            "decision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "clarification",
+              "type": "string"
+            },
+            "question": {
+              "type": "string"
+            },
+            "selected": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "decision_id",
+            "selected",
+            "question",
+            "continuation"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "OptionalManifestRef": {
       "oneOf": [
@@ -378,6 +749,60 @@
           "required": [
             "kind",
             "manifest_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OptionalModelAttemptInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "destination_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "dispatch_state": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "model_attempt_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "model_invocation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "outbound_disclosure_event_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "model_attempt_id",
+            "destination_attempt_id",
+            "outbound_disclosure_event_id",
+            "model_invocation_id",
+            "dispatch_state"
           ],
           "type": "object"
         }
@@ -492,9 +917,27 @@
       "format": "uuid",
       "type": "string"
     },
+    "decision": {
+      "$ref": "#/$defs/OptionalDecisionInspect"
+    },
+    "evidence": {
+      "items": {
+        "$ref": "#/$defs/AttemptEvidence"
+      },
+      "type": "array"
+    },
+    "items": {
+      "items": {
+        "$ref": "#/$defs/AgentRunStreamItemInspect"
+      },
+      "type": "array"
+    },
     "memory_settings_revision": {
       "format": "uuid",
       "type": "string"
+    },
+    "model_attempt": {
+      "$ref": "#/$defs/OptionalModelAttemptInspect"
     },
     "project_agent_id": {
       "format": "uuid",
@@ -513,6 +956,9 @@
     },
     "status": {
       "$ref": "#/$defs/AgentRunStatus"
+    },
+    "usage": {
+      "$ref": "#/$defs/AgentRunUsageInspect"
     }
   },
   "required": [
@@ -524,7 +970,12 @@
     "memory_settings_revision",
     "run_id",
     "status",
-    "context"
+    "context",
+    "decision",
+    "model_attempt",
+    "evidence",
+    "items",
+    "usage"
   ],
   "title": "StoryOS Agent Run Response",
   "type": "object"

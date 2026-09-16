@@ -3,15 +3,17 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_agent_run::{
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget,
-    AuthorMessage, CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE,
-    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason,
-    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
-    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ConversationSelection,
-    CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse,
-    CurrentAvailabilityInspect, DestinationIo, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
-    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse, HostControlInspect, InstructionBinding,
-    OptionalManifestRef, ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
+    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
+    CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
+    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason, ContextProjectionInspect,
+    ContextPurpose, ContextRejectionInspect, ContextRejectionReason, ContextSourceClass,
+    ContextSourceInspect, ContextSufficiency, ConversationSelection, CreateAgentRunEffect,
+    CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
+    DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
+    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
+    InstructionBinding, OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -95,14 +97,16 @@ pub(super) fn create_response_schema_bytes() -> Vec<u8> {
 }
 
 pub(super) fn get_request_schema_bytes() -> Vec<u8> {
-    json_bytes(&json!({
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "$id": GET_AGENT_RUN_REQUEST_SCHEMA_ID,
-        "title": "StoryOS Agent Run Request",
-        "type": "object",
-        "additionalProperties": false,
-        "maxProperties": 0
-    }))
+    let mut schema = schema_value::<GetAgentRunRequest>(
+        GET_AGENT_RUN_REQUEST_SCHEMA_ID,
+        "StoryOS Agent Run Request",
+    );
+    if let Some(properties) = schema.get_mut("properties")
+        && properties.get("model_attempt_id").is_some()
+    {
+        properties["model_attempt_id"]["format"] = json!("uuid");
+    }
+    json_bytes(&schema)
 }
 
 pub(super) fn get_response_schema_bytes() -> Vec<u8> {
@@ -151,6 +155,28 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
     if let Some(availability) = schema["$defs"].get_mut("SourceAvailability") {
         constrain_uuid_fields(availability, &["current_revision_id"]);
     }
+    for name in [
+        "AttemptEvidence",
+        "OptionalDecisionInspect",
+        "OptionalModelAttemptInspect",
+        "OptionalContinuationInspect",
+    ] {
+        if let Some(definition) = schema["$defs"].get_mut(name) {
+            constrain_uuid_fields(
+                definition,
+                &[
+                    "attempt_id",
+                    "decision_id",
+                    "model_attempt_id",
+                    "destination_attempt_id",
+                    "outbound_disclosure_event_id",
+                    "model_invocation_id",
+                    "continuation_binding_id",
+                    "reference_id",
+                ],
+            );
+        }
+    }
     json_bytes(&schema)
 }
 
@@ -182,6 +208,7 @@ pub(super) fn openapi() -> String {
             "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one durable AgentRun status\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: run_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
+            "        - name: model_attempt_id\n          in: query\n          required: false\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
         ),
         CREATE_AGENT_RUN.path,
@@ -197,7 +224,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -225,6 +252,14 @@ pub(super) fn typescript_type_declarations() -> String {
         HostControlInspect::decl(&config),
         CurrentAvailabilityInspect::decl(&config),
         AgentRunContextInspect::decl(&config),
+        EvidenceAvailability::decl(&config),
+        AttemptEvidence::decl(&config),
+        OptionalContinuationInspect::decl(&config),
+        OptionalDecisionInspect::decl(&config),
+        OptionalModelAttemptInspect::decl(&config),
+        AgentRunStreamItemInspect::decl(&config),
+        AgentRunUsageInspect::decl(&config),
+        GetAgentRunRequest::decl(&config),
         GetAgentRunResponse::decl(&config),
     )
 }
@@ -243,19 +278,23 @@ pub(super) fn typescript_client_source() -> String {
             "  if (!request || typeof request !== \"object\") throw new TypeError(\"createAgentRun requires request\");\n",
             "  if (typeof idempotencyKey !== \"string\" || typeof antiForgery !== \"string\") throw new TypeError(\"createAgentRun requires security bindings\");\n",
             "  return commandJson({{ ...options, path: `{}`, body: request, commandHeaders: {{ \"idempotency-key\": idempotencyKey, \"x-storyos-anti-forgery\": antiForgery }} }});\n}}\n",
-            "\nexport async function getAgentRun({{ projectId, runId, ...options }} = {{}}) {{\n",
+            "\nexport async function getAgentRun({{ projectId, runId, modelAttemptId, ...options }} = {{}}) {{\n",
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getAgentRun requires projectId\");\n",
             "  if (typeof runId !== \"string\" || runId.length === 0) throw new TypeError(\"getAgentRun requires runId\");\n",
+            "  const query = modelAttemptId == null || modelAttemptId === \"\" ? \"\" : `?model_attempt_id=${{encodeURIComponent(modelAttemptId)}}`;\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
         ),
         CREATE_AGENT_RUN_DIGEST_PROFILE,
         CREATE_AGENT_RUN
             .path
             .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        GET_AGENT_RUN
-            .path
-            .replace("{project_id}", "${encodeURIComponent(projectId)}")
-            .replace("{run_id}", "${encodeURIComponent(runId)}"),
+        format!(
+            "{}{{query}}",
+            GET_AGENT_RUN
+                .path
+                .replace("{project_id}", "${encodeURIComponent(projectId)}")
+                .replace("{run_id}", "${encodeURIComponent(runId)}")
+        ),
     )
 }
 
@@ -263,7 +302,7 @@ pub(super) fn typescript_declarations() -> &'static str {
     concat!(
         "export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;\n",
         "export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;\n",
-        "export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<GetAgentRunResponse>;\n",
+        "export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;\n",
     )
 }
 
@@ -415,7 +454,12 @@ fn get_fixture() -> Value {
             "current_availability": {
                 "working_target": { "kind": "current" }
             }
-        }
+        },
+        "decision": { "kind": "absent" },
+        "model_attempt": { "kind": "absent" },
+        "evidence": [],
+        "items": [],
+        "usage": { "kind": "unknown" }
     })
 }
 
