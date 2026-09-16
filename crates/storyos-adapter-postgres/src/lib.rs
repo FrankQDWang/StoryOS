@@ -33,6 +33,10 @@ mod recovery_visibility_proof_tests;
 mod update_project_tests;
 
 #[cfg(test)]
+#[path = "update_project_assistance_tests.rs"]
+mod update_project_assistance_tests;
+
+#[cfg(test)]
 #[path = "archive_project_tests.rs"]
 mod archive_project_tests;
 
@@ -124,6 +128,7 @@ mod undo_latest_author_action;
 mod undo_structure;
 mod update_chapter;
 mod update_project;
+mod update_project_assistance;
 mod update_volume;
 mod volume_storage_order;
 
@@ -717,6 +722,20 @@ impl ProjectReader for PostgresProjectReader {
         };
         transaction.commit().await.map_err(read_error)?;
         Ok(chapter)
+    }
+
+    async fn read_project_assistance(
+        &self,
+        scope: &ProjectScope,
+    ) -> Result<Option<storyos_application::ProjectAssistanceRecord>, ProjectReadError> {
+        let mut client = self.connect().await?;
+        let transaction = client.transaction().await.map_err(read_error)?;
+        set_scope(&transaction, scope).await?;
+        let assistance =
+            crate::update_project_assistance::read_assistance_record(transaction.client(), scope)
+                .await?;
+        transaction.commit().await.map_err(read_error)?;
+        Ok(assistance)
     }
 }
 

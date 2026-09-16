@@ -81,7 +81,9 @@
           "updateProject",
           "archiveProject",
           "deleteProject",
-          "getCommand"
+          "getCommand",
+          "getProjectAssistance",
+          "updateProjectAssistance"
         ]
       },
       {
@@ -888,6 +890,165 @@
         "json_schema_ids": [
           "storyos.command.update-project.request.v1",
           "storyos.command.update-project.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      }
+    },
+    {
+      "operation_id": "getProjectAssistance",
+      "kind": "query",
+      "method": "GET",
+      "path": "/api/v1/projects/{project_id}/assistance",
+      "shape": "project:assistance",
+      "semantic_owner": "release",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.query.project-assistance.request.v1",
+        "response": "storyos.query.project-assistance.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "action_class": "none",
+      "admission": "query",
+      "editor": {
+        "session": "none",
+        "writer_generation": "none",
+        "takeover": "none"
+      },
+      "idempotency": "none",
+      "preconditions": [
+        "server_derived_project_scope",
+        "project_visibility"
+      ],
+      "settlement": {
+        "mode": "read",
+        "acknowledgements": [],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          413,
+          415,
+          422,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "query_canonical",
+      "activity": {
+        "success": [],
+        "no_effect": [],
+        "pre_admission": "none",
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.getProjectAssistance.positive.v1",
+        "negative": [
+          "storyos.golden.getProjectAssistance.invalid.v1",
+          "storyos.golden.getProjectAssistance.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "getProjectAssistance",
+        "typescript_operation": "getProjectAssistance",
+        "json_schema_ids": [
+          "storyos.query.project-assistance.request.v1",
+          "storyos.query.project-assistance.response.v1"
+        ],
+        "schema_catalog": "storyos.schema-catalog.v1",
+        "openapi": true,
+        "typescript_client": true,
+        "golden_wire_corpus": true
+      }
+    },
+    {
+      "operation_id": "updateProjectAssistance",
+      "kind": "command",
+      "method": "PUT",
+      "path": "/api/v1/projects/{project_id}/assistance",
+      "shape": "project:assistance",
+      "semantic_owner": "release",
+      "wire_owner": "protocol",
+      "schemas": {
+        "request": "storyos.command.update-project-assistance.request.v1",
+        "response": "storyos.command.update-project-assistance.response.v1",
+        "request_source": "protocol",
+        "response_source": "protocol",
+        "semantic_source": "release"
+      },
+      "action_class": "explicit_project_command",
+      "admission": "author_command",
+      "editor": {
+        "session": "none",
+        "writer_generation": "none",
+        "takeover": "none"
+      },
+      "idempotency": "header_and_admission_record",
+      "preconditions": [
+        "server_derived_project_scope",
+        "expected_assistance_revision",
+        "project_active"
+      ],
+      "settlement": {
+        "mode": "sync",
+        "acknowledgements": [
+          "committed",
+          "requires_reconfirmation"
+        ],
+        "http_statuses": [
+          200,
+          400,
+          401,
+          403,
+          404,
+          405,
+          409,
+          412,
+          413,
+          415,
+          422,
+          428,
+          429,
+          503
+        ],
+        "settlement_query": null,
+        "operation_ref": null
+      },
+      "error_profile": "command_sync",
+      "activity": {
+        "success": [
+          "storyos.event.domain-receipt-settled.v1",
+          "storyos.event.project-assistance-updated.v1"
+        ],
+        "no_effect": [
+          "storyos.event.domain-receipt-settled.v1"
+        ],
+        "pre_admission": "none",
+        "visibility": "only after the durable transition or async settlement named by the operation"
+      },
+      "fixtures": {
+        "positive": "storyos.golden.updateProjectAssistance.positive.v1",
+        "negative": [
+          "storyos.golden.updateProjectAssistance.invalid.v1",
+          "storyos.golden.updateProjectAssistance.boundary.v1"
+        ]
+      },
+      "generated": {
+        "openapi_operation_id": "updateProjectAssistance",
+        "typescript_operation": "updateProjectAssistance",
+        "json_schema_ids": [
+          "storyos.command.update-project-assistance.request.v1",
+          "storyos.command.update-project-assistance.response.v1"
         ],
         "schema_catalog": "storyos.schema-catalog.v1",
         "openapi": true,
@@ -5600,6 +5761,15 @@
       "description": "",
       "positive_fixture": "storyos.golden.storyos.event.project-updated.v1.positive.v1",
       "negative_fixture": "storyos.golden.storyos.event.project-updated.v1.negative.v1"
+    },
+    {
+      "schema_id": "storyos.event.project-assistance-updated.v1",
+      "event_kind": "project_assistance_updated",
+      "semantic_owner": "release",
+      "wire_profile": "storyos.project-activity.v1",
+      "description": "",
+      "positive_fixture": "storyos.golden.storyos.event.project-assistance-updated.v1.positive.v1",
+      "negative_fixture": "storyos.golden.storyos.event.project-assistance-updated.v1.negative.v1"
     },
     {
       "schema_id": "storyos.event.project-archival-changed.v1",

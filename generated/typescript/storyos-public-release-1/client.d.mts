@@ -197,7 +197,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -301,6 +301,24 @@ export type TakeOverProjectWriterResult = { "kind": "takeover_applied", prior_ed
 
 export type TakeOverProjectWriterResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, result: TakeOverProjectWriterResult, };
 
+export type ProjectAssistanceAvailability = "available" | "unavailable";
+
+export type ProjectAssistanceBinding = { availability: ProjectAssistanceAvailability, revision: string, model_registration_revision: string, processing_destination_identity: string, processing_destination_identity_evidence_revision: string, project_model_use_binding_revision: string, external_compatibility_decision: string, };
+
+export type GetProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, assistance: ProjectAssistanceBinding, };
+
+export type UpdateProjectAssistanceInput = { availability: ProjectAssistanceAvailability, expected_assistance_revision: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type UpdateProjectAssistanceRequest = { command_schema: string, update_project_assistance_input: UpdateProjectAssistanceInput, };
+
+export type UpdateProjectAssistanceNoEffectReason = "availability_unchanged";
+
+export type UpdateProjectAssistanceConflictReason = "stale_assistance_revision";
+
+export type UpdateProjectAssistanceEffect = { "kind": "initialized", availability: ProjectAssistanceAvailability, revision: string, project_activity_position: string, } | { "kind": "authoritative_applied", availability: ProjectAssistanceAvailability, revision: string, project_activity_position: string, } | { "kind": "no_effect", reason: UpdateProjectAssistanceNoEffectReason, } | { "kind": "conflicted", reason: UpdateProjectAssistanceConflictReason, };
+
+export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, assistance: ProjectAssistanceBinding, effect: UpdateProjectAssistanceEffect, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -325,6 +343,9 @@ export declare function createProject(options: StoryOSQueryOptions & { request: 
 export declare function listProjects(options: StoryOSQueryOptions): Promise<ListProjectsResponse>;
 export declare function digestUpdateProject(request: UpdateProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProject(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectResponse>;
+export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;
+export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

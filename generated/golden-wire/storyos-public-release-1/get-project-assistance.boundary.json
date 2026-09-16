@@ -1,0 +1,17 @@
+{
+  "assistance": {
+    "availability": "available",
+    "external_compatibility_decision": "018f0000-0000-7001-8000-000000000904",
+    "model_registration_revision": "018f0000-0000-7001-8000-000000000901",
+    "processing_destination_identity": "018f0000-0000-7001-8000-000000000902",
+    "processing_destination_identity_evidence_revision": "1",
+    "project_model_use_binding_revision": "018f0000-0000-7001-8000-000000000903",
+    "revision": "1"
+  },
+  "correlation_id": "018f0000-0000-7001-8000-000000000920",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.query.project-assistance.response.v1"
+}

@@ -28,6 +28,12 @@ pub(super) const PROJECT_COMMAND_TARGETS: &[ProjectCommandTarget] = &[
         "storyos.command.update-project.request.v1",
     ),
     target(
+        "updateProjectAssistance",
+        "PUT",
+        "/api/v1/projects/{project_id}/assistance",
+        "storyos.command.update-project-assistance.request.v1",
+    ),
+    target(
         "archiveProject",
         "PUT",
         "/api/v1/projects/{project_id}/archival",

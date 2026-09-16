@@ -136,6 +136,26 @@ export async function updateProject({ projectId, request, idempotencyKey, antiFo
   return commandJson({ ...options, method: "PATCH", path: `/api/v1/projects/${encodeURIComponent(projectId)}`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
 }
 
+export async function getProjectAssistance({ projectId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getProjectAssistance requires projectId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/assistance` });
+}
+
+export async function digestUpdateProjectAssistance(request, cryptoImpl = globalThis.crypto) {
+  if (!request || typeof request !== "object") throw new TypeError("digestUpdateProjectAssistance requires request");
+  const canonical = canonicalJson(request);
+  const bytes = new TextEncoder().encode(JSON.stringify(canonical));
+  const digest = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+  return { algorithm: "sha256", profile: "storyos.command.updateProjectAssistance.jcs.v1", value_hex_lowercase: [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+}
+
+export async function updateProjectAssistance({ projectId, request, idempotencyKey, antiForgery, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("updateProjectAssistance requires projectId");
+  if (!request || typeof request !== "object") throw new TypeError("updateProjectAssistance requires request");
+  if (typeof idempotencyKey !== "string" || typeof antiForgery !== "string") throw new TypeError("updateProjectAssistance requires security bindings");
+  return commandJson({ ...options, method: "PUT", path: `/api/v1/projects/${encodeURIComponent(projectId)}/assistance`, body: request, commandHeaders: { "idempotency-key": idempotencyKey, "x-storyos-anti-forgery": antiForgery } });
+}
+
 export async function digestArchiveProject(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestArchiveProject requires request");
   const canonical = canonicalJson(request);
