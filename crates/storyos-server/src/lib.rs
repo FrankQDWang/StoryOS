@@ -44,6 +44,7 @@ mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
+mod update_project_assistance;
 mod update_volume;
 mod web_assets;
 mod web_host;
@@ -90,6 +91,7 @@ use takeover::take_over_project_writer;
 use undo_latest_author_action::undo_latest_author_action;
 use update_chapter::update_chapter;
 use update_project::update_project;
+use update_project_assistance::{get_project_assistance, update_project_assistance};
 use update_volume::update_volume;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -262,6 +264,17 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(project_method, get_project).on(
                 method_filter(contracts::UPDATE_PROJECT_METHOD),
                 update_project,
+            ),
+        )
+        .route(
+            contracts::GET_PROJECT_ASSISTANCE_PATH,
+            routing::on(
+                method_filter(contracts::GET_PROJECT_ASSISTANCE_METHOD),
+                get_project_assistance,
+            )
+            .on(
+                method_filter(contracts::UPDATE_PROJECT_ASSISTANCE_METHOD),
+                update_project_assistance,
             ),
         )
         .route(

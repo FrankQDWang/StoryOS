@@ -30,6 +30,8 @@ mod release1_manuscript_statistics;
 mod release1_manuscript_statistics_artifacts;
 mod release1_manuscript_tree;
 mod release1_manuscript_tree_artifacts;
+mod release1_project_assistance;
+mod release1_project_assistance_artifacts;
 mod release1_project_export;
 mod release1_project_export_artifacts;
 mod release1_project_export_query;
@@ -156,6 +158,17 @@ pub use release1_manuscript_tree::{
     GET_MANUSCRIPT_TREE_METHOD, GET_MANUSCRIPT_TREE_PATH, GET_MANUSCRIPT_TREE_REQUEST_SCHEMA_ID,
     GET_MANUSCRIPT_TREE_RESPONSE_SCHEMA_ID, GetManuscriptTreeResponse, ManuscriptChapterNode,
     ManuscriptVolumeNode,
+};
+pub use release1_project_assistance::{
+    GET_PROJECT_ASSISTANCE_METHOD, GET_PROJECT_ASSISTANCE_PATH,
+    GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID, GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
+    GetProjectAssistanceResponse, ProjectAssistanceAvailability, ProjectAssistanceBinding,
+    UPDATE_PROJECT_ASSISTANCE_DIGEST_PROFILE, UPDATE_PROJECT_ASSISTANCE_METHOD,
+    UPDATE_PROJECT_ASSISTANCE_PATH, UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
+    UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID, UpdateProjectAssistanceConflictReason,
+    UpdateProjectAssistanceEffect, UpdateProjectAssistanceInput,
+    UpdateProjectAssistanceNoEffectReason, UpdateProjectAssistanceRequest,
+    UpdateProjectAssistanceResponse,
 };
 pub use release1_project_export::{
     EXPORT_PROJECT_ARCHIVE_DIGEST_PROFILE, EXPORT_PROJECT_ARCHIVE_METHOD,

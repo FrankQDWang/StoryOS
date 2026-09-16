@@ -31,6 +31,8 @@ use crate::release1_manuscript_statistics::GET_STATISTICS;
 use crate::release1_manuscript_statistics_artifacts as manuscript_statistics_artifacts;
 use crate::release1_manuscript_tree::GET_MANUSCRIPT_TREE;
 use crate::release1_manuscript_tree_artifacts as manuscript_tree_artifacts;
+use crate::release1_project_assistance::{GET_PROJECT_ASSISTANCE, UPDATE_PROJECT_ASSISTANCE};
+use crate::release1_project_assistance_artifacts as project_assistance_artifacts;
 use crate::release1_project_export::EXPORT_PROJECT_ARCHIVE;
 use crate::release1_project_export_artifacts as project_export_artifacts;
 use crate::release1_project_export_query::GET_EXPORT_OPERATION;
@@ -288,6 +290,24 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| update_project_artifacts::fixture_bytes(),
             |_profile| update_project_artifacts::invalid_fixture_bytes(),
             |_profile| update_project_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        project_assistance_artifacts::GET_FIXTURE_PATHS,
+        &GET_PROJECT_ASSISTANCE,
+        [
+            |_profile| project_assistance_artifacts::get_fixture_bytes(),
+            |_profile| project_assistance_artifacts::get_invalid_fixture_bytes(),
+            |_profile| project_assistance_artifacts::get_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        project_assistance_artifacts::UPDATE_FIXTURE_PATHS,
+        &UPDATE_PROJECT_ASSISTANCE,
+        [
+            |_profile| project_assistance_artifacts::update_fixture_bytes(),
+            |_profile| project_assistance_artifacts::update_invalid_fixture_bytes(),
+            |_profile| project_assistance_artifacts::update_boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

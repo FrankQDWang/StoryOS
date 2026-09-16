@@ -1,0 +1,51 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000923",
+  "command_id": "018f0000-0000-7001-8000-000000000922",
+  "correlation_id": "018f0000-0000-7001-8000-000000000921",
+  "effect": {
+    "availability": "available",
+    "kind": "initialized",
+    "project_activity_position": "1",
+    "revision": "1"
+  },
+  "project": {
+    "open": {
+      "kind": "empty"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000201",
+    "title": "Empty Novel"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "artifact_lifecycle_event_refs": [],
+    "author_action_sequence": null,
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000923",
+    "authoritative_commit_ids": [],
+    "authoritative_revision_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.updateProjectAssistance.jcs.v1",
+      "value_hex_lowercase": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "command_kind": "updateProjectAssistance",
+    "condition_refs": [],
+    "created_at": "2026-09-16T03:00:00.000Z",
+    "draft_artifact_refs": [],
+    "expected_heads": [],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000925",
+    "prior_heads": [],
+    "producer_cause": "author_command_admission",
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_revision_ids": [],
+    "receipt_id": "018f0000-0000-7001-8000-000000000924",
+    "result": "authoritative_applied",
+    "resulting_heads": []
+  },
+  "schema_id": "storyos.command.update-project-assistance.response.v1"
+}

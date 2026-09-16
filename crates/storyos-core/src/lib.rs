@@ -18,6 +18,7 @@ mod statistics_profile;
 mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
+mod update_project_assistance;
 mod update_volume;
 
 pub use archive_path::{
@@ -88,6 +89,11 @@ pub use update_chapter::{
 pub use update_project::{
     UpdateProject, UpdateProjectConflict, UpdateProjectNoEffect, UpdateProjectRefusal,
     UpdateProjectResult, update_project,
+};
+pub use update_project_assistance::{
+    AssistanceAvailability, AssistanceBindingPresence, UpdateProjectAssistance,
+    UpdateProjectAssistanceConflict, UpdateProjectAssistanceNoEffect,
+    UpdateProjectAssistanceRefusal, UpdateProjectAssistanceResult, update_project_assistance,
 };
 pub use update_volume::{
     UpdateVolume, UpdateVolumeConflict, UpdateVolumeNoEffect, UpdateVolumeRefusal,

@@ -64,6 +64,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
     ("editor_sessions", "canonical/editor_sessions.json"),
     (
+        "external_contract_compatibility_decisions",
+        "canonical/external_contract_compatibility_decisions.json",
+    ),
+    (
         "human_readable_manuscript_export_operations",
         "canonical/human_readable_manuscript_export_operations.json",
     ),
@@ -82,6 +86,14 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/pinned_export_sources.json",
     ),
     (
+        "processing_destination_identities",
+        "canonical/processing_destination_identities.json",
+    ),
+    (
+        "processing_destination_identity_evidence_revisions",
+        "canonical/processing_destination_identity_evidence_revisions.json",
+    ),
+    (
         "project_activity_event_payloads",
         "canonical/project_activity_event_payloads.json",
     ),
@@ -94,8 +106,20 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/project_archival_decisions.json",
     ),
     (
+        "project_destination_grants",
+        "canonical/project_destination_grants.json",
+    ),
+    (
         "project_export_operations",
         "canonical/project_export_operations.json",
+    ),
+    (
+        "project_external_use_binding_revisions",
+        "canonical/project_external_use_binding_revisions.json",
+    ),
+    (
+        "project_policy_revisions",
+        "canonical/project_policy_revisions.json",
     ),
     ("project_snapshots", "canonical/project_snapshots.json"),
     (

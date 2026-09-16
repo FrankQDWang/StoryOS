@@ -1,6 +1,6 @@
 use super::{
-    Chapter, ChapterId, Project, ProjectId, ProjectReadError, ProjectReader, ProjectScope,
-    RevisionId, UserId, open_current_chapter,
+    Chapter, ChapterId, Project, ProjectAssistanceRecord, ProjectId, ProjectReadError,
+    ProjectReader, ProjectScope, RevisionId, UserId, open_current_chapter,
 };
 use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
@@ -36,6 +36,13 @@ impl ProjectReader for FixtureReader {
             }],
             project_activity_position: 0,
         }))
+    }
+
+    async fn read_project_assistance(
+        &self,
+        _scope: &ProjectScope,
+    ) -> Result<Option<ProjectAssistanceRecord>, ProjectReadError> {
+        Ok(None)
     }
 }
 

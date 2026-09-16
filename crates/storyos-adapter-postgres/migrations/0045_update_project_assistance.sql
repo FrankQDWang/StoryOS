@@ -1,0 +1,1475 @@
+SET LOCAL ROLE storyos_owner;
+
+CREATE TABLE storyos.model_registration_revisions (
+  model_registration_revision uuid PRIMARY KEY,
+  model_kind text NOT NULL CHECK (model_kind = 'host_fake')
+);
+CREATE TABLE storyos.model_registration_heads (
+  model_kind text PRIMARY KEY CHECK (model_kind = 'host_fake'),
+  model_registration_revision uuid NOT NULL
+    REFERENCES storyos.model_registration_revisions(model_registration_revision)
+);
+
+CREATE TABLE storyos.processing_destination_identities (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  processing_destination_identity uuid NOT NULL,
+  destination_kind text NOT NULL CHECK (destination_kind = 'host_fake'),
+  PRIMARY KEY (owner_user_id, project_id, processing_destination_identity),
+  UNIQUE (owner_user_id, project_id),
+  FOREIGN KEY (owner_user_id, project_id)
+    REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL
+);
+CREATE TABLE storyos.processing_destination_identity_evidence_revisions (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  processing_destination_identity uuid NOT NULL,
+  evidence_revision numeric(20, 0) NOT NULL
+    CHECK (evidence_revision BETWEEN 1 AND 18446744073709551615),
+  evidence_kind text NOT NULL CHECK (evidence_kind = 'host_fake_boundary'),
+  PRIMARY KEY (
+    owner_user_id, project_id, processing_destination_identity, evidence_revision
+  ),
+  FOREIGN KEY (owner_user_id, project_id, processing_destination_identity)
+    REFERENCES storyos.processing_destination_identities(
+      owner_user_id, project_id, processing_destination_identity
+    ) MATCH FULL
+);
+CREATE TABLE storyos.project_destination_grants (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  grant_id uuid NOT NULL,
+  processing_destination_identity uuid NOT NULL,
+  grant_kind text NOT NULL CHECK (grant_kind = 'host_fake_use'),
+  PRIMARY KEY (owner_user_id, project_id, grant_id),
+  UNIQUE (owner_user_id, project_id),
+  FOREIGN KEY (owner_user_id, project_id, processing_destination_identity)
+    REFERENCES storyos.processing_destination_identities(
+      owner_user_id, project_id, processing_destination_identity
+    ) MATCH FULL
+);
+CREATE INDEX project_destination_grants_identity_idx
+  ON storyos.project_destination_grants (
+    owner_user_id, project_id, processing_destination_identity
+  );
+CREATE TABLE storyos.project_external_use_binding_revisions (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  project_model_use_binding_revision uuid NOT NULL,
+  processing_destination_identity uuid NOT NULL,
+  evidence_revision numeric(20, 0) NOT NULL
+    CHECK (evidence_revision BETWEEN 1 AND 18446744073709551615),
+  grant_id uuid NOT NULL,
+  model_registration_revision uuid NOT NULL
+    REFERENCES storyos.model_registration_revisions(model_registration_revision),
+  PRIMARY KEY (owner_user_id, project_id, project_model_use_binding_revision),
+  UNIQUE (owner_user_id, project_id),
+  FOREIGN KEY (
+    owner_user_id, project_id, processing_destination_identity, evidence_revision
+  )
+    REFERENCES storyos.processing_destination_identity_evidence_revisions(
+      owner_user_id, project_id, processing_destination_identity, evidence_revision
+    ) MATCH FULL,
+  FOREIGN KEY (owner_user_id, project_id, grant_id)
+    REFERENCES storyos.project_destination_grants(
+      owner_user_id, project_id, grant_id
+    ) MATCH FULL
+);
+CREATE INDEX project_external_use_binding_revisions_refs_idx
+  ON storyos.project_external_use_binding_revisions (
+    owner_user_id, project_id, processing_destination_identity, evidence_revision
+  );
+CREATE TABLE storyos.external_contract_compatibility_decisions (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  external_compatibility_decision uuid NOT NULL,
+  project_model_use_binding_revision uuid NOT NULL,
+  decision_kind text NOT NULL CHECK (decision_kind = 'host_fake_compatible'),
+  PRIMARY KEY (owner_user_id, project_id, external_compatibility_decision),
+  UNIQUE (owner_user_id, project_id),
+  FOREIGN KEY (owner_user_id, project_id, project_model_use_binding_revision)
+    REFERENCES storyos.project_external_use_binding_revisions(
+      owner_user_id, project_id, project_model_use_binding_revision
+    ) MATCH FULL
+);
+CREATE TABLE storyos.project_policy_revisions (
+  owner_user_id uuid NOT NULL,
+  project_id uuid NOT NULL,
+  policy_revision numeric(20, 0) NOT NULL
+    CHECK (policy_revision BETWEEN 1 AND 18446744073709551615),
+  availability text NOT NULL CHECK (availability IN ('available', 'unavailable')),
+  receipt_id uuid NOT NULL,
+  PRIMARY KEY (owner_user_id, project_id, policy_revision),
+  FOREIGN KEY (owner_user_id, project_id)
+    REFERENCES storyos.projects(owner_user_id, project_id) MATCH FULL,
+  FOREIGN KEY (owner_user_id, project_id, receipt_id)
+    REFERENCES storyos.domain_receipts(owner_user_id, project_id, receipt_id) MATCH FULL
+);
+
+ALTER TABLE storyos.processing_destination_identities ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.processing_destination_identities FORCE ROW LEVEL SECURITY;
+ALTER TABLE storyos.processing_destination_identity_evidence_revisions
+  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.processing_destination_identity_evidence_revisions
+  FORCE ROW LEVEL SECURITY;
+ALTER TABLE storyos.project_destination_grants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.project_destination_grants FORCE ROW LEVEL SECURITY;
+ALTER TABLE storyos.project_external_use_binding_revisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.project_external_use_binding_revisions FORCE ROW LEVEL SECURITY;
+ALTER TABLE storyos.external_contract_compatibility_decisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.external_contract_compatibility_decisions FORCE ROW LEVEL SECURITY;
+ALTER TABLE storyos.project_policy_revisions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storyos.project_policy_revisions FORCE ROW LEVEL SECURITY;
+
+CREATE POLICY processing_destination_identities_exact_scope
+  ON storyos.processing_destination_identities USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  ) WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+CREATE POLICY processing_destination_identity_evidence_revisions_exact_scope
+  ON storyos.processing_destination_identity_evidence_revisions USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  ) WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+CREATE POLICY project_destination_grants_exact_scope
+  ON storyos.project_destination_grants USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  ) WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+CREATE POLICY project_external_use_binding_revisions_exact_scope
+  ON storyos.project_external_use_binding_revisions USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  ) WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+CREATE POLICY external_contract_compatibility_decisions_exact_scope
+  ON storyos.external_contract_compatibility_decisions USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  ) WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+CREATE POLICY project_policy_revisions_exact_scope
+  ON storyos.project_policy_revisions USING (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  ) WITH CHECK (
+    owner_user_id = current_setting('storyos.owner_user_id')::uuid
+    AND project_id = current_setting('storyos.project_id')::uuid
+  );
+
+GRANT SELECT, INSERT ON storyos.model_registration_revisions,
+  storyos.model_registration_heads,
+  storyos.processing_destination_identities,
+  storyos.processing_destination_identity_evidence_revisions,
+  storyos.project_destination_grants,
+  storyos.project_external_use_binding_revisions,
+  storyos.external_contract_compatibility_decisions,
+  storyos.project_policy_revisions TO storyos_runtime;
+
+DROP TRIGGER author_command_admissions_writer_generation ON storyos.author_command_admissions;
+CREATE TRIGGER author_command_admissions_writer_generation
+BEFORE INSERT ON storyos.author_command_admissions
+FOR EACH ROW
+WHEN (NEW.command_kind NOT IN (
+  'createProject', 'updateProject', 'archiveProject', 'createVolume',
+  'createChapter', 'updateVolume', 'updateChapter', 'deleteChapter', 'deleteVolume',
+  'exportHumanReadableManuscript', 'exportProjectArchive',
+  'updateProjectAssistance'
+))
+EXECUTE FUNCTION storyos.require_writer_generation_admission();
+ALTER TABLE storyos.author_command_admissions
+  DROP CONSTRAINT author_command_admissions_command_shape;
+ALTER TABLE storyos.author_command_admissions
+  ADD CONSTRAINT author_command_admissions_command_shape CHECK ((
+    (command_kind = 'applyAuthorEdit'
+      AND action_class = 'direct_editor_action'
+      AND editor_session_id IS NOT NULL
+      AND writer_generation IS NOT NULL
+      AND chapter_object_id IS NOT NULL
+      AND expected_authoritative_revision_id IS NOT NULL
+      AND observed_ownership_partition = 'authoritative'
+      AND undo_group_id IS NOT NULL
+      AND completed_intent_record_id IS NOT NULL
+      AND local_intent_sequence IS NOT NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'takeOverProjectWriter'
+      AND action_class = 'explicit_editor_command'
+      AND editor_session_id IS NOT NULL
+      AND writer_generation IS NOT NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'createProject'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NULL
+      AND challenge_expires_at IS NULL)
+    OR (command_kind = 'updateProject'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'archiveProject'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'createVolume'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'createChapter'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'updateVolume'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'updateChapter'
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+
+    OR (command_kind IN ('deleteChapter', 'deleteVolume', 'exportHumanReadableManuscript', 'exportProjectArchive', 'updateProjectAssistance')
+      AND action_class = 'explicit_project_command'
+      AND editor_session_id IS NULL
+      AND writer_generation IS NULL
+      AND chapter_object_id IS NULL
+      AND expected_authoritative_revision_id IS NULL
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'setCurrentChapter'
+      AND action_class = 'explicit_editor_command'
+      AND editor_session_id IS NOT NULL
+      AND writer_generation IS NOT NULL
+      AND (
+        (chapter_object_id IS NOT NULL AND expected_authoritative_revision_id IS NOT NULL)
+        OR (chapter_object_id IS NULL AND expected_authoritative_revision_id IS NULL)
+      )
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+    OR (command_kind = 'undoLatestAuthorAction'
+      AND action_class = 'explicit_editor_command'
+      AND editor_session_id IS NOT NULL
+      AND writer_generation IS NOT NULL
+      AND (
+        (chapter_object_id IS NOT NULL AND expected_authoritative_revision_id IS NOT NULL)
+        OR (chapter_object_id IS NULL AND expected_authoritative_revision_id IS NULL)
+      )
+      AND expected_proposal_head_revision_ids = '{}'::uuid[]
+      AND target_refs = '{}'::text[]
+      AND observed_ownership_partition IS NULL
+      AND undo_group_id IS NULL
+      AND completed_intent_record_id IS NULL
+      AND local_intent_sequence IS NULL
+      AND challenge_consumed_at IS NOT NULL
+      AND challenge_expires_at IS NOT NULL)
+  ) IS TRUE);
+ALTER TABLE storyos.domain_receipts
+  DROP CONSTRAINT domain_receipts_command_kind_check;
+ALTER TABLE storyos.domain_receipts
+  ADD CONSTRAINT domain_receipts_command_kind_check
+  CHECK (command_kind IN (
+    'applyAuthorEdit', 'takeOverProjectWriter', 'createProject', 'updateProject',
+    'archiveProject', 'createVolume', 'createChapter', 'updateVolume', 'updateChapter',
+    'setCurrentChapter', 'undoLatestAuthorAction', 'deleteChapter', 'deleteVolume',
+    'exportHumanReadableManuscript', 'exportProjectArchive',
+    'updateProjectAssistance'
+  ));
+
+ALTER TABLE storyos.author_command_admission_outcome_unknown_observations
+  DROP CONSTRAINT author_command_admission_outcome_unknown_command_kind_check;
+ALTER TABLE storyos.author_command_admission_outcome_unknown_observations
+  ADD CONSTRAINT author_command_admission_outcome_unknown_command_kind_check
+  CHECK (command_kind IN (
+    'applyAuthorEdit', 'takeOverProjectWriter', 'createProject', 'updateProject',
+    'archiveProject', 'createVolume', 'createChapter', 'updateVolume', 'updateChapter',
+    'setCurrentChapter', 'undoLatestAuthorAction', 'deleteChapter', 'deleteVolume',
+    'exportHumanReadableManuscript', 'exportProjectArchive',
+    'updateProjectAssistance'
+  ));
+ALTER TABLE storyos.domain_receipts
+  DROP CONSTRAINT domain_receipts_common_shape;
+ALTER TABLE storyos.domain_receipts
+  ADD CONSTRAINT domain_receipts_common_shape CHECK ((
+    cardinality(proposal_revision_ids) = 0
+    AND cardinality(draft_artifact_refs) = 0
+    AND cardinality(artifact_lifecycle_event_refs) = 0
+    AND cardinality(condition_refs) = 0
+    AND array_position(expected_heads, NULL) IS NULL
+    AND array_position(prior_heads, NULL) IS NULL
+    AND array_position(resulting_heads, NULL) IS NULL
+    AND array_position(authoritative_revision_ids, NULL) IS NULL
+    AND array_position(proposal_revision_ids, NULL) IS NULL
+    AND array_position(authoritative_commit_ids, NULL) IS NULL
+    AND array_position(draft_artifact_refs, NULL) IS NULL
+    AND array_position(artifact_lifecycle_event_refs, NULL) IS NULL
+    AND array_position(condition_refs, NULL) IS NULL
+    AND (
+      (command_kind NOT IN (
+        'createProject', 'updateProject', 'archiveProject', 'createVolume',
+        'createChapter', 'updateVolume', 'updateChapter', 'deleteChapter', 'deleteVolume',
+        'exportHumanReadableManuscript', 'exportProjectArchive',
+        'updateProjectAssistance'
+      )
+        AND cardinality(expected_heads) = 1
+        AND cardinality(prior_heads) = 1
+        AND cardinality(resulting_heads) = 1
+        AND array_dims(expected_heads) = '[1:1]'
+        AND array_dims(prior_heads) = '[1:1]'
+        AND array_dims(resulting_heads) = '[1:1]')
+      OR (command_kind IN (
+        'createProject', 'updateProject', 'archiveProject', 'createVolume',
+        'createChapter', 'updateVolume', 'updateChapter', 'deleteChapter', 'deleteVolume',
+        'exportHumanReadableManuscript', 'exportProjectArchive',
+        'updateProjectAssistance'
+      )
+        AND cardinality(expected_heads) = 0
+        AND cardinality(prior_heads) = 0
+        AND cardinality(resulting_heads) = 0)
+    )
+  ) IS TRUE);
+ALTER TABLE storyos.domain_receipts
+  DROP CONSTRAINT domain_receipts_result_shape;
+ALTER TABLE storyos.domain_receipts
+  ADD CONSTRAINT domain_receipts_result_shape CHECK ((
+    (command_kind = 'applyAuthorEdit'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 1
+      AND cardinality(authoritative_commit_ids) = 1
+      AND array_dims(authoritative_revision_ids) = '[1:1]'
+      AND array_dims(authoritative_commit_ids) = '[1:1]'
+      AND resulting_heads = authoritative_revision_ids)
+    OR (command_kind = 'applyAuthorEdit'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'content_unchanged'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND expected_heads = resulting_heads)
+    OR (command_kind = 'takeOverProjectWriter'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'writer_takeover_applied',
+        'writer_takeover_compare_failed'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND expected_heads = resulting_heads)
+    OR (command_kind = 'createProject'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateProject'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateProject'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'title_unchanged'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateProject'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_project_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'archiveProject'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'archiveProject'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'already_archived'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'archiveProject'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_project_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'createVolume'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'createVolume'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload ? 'order'
+      AND result_payload - 'order' = '{}'::jsonb
+      AND jsonb_typeof(result_payload->'order') = 'string'
+      AND result_payload->>'order' ~ '^[1-9][0-9]*$'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'createVolume'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_tree_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'createVolume'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN ('archived_project', 'invalid_title')
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'createChapter'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'createChapter'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload ? 'order'
+      AND result_payload - 'order' = '{}'::jsonb
+      AND jsonb_typeof(result_payload->'order') = 'string'
+      AND result_payload->>'order' ~ '^[1-9][0-9]*$'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'createChapter'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_tree_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'createChapter'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'invalid_title', 'invalid_volume_join'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateVolume'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'updateVolume'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'unchanged'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateVolume'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_tree_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateVolume'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'invalid_title', 'invalid_order', 'invalid_volume_join'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateChapter'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'updateChapter'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'unchanged'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateChapter'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_tree_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateChapter'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'invalid_title', 'invalid_order', 'invalid_chapter_join'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+
+    OR (command_kind = 'deleteChapter'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'deleteChapter'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'already_removed'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'deleteChapter'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_tree_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'deleteChapter'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'invalid_chapter_join'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'deleteVolume'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (cardinality(authoritative_commit_ids) = 0
+        OR array_dims(authoritative_commit_ids) = '[1:1]'))
+    OR (command_kind = 'deleteVolume'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'already_removed'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'deleteVolume'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_tree_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'deleteVolume'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'invalid_volume_join', 'nonempty_volume'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'setCurrentChapter'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads)
+    OR (command_kind = 'setCurrentChapter'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'already_current'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND expected_heads = resulting_heads)
+    OR (command_kind = 'setCurrentChapter'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'stale_current_chapter', 'wrong_target_head'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads)
+    OR (command_kind = 'setCurrentChapter'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'invalid_chapter_join', 'empty_project'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads)
+    OR (command_kind = 'applyAuthorEdit'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload ? 'current_authoritative_revision_id'
+      AND result_payload - 'reason' - 'current_authoritative_revision_id' = '{}'::jsonb
+      AND jsonb_typeof(result_payload->'reason') = 'string'
+      AND jsonb_typeof(result_payload->'current_authoritative_revision_id') = 'string'
+      AND result_payload->>'reason' IN (
+        'stale_authoritative_head', 'proposal_head_present', 'ownership_changed'
+      )
+      AND result_payload->>'current_authoritative_revision_id' = resulting_heads[1]::text
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND (result_payload->>'reason' <> 'stale_authoritative_head'
+        OR expected_heads <> resulting_heads))
+    OR (command_kind = 'applyAuthorEdit'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND jsonb_typeof(result_payload->'reason') = 'string'
+      AND result_payload->>'reason' IN (
+        'unsupported_intent_shape', 'invalid_selection', 'target_mismatch'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads
+      AND expected_heads = resulting_heads)
+
+    OR (command_kind = 'exportHumanReadableManuscript'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'exportHumanReadableManuscript'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'pinned_export_source_unavailable'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'exportProjectArchive'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'exportProjectArchive'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'archived_project', 'pinned_export_source_unavailable'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'undoLatestAuthorAction'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_commit_ids) IN (0, 1)
+      AND (
+        (cardinality(authoritative_commit_ids) = 1
+          AND array_dims(authoritative_commit_ids) = '[1:1]'
+          AND (
+            (cardinality(authoritative_revision_ids) = 1
+              AND array_dims(authoritative_revision_ids) = '[1:1]'
+              AND resulting_heads = authoritative_revision_ids)
+            OR (cardinality(authoritative_revision_ids) = 0
+              AND prior_heads = resulting_heads)
+          ))
+        OR (cardinality(authoritative_commit_ids) = 0
+          AND cardinality(authoritative_revision_ids) = 0
+          AND prior_heads = resulting_heads)
+      ))
+    OR (command_kind = 'undoLatestAuthorAction'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'frontier_mismatch', 'wrong_target_head'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads)
+    OR (command_kind = 'undoLatestAuthorAction'
+      AND result_kind = 'refused'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' IN (
+        'no_frontier', 'barrier'
+      )
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0
+      AND prior_heads = resulting_heads)
+
+    OR (command_kind = 'updateProjectAssistance'
+      AND result_kind = 'authoritative_applied'
+      AND result_payload = '{}'::jsonb
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateProjectAssistance'
+      AND result_kind = 'no_effect'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'availability_unchanged'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+    OR (command_kind = 'updateProjectAssistance'
+      AND result_kind = 'conflicted'
+      AND result_payload ? 'reason'
+      AND result_payload - 'reason' = '{}'::jsonb
+      AND result_payload->>'reason' = 'stale_assistance_revision'
+      AND cardinality(authoritative_revision_ids) = 0
+      AND cardinality(authoritative_commit_ids) = 0)
+  ) IS TRUE);
+ALTER TABLE storyos.project_activity_event_payloads
+  DROP CONSTRAINT project_activity_event_payloads_event_kind_check;
+
+ALTER TABLE storyos.project_activity_event_payloads
+  ADD CONSTRAINT project_activity_event_payloads_event_kind_check
+  CHECK (event_kind IN (
+    'writer_takeover_applied', 'writer_takeover_compare_failed',
+    'project_created', 'project_updated', 'project_archival_changed',
+    'volume_created', 'volume_updated', 'chapter_created', 'chapter_updated',
+    'current_chapter_set', 'chapter_deleted', 'volume_deleted',
+    'human_readable_manuscript_export_settled',
+    'project_export_settled',
+    'project_assistance_updated'
+  ));
+ALTER TABLE storyos.project_activity_event_payloads
+  DROP CONSTRAINT project_activity_event_payloads_shape;
+ALTER TABLE storyos.project_activity_event_payloads
+  ADD CONSTRAINT project_activity_event_payloads_shape CHECK ((
+    jsonb_typeof(payload) = 'object'
+    AND (
+      (event_kind = 'writer_takeover_applied'
+        AND receipt_result_kind = 'no_effect'
+        AND payload->>'kind' = 'takeover_applied'
+        AND jsonb_typeof(payload->'prior_editor_session_id') = 'string'
+        AND jsonb_typeof(payload->'prior_writer_generation') = 'string'
+        AND jsonb_typeof(payload->'resulting_editor_session_id') = 'string'
+        AND jsonb_typeof(payload->'resulting_writer_generation') = 'string'
+        AND jsonb_typeof(payload->'resulting_snapshot_id') = 'string'
+        AND jsonb_typeof(payload->'resulting_snapshot_activity_position') = 'string'
+        AND jsonb_typeof(payload->'resulting_heads') = 'array'
+        AND payload - 'kind' - 'prior_editor_session_id' - 'prior_writer_generation'
+          - 'resulting_editor_session_id' - 'resulting_writer_generation'
+          - 'resulting_snapshot_id' - 'resulting_snapshot_activity_position'
+          - 'resulting_heads' = '{}'::jsonb)
+      OR (event_kind = 'writer_takeover_compare_failed'
+        AND receipt_result_kind = 'no_effect'
+        AND payload->>'kind' = 'takeover_compare_failed'
+        AND jsonb_typeof(payload->'observed_writer_generation') = 'string'
+        AND jsonb_typeof(payload->'current_writer_generation') = 'string'
+        AND jsonb_typeof(payload->'current_writer_projection') = 'object'
+        AND jsonb_typeof(payload->'current_snapshot_id') = 'string'
+        AND jsonb_typeof(payload->'current_snapshot_activity_position') = 'string'
+        AND jsonb_typeof(payload->'current_heads') = 'array'
+        AND jsonb_typeof(payload->'reason') = 'string'
+        AND payload->>'reason' IN (
+          'writer_generation_advanced_after_admission',
+          'requester_became_current_after_admission'
+        )
+        AND payload - 'kind' - 'observed_writer_generation' - 'current_writer_generation'
+          - 'current_writer_projection' - 'current_snapshot_id'
+          - 'current_snapshot_activity_position' - 'current_heads' - 'reason' = '{}'::jsonb)
+      OR (event_kind = 'project_created'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'project_created'
+        AND payload->>'open_kind' = 'empty'
+        AND jsonb_typeof(payload->'title') = 'string'
+        AND payload - 'kind' - 'open_kind' - 'title' = '{}'::jsonb)
+      OR (event_kind = 'project_updated'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'project_updated'
+        AND jsonb_typeof(payload->'title') = 'string'
+        AND jsonb_typeof(payload->'revision') = 'string'
+        AND payload - 'kind' - 'title' - 'revision' = '{}'::jsonb)
+      OR (event_kind = 'project_archival_changed'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'project_archival_changed'
+        AND payload->>'lifecycle' = 'archived'
+        AND jsonb_typeof(payload->'revision') = 'string'
+        AND payload - 'kind' - 'lifecycle' - 'revision' = '{}'::jsonb)
+      OR (event_kind = 'volume_created'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'volume_created'
+        AND jsonb_typeof(payload->'volume_id') = 'string'
+        AND jsonb_typeof(payload->'title') = 'string'
+        AND jsonb_typeof(payload->'tree_revision') = 'string'
+        AND jsonb_typeof(payload->'order') = 'string'
+        AND payload - 'kind' - 'volume_id' - 'title' - 'tree_revision' - 'order' = '{}'::jsonb)
+      OR (event_kind = 'volume_updated'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'volume_updated'
+        AND jsonb_typeof(payload->'volume_id') = 'string'
+        AND jsonb_typeof(payload->'title') = 'string'
+        AND jsonb_typeof(payload->'tree_revision') = 'string'
+        AND jsonb_typeof(payload->'order') = 'string'
+        AND payload - 'kind' - 'volume_id' - 'title' - 'tree_revision' - 'order'
+          - 'prior_title' - 'prior_order' = '{}'::jsonb
+        AND (
+          (NOT payload ? 'prior_title' AND NOT payload ? 'prior_order')
+          OR (
+            payload ? 'prior_title'
+            AND payload ? 'prior_order'
+            AND jsonb_typeof(payload->'prior_title') = 'string'
+            AND jsonb_typeof(payload->'prior_order') = 'string'
+            AND payload->>'prior_order' ~ '^[1-9][0-9]*$'
+          )
+        ))
+      OR (event_kind = 'chapter_updated'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'chapter_updated'
+        AND jsonb_typeof(payload->'chapter_id') = 'string'
+        AND jsonb_typeof(payload->'title') = 'string'
+        AND jsonb_typeof(payload->'tree_revision') = 'string'
+        AND jsonb_typeof(payload->'order') = 'string'
+        AND payload - 'kind' - 'chapter_id' - 'title' - 'tree_revision' - 'order'
+          - 'prior_title' - 'prior_order' = '{}'::jsonb
+        AND (
+          (NOT payload ? 'prior_title' AND NOT payload ? 'prior_order')
+          OR (
+            payload ? 'prior_title'
+            AND payload ? 'prior_order'
+            AND jsonb_typeof(payload->'prior_title') = 'string'
+            AND jsonb_typeof(payload->'prior_order') = 'string'
+            AND payload->>'prior_order' ~ '^[1-9][0-9]*$'
+          )
+        ))
+      OR (event_kind = 'chapter_created'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'chapter_created'
+        AND jsonb_typeof(payload->'volume_id') = 'string'
+        AND jsonb_typeof(payload->'chapter_id') = 'string'
+        AND jsonb_typeof(payload->'title') = 'string'
+        AND jsonb_typeof(payload->'tree_revision') = 'string'
+        AND jsonb_typeof(payload->'order') = 'string'
+        AND jsonb_typeof(payload->'current_chapter_id') = 'string'
+        AND payload - 'kind' - 'volume_id' - 'chapter_id' - 'title' - 'tree_revision'
+          - 'order' - 'current_chapter_id' = '{}'::jsonb)
+      OR (event_kind = 'current_chapter_set'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'current_chapter_set'
+        AND jsonb_typeof(payload->'prior_chapter_id') = 'string'
+        AND jsonb_typeof(payload->'current_chapter_id') = 'string'
+        AND jsonb_typeof(payload->'base_snapshot_id') = 'string'
+        AND payload - 'kind' - 'prior_chapter_id' - 'current_chapter_id'
+          - 'base_snapshot_id' = '{}'::jsonb)
+      OR (event_kind = 'chapter_deleted'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'chapter_deleted'
+        AND jsonb_typeof(payload->'chapter_id') = 'string'
+        AND jsonb_typeof(payload->'volume_id') = 'string'
+        AND jsonb_typeof(payload->'tree_revision') = 'string'
+        AND payload ? 'current_chapter_id'
+        AND jsonb_typeof(payload->'current_chapter_id') IN ('string', 'null')
+        AND payload - 'kind' - 'chapter_id' - 'volume_id' - 'tree_revision'
+          - 'current_chapter_id' - 'prior_current_chapter_id' = '{}'::jsonb
+        AND (
+          (NOT payload ? 'prior_current_chapter_id')
+          OR jsonb_typeof(payload->'prior_current_chapter_id') IN ('string', 'null')
+        ))
+      OR (event_kind = 'volume_deleted'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'volume_deleted'
+        AND jsonb_typeof(payload->'volume_id') = 'string'
+        AND jsonb_typeof(payload->'tree_revision') = 'string'
+        AND payload - 'kind' - 'volume_id' - 'tree_revision' = '{}'::jsonb)
+
+      OR (event_kind = 'human_readable_manuscript_export_settled'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'human_readable_manuscript_export_settled'
+        AND jsonb_typeof(payload->'export_id') = 'string'
+        AND jsonb_typeof(payload->'content_sha256') = 'string'
+        AND payload - 'kind' - 'export_id' - 'content_sha256' = '{}'::jsonb)
+      OR (event_kind = 'project_export_settled'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'project_export_settled'
+        AND jsonb_typeof(payload->'export_id') = 'string'
+        AND jsonb_typeof(payload->'archive_profile') = 'string'
+        AND jsonb_typeof(payload->'archive_path_profile') = 'string'
+        AND payload - 'kind' - 'export_id' - 'archive_profile'
+          - 'archive_path_profile' = '{}'::jsonb)
+      OR (event_kind = 'project_assistance_updated'
+        AND receipt_result_kind = 'authoritative_applied'
+        AND payload->>'kind' = 'project_assistance_updated'
+        AND payload->>'availability' IN ('available', 'unavailable')
+        AND jsonb_typeof(payload->'revision') = 'string'
+        AND payload - 'kind' - 'availability' - 'revision' = '{}'::jsonb)
+    )
+  ) IS TRUE);
+
+CREATE OR REPLACE FUNCTION storyos.require_author_edit_receipt_relation()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog
+AS $function$
+DECLARE
+  scoped_owner_user_id uuid := COALESCE(NEW.owner_user_id, OLD.owner_user_id);
+  scoped_project_id uuid := COALESCE(NEW.project_id, OLD.project_id);
+  scoped_receipt_id uuid := COALESCE(NEW.receipt_id, OLD.receipt_id);
+  scoped_result_kind text;
+  scoped_command_kind text;
+  scoped_reason text;
+  activity_count bigint;
+  payload_count bigint;
+  action_count bigint;
+  commit_count bigint;
+  revision_envelope_count bigint;
+  archival_count bigint;
+  payload_event_kind text;
+BEGIN
+  SELECT receipt.result_kind, receipt.command_kind, receipt.result_payload->>'reason'
+    INTO scoped_result_kind, scoped_command_kind, scoped_reason
+    FROM storyos.domain_receipts AS receipt
+   WHERE receipt.owner_user_id = scoped_owner_user_id
+     AND receipt.project_id = scoped_project_id
+     AND receipt.receipt_id = scoped_receipt_id;
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  SELECT count(*) INTO activity_count
+    FROM storyos.project_activity_events AS activity
+   WHERE activity.owner_user_id = scoped_owner_user_id
+     AND activity.project_id = scoped_project_id
+     AND activity.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO payload_count
+    FROM storyos.project_activity_event_payloads AS payload
+   WHERE payload.owner_user_id = scoped_owner_user_id
+     AND payload.project_id = scoped_project_id
+     AND payload.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO action_count
+    FROM storyos.author_action_entries AS action
+   WHERE action.owner_user_id = scoped_owner_user_id
+     AND action.project_id = scoped_project_id
+     AND action.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO commit_count
+    FROM storyos.authoritative_commits AS authoritative_commit
+   WHERE authoritative_commit.owner_user_id = scoped_owner_user_id
+     AND authoritative_commit.project_id = scoped_project_id
+     AND authoritative_commit.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO revision_envelope_count
+    FROM storyos.authoritative_revision_envelopes AS envelope
+   WHERE envelope.owner_user_id = scoped_owner_user_id
+     AND envelope.project_id = scoped_project_id
+     AND envelope.receipt_id = scoped_receipt_id;
+  SELECT count(*) INTO archival_count
+    FROM storyos.project_archival_decisions AS archival
+   WHERE archival.owner_user_id = scoped_owner_user_id
+     AND archival.project_id = scoped_project_id
+     AND archival.receipt_id = scoped_receipt_id;
+
+  IF scoped_command_kind = 'takeOverProjectWriter' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind <> 'no_effect'
+       OR (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+          <> (0, 0, 0, 0, 1, 0)
+       OR payload_event_kind IS DISTINCT FROM scoped_reason THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'takeOverProjectWriter requires one takeover Activity and zero manuscript authority';
+    END IF;
+  ELSIF scoped_command_kind = 'createProject' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind <> 'authoritative_applied'
+       OR (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+          <> (0, 0, 0, 0, 1, 0)
+       OR payload_event_kind IS DISTINCT FROM 'project_created' THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'createProject requires one project-created Activity and zero manuscript authority';
+    END IF;
+  ELSIF scoped_command_kind = 'updateProject' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count, archival_count)
+           <> (0, 0, 0, 0, 1, 0)
+         OR payload_event_kind IS DISTINCT FROM 'project_updated' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'updateProject applied requires one project-updated Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'updateProject with zero title effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_command_kind = 'archiveProject' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count, archival_count)
+           <> (0, 0, 0, 0, 1, 1)
+         OR payload_event_kind IS DISTINCT FROM 'project_archival_changed' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'archiveProject applied requires one archival decision, Activity, and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'archiveProject with zero lifecycle effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_command_kind = 'createVolume' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR NOT (
+           (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
+           OR (action_count = 1
+             AND commit_count = 1
+             AND revision_envelope_count IN (0, 1))
+         )
+         OR payload_event_kind IS DISTINCT FROM 'volume_created' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'createVolume applied requires one volume-created Activity and at most one structure Commit';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'createVolume with zero tree effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_command_kind = 'updateVolume' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR NOT (
+           (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
+           OR (action_count = 1
+             AND commit_count = 1
+             AND revision_envelope_count IN (0, 1))
+         )
+         OR payload_event_kind IS DISTINCT FROM 'volume_updated' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'updateVolume applied requires one volume-updated Activity and at most one structure Commit';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'updateVolume with zero tree effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_command_kind = 'updateChapter' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR NOT (
+           (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
+           OR (action_count = 1
+             AND commit_count = 1
+             AND revision_envelope_count IN (0, 1))
+         )
+         OR payload_event_kind IS DISTINCT FROM 'chapter_updated' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'updateChapter applied requires one chapter-updated Activity and at most one structure Commit';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'updateChapter with zero tree effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'setCurrentChapter' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR commit_count <> 0
+         OR revision_envelope_count <> 0
+         OR action_count NOT IN (0, 1)
+         OR payload_event_kind IS DISTINCT FROM 'current_chapter_set' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'setCurrentChapter applied requires one current-chapter-set Activity, no Commit, and at most one Author Action';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'setCurrentChapter with zero current-chapter effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_command_kind = 'createChapter' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR NOT (
+           (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
+           OR (action_count = 1
+             AND commit_count = 1
+             AND revision_envelope_count IN (0, 1))
+         )
+         OR payload_event_kind IS DISTINCT FROM 'chapter_created' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'createChapter applied requires one chapter-created Activity and at most one structure Commit';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'createChapter with zero tree effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'deleteChapter' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR NOT (
+           (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
+           OR (action_count = 1
+             AND commit_count = 1
+             AND revision_envelope_count IN (0, 1))
+         )
+         OR payload_event_kind IS DISTINCT FROM 'chapter_deleted' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'deleteChapter applied requires one chapter-deleted Activity and at most one structure Commit';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'deleteChapter with zero tree effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_command_kind = 'deleteVolume' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF activity_count <> 0
+         OR payload_count <> 1
+         OR archival_count <> 0
+         OR NOT (
+           (action_count, commit_count, revision_envelope_count) = (0, 0, 0)
+           OR (action_count = 1
+             AND commit_count = 1
+             AND revision_envelope_count IN (0, 1))
+         )
+         OR payload_event_kind IS DISTINCT FROM 'volume_deleted' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'deleteVolume applied requires one volume-deleted Activity and at most one structure Commit';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'deleteVolume with zero tree effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'exportHumanReadableManuscript' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count, archival_count)
+           <> (0, 0, 0, 0, 1, 0)
+         OR payload_event_kind IS DISTINCT FROM 'human_readable_manuscript_export_settled' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'exportHumanReadableManuscript applied requires one export-settled Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'exportHumanReadableManuscript with zero export effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'exportProjectArchive' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count, archival_count)
+           <> (0, 0, 0, 0, 1, 0)
+         OR payload_event_kind IS DISTINCT FROM 'project_export_settled' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'exportProjectArchive applied requires one export-settled Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'exportProjectArchive with zero export effect cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'undoLatestAuthorAction' THEN
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF NOT (
+        (activity_count, action_count, commit_count, revision_envelope_count,
+         payload_count, archival_count) = (1, 1, 1, 1, 0, 0)
+        OR (activity_count, action_count, commit_count, revision_envelope_count,
+            payload_count, archival_count) = (0, 1, 1, 0, 0, 0)
+        OR (activity_count, action_count, commit_count, revision_envelope_count,
+            payload_count, archival_count) = (0, 1, 0, 0, 0, 0)
+      ) THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'undoLatestAuthorAction applied requires prose, structure, or Current Chapter compensation authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'undoLatestAuthorAction with zero authority cannot have an authority or Activity relation';
+    END IF;
+
+  ELSIF scoped_command_kind = 'updateProjectAssistance' THEN
+    SELECT payload.event_kind
+      INTO payload_event_kind
+      FROM storyos.project_activity_event_payloads AS payload
+     WHERE payload.owner_user_id = scoped_owner_user_id
+       AND payload.project_id = scoped_project_id
+       AND payload.receipt_id = scoped_receipt_id;
+    IF scoped_result_kind = 'authoritative_applied' THEN
+      IF (activity_count, action_count, commit_count, revision_envelope_count,
+          payload_count, archival_count)
+           <> (0, 0, 0, 0, 1, 0)
+         OR payload_event_kind IS DISTINCT FROM 'project_assistance_updated' THEN
+        RAISE EXCEPTION USING
+          ERRCODE = '23514',
+          MESSAGE = 'updateProjectAssistance applied requires one assistance Activity and zero manuscript authority';
+      END IF;
+    ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+           payload_count, archival_count)
+            <> (0, 0, 0, 0, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'updateProjectAssistance with zero availability effect cannot have an authority or Activity relation';
+    END IF;
+  ELSIF scoped_result_kind = 'authoritative_applied' THEN
+    IF (activity_count, action_count, commit_count, revision_envelope_count,
+        payload_count, archival_count)
+         <> (1, 1, 1, 1, 0, 0) THEN
+      RAISE EXCEPTION USING
+        ERRCODE = '23514',
+        MESSAGE = 'AuthoritativeApplied requires one complete authority and Activity relation';
+    END IF;
+  ELSIF (activity_count, action_count, commit_count, revision_envelope_count,
+         payload_count, archival_count)
+          <> (0, 0, 0, 0, 0, 0) THEN
+    RAISE EXCEPTION USING
+      ERRCODE = '23514',
+      MESSAGE = 'A zero-authority Receipt cannot have an authority or Activity relation';
+  END IF;
+  RETURN NULL;
+END
+$function$;

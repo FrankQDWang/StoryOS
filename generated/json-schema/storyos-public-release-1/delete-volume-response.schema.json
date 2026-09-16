@@ -273,7 +273,8 @@
         "setCurrentChapter",
         "undoLatestAuthorAction",
         "exportHumanReadableManuscript",
-        "exportProjectArchive"
+        "exportProjectArchive",
+        "updateProjectAssistance"
       ],
       "type": "string"
     },

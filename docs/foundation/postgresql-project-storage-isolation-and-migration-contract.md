@@ -34,7 +34,7 @@ StorageCompatibilityIdentity {
   public_release: storyos.public.release.1
   route_catalog_id: storyos.public.route-catalog.release-1.v1
   route_catalog_contract_revision: release1-wire-catalog-2026-09-14-responses-memory
-  route_catalog_sha256: sha256:3ba801590f81969a2b80edb8ebaaa5fa1f5014521e82a3ffa772721775447f7d
+  route_catalog_sha256: sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19
   compatibility_profile: storyos.public.same-release.v1
   release_identity_schema_id: storyos.compatibility.release-identity.v1
 }

@@ -56,6 +56,7 @@ mod takeover;
 mod undo_latest_author_action;
 mod update_chapter;
 mod update_project;
+mod update_project_assistance;
 mod update_volume;
 
 #[cfg(test)]
@@ -176,6 +177,11 @@ pub use update_chapter::{
 pub use update_project::{
     UpdateProjectCommand, UpdateProjectError, UpdateProjectSettlement,
     UpdateProjectSettlementEffect, UpdateProjectStore, update_project,
+};
+pub use update_project_assistance::{
+    ProjectAssistanceRecord, UpdateProjectAssistanceCommand, UpdateProjectAssistanceError,
+    UpdateProjectAssistanceSettlement, UpdateProjectAssistanceSettlementEffect,
+    UpdateProjectAssistanceStore, update_project_assistance,
 };
 pub use update_volume::{
     UpdateVolumeAuthority, UpdateVolumeCommand, UpdateVolumeError, UpdateVolumeSettlement,
@@ -439,6 +445,11 @@ pub trait ProjectReader: Sync {
         scope: &ProjectScope,
         chapter_id: &ChapterId,
     ) -> impl Future<Output = Result<Option<Chapter>, ProjectReadError>> + Send;
+
+    fn read_project_assistance(
+        &self,
+        scope: &ProjectScope,
+    ) -> impl Future<Output = Result<Option<ProjectAssistanceRecord>, ProjectReadError>> + Send;
 }
 
 pub async fn open_project(
@@ -446,6 +457,13 @@ pub async fn open_project(
     scope: &ProjectScope,
 ) -> Result<Option<Project>, ProjectReadError> {
     reader.read_project(scope).await
+}
+
+pub async fn open_project_assistance(
+    reader: &impl ProjectReader,
+    scope: &ProjectScope,
+) -> Result<Option<ProjectAssistanceRecord>, ProjectReadError> {
+    reader.read_project_assistance(scope).await
 }
 
 pub async fn open_current_chapter(

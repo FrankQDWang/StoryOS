@@ -53,6 +53,8 @@ use crate::release1_manuscript_statistics::GET_STATISTICS;
 use crate::release1_manuscript_statistics_artifacts as manuscript_statistics_artifacts;
 use crate::release1_manuscript_tree::GET_MANUSCRIPT_TREE;
 use crate::release1_manuscript_tree_artifacts as manuscript_tree_artifacts;
+use crate::release1_project_assistance::{GET_PROJECT_ASSISTANCE, UPDATE_PROJECT_ASSISTANCE};
+use crate::release1_project_assistance_artifacts as project_assistance_artifacts;
 use crate::release1_project_export::EXPORT_PROJECT_ARCHIVE;
 use crate::release1_project_export_artifacts as project_export_artifacts;
 use crate::release1_project_export_query::GET_EXPORT_OPERATION;
@@ -144,9 +146,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:3ba801590f81969a2b80edb8ebaaa5fa1f5014521e82a3ffa772721775447f7d";
+    "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:3753cb22ce008cf30bb1cecd62dd75193633201e8b735771135465ffa7d19461";
+    "sha256:3fd802faf4642368d5e73366cab5a65cbd9a444cd90a3b1e7258ccd063a67476";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -249,6 +251,14 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
         project_export_query_artifacts::response_schema_bytes();
     let update_project_request_schema = update_project_artifacts::request_schema_bytes();
     let update_project_response_schema = update_project_artifacts::response_schema_bytes();
+    let get_project_assistance_request_schema =
+        project_assistance_artifacts::get_request_schema_bytes();
+    let get_project_assistance_response_schema =
+        project_assistance_artifacts::get_response_schema_bytes();
+    let update_project_assistance_request_schema =
+        project_assistance_artifacts::update_request_schema_bytes();
+    let update_project_assistance_response_schema =
+        project_assistance_artifacts::update_response_schema_bytes();
     let archive_project_request_schema = archive_project_artifacts::request_schema_bytes();
     let archive_project_response_schema = archive_project_artifacts::response_schema_bytes();
     let create_volume_request_schema = create_volume_artifacts::request_schema_bytes();
@@ -420,6 +430,26 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::UPDATE_PROJECT_RESPONSE_SCHEMA_ID,
             update_project_artifacts::RESPONSE_SCHEMA_PATH,
             update_project_response_schema,
+        ),
+        (
+            crate::GET_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
+            project_assistance_artifacts::GET_REQUEST_SCHEMA_PATH,
+            get_project_assistance_request_schema,
+        ),
+        (
+            crate::GET_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
+            project_assistance_artifacts::GET_RESPONSE_SCHEMA_PATH,
+            get_project_assistance_response_schema,
+        ),
+        (
+            crate::UPDATE_PROJECT_ASSISTANCE_REQUEST_SCHEMA_ID,
+            project_assistance_artifacts::UPDATE_REQUEST_SCHEMA_PATH,
+            update_project_assistance_request_schema,
+        ),
+        (
+            crate::UPDATE_PROJECT_ASSISTANCE_RESPONSE_SCHEMA_ID,
+            project_assistance_artifacts::UPDATE_RESPONSE_SCHEMA_PATH,
+            update_project_assistance_response_schema,
         ),
         (
             crate::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
@@ -738,6 +768,8 @@ fn contract_graph_bytes() -> Vec<u8> {
             operation_graph(&GET_PROTOCOL_PROFILE, &["active_public_release_profile"]),
             operation_graph(&GET_PROJECT, &["server_derived_project_scope", "project_visibility"]),
             command_operation_graph(&UPDATE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_active"]),
+            operation_graph(&GET_PROJECT_ASSISTANCE, &["server_derived_project_scope", "project_visibility"]),
+            command_operation_graph(&UPDATE_PROJECT_ASSISTANCE, &["server_derived_project_scope", "expected_assistance_revision", "project_active"]),
             command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
             command_operation_graph(&CREATE_VOLUME, &["server_derived_project_scope", "project_active", "expected_tree_revision"]),
             command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision"]),
@@ -860,6 +892,7 @@ fn openapi_bytes() -> Vec<u8> {
             paths.push_str(&delete_chapter_artifacts::method_openapi());
         }
     }
+    paths.push_str(&project_assistance_artifacts::openapi());
     paths.push_str(&archive_project_artifacts::openapi());
     paths.push_str(&create_volume_artifacts::openapi());
     paths.push_str(&update_volume_artifacts::openapi());
@@ -1047,6 +1080,8 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         CREATE_PROJECT.operation_id,
         LIST_PROJECTS.operation_id,
         UPDATE_PROJECT.operation_id,
+        GET_PROJECT_ASSISTANCE.operation_id,
+        UPDATE_PROJECT_ASSISTANCE.operation_id,
         ARCHIVE_PROJECT.operation_id,
         CREATE_VOLUME.operation_id,
         UPDATE_VOLUME.operation_id,
@@ -1159,7 +1194,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1186,6 +1221,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         create_project_client,
         list_projects_client,
         update_project_client,
+        project_assistance_artifacts::typescript_client_source(),
         archive_project_client,
         create_volume_client,
         update_volume_client,
@@ -1260,6 +1296,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
         takeover_artifacts::typescript_type_declarations(),
     );
     declaration.push_str("\n\n");
+    declaration.push_str(&project_assistance_artifacts::typescript_type_declarations());
+    declaration.push_str("\n\n");
     declaration.push_str(
         concat!(
             "export declare const GENERATED_CLIENT_REVISION: string;\n",
@@ -1277,6 +1315,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(create_project_artifacts::typescript_declarations());
     declaration.push_str(list_projects_artifacts::typescript_declarations());
     declaration.push_str(update_project_artifacts::typescript_declarations());
+    declaration.push_str(project_assistance_artifacts::typescript_declarations());
     declaration.push_str(archive_project_artifacts::typescript_declarations());
     declaration.push_str(create_volume_artifacts::typescript_declarations());
     declaration.push_str(update_volume_artifacts::typescript_declarations());
@@ -1545,6 +1584,10 @@ mod undo_latest_author_action_tests;
 #[cfg(test)]
 #[path = "release1_update_project_artifacts_tests.rs"]
 mod update_project_tests;
+
+#[cfg(test)]
+#[path = "release1_project_assistance_artifacts_tests.rs"]
+mod project_assistance_tests;
 
 #[cfg(test)]
 #[path = "release1_fixture_corpus_tests.rs"]

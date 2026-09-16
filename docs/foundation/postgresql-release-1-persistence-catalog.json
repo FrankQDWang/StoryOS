@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:978ed80c87f8c332c046c3569784634eca832389b9d3c3c2848c9413772fd29e",
+    "migration_chain_digest": "sha256:f0aa30fee79d0f39f7fb8b307ee021409f4bfa37a1884c342e64cb80500d0596",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -27,7 +27,7 @@
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:3ba801590f81969a2b80edb8ebaaa5fa1f5014521e82a3ffa772721775447f7d",
+      "route_catalog_sha256": "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:31cdcb4576e4b82fba1618dd7a8e01088050e34b19f413e956c2d095468d9400",
+      "manifest_sha256": "sha256:5602c05f346b9b33610c2202db07ce60de5b9dedddc277a39ff48512bfce4335",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -411,6 +411,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0044_command_response_project.sql",
           "lf_sha256": "sha256:494fcd3666b0c3d383e210a066f3dbec8e219ac6b8f5fc1f34f443d264040b2b"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0045_update_project_assistance.sql",
+          "lf_sha256": "sha256:b67111dc69c799a89895ae9836722e428916e6147e0823ab7a1e135914b1a92d"
         }
       ]
     },
@@ -536,7 +540,7 @@
       "head": "scoped_head_and_counter",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "canonical_facts_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects", "getProject", "updateProject", "createVolume", "updateVolume", "deleteVolume", "createChapter", "updateChapter", "deleteChapter", "setCurrentChapter", "applyAuthorEdit", "getApplyAuthorEditOutcome", "getManuscriptTree", "getChapter", "getStatistics", "searchManuscript", "exportHumanReadableManuscript", "getHumanReadableManuscriptExport"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createProject", "listProjects", "getProject", "updateProject", "getProjectAssistance", "updateProjectAssistance", "createVolume", "updateVolume", "deleteVolume", "createChapter", "updateChapter", "deleteChapter", "setCurrentChapter", "applyAuthorEdit", "getApplyAuthorEditOutcome", "getManuscriptTree", "getChapter", "getStatistics", "searchManuscript", "exportHumanReadableManuscript", "getHumanReadableManuscriptExport"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "artifact-proposal-draft",
@@ -616,7 +620,7 @@
       "head": "destination_attempt_fence",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "manifest_claim_and_outcome_unknown_verified"},
       "portability": {"physical_backup": "full_rows_without_secret_values", "whole_service_restore": "restore_and_reconcile_outcome_unknown", "project_export": "include_nonsecret_evidence", "project_restore": "restore_and_unbound_credentials", "secret_exclusion": "reference_only"},
-      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createReplacementProposal", "createAgentRun", "updateConversationMemorySettings", "getConversationMemory", "retrieveContext"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "operational_persistence", "operation_ids": ["createReplacementProposal", "createAgentRun", "updateConversationMemorySettings", "getConversationMemory", "retrieveContext", "getProjectAssistance", "updateProjectAssistance"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-wire-history",
