@@ -9,10 +9,12 @@ pub enum AssistanceAdmission {
     Available,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ConversationAdmission {
     New,
-    Existing { found: bool, busy: bool },
+    ExistingIdle,
+    ExistingBusy,
+    ExistingMissing,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -69,17 +71,15 @@ pub fn create_agent_run(command: &CreateAgentRun) -> CreateAgentRunResult {
         };
     }
     match command.conversation {
-        ConversationAdmission::New => CreateAgentRunResult::Admitted,
-        ConversationAdmission::Existing { found: false, .. } => CreateAgentRunResult::Refused {
+        ConversationAdmission::New | ConversationAdmission::ExistingIdle => {
+            CreateAgentRunResult::Admitted
+        }
+        ConversationAdmission::ExistingMissing => CreateAgentRunResult::Refused {
             reason: CreateAgentRunRefusal::InaccessibleConversation,
         },
-        ConversationAdmission::Existing { busy: true, .. } => CreateAgentRunResult::Refused {
+        ConversationAdmission::ExistingBusy => CreateAgentRunResult::Refused {
             reason: CreateAgentRunRefusal::ConversationBusy,
         },
-        ConversationAdmission::Existing {
-            found: true,
-            busy: false,
-        } => CreateAgentRunResult::Admitted,
     }
 }
 

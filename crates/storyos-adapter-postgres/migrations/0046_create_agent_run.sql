@@ -78,6 +78,18 @@ CREATE TABLE storyos.agent_runs (
 CREATE UNIQUE INDEX agent_runs_one_queued_conversation
   ON storyos.agent_runs (owner_user_id, project_id, conversation_id)
   WHERE status = 'queued';
+CREATE INDEX project_conversations_created_receipt_idx
+  ON storyos.project_conversations (owner_user_id, project_id, created_receipt_id);
+CREATE INDEX conversation_memory_settings_receipt_idx
+  ON storyos.conversation_memory_settings (owner_user_id, project_id, receipt_id);
+CREATE INDEX agent_runs_settings_idx
+  ON storyos.agent_runs (
+    owner_user_id, project_id, conversation_id, memory_settings_revision
+  );
+CREATE INDEX agent_runs_grant_idx
+  ON storyos.agent_runs (owner_user_id, project_id, grant_id);
+CREATE INDEX agent_runs_binding_idx
+  ON storyos.agent_runs (owner_user_id, project_id, project_model_use_binding_revision);
 CREATE INDEX agent_runs_receipt_idx
   ON storyos.agent_runs (owner_user_id, project_id, receipt_id);
 

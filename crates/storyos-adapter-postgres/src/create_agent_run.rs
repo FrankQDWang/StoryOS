@@ -284,10 +284,7 @@ async fn conversation_admission(
         .map_err(agent_run_database_error)?
         .is_some();
     if !found {
-        return Ok(ConversationAdmission::Existing {
-            found: false,
-            busy: false,
-        });
+        return Ok(ConversationAdmission::ExistingMissing);
     }
     let busy = client
         .query_opt(
@@ -306,7 +303,11 @@ async fn conversation_admission(
         .await
         .map_err(agent_run_database_error)?
         .is_some();
-    Ok(ConversationAdmission::Existing { found: true, busy })
+    Ok(if busy {
+        ConversationAdmission::ExistingBusy
+    } else {
+        ConversationAdmission::ExistingIdle
+    })
 }
 
 async fn hold_conversation_if_requested(idempotency_key: &str) {

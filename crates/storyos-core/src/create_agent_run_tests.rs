@@ -25,10 +25,7 @@ fn refuses_an_inaccessible_existing_conversation() {
             presence: ProjectPresence::Present,
             lifecycle: ProjectLifecycle::Active,
             assistance: AssistanceAdmission::Available,
-            conversation: ConversationAdmission::Existing {
-                found: false,
-                busy: false,
-            },
+            conversation: ConversationAdmission::ExistingMissing,
             chapter: ChapterAdmission::Current,
         }),
         CreateAgentRunResult::Refused {
@@ -74,10 +71,7 @@ fn refuses_unavailable_assistance() {
 #[test]
 fn refuses_a_busy_existing_conversation() {
     let mut command = admitted();
-    command.conversation = ConversationAdmission::Existing {
-        found: true,
-        busy: true,
-    };
+    command.conversation = ConversationAdmission::ExistingBusy;
     assert_eq!(
         create_agent_run(&command),
         CreateAgentRunResult::Refused {
