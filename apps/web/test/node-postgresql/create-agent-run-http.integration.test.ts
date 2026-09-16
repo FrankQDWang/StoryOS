@@ -24,6 +24,7 @@ import type {
   CreateChapterRequest,
   CreateProjectChallengeRequest,
   CreateVolumeRequest,
+  DigestValue,
   UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
@@ -145,7 +146,7 @@ async function challenged<T>(options: {
   method: string;
   route: string;
   schema: string;
-  digest: { algorithm: string; profile: string; value_hex_lowercase: string };
+  digest: DigestValue;
   key: string;
   send: (antiForgery: string) => Promise<T>;
 }): Promise<T> {
@@ -224,6 +225,7 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
   if (createdVolume.effect.kind !== "authoritative_applied") {
     throw new Error("Create Volume must apply");
   }
+  const volumeId = createdVolume.effect.volume_id;
   const chapter = chapterRequest("018f0000-0000-7001-8000-000000000b24");
   const createdChapter = await challenged({
     baseUrl,
@@ -237,7 +239,7 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
     send: (antiForgery) => createChapter({
       baseUrl,
       projectId,
-      volumeId: createdVolume.effect.volume_id,
+      volumeId,
       fetchImpl,
       idempotencyKey: "018f0000-0000-7001-8000-000000000b25",
       antiForgery,
@@ -666,6 +668,8 @@ test("createAgentRun competing existing admission keeps one queued run", async (
       chapterId,
       "018f0000-0000-7001-8000-000000000b65",
     );
+    const heldDigest = await digestCreateAgentRun(heldRequest);
+    const competingDigest = await digestCreateAgentRun(competingRequest);
     const heldChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
@@ -674,7 +678,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
         method: "POST",
         route_template: "/api/v1/projects/{project_id}/agent-runs",
         command_schema: "storyos.command.create-agent-run.request.v2",
-        canonical_command_digest: await digestCreateAgentRun(heldRequest),
+        canonical_command_digest: heldDigest,
         idempotency_key: heldKey,
       },
     }));
@@ -686,7 +690,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
         method: "POST",
         route_template: "/api/v1/projects/{project_id}/agent-runs",
         command_schema: "storyos.command.create-agent-run.request.v2",
-        canonical_command_digest: await digestCreateAgentRun(competingRequest),
+        canonical_command_digest: competingDigest,
         idempotency_key: "018f0000-0000-7001-8000-000000000b66",
       },
     }));
