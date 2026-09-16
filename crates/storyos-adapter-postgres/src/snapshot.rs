@@ -551,5 +551,9 @@ fn payload_aggregate(
             kind: "export".to_owned(),
             id: field("export_id")?,
         },
+        ProjectActivityKind::AgentRunCreated => ActivityAggregateRef {
+            kind: "agent_run".to_owned(),
+            id: field("run_id")?,
+        },
     })
 }

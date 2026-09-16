@@ -15,6 +15,7 @@ pub struct ProjectAssistanceRecord {
     pub processing_destination_identity: String,
     pub processing_destination_identity_evidence_revision: u64,
     pub project_model_use_binding_revision: String,
+    pub grant_id: String,
     pub external_compatibility_decision: String,
 }
 

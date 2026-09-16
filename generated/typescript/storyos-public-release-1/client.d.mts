@@ -197,7 +197,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -319,6 +319,30 @@ export type UpdateProjectAssistanceEffect = { "kind": "initialized", availabilit
 
 export type UpdateProjectAssistanceResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, assistance: ProjectAssistanceBinding, effect: UpdateProjectAssistanceEffect, };
 
+export type ConversationSelection = { "kind": "new" } | { "kind": "existing", conversation_id: string, };
+
+export type AuthorMessage = { text: string, };
+
+export type AssistanceWorkingTarget = { "kind": "current_chapter", chapter_id: string, };
+
+export type InstructionBinding = { "kind": "absent" };
+
+export type AssistanceCause = { "kind": "author_request" };
+
+export type CreateAgentRunInput = { conversation: ConversationSelection, author_message: AuthorMessage, working_target: AssistanceWorkingTarget, instruction: InstructionBinding, cause: AssistanceCause, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type CreateAgentRunRequest = { command_schema: string, create_agent_run_input: CreateAgentRunInput, };
+
+export type AgentRunRef = { "kind": "agent_run", run_id: string, };
+
+export type CreateAgentRunEffect = { "kind": "admitted", project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, project_activity_position: string, };
+
+export type CreateAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: AgentRunRef | null, project: ControlledProject, project_agent_id: string, conversation_id: string, memory_settings_revision: string, effect: CreateAgentRunEffect, };
+
+export type AgentRunStatus = "queued";
+
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -346,6 +370,9 @@ export declare function updateProject(options: StoryOSQueryOptions & { projectId
 export declare function getProjectAssistance(options: StoryOSQueryOptions & { projectId: string }): Promise<GetProjectAssistanceResponse>;
 export declare function digestUpdateProjectAssistance(request: UpdateProjectAssistanceRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
+export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
+export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<GetAgentRunResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

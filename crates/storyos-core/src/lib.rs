@@ -3,6 +3,7 @@
 mod archive_path;
 mod archive_project;
 mod archive_zip;
+mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_volume;
@@ -28,6 +29,10 @@ pub use archive_path::{
 pub use archive_project::{
     ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
     ArchiveProjectResult, ProjectLifecycle, archive_project,
+};
+pub use create_agent_run::{
+    AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
+    CreateAgentRunRefusal, CreateAgentRunResult, create_agent_run,
 };
 pub use create_chapter::{
     CreateChapter, CreateChapterConflict, CreateChapterCurrent, CreateChapterOpen,

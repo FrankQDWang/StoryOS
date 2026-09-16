@@ -584,6 +584,7 @@ run_http_files \
   test/node-postgresql/list-projects-http.integration.test.ts \
   test/node-postgresql/update-project-http.integration.test.ts \
   test/node-postgresql/update-project-assistance-http.integration.test.ts \
+  test/node-postgresql/create-agent-run-http.integration.test.ts \
   test/node-postgresql/archive-project-http.integration.test.ts \
   test/node-postgresql/create-volume-http.integration.test.ts \
   test/node-postgresql/update-volume-http.integration.test.ts \

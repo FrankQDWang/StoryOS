@@ -5,6 +5,8 @@
 mod digest;
 mod project_command_targets;
 mod release1;
+mod release1_agent_run;
+mod release1_agent_run_artifacts;
 mod release1_archive_project;
 mod release1_archive_project_artifacts;
 mod release1_artifacts;
@@ -84,6 +86,14 @@ pub use release1::{
     LIMIT_PROFILE_REVISION, ManuscriptBlock, ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE,
     ProjectOpenState, ProjectScope, Release1CompatibilityIdentity, Release1ProtocolProfile,
     StoryOSProblem, project_command_kind,
+};
+pub use release1_agent_run::{
+    AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget, AuthorMessage,
+    CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
+    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ConversationSelection,
+    CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse,
+    GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
+    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse, InstructionBinding,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,

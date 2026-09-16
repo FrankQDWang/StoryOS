@@ -37,6 +37,10 @@ mod update_project_tests;
 mod update_project_assistance_tests;
 
 #[cfg(test)]
+#[path = "create_agent_run_tests.rs"]
+mod create_agent_run_tests;
+
+#[cfg(test)]
 #[path = "archive_project_tests.rs"]
 mod archive_project_tests;
 
@@ -98,6 +102,7 @@ mod author_edit_settlement;
 mod chapter_query;
 mod command_response_project;
 mod connection_pool;
+mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_project_challenge;

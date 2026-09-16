@@ -34,6 +34,7 @@ impl UpdateProjectAssistanceStore for Store {
                 processing_destination_identity: "dest".to_owned(),
                 processing_destination_identity_evidence_revision: 1,
                 project_model_use_binding_revision: "bind".to_owned(),
+                grant_id: "grant".to_owned(),
                 external_compatibility_decision: "dec".to_owned(),
             }),
         })
