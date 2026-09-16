@@ -277,6 +277,6 @@ test("project assistance prepares the host fake binding without a run", async ()
     `);
     assert.equal(policyCount, "2");
   } finally {
-    await stopRealServer(started);
+    await stopRealServer(started.server);
   }
 });
