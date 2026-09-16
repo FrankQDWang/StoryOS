@@ -282,19 +282,16 @@ pub(super) fn typescript_client_source() -> String {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getAgentRun requires projectId\");\n",
             "  if (typeof runId !== \"string\" || runId.length === 0) throw new TypeError(\"getAgentRun requires runId\");\n",
             "  const query = modelAttemptId == null || modelAttemptId === \"\" ? \"\" : `?model_attempt_id=${{encodeURIComponent(modelAttemptId)}}`;\n",
-            "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
+            "  return queryJson({{ ...options, path: `{}{{query}}` }});\n}}\n",
         ),
         CREATE_AGENT_RUN_DIGEST_PROFILE,
         CREATE_AGENT_RUN
             .path
             .replace("{project_id}", "${encodeURIComponent(projectId)}"),
-        format!(
-            "{}{{query}}",
-            GET_AGENT_RUN
-                .path
-                .replace("{project_id}", "${encodeURIComponent(projectId)}")
-                .replace("{run_id}", "${encodeURIComponent(runId)}")
-        ),
+        GET_AGENT_RUN
+            .path
+            .replace("{project_id}", "${encodeURIComponent(projectId)}")
+            .replace("{run_id}", "${encodeURIComponent(runId)}"),
     )
 }
 

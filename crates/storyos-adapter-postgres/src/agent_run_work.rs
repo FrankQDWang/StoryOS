@@ -315,9 +315,9 @@ async fn persist_stream_and_decision(
         (
             true,
             FakeAttemptOutcome::Decision {
-                kind,
                 selected,
                 advances_continuation,
+                ..
             },
         ) => {
             let id = (*selected).then(|| Uuid::now_v7().to_string());
