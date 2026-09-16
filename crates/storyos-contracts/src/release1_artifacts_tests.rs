@@ -162,7 +162,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -303,7 +303,8 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
             "setCurrentChapter",
             "undoLatestAuthorAction",
             "exportHumanReadableManuscript",
-            "exportProjectArchive"
+            "exportProjectArchive",
+            "updateProjectAssistance"
         ])
     );
 
@@ -470,6 +471,9 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_list_projects_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_update_project_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_update_project_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_project_assistance_artifacts::GET_RESPONSE_SCHEMA_PATH,
+        crate::release1_project_assistance_artifacts::UPDATE_REQUEST_SCHEMA_PATH,
+        crate::release1_project_assistance_artifacts::UPDATE_RESPONSE_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_create_volume_artifacts::REQUEST_SCHEMA_PATH,
