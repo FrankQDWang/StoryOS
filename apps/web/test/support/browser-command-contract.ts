@@ -1,6 +1,7 @@
 export const storyOSBrowserCommandNames = {
   clipboardPermission: "storyosClipboardPermission",
   clientSessionCookie: "storyosClientSessionCookie",
+  commandChallengeRateWindows: "storyosCommandChallengeRateWindows",
   imeComposition: "storyosImeComposition",
   trustedInput: "storyosTrustedInput",
   productionHost: "storyosProductionHost",
@@ -33,6 +34,10 @@ export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_u
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
 export type ProductionHostRequest = Readonly<{ scenario: "open_edit_reload_takeover" }>;
 export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
+export type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
+export type CommandChallengeRateWindowsResult = Readonly<{
+  kind: "command_challenge_rate_windows_reset";
+}>;
 
 function exactObject(value: unknown, keys: readonly string[], label: string): object {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
@@ -191,4 +196,24 @@ export function parseProductionHostRequest(value: unknown): ProductionHostReques
 
 export function parseProductionHostResult(value: unknown): ProductionHostResult {
   return parseResult(value, "production_host_verified", "production host");
+}
+
+export function parseCommandChallengeRateWindowsRequest(
+  value: unknown,
+): CommandChallengeRateWindowsRequest {
+  const request = exactObject(value, ["action"], "Command Challenge rate-window request");
+  if (property(request, "action") !== "reset") {
+    throw new TypeError("Command Challenge rate-window action is unsupported");
+  }
+  return { action: "reset" };
+}
+
+export function parseCommandChallengeRateWindowsResult(
+  value: unknown,
+): CommandChallengeRateWindowsResult {
+  return parseResult(
+    value,
+    "command_challenge_rate_windows_reset",
+    "Command Challenge rate windows",
+  );
 }

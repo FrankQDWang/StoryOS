@@ -1,0 +1,75 @@
+{
+  "$defs": {
+    "AgentRunStatus": {
+      "enum": [
+        "queued"
+      ],
+      "type": "string"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.query.agent-run.response.v2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "conversation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "memory_settings_revision": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_agent_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "run_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "schema_id": {
+      "const": "storyos.query.agent-run.response.v2",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/AgentRunStatus"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "project_agent_id",
+    "conversation_id",
+    "memory_settings_revision",
+    "run_id",
+    "status"
+  ],
+  "title": "StoryOS Agent Run Response",
+  "type": "object"
+}

@@ -1,0 +1,168 @@
+{
+  "$defs": {
+    "AssistanceCause": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "author_request",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AssistanceWorkingTarget": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "chapter_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AuthorMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "ConversationSelection": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "new",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "conversation_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "existing",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "conversation_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CreateAgentRunInput": {
+      "additionalProperties": false,
+      "properties": {
+        "author_message": {
+          "$ref": "#/$defs/AuthorMessage"
+        },
+        "cause": {
+          "$ref": "#/$defs/AssistanceCause"
+        },
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "conversation": {
+          "$ref": "#/$defs/ConversationSelection"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "instruction": {
+          "$ref": "#/$defs/InstructionBinding"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "working_target": {
+          "$ref": "#/$defs/AssistanceWorkingTarget"
+        }
+      },
+      "required": [
+        "conversation",
+        "author_message",
+        "working_target",
+        "instruction",
+        "cause",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    },
+    "InstructionBinding": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "storyos.command.create-agent-run.request.v2",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.create-agent-run.request.v2",
+      "type": "string"
+    },
+    "create_agent_run_input": {
+      "$ref": "#/$defs/CreateAgentRunInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "create_agent_run_input"
+  ],
+  "title": "StoryOS Create Agent Run Request",
+  "type": "object"
+}

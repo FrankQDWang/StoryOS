@@ -81,6 +81,7 @@ pub(crate) async fn read_assistance_record(
                     identity.processing_destination_identity::text,
                     evidence.evidence_revision::text,
                     binding.project_model_use_binding_revision::text,
+                    binding.grant_id::text,
                     decision.external_compatibility_decision::text
                FROM storyos.project_policy_revisions AS policy
                JOIN storyos.processing_destination_identities AS identity
@@ -121,7 +122,8 @@ pub(crate) async fn read_assistance_record(
         processing_destination_identity_evidence_revision: parse_u64(row.get::<_, String>(4))
             .map_err(ProjectReadError::unavailable)?,
         project_model_use_binding_revision: row.get(5),
-        external_compatibility_decision: row.get(6),
+        grant_id: row.get(6),
+        external_compatibility_decision: row.get(7),
     }))
 }
 

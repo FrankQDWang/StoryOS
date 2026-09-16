@@ -32,6 +32,7 @@ mod author_command_outcome_unknown;
 mod author_edit;
 mod author_edit_outcome;
 mod chapter_query;
+mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_project_challenge;
@@ -87,6 +88,11 @@ pub use archive_project::{
     ArchiveProjectSettlementEffect, ArchiveProjectStore, archive_project,
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
+pub use create_agent_run::{
+    AgentRunRecord, AgentRunStatus, ConversationSelection, CreateAgentRunAdmission,
+    CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore, open_agent_run,
+    request_create_agent_run,
+};
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
     CreateChapterSettlement, CreateChapterSettlementEffect, CreateChapterStore, create_chapter,

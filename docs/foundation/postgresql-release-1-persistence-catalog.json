@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:6199406b8dce00355c357fbde2acaf11afa1b490d0ac3c096b99da24e23c525d"
+    "digest": "sha256:5cd86eded8219e9b540a2b2cffdd27d8c3e69a8ff1d39a54d9e72f37e6be9d13"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:f0aa30fee79d0f39f7fb8b307ee021409f4bfa37a1884c342e64cb80500d0596",
+    "migration_chain_digest": "sha256:0aaf77bd4c8ca7ef816959f781d668dcae9ea0866e6d4eff74c05293960c07e9",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:5602c05f346b9b33610c2202db07ce60de5b9dedddc277a39ff48512bfce4335",
+      "manifest_sha256": "sha256:5bf4ed820b5523d30473d806141a0ba888d1fa7065c1574fc73647d7bee43089",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -415,6 +415,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0045_update_project_assistance.sql",
           "lf_sha256": "sha256:b67111dc69c799a89895ae9836722e428916e6147e0823ab7a1e135914b1a92d"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0046_create_agent_run.sql",
+          "lf_sha256": "sha256:8c08ca98e88a69e073cce2d93a8a386adcfa5a041b03ef791a58423a7838d67e"
         }
       ]
     },
@@ -592,7 +596,7 @@
     },
     {
       "family_id": "operational-run-mailbox",
-      "table_families": ["agent_runs", "subruns", "subrun_joins", "run_grant_revisions", "subrun_capability_grants", "run_plans", "run_steps", "run_lanes", "run_events", "run_mailbox_messages", "run_mailbox_deliveries", "run_waits", "wait_resolutions", "run_holds", "run_wakeups", "run_leases", "run_execution_attempts", "run_budget_accounts", "run_budget_reservations", "usage_records", "transcript_items", "approval_waits", "approval_decisions", "steering_inputs", "run_checkpoints", "outbox_entries", "worker_fences"],
+      "table_families": ["agent_runs", "conversation_memory_settings", "project_agents", "project_conversations", "subruns", "subrun_joins", "run_grant_revisions", "subrun_capability_grants", "run_plans", "run_steps", "run_lanes", "run_events", "run_mailbox_messages", "run_mailbox_deliveries", "run_waits", "wait_resolutions", "run_holds", "run_wakeups", "run_leases", "run_execution_attempts", "run_budget_accounts", "run_budget_reservations", "usage_records", "transcript_items", "approval_waits", "approval_decisions", "steering_inputs", "run_checkpoints", "outbox_entries", "worker_fences"],
       "owner": "context",
       "authority_class": "operational",
       "durability_class": "immutable_events_with_fenced_live_state",

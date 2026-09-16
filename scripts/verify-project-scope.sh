@@ -584,6 +584,7 @@ run_http_files \
   test/node-postgresql/list-projects-http.integration.test.ts \
   test/node-postgresql/update-project-http.integration.test.ts \
   test/node-postgresql/update-project-assistance-http.integration.test.ts \
+  test/node-postgresql/create-agent-run-http.integration.test.ts \
   test/node-postgresql/archive-project-http.integration.test.ts \
   test/node-postgresql/create-volume-http.integration.test.ts \
   test/node-postgresql/update-volume-http.integration.test.ts \
@@ -611,6 +612,7 @@ pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/project-export-admission-process-cut.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 reload_controlled_fixture "$container"
+reset_command_challenge_rate_windows "$container"
 echo "Running the exact-dist S1-JRN-001 and real production-host Chrome journeys"
 s1_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-s1-server.XXXXXX")
 stage1_user_id="018f0000-0000-7001-8000-000000000001"

@@ -21,6 +21,7 @@ mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
 mod chapter;
+mod create_agent_run;
 mod create_chapter;
 mod create_project;
 mod create_project_challenge;
@@ -68,6 +69,7 @@ use author_edit_outcome::{
     apply_author_edit_outcome_method_not_allowed, get_apply_author_edit_outcome,
 };
 use chapter::get_chapter;
+use create_agent_run::{create_agent_run, get_agent_run};
 use create_chapter::create_chapter;
 use create_project::create_project;
 use create_project_challenge::create_project_challenge;
@@ -275,6 +277,20 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             .on(
                 method_filter(contracts::UPDATE_PROJECT_ASSISTANCE_METHOD),
                 update_project_assistance,
+            ),
+        )
+        .route(
+            contracts::CREATE_AGENT_RUN_PATH,
+            routing::on(
+                method_filter(contracts::CREATE_AGENT_RUN_METHOD),
+                create_agent_run,
+            ),
+        )
+        .route(
+            contracts::GET_AGENT_RUN_PATH,
+            routing::on(
+                method_filter(contracts::GET_AGENT_RUN_METHOD),
+                get_agent_run,
             ),
         )
         .route(

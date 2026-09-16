@@ -7,6 +7,8 @@ use crate::release1::{
     CREATE_EDITOR_SESSION, CREATE_PROJECT_COMMAND_CHALLENGE, GET_CHAPTER, GET_EDITOR_SESSION,
     GET_PROJECT, GET_PROTOCOL_PROFILE, PUBLIC_PROTOCOL_RELEASE, QueryOperation,
 };
+use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
+use crate::release1_agent_run_artifacts as agent_run_artifacts;
 use crate::release1_archive_project::ARCHIVE_PROJECT;
 use crate::release1_archive_project_artifacts as archive_project_artifacts;
 use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
@@ -308,6 +310,24 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| project_assistance_artifacts::update_fixture_bytes(),
             |_profile| project_assistance_artifacts::update_invalid_fixture_bytes(),
             |_profile| project_assistance_artifacts::update_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        agent_run_artifacts::CREATE_FIXTURE_PATHS,
+        &CREATE_AGENT_RUN,
+        [
+            |_profile| agent_run_artifacts::create_fixture_bytes(),
+            |_profile| agent_run_artifacts::create_invalid_fixture_bytes(),
+            |_profile| agent_run_artifacts::create_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        agent_run_artifacts::GET_FIXTURE_PATHS,
+        &GET_AGENT_RUN,
+        [
+            |_profile| agent_run_artifacts::get_fixture_bytes(),
+            |_profile| agent_run_artifacts::get_invalid_fixture_bytes(),
+            |_profile| agent_run_artifacts::get_boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

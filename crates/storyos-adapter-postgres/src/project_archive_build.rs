@@ -11,6 +11,7 @@ use storyos_core::{
 };
 
 const EXPORT_TABLES: &[(&str, &str)] = &[
+    ("agent_runs", "canonical/agent_runs.json"),
     (
         "author_action_entries",
         "canonical/author_action_entries.json",
@@ -57,6 +58,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/chapter_removal_decisions.json",
     ),
     ("command_idempotency", "canonical/command_idempotency.json"),
+    (
+        "conversation_memory_settings",
+        "canonical/conversation_memory_settings.json",
+    ),
     ("domain_receipts", "canonical/domain_receipts.json"),
     (
         "editor_session_base_snapshots",
@@ -101,9 +106,14 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "project_activity_events",
         "canonical/project_activity_events.json",
     ),
+    ("project_agents", "canonical/project_agents.json"),
     (
         "project_archival_decisions",
         "canonical/project_archival_decisions.json",
+    ),
+    (
+        "project_conversations",
+        "canonical/project_conversations.json",
     ),
     (
         "project_destination_grants",

@@ -1,7 +1,11 @@
 import { afterEach, expect, it } from "vitest";
 
 import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { applyTrustedInput, updateClientSessionCookie } from "../support/browser-command-client.ts";
+import {
+  applyTrustedInput,
+  resetCommandChallengeRateWindows,
+  updateClientSessionCookie,
+} from "../support/browser-command-client.ts";
 import {
   focusManuscriptEnd,
   manuscriptBody,
@@ -201,13 +205,11 @@ it("repeats Chapter switching, Undo, search, and reload without losing work", {
   const longEditor = manuscriptEditor(appRoot(frame), applicationWindow(frame));
   longEditor.focus();
   focusManuscriptEnd(longEditor, applicationWindow(frame));
-  let challengeWindow = Math.floor(Date.now() / 60_000);
   for (let batch = 0; batch < 11; batch++) {
     if (batch % 5 === 0) {
-      // The real package allows ten challenges per minute for this Project.
-      await expect.poll(() => Math.floor(Date.now() / 60_000), { timeout: 61_000 })
-        .toBeGreaterThan(challengeWindow);
-      challengeWindow = Math.floor(Date.now() / 60_000);
+      await resetCommandChallengeRateWindows();
+      longEditor.focus();
+      focusManuscriptEnd(longEditor, applicationWindow(frame));
     }
     const count = batch === 10 ? 1 : 240;
     for (let input = 0; input < count; input++) {

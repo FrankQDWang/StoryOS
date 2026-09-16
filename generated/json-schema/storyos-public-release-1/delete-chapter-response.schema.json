@@ -277,7 +277,8 @@
         "undoLatestAuthorAction",
         "exportHumanReadableManuscript",
         "exportProjectArchive",
-        "updateProjectAssistance"
+        "updateProjectAssistance",
+        "createAgentRun"
       ],
       "type": "string"
     },

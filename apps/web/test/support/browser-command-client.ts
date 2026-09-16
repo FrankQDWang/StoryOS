@@ -5,6 +5,7 @@ import {
   type ClientSessionCookieResult,
   type ClipboardPermissionRequest,
   type ClipboardPermissionResult,
+  type CommandChallengeRateWindowsResult,
   type ImeCompositionRequest,
   type ImeCompositionResult,
   type ProductionHostRequest,
@@ -13,6 +14,7 @@ import {
   type TrustedInputResult,
   parseClientSessionCookieResult,
   parseClipboardPermissionResult,
+  parseCommandChallengeRateWindowsResult,
   parseImeCompositionResult,
   parseProductionHostResult,
   parseTrustedInputResult,
@@ -65,5 +67,13 @@ export async function verifyProductionHost(
 ): Promise<ProductionHostResult> {
   return parseProductionHostResult(
     await invokeStoryOSCommand(storyOSBrowserCommandNames.productionHost, request),
+  );
+}
+
+export async function resetCommandChallengeRateWindows(): Promise<CommandChallengeRateWindowsResult> {
+  return parseCommandChallengeRateWindowsResult(
+    await invokeStoryOSCommand(storyOSBrowserCommandNames.commandChallengeRateWindows, {
+      action: "reset",
+    }),
   );
 }

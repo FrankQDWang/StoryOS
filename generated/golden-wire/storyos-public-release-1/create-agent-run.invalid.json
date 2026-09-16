@@ -1,0 +1,33 @@
+{
+  "acknowledgement": "accepted",
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000a33",
+  "command_id": "018f0000-0000-7001-8000-000000000a32",
+  "correlation_id": "018f0000-0000-7001-8000-000000000a31",
+  "effect": {
+    "conversation_id": "018f0000-0000-7001-8000-000000000a36",
+    "kind": "admitted",
+    "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
+    "project_activity_position": "1",
+    "project_agent_id": "018f0000-0000-7001-8000-000000000a35",
+    "run_id": "018f0000-0000-7001-8000-000000000a34"
+  },
+  "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
+  "operation_ref": {
+    "kind": "agent_run",
+    "run_id": "018f0000-0000-7001-8000-000000000a34"
+  },
+  "project": {
+    "open": {
+      "current_chapter_id": "018f0000-0000-7001-8000-000000000301",
+      "kind": "current_chapter"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000201",
+    "title": "Empty Novel"
+  },
+  "project_agent_id": "018f0000-0000-7001-8000-000000000a35",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "schema_id": "storyos.command.create-agent-run.response.v2"
+}

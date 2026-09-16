@@ -1,5 +1,5 @@
-/// Event kinds that both current Activity table families and the Release 1
-/// route catalog already admit. Stage 3 kinds are not in this set.
+/// Event kinds that current Activity table families and the Release 1
+/// route catalog already admit, including the Stage 3 AgentRun created kind.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectActivityKind {
     AuthoritativeAuthorEditApplied,
@@ -17,6 +17,7 @@ pub enum ProjectActivityKind {
     VolumeDeleted,
     HumanReadableManuscriptExportSettled,
     ProjectExportSettled,
+    AgentRunCreated,
 }
 
 impl ProjectActivityKind {
@@ -39,6 +40,7 @@ impl ProjectActivityKind {
                 Self::HumanReadableManuscriptExportSettled
             }
             "project_export_settled" => Self::ProjectExportSettled,
+            "agent_run_created" => Self::AgentRunCreated,
             _ => return None,
         })
     }
@@ -62,6 +64,7 @@ impl ProjectActivityKind {
                 "human_readable_manuscript_export_settled"
             }
             Self::ProjectExportSettled => "project_export_settled",
+            Self::AgentRunCreated => "agent_run_created",
         }
     }
 
@@ -86,6 +89,7 @@ impl ProjectActivityKind {
                 "storyos.event.human-readable-manuscript-export-settled.v1"
             }
             Self::ProjectExportSettled => "storyos.event.project-export-settled.v1",
+            Self::AgentRunCreated => "storyos.event.agent-run-created.v1",
         }
     }
 
