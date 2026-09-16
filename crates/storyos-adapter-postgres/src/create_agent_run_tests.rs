@@ -123,11 +123,16 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         .expect("run through scripts/verify-project-scope.sh");
     let admin_url = std::env::var("STORYOS_TEST_ADMIN_DATABASE_URL")
         .expect("run through scripts/verify-project-scope.sh");
-    let (admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
+    let (mut admin, admin_connection) = tokio_postgres::connect(&admin_url, NoTls).await.unwrap();
     tokio::spawn(async move {
         admin_connection.await.unwrap();
     });
-    admin
+    let setup = admin.transaction().await.unwrap();
+    setup
+        .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+        .await
+        .unwrap();
+    setup
         .execute(
             "INSERT INTO storyos.projects
                (owner_user_id, project_id, title, current_chapter_id)
@@ -136,6 +141,17 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         )
         .await
         .unwrap();
+    setup
+        .execute(
+            "INSERT INTO storyos.manuscript_objects
+               (owner_user_id, project_id, manuscript_object_id, object_kind, title)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid,
+                     'chapter', 'Assistance Chapter')",
+            &[&USER_A, &PROJECT, &CHAPTER],
+        )
+        .await
+        .unwrap();
+    setup.commit().await.unwrap();
     admin
         .execute(
             "INSERT INTO storyos.projects (owner_user_id, project_id, title, current_chapter_id)
