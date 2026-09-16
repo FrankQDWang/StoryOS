@@ -285,19 +285,10 @@ async fn settle_one_phase(
         .await?;
         return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
     }
-    let terminal = if payload
-        .pointer("/decision/kind")
-        .and_then(serde_json::Value::as_str)
-        == Some("clarification")
-    {
-        "waiting"
-    } else {
-        "completed"
-    };
     update_run(
         client,
         claim,
-        terminal,
+        "completed",
         /*settlement*/ None,
         /*clear_lease*/ true,
     )

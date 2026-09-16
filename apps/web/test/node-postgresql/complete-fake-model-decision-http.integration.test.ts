@@ -369,14 +369,14 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
 
     const clarification = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb13"), "Which wording should I keep? The first clause.");
     await settleOnce();
-    const waiting = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, clarification.effect.run_id);
-    assert.equal(waiting.status, "completed");
-    assert.equal(waiting.decision.kind, "clarification");
-    if (waiting.decision.kind !== "clarification") throw new Error("expected clarification");
-    assert.equal(waiting.decision.selected, true);
-    assert.equal(waiting.decision.question, CLARIFICATION);
-    assert.equal(waiting.decision.required_reply, CLARIFICATION);
-    assert.equal(waiting.decision.continuation.kind, "absent");
+    const clarified = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, clarification.effect.run_id);
+    assert.equal(clarified.status, "completed");
+    assert.equal(clarified.decision.kind, "clarification");
+    if (clarified.decision.kind !== "clarification") throw new Error("expected clarification");
+    assert.equal(clarified.decision.selected, true);
+    assert.equal(clarified.decision.question, CLARIFICATION);
+    assert.equal(clarified.decision.required_reply, CLARIFICATION);
+    assert.equal(clarified.decision.continuation.kind, "absent");
 
     writeFileSync(dispatchHold, "hold");
     const dispatchRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb15"), "Help with this passage.");
