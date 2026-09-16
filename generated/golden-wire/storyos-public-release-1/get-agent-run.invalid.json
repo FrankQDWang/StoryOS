@@ -1,4 +1,79 @@
 {
+  "context": {
+    "assembly_manifest_id": "018f0000-0000-7001-8000-000000000a3b",
+    "considered": [
+      {
+        "eligible": true,
+        "source_class": "host_control",
+        "source_version": "018f0000-0000-7001-8000-000000000a39",
+        "token_count": "0"
+      },
+      {
+        "eligible": true,
+        "source_class": "author_instruction",
+        "source_version": "018f0000-0000-7001-8000-000000000a3a",
+        "token_count": "23"
+      },
+      {
+        "eligible": true,
+        "source_class": "working_target",
+        "source_version": "018f0000-0000-7001-8000-000000000301",
+        "token_count": "0"
+      },
+      {
+        "eligible": true,
+        "source_class": "instruction_binding",
+        "source_version": "absent",
+        "token_count": "0"
+      }
+    ],
+    "current_availability": {
+      "working_target": {
+        "kind": "current"
+      }
+    },
+    "destination_context_manifest": {
+      "kind": "absent"
+    },
+    "destination_io": {
+      "kind": "none"
+    },
+    "host_control": {
+      "destination_visible": false,
+      "distinct_from_destination": true
+    },
+    "input_snapshot_id": "018f0000-0000-7001-8000-000000000a3a",
+    "operation_requirement_id": "018f0000-0000-7001-8000-000000000a39",
+    "outbound_disclosure_manifest": {
+      "kind": "absent"
+    },
+    "purpose": "current_passage_assistance",
+    "rejected": [],
+    "selected": [
+      {
+        "content": "Help with this passage.",
+        "projection_mode": "exact_required",
+        "source_class": "author_instruction",
+        "source_version": "018f0000-0000-7001-8000-000000000a3a",
+        "token_count": "23"
+      },
+      {
+        "content": "",
+        "projection_mode": "exact_required",
+        "source_class": "working_target",
+        "source_version": "018f0000-0000-7001-8000-000000000301",
+        "token_count": "0"
+      }
+    ],
+    "sufficiency": {
+      "kind": "complete"
+    },
+    "token_counting_profile": {
+      "algorithm_revision": "storyos.statistics.unicode-16.0.0.v1",
+      "item_token_limit": "10000",
+      "profile_revision": "storyos.token-counting.unicode-scalar.v1"
+    }
+  },
   "conversation_id": "018f0000-0000-7001-8000-000000000a36",
   "correlation_id": "018f0000-0000-7001-8000-000000000a37",
   "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",

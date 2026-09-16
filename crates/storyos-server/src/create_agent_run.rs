@@ -192,7 +192,141 @@ pub(super) async fn get_agent_run(
         memory_settings_revision: record.memory_settings_revision,
         run_id: record.run_id,
         status: contracts::AgentRunStatus::Queued,
+        context: inspect_context(&record.context),
     }))
+}
+
+fn inspect_context(
+    context: &storyos_application::AgentRunContext,
+) -> contracts::AgentRunContextInspect {
+    use storyos_core::{ContextBlockReason, ContextSufficiency, RejectionReason};
+    let record = &context.record;
+    contracts::AgentRunContextInspect {
+        operation_requirement_id: record
+            .operation_requirement
+            .operation_requirement_id
+            .clone(),
+        input_snapshot_id: record.operation_requirement.input_snapshot_id.clone(),
+        purpose: contracts::ContextPurpose::CurrentPassageAssistance,
+        token_counting_profile: contracts::TokenCountingProfileInspect {
+            profile_revision: record.token_counting_profile_revision.clone(),
+            algorithm_revision: record.token_counting_algorithm_revision.clone(),
+            item_token_limit: record.operation_requirement.item_token_limit.to_string(),
+        },
+        sufficiency: match &record.sufficiency {
+            ContextSufficiency::Complete => contracts::ContextSufficiency::Complete,
+            ContextSufficiency::Blocked { reasons } => contracts::ContextSufficiency::Blocked {
+                reasons: reasons
+                    .iter()
+                    .map(|reason| match reason {
+                        ContextBlockReason::ExactRequiredOverLimit { source_class } => {
+                            contracts::ContextBlockReason::ExactRequiredOverLimit {
+                                source_class: inspect_source_class(*source_class),
+                            }
+                        }
+                        ContextBlockReason::RequiredInstructionRevisionUnavailable => {
+                            contracts::ContextBlockReason::RequiredInstructionRevisionUnavailable
+                        }
+                        ContextBlockReason::WorkingTargetRevisionUnavailable => {
+                            contracts::ContextBlockReason::WorkingTargetRevisionUnavailable
+                        }
+                    })
+                    .collect(),
+            },
+        },
+        considered: record
+            .considered
+            .iter()
+            .map(|source| contracts::ContextSourceInspect {
+                source_class: inspect_source_class(source.source_class),
+                source_version: source.source_version.clone(),
+                token_count: source.token_count.to_string(),
+                eligible: source.eligible,
+            })
+            .collect(),
+        selected: record
+            .selected
+            .iter()
+            .map(|source| contracts::ContextProjectionInspect {
+                source_class: inspect_source_class(source.source_class),
+                source_version: source.source_version.clone(),
+                projection_mode: contracts::ProjectionMode::ExactRequired,
+                token_count: source.token_count.to_string(),
+                content: source.content.clone(),
+            })
+            .collect(),
+        rejected: record
+            .rejected
+            .iter()
+            .map(|source| contracts::ContextRejectionInspect {
+                source_class: inspect_source_class(source.source_class),
+                source_version: source.source_version.clone(),
+                token_count: source.token_count.to_string(),
+                reason: match source.reason {
+                    RejectionReason::OverItemTokenLimit => {
+                        contracts::ContextRejectionReason::OverItemTokenLimit
+                    }
+                    RejectionReason::RequiredRevisionUnavailable => {
+                        contracts::ContextRejectionReason::RequiredRevisionUnavailable
+                    }
+                    RejectionReason::WorkingTargetRevisionUnavailable => {
+                        contracts::ContextRejectionReason::WorkingTargetRevisionUnavailable
+                    }
+                },
+            })
+            .collect(),
+        host_control: contracts::HostControlInspect {
+            distinct_from_destination: record.host_control.distinct_from_destination,
+            destination_visible: record.host_control.destination_visible,
+        },
+        assembly_manifest_id: context.assembly_manifest_id.clone(),
+        destination_context_manifest: optional_manifest(
+            context.destination_context_manifest_id.as_deref(),
+        ),
+        outbound_disclosure_manifest: optional_manifest(
+            context.outbound_disclosure_manifest_id.as_deref(),
+        ),
+        destination_io: contracts::DestinationIo::None,
+        current_availability: contracts::CurrentAvailabilityInspect {
+            working_target: match &context.working_target_availability {
+                storyos_application::WorkingTargetAvailability::Current => {
+                    contracts::SourceAvailability::Current
+                }
+                storyos_application::WorkingTargetAvailability::Unavailable => {
+                    contracts::SourceAvailability::Unavailable
+                }
+                storyos_application::WorkingTargetAvailability::Superseded {
+                    current_revision_id,
+                } => contracts::SourceAvailability::Superseded {
+                    current_revision_id: current_revision_id.clone(),
+                },
+            },
+        },
+    }
+}
+
+fn optional_manifest(manifest_id: Option<&str>) -> contracts::OptionalManifestRef {
+    match manifest_id {
+        Some(manifest_id) => contracts::OptionalManifestRef::Present {
+            manifest_id: manifest_id.to_owned(),
+        },
+        None => contracts::OptionalManifestRef::Absent,
+    }
+}
+
+fn inspect_source_class(class: storyos_core::ContextSourceClass) -> contracts::ContextSourceClass {
+    match class {
+        storyos_core::ContextSourceClass::HostControl => contracts::ContextSourceClass::HostControl,
+        storyos_core::ContextSourceClass::AuthorInstruction => {
+            contracts::ContextSourceClass::AuthorInstruction
+        }
+        storyos_core::ContextSourceClass::WorkingTarget => {
+            contracts::ContextSourceClass::WorkingTarget
+        }
+        storyos_core::ContextSourceClass::InstructionBinding => {
+            contracts::ContextSourceClass::InstructionBinding
+        }
+    }
 }
 
 fn canonical_body_bytes(body: &contracts::CreateAgentRunRequest) -> Result<Vec<u8>, ApiError> {

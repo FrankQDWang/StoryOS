@@ -231,6 +231,22 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
         opened.memory_settings_revision,
         first.memory_settings_revision
     );
+    assert_eq!(
+        opened.context.record.sufficiency,
+        storyos_core::ContextSufficiency::Blocked {
+            reasons: vec![storyos_core::ContextBlockReason::WorkingTargetRevisionUnavailable],
+        }
+    );
+    assert_eq!(opened.context.destination_context_manifest_id, None);
+    assert_eq!(opened.context.outbound_disclosure_manifest_id, None);
+    assert_eq!(
+        opened.context.working_target_availability,
+        storyos_application::WorkingTargetAvailability::Unavailable
+    );
+    assert_eq!(
+        opened.context.record.destination_io,
+        storyos_core::DestinationIo::None
+    );
     let grant_id = admin
         .query_one(
             "SELECT run.grant_id::text

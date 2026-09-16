@@ -3,12 +3,15 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_agent_run::{
-    AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget, AuthorMessage,
-    CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
-    CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ConversationSelection, CreateAgentRunEffect,
-    CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, GET_AGENT_RUN,
-    GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse,
-    InstructionBinding,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget,
+    AuthorMessage, CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE,
+    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason,
+    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
+    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ConversationSelection,
+    CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse,
+    CurrentAvailabilityInspect, DestinationIo, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
+    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse, HostControlInspect, InstructionBinding,
+    OptionalManifestRef, ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
 };
 
 pub(super) const CREATE_REQUEST_SCHEMA_PATH: &str =
@@ -121,6 +124,33 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         scope["properties"]["owner_user_id"]["format"] = json!("uuid");
         scope["properties"]["project_id"]["format"] = json!("uuid");
     }
+    if let Some(inspect) = schema["$defs"].get_mut("AgentRunContextInspect") {
+        constrain_uuid_fields(
+            inspect,
+            &[
+                "operation_requirement_id",
+                "input_snapshot_id",
+                "assembly_manifest_id",
+            ],
+        );
+        constrain_count_fields(inspect);
+    }
+    for name in [
+        "TokenCountingProfileInspect",
+        "ContextSourceInspect",
+        "ContextProjectionInspect",
+        "ContextRejectionInspect",
+    ] {
+        if let Some(definition) = schema["$defs"].get_mut(name) {
+            constrain_count_fields(definition);
+        }
+    }
+    if let Some(manifest) = schema["$defs"].get_mut("OptionalManifestRef") {
+        constrain_uuid_fields(manifest, &["manifest_id"]);
+    }
+    if let Some(availability) = schema["$defs"].get_mut("SourceAvailability") {
+        constrain_uuid_fields(availability, &["current_revision_id"]);
+    }
     json_bytes(&schema)
 }
 
@@ -167,7 +197,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -179,6 +209,22 @@ pub(super) fn typescript_type_declarations() -> String {
         CreateAgentRunEffect::decl(&config),
         CreateAgentRunResponse::decl(&config),
         AgentRunStatus::decl(&config),
+        ContextPurpose::decl(&config),
+        ContextSourceClass::decl(&config),
+        ProjectionMode::decl(&config),
+        ContextSufficiency::decl(&config),
+        ContextBlockReason::decl(&config),
+        ContextRejectionReason::decl(&config),
+        DestinationIo::decl(&config),
+        OptionalManifestRef::decl(&config),
+        SourceAvailability::decl(&config),
+        TokenCountingProfileInspect::decl(&config),
+        ContextSourceInspect::decl(&config),
+        ContextProjectionInspect::decl(&config),
+        ContextRejectionInspect::decl(&config),
+        HostControlInspect::decl(&config),
+        CurrentAvailabilityInspect::decl(&config),
+        AgentRunContextInspect::decl(&config),
         GetAgentRunResponse::decl(&config),
     )
 }
@@ -304,8 +350,88 @@ fn get_fixture() -> Value {
         "conversation_id": "018f0000-0000-7001-8000-000000000a36",
         "memory_settings_revision": "018f0000-0000-7001-8000-000000000a38",
         "run_id": "018f0000-0000-7001-8000-000000000a34",
-        "status": "queued"
+        "status": "queued",
+        "context": {
+            "operation_requirement_id": "018f0000-0000-7001-8000-000000000a39",
+            "input_snapshot_id": "018f0000-0000-7001-8000-000000000a3a",
+            "purpose": "current_passage_assistance",
+            "token_counting_profile": {
+                "profile_revision": "storyos.token-counting.unicode-scalar.v1",
+                "algorithm_revision": "storyos.statistics.unicode-16.0.0.v1",
+                "item_token_limit": "10000"
+            },
+            "sufficiency": { "kind": "complete" },
+            "considered": [
+                {
+                    "source_class": "host_control",
+                    "source_version": "018f0000-0000-7001-8000-000000000a39",
+                    "token_count": "0",
+                    "eligible": true
+                },
+                {
+                    "source_class": "author_instruction",
+                    "source_version": "018f0000-0000-7001-8000-000000000a3a",
+                    "token_count": "23",
+                    "eligible": true
+                },
+                {
+                    "source_class": "working_target",
+                    "source_version": "018f0000-0000-7001-8000-000000000301",
+                    "token_count": "0",
+                    "eligible": true
+                },
+                {
+                    "source_class": "instruction_binding",
+                    "source_version": "absent",
+                    "token_count": "0",
+                    "eligible": true
+                }
+            ],
+            "selected": [
+                {
+                    "source_class": "author_instruction",
+                    "source_version": "018f0000-0000-7001-8000-000000000a3a",
+                    "projection_mode": "exact_required",
+                    "token_count": "23",
+                    "content": "Help with this passage."
+                },
+                {
+                    "source_class": "working_target",
+                    "source_version": "018f0000-0000-7001-8000-000000000301",
+                    "projection_mode": "exact_required",
+                    "token_count": "0",
+                    "content": ""
+                }
+            ],
+            "rejected": [],
+            "host_control": {
+                "distinct_from_destination": true,
+                "destination_visible": false
+            },
+            "assembly_manifest_id": "018f0000-0000-7001-8000-000000000a3b",
+            "destination_context_manifest": { "kind": "absent" },
+            "outbound_disclosure_manifest": { "kind": "absent" },
+            "destination_io": { "kind": "none" },
+            "current_availability": {
+                "working_target": { "kind": "current" }
+            }
+        }
     })
+}
+
+fn constrain_count_fields(schema: &mut Value) {
+    if let Some(properties) = schema.get_mut("properties") {
+        for field in ["item_token_limit", "token_count"] {
+            if properties.get(field).is_some() {
+                properties[field] = json!({"type": "string", "pattern": U64_WIRE});
+            }
+        }
+    }
+    if let Some(one_of) = schema.get_mut("oneOf").and_then(Value::as_array_mut) {
+        for variant in one_of {
+            constrain_count_fields(variant);
+        }
+    }
 }
 
 fn constrain_revision_fields(schema: &mut Value) {

@@ -155,5 +155,6 @@ pub(super) async fn load_agent_run(
         memory_settings_revision: row.get(2),
         run_id: row.get(3),
         status: AgentRunStatus::Queued,
+        context: super::context::load_assembled_context(client, scope, run_id).await?,
     }))
 }

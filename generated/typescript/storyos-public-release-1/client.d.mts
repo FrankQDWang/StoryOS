@@ -341,7 +341,39 @@ export type CreateAgentRunResponse = { schema_id: string, correlation_id: string
 
 export type AgentRunStatus = "queued";
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, };
+export type ContextPurpose = "current_passage_assistance";
+
+export type ContextSourceClass = "host_control" | "author_instruction" | "working_target" | "instruction_binding";
+
+export type ProjectionMode = "exact_required";
+
+export type ContextSufficiency = { "kind": "complete" } | { "kind": "blocked", reasons: Array<ContextBlockReason>, };
+
+export type ContextBlockReason = { "kind": "exact_required_over_limit", source_class: ContextSourceClass, } | { "kind": "required_instruction_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
+
+export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
+
+export type DestinationIo = { "kind": "none" };
+
+export type OptionalManifestRef = { "kind": "absent" } | { "kind": "present", manifest_id: string, };
+
+export type SourceAvailability = { "kind": "current" } | { "kind": "unavailable" } | { "kind": "superseded", current_revision_id: string, };
+
+export type TokenCountingProfileInspect = { profile_revision: string, algorithm_revision: string, item_token_limit: string, };
+
+export type ContextSourceInspect = { source_class: ContextSourceClass, source_version: string, token_count: string, eligible: boolean, };
+
+export type ContextProjectionInspect = { source_class: ContextSourceClass, source_version: string, projection_mode: ProjectionMode, token_count: string, content: string, };
+
+export type ContextRejectionInspect = { source_class: ContextSourceClass, source_version: string, token_count: string, reason: ContextRejectionReason, };
+
+export type HostControlInspect = { distinct_from_destination: boolean, destination_visible: boolean, };
+
+export type CurrentAvailabilityInspect = { working_target: SourceAvailability, };
+
+export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, };
+
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, };
 
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
