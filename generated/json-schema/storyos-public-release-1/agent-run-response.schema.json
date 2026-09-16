@@ -1,10 +1,387 @@
 {
   "$defs": {
+    "AgentRunContextInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "assembly_manifest_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "considered": {
+          "items": {
+            "$ref": "#/$defs/ContextSourceInspect"
+          },
+          "type": "array"
+        },
+        "current_availability": {
+          "$ref": "#/$defs/CurrentAvailabilityInspect"
+        },
+        "destination_context_manifest": {
+          "$ref": "#/$defs/OptionalManifestRef"
+        },
+        "destination_io": {
+          "$ref": "#/$defs/DestinationIo"
+        },
+        "host_control": {
+          "$ref": "#/$defs/HostControlInspect"
+        },
+        "input_snapshot_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "operation_requirement_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "outbound_disclosure_manifest": {
+          "$ref": "#/$defs/OptionalManifestRef"
+        },
+        "purpose": {
+          "$ref": "#/$defs/ContextPurpose"
+        },
+        "rejected": {
+          "items": {
+            "$ref": "#/$defs/ContextRejectionInspect"
+          },
+          "type": "array"
+        },
+        "selected": {
+          "items": {
+            "$ref": "#/$defs/ContextProjectionInspect"
+          },
+          "type": "array"
+        },
+        "sufficiency": {
+          "$ref": "#/$defs/ContextSufficiency"
+        },
+        "token_counting_profile": {
+          "$ref": "#/$defs/TokenCountingProfileInspect"
+        }
+      },
+      "required": [
+        "operation_requirement_id",
+        "input_snapshot_id",
+        "purpose",
+        "token_counting_profile",
+        "sufficiency",
+        "considered",
+        "selected",
+        "rejected",
+        "host_control",
+        "assembly_manifest_id",
+        "destination_context_manifest",
+        "outbound_disclosure_manifest",
+        "destination_io",
+        "current_availability"
+      ],
+      "type": "object"
+    },
     "AgentRunStatus": {
       "enum": [
         "queued"
       ],
       "type": "string"
+    },
+    "ContextBlockReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "exact_required_over_limit",
+              "type": "string"
+            },
+            "source_class": {
+              "$ref": "#/$defs/ContextSourceClass"
+            }
+          },
+          "required": [
+            "kind",
+            "source_class"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "required_instruction_revision_unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "working_target_revision_unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ContextProjectionInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "content": {
+          "type": "string"
+        },
+        "projection_mode": {
+          "$ref": "#/$defs/ProjectionMode"
+        },
+        "source_class": {
+          "$ref": "#/$defs/ContextSourceClass"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "token_count": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_class",
+        "source_version",
+        "projection_mode",
+        "token_count",
+        "content"
+      ],
+      "type": "object"
+    },
+    "ContextPurpose": {
+      "enum": [
+        "current_passage_assistance"
+      ],
+      "type": "string"
+    },
+    "ContextRejectionInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/ContextRejectionReason"
+        },
+        "source_class": {
+          "$ref": "#/$defs/ContextSourceClass"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "token_count": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_class",
+        "source_version",
+        "token_count",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ContextRejectionReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "over_item_token_limit",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "required_revision_unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "working_target_revision_unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ContextSourceClass": {
+      "enum": [
+        "host_control",
+        "author_instruction",
+        "working_target",
+        "instruction_binding"
+      ],
+      "type": "string"
+    },
+    "ContextSourceInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "eligible": {
+          "type": "boolean"
+        },
+        "source_class": {
+          "$ref": "#/$defs/ContextSourceClass"
+        },
+        "source_version": {
+          "type": "string"
+        },
+        "token_count": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_class",
+        "source_version",
+        "token_count",
+        "eligible"
+      ],
+      "type": "object"
+    },
+    "ContextSufficiency": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "complete",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "blocked",
+              "type": "string"
+            },
+            "reasons": {
+              "items": {
+                "$ref": "#/$defs/ContextBlockReason"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "reasons"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CurrentAvailabilityInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "working_target": {
+          "$ref": "#/$defs/SourceAvailability"
+        }
+      },
+      "required": [
+        "working_target"
+      ],
+      "type": "object"
+    },
+    "DestinationIo": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "none",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "HostControlInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "destination_visible": {
+          "type": "boolean"
+        },
+        "distinct_from_destination": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "distinct_from_destination",
+        "destination_visible"
+      ],
+      "type": "object"
+    },
+    "OptionalManifestRef": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "manifest_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "manifest_id"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProjectScope": {
       "additionalProperties": false,
@@ -23,12 +400,90 @@
         "project_id"
       ],
       "type": "object"
+    },
+    "ProjectionMode": {
+      "enum": [
+        "exact_required"
+      ],
+      "type": "string"
+    },
+    "SourceAvailability": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "current",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_revision_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "kind": {
+              "const": "superseded",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_revision_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "TokenCountingProfileInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm_revision": {
+          "type": "string"
+        },
+        "item_token_limit": {
+          "pattern": "^(?:0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{3}|1844674407370955[0-9]{2}|18446744073709551[0-5]|1844674407370955160|1844674407370955161[0-5])$",
+          "type": "string"
+        },
+        "profile_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile_revision",
+        "algorithm_revision",
+        "item_token_limit"
+      ],
+      "type": "object"
     }
   },
   "$id": "storyos.query.agent-run.response.v2",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "context": {
+      "$ref": "#/$defs/AgentRunContextInspect"
+    },
     "conversation_id": {
       "format": "uuid",
       "type": "string"
@@ -68,7 +523,8 @@
     "conversation_id",
     "memory_settings_revision",
     "run_id",
-    "status"
+    "status",
+    "context"
   ],
   "title": "StoryOS Agent Run Response",
   "type": "object"

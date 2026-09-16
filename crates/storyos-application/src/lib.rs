@@ -89,9 +89,9 @@ pub use archive_project::{
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
 pub use create_agent_run::{
-    AgentRunRecord, AgentRunStatus, ConversationSelection, CreateAgentRunAdmission,
-    CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore, open_agent_run,
-    request_create_agent_run,
+    AgentRunContext, AgentRunRecord, AgentRunStatus, ConversationSelection,
+    CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore,
+    WorkingTargetAvailability, open_agent_run, request_create_agent_run,
 };
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,

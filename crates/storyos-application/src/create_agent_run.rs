@@ -29,12 +29,29 @@ pub struct CreateAgentRunCommand {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WorkingTargetAvailability {
+    Current,
+    Unavailable,
+    Superseded { current_revision_id: String },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRunContext {
+    pub record: storyos_core::CurrentPassageAssemblyRecord,
+    pub assembly_manifest_id: String,
+    pub destination_context_manifest_id: Option<String>,
+    pub outbound_disclosure_manifest_id: Option<String>,
+    pub working_target_availability: WorkingTargetAvailability,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunRecord {
     pub project_agent_id: String,
     pub conversation_id: String,
     pub memory_settings_revision: String,
     pub run_id: String,
     pub status: AgentRunStatus,
+    pub context: AgentRunContext,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

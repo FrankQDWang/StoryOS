@@ -16,6 +16,8 @@ use crate::update_project_assistance::read_assistance_record;
 
 use super::*;
 
+#[path = "create_agent_run_context.rs"]
+mod context;
 #[path = "create_agent_run_read.rs"]
 mod read;
 #[path = "create_agent_run_write.rs"]
@@ -221,6 +223,12 @@ async fn persist_create_agent_run(
         command,
         &assistance_record.grant_id,
         &assistance_record.project_model_use_binding_revision,
+    )
+    .await?;
+    context::persist_current_passage_assembly(
+        client,
+        command,
+        &assistance_record.processing_destination_identity,
     )
     .await?;
     let project_activity_position =

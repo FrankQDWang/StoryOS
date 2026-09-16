@@ -165,6 +165,139 @@ pub enum AgentRunStatus {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextPurpose {
+    CurrentPassageAssistance,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextSourceClass {
+    HostControl,
+    AuthorInstruction,
+    WorkingTarget,
+    InstructionBinding,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProjectionMode {
+    ExactRequired,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ContextSufficiency {
+    Complete,
+    Blocked { reasons: Vec<ContextBlockReason> },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ContextBlockReason {
+    ExactRequiredOverLimit { source_class: ContextSourceClass },
+    RequiredInstructionRevisionUnavailable,
+    WorkingTargetRevisionUnavailable,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ContextRejectionReason {
+    OverItemTokenLimit,
+    RequiredRevisionUnavailable,
+    WorkingTargetRevisionUnavailable,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum DestinationIo {
+    None,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalManifestRef {
+    Absent,
+    Present { manifest_id: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum SourceAvailability {
+    Current,
+    Unavailable,
+    Superseded { current_revision_id: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct TokenCountingProfileInspect {
+    pub profile_revision: String,
+    pub algorithm_revision: String,
+    pub item_token_limit: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ContextSourceInspect {
+    pub source_class: ContextSourceClass,
+    pub source_version: String,
+    pub token_count: String,
+    pub eligible: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ContextProjectionInspect {
+    pub source_class: ContextSourceClass,
+    pub source_version: String,
+    pub projection_mode: ProjectionMode,
+    pub token_count: String,
+    pub content: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ContextRejectionInspect {
+    pub source_class: ContextSourceClass,
+    pub source_version: String,
+    pub token_count: String,
+    pub reason: ContextRejectionReason,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct HostControlInspect {
+    pub distinct_from_destination: bool,
+    pub destination_visible: bool,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct CurrentAvailabilityInspect {
+    pub working_target: SourceAvailability,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AgentRunContextInspect {
+    pub operation_requirement_id: String,
+    pub input_snapshot_id: String,
+    pub purpose: ContextPurpose,
+    pub token_counting_profile: TokenCountingProfileInspect,
+    pub sufficiency: ContextSufficiency,
+    pub considered: Vec<ContextSourceInspect>,
+    pub selected: Vec<ContextProjectionInspect>,
+    pub rejected: Vec<ContextRejectionInspect>,
+    pub host_control: HostControlInspect,
+    pub assembly_manifest_id: String,
+    pub destination_context_manifest: OptionalManifestRef,
+    pub outbound_disclosure_manifest: OptionalManifestRef,
+    pub destination_io: DestinationIo,
+    pub current_availability: CurrentAvailabilityInspect,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct GetAgentRunResponse {
     pub schema_id: String,
@@ -175,4 +308,5 @@ pub struct GetAgentRunResponse {
     pub memory_settings_revision: String,
     pub run_id: String,
     pub status: AgentRunStatus,
+    pub context: AgentRunContextInspect,
 }

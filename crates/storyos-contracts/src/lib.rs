@@ -88,12 +88,16 @@ pub use release1::{
     StoryOSProblem, project_command_kind,
 };
 pub use release1_agent_run::{
-    AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget, AuthorMessage,
-    CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
-    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ConversationSelection,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget,
+    AuthorMessage, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
+    CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason,
+    ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
+    ContextSourceClass, ContextSourceInspect, ContextSufficiency, ConversationSelection,
     CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse,
-    GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
-    GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse, InstructionBinding,
+    CurrentAvailabilityInspect, DestinationIo, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
+    GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse,
+    HostControlInspect, InstructionBinding, OptionalManifestRef, ProjectionMode,
+    SourceAvailability, TokenCountingProfileInspect,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,

@@ -3,6 +3,7 @@
 mod archive_path;
 mod archive_project;
 mod archive_zip;
+mod assemble_context;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;
@@ -29,6 +30,11 @@ pub use archive_path::{
 pub use archive_project::{
     ArchiveProject, ArchiveProjectConflict, ArchiveProjectNoEffect, ArchiveProjectRefusal,
     ArchiveProjectResult, ProjectLifecycle, archive_project,
+};
+pub use assemble_context::{
+    ContextBlockReason, ContextSourceClass, ContextSufficiency, CurrentPassageAssembly,
+    CurrentPassageAssemblyRecord, DestinationIo, InstructionBindingInput, RejectionReason,
+    assemble_current_passage_context, decode_assembly_record, encode_assembly_record,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,

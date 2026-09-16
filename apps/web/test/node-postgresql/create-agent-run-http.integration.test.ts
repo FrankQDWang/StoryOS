@@ -197,8 +197,13 @@ async function createEmpty(
   return { fetchImpl, projectId: challenge.prospective_project_id };
 }
 
-async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectId: string) {
-  const assistance = assistanceRequest("018f0000-0000-7001-8000-000000000b20");
+async function prepareProject(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  keyNs = "b2",
+) {
+  const assistance = assistanceRequest(`018f0000-0000-7001-8000-000000000${keyNs}0`);
   await challenged({
     baseUrl,
     fetchImpl,
@@ -207,17 +212,17 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
     route: "/api/v1/projects/{project_id}/assistance",
     schema: assistance.command_schema,
     digest: await digestUpdateProjectAssistance(assistance),
-    key: "018f0000-0000-7001-8000-000000000b21",
+    key: `018f0000-0000-7001-8000-000000000${keyNs}1`,
     send: (antiForgery) => updateProjectAssistance({
       baseUrl,
       projectId,
       fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000b21",
+      idempotencyKey: `018f0000-0000-7001-8000-000000000${keyNs}1`,
       antiForgery,
       request: assistance,
     }),
   });
-  const volume = volumeRequest("018f0000-0000-7001-8000-000000000b22");
+  const volume = volumeRequest(`018f0000-0000-7001-8000-000000000${keyNs}2`);
   const createdVolume = await challenged({
     baseUrl,
     fetchImpl,
@@ -226,12 +231,12 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
     route: "/api/v1/projects/{project_id}/volumes",
     schema: volume.command_schema,
     digest: await digestCreateVolume(volume),
-    key: "018f0000-0000-7001-8000-000000000b23",
+    key: `018f0000-0000-7001-8000-000000000${keyNs}3`,
     send: (antiForgery) => createVolume({
       baseUrl,
       projectId,
       fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000b23",
+      idempotencyKey: `018f0000-0000-7001-8000-000000000${keyNs}3`,
       antiForgery,
       request: volume,
     }),
@@ -240,7 +245,7 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
     throw new Error("Create Volume must apply");
   }
   const volumeId = createdVolume.effect.volume_id;
-  const chapter = chapterRequest("018f0000-0000-7001-8000-000000000b24");
+  const chapter = chapterRequest(`018f0000-0000-7001-8000-000000000${keyNs}4`);
   const createdChapter = await challenged({
     baseUrl,
     fetchImpl,
@@ -249,13 +254,13 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
     route: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
     schema: chapter.command_schema,
     digest: await digestCreateChapter(chapter),
-    key: "018f0000-0000-7001-8000-000000000b25",
+    key: `018f0000-0000-7001-8000-000000000${keyNs}5`,
     send: (antiForgery) => createChapter({
       baseUrl,
       projectId,
       volumeId,
       fetchImpl,
-      idempotencyKey: "018f0000-0000-7001-8000-000000000b25",
+      idempotencyKey: `018f0000-0000-7001-8000-000000000${keyNs}5`,
       antiForgery,
       request: chapter,
     }),
@@ -264,6 +269,17 @@ async function prepareProject(baseUrl: string, fetchImpl: typeof fetch, projectI
     throw new Error("Create Chapter must apply");
   }
   return createdChapter.effect.chapter_id;
+}
+
+async function deleteAdmittedRun(projectId: string, runId: string) {
+  await queryPostgres(`
+    DELETE FROM storyos.context_assembly_manifests
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+    DELETE FROM storyos.operation_requirements
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+    DELETE FROM storyos.agent_runs
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+  `);
 }
 
 async function postRun(
@@ -343,6 +359,35 @@ test("createAgentRun admits one conversation and keeps query scope closed", asyn
     assert.equal(queried.memory_settings_revision, created.admitted.memory_settings_revision);
     assert.equal(queried.run_id, created.admitted.effect.run_id);
     assert.equal(queried.status, "queued");
+    assert.equal(queried.context.purpose, "current_passage_assistance");
+    assert.equal(queried.context.sufficiency.kind, "complete");
+    assert.equal(queried.context.destination_io.kind, "none");
+    assert.equal(queried.context.host_control.distinct_from_destination, true);
+    assert.equal(queried.context.host_control.destination_visible, false);
+    assert.equal(queried.context.destination_context_manifest.kind, "absent");
+    assert.equal(queried.context.outbound_disclosure_manifest.kind, "absent");
+    assert.equal(
+      queried.context.token_counting_profile.profile_revision,
+      "storyos.token-counting.unicode-scalar.v1",
+    );
+    assert.equal(queried.context.token_counting_profile.item_token_limit, "10000");
+    assert.equal(queried.context.current_availability.working_target.kind, "current");
+    assert.deepEqual(
+      queried.context.selected.map((item) => item.source_class),
+      ["author_instruction", "working_target"],
+    );
+    assert.equal(queried.context.selected[0]?.content, "Help with this passage.");
+    assert.equal(queried.context.selected[0]?.projection_mode, "exact_required");
+    assert.equal(queried.context.selected[1]?.content, "");
+    const assembly = await queryPostgres(`
+      SELECT sufficiency || ' ' ||
+             (destination_context_manifest_id IS NULL)::text || ' ' ||
+             (outbound_disclosure_manifest_id IS NULL)::text
+        FROM storyos.context_assembly_manifests
+       WHERE project_id = '${first.projectId}'::uuid
+         AND run_id = '${created.admitted.effect.run_id}'::uuid;
+    `);
+    assert.equal(assembly, "complete true true");
 
     await assert.rejects(
       () => postRun(
@@ -453,11 +498,7 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
       runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b42"),
     );
     if (created.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
-    await queryPostgres(`
-      DELETE FROM storyos.agent_runs
-       WHERE project_id = '${first.projectId}'::uuid
-         AND run_id = '${created.admitted.effect.run_id}'::uuid;
-    `);
+    await deleteAdmittedRun(first.projectId, created.admitted.effect.run_id);
     const reopenRequest = runRequest(
       { kind: "existing", conversation_id: created.admitted.conversation_id },
       chapterId,
@@ -672,11 +713,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
       runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b63"),
     );
     if (created.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
-    await queryPostgres(`
-      DELETE FROM storyos.agent_runs
-       WHERE project_id = '${first.projectId}'::uuid
-         AND run_id = '${created.admitted.effect.run_id}'::uuid;
-    `);
+    await deleteAdmittedRun(first.projectId, created.admitted.effect.run_id);
     const heldRequest = runRequest(
       { kind: "existing", conversation_id: created.admitted.conversation_id },
       chapterId,
@@ -762,6 +799,75 @@ test("createAgentRun competing existing admission keeps one queued run", async (
     } catch {
       // The reached file is created only after the held request starts.
     }
+    await stopRealServer(started.server);
+  }
+});
+
+test("createAgentRun blocks an over-limit Working Target before destination I/O", async () => {
+  const started = await startRealServer();
+  try {
+    const prepared = await createEmpty(started.baseUrl, "session-a", id("ac30"), "Limit Novel", id("ac10"));
+    const chapterId = await prepareProject(
+      started.baseUrl,
+      prepared.fetchImpl,
+      prepared.projectId,
+      "c2",
+    );
+    await queryPostgres(`
+      UPDATE storyos.authoritative_payloads AS payload
+         SET canonical_bytes = convert_to(repeat('a', 10001), 'UTF8')
+        FROM storyos.authoritative_heads AS head
+        JOIN storyos.authoritative_revisions AS revision
+          ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+              revision.revision_id) =
+             (head.owner_user_id, head.project_id, head.manuscript_object_id,
+              head.current_revision_id)
+       WHERE (payload.owner_user_id, payload.project_id, payload.payload_id) =
+             (revision.owner_user_id, revision.project_id, revision.payload_id)
+         AND head.project_id = '${prepared.projectId}'::uuid
+         AND head.manuscript_object_id = '${chapterId}'::uuid;
+    `);
+    const created = await postRun(
+      started.baseUrl,
+      prepared.fetchImpl,
+      prepared.projectId,
+      "018f0000-0000-7001-8000-000000000c32",
+      runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000c31"),
+    );
+    if (created.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
+    const queried = await getAgentRun({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      runId: created.admitted.effect.run_id,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(queried.context.sufficiency.kind, "blocked");
+    if (queried.context.sufficiency.kind !== "blocked") throw new Error("expected blocked");
+    assert.deepEqual(queried.context.sufficiency.reasons, [{
+      kind: "exact_required_over_limit",
+      source_class: "working_target",
+    }]);
+    assert.equal(queried.context.destination_io.kind, "none");
+    assert.equal(queried.context.destination_context_manifest.kind, "absent");
+    assert.equal(queried.context.outbound_disclosure_manifest.kind, "absent");
+    assert.deepEqual(
+      queried.context.selected.map((item) => item.source_class),
+      ["author_instruction"],
+    );
+    assert.deepEqual(
+      queried.context.rejected.map((item) => [item.source_class, item.reason.kind, item.token_count]),
+      [["working_target", "over_item_token_limit", "10001"]],
+    );
+    const assembly = await queryPostgres(`
+      SELECT sufficiency || ' ' ||
+             (destination_context_manifest_id IS NULL)::text || ' ' ||
+             (outbound_disclosure_manifest_id IS NULL)::text
+        FROM storyos.context_assembly_manifests
+       WHERE project_id = '${prepared.projectId}'::uuid
+         AND run_id = '${created.admitted.effect.run_id}'::uuid;
+    `);
+    assert.equal(assembly, "blocked true true");
+  } finally {
     await stopRealServer(started.server);
   }
 });

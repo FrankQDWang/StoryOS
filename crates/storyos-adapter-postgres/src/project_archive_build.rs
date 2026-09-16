@@ -59,6 +59,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ),
     ("command_idempotency", "canonical/command_idempotency.json"),
     (
+        "context_assembly_manifests",
+        "canonical/context_assembly_manifests.json",
+    ),
+    (
         "conversation_memory_settings",
         "canonical/conversation_memory_settings.json",
     ),
@@ -85,6 +89,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     (
         "manuscript_revision_members",
         "canonical/manuscript_revision_members.json",
+    ),
+    (
+        "operation_requirements",
+        "canonical/operation_requirements.json",
     ),
     (
         "pinned_export_sources",
