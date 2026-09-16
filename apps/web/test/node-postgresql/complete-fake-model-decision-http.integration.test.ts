@@ -93,7 +93,7 @@ async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
     repositoryRoot,
     workerBinary: bin("storyos-worker"),
     args: ["--once"],
-    extraEnv,
+    ...(extraEnv === undefined ? {} : { extraEnv }),
   });
 }
 
@@ -166,11 +166,12 @@ async function prepare(baseUrl: string, createKey: string, title: string, ns: st
   };
   const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volume.command_schema, await digestCreateVolume(volume), id(`${ns}4`), (antiForgery) => createVolume({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request: volume }));
   if (createdVolume.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
+  const volumeId = createdVolume.effect.volume_id;
   const chapter = {
     command_schema: "storyos.command.create-chapter.request.v1" as const,
     create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(`${ns}5`) },
   };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId: createdVolume.effect.volume_id, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
+  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
   if (createdChapter.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
   return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
 }
@@ -275,8 +276,9 @@ test("Worker completes one Host-fake advisory Decision", async () => {
     await settleOnce();
     const secondInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, second.effect.run_id);
     if (secondInspect.model_attempt.kind !== "present") throw new Error("expected second attempt");
+    const foreignAttemptId = secondInspect.model_attempt.model_attempt_id;
     await assert.rejects(
-      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, secondInspect.model_attempt.model_attempt_id),
+      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, foreignAttemptId),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
     await assert.rejects(
@@ -408,7 +410,7 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(unselectedInspect.decision.kind, "absent");
     assert.equal(unselectedInspect.items[0]?.state, "complete");
     assert.equal(unselectedInspect.items[0]?.phase, "complete");
-    for (const [index, [text, state, role]] of [
+    const scriptCases = [
       ["SCRIPT:partial", "provisional", "assistant"],
       ["SCRIPT:incomplete", "incomplete", "assistant"],
       ["SCRIPT:failed", "failed", "assistant"],
@@ -418,15 +420,18 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
       ["SCRIPT:tool_partial", "provisional", "tool"],
       ["SCRIPT:hosted", "complete", "hosted"],
       ["SCRIPT:refusal", "complete", "assistant"],
-    ] as const) {
+    ] as const;
+    let scriptIndex = 0;
+    for (const [text, state, role] of scriptCases) {
       const scripted = await admit(
         started.baseUrl,
         prepared.fetchImpl,
         prepared.projectId,
         prepared.chapterId,
-        id(`ec1${index}`),
+        id(`ec1${scriptIndex}`),
         text,
       );
+      scriptIndex += 1;
       await settleOnce();
       const inspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, scripted.effect.run_id);
       assert.equal(inspect.status, "completed");
