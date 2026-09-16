@@ -53,9 +53,9 @@ impl CreateAgentRunStore for PostgresProjectReader {
                 match persist_create_agent_run(&transaction.client, command).await {
                     Ok(admission) => {
                         transaction
-                            .commit()
+                            .commit_sql()
                             .await
-                            .map_err(agent_run_challenge_error)?;
+                            .map_err(agent_run_database_error)?;
                         Ok(admission)
                     }
                     Err(error) => {
@@ -342,12 +342,26 @@ pub(super) fn agent_run_challenge_error(
     }
 }
 
+fn admission_race(error: &tokio_postgres::Error) -> bool {
+    matches!(
+        error.code(),
+        Some(
+            &tokio_postgres::error::SqlState::UNIQUE_VIOLATION
+                | &tokio_postgres::error::SqlState::T_R_SERIALIZATION_FAILURE
+                | &tokio_postgres::error::SqlState::T_R_DEADLOCK_DETECTED
+        )
+    )
+}
+
 pub(super) fn agent_run_database_error(error: tokio_postgres::Error) -> CreateAgentRunError {
+    if admission_race(&error) {
+        return CreateAgentRunError::ConversationBusy;
+    }
     CreateAgentRunError::Unavailable(Box::new(error))
 }
 
 pub(super) fn agent_run_write_error(error: tokio_postgres::Error) -> CreateAgentRunError {
-    if error.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
+    if admission_race(&error) {
         return CreateAgentRunError::ConversationBusy;
     }
     CreateAgentRunError::Unavailable(Box::new(error))

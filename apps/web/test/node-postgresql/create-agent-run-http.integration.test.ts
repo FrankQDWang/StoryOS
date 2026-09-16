@@ -47,13 +47,21 @@ const BINDING = {
   security_policy_revision: "storyos.web-security-policy.release-1.v1",
 };
 
-function createChallengeRequest(idempotencyKey: string, title: string): CreateProjectChallengeRequest {
+function id(suffix: string): string {
+  return `018f0000-0000-7001-8000-00000000${suffix}`;
+}
+
+function createChallengeRequest(
+  idempotencyKey: string,
+  title: string,
+  correlationId: string,
+): CreateProjectChallengeRequest {
   return {
     command_schema: "storyos.command.create-project.request.v1",
     create_project_input: {
       title,
       ...BINDING,
-      correlation_id: "018f0000-0000-7001-8000-000000000b10",
+      correlation_id: correlationId,
     },
     idempotency_key: idempotencyKey,
   };
@@ -165,9 +173,15 @@ async function challenged<T>(options: {
   return options.send(challenge.nonce);
 }
 
-async function createEmpty(baseUrl: string, session: string, idempotencyKey: string, title: string) {
+async function createEmpty(
+  baseUrl: string,
+  session: string,
+  idempotencyKey: string,
+  title: string,
+  correlationId: string,
+) {
   const fetchImpl = browserFetch(baseUrl, session);
-  const request = createChallengeRequest(idempotencyKey, title);
+  const request = createChallengeRequest(idempotencyKey, title, correlationId);
   const challenge = await createProjectChallenge({ baseUrl, request, fetchImpl });
   await createProject({
     baseUrl,
@@ -286,7 +300,7 @@ async function postRun(
 test("createAgentRun admits one conversation and keeps query scope closed", async () => {
   const started = await startRealServer();
   try {
-    const first = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000b30", "Run Novel");
+    const first = await createEmpty(started.baseUrl, "session-a", id("aa30"), "Run Novel", id("aa10"));
     const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
     const request = runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b31");
     const created = await postRun(
@@ -429,7 +443,7 @@ async function waitForSettledKey(projectId: string, idempotencyKey: string) {
 test("createAgentRun reopens an idle conversation and refuses digest or scope substitution", async () => {
   const started = await startRealServer();
   try {
-    const first = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000b40", "Reopen Novel");
+    const first = await createEmpty(started.baseUrl, "session-a", id("aa40"), "Reopen Novel", id("aa11"));
     const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
     const created = await postRun(
       started.baseUrl,
@@ -466,15 +480,20 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
 
     const mutated = structuredClone(reopenRequest);
     mutated.create_agent_run_input.author_message = { text: "A different assistance request." };
+    const mutatedDigest = await digestCreateAgentRun(mutated);
     await assert.rejects(
-      () => createAgentRun({
+      () => withChallengeRetry(() => createProjectCommandChallenge({
         baseUrl: started.baseUrl,
         projectId: first.projectId,
         fetchImpl: first.fetchImpl,
-        idempotencyKey: "018f0000-0000-7001-8000-000000000b43",
-        antiForgery: reopened.challenge.nonce,
-        request: mutated,
-      }),
+        request: {
+          method: "POST",
+          route_template: "/api/v1/projects/{project_id}/agent-runs",
+          command_schema: "storyos.command.create-agent-run.request.v2",
+          canonical_command_digest: mutatedDigest,
+          idempotency_key: "018f0000-0000-7001-8000-000000000b43",
+        },
+      })),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 409 && problemCode(error) === "idempotency_binding_conflict";
@@ -499,7 +518,7 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
       },
     );
 
-    const empty = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000b49", "No Binding Novel");
+    const empty = await createEmpty(started.baseUrl, "session-a", id("aa49"), "No Binding Novel", id("aa12"));
     await assert.rejects(
       () => postRun(
         started.baseUrl,
@@ -553,7 +572,7 @@ test("createAgentRun exact retry after commit keeps the first acknowledgement", 
     STORYOS_TEST_ACK_HOLD_IDEMPOTENCY_KEY: heldKey,
   });
   try {
-    const first = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000b51", "Held Run Novel");
+    const first = await createEmpty(started.baseUrl, "session-a", id("aa51"), "Held Run Novel", id("aa13"));
     const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
     const request = runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b52");
     const digest = await digestCreateAgentRun(request);
@@ -643,7 +662,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
     STORYOS_TEST_CONVERSATION_HOLD_IDEMPOTENCY_KEY: heldKey,
   });
   try {
-    const first = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000b61", "Compete Novel");
+    const first = await createEmpty(started.baseUrl, "session-a", id("aa61"), "Compete Novel", id("aa14"));
     const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId);
     const created = await postRun(
       started.baseUrl,

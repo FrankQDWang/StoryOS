@@ -308,6 +308,10 @@ impl PostgresProjectCommandTransaction {
             .map_err(challenge_error)
     }
 
+    pub(crate) async fn commit_sql(self) -> Result<(), tokio_postgres::Error> {
+        self.client.batch_execute("COMMIT").await
+    }
+
     pub async fn rollback(self) -> Result<(), ProjectCommandChallengeError> {
         self.client
             .batch_execute("ROLLBACK")
