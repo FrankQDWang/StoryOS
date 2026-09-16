@@ -323,6 +323,24 @@ async fn create_agent_run_admits_one_conversation_and_stays_scope_safe() {
 
     admin
         .execute(
+            "DELETE FROM storyos.context_assembly_manifests
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
+            &[&USER_A, &PROJECT, &first.run_id],
+        )
+        .await
+        .unwrap();
+    admin
+        .execute(
+            "DELETE FROM storyos.operation_requirements
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND run_id = $3::text::uuid",
+            &[&USER_A, &PROJECT, &first.run_id],
+        )
+        .await
+        .unwrap();
+    admin
+        .execute(
             "DELETE FROM storyos.agent_runs
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid",

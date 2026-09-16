@@ -203,7 +203,7 @@ async function prepareProject(
   projectId: string,
   keyNs = "b2",
 ) {
-  const assistance = assistanceRequest(`018f0000-0000-7001-8000-00000000${keyNs}0`);
+  const assistance = assistanceRequest(`018f0000-0000-7001-8000-000000000${keyNs}0`);
   await challenged({
     baseUrl,
     fetchImpl,
@@ -212,17 +212,17 @@ async function prepareProject(
     route: "/api/v1/projects/{project_id}/assistance",
     schema: assistance.command_schema,
     digest: await digestUpdateProjectAssistance(assistance),
-    key: `018f0000-0000-7001-8000-00000000${keyNs}1`,
+    key: `018f0000-0000-7001-8000-000000000${keyNs}1`,
     send: (antiForgery) => updateProjectAssistance({
       baseUrl,
       projectId,
       fetchImpl,
-      idempotencyKey: `018f0000-0000-7001-8000-00000000${keyNs}1`,
+      idempotencyKey: `018f0000-0000-7001-8000-000000000${keyNs}1`,
       antiForgery,
       request: assistance,
     }),
   });
-  const volume = volumeRequest(`018f0000-0000-7001-8000-00000000${keyNs}2`);
+  const volume = volumeRequest(`018f0000-0000-7001-8000-000000000${keyNs}2`);
   const createdVolume = await challenged({
     baseUrl,
     fetchImpl,
@@ -231,12 +231,12 @@ async function prepareProject(
     route: "/api/v1/projects/{project_id}/volumes",
     schema: volume.command_schema,
     digest: await digestCreateVolume(volume),
-    key: `018f0000-0000-7001-8000-00000000${keyNs}3`,
+    key: `018f0000-0000-7001-8000-000000000${keyNs}3`,
     send: (antiForgery) => createVolume({
       baseUrl,
       projectId,
       fetchImpl,
-      idempotencyKey: `018f0000-0000-7001-8000-00000000${keyNs}3`,
+      idempotencyKey: `018f0000-0000-7001-8000-000000000${keyNs}3`,
       antiForgery,
       request: volume,
     }),
@@ -245,7 +245,7 @@ async function prepareProject(
     throw new Error("Create Volume must apply");
   }
   const volumeId = createdVolume.effect.volume_id;
-  const chapter = chapterRequest(`018f0000-0000-7001-8000-00000000${keyNs}4`);
+  const chapter = chapterRequest(`018f0000-0000-7001-8000-000000000${keyNs}4`);
   const createdChapter = await challenged({
     baseUrl,
     fetchImpl,
@@ -254,13 +254,13 @@ async function prepareProject(
     route: "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters",
     schema: chapter.command_schema,
     digest: await digestCreateChapter(chapter),
-    key: `018f0000-0000-7001-8000-00000000${keyNs}5`,
+    key: `018f0000-0000-7001-8000-000000000${keyNs}5`,
     send: (antiForgery) => createChapter({
       baseUrl,
       projectId,
       volumeId,
       fetchImpl,
-      idempotencyKey: `018f0000-0000-7001-8000-00000000${keyNs}5`,
+      idempotencyKey: `018f0000-0000-7001-8000-000000000${keyNs}5`,
       antiForgery,
       request: chapter,
     }),
@@ -269,6 +269,17 @@ async function prepareProject(
     throw new Error("Create Chapter must apply");
   }
   return createdChapter.effect.chapter_id;
+}
+
+async function deleteAdmittedRun(projectId: string, runId: string) {
+  await queryPostgres(`
+    DELETE FROM storyos.context_assembly_manifests
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+    DELETE FROM storyos.operation_requirements
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+    DELETE FROM storyos.agent_runs
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
+  `);
 }
 
 async function postRun(
@@ -487,11 +498,7 @@ test("createAgentRun reopens an idle conversation and refuses digest or scope su
       runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b42"),
     );
     if (created.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
-    await queryPostgres(`
-      DELETE FROM storyos.agent_runs
-       WHERE project_id = '${first.projectId}'::uuid
-         AND run_id = '${created.admitted.effect.run_id}'::uuid;
-    `);
+    await deleteAdmittedRun(first.projectId, created.admitted.effect.run_id);
     const reopenRequest = runRequest(
       { kind: "existing", conversation_id: created.admitted.conversation_id },
       chapterId,
@@ -706,11 +713,7 @@ test("createAgentRun competing existing admission keeps one queued run", async (
       runRequest({ kind: "new" }, chapterId, "018f0000-0000-7001-8000-000000000b63"),
     );
     if (created.admitted.effect.kind !== "admitted") throw new Error("expected admitted");
-    await queryPostgres(`
-      DELETE FROM storyos.agent_runs
-       WHERE project_id = '${first.projectId}'::uuid
-         AND run_id = '${created.admitted.effect.run_id}'::uuid;
-    `);
+    await deleteAdmittedRun(first.projectId, created.admitted.effect.run_id);
     const heldRequest = runRequest(
       { kind: "existing", conversation_id: created.admitted.conversation_id },
       chapterId,
