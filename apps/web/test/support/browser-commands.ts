@@ -4,11 +4,13 @@ import type { BrowserCommandContext } from "vitest/node";
 import {
   parseClientSessionCookieRequest,
   parseClipboardPermissionRequest,
+  parseCommandChallengeRateWindowsRequest,
   parseImeCompositionRequest,
   parseProductionHostRequest,
   parseTrustedInputRequest,
   storyOSBrowserCommandNames,
 } from "./browser-command-contract";
+import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionHostJourney } from "./production-host-command";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
@@ -24,6 +26,15 @@ async function focusedApplicationFrame(context: BrowserCommandContext) {
 }
 
 export const storyOSBrowserCommands = {
+  [storyOSBrowserCommandNames.commandChallengeRateWindows]: defineBrowserCommand<[request: unknown]>(
+    async (_context, value) => {
+      parseCommandChallengeRateWindowsRequest(value);
+      await queryStoryOSPostgres(
+        "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0",
+      );
+      return { kind: "command_challenge_rate_windows_reset" } as const;
+    },
+  ),
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       parseProductionHostRequest(value);
