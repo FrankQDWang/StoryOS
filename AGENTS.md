@@ -122,4 +122,5 @@ use_field_init_shorthand = true
 ### Verification
 
 - Use StoryOS-owned repository commands for formatting, linting, tests, schema generation, and verification.
-- Run the relevant targeted checks after changes and the final non-mutating verification command before declaring completion.
+- After each product or test edit, run the smallest StoryOS-owned command that can fail on that edit.
+- `make verify-local` is the pre-merge evidence command. Start it only after Standards and Spec review on the candidate tree, and only once for that tree. A red targeted check is fixed with another targeted check.
