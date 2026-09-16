@@ -1,0 +1,14 @@
+---
+description: After an edit, run a targeted check. Start make verify-local once as PR evidence.
+alwaysApply: true
+---
+
+# Verification selection
+
+After each product or test edit, run the smallest StoryOS-owned command that can fail on that edit: one crate test, one HTTP or process-cut file, or one ignored adapter test.
+
+`make verify-local` is the pre-merge evidence command. Start it only after Standards and Spec review on the candidate tree, and only once for that tree. A later commit on the range invalidates that run.
+
+GitHub `verify` is the cheap sentinel after each push. After merge, when `main` has the same tree as the evidence comment, run `make verify-tracker` only.
+
+A red targeted check is fixed with another targeted check.
