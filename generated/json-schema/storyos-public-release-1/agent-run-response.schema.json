@@ -110,6 +110,9 @@
         "item_id": {
           "type": "string"
         },
+        "phase": {
+          "type": "string"
+        },
         "refusal": {
           "type": [
             "string",
@@ -138,7 +141,8 @@
       "required": [
         "item_id",
         "role",
-        "state"
+        "state",
+        "phase"
       ],
       "type": "object"
     },
@@ -704,6 +708,9 @@
             "question": {
               "type": "string"
             },
+            "required_reply": {
+              "type": "string"
+            },
             "selected": {
               "type": "boolean"
             }
@@ -713,6 +720,7 @@
             "decision_id",
             "selected",
             "question",
+            "required_reply",
             "continuation"
           ],
           "type": "object"

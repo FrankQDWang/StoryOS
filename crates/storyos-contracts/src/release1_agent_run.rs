@@ -366,6 +366,7 @@ pub enum OptionalDecisionInspect {
         decision_id: String,
         selected: bool,
         question: String,
+        required_reply: String,
         continuation: OptionalContinuationInspect,
     },
 }
@@ -396,6 +397,7 @@ pub struct AgentRunStreamItemInspect {
     pub item_id: String,
     pub role: String,
     pub state: String,
+    pub phase: String,
     pub text: Option<String>,
     pub summary: Option<String>,
     pub call_id: Option<String>,

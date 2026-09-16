@@ -379,11 +379,11 @@ export type AttemptEvidence = { "kind": "sent_content", attempt_id: string, avai
 
 export type OptionalContinuationInspect = { "kind": "absent" } | { "kind": "present", continuation_binding_id: string, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, continuation: OptionalContinuationInspect, };
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
 
 export type OptionalModelAttemptInspect = { "kind": "absent" } | { "kind": "present", model_attempt_id: string, destination_attempt_id: string, outbound_disclosure_event_id: string, model_invocation_id: string, dispatch_state: string, };
 
-export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, hosted_report: string | null, };
+export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, phase: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, hosted_report: string | null, };
 
 export type AgentRunUsageInspect = { kind: string, };
 

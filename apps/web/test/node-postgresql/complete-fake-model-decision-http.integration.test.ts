@@ -256,6 +256,7 @@ test("Worker completes one Host-fake advisory Decision", async () => {
     assert.equal(queried.model_attempt.dispatch_state, "settled");
     assertEvidence(queried);
     assert.equal(queried.items[0]?.state, "complete");
+    assert.equal(queried.items[0]?.phase, "complete");
     assert.equal(queried.usage.kind, "unknown");
     const matched = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, queried.model_attempt.model_attempt_id);
     assert.equal(matched.status, "completed");
@@ -371,6 +372,7 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     if (waiting.decision.kind !== "clarification") throw new Error("expected clarification");
     assert.equal(waiting.decision.selected, true);
     assert.equal(waiting.decision.question, CLARIFICATION);
+    assert.equal(waiting.decision.required_reply, CLARIFICATION);
     assert.equal(waiting.decision.continuation.kind, "absent");
 
     writeFileSync(dispatchHold, "hold");
@@ -402,6 +404,33 @@ test("Worker distinguishes prose-change, clarification, and CFP holds", async ()
     assert.equal(unselectedInspect.status, "completed");
     assert.equal(unselectedInspect.decision.kind, "absent");
     assert.equal(unselectedInspect.items[0]?.state, "complete");
+    assert.equal(unselectedInspect.items[0]?.phase, "complete");
+    for (const [index, [text, state, role]] of [
+      ["SCRIPT:partial", "provisional", "assistant"],
+      ["SCRIPT:incomplete", "incomplete", "assistant"],
+      ["SCRIPT:failed", "failed", "assistant"],
+      ["SCRIPT:cancelled", "cancelled", "assistant"],
+      ["SCRIPT:unknown", "unknown", "assistant"],
+      ["SCRIPT:invalid", "complete", "assistant"],
+      ["SCRIPT:tool_partial", "provisional", "tool"],
+      ["SCRIPT:hosted", "complete", "hosted"],
+    ] as const) {
+      const scripted = await admit(
+        started.baseUrl,
+        prepared.fetchImpl,
+        prepared.projectId,
+        prepared.chapterId,
+        id(`ec1${index}`),
+        text,
+      );
+      await settleOnce();
+      const inspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, scripted.effect.run_id);
+      assert.equal(inspect.status, "completed");
+      assert.equal(inspect.decision.kind, "absent");
+      assert.equal(inspect.items[0]?.state, state);
+      assert.equal(inspect.items[0]?.phase, state);
+      assert.equal(inspect.items[0]?.role, role);
+    }
 
     writeFileSync(decisionHold, "hold");
     const decisionRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("eb17"), "Help with this passage.");

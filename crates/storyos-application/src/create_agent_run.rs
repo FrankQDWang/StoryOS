@@ -88,6 +88,7 @@ pub enum AgentRunDecisionInspect {
         decision_id: String,
         selected: bool,
         question: String,
+        required_reply: String,
         continuation_binding_id: Option<String>,
     },
 }
@@ -109,6 +110,7 @@ pub struct AgentRunStreamItem {
     pub item_id: String,
     pub role: String,
     pub state: String,
+    pub phase: String,
     pub text: Option<String>,
     pub summary: Option<String>,
     pub call_id: Option<String>,

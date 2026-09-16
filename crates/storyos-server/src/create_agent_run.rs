@@ -280,11 +280,13 @@ fn inspect_decision(
             decision_id,
             selected,
             question,
+            required_reply,
             continuation_binding_id,
         } => contracts::OptionalDecisionInspect::Clarification {
             decision_id: decision_id.clone(),
             selected: *selected,
             question: question.clone(),
+            required_reply: required_reply.clone(),
             continuation: inspect_continuation(continuation_binding_id.as_deref()),
         },
     }
@@ -371,6 +373,7 @@ fn inspect_items(
             item_id: item.item_id.clone(),
             role: item.role.clone(),
             state: item.state.clone(),
+            phase: item.phase.clone(),
             text: item.text.clone(),
             summary: item.summary.clone(),
             call_id: item.call_id.clone(),

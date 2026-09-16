@@ -263,7 +263,14 @@ async fn settle_one_phase(
             )
             .await
             .map_err(complete_database_error)?;
-        update_run(client, claim, "completed", None, /*clear_lease*/ true).await?;
+        update_run(
+            client,
+            claim,
+            "completed",
+            /*settlement*/ None,
+            /*clear_lease*/ true,
+        )
+        .await?;
         return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
     }
     let terminal = if payload
@@ -275,7 +282,14 @@ async fn settle_one_phase(
     } else {
         "completed"
     };
-    update_run(client, claim, terminal, None, /*clear_lease*/ true).await?;
+    update_run(
+        client,
+        claim,
+        terminal,
+        /*settlement*/ None,
+        /*clear_lease*/ true,
+    )
+    .await?;
     Ok(WorkPhase::Done(CompleteAgentRun::Settled))
 }
 
@@ -352,7 +366,7 @@ async fn persist_stream_and_decision(
         client,
         claim,
         status,
-        None,
+        /*settlement*/ None,
         /*clear_lease*/ hold.is_none(),
     )
     .await?;
@@ -458,6 +472,14 @@ fn encode_payload(
     let encoded_items: Vec<serde_json::Value> = items
         .iter()
         .map(|item| {
+            let phase = match item.state {
+                StreamItemState::Provisional => "provisional",
+                StreamItemState::Complete => "complete",
+                StreamItemState::Incomplete => "incomplete",
+                StreamItemState::Failed => "failed",
+                StreamItemState::Cancelled => "cancelled",
+                StreamItemState::Unknown => "unknown",
+            };
             serde_json::json!({
                 "item_id": item.item_id,
                 "role": match item.role {
@@ -465,14 +487,8 @@ fn encode_payload(
                     StreamItemRole::Tool => "tool",
                     StreamItemRole::Hosted => "hosted",
                 },
-                "state": match item.state {
-                    StreamItemState::Provisional => "provisional",
-                    StreamItemState::Complete => "complete",
-                    StreamItemState::Incomplete => "incomplete",
-                    StreamItemState::Failed => "failed",
-                    StreamItemState::Cancelled => "cancelled",
-                    StreamItemState::Unknown => "unknown",
-                },
+                "state": phase,
+                "phase": phase,
                 "text": item.text,
                 "summary": item.summary,
                 "call_id": item.call_id,
@@ -516,6 +532,7 @@ fn encode_payload(
                 "decision_id": decision_id,
                 "selected": selected,
                 "question": question,
+                "required_reply": question,
                 "authoritative": false,
                 "advances_continuation": advances_continuation
             }),

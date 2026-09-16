@@ -282,16 +282,24 @@ fn inspect_decision(
                 .to_owned(),
             continuation_binding_id,
         },
-        Some("clarification") => AgentRunDecisionInspect::Clarification {
-            decision_id,
-            selected,
-            question: decision
+        Some("clarification") => {
+            let question = decision
                 .get("question")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default()
-                .to_owned(),
-            continuation_binding_id,
-        },
+                .to_owned();
+            AgentRunDecisionInspect::Clarification {
+                decision_id,
+                selected,
+                required_reply: decision
+                    .get("required_reply")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(&question)
+                    .to_owned(),
+                question,
+                continuation_binding_id,
+            }
+        }
         _ => AgentRunDecisionInspect::Absent,
     }
 }
@@ -360,28 +368,36 @@ fn parse_evidence(
 fn parse_items(values: &[serde_json::Value]) -> Vec<AgentRunStreamItem> {
     values
         .iter()
-        .map(|value| AgentRunStreamItem {
-            item_id: value
-                .get("item_id")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            role: value
-                .get("role")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or_default()
-                .to_owned(),
-            state: value
+        .map(|value| {
+            let state = value
                 .get("state")
                 .and_then(serde_json::Value::as_str)
                 .unwrap_or_default()
-                .to_owned(),
-            text: optional_string(value, "text"),
-            summary: optional_string(value, "summary"),
-            call_id: optional_string(value, "call_id"),
-            arguments: optional_string(value, "arguments"),
-            refusal: optional_string(value, "refusal"),
-            hosted_report: optional_string(value, "hosted_report"),
+                .to_owned();
+            AgentRunStreamItem {
+                item_id: value
+                    .get("item_id")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                role: value
+                    .get("role")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_owned(),
+                phase: value
+                    .get("phase")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or(&state)
+                    .to_owned(),
+                state,
+                text: optional_string(value, "text"),
+                summary: optional_string(value, "summary"),
+                call_id: optional_string(value, "call_id"),
+                arguments: optional_string(value, "arguments"),
+                refusal: optional_string(value, "refusal"),
+                hosted_report: optional_string(value, "hosted_report"),
+            }
         })
         .collect()
 }
