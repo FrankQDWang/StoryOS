@@ -31,9 +31,9 @@ def budget(root):
             fcntl.flock(lock, fcntl.LOCK_UN)
 
 
-def outputs(root, producer):
+def outputs(root, producer=None):
     directories = [root / name for name in ("node_modules", "apps/web/node_modules")]
-    if not all(path.is_dir() for path in directories) or not (producer / "vitest.json").is_file():
+    if not all(path.is_dir() for path in directories):
         return None
     identities = []
     for directory in directories:
@@ -44,8 +44,14 @@ def outputs(root, producer):
                     return None
                 identities.append((str(path.relative_to(root)), "link", os.readlink(path)))
             elif path.is_file():
-                identities.append((str(path.relative_to(root)), "file", hashlib.sha256(path.read_bytes()).hexdigest()))
-    identities.append(("test-result", hashlib.sha256((producer / "vitest.json").read_bytes()).hexdigest()))
+                state = path.stat()
+                identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
+                                   state.st_mtime_ns, state.st_ctime_ns,
+                                   hashlib.sha256(path.read_bytes()).hexdigest()))
+    if producer:
+        return {"dependencies": digest(identities), "artifacts": {
+            name: hashlib.sha256((producer / name).read_bytes()).hexdigest()
+            for name in ("vitest.json", "dependencies.json")}}
     return digest(identities)
 
 
@@ -107,6 +113,9 @@ class DailyCache:
     def prepare(self, report_path):
         if self.path is not None and not self.no_cache and self.observation["status"] == "miss":
             self.required = outputs(self.root, report_path.parent)
+            if self.required and self.required["dependencies"] != json.loads(
+                    (report_path.parent / "dependencies.json").read_text()):
+                raise ValueError("Installed dependencies changed before cache publication")
         elif self.observation["status"] == "hit":
             producer = self.root / self.observation["producer"]
             if (self.required != outputs(self.root, producer.parent)

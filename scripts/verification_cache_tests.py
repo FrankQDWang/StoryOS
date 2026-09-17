@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import sys
 import unittest
@@ -68,6 +69,10 @@ class DailyCacheTests(unittest.TestCase):
         result, report = self.run_daily()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(report["cache"]["status"], "miss")
+        self.test.chmod(0o755)
+        result, report = self.run_daily()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(report["cache"]["status"], "miss")
         self.fixture.repo.environment["FIXTURE_INPUT"] = "changed environment"
         result, report = self.run_daily()
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -88,6 +93,10 @@ class DailyCacheTests(unittest.TestCase):
         self.assertEqual(report["cache"]["status"], "miss")
         producer = self.root / json.loads(entry.read_text())["report"]
         producer.with_name("vitest.json").unlink()
+        result, report = self.run_daily()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("executed selected files", result.stdout)
+        (self.root / "node_modules/installed.js").chmod(0o755)
         result, report = self.run_daily()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("executed selected files", result.stdout)
@@ -134,6 +143,11 @@ class DailyCacheTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(report["status"], "source-changed")
         self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
+        tool.write_text(tool.read_text().replace("files[0].write_text(files[0].read_text() + '// drift\\n')",
+                        "pathlib.Path('node_modules/installed.js').write_text('changed dependency')"))
+        result, report = self.run_daily()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
         target = self.root / "target"
@@ -141,28 +155,61 @@ class DailyCacheTests(unittest.TestCase):
         fifo = target / "release"
         os.mkfifo(fifo)
         tool = self.root / ".tools/pnpm"
-        tool.write_text(tool.read_text().replace("output = next", "print('FIXTURE_READY', flush=True)\n"
-                        "pathlib.Path('target/release').read_text()\noutput = next"))
-        command = [sys.executable, str(Path(__file__).with_name("verification_plan.py")),
-                   "run", "--base", self.fixture.base, "--workers", "1"]
-        child = subprocess.Popen(command, cwd=self.root, env=self.fixture.repo.environment,
+        original = tool.read_text()
+        tool.write_text(original.replace("output = next", """import os, signal
+if os.environ.get('FIXTURE_WAIT'):
+    def cleanup(*_):
+        print('FIXTURE_CLEANUP', flush=True)
+        pathlib.Path('target/release').read_text()
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, cleanup)
+    print(f'FIXTURE_READY {os.getpgrp()}', flush=True)
+    signal.pause()
+output = next"""))
+        self.fixture.repo.git("add", str(self.test))
+        self.fixture.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                              "commit", "--quiet", "-m", "Prepare a clean command fixture.")
+        command = [sys.executable, str(Path(__file__).with_name("verification.py")), "run", "--",
+                   sys.executable, "-c", "import subprocess,sys,signal; "
+                   "subprocess.Popen([sys.executable, '.tools/pnpm']); signal.pause()"]
+        child = subprocess.Popen(command, cwd=self.root, env={**self.fixture.repo.environment, "FIXTURE_WAIT": "1"},
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        group = None
         try:
             for line in child.stdout:
-                if line.strip() == "FIXTURE_READY":
+                if line.startswith("FIXTURE_READY "):
+                    group = int(line.split()[1])
                     break
             self.assertIsNone(child.poll())
-            result = self.fixture.cli("run")
+            result = self.fixture.repo.cli("run", "--", sys.executable, "-c", "print('SECOND_CHILD_EXECUTED')")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("budget is busy", result.stderr)
             child.terminate()
+            cleanup = waiting = False
+            for line in child.stdout:
+                cleanup |= line.strip() == "FIXTURE_CLEANUP"
+                waiting |= line.strip() == "Waiting for verification child cleanup"
+                if line.startswith("Verification interrupted:"):
+                    child.wait(timeout=10)
+                    break
+                if cleanup and waiting:
+                    break
+            result = self.fixture.repo.cli("run", "--", sys.executable, "-c", "print('SECOND_CHILD_EXECUTED')")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("budget is busy", result.stderr)
+            fifo.write_text("cleanup may finish")
             child.communicate(timeout=10)
         finally:
+            if group is not None:
+                try:
+                    os.killpg(group, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
             if child.poll() is None:
                 child.kill()
-                child.communicate()
+            child.communicate()
         self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
-        tool.write_text(tool.read_text().replace("pathlib.Path('target/release').read_text()", "pass"))
+        tool.write_text(original)
         result, report = self.run_daily("--workers", "1")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(report["budget"], {"groups": 1, "workers": 1})

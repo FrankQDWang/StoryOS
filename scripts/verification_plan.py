@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 import verification
+import verification_cache
 
 
 def cargo_targets(root, changes, files):
@@ -129,9 +130,11 @@ def execute_plan(root, plan):
             command.extend(["--", "--test-threads", str(plan["workers"])])
         elif group == "node-contract":
             output = directory / "vitest.json"
+            dependencies = verification_cache.outputs(root)
+            (directory / "dependencies.json").write_text(json.dumps(dependencies))
             command = ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", group,
                        *[str(root / path) for path in check["files"]], "--passWithNoTests=false",
-                       "--allowOnly=false", f"--maxWorkers={plan['workers']}", "--reporter=default",
+                       "--allowOnly=false", "--cache=false", f"--maxWorkers={plan['workers']}", "--reporter=default",
                        "--reporter=json", f"--outputFile={output}"]
         else:
             raise ValueError(f"Unsupported execution group: {group}")
@@ -139,6 +142,8 @@ def execute_plan(root, plan):
         if code:
             return code
         if group == "node-contract":
+            if dependencies != verification_cache.outputs(root):
+                raise ValueError("Installed dependencies changed during the selected tests")
             result = json.loads(output.read_text())
             suites = result.get("testResults", [])
             expected = {str(root / path) for path in check["files"]}

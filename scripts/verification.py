@@ -31,7 +31,7 @@ def source_identity(root):
             metadata = source.stat()
             stamps.append((path, metadata.st_ino, metadata.st_size,
                            metadata.st_mtime_ns, metadata.st_ctime_ns))
-            contents.append((path, hashlib.sha256(source.read_bytes()).hexdigest()))
+            contents.append((path, metadata.st_mode, hashlib.sha256(source.read_bytes()).hexdigest()))
         else:
             stamps.append((path, None))
             contents.append((path, None))
@@ -114,6 +114,21 @@ def execute(command, environment, new_group):
     previous = {sig: signal.signal(sig, interrupt) for sig in (signal.SIGINT, signal.SIGTERM)}
     try:
         code = child.wait()
+        deadline = time.monotonic() + 30
+        waiting = False
+        # POSIX waitpid cannot wait for reparented descendants.
+        while new_group:
+            try:
+                os.killpg(child.pid, 0)
+                if not waiting:
+                    print("Waiting for verification child cleanup", flush=True)
+                    waiting = True
+                if time.monotonic() >= deadline:
+                    os.killpg(child.pid, signal.SIGKILL)
+                    code = 1
+                time.sleep(0.05)
+            except ProcessLookupError:
+                break
     finally:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
