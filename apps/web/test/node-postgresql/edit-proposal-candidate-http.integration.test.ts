@@ -298,16 +298,18 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     assert.equal(edited.receipt.author_action_sequence, edited.effect.author_action_sequence);
     assert.match(edited.effect.author_action_sequence, /^[1-9][0-9]*$/);
     assert.deepEqual(await applyAuthorEdit(editOptions), edited);
-    const queried = await getApplyAuthorEditOutcome({
+    const editOutcome = await getApplyAuthorEditOutcome({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       fetchImpl: prepared.fetchImpl,
       idempotencyKey: id("e146"),
       antiForgery: editOptions.antiForgery,
     });
-    assert.equal(queried.outcome.outcome_kind, "committed");
-    if (queried.outcome.outcome_kind !== "committed") throw new Error("expected committed outcome");
-    assert.deepEqual(queried.outcome.response, edited);
+    assert.equal(editOutcome.outcome.outcome_kind, "committed");
+    if (editOutcome.outcome.outcome_kind !== "committed") {
+      throw new Error("expected committed outcome");
+    }
+    assert.deepEqual(editOutcome.outcome.response, edited);
     const revised = await getProposal({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
