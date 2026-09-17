@@ -4,6 +4,10 @@ set -eu
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
 
+timed_stage() {
+  PYTHONDONTWRITEBYTECODE=1 python3 "$repository_root/scripts/verification.py" step "$@"
+}
+
 verify_web_migration_guards() {
   legacy_web_files=$(find apps/web \
     \( -path apps/web/dist -o -path apps/web/node_modules \) -prune -o \
@@ -362,7 +366,7 @@ reset_command_challenge_rate_windows() {
 # keeps the given order instead of the Vitest default order.
 run_http_files() {
   STORYOS_VITEST_FILE_ORDER=$(printf '%s:' "$@") \
-    pnpm --dir apps/web exec vitest run --project node-postgresql "$@"
+    timed_stage http-files -- pnpm --dir apps/web exec vitest run --project node-postgresql "$@"
 }
 
 container="storyos-issue105-$$"
@@ -562,16 +566,16 @@ echo "Running PostgreSQL Application and RLS tests"
 # selection reuses those artifacts. A package-only selection unifies dependency features
 # differently and recompiles storyos-adapter-postgres for each target. The `--lib` step
 # runs every ignored lib test in the workspace; today only storyos-adapter-postgres has them.
-cargo test --workspace --all-features --test project_scope -- --ignored --nocapture
-cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture
-cargo test --workspace --all-features --lib -- --ignored --nocapture
+timed_stage postgres-scope -- cargo test --workspace --all-features --test project_scope -- --ignored --nocapture
+timed_stage postgres-challenge -- cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture
+timed_stage postgres-library -- cargo test --workspace --all-features --lib -- --ignored --nocapture
 echo "Running HTTP protocol host and Project Scope tests"
 run_http_files \
   test/node-postgresql/protocol-http-host.integration.test.ts \
   test/node-postgresql/project-http.integration.test.ts
 echo "Running HTTP ApplyAuthorEdit process-cut tests"
 reset_command_challenge_rate_windows "$container"
-pnpm --dir apps/web exec vitest run --project node-process-cut \
+timed_stage author-edit-process-cut -- pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/apply-author-edit-process-cut.integration.test.ts
 echo "Running HTTP Activity Stream, Project, structure, query, and export tests"
 reset_command_challenge_rate_windows "$container"
@@ -607,11 +611,11 @@ run_http_files \
   test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
 echo "Running HTTP human-readable export process-cut tests"
 reload_controlled_fixture "$container"
-pnpm --dir apps/web exec vitest run --project node-process-cut \
+timed_stage readable-export-process-cut -- pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/readable-export-admission-process-cut.integration.test.ts
 echo "Running HTTP Project Export Archive process-cut tests"
 reload_controlled_fixture "$container"
-pnpm --dir apps/web exec vitest run --project node-process-cut \
+timed_stage project-export-process-cut -- pnpm --dir apps/web exec vitest run --project node-process-cut \
   test/node-process-cut/project-export-admission-process-cut.integration.test.ts
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 reload_controlled_fixture "$container"
@@ -645,11 +649,11 @@ done
 STORYOS_DEV_SERVER=$(sed -n 's/^STORYOS_SERVER_URL=//p' "$s1_server_log" | head -n 1)
 export STORYOS_DEV_SERVER
 export STORYOS_STAGE1_AUTHORITY_ORACLE=1
-pnpm --dir apps/web exec vitest run --project browser-exact-dist
+timed_stage exact-dist -- pnpm --dir apps/web exec vitest run --project browser-exact-dist
 kill "$s1_server_pid" >/dev/null 2>&1 || true
 wait "$s1_server_pid" >/dev/null 2>&1 || true
 s1_server_pid=""
 echo "Running isolated Recovery Copy restore and Recovery Visibility Proof"
-STORYOS_RECOVERY_DRILL=fixture-only "$repository_root/scripts/verify-recovery-hold.sh"
+STORYOS_RECOVERY_DRILL=fixture-only timed_stage recovery-fixture -- "$repository_root/scripts/verify-recovery-hold.sh"
 echo "Running mixed empty and populated isolated Recovery Copy restore"
-STORYOS_RECOVERY_DRILL=mixed "$repository_root/scripts/verify-recovery-hold.sh"
+STORYOS_RECOVERY_DRILL=mixed timed_stage recovery-mixed -- "$repository_root/scripts/verify-recovery-hold.sh"
