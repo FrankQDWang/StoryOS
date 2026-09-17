@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 
@@ -61,7 +62,8 @@ def build_plan(root, base):
             if owner is None:
                 raise ValueError(f"No Cargo target owns {path}")
             group = f"cargo:{owner}"
-            if any("#[ignore" in file.read_text() for file in (root / targets[owner]["directory"]).rglob("*.rs")):
+            if any(re.search(r"#\s*\[\s*(?:ignore|cfg_attr)\b", file.read_text())
+                   for file in (root / targets[owner]["directory"]).rglob("*.rs")):
                 marker = None
         if ((root / path).is_file() and item.get("kind") in {"web-test", "rust-test"}
                 and marker and (root / path).read_text().startswith(marker + "\n")):
@@ -98,7 +100,22 @@ def execute_plan(root, plan):
         elif group == "web-typecheck":
             command = ["make", "web-typecheck"]
         elif group.startswith("cargo:"):
-            command = ["cargo", "test", "--tests", "--all-features", "-p", group.removeprefix("cargo:")]
+            command = ["cargo", "test", "--locked", "--tests", "--all-features", "-p", group.removeprefix("cargo:")]
+            artifacts = subprocess.check_output(
+                [*command, "--no-run", "--message-format=json"], cwd=root, text=True)
+            (directory / f"{group.replace(':', '-')}-artifacts.jsonl").write_text(artifacts)
+            compiled = set()
+            for line in artifacts.splitlines():
+                artifact = json.loads(line)
+                if (artifact.get("reason") == "compiler-artifact" and artifact["profile"]["test"]
+                        and artifact.get("executable")):
+                    dependencies = Path(artifact["executable"]).with_suffix(".d").read_text()
+                    compiled.update((root / entry[:-1].replace("\\ ", " ")).resolve()
+                                    for entry in dependencies.splitlines()
+                                    if entry.endswith(":") and not entry.startswith("#"))
+            missing = sorted(path for path in check["files"] if (root / path).resolve() not in compiled)
+            if missing:
+                raise ValueError(f"Selected files were not compiled into a test target: {missing}")
             listing = subprocess.check_output([*command, "--", "--list", "--format", "terse"], cwd=root, text=True)
             print(listing, flush=True)
             if not any(line.endswith(": test") for line in listing.splitlines()):

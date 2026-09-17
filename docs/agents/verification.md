@@ -36,9 +36,11 @@ policy to the first line only after reviewing all imports, file reads and enviro
 needs. This profile permits repository inputs and the locked test toolchain only;
 live services, mutable shared fixtures, release packages and ignored build outputs
 require the complete group. A changed dependency invalidates that declaration.
-Rust opt-in files run their existing crate test targets; crates with ignored tests
-retain the complete group. Rust production changes include current reverse consumers
-in the plan and require complete verification. No function filter is inferred.
+Rust opt-in files must appear in compiler dependency records for a test executable,
+then run their existing crate test targets. Unlinked files fail. Crates with ignored
+tests or conditional attributes retain the complete group. Rust production changes
+include current reverse consumers in the plan and require complete verification.
+No function filter is inferred.
 
 When adding, renaming or deleting tests, run `make verify-policy` and inspect a fresh
 plan. Renames and deletions expand to complete verification and remove obsolete
