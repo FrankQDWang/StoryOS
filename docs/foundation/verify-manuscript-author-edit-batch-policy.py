@@ -384,6 +384,8 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         "authoritative_applied": {
             "kind", "authoritative_revision", "authoritative_commit_id",
             "author_action_sequence", "project_activity_position"},
+        "proposal_revised": {
+            "kind", "proposal_revision_id", "author_action_sequence"},
         "no_effect": {"kind", "reason"},
         "conflicted": {"kind", "reason", "current_authoritative_revision_id"},
         "refused": {"kind", "reason"},
@@ -521,7 +523,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "9483c33b0775d7d9631908632b49c223a9d0667fd418da498e9b79996e47672e":
+    ).encode()).hexdigest() != "4de6a31da45a16aba32798cb6be3116bdfd083cecd43c49977497f44f0d59ae4":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
@@ -1171,6 +1173,16 @@ def self_test() -> None:
     del applied_variant["properties"]["project_activity_position"]
     applied_variant["required"].remove("project_activity_position")
     assert "authoritative_applied effect shape drifted" in "\n".join(
+        policy_errors(policy, evidence, candidate_metrics, changed_schema, projections)
+    )
+    changed_schema = deepcopy(response_schema)
+    revised_variant = next(
+        variant for variant in changed_schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
+        if variant["properties"]["kind"]["const"] == "proposal_revised"
+    )
+    revised_variant["properties"]["project_activity_position"] = {"type": "string"}
+    revised_variant["required"].append("project_activity_position")
+    assert "proposal_revised effect shape drifted" in "\n".join(
         policy_errors(policy, evidence, candidate_metrics, changed_schema, projections)
     )
     changed_schema = deepcopy(response_schema)
