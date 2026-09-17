@@ -14,7 +14,7 @@
     "contract_graph_digest": "sha256:03cf2da80f4c3fd1f483d5360b22c193778261f9c180a30ce9687ca309e06c8e",
     "contract_graph_revision": "release1-wire-catalog-2026-09-14-responses-memory",
     "envelope_profile": "storyos.public.envelope.v1",
-    "fixture_corpus_digest": "sha256:4e99fc32138476c5a539e3009ffc17fba962ac32558c3bbabe25903794be7e2b",
+    "fixture_corpus_digest": "sha256:eb9ada421d43a13673e7f43d5ae0fb39c988cda8d562b0210154e5e09667a2d0",
     "generated_client_revision": "storyos.typescript-client.release-0.v1",
     "json_schema_catalog_digest": "sha256:65d02c803f76550cc6a728cd86139e80c0703976fc2d3dd41ad778d43d2c1949",
     "limit_profile_revision": "storyos.foundation.absolute.v1",
@@ -22,7 +22,7 @@
     "public_protocol_release": "storyos.public.release.1",
     "schema_id": "storyos.compatibility.release-identity.v1",
     "server_contract_revision": "storyos.server.release-1.v4",
-    "typescript_artifact_digest": "sha256:88f872785ef37653664e017fcaf95f549bcc3ccc13a083122d45b2240022725c",
+    "typescript_artifact_digest": "sha256:3fce7a33bce9dce93ec4e28e308aea0478015d2dd402c007208e3d6ffa4763da",
     "web_client_contract_revision": "storyos.web-client.release-1.v3",
     "worker_contract_revision": "storyos.worker.release-1.v4"
   },

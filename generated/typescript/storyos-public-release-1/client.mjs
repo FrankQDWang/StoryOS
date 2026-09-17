@@ -175,7 +175,7 @@ export async function getAgentRun({ projectId, runId, modelAttemptId, ...options
   if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getAgentRun requires projectId");
   if (typeof runId !== "string" || runId.length === 0) throw new TypeError("getAgentRun requires runId");
   const query = modelAttemptId == null || modelAttemptId === "" ? "" : `?model_attempt_id=${encodeURIComponent(modelAttemptId)}`;
-  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}{query}` });
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}${query}` });
 }
 
 export async function digestArchiveProject(request, cryptoImpl = globalThis.crypto) {

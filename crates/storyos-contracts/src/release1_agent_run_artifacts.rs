@@ -282,7 +282,7 @@ pub(super) fn typescript_client_source() -> String {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getAgentRun requires projectId\");\n",
             "  if (typeof runId !== \"string\" || runId.length === 0) throw new TypeError(\"getAgentRun requires runId\");\n",
             "  const query = modelAttemptId == null || modelAttemptId === \"\" ? \"\" : `?model_attempt_id=${{encodeURIComponent(modelAttemptId)}}`;\n",
-            "  return queryJson({{ ...options, path: `{}{{query}}` }});\n}}\n",
+            "  return queryJson({{ ...options, path: `{}${{query}}` }});\n}}\n",
         ),
         CREATE_AGENT_RUN_DIGEST_PROFILE,
         CREATE_AGENT_RUN
