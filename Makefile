@@ -2,12 +2,13 @@
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
+VERIFY_ARGS ?=
 
 verify-plan:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py plan --base "$(BASE)"
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py plan --base "$(BASE)" $(VERIFY_ARGS)
 
 verify-changed:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)"
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)" $(VERIFY_ARGS)
 
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check

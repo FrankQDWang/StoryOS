@@ -55,5 +55,36 @@ is the common owner; client instructions link here. Selected dirty-tree runs are
 daily feedback. A complete group needs a clean tree because release packaging binds
 Git identity. An empty change set or empty test discovery cannot report success.
 Complete candidate verification, PostgreSQL fixtures, ordered HTTP groups, exact-dist
-oracles and both recovery drills remain mandatory. There is no result cache yet.
+oracles and both recovery drills remain mandatory.
 The PR sentinel checks the policy and runner, but does not yet validate full reports.
+
+## Daily result reuse and host budget
+
+The reviewed Node profile caches passed policy checks, Web preparation and type
+checks, and selected Node tests as one group. A hit records a `cached` step and its
+producer report. Cargo and complete groups always execute. Selected Vitest runs disable result-cache writes.
+
+The key binds current non-ignored input bytes, modes and link targets; test-file membership;
+checks and workers; runners and toolchains; host identity; and an environment digest.
+An unrelated file edit can miss, but a new Git SHA alone does not. Environment values stay private.
+Reuse requires the original complete successful report, its digest and Vitest output,
+and equal installed Node dependency trees, including modes and write stamps. Dependency
+identity must stay equal from prepared test start through report completion. Missing,
+changed or corrupt output causes execution. The Web workspace link binds to repository
+inputs; other external links disable reuse. Failed, interrupted, incomplete or
+source-changing runs cannot publish reusable results.
+
+Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution without
+reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
+need their referenced reports. A cache hit is daily feedback, not candidate evidence.
+
+The complete and daily run commands admit one run per checkout at a time. A busy
+budget fails with a retry reason. The lock covers process-group cleanup; overdue
+descendants are terminated and fail the run. The input policy caps daily Cargo build
+jobs, Rust test threads and Vitest workers. Use `VERIFY_ARGS='--workers 1'` to lower
+that cap. Groups stay serial. Complete runs retain their existing worker configuration.
+
+When tests or dependencies change, inspect the new plan and report. Extend a cache
+profile only after specifying its inputs, required outputs and resource ownership,
+adding public CLI invalidation tests, and obtaining independent Standards and Spec
+review. New frameworks remain ineligible until the policy and runner support them.
