@@ -343,6 +343,13 @@ pub enum AttemptEvidence {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalOpenedProposalInspect {
+    Absent,
+    Present { proposal_id: String },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OptionalDecisionInspect {
     Absent,
     ExecutionRefused {
@@ -361,6 +368,7 @@ pub enum OptionalDecisionInspect {
         producer_input: String,
         continuation: OptionalContinuationInspect,
         authoritative: bool,
+        opened_proposal: OptionalOpenedProposalInspect,
     },
     Clarification {
         decision_id: String,

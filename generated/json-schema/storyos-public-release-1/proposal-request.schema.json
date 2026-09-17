@@ -1,0 +1,21 @@
+{
+  "$id": "storyos.query.proposal.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "proposal_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "proposal_id"
+  ],
+  "title": "StoryOS Proposal Request",
+  "type": "object"
+}

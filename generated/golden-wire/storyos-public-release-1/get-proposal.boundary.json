@@ -1,0 +1,31 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000b01",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "proposal": {
+    "base_authoritative_revision_id": "018f0000-0000-7001-8000-000000000b06",
+    "candidate_text": "Guard the narrator voice in this passage.",
+    "chapter_id": "018f0000-0000-7001-8000-000000000301",
+    "closure": "open",
+    "generation": "ready",
+    "kind": "block_edit",
+    "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
+    "operation_id": "018f0000-0000-7001-8000-000000000b04",
+    "operation_resolution": "pending",
+    "proposal_id": "018f0000-0000-7001-8000-000000000b02",
+    "reservation_state": "unresolved",
+    "revision_id": "018f0000-0000-7001-8000-000000000b03",
+    "source": {
+      "decision_id": "018f0000-0000-7001-8000-000000000b07",
+      "kind": "agent_run_decision",
+      "run_id": "018f0000-0000-7001-8000-000000000a34"
+    },
+    "validation": "pending",
+    "validation_receipt": {
+      "kind": "absent"
+    }
+  },
+  "schema_id": "storyos.query.proposal.response.v1"
+}

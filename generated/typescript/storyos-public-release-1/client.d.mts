@@ -379,7 +379,9 @@ export type AttemptEvidence = { "kind": "sent_content", attempt_id: string, avai
 
 export type OptionalContinuationInspect = { "kind": "absent" } | { "kind": "present", continuation_binding_id: string, };
 
-export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
+export type OptionalOpenedProposalInspect = { "kind": "absent" } | { "kind": "present", proposal_id: string, };
+
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
 
 export type OptionalModelAttemptInspect = { "kind": "absent" } | { "kind": "present", model_attempt_id: string, destination_attempt_id: string, outbound_disclosure_event_id: string, model_invocation_id: string, dispatch_state: string, };
 
@@ -390,6 +392,14 @@ export type AgentRunUsageInspect = { kind: string, };
 export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
 export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+
+export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: string, decision_id: string, };
+
+export type OptionalValidationReceiptInspect = { "kind": "absent" } | { "kind": "present", validation_receipt_id: string, result: string, };
+
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, };
+
+export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
@@ -421,6 +431,7 @@ export declare function updateProjectAssistance(options: StoryOSQueryOptions & {
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
 export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
+export declare function getProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string }): Promise<GetProposalResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

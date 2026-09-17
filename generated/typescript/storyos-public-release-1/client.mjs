@@ -178,6 +178,12 @@ export async function getAgentRun({ projectId, runId, modelAttemptId, ...options
   return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/agent-runs/${encodeURIComponent(runId)}${query}` });
 }
 
+export async function getProposal({ projectId, proposalId, ...options } = {}) {
+  if (typeof projectId !== "string" || projectId.length === 0) throw new TypeError("getProposal requires projectId");
+  if (typeof proposalId !== "string" || proposalId.length === 0) throw new TypeError("getProposal requires proposalId");
+  return queryJson({ ...options, path: `/api/v1/projects/${encodeURIComponent(projectId)}/proposals/${encodeURIComponent(proposalId)}` });
+}
+
 export async function digestArchiveProject(request, cryptoImpl = globalThis.crypto) {
   if (!request || typeof request !== "object") throw new TypeError("digestArchiveProject requires request");
   const canonical = canonicalJson(request);

@@ -38,6 +38,8 @@ mod release1_project_export;
 mod release1_project_export_artifacts;
 mod release1_project_export_query;
 mod release1_project_export_query_artifacts;
+mod release1_proposal;
+mod release1_proposal_artifacts;
 mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
@@ -99,7 +101,8 @@ pub use release1_agent_run::{
     GET_AGENT_RUN_PATH, GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
     GetAgentRunRequest, GetAgentRunResponse, HostControlInspect, InstructionBinding,
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
-    OptionalModelAttemptInspect, ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
+    OptionalModelAttemptInspect, OptionalOpenedProposalInspect, ProjectionMode, SourceAvailability,
+    TokenCountingProfileInspect,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,
@@ -196,6 +199,11 @@ pub use release1_project_export::{
 pub use release1_project_export_query::{
     GET_EXPORT_OPERATION_METHOD, GET_EXPORT_OPERATION_PATH, GET_EXPORT_OPERATION_REQUEST_SCHEMA_ID,
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
+};
+pub use release1_proposal::{
+    BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID,
+    GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
+    OptionalValidationReceiptInspect, ProposalSourceInspect,
 };
 pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,

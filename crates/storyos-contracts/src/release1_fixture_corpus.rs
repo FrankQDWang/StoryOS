@@ -39,6 +39,8 @@ use crate::release1_project_export::EXPORT_PROJECT_ARCHIVE;
 use crate::release1_project_export_artifacts as project_export_artifacts;
 use crate::release1_project_export_query::GET_EXPORT_OPERATION;
 use crate::release1_project_export_query_artifacts as project_export_query_artifacts;
+use crate::release1_proposal::GET_PROPOSAL;
+use crate::release1_proposal_artifacts as proposal_artifacts;
 use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
@@ -328,6 +330,15 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| agent_run_artifacts::get_fixture_bytes(),
             |_profile| agent_run_artifacts::get_invalid_fixture_bytes(),
             |_profile| agent_run_artifacts::get_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        proposal_artifacts::FIXTURE_PATHS,
+        &GET_PROPOSAL,
+        [
+            |_profile| proposal_artifacts::fixture_bytes(),
+            |_profile| proposal_artifacts::invalid_fixture_bytes(),
+            |_profile| proposal_artifacts::boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

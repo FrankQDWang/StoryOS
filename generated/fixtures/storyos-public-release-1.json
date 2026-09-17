@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:eb9ada421d43a13673e7f43d5ae0fb39c988cda8d562b0210154e5e09667a2d0",
+  "corpus_digest": "sha256:918ed35a651ce07937702629ac14d11f549eaf8346320f0c14d673c916b24f7b",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -60,6 +60,9 @@
       "generated/golden-wire/storyos-public-release-1/get-agent-run.json",
       "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json",
@@ -452,6 +455,24 @@
       "fixture_id": "storyos.golden.getAgentRun.boundary.v1",
       "operation_id": "getAgentRun",
       "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getProposal.positive.v1",
+      "operation_id": "getProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getProposal.invalid.v1",
+      "operation_id": "getProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getProposal.boundary.v1",
+      "operation_id": "getProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json"
     },
     {
       "classification": "positive",

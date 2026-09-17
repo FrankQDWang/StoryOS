@@ -281,6 +281,14 @@ fn inspect_decision(
                 .unwrap_or_default()
                 .to_owned(),
             continuation_binding_id,
+            opened_proposal_id: decision
+                .get("opened_proposal")
+                .filter(|value| {
+                    value.get("kind").and_then(serde_json::Value::as_str) == Some("present")
+                })
+                .and_then(|value| value.get("proposal_id"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned),
         },
         Some("clarification") => {
             let question = decision

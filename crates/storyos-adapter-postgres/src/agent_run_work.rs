@@ -330,6 +330,26 @@ async fn persist_stream_and_decision(
             (id, status, hold)
         }
     };
+    let opened_proposal = match (decision_id.as_deref(), outcome) {
+        (
+            Some(decision_id),
+            FakeAttemptOutcome::Decision {
+                kind: FakeDecisionKind::ProseChange { text, .. },
+                selected: true,
+                ..
+            },
+        ) => {
+            crate::open_block_proposal::open_selected_prose_change(
+                client,
+                claim,
+                chapter_id,
+                decision_id,
+                text,
+            )
+            .await?
+        }
+        _ => None,
+    };
     let payload = encode_payload(
         author_message,
         chapter_id,
@@ -338,6 +358,7 @@ async fn persist_stream_and_decision(
         items,
         outcome,
         decision_id.as_deref(),
+        opened_proposal.as_deref(),
     );
     client
         .execute(
@@ -461,6 +482,7 @@ async fn persist_uncertain_attempt(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn encode_payload(
     author_message: &str,
     chapter_id: &str,
@@ -469,6 +491,7 @@ fn encode_payload(
     items: &[storyos_core::NativeStreamItem],
     outcome: &FakeAttemptOutcome,
     decision_id: Option<&str>,
+    opened_proposal: Option<&str>,
 ) -> serde_json::Value {
     let encoded_items: Vec<serde_json::Value> = items
         .iter()
@@ -526,7 +549,14 @@ fn encode_payload(
                 "text": text,
                 "producer_input": producer_input,
                 "authoritative": false,
-                "advances_continuation": advances_continuation
+                "advances_continuation": advances_continuation,
+                "opened_proposal": match opened_proposal {
+                    Some(proposal_id) => serde_json::json!({
+                        "kind": "present",
+                        "proposal_id": proposal_id
+                    }),
+                    None => serde_json::json!({ "kind": "absent" }),
+                }
             }),
             FakeDecisionKind::Clarification { question } => serde_json::json!({
                 "kind": "clarification",
