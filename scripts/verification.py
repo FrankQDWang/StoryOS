@@ -22,14 +22,23 @@ def git(root, *arguments):
 
 
 def source_identity(root):
-    stamps = []
+    stamps, contents = [], []
     for path in input_paths(root):
-        metadata = (root / path).stat()
-        stamps.append((path, metadata.st_ino, metadata.st_size,
-                       metadata.st_mtime_ns, metadata.st_ctime_ns))
+        source = root / path
+        if source.is_file():
+            metadata = source.stat()
+            stamps.append((path, metadata.st_ino, metadata.st_size,
+                           metadata.st_mtime_ns, metadata.st_ctime_ns))
+            contents.append((path, hashlib.sha256(source.read_bytes()).hexdigest()))
+        else:
+            stamps.append((path, None))
+            contents.append((path, None))
     return {"commit": git(root, "rev-parse", "HEAD"),
             "tree": git(root, "rev-parse", "HEAD^{tree}"),
             "write_stamps_sha256": hashlib.sha256(json.dumps(stamps).encode()).hexdigest(),
+            "inputs_sha256": hashlib.sha256(json.dumps(contents).encode()).hexdigest(),
+            "index_sha256": hashlib.sha256(subprocess.check_output(
+                ["git", "ls-files", "--stage", "-z"], cwd=root)).hexdigest(),
             "dirty": bool(git(root, "status", "--porcelain", "--untracked-files=all"))}
 
 
@@ -44,6 +53,10 @@ def inventory(root):
     policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")
+    profiles = policy.get("file_profiles", {})
+    if (not isinstance(profiles, dict) or set(profiles) - {"node-contract", "cargo"}
+            or any(not isinstance(value, str) or not value for value in profiles.values())):
+        raise ValueError("Unsupported file execution profile")
     for rule in policy["rules"]:
         if set(rule) != {"pattern", "kind", "group"} or not all(
                 isinstance(value, str) and value for value in rule.values()):
@@ -126,7 +139,7 @@ def step(root, stage, command):
     return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
 
 
-def run(root, command):
+def run(root, command, *, plan=None):
     if os.environ.get("STORYOS_VERIFICATION_RUN"):
         raise ValueError("A complete verification run cannot be nested")
     started = time.monotonic()
@@ -135,13 +148,18 @@ def run(root, command):
     (directory / "steps").mkdir(parents=True)
     report_path = directory / "report.json"
     report = {"version": 1, "started_at": timestamp, "command": command, "status": "running",
+              "profile": "daily" if plan else "complete",
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
     write_json(report_path, report)
     code, interrupted = 1, 0
     try:
         report["source_start"] = source_identity(root)
-        if report["source_start"]["dirty"]:
+        if plan:
+            report["plan"] = plan
+            if plan["source"] != report["source_start"]:
+                raise ValueError("The verification plan is stale")
+        if report["source_start"]["dirty"] and (not plan or plan["checks"][0]["group"] == "complete"):
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
         code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_RUN": str(directory)},

@@ -121,7 +121,7 @@ use_field_init_shorthand = true
 
 ### Verification
 
-- For verification commands, file ownership, or timing reports, read [Repository verification](docs/agents/verification.md). Run `make verify-policy` after changes to the verification runner or input policy.
+- For verification commands, file selection, test lifecycle changes, or reports, read [Repository verification](docs/agents/verification.md). Run `make verify-policy` after changes to the verification runner or input policy.
 - Use StoryOS-owned repository commands for formatting, linting, tests, schema generation, and verification.
 - After each product or test edit, run the smallest StoryOS-owned command that can fail on that edit.
 - `make verify-local` is the pre-merge evidence command. Start it only after Standards and Spec review on the candidate tree, and only once for that tree. A red targeted check is fixed with another targeted check.

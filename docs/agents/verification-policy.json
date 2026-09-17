@@ -1,5 +1,9 @@
 {
   "version": 1,
+  "file_profiles": {
+    "node-contract": "// Verification: repository-inputs-only.",
+    "cargo": "// Verification: repository-inputs-only."
+  },
   "rules": [
     {"pattern": "crates/*/src/*_tests.rs", "kind": "rust-test", "group": "cargo"},
     {"pattern": "crates/*/tests/*.rs", "kind": "rust-test", "group": "cargo"},
