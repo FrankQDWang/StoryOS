@@ -4,6 +4,7 @@ VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
+	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
 	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p 'verification_tests.py'
 
 contracts: verify-policy

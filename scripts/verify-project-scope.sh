@@ -113,6 +113,9 @@ record_google_chrome_version() {
 }
 
 verify_web_migration_guards
+if [ "${1:-}" = "--check-inputs" ]; then
+  exit 0
+fi
 record_google_chrome_version
 if [ "${STORYOS_WEB_TYPECHECKED:-}" != "1" ]; then
   make release-package

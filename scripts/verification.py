@@ -4,6 +4,7 @@
 import argparse
 from datetime import datetime, timezone
 import fnmatch
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -21,27 +22,39 @@ def git(root, *arguments):
 
 
 def source_identity(root):
+    stamps = []
+    for path in input_paths(root):
+        metadata = (root / path).stat()
+        stamps.append((path, metadata.st_ino, metadata.st_size,
+                       metadata.st_mtime_ns, metadata.st_ctime_ns))
     return {"commit": git(root, "rev-parse", "HEAD"),
             "tree": git(root, "rev-parse", "HEAD^{tree}"),
+            "write_stamps_sha256": hashlib.sha256(json.dumps(stamps).encode()).hexdigest(),
             "dirty": bool(git(root, "status", "--porcelain", "--untracked-files=all"))}
 
 
+def input_paths(root):
+    paths = subprocess.check_output(
+        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root,
+    ).decode().split("\0")
+    return sorted(set(paths) - {""})
+
+
 def inventory(root):
-    policy = json.loads((root / "scripts/verification-policy.json").read_text())
+    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")
     for rule in policy["rules"]:
         if set(rule) != {"pattern", "kind", "group"} or not all(
                 isinstance(value, str) and value for value in rule.values()):
             raise ValueError("Each input rule needs a pattern, kind, and group")
-    paths = subprocess.check_output(
-        ["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=root,
-    ).decode().split("\0")
     files, errors = [], []
-    for path in sorted(set(paths) - {""}):
+    for path in input_paths(root):
         rule = next((r for r in policy["rules"] if fnmatch.fnmatchcase(path, r["pattern"])), None)
-        is_test = re.search(r"(?:_tests?\.(?:rs|py)|\.test\.[cm]?[jt]sx?|/tests/.*\.rs)$", path)
-        if rule is None or (is_test and not rule["kind"].endswith("-test")):
+        is_test = re.search(r"(?:_tests?\.(?:rs|py)|\.(?:test|spec)\.[cm]?[jt]sx?|/tests/.*\.rs|/test_[^/]+\.py)$", path)
+        test_directory = path.startswith("apps/web/test/")
+        if (rule is None or (is_test and not rule["kind"].endswith("-test"))
+                or (test_directory and rule["kind"] not in {"web-test", "fixture"})):
             errors.append(path)
             continue
         group = rule["group"]

@@ -23,14 +23,16 @@ class VerificationCommandTests(unittest.TestCase):
                             if not key.startswith("STORYOS_VERIFICATION_")}
         self.git("init", "--quiet", "--initial-branch=main")
         (self.root / "scripts").mkdir()
+        (self.root / "docs/agents").mkdir(parents=True)
         (self.root / ".gitignore").write_text("target/\n")
         (self.root / "AGENTS.md").write_text("Fixture source.\n")
         policy = {"version": 1, "rules": [
             {"pattern": "*.md", "kind": "documentation", "group": "contracts"},
             {"pattern": ".gitignore", "kind": "configuration", "group": "complete"},
             {"pattern": "scripts/*", "kind": "verification", "group": "verification-tools"},
+            {"pattern": "docs/*", "kind": "documentation", "group": "contracts"},
         ]}
-        (self.root / "scripts/verification-policy.json").write_text(json.dumps(policy))
+        (self.root / "docs/agents/verification-policy.json").write_text(json.dumps(policy))
         self.git("add", ".")
         self.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                  "commit", "--quiet", "-m", "Create fixture.")
@@ -52,8 +54,11 @@ class VerificationCommandTests(unittest.TestCase):
         (self.root / "surprise.xyz").write_text("unclassified")
         self.assertNotEqual(self.cli("inventory", "--check").returncode, 0)
         (self.root / "surprise.xyz").unlink()
-        (self.root / "scripts/misplaced.test.ts").write_text("test('case', () => {});")
-        self.assertNotEqual(self.cli("inventory", "--check").returncode, 0)
+        for name in ("misplaced.test.ts", "misplaced.spec.ts", "test_misplaced.py"):
+            path = self.root / "scripts" / name
+            path.write_text("unsupported test")
+            self.assertNotEqual(self.cli("inventory", "--check").returncode, 0)
+            path.unlink()
 
     def test_success_records_nested_stage_and_stable_source(self):
         result = self.cli("run", "--", sys.executable, str(COMMAND), "step", "sample",
@@ -90,6 +95,16 @@ class VerificationCommandTests(unittest.TestCase):
         result = self.cli("run", "--", "sh", "-c", f"{failure}; true")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.report()["status"], "incomplete")
+
+    def test_restoring_source_bytes_does_not_hide_an_intervening_write(self):
+        mutation = ("from pathlib import Path; p=Path('AGENTS.md'); "
+                    "original=p.read_bytes(); p.write_bytes(b'changed'); p.write_bytes(original)")
+        result = self.cli("run", "--", sys.executable, str(COMMAND), "step", "mutation",
+                          "--", sys.executable, "-c", mutation)
+        self.assertNotEqual(result.returncode, 0)
+        report = self.report()
+        self.assertEqual(report["status"], "source-changed")
+        self.assertFalse(report["source_end"]["dirty"])
 
     def test_no_executed_stages_cannot_produce_a_successful_report(self):
         result = self.cli("run", "--", sys.executable, "-c", "print('dry run')")

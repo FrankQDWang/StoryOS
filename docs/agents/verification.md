@@ -2,7 +2,7 @@
 
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.
-The policy includes tracked files and new files that Git does not ignore. Its
+The [input policy](verification-policy.json) includes tracked files and new files that Git does not ignore. Its
 ordered path rules classify each input. Test files require an explicit test rule.
 A Cargo group names the existing owning crate. Historical and prototype tests
 retain separate classifications; the inventory does not add them to product tests.
@@ -15,7 +15,8 @@ durations overlap their parent and must not be added to that total.
 
 A nonzero child result, interruption, incomplete stage, or changed source identity
 prevents a successful report. A failed child keeps its failure even if another
-command succeeds. A report describes local execution within the existing trust
+command succeeds. Input write stamps detect ordinary writes even when the original
+bytes are restored; they are run observations, not reusable cache keys. A report describes local execution within the existing trust
 boundary; it is not an independent attestation or a domain Verification Evidence
 Bundle. Keep secrets in environment variables, not recorded command arguments.
 
