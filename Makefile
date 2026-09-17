@@ -19,12 +19,12 @@ verify-changed:
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
-	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p 'verification*_tests.py'
+	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p '*_tests.py'
 
 contracts: verify-policy
 	$(VERIFY_STEP) rust-format -- cargo fmt --all -- --check
 	$(VERIFY_STEP) rust-clippy -- cargo clippy --workspace --all-targets --all-features -- -D warnings
-	$(VERIFY_STEP) rust-tests -- cargo test --workspace --all-targets --all-features
+	$(VERIFY_STEP) rust-tests -- python3 scripts/verification.py rust-tests
 	$(VERIFY_STEP) rust-doc-tests -- cargo test --workspace --doc --all-features
 	$(VERIFY_STEP) protocol-self-test -- python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
 	$(VERIFY_STEP) persistence-self-test -- python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test

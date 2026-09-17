@@ -108,18 +108,7 @@ def execute_plan(root, plan):
         elif group.startswith("cargo:"):
             command = ["cargo", "test", "--locked", "--tests", "--all-features", "-p", group.removeprefix("cargo:"),
                        "--jobs", str(plan["workers"])]
-            artifacts = subprocess.check_output(
-                [*command, "--no-run", "--message-format=json"], cwd=root, text=True)
-            (directory / f"{group.replace(':', '-')}-artifacts.jsonl").write_text(artifacts)
-            compiled = set()
-            for line in artifacts.splitlines():
-                artifact = json.loads(line)
-                if (artifact.get("reason") == "compiler-artifact" and artifact["profile"]["test"]
-                        and artifact.get("executable")):
-                    dependencies = Path(artifact["executable"]).with_suffix(".d").read_text()
-                    compiled.update((root / entry[:-1].replace("\\ ", " ")).resolve()
-                                    for entry in dependencies.splitlines()
-                                    if entry.endswith(":") and not entry.startswith("#"))
+            compiled = verification.cargo_test_inputs(root, command)
             missing = sorted(path for path in check["files"] if (root / path).resolve() not in compiled)
             if missing:
                 raise ValueError(f"Selected files were not compiled into a test target: {missing}")

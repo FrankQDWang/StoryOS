@@ -21,13 +21,15 @@ class CandidateEvidenceTests(unittest.TestCase):
         self.fixture.setUp()
         self.addCleanup(self.fixture.doCleanups)
         self.root = self.fixture.root
+        self.fixture.environment["PYTHONDONTWRITEBYTECODE"] = "1"
+        (self.root / "scripts/sample_tests.py").write_text("import unittest\nclass Sample(unittest.TestCase):\n    def test_child(self): pass\n")
         policy = self.root / "docs/agents/verification-policy.json"
         data = json.loads(policy.read_text())
         data["complete"] = {"stages": ["sample"], "groups": {"verification-tools": ["sample"]}}
         data["rules"].insert(0, {"pattern": "scripts/*_tests.py", "kind": "verification-test", "group": "verification-tools"})
         data["rules"].append({"pattern": "Makefile", "kind": "verification", "group": "complete"})
         policy.write_text(json.dumps(data))
-        (self.root / "Makefile").write_text(f"verify-local-steps:\n\t{sys.executable} {verification_tests.COMMAND} step sample -- {sys.executable} -c 'print(42)'\n")
+        (self.root / "Makefile").write_text(f"verify-local-steps:\n\t{sys.executable} {verification_tests.COMMAND} step sample -- python3 -m unittest discover -s scripts -p '*_tests.py'\n")
         self.commit()
         self.base = self.fixture.git("rev-parse", "HEAD")
         self.fixture.git("update-ref", "refs/remotes/origin/main", self.base)
@@ -77,7 +79,7 @@ class CandidateEvidenceTests(unittest.TestCase):
             self.write_report(report)
             self.assertNotEqual(self.check().returncode, 0, field)
         report = copy.deepcopy(original)
-        report["steps"][0]["command"] = "true"
+        report["steps"][0]["command"] = ["python3", "-c", "print(42)"]
         self.write_report(report)
         self.assertNotEqual(self.check().returncode, 0)
         policy = self.root / "docs/agents/verification-policy.json"
@@ -102,7 +104,7 @@ class CandidateEvidenceTests(unittest.TestCase):
     def test_missing_failed_stale_and_cached_reports_are_refused(self):
         original = json.loads(self.prepare().read_text())
         for change in ({"steps": []}, {"status": "failed"}, {"status": "interrupted"},
-                       {"profile": "daily", "cache": {"status": "hit"}}, {"inventory": {"files": []}}, {"environment": {}},
+                       {"profile": "daily", "cache": {"status": "hit"}}, {"inventory": {"files": []}}, {"environment": {}}, {"rust_test_files": ["missing.rs"]},
                        {"source_end": {**original["source_end"], "inputs_sha256": "0" * 64}}):
             self.write_report({**original, **change})
             self.assertNotEqual(self.check().returncode, 0, change)
@@ -122,6 +124,22 @@ class CandidateEvidenceTests(unittest.TestCase):
             self.prepare("--policy-reviewed")
             result = self.check()
             self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_manifest_edits_require_review(self):
+        manifest = self.root / "crates/example/Cargo.toml"
+        manifest.parent.mkdir(parents=True)
+        manifest.write_text('[package]\nname = "example"\n')
+        policy = self.root / "docs/agents/verification-policy.json"
+        data = json.loads(policy.read_text())
+        data["rules"].append({"pattern": "crates/*/Cargo.toml", "kind": "configuration", "group": "complete"})
+        policy.write_text(json.dumps(data))
+        self.commit()
+        self.base = self.fixture.git("rev-parse", "HEAD")
+        self.fixture.git("update-ref", "refs/remotes/origin/main", self.base)
+        manifest.write_text(manifest.read_text() + 'autotests = false\n')
+        self.commit()
+        self.prepare()
+        self.assertNotEqual(self.check().returncode, 0)
 
     def test_policy_edits_require_explicit_review_and_base_changes_expire_evidence(self):
         policy = self.root / "docs/agents/verification-policy.json"
@@ -182,6 +200,10 @@ print(json.dumps(value))
         result = self.cli("gate")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((target / "statuses.txt").read_text().splitlines(), ["pending", "success"])
+        (target / "pull.json").write_text(json.dumps({"head": {"sha": head}, "base": {"sha": self.base},
+                                                     "state": "closed", "merged": True, "merge_commit_sha": merge}))
+        self.fixture.git("update-ref", "-d", "refs/pull/1/merge")
+        self.assertEqual(self.cli("gate").returncode, 0)
         self.body.write_text(self.body.read_text().split("\n", 1)[0] + "\n{}")
         self.assertNotEqual(self.cli("gate").returncode, 0)
         self.assertEqual((target / "statuses.txt").read_text().splitlines()[-2:], ["pending", "failure"])

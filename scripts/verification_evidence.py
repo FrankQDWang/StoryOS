@@ -16,8 +16,8 @@ import verification
 
 
 PREFIX = "<!-- storyos-candidate-evidence:v1 -->\n"
-PROTECTED = ["AGENTS.md", "Makefile", "scripts", ".github", ".cursor", ".githooks", "docs/agents",
-             "Cargo.toml", "Cargo.lock", "package.json", "pnpm-*.yaml", "apps/web/*config*", "apps/web/package.json"]
+PROTECTED = ["AGENTS.md", "Makefile", "scripts", ".github", ".cursor", ".agents", ".githooks", ".gitignore", "rustfmt.toml", "docs/agents",
+             "Cargo.toml", "crates/*/Cargo.toml", "docs/foundation", "Cargo.lock", "package.json", "pnpm-*.yaml", "apps/web/*config*", "apps/web/package.json"]
 
 
 def api(path, data=None, *, pages=False):
@@ -51,7 +51,7 @@ def gate(root):
         if pull["state"] == "open" and base != baseline:
             raise ValueError("The protected baseline changed; publish evidence again")
         candidate = "refs/storyos/evidence-candidate"
-        verification.git(root, "fetch", "--no-tags", "--depth=2", "origin", f"+refs/pull/{number}/merge:{candidate}")
+        verification.git(root, "fetch", "--no-tags", "--depth=2", "origin", f"+{pull['merge_commit_sha'] if pull.get('merged') else f'refs/pull/{number}/merge'}:{candidate}")
         if verification.git(root, "rev-list", "--parents", "-n", "1", candidate).split()[1:] != [base, head]:
             raise ValueError("The synthetic merge no longer matches the pull request")
         comments = [comment for page in api(f"{route}/issues/{number}/comments?per_page=100", pages=True) for comment in page]
@@ -90,6 +90,8 @@ def check(root, packet, candidate, baseline, head, base):
             or any(not isinstance(value, str) or not value for value in report["environment"].values())
             or report["plan"] != expected or report["inventory"] != verification.inventory(root, candidate)):
         raise ValueError("Evidence is not a current complete verification report")
+    if report.get("rust_test_files", []) != sorted(item["path"] for item in report["inventory"]["files"] if item["kind"] == "rust-test"):
+        raise ValueError("Rust test files are missing from current compiler artifacts")
     source = report["source_start"]
     if (source != report["source_end"] or source["dirty"] is not False or source["tree"] != expected["tree"]
             or source["commit"] not in {head, verification.git(root, "rev-parse", candidate)}
@@ -110,9 +112,13 @@ def check(root, packet, candidate, baseline, head, base):
         raise ValueError("Stage duration exceeds the complete run")
     groups = json.loads(verification.git(root, "show", f"{candidate}:docs/agents/verification-policy.json"))["complete"]["groups"]
     for item in report["inventory"]["files"]:
-        if item["kind"] != "web-test":
+        if item["kind"] not in {"web-test", "verification-test"}:
             continue
         commands = [step["command"] for step in steps if step["stage"] in groups[item["group"]]]
+        if item["kind"] == "verification-test":
+            if ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "*_tests.py"] not in commands:
+                raise ValueError(f"No recorded discovery covers {item['path']}")
+            continue
         project = [command for command in commands if command[:6] == ["pnpm", "--dir", "apps/web", "exec", "vitest", "run"]
                    and any(pair == ["--project", item["group"]] for pair in [command[i:i + 2] for i in range(len(command))])]
         if not any(not any(re.search(r"\.(test|spec)\.[cm]?[jt]sx?$", arg) for arg in command)
@@ -143,7 +149,7 @@ def main():
             pull = api(f"repos/{repository}/pulls/{args.pr}")
             args.head, args.base = pull["head"]["sha"], pull["base"]["sha"]
             args.candidate = "refs/storyos/evidence-candidate"
-            verification.git(root, "fetch", "origin", "main", f"+refs/pull/{args.pr}/merge:{args.candidate}")
+            verification.git(root, "fetch", "origin", "main", f"+{pull['merge_commit_sha'] if pull.get('merged') else f'refs/pull/{args.pr}/merge'}:{args.candidate}")
             args.baseline = verification.git(root, "rev-parse", "origin/main")
         if not all((args.head, args.base, args.baseline)):
             raise ValueError("The candidate head, base and protected baseline are required")
