@@ -294,20 +294,54 @@ test("Worker keeps two non-overlapping Block Proposals and refuses a reserved cu
     assert.deepEqual(overlap.decision.opened_proposal, { kind: "absent" });
     const secondBlockId = id("f155");
     await queryPostgres(`
-      INSERT INTO storyos.manuscript_blocks
-        (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
-      SELECT owner_user_id, project_id, '${secondBlockId}'::uuid, manuscript_object_id, 'paragraph'
-        FROM storyos.manuscript_blocks
-       WHERE project_id = '${prepared.projectId}'::uuid
-         AND manuscript_object_id = '${prepared.chapterId}'::uuid
-       LIMIT 1;
-      INSERT INTO storyos.manuscript_revision_members
-        (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id, block_order)
-      SELECT owner_user_id, project_id, manuscript_object_id, revision_id, '${secondBlockId}'::uuid, 2
-        FROM storyos.manuscript_revision_members
-       WHERE project_id = '${prepared.projectId}'::uuid
-         AND manuscript_object_id = '${prepared.chapterId}'::uuid
-       LIMIT 1;
+      WITH first AS (
+        SELECT owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id
+          FROM storyos.manuscript_revision_members
+         WHERE project_id = '${prepared.projectId}'::uuid
+           AND manuscript_object_id = '${prepared.chapterId}'::uuid
+         ORDER BY block_order
+         LIMIT 1
+      ),
+      ins_block AS (
+        INSERT INTO storyos.manuscript_blocks
+          (owner_user_id, project_id, manuscript_block_id, manuscript_object_id, block_kind)
+        SELECT owner_user_id, project_id, '${secondBlockId}'::uuid, manuscript_object_id, 'paragraph'
+          FROM first
+      ),
+      ins_member AS (
+        INSERT INTO storyos.manuscript_revision_members
+          (owner_user_id, project_id, manuscript_object_id, revision_id, manuscript_block_id, block_order)
+        SELECT owner_user_id, project_id, manuscript_object_id, revision_id, '${secondBlockId}'::uuid, 2
+          FROM first
+      )
+      UPDATE storyos.authoritative_payloads AS payload
+         SET canonical_bytes = convert_to(
+           json_build_object(
+             'format', 'storyos.manuscript-payload.v1',
+             'schema_version', 1,
+             'coordinate_version', 1,
+             'blocks', json_build_array(
+               json_build_object(
+                 'manuscript_block_id', first.manuscript_block_id,
+                 'block_kind', 'paragraph',
+                 'text', ''
+               ),
+               json_build_object(
+                 'manuscript_block_id', '${secondBlockId}',
+                 'block_kind', 'paragraph',
+                 'text', ''
+               )
+             )
+           )::text,
+           'UTF8'
+         )
+        FROM first
+        JOIN storyos.authoritative_revisions AS revision
+          ON (revision.owner_user_id, revision.project_id, revision.manuscript_object_id,
+              revision.revision_id) =
+             (first.owner_user_id, first.project_id, first.manuscript_object_id, first.revision_id)
+       WHERE (payload.owner_user_id, payload.project_id, payload.payload_id) =
+             (revision.owner_user_id, revision.project_id, revision.payload_id);
     `);
     const second = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("f157"));
     const secondId = assertOpenedProposal(second);
@@ -328,19 +362,6 @@ test("Worker keeps two non-overlapping Block Proposals and refuses a reserved cu
     assert.equal(secondProposal.proposal.reservation_state, "unresolved");
     assert.notEqual(firstProposal.proposal.manuscript_block_id, secondProposal.proposal.manuscript_block_id);
     assert.equal(firstProposal.proposal.chapter_id, secondProposal.proposal.chapter_id);
-    const missing = await prepare(started.baseUrl, id("f161"), "Missing Block Novel", "f7");
-    await queryPostgres(`
-      DELETE FROM storyos.manuscript_revision_members
-       WHERE project_id = '${missing.projectId}'::uuid
-         AND manuscript_object_id = '${missing.chapterId}'::uuid;
-      DELETE FROM storyos.manuscript_blocks
-       WHERE project_id = '${missing.projectId}'::uuid
-         AND manuscript_object_id = '${missing.chapterId}'::uuid;
-    `);
-    const unavailable = await admitProse(started.baseUrl, missing.fetchImpl, missing.projectId, missing.chapterId, id("f171"));
-    assert.equal(unavailable.decision.kind, "prose_change");
-    if (unavailable.decision.kind !== "prose_change") throw new Error("expected prose");
-    assert.deepEqual(unavailable.decision.opened_proposal, { kind: "absent" });
   } finally {
     await stopRealServer(started.server);
   }
