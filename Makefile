@@ -1,11 +1,18 @@
-.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-local-steps verify-policy verify-pr verify-tracker web web-foundation web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-local-steps verify-policy verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
+BASE ?= origin/main
+
+verify-plan:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py plan --base "$(BASE)"
+
+verify-changed:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)"
 
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
-	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p 'verification_tests.py'
+	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p 'verification*_tests.py'
 
 contracts: verify-policy
 	$(VERIFY_STEP) rust-format -- cargo fmt --all -- --check
