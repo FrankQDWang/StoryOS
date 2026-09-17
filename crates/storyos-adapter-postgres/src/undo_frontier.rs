@@ -5,6 +5,7 @@ pub(super) enum ObservedFrontier {
     Prose(ObservedProseFrontier),
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
+    Proposal(crate::author_edit_proposal::ObservedProposalFrontier),
     Barrier { sequence: u64 },
 }
 
@@ -150,9 +151,30 @@ pub(super) async fn load_observed_frontier(
     let Some(row) = row else {
         return Err(UndoLatestAuthorActionError::MissingProject);
     };
+    let observed = observed_frontier(&row)?;
+    let observed = match observed {
+        Some(ObservedFrontier::Barrier { sequence }) => {
+            match crate::author_edit_proposal::load_proposal_frontier(
+                client,
+                &command.project_scope,
+                sequence,
+            )
+            .await
+            .map_err(|error| match error {
+                storyos_application::AuthorEditError::Unavailable(source) => {
+                    UndoLatestAuthorActionError::Unavailable(source)
+                }
+                _ => UndoLatestAuthorActionError::BindingConflict,
+            })? {
+                Some(frontier) => Some(ObservedFrontier::Proposal(frontier)),
+                None => Some(ObservedFrontier::Barrier { sequence }),
+            }
+        }
+        other => other,
+    };
     Ok(LoadedUndoFrontier {
         lifecycle_state: row.get(0),
-        observed: observed_frontier(&row)?,
+        observed,
     })
 }
 
@@ -382,6 +404,7 @@ impl ObservedFrontier {
             Self::Prose(frontier) => frontier.sequence,
             Self::Structure(frontier) => frontier.sequence,
             Self::CurrentChapter(frontier) => frontier.sequence,
+            Self::Proposal(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
         }
     }
@@ -391,7 +414,7 @@ impl ObservedFrontier {
             Self::Prose(frontier) => AuthorUndoFrontierKind::ReversibleDirectAuthorAction {
                 resulting_revision_id: frontier.resulting_revision_id.clone(),
             },
-            Self::Structure(_) | Self::CurrentChapter(_) => {
+            Self::Structure(_) | Self::CurrentChapter(_) | Self::Proposal(_) => {
                 AuthorUndoFrontierKind::ReversibleStructureTransition
             }
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
@@ -401,7 +424,10 @@ impl ObservedFrontier {
     pub(super) fn prose_head(&self) -> Option<&str> {
         match self {
             Self::Prose(frontier) => Some(frontier.current_head_revision_id.as_str()),
-            Self::Structure(_) | Self::CurrentChapter(_) | Self::Barrier { .. } => None,
+            Self::Structure(_)
+            | Self::CurrentChapter(_)
+            | Self::Proposal(_)
+            | Self::Barrier { .. } => None,
         }
     }
 }

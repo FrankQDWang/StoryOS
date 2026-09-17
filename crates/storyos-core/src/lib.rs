@@ -190,6 +190,7 @@ pub struct SelectionSnapshot {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ApplyAuthorEditResult {
     AuthoritativeApplied { body: String },
+    ProposalRevised { candidate_text: String },
     Conflicted { reason: AuthorEditConflict },
     NoEffect { reason: AuthorEditNoEffect },
     Refused { reason: AuthorEditRefusal },
@@ -243,13 +244,31 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
     } else {
         "mixed"
     };
-    if command.observed_ownership_partition != current_partition
-        || current_partition != "authoritative"
-    {
+    if command.observed_ownership_partition != current_partition {
         return ApplyAuthorEditResult::Conflicted {
             reason: AuthorEditConflict::OwnershipChanged,
         };
     }
+    if current_partition == "authoritative" {
+        return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);
+    }
+    if command.expected_proposal_head_revision_ids.is_empty() {
+        return ApplyAuthorEditResult::Conflicted {
+            reason: AuthorEditConflict::OwnershipChanged,
+        };
+    }
+    apply_author_edit_body(command, AuthorEditAppliedKind::Proposal)
+}
+
+enum AuthorEditAppliedKind {
+    Authoritative,
+    Proposal,
+}
+
+fn apply_author_edit_body(
+    command: &ApplyAuthorEdit,
+    kind: AuthorEditAppliedKind,
+) -> ApplyAuthorEditResult {
     if command.target_refs != [format!("manuscript:{}", command.chapter_id)] {
         return ApplyAuthorEditResult::Refused {
             reason: AuthorEditRefusal::TargetMismatch,
@@ -286,7 +305,14 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
             reason: AuthorEditNoEffect::ContentUnchanged,
         }
     } else {
-        ApplyAuthorEditResult::AuthoritativeApplied { body }
+        match kind {
+            AuthorEditAppliedKind::Authoritative => {
+                ApplyAuthorEditResult::AuthoritativeApplied { body }
+            }
+            AuthorEditAppliedKind::Proposal => ApplyAuthorEditResult::ProposalRevised {
+                candidate_text: body,
+            },
+        }
     }
 }
 

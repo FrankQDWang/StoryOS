@@ -98,7 +98,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-project-response.schema.json",
       "schema_id": "storyos.command.create-project.response.v1",
-      "sha256": "sha256:8b74a4eec85da481b67a8d300eb3425d0de3711aa52f71b6e7f9b42dd561cf48"
+      "sha256": "sha256:233cf09f4966727d8aa393a436c8f79fa9ada45ea340cbf8401a2bff2f96c6e4"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/project-list-request.schema.json",
@@ -188,7 +188,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/update-project-response.schema.json",
       "schema_id": "storyos.command.update-project.response.v1",
-      "sha256": "sha256:23daf8283c31250c2e47f4ff9f4c96bac3035b45a5b327ac4fb9fa095f96b91c"
+      "sha256": "sha256:7db0a3a6318bee3a19123a6c947850b842b23a9b4358258c6e5875e1c858396c"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/project-assistance-request.schema.json",
@@ -208,7 +208,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/update-project-assistance-response.schema.json",
       "schema_id": "storyos.command.update-project-assistance.response.v1",
-      "sha256": "sha256:53da548118909e8488d020c339eb4ec85f70faffa00ec6b7a9ff64a00949d0fa"
+      "sha256": "sha256:21c1e3a5d88ec5867a5875de7db34734ee5e1257e96207db1b471277d82754fe"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/create-agent-run-request.schema.json",
@@ -248,7 +248,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-response.schema.json",
       "schema_id": "storyos.command.archive-project.response.v1",
-      "sha256": "sha256:fb695bbcee68bd5ab47db529aabb3d3f3bb6e9846beb929c1e38a15072769db3"
+      "sha256": "sha256:b2deedfb0a50e53efa7f7196f010f2a8d68cef28983df71f33501be83b475525"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/create-volume-request.schema.json",
@@ -258,7 +258,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-volume-response.schema.json",
       "schema_id": "storyos.command.create-volume.response.v1",
-      "sha256": "sha256:794fb605e876ada129560e703f055f3b4bcdb6f1e4c3aa3f77cef30230f59c65"
+      "sha256": "sha256:13a26e1fde1a2df950dd25ec78040c2357672a0cc72f1c03507a464d394659b5"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/update-volume-request.schema.json",
@@ -268,7 +268,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/update-volume-response.schema.json",
       "schema_id": "storyos.command.update-volume.response.v1",
-      "sha256": "sha256:a47e3572b20cb056a85de259738864e38a8cb0584b07fe85284ee45c514c411d"
+      "sha256": "sha256:579c56d2f1aea17aea966c3da6bec83e9696087f0996d517330538d39402800c"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/delete-volume-request.schema.json",
@@ -278,7 +278,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/delete-volume-response.schema.json",
       "schema_id": "storyos.command.delete-volume.response.v1",
-      "sha256": "sha256:6d69dc67e343704632c21bb7502679dad191995f7632493081d23053eadc5fe8"
+      "sha256": "sha256:0dd38071b67047c71c8a4f8cd7d24b204bc9396ec8512fbecfe9a8c5af99ad51"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/update-chapter-request.schema.json",
@@ -288,7 +288,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/update-chapter-response.schema.json",
       "schema_id": "storyos.command.update-chapter.response.v1",
-      "sha256": "sha256:db0bd5e87f1d337a20577698e7f86c6b726066de57ba4eea697657ed6257a1b7"
+      "sha256": "sha256:5be9eab399178d5ec47c74db0876e3733c7845a9500fefd3258877e6570411e1"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/delete-chapter-request.schema.json",
@@ -298,7 +298,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/delete-chapter-response.schema.json",
       "schema_id": "storyos.command.delete-chapter.response.v1",
-      "sha256": "sha256:4c6be4d85dd35d5cf80ebe8b676331963cc9732309da8b3c8c416421fd4d6242"
+      "sha256": "sha256:f6cf855adf5306241bd5c5668147cd96784bed3ce053ac421c3d927e88497318"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/create-chapter-request.schema.json",
@@ -308,7 +308,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/create-chapter-response.schema.json",
       "schema_id": "storyos.command.create-chapter.response.v1",
-      "sha256": "sha256:f4598a00737c1bd4489c6994a70e8f1df3386b5ace5b9bff8750dffd9dfa6c66"
+      "sha256": "sha256:f36ac9988a28d560b2fbea9b5a51c9826cb86f559b10f7e03b69418bf202b5e4"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/set-current-chapter-request.schema.json",
@@ -318,7 +318,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/set-current-chapter-response.schema.json",
       "schema_id": "storyos.command.set-current-chapter.response.v1",
-      "sha256": "sha256:30d81a94a01ca8a1a81d312f821c43fe580045a56f63ce8b0c81c2819d551b8c"
+      "sha256": "sha256:699a5d8838e2da6dacb6db983e31c427ea35c6ee5af725c82ca70e062ddbe0d4"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/undo-latest-author-action-request.schema.json",
@@ -328,7 +328,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json",
       "schema_id": "storyos.command.undo-latest-author-action.response.v1",
-      "sha256": "sha256:42b4685013bce8221b37df4b9ba54278860fabfc7649b87c22b6da8642a7d31c"
+      "sha256": "sha256:eb5cef8eb1573ea6366ee836b7bc75f3c095cd83d4591df43bc4a98a5853f1c9"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",
@@ -358,7 +358,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json",
       "schema_id": "storyos.command.apply-author-edit.response.v2",
-      "sha256": "sha256:ffb8c41b41c5cc000bba83e19e007836c6ee8b070d2818bf7de11a3af5846090"
+      "sha256": "sha256:cfc9e1249a3d9ad0dc902fae003a8b6ebd34901aee64021fad0958e33800687e"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json",
@@ -368,7 +368,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json",
       "schema_id": "storyos.query.apply-author-edit-outcome.response.v1",
-      "sha256": "sha256:a5dd3c0f7d6df9b36dc1fff2a5ed28c8db577e99352ceedb9b87e9a70da66be3"
+      "sha256": "sha256:455a87ef9dd2f81f2d676f6019c590a17de8d0caf4a06a3858eb6c02570100a0"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/snapshot-request.schema.json",
@@ -398,7 +398,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/take-over-project-writer-response.schema.json",
       "schema_id": "storyos.command.take-over-project-writer.response.v1",
-      "sha256": "sha256:076a5721a853b0533ef09c67faaa10fced7eb06537da55783416e8b167fdd171"
+      "sha256": "sha256:7c04560f00d5e783ed6721591e8077ab21101bb41398407c162a90530d1ea584"
     }
   ]
 }

@@ -60,6 +60,10 @@ pub enum AuthorEditSettlementEffect {
         author_action_sequence: u64,
         project_activity_position: u64,
     },
+    ProposalRevised {
+        proposal_revision_id: String,
+        author_action_sequence: u64,
+    },
     NoEffect {
         reason: AuthorEditNoEffect,
     },

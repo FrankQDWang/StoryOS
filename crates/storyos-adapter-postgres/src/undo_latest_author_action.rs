@@ -115,6 +115,10 @@ async fn persist_undo(
             Some(frontier.chapter_id.as_str()),
             Some(frontier.resulting_revision_id.as_str()),
         ),
+        Some(ObservedFrontier::Proposal(frontier)) => (
+            Some(frontier.chapter_id.as_str()),
+            Some(command.expected_authoritative_revision_id.as_str()),
+        ),
         Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
@@ -149,6 +153,15 @@ async fn persist_undo(
             }
             Some(ObservedFrontier::CurrentChapter(frontier)) => {
                 crate::undo_current_chapter::persist_current_chapter_compensation(
+                    client,
+                    command,
+                    frontier,
+                    source_sequence,
+                )
+                .await
+            }
+            Some(ObservedFrontier::Proposal(frontier)) => {
+                crate::undo_proposal::persist_proposal_compensation(
                     client,
                     command,
                     frontier,
@@ -884,13 +897,18 @@ async fn read_undo_settlement(
                             .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
                         author_undo_frontier_sequence: current_frontier,
                     }
-                } else {
+                } else if let Some(snapshot_id) = row.get::<_, Option<String>>(13) {
                     UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
                         source_sequence,
                         author_action_sequence,
-                        snapshot_id: row
-                            .get::<_, Option<String>>(13)
-                            .ok_or(UndoLatestAuthorActionError::BindingConflict)?,
+                        snapshot_id,
+                        author_undo_frontier_sequence: current_frontier,
+                    }
+                } else {
+                    UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+                        source_sequence,
+                        author_action_sequence,
+                        proposal_revision_id: String::new(),
                         author_undo_frontier_sequence: current_frontier,
                     }
                 }
@@ -966,7 +984,7 @@ fn undo_parse_error(
     UndoLatestAuthorActionError::Unavailable(Box::new(error))
 }
 
-fn undo_from_author_edit(
+pub(super) fn undo_from_author_edit(
     error: storyos_application::AuthorEditError,
 ) -> UndoLatestAuthorActionError {
     UndoLatestAuthorActionError::Unavailable(Box::new(error))

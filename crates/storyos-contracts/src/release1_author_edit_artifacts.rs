@@ -95,6 +95,12 @@ pub(super) fn apply_u64_wire_constraints(schema: &mut Value, canonical_u64: &Val
         let applied = &mut variants[0];
         applied["properties"]["author_action_sequence"] = canonical_u64.clone();
         applied["properties"]["project_activity_position"] = canonical_u64.clone();
+        if let Some(revised) = variants
+            .iter_mut()
+            .find(|variant| variant["properties"]["kind"]["const"] == "proposal_revised")
+        {
+            revised["properties"]["author_action_sequence"] = canonical_u64.clone();
+        }
     }
 }
 

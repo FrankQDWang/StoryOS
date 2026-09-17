@@ -364,13 +364,45 @@ async function settleAuthorEditResponse({
     || receipt?.author_command_admission_id !== settledResponse.author_command_admission_id
     || JSON.stringify(receipt?.expected_heads)
       !== JSON.stringify([group.frozen_request_body.expected_authoritative_revision_id])
-    || JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([])
+    || (receipt.result === "proposal_revised"
+      ? (JSON.stringify(receipt.proposal_revision_ids)
+        !== JSON.stringify([effect?.kind === "proposal_revised" ? effect.proposal_revision_id : ""])
+        || receipt.proposal_revision_ids.length !== 1)
+      : JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([]))
     || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify([])
     || JSON.stringify(receipt.condition_refs) !== JSON.stringify([])
     || typeof receipt.created_at !== "string"
     || Number.isNaN(Date.parse(receipt.created_at))) {
     throw new Error("Author Edit acknowledgement does not converge");
+  }
+  if (effect?.kind === "proposal_revised") {
+    const currentHead = group.frozen_request_body.expected_authoritative_revision_id;
+    if (receipt.result !== "proposal_revised"
+      || !UUID.test(effect.proposal_revision_id ?? "")
+      || receipt.author_action_sequence !== effect.author_action_sequence
+      || !positiveU64(effect.author_action_sequence)
+      || JSON.stringify(receipt.prior_heads) !== JSON.stringify([currentHead])
+      || JSON.stringify(receipt.resulting_heads) !== JSON.stringify([currentHead])
+      || JSON.stringify(receipt.authoritative_revision_ids) !== JSON.stringify([])
+      || JSON.stringify(receipt.authoritative_commit_ids) !== JSON.stringify([])) {
+      throw new Error("Author Edit acknowledgement does not converge");
+    }
+    const rest = { ...group };
+    delete rest.reconciliation;
+    const next: JournalSubmissionGroup = {
+      ...rest,
+      settlement: {
+        kind: "zero_authority_receipt_settled",
+        command_id: settledResponse.command_id,
+        author_command_admission_id: settledResponse.author_command_admission_id,
+        receipt,
+        effect,
+      },
+    };
+    if (durableQuery) await commitOutcomeQueryWithGroup(workspace, { ...durableQuery, next });
+    else await commitStrongerGroup(workspace, next);
+    return;
   }
   if (effect?.kind !== "authoritative_applied") {
     const currentHead = effect?.kind === "conflicted"

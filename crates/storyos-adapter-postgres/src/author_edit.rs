@@ -4,7 +4,7 @@ use storyos_application::{
 };
 use storyos_core::{
     ApplyAuthorEdit, ApplyAuthorEditResult, ApplyVersionedAuthorEdit,
-    ApplyVersionedAuthorEditResult, AuthorEditPrimitive, COORDINATE_VERSION, CurrentOwnershipFacts,
+    ApplyVersionedAuthorEditResult, AuthorEditPrimitive, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload,
     apply_author_edit as apply_core_author_edit, apply_versioned_author_edit, chapter_display_body,
 };
@@ -15,6 +15,7 @@ use super::*;
 pub(crate) struct ClassifiedAuthorEdit {
     pub result: ApplyAuthorEditResult,
     pub successor_blocks: Option<Vec<ManuscriptBlock>>,
+    pub proposal_context: Option<super::author_edit_proposal::ProposalEditContext>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -459,12 +460,16 @@ async fn classify_author_edit(
             )
         })
     });
-    let current_ownership = CurrentOwnershipFacts {
-        proposal_head_revision_ids: Vec::new(),
-        anchor_refs: Vec::new(),
-        unresolved_reservation_refs: Vec::new(),
-    };
+    let loaded = super::author_edit_proposal::load_chapter_proposal_heads(
+        client,
+        command,
+        current_body.clone(),
+    )
+    .await?;
+    let current_ownership = loaded.ownership;
+    let proposal_context = loaded.context;
     if !uses_versioned_payload {
+        let current_body = loaded.edit_body;
         return Ok(ClassifiedAuthorEdit {
             result: apply_core_author_edit(&ApplyAuthorEdit {
                 chapter_id: command.chapter_id.clone(),
@@ -482,6 +487,7 @@ async fn classify_author_edit(
                 author_edit_units: command.author_edit_units.clone(),
             }),
             successor_blocks: None,
+            proposal_context,
         });
     }
     let blocks = crate::manuscript_block::load_or_upgrade_blocks(
@@ -518,19 +524,23 @@ async fn classify_author_edit(
                         body: chapter_display_body(&payload.blocks),
                     },
                     successor_blocks: Some(payload.blocks),
+                    proposal_context: None,
                 }
             }
             ApplyVersionedAuthorEditResult::Conflicted { reason } => ClassifiedAuthorEdit {
                 result: ApplyAuthorEditResult::Conflicted { reason },
                 successor_blocks: None,
+                proposal_context: None,
             },
             ApplyVersionedAuthorEditResult::NoEffect { reason } => ClassifiedAuthorEdit {
                 result: ApplyAuthorEditResult::NoEffect { reason },
                 successor_blocks: None,
+                proposal_context: None,
             },
             ApplyVersionedAuthorEditResult::Refused { reason } => ClassifiedAuthorEdit {
                 result: ApplyAuthorEditResult::Refused { reason },
                 successor_blocks: None,
+                proposal_context: None,
             },
         },
     )

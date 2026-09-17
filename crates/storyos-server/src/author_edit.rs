@@ -266,6 +266,21 @@ pub(super) fn author_edit_response(
                 project_activity_position: project_activity_position.to_string(),
             },
         ),
+        AuthorEditSettlementEffect::ProposalRevised {
+            proposal_revision_id,
+            author_action_sequence,
+        } => (
+            contracts::DomainReceiptResult::ProposalRevised,
+            vec![identity.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
+            Vec::new(),
+            Vec::new(),
+            Some(author_action_sequence.to_string()),
+            contracts::ApplyAuthorEditEffect::ProposalRevised {
+                proposal_revision_id: proposal_revision_id.clone(),
+                author_action_sequence: author_action_sequence.to_string(),
+            },
+        ),
         AuthorEditSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             vec![identity.expected_authoritative_revision_id.clone()],
@@ -350,7 +365,13 @@ pub(super) fn author_edit_response(
             prior_heads,
             resulting_heads,
             authoritative_revision_ids,
-            proposal_revision_ids: Vec::new(),
+            proposal_revision_ids: match &effect {
+                contracts::ApplyAuthorEditEffect::ProposalRevised {
+                    proposal_revision_id,
+                    ..
+                } => vec![proposal_revision_id.clone()],
+                _ => Vec::new(),
+            },
             authoritative_commit_ids,
             author_action_sequence,
             draft_artifact_refs: Vec::new(),
@@ -374,9 +395,13 @@ fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiE
         })
         .ok_or_else(command_target_refused)?;
     if body.command_schema != contracts::APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID
-        || body.observed_ownership_partition != "authoritative"
+        || !matches!(
+            body.observed_ownership_partition.as_str(),
+            "authoritative" | "mixed"
+        )
         || body.editor_contract_revision != contracts::EDITOR_CONTRACT_REVISION
-        || !body.expected_proposal_head_revision_ids.is_empty()
+        || (body.observed_ownership_partition == "authoritative")
+            != body.expected_proposal_head_revision_ids.is_empty()
         || body.author_edit_units.is_empty()
         || body.author_edit_units.len() > contracts::AUTHOR_EDIT_MAX_UNITS
         || normalized_primitive_count > contracts::AUTHOR_EDIT_MAX_NORMALIZED_PRIMITIVES
