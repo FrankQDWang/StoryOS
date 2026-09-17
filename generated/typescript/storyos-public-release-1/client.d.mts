@@ -201,7 +201,7 @@ export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWrite
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
-export type DomainReceiptResult = "authoritative_applied" | "no_effect" | "conflicted" | "refused";
+export type DomainReceiptResult = "authoritative_applied" | "proposal_revised" | "no_effect" | "conflicted" | "refused";
 
 export type DomainReceipt = { receipt_id: string, project_scope: ProjectScope, command_kind: DomainReceiptCommandKind, command_digest: DigestValue, idempotency_key: string, producer_cause: DomainReceiptProducerCause, author_command_admission_id: string, expected_heads: Array<string>, prior_heads: Array<string>, resulting_heads: Array<string>, authoritative_revision_ids: Array<string>, proposal_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, author_action_sequence: string | null, draft_artifact_refs: Array<string>, artifact_lifecycle_event_refs: Array<string>, condition_refs: Array<string>, result: DomainReceiptResult, created_at: string, };
 
@@ -211,7 +211,7 @@ export type AuthorEditConflictReason = "stale_authoritative_head" | "proposal_he
 
 export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_selection" | "target_mismatch";
 
-export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
+export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
 
 export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
 

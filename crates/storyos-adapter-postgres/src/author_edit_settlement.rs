@@ -87,6 +87,36 @@ pub(super) async fn persist_author_edit_settlement(
                 project_activity_position,
             }
         }
+        ApplyAuthorEditResult::ProposalRevised { candidate_text } => {
+            let Some(context) = classified.proposal_context.as_ref() else {
+                return Err(AuthorEditError::BindingConflict);
+            };
+            let proposal_revision_id = super::author_edit_proposal::append_proposal_revision(
+                client,
+                &command.project_scope,
+                context,
+                current_revision_id,
+                &candidate_text,
+            )
+            .await?;
+            let counter_row = client
+                .query_one(
+                    "UPDATE storyos.scope_counters
+                        SET author_action_sequence = author_action_sequence + 1
+                      WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                  RETURNING author_action_sequence::text",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                    ],
+                )
+                .await
+                .map_err(author_edit_database_error)?;
+            PreparedSettlement::ProposalRevised {
+                proposal_revision_id,
+                author_action_sequence: parse_u64(counter_row.get(0))?,
+            }
+        }
         ApplyAuthorEditResult::NoEffect { reason } => PreparedSettlement::NoEffect { reason },
         ApplyAuthorEditResult::Conflicted { reason } => PreparedSettlement::Conflicted {
             reason,
@@ -95,18 +125,38 @@ pub(super) async fn persist_author_edit_settlement(
         ApplyAuthorEditResult::Refused { reason } => PreparedSettlement::Refused { reason },
     };
 
-    let (result_kind, result_payload, resulting_head, revision_ids, commit_ids) = match &prepared {
+    let (
+        result_kind,
+        result_payload,
+        resulting_head,
+        revision_ids,
+        proposal_revision_ids,
+        commit_ids,
+    ) = match &prepared {
         PreparedSettlement::AuthoritativeApplied { ids, .. } => (
             "authoritative_applied",
             serde_json::json!({}),
             ids.revision_id.as_str(),
             vec![ids.revision_id.clone()],
+            Vec::new(),
             vec![ids.authoritative_commit_id.clone()],
+        ),
+        PreparedSettlement::ProposalRevised {
+            proposal_revision_id,
+            ..
+        } => (
+            "proposal_revised",
+            serde_json::json!({}),
+            current_revision_id,
+            Vec::new(),
+            vec![proposal_revision_id.clone()],
+            Vec::new(),
         ),
         PreparedSettlement::NoEffect { reason } => (
             "no_effect",
             serde_json::json!({"reason": no_effect_reason(reason)}),
             current_revision_id,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         ),
@@ -122,11 +172,13 @@ pub(super) async fn persist_author_edit_settlement(
             current_revision_id,
             Vec::new(),
             Vec::new(),
+            Vec::new(),
         ),
         PreparedSettlement::Refused { reason } => (
             "refused",
             serde_json::json!({"reason": refusal_reason(reason)}),
             current_revision_id,
+            Vec::new(),
             Vec::new(),
             Vec::new(),
         ),
@@ -145,9 +197,9 @@ pub(super) async fn persist_author_edit_settlement(
                      $5::text::uuid, 'applyAuthorEdit', $6, $7::text::uuid,
                      'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
                      ARRAY[$10::text::uuid],
-                     $11::text[]::uuid[], ARRAY[]::uuid[], $12::text[]::uuid[],
+                     $11::text[]::uuid[], $12::text[]::uuid[], $13::text[]::uuid[],
                      ARRAY[]::text[], ARRAY[]::text[], ARRAY[]::text[],
-                     $13, $14::text::jsonb)
+                     $14, $15::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
@@ -162,6 +214,7 @@ pub(super) async fn persist_author_edit_settlement(
                 &current_revision_id,
                 &resulting_head,
                 &revision_ids,
+                &proposal_revision_ids,
                 &commit_ids,
                 &result_kind,
                 &result_payload,
@@ -267,6 +320,31 @@ pub(super) async fn persist_author_edit_settlement(
                 blocks,
                 author_action_sequence,
                 project_activity_position,
+            }
+        }
+        PreparedSettlement::ProposalRevised {
+            proposal_revision_id,
+            author_action_sequence,
+        } => {
+            client
+                .execute(
+                    "INSERT INTO storyos.author_action_entries
+                   (owner_user_id, project_id, author_action_sequence, disposition,
+                    receipt_id, receipt_result_kind)
+                 VALUES ($1::text::uuid, $2::text::uuid, $3::text::numeric, 'forward',
+                         $4::text::uuid, 'proposal_revised')",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &author_action_sequence.to_string(),
+                        &command.ids.receipt_id,
+                    ],
+                )
+                .await
+                .map_err(author_edit_database_error)?;
+            AuthorEditSettlementEffect::ProposalRevised {
+                proposal_revision_id,
+                author_action_sequence,
             }
         }
         PreparedSettlement::NoEffect { reason } => AuthorEditSettlementEffect::NoEffect { reason },
@@ -466,6 +544,10 @@ enum PreparedSettlement {
         blocks: Vec<storyos_core::ManuscriptBlock>,
         author_action_sequence: u64,
         project_activity_position: u64,
+    },
+    ProposalRevised {
+        proposal_revision_id: String,
+        author_action_sequence: u64,
     },
     NoEffect {
         reason: AuthorEditNoEffect,

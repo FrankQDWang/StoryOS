@@ -84,7 +84,8 @@ impl PostgresProjectReader {
                         cardinality(receipt.artifact_lifecycle_event_refs),
                         cardinality(receipt.condition_refs),
                         receipt.authoritative_revision_ids[1]::text,
-                        receipt.authoritative_commit_ids[1]::text
+                        receipt.authoritative_commit_ids[1]::text,
+                        receipt.proposal_revision_ids[1]::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admissions AS admission
                      ON (admission.owner_user_id, admission.project_id,
@@ -119,8 +120,14 @@ impl PostgresProjectReader {
                     AND admission.chapter_object_id = $6::text::uuid
                     AND admission.expected_authoritative_revision_id = $7::text::uuid
                     AND admission.target_refs = $8::text[]
-                    AND admission.expected_proposal_head_revision_ids =
-                        receipt.proposal_revision_ids
+                    AND (
+                      (receipt.result_kind <> 'proposal_revised'
+                        AND admission.expected_proposal_head_revision_ids =
+                            receipt.proposal_revision_ids)
+                      OR (receipt.result_kind = 'proposal_revised'
+                        AND cardinality(receipt.proposal_revision_ids) = 1
+                        AND cardinality(admission.expected_proposal_head_revision_ids) >= 1)
+                    )
                     AND receipt.expected_heads =
                         ARRAY[admission.expected_authoritative_revision_id]
                     AND EXISTS (
@@ -158,7 +165,9 @@ impl PostgresProjectReader {
         let resulting_head = receipt.get::<_, String>(10);
         let common_cardinalities =
             [11, 12, 13, 15, 17, 18, 19].map(|index| receipt.get::<_, i32>(index));
-        if common_cardinalities != [1, 1, 1, 0, 0, 0, 0] {
+        if common_cardinalities != [1, 1, 1, 0, 0, 0, 0]
+            && !(result_kind == "proposal_revised" && common_cardinalities == [1, 1, 1, 1, 0, 0, 0])
+        {
             return Err(AuthorEditError::BindingConflict);
         }
 
@@ -292,6 +301,65 @@ impl PostgresProjectReader {
                     blocks,
                     author_action_sequence: parse_u64(relation.get(5))?,
                     project_activity_position: parse_u64(relation.get(1))?,
+                }
+            }
+            "proposal_revised"
+                if result_payload == serde_json::json!({})
+                    && expected_head == prior_head
+                    && prior_head == resulting_head
+                    && receipt.get::<_, i32>(14) == 0
+                    && receipt.get::<_, i32>(16) == 0 =>
+            {
+                let proposal_revision_id = receipt
+                    .get::<_, Option<String>>(22)
+                    .ok_or(AuthorEditError::BindingConflict)?;
+                let action = client
+                    .query(
+                        "SELECT action.author_action_sequence::text
+                           FROM storyos.author_action_entries AS action
+                          WHERE action.owner_user_id = $1::text::uuid
+                            AND action.project_id = $2::text::uuid
+                            AND action.receipt_id = $3::text::uuid
+                            AND action.receipt_result_kind = 'proposal_revised'
+                            AND action.disposition = 'forward'
+                            AND action.authoritative_commit_id IS NULL",
+                        &[
+                            &identity.project_scope.owner_user_id.as_ref(),
+                            &identity.project_scope.project_id.as_ref(),
+                            &receipt_id,
+                        ],
+                    )
+                    .await
+                    .map_err(author_edit_database_error)?;
+                if action.len() != 1 {
+                    return Err(AuthorEditError::BindingConflict);
+                }
+                let counts = client
+                    .query_one(
+                        "SELECT
+                           (SELECT count(*) FROM storyos.project_activity_events
+                             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                               AND receipt_id = $3::text::uuid),
+                           (SELECT count(*) FROM storyos.authoritative_commits
+                             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                               AND receipt_id = $3::text::uuid),
+                           (SELECT count(*) FROM storyos.authoritative_revision_envelopes
+                             WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                               AND receipt_id = $3::text::uuid)",
+                        &[
+                            &identity.project_scope.owner_user_id.as_ref(),
+                            &identity.project_scope.project_id.as_ref(),
+                            &receipt_id,
+                        ],
+                    )
+                    .await
+                    .map_err(author_edit_database_error)?;
+                if [0, 1, 2].map(|index| counts.get::<_, i64>(index)) != [0, 0, 0] {
+                    return Err(AuthorEditError::BindingConflict);
+                }
+                AuthorEditSettlementEffect::ProposalRevised {
+                    proposal_revision_id,
+                    author_action_sequence: parse_u64(action[0].get(0))?,
                 }
             }
             "no_effect"

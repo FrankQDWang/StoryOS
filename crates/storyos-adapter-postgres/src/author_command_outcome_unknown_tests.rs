@@ -290,6 +290,7 @@ async fn append_is_exact_serialized_and_has_zero_authority_effect() {
                 reason: storyos_core::AuthorEditNoEffect::ContentUnchanged,
             },
             successor_blocks: None,
+            proposal_context: None,
         },
     )
     .await

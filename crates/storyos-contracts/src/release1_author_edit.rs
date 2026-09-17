@@ -173,6 +173,7 @@ pub enum DomainReceiptCommandKind {
 #[serde(rename_all = "snake_case")]
 pub enum DomainReceiptResult {
     AuthoritativeApplied,
+    ProposalRevised,
     NoEffect,
     Conflicted,
     Refused,
@@ -233,6 +234,10 @@ pub enum ApplyAuthorEditEffect {
         authoritative_commit_id: String,
         author_action_sequence: String,
         project_activity_position: String,
+    },
+    ProposalRevised {
+        proposal_revision_id: String,
+        author_action_sequence: String,
     },
     NoEffect {
         reason: NoEffectReason,

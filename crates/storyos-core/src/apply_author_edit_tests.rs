@@ -145,6 +145,33 @@ fn current_proposal_fact_conflicts_with_a_stale_authoritative_observation() {
 }
 
 #[test]
+fn matching_proposal_heads_revise_the_candidate_without_authority() {
+    let mut revise = command();
+    revise.current_body = "Guard the narrator voice in this passage.".to_owned();
+    revise.expected_proposal_head_revision_ids = vec!["proposal-revision".to_owned()];
+    revise.current_ownership.proposal_head_revision_ids = vec!["proposal-revision".to_owned()];
+    revise.observed_ownership_partition = "mixed".to_owned();
+    let unit = &mut revise.author_edit_units[0];
+    unit.selection_snapshot.from = 0;
+    unit.selection_snapshot.to = 5;
+    let AuthorEditPrimitive::ReplaceSelection { from, to, text } =
+        &mut unit.normalized_primitives[0]
+    else {
+        panic!("legacy command must use ReplaceSelection")
+    };
+    *from = 0;
+    *to = 5;
+    *text = "Keep".to_owned();
+
+    assert_eq!(
+        apply_author_edit(&revise),
+        ApplyAuthorEditResult::ProposalRevised {
+            candidate_text: "Keep the narrator voice in this passage.".to_owned()
+        }
+    );
+}
+
+#[test]
 fn unchanged_content_is_a_no_effect_core_result() {
     for (start, end, replacement) in [(1, 3, "😀"), (3, 3, "")] {
         let mut unchanged = command();

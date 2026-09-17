@@ -52,6 +52,12 @@ pub enum UndoLatestAuthorActionSettlementEffect {
         snapshot_id: String,
         author_undo_frontier_sequence: Option<u64>,
     },
+    CompensatedProposal {
+        source_sequence: u64,
+        author_action_sequence: u64,
+        proposal_revision_id: String,
+        author_undo_frontier_sequence: Option<u64>,
+    },
     Conflicted {
         reason: storyos_core::UndoLatestAuthorActionConflict,
     },

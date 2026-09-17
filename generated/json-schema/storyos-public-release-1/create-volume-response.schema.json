@@ -272,6 +272,7 @@
     "DomainReceiptResult": {
       "enum": [
         "authoritative_applied",
+        "proposal_revised",
         "no_effect",
         "conflicted",
         "refused"

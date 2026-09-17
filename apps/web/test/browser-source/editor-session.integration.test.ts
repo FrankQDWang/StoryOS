@@ -54,7 +54,10 @@ import {
   requireString,
 } from "./scenario.ts";
 
-type ZeroAuthorityResult = Exclude<DomainReceiptResult, "authoritative_applied">;
+type ZeroAuthorityResult = Exclude<
+  DomainReceiptResult,
+  "authoritative_applied" | "proposal_revised"
+>;
 
 const FIRST_REVISION = "018f0000-0000-7001-8000-000000000034";
 const SECOND_REVISION = "018f0000-0000-7001-8000-000000000044";

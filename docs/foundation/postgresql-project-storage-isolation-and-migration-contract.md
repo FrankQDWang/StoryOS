@@ -556,8 +556,8 @@ writes Activity without manuscript authority. ADR 0026 owns Current Chapter
 allocation. ADR 0025 owns structure Commit allocation. The Manuscript Revision
 and Proposal State Machine owns Author Edit allocation. The Web Editor Session
 contract owns takeover Activity. Current Chapter and structure paths are
-delivered. `ProposalRevised` allocation is accepted; Proposal editing remains
-undelivered. Allocation presence cannot substitute for the command's typed
+delivered. `ProposalRevised` allocation is accepted and Proposal candidate
+editing is delivered through `ApplyAuthorEdit`. Allocation presence cannot substitute for the command's typed
 result. No row from either write set is published as committed before the
 transaction commits.
 
