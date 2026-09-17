@@ -42,12 +42,14 @@ def outputs(root, producer=None):
                 if (path.resolve() != (root / "apps/web").resolve()
                         and not any(path.resolve().is_relative_to(base.resolve()) for base in directories)):
                     return None
-                identities.append((str(path.relative_to(root)), "link", os.readlink(path)))
+                content = ("link", os.readlink(path))
             elif path.is_file():
-                state = path.stat()
-                identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
-                                   state.st_mtime_ns, state.st_ctime_ns,
-                                   hashlib.sha256(path.read_bytes()).hexdigest()))
+                content = hashlib.sha256(path.read_bytes()).hexdigest()
+            else:
+                continue
+            state = path.lstat()
+            identities.append((str(path.relative_to(root)), state.st_mode, state.st_ino,
+                               state.st_mtime_ns, state.st_ctime_ns, content))
     if producer:
         return {"dependencies": digest(identities), "artifacts": {
             name: hashlib.sha256((producer / name).read_bytes()).hexdigest()

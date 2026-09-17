@@ -27,11 +27,12 @@ def source_identity(root):
     stamps, contents = [], []
     for path in input_paths(root):
         source = root / path
-        if source.is_file():
-            metadata = source.stat()
-            stamps.append((path, metadata.st_ino, metadata.st_size,
-                           metadata.st_mtime_ns, metadata.st_ctime_ns))
-            contents.append((path, metadata.st_mode, hashlib.sha256(source.read_bytes()).hexdigest()))
+        if source.is_file() or source.is_symlink():
+            for metadata in (source.lstat(), source.stat() if source.exists() else source.lstat()):
+                stamps.append((path, metadata.st_ino, metadata.st_size,
+                               metadata.st_mtime_ns, metadata.st_ctime_ns))
+            contents.append((path, source.lstat().st_mode, os.readlink(source) if source.is_symlink() else None,
+                             hashlib.sha256(source.read_bytes()).hexdigest() if source.is_file() else None))
         else:
             stamps.append((path, None))
             contents.append((path, None))

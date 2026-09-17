@@ -60,38 +60,31 @@ The PR sentinel checks the policy and runner, but does not yet validate full rep
 
 ## Daily result reuse and host budget
 
-The reviewed Node profile caches one complete daily group: policy checks, Web
-preparation and type checks, then the selected Node tests. A hit reuses that whole
-successful group and records a `cached` step with its producer report. Cargo and
-complete groups execute each time. Selected Vitest runs disable its result-cache writes.
+The reviewed Node profile caches passed policy checks, Web preparation and type
+checks, and selected Node tests as one group. A hit records a `cached` step and its
+producer report. Cargo and complete groups always execute. Selected Vitest runs disable result-cache writes.
 
-The key includes all current non-ignored repository input bytes and modes, current test-file
-membership, selected checks, worker count, runner sources, tool executables and
-versions, host identity, and a digest of the inherited environment. Input scope is
-conservative: even an unrelated file edit can miss, but a new Git SHA alone does not.
-Environment values are not recorded. Cache use requires the original complete
-successful daily report, its digest and Vitest output, and equal content of both
-installed Node dependency trees, including modes and write stamps. Dependency identity
-must stay equal from prepared test start through report completion. Missing, changed
-or corrupt output causes execution.
-The Web workspace link binds to the repository inputs; other external links disable
-reuse. A failed, interrupted, incomplete
-or source-changing run cannot publish a reusable result.
+The key binds current non-ignored input bytes, modes and link targets; test-file membership;
+checks and workers; runners and toolchains; host identity; and an environment digest.
+An unrelated file edit can miss, but a new Git SHA alone does not. Environment values stay private.
+Reuse requires the original complete successful report, its digest and Vitest output,
+and equal installed Node dependency trees, including modes and write stamps. Dependency
+identity must stay equal from prepared test start through report completion. Missing,
+changed or corrupt output causes execution. The Web workspace link binds to repository
+inputs; other external links disable reuse. Failed, interrupted, incomplete or
+source-changing runs cannot publish reusable results.
 
 Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution without
-reading or publishing a result-cache entry. Entries are local under
-`target/verification-cache/`; keep their referenced reports when retaining the cache.
-Removing these entries is safe. A cache hit is daily feedback, not candidate evidence.
+reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
+need their referenced reports. A cache hit is daily feedback, not candidate evidence.
 
 The complete and daily run commands admit one run per checkout at a time. A busy
-budget fails with a retry reason; it does not start another check group. The lock
-covers process-group cleanup; overdue descendants are terminated and fail the run.
-The input policy caps daily
-Cargo build jobs, Rust test threads and Vitest workers. Use `VERIFY_ARGS='--workers 1'`
-to lower that cap. Groups stay serial, and complete runs retain their existing worker
-configuration. This budget coordinates these repository commands on one checkout.
+budget fails with a retry reason. The lock covers process-group cleanup; overdue
+descendants are terminated and fail the run. The input policy caps daily Cargo build
+jobs, Rust test threads and Vitest workers. Use `VERIFY_ARGS='--workers 1'` to lower
+that cap. Groups stay serial. Complete runs retain their existing worker configuration.
 
 When tests or dependencies change, inspect the new plan and report. Extend a cache
-profile only after specifying all inputs, required outputs and resource ownership,
-then add public CLI invalidation tests and obtain independent Standards and Spec
+profile only after specifying its inputs, required outputs and resource ownership,
+adding public CLI invalidation tests, and obtaining independent Standards and Spec
 review. New frameworks remain ineligible until the policy and runner support them.

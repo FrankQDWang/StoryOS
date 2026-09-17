@@ -45,52 +45,50 @@ class DailyCacheTests(unittest.TestCase):
 
     def test_equal_inputs_reuse_without_child_execution_and_leaf_edits_invalidate(self):
         first, report = self.run_daily()
-        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertEqual((first.returncode, report["cache"]["status"]), (0, "miss"), first.stderr)
         self.assertIn("executed selected files", first.stdout)
-        self.assertEqual(report["cache"]["status"], "miss")
+        for name in ("first.ts", "second.ts"):
+            target = self.root / ".tools" / name
+            target.write_text(self.test.read_text())
+            self.test.unlink()
+            self.test.symlink_to(target)
+            result, report = self.run_daily()
+            self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
         second, report = self.run_daily()
-        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertEqual((second.returncode, report["cache"]["status"]), (0, "hit"), second.stderr)
         self.assertNotIn("executed selected files", second.stdout)
-        self.assertEqual(report["cache"]["status"], "hit")
         self.test.write_text(self.test.read_text() + "// changed input\n")
         changed, report = self.run_daily()
-        self.assertEqual(changed.returncode, 0, changed.stderr)
+        self.assertEqual((changed.returncode, report["cache"]["status"]), (0, "miss"), changed.stderr)
         self.assertIn("executed selected files", changed.stdout)
-        self.assertEqual(report["cache"]["status"], "miss")
 
     def test_new_commit_keeps_equal_inputs_but_membership_and_environment_do_not(self):
         self.assertEqual(self.run_daily()[0].returncode, 0)
         self.fixture.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                               "commit", "--quiet", "--allow-empty", "-m", "Record unrelated history.")
         result, report = self.run_daily()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(report["cache"]["status"], "hit")
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "hit"), result.stderr)
         self.fixture.add_test("another.test.ts")
         result, report = self.run_daily()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(report["cache"]["status"], "miss")
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
         self.test.chmod(0o755)
         result, report = self.run_daily()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(report["cache"]["status"], "miss")
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
         self.fixture.repo.environment["FIXTURE_INPUT"] = "changed environment"
         result, report = self.run_daily()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(report["cache"]["status"], "miss")
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
         tool = self.root / ".tools/pnpm"
         tool.write_text(tool.read_text().replace("fixture-pnpm-1", "fixture-pnpm-2"))
         result, report = self.run_daily()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(report["cache"]["status"], "miss")
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
 
     def test_missing_outputs_corrupt_entries_and_no_cache_force_execution(self):
         self.assertEqual(self.run_daily()[0].returncode, 0)
         entry = next(self.root.glob("target/verification-cache/*.json"))
         entry.write_text("{incomplete")
         result, report = self.run_daily()
-        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((result.returncode, report["cache"]["status"]), (0, "miss"), result.stderr)
         self.assertIn("executed selected files", result.stdout)
-        self.assertEqual(report["cache"]["status"], "miss")
         producer = self.root / json.loads(entry.read_text())["report"]
         producer.with_name("vitest.json").unlink()
         result, report = self.run_daily()
@@ -143,11 +141,13 @@ class DailyCacheTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(report["status"], "source-changed")
         self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
-        tool.write_text(tool.read_text().replace("files[0].write_text(files[0].read_text() + '// drift\\n')",
-                        "pathlib.Path('node_modules/installed.js').write_text('changed dependency')"))
-        result, report = self.run_daily()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
+        original = tool.read_text()
+        for mutation in ("pathlib.Path('node_modules/installed.js').write_text('changed dependency')",
+                         "link = pathlib.Path('node_modules/workspace'); link.unlink(); link.symlink_to('../apps/web')"):
+            tool.write_text(original.replace("files[0].write_text(files[0].read_text() + '// drift\\n')", mutation))
+            result, report = self.run_daily()
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse(list(self.root.glob("target/verification-cache/*.json")))
 
     def test_busy_budget_refuses_a_second_run_and_releases_after_interruption(self):
         target = self.root / "target"
