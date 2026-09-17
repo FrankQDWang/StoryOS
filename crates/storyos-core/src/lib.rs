@@ -12,6 +12,7 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
+mod open_block_proposal;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -66,6 +67,10 @@ pub use manuscript_payload::{
     ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
     apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
+};
+pub use open_block_proposal::{
+    OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
+    OpenBlockProposalResult, open_block_proposal,
 };
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,

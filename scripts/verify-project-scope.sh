@@ -586,6 +586,7 @@ run_http_files \
   test/node-postgresql/update-project-assistance-http.integration.test.ts \
   test/node-postgresql/create-agent-run-http.integration.test.ts \
   test/node-postgresql/complete-fake-model-decision-http.integration.test.ts \
+  test/node-postgresql/open-block-proposal-http.integration.test.ts \
   test/node-postgresql/archive-project-http.integration.test.ts \
   test/node-postgresql/create-volume-http.integration.test.ts \
   test/node-postgresql/update-volume-http.integration.test.ts \

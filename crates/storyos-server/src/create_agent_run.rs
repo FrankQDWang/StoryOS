@@ -269,6 +269,7 @@ fn inspect_decision(
             text,
             producer_input,
             continuation_binding_id,
+            opened_proposal_id,
         } => contracts::OptionalDecisionInspect::ProseChange {
             decision_id: decision_id.clone(),
             selected: *selected,
@@ -276,6 +277,12 @@ fn inspect_decision(
             producer_input: producer_input.clone(),
             continuation: inspect_continuation(continuation_binding_id.as_deref()),
             authoritative: false,
+            opened_proposal: match opened_proposal_id.as_deref() {
+                Some(proposal_id) => contracts::OptionalOpenedProposalInspect::Present {
+                    proposal_id: proposal_id.to_owned(),
+                },
+                None => contracts::OptionalOpenedProposalInspect::Absent,
+            },
         },
         storyos_application::AgentRunDecisionInspect::Clarification {
             decision_id,

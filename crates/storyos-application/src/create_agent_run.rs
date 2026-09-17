@@ -83,6 +83,7 @@ pub enum AgentRunDecisionInspect {
         text: String,
         producer_input: String,
         continuation_binding_id: Option<String>,
+        opened_proposal_id: Option<String>,
     },
     Clarification {
         decision_id: String,

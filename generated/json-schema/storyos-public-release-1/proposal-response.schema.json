@@ -1,0 +1,200 @@
+{
+  "$defs": {
+    "BlockProposalInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "base_authoritative_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "candidate_text": {
+          "type": "string"
+        },
+        "chapter_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "closure": {
+          "type": "string"
+        },
+        "generation": {
+          "type": "string"
+        },
+        "kind": {
+          "const": "block_edit",
+          "type": "string"
+        },
+        "manuscript_block_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "operation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "operation_resolution": {
+          "type": "string"
+        },
+        "proposal_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "reservation_state": {
+          "type": "string"
+        },
+        "revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/ProposalSourceInspect"
+        },
+        "validation": {
+          "type": "string"
+        },
+        "validation_receipt": {
+          "$ref": "#/$defs/OptionalValidationReceiptInspect"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "kind",
+        "revision_id",
+        "generation",
+        "validation",
+        "closure",
+        "operation_id",
+        "operation_resolution",
+        "chapter_id",
+        "manuscript_block_id",
+        "base_authoritative_revision_id",
+        "reservation_state",
+        "candidate_text",
+        "source",
+        "validation_receipt"
+      ],
+      "type": "object"
+    },
+    "OptionalValidationReceiptInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "result": {
+              "type": "string"
+            },
+            "validation_receipt_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "validation_receipt_id",
+            "result"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "validation_receipt_id": {
+          "format": "uuid"
+        }
+      }
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "ProposalSourceInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "decision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "agent_run_decision",
+              "type": "string"
+            },
+            "run_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "run_id",
+            "decision_id"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "decision_id": {
+          "format": "uuid"
+        },
+        "run_id": {
+          "format": "uuid"
+        }
+      }
+    }
+  },
+  "$id": "storyos.query.proposal.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "proposal": {
+      "$ref": "#/$defs/BlockProposalInspect"
+    },
+    "schema_id": {
+      "const": "storyos.query.proposal.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "proposal"
+  ],
+  "title": "StoryOS Proposal Response",
+  "type": "object"
+}

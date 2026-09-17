@@ -670,6 +670,9 @@
               "const": "prose_change",
               "type": "string"
             },
+            "opened_proposal": {
+              "$ref": "#/$defs/OptionalOpenedProposalInspect"
+            },
             "producer_input": {
               "type": "string"
             },
@@ -687,7 +690,8 @@
             "text",
             "producer_input",
             "continuation",
-            "authoritative"
+            "authoritative",
+            "opened_proposal"
           ],
           "type": "object"
         },
@@ -811,6 +815,41 @@
             "outbound_disclosure_event_id",
             "model_invocation_id",
             "dispatch_state"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OptionalOpenedProposalInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "proposal_id": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id"
           ],
           "type": "object"
         }
