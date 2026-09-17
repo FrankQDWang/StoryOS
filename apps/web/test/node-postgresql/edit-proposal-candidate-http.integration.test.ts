@@ -196,14 +196,14 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("e111"), "Edit Proposal Novel", "e2");
+    const prepared = await prepare(started.baseUrl, id("c811"), "Edit Proposal Novel", "c82");
     const before = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       chapterId: prepared.chapterId,
       fetchImpl: prepared.fetchImpl,
     });
-    const queried = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("e131"));
+    const queried = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c831"));
     assert.equal(queried.decision.kind, "prose_change");
     if (queried.decision.kind !== "prose_change") throw new Error("expected prose");
     assert.equal(queried.decision.opened_proposal.kind, "present");
@@ -222,7 +222,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     const sessionRequest: CreateEditorSessionRequest = {
       command_schema: "storyos.command.create-editor-session.request.v1",
       ...BINDING,
-      correlation_id: id("e141"),
+      correlation_id: id("c841"),
     };
     const session = await challenged(
       started.baseUrl,
@@ -232,12 +232,12 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       "/api/v1/projects/{project_id}/editor-sessions",
       sessionRequest.command_schema,
       await digestCreateEditorSession(sessionRequest),
-      id("e142"),
+      id("c842"),
       (antiForgery) => createEditorSession({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e142"),
+        idempotencyKey: id("c842"),
         antiForgery,
         request: sessionRequest,
       }),
@@ -246,7 +246,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     const editRequest: ApplyAuthorEditRequest = {
       command_schema: "storyos.command.apply-author-edit.request.v1",
       ...BINDING,
-      correlation_id: id("e143"),
+      correlation_id: id("c843"),
       editor_session_id: session.editor_session.editor_session_id,
       writer_generation: session.writer.writer_generation,
       chapter_id: session.base_snapshot.chapter_id,
@@ -255,8 +255,8 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       target_refs: session.base_snapshot.target_refs,
       observed_ownership_partition: "mixed",
       editor_contract_revision: "storyos.editor-contract.release-1.v2",
-      undo_group_id: id("e144"),
-      completed_intent_record_id: id("e145"),
+      undo_group_id: id("c844"),
+      completed_intent_record_id: id("c845"),
       local_intent_sequence: "1",
       author_edit_units: [{
         normalized_primitives: [{ kind: "replace_selection", from: 0, to: 5, text: "Keep" }],
@@ -269,7 +269,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       fetchImpl: prepared.fetchImpl,
-      idempotencyKey: id("e146"),
+      idempotencyKey: id("c846"),
       antiForgery: "",
       request: editRequest,
     };
@@ -281,7 +281,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       "/api/v1/projects/{project_id}/manuscript/author-edits",
       editRequest.command_schema,
       await digestApplyAuthorEdit(editRequest),
-      id("e146"),
+      id("c846"),
       (antiForgery) => {
         editOptions.antiForgery = antiForgery;
         return applyAuthorEdit(editOptions);
@@ -302,7 +302,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       fetchImpl: prepared.fetchImpl,
-      idempotencyKey: id("e146"),
+      idempotencyKey: id("c846"),
       antiForgery: editOptions.antiForgery,
     });
     assert.equal(editOutcome.outcome.outcome_kind, "committed");
@@ -347,7 +347,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
         expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING,
-        correlation_id: id("e147"),
+        correlation_id: id("c847"),
       },
     };
     const undone = await challenged(
@@ -358,12 +358,12 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       "/api/v1/projects/{project_id}/author-actions/undo",
       undoRequest.command_schema,
       await digestUndoLatestAuthorAction(undoRequest),
-      id("e148"),
+      id("c848"),
       (antiForgery) => undoLatestAuthorAction({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("e148"),
+        idempotencyKey: id("c848"),
         antiForgery,
         request: undoRequest,
       }),
