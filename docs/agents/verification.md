@@ -55,5 +55,39 @@ is the common owner; client instructions link here. Selected dirty-tree runs are
 daily feedback. A complete group needs a clean tree because release packaging binds
 Git identity. An empty change set or empty test discovery cannot report success.
 Complete candidate verification, PostgreSQL fixtures, ordered HTTP groups, exact-dist
-oracles and both recovery drills remain mandatory. There is no result cache yet.
+oracles and both recovery drills remain mandatory.
 The PR sentinel checks the policy and runner, but does not yet validate full reports.
+
+## Daily result reuse and host budget
+
+The reviewed Node profile caches one complete daily group: policy checks, Web
+preparation and type checks, then the selected Node tests. A hit reuses that whole
+successful group and records a `cached` step with its producer report. Cargo and
+complete groups execute each time. Build-tool caches retain their existing behavior.
+
+The key includes all current non-ignored repository input bytes, current test-file
+membership, selected checks, worker count, runner sources, tool executables and
+versions, host identity, and a digest of the inherited environment. Input scope is
+conservative: even an unrelated file edit can miss, but a new Git SHA alone does not.
+Environment values are not recorded. Cache use requires the original complete
+successful daily report, its digest and Vitest output, and equal content of both
+installed Node dependency trees. Missing, changed or corrupt output causes execution.
+The Web workspace link binds to the repository inputs; other external links disable
+reuse. A failed, interrupted, incomplete
+or source-changing run cannot publish a reusable result.
+
+Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution without
+reading or publishing a result-cache entry. Entries are local under
+`target/verification-cache/`; keep their referenced reports when retaining the cache.
+Removing these entries is safe. A cache hit is daily feedback, not candidate evidence.
+
+The complete and daily run commands admit one run per checkout at a time. A busy
+budget fails with a retry reason; it does not start another child. The input policy caps daily
+Cargo build jobs, Rust test threads and Vitest workers. Use `VERIFY_ARGS='--workers 1'`
+to lower that cap. Groups stay serial, and complete runs retain their existing worker
+configuration. This budget coordinates these repository commands on one checkout.
+
+When tests or dependencies change, inspect the new plan and report. Extend a cache
+profile only after specifying all inputs, required outputs and resource ownership,
+then add public CLI invalidation tests and obtain independent Standards and Spec
+review. New frameworks remain ineligible until the policy and runner support them.

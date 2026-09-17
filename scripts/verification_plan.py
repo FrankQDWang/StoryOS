@@ -36,7 +36,7 @@ def cargo_targets(root, changes, files):
             for name in sorted(affected)}
 
 
-def build_plan(root, base):
+def build_plan(root, base, workers=None):
     base = verification.git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
     source = verification.source_identity(root)
     files = {item["path"]: item for item in verification.inventory(root)["files"]}
@@ -51,6 +51,10 @@ def build_plan(root, base):
     if not changes:
         raise ValueError("No changed inputs; there is no selected test run")
     policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+    limit = min(policy.get("daily_workers", 2), os.cpu_count() or 1)
+    workers = limit if workers is None else workers
+    if not 1 <= workers <= limit:
+        raise ValueError(f"The daily worker budget must be between 1 and {limit}")
     targets = cargo_targets(root, changes, files)
     selected, complete = {}, []
     for path in sorted(changes):
@@ -80,6 +84,7 @@ def build_plan(root, base):
     if complete:
         checks = [{"group": "complete", "files": [], "reasons": complete}]
     plan = {"version": 1, "base": base, "source": source, "changes": sorted(changes), "checks": checks,
+            "workers": workers,
             "cargo_targets": targets,
             "test_files": sorted(path for path, item in files.items()
                                  if item["kind"].endswith("-test") and (root / path).is_file())}
@@ -100,7 +105,8 @@ def execute_plan(root, plan):
         elif group == "web-typecheck":
             command = ["make", "web-typecheck"]
         elif group.startswith("cargo:"):
-            command = ["cargo", "test", "--locked", "--tests", "--all-features", "-p", group.removeprefix("cargo:")]
+            command = ["cargo", "test", "--locked", "--tests", "--all-features", "-p", group.removeprefix("cargo:"),
+                       "--jobs", str(plan["workers"])]
             artifacts = subprocess.check_output(
                 [*command, "--no-run", "--message-format=json"], cwd=root, text=True)
             (directory / f"{group.replace(':', '-')}-artifacts.jsonl").write_text(artifacts)
@@ -120,11 +126,13 @@ def execute_plan(root, plan):
             print(listing, flush=True)
             if not any(line.endswith(": test") for line in listing.splitlines()):
                 raise ValueError("The selected Cargo target contains no tests")
+            command.extend(["--", "--test-threads", str(plan["workers"])])
         elif group == "node-contract":
             output = directory / "vitest.json"
             command = ["pnpm", "--dir", "apps/web", "exec", "vitest", "run", "--project", group,
                        *[str(root / path) for path in check["files"]], "--passWithNoTests=false",
-                       "--allowOnly=false", "--reporter=default", "--reporter=json", f"--outputFile={output}"]
+                       "--allowOnly=false", f"--maxWorkers={plan['workers']}", "--reporter=default",
+                       "--reporter=json", f"--outputFile={output}"]
         else:
             raise ValueError(f"Unsupported execution group: {group}")
         code = verification.step(root, group.replace(":", "-").replace("_", "-").lower(), command)
@@ -147,10 +155,12 @@ def main():
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--expected")
+    parser.add_argument("--workers", type=int)
+    parser.add_argument("--no-cache", action="store_true")
     args = parser.parse_args()
     try:
         root = Path(verification.git(Path.cwd(), "rev-parse", "--show-toplevel"))
-        plan = build_plan(root, args.base)
+        plan = build_plan(root, args.base, args.workers)
         if ((args.plan and json.loads(args.plan.read_text()) != plan)
                 or (args.expected and args.expected != plan["digest"])):
             raise ValueError("The verification plan is stale or has been changed")
@@ -160,8 +170,8 @@ def main():
         if args.action == "execute":
             return execute_plan(root, plan)
         command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],
-                   "--expected", plan["digest"]]
-        return verification.run(root, command, plan=plan)
+                   "--expected", plan["digest"], "--workers", str(plan["workers"])]
+        return verification.run(root, command, plan=plan, no_cache=args.no_cache)
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

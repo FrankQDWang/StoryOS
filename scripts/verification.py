@@ -16,6 +16,8 @@ import sys
 import time
 import uuid
 
+import verification_cache
+
 
 def git(root, *arguments):
     return subprocess.check_output(["git", *arguments], cwd=root, text=True).strip()
@@ -57,6 +59,9 @@ def inventory(root):
     if (not isinstance(profiles, dict) or set(profiles) - {"node-contract", "cargo"}
             or any(not isinstance(value, str) or not value for value in profiles.values())):
         raise ValueError("Unsupported file execution profile")
+    if (policy.get("result_cache_profiles", []) not in ([], ["node-contract"])
+            or type(policy.get("daily_workers", 2)) is not int or not 1 <= policy.get("daily_workers", 2) <= 2):
+        raise ValueError("Unsupported cache profile or daily worker budget")
     for rule in policy["rules"]:
         if set(rule) != {"pattern", "kind", "group"} or not all(
                 isinstance(value, str) and value for value in rule.values()):
@@ -139,7 +144,7 @@ def step(root, stage, command):
     return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
 
 
-def run(root, command, *, plan=None):
+def record_run(root, command, *, plan=None, no_cache=False):
     if os.environ.get("STORYOS_VERIFICATION_RUN"):
         raise ValueError("A complete verification run cannot be nested")
     started = time.monotonic()
@@ -153,6 +158,7 @@ def run(root, command, *, plan=None):
                               "python": platform.python_version()}}
     write_json(report_path, report)
     code, interrupted = 1, 0
+    cache = None
     try:
         report["source_start"] = source_identity(root)
         if plan:
@@ -162,8 +168,20 @@ def run(root, command, *, plan=None):
         if report["source_start"]["dirty"] and (not plan or plan["checks"][0]["group"] == "complete"):
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
-        code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_RUN": str(directory)},
-                                    os.name == "posix")
+        cache_started = time.monotonic()
+        cache = verification_cache.DailyCache(root, plan, no_cache)
+        report["cache"] = cache.observation
+        report["budget"] = {"groups": 1, "workers": plan["workers"] if plan else "existing-complete-profile"}
+        hit = cache.restore()
+        report["cache_check_seconds"] = time.monotonic() - cache_started
+        if hit:
+            write_json(directory / "steps/cache.json", {"stage": "daily-result-reuse", "status": "cached",
+                       "command": [], "duration_seconds": 0, "started_monotonic": time.monotonic()})
+            code = 0
+        else:
+            cache.discard()
+            code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_RUN": str(directory)},
+                                        os.name == "posix")
         report["source_end"] = source_identity(root)
         report["status"] = "passed" if code == 0 else "failed"
         if report["source_end"] != report["source_start"]:
@@ -175,14 +193,36 @@ def run(root, command, *, plan=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
-    if report["status"] == "passed" and (not steps or any(item["status"] != "passed" for item in steps)):
+    allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}
+    if report["status"] == "passed" and (not steps or any(item["status"] not in allowed for item in steps)):
         report["status"] = "incomplete"
+    if cache and report["status"] == "passed":
+        try:
+            cache_started = time.monotonic()
+            cache.prepare(report_path)
+            report["cache_output_check_seconds"] = time.monotonic() - cache_started
+            report["source_end"] = source_identity(root)
+            if report["source_end"] != report["source_start"]:
+                report["status"] = "source-changed"
+        except (OSError, ValueError) as error:
+            report.update(status="failed", error=str(error))
     report.update(duration_seconds=time.monotonic() - started, exit_code=code)
     write_json(report_path, report)
+    if cache:
+        cache.publish(report_path)
     print(f"Verification {report['status']}: {report['duration_seconds']:.2f}s; report: {report_path}", flush=True)
     if report["status"] == "passed":
         return 0
     return 128 + interrupted if interrupted else (code if code > 0 else 1)
+
+
+def run(root, command, *, plan=None, no_cache=False):
+    try:
+        with verification_cache.budget(root):
+            return record_run(root, command, plan=plan, no_cache=no_cache)
+    except (OSError, ValueError) as error:
+        print(str(error), file=sys.stderr)
+        return 1
 
 
 def main():
