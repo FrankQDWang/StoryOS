@@ -1,43 +1,53 @@
-.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-pr verify-tracker web web-foundation web-typecheck
+.PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-local-steps verify-policy verify-pr verify-tracker web web-foundation web-typecheck
 
-contracts:
-	cargo fmt --all -- --check
-	cargo clippy --workspace --all-targets --all-features -- -D warnings
-	cargo test --workspace --all-targets --all-features
-	cargo test --workspace --doc --all-features
-	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
-	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
-	PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py --self-test
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
-	PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-transaction-control-receivers.py --self-test
-	cargo run --quiet -p storyos-contracts -- check
+VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
+
+verify-policy:
+	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
+	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
+	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p 'verification_tests.py'
+
+contracts: verify-policy
+	$(VERIFY_STEP) rust-format -- cargo fmt --all -- --check
+	$(VERIFY_STEP) rust-clippy -- cargo clippy --workspace --all-targets --all-features -- -D warnings
+	$(VERIFY_STEP) rust-tests -- cargo test --workspace --all-targets --all-features
+	$(VERIFY_STEP) rust-doc-tests -- cargo test --workspace --doc --all-features
+	$(VERIFY_STEP) protocol-self-test -- python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
+	$(VERIFY_STEP) persistence-self-test -- python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
+	$(VERIFY_STEP) author-edit-self-test -- python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py --self-test
+	$(VERIFY_STEP) tracker-self-test -- python3 scripts/verify-stage1-ticket-bindings.py --self-test
+	$(VERIFY_STEP) transaction-self-test -- python3 scripts/verify-transaction-control-receivers.py --self-test
+	$(VERIFY_STEP) generated-contracts -- cargo run --quiet -p storyos-contracts -- check
 	$(MAKE) web
 web-typecheck:
-	pnpm install --frozen-lockfile
-	pnpm --dir apps/web run typecheck
+	$(VERIFY_STEP) node-install -- pnpm install --frozen-lockfile
+	$(VERIFY_STEP) web-typecheck -- pnpm --dir apps/web run typecheck
 
 release-package: web-typecheck
-	python3 scripts/package-release.py
+	$(VERIFY_STEP) release-package -- python3 scripts/package-release.py
 
 web-foundation: release-package
-	pnpm --dir apps/web exec vitest run --project node-contract --project browser-source
+	$(VERIFY_STEP) foundation-tests -- pnpm --dir apps/web exec vitest run --project node-contract --project browser-source
 
 web: web-foundation
-	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
+	STORYOS_WEB_TYPECHECKED=1 $(VERIFY_STEP) project-scope -- scripts/verify-project-scope.sh
 
 project-scope: release-package
-	STORYOS_WEB_TYPECHECKED=1 scripts/verify-project-scope.sh
+	STORYOS_WEB_TYPECHECKED=1 $(VERIFY_STEP) project-scope -- scripts/verify-project-scope.sh
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
-verify-local: contracts
-	@cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py
-	@PYTHONDONTWRITEBYTECODE=1 python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-transaction-control-receivers.py
+verify-local:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run -- make verify-local-steps
+
+verify-local-steps: contracts
+	@$(VERIFY_STEP) workspace-boundaries -- sh -c 'cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py'
+	@$(VERIFY_STEP) author-edit-policy -- python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py
+	@$(VERIFY_STEP) transaction-guards -- python3 scripts/verify-transaction-control-receivers.py
 
 verify-tracker:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py
 
-verify-pr:
+verify-pr: verify-policy
 	@set -eu; \
 		if [ -z "$${STORYOS_PR_BASE_SHA:-}" ]; then \
 			printf '%s\n' "STORYOS_PR_BASE_SHA is required" >&2; \

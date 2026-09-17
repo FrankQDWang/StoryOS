@@ -5,10 +5,12 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
 root = Path(__file__).resolve().parents[1]
+timer = [sys.executable, str(root / "scripts/verification.py"), "step"]
 
 
 def output(*arguments):
@@ -22,7 +24,8 @@ def source_identity():
 
 
 source = source_identity()
-subprocess.run(["pnpm", "--dir", "apps/web", "exec", "vite", "build"], cwd=root, check=True)
+subprocess.run([*timer, "web-build", "--", "pnpm", "--dir", "apps/web", "exec", "vite", "build"],
+               cwd=root, check=True)
 target = root / "target"
 target.mkdir(exist_ok=True)
 with tempfile.TemporaryDirectory(prefix="release-package-", dir=target) as temporary:
@@ -31,7 +34,7 @@ with tempfile.TemporaryDirectory(prefix="release-package-", dir=target) as tempo
     digest = output("cargo", "run", "--quiet", "--locked", "-p", "storyos-contracts", "--",
                     "web-manifest", str(package / "web"), *source)
     build_target = target / "web-release"
-    subprocess.run(["cargo", "build", "--locked", "--release", "--target-dir", str(build_target),
+    subprocess.run([*timer, "rust-release-build", "--", "cargo", "build", "--locked", "--release", "--target-dir", str(build_target),
                     "-p", "storyos-server", "-p", "storyos-worker",
                     "-p", "storyos-adapter-postgres"], cwd=root,
                    env={**os.environ, "STORYOS_WEB_MANIFEST_SHA256": digest}, check=True)
