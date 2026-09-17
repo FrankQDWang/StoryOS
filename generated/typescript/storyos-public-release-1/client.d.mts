@@ -339,7 +339,7 @@ export type CreateAgentRunEffect = { "kind": "admitted", project_agent_id: strin
 
 export type CreateAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: AgentRunRef | null, project: ControlledProject, project_agent_id: string, conversation_id: string, memory_settings_revision: string, effect: CreateAgentRunEffect, };
 
-export type AgentRunStatus = "queued";
+export type AgentRunStatus = "queued" | "claimed" | "waiting" | "completed" | "refused";
 
 export type ContextPurpose = "current_passage_assistance";
 
@@ -353,7 +353,7 @@ export type ContextBlockReason = { "kind": "exact_required_over_limit", source_c
 
 export type ContextRejectionReason = { "kind": "over_item_token_limit" } | { "kind": "required_revision_unavailable" } | { "kind": "working_target_revision_unavailable" };
 
-export type DestinationIo = { "kind": "none" };
+export type DestinationIo = { "kind": "none" } | { "kind": "host_fake" };
 
 export type OptionalManifestRef = { "kind": "absent" } | { "kind": "present", manifest_id: string, };
 
@@ -373,7 +373,23 @@ export type CurrentAvailabilityInspect = { working_target: SourceAvailability, }
 
 export type AgentRunContextInspect = { operation_requirement_id: string, input_snapshot_id: string, purpose: ContextPurpose, token_counting_profile: TokenCountingProfileInspect, sufficiency: ContextSufficiency, considered: Array<ContextSourceInspect>, selected: Array<ContextProjectionInspect>, rejected: Array<ContextRejectionInspect>, host_control: HostControlInspect, assembly_manifest_id: string, destination_context_manifest: OptionalManifestRef, outbound_disclosure_manifest: OptionalManifestRef, destination_io: DestinationIo, current_availability: CurrentAvailabilityInspect, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, };
+export type EvidenceAvailability = "current" | "unknown";
+
+export type AttemptEvidence = { "kind": "sent_content", attempt_id: string, availability: EvidenceAvailability, content: string, } | { "kind": "stored_reference", attempt_id: string, availability: EvidenceAvailability, reference_id: string, } | { "kind": "provider_report", attempt_id: string, availability: EvidenceAvailability, report: string, } | { "kind": "provider_opaque", attempt_id: string, availability: EvidenceAvailability, unknown_facts: Array<string>, };
+
+export type OptionalContinuationInspect = { "kind": "absent" } | { "kind": "present", continuation_binding_id: string, };
+
+export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
+
+export type OptionalModelAttemptInspect = { "kind": "absent" } | { "kind": "present", model_attempt_id: string, destination_attempt_id: string, outbound_disclosure_event_id: string, model_invocation_id: string, dispatch_state: string, };
+
+export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, phase: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, hosted_report: string | null, };
+
+export type AgentRunUsageInspect = { kind: string, };
+
+export type GetAgentRunRequest = { model_attempt_id?: string | null, };
+
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
 
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
@@ -404,7 +420,7 @@ export declare function digestUpdateProjectAssistance(request: UpdateProjectAssi
 export declare function updateProjectAssistance(options: StoryOSQueryOptions & { projectId: string; request: UpdateProjectAssistanceRequest; idempotencyKey: string; antiForgery: string }): Promise<UpdateProjectAssistanceResponse>;
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
-export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string }): Promise<GetAgentRunResponse>;
+export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

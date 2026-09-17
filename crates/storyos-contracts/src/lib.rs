@@ -88,16 +88,18 @@ pub use release1::{
     StoryOSProblem, project_command_kind,
 };
 pub use release1_agent_run::{
-    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AssistanceCause, AssistanceWorkingTarget,
-    AuthorMessage, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
+    AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
+    AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
+    CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
     CREATE_AGENT_RUN_REQUEST_SCHEMA_ID, CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason,
     ContextProjectionInspect, ContextPurpose, ContextRejectionInspect, ContextRejectionReason,
     ContextSourceClass, ContextSourceInspect, ContextSufficiency, ConversationSelection,
     CreateAgentRunEffect, CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse,
-    CurrentAvailabilityInspect, DestinationIo, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
-    GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunResponse,
-    HostControlInspect, InstructionBinding, OptionalManifestRef, ProjectionMode,
-    SourceAvailability, TokenCountingProfileInspect,
+    CurrentAvailabilityInspect, DestinationIo, EvidenceAvailability, GET_AGENT_RUN_METHOD,
+    GET_AGENT_RUN_PATH, GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    GetAgentRunRequest, GetAgentRunResponse, HostControlInspect, InstructionBinding,
+    OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
+    OptionalModelAttemptInspect, ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,

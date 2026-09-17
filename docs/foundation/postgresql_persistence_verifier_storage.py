@@ -210,6 +210,7 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
         "crates/storyos-adapter-postgres/migrations/0045_update_project_assistance.sql",
         "crates/storyos-adapter-postgres/migrations/0046_create_agent_run.sql",
         "crates/storyos-adapter-postgres/migrations/0047_context_assembly.sql",
+        "crates/storyos-adapter-postgres/migrations/0048_complete_fake_model_decision.sql",
     ]
     if bootstrap.get("transaction_boundary") != "one_postgresql_transaction":
         fail(errors, "Release 1 bootstrap must use one PostgreSQL transaction")

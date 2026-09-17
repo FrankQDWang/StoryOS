@@ -90,6 +90,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "manuscript_revision_members",
         "canonical/manuscript_revision_members.json",
     ),
+    ("model_attempts", "canonical/model_attempts.json"),
     (
         "operation_requirements",
         "canonical/operation_requirements.json",

@@ -13,9 +13,9 @@ const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
 pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-09-14-responses-memory";
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
-pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v3";
-pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v3";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v17";
+pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v4";
+pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v4";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v18";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";

@@ -27,6 +27,7 @@ pub use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
 use std::future::Future;
 
+mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
@@ -83,15 +84,20 @@ pub use author_edit_outcome::{
     get_apply_author_edit_outcome,
 };
 
+pub use agent_run_work::{
+    AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
+    claim_next_agent_run, complete_agent_run,
+};
 pub use archive_project::{
     ArchiveProjectCommand, ArchiveProjectError, ArchiveProjectSettlement,
     ArchiveProjectSettlementEffect, ArchiveProjectStore, archive_project,
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
 pub use create_agent_run::{
-    AgentRunContext, AgentRunRecord, AgentRunStatus, ConversationSelection,
+    AgentRunContext, AgentRunDecisionInspect, AgentRunEvidence, AgentRunModelInspect,
+    AgentRunRecord, AgentRunStatus, AgentRunStreamItem, ConversationSelection,
     CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore,
-    WorkingTargetAvailability, open_agent_run, request_create_agent_run,
+    EvidenceAvailability, WorkingTargetAvailability, open_agent_run, request_create_agent_run,
 };
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,

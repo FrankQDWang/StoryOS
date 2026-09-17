@@ -273,6 +273,8 @@ async function prepareProject(
 
 async function deleteAdmittedRun(projectId: string, runId: string) {
   await queryPostgres(`
+    DELETE FROM storyos.model_attempts
+     WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
     DELETE FROM storyos.context_assembly_manifests
      WHERE project_id = '${projectId}'::uuid AND run_id = '${runId}'::uuid;
     DELETE FROM storyos.operation_requirements
