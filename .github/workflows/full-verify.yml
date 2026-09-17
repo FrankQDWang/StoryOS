@@ -27,6 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch --no-tags --depth=1 origin main:refs/remotes/origin/main
           git fetch --no-tags --no-recurse-submodules --depth=1 origin \
             bab4c0ac5ca3da20b01ea1d61783aaba414f493f:refs/storyos/verification/execution-baseline \
             615408dabba489805f36aee83719cd0e8eb18dc3:refs/storyos/verification/delivery-baseline \

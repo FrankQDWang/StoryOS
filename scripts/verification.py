@@ -52,8 +52,11 @@ def input_paths(root):
     return sorted(set(paths) - {""})
 
 
-def inventory(root):
-    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+def inventory(root, revision=None):
+    policy = json.loads(git(root, "show", f"{revision}:docs/agents/verification-policy.json") if revision
+                        else (root / "docs/agents/verification-policy.json").read_text())
+    paths = git(root, "ls-tree", "-rz", "--name-only", revision).split("\0")[:-1] if revision else input_paths(root)
+    known = set(paths)
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")
     profiles = policy.get("file_profiles", {})
@@ -68,7 +71,7 @@ def inventory(root):
                 isinstance(value, str) and value for value in rule.values()):
             raise ValueError("Each input rule needs a pattern, kind, and group")
     files, errors = [], []
-    for path in input_paths(root):
+    for path in paths:
         rule = next((r for r in policy["rules"] if fnmatch.fnmatchcase(path, r["pattern"])), None)
         is_test = re.search(r"(?:_tests?\.(?:rs|py)|\.(?:test|spec)\.[cm]?[jt]sx?|/tests/.*\.rs|/test_[^/]+\.py)$", path)
         test_directory = path.startswith("apps/web/test/")
@@ -79,14 +82,32 @@ def inventory(root):
         group = rule["group"]
         if group == "cargo":
             crate = path.split("/")[1]
-            if not (root / "crates" / crate / "Cargo.toml").is_file():
+            if f"crates/{crate}/Cargo.toml" not in known:
                 errors.append(path)
                 continue
             group = f"cargo:{crate}"
         files.append({"path": path, "kind": rule["kind"], "group": group})
     if errors:
         raise ValueError("Unclassified inputs or unsupported test locations:\n" + "\n".join(errors))
+    if "complete" in policy:
+        stages, groups = policy["complete"]["stages"], policy["complete"]["groups"]
+        if (not isinstance(stages, list) or not isinstance(groups, dict) or not stages or len(stages) != len(set(stages))
+                or any(not re.fullmatch(r"[a-z][a-z0-9-]*", stage) for stage in stages)
+                or any(not isinstance(owners, list) or not owners or not set(owners) <= set(stages) for owners in groups.values())
+                or any(item["group"].split(":")[0] not in groups for item in files
+                       if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"})):
+            raise ValueError("Incomplete verification stage or test group policy")
     return {"version": 1, "files": files}
+
+
+def complete_plan(root, revision="HEAD", base="origin/main"):
+    policy_bytes = subprocess.check_output(["git", "show", f"{revision}:docs/agents/verification-policy.json"], cwd=root)
+    profile = json.loads(policy_bytes)["complete"]
+    files = [item for item in inventory(root, revision)["files"]
+             if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"}]
+    return {"version": 1, "base": git(root, "rev-parse", base), "tree": git(root, "rev-parse", f"{revision}^{{tree}}"),
+            "policy_sha256": hashlib.sha256(policy_bytes).hexdigest(), "stages": profile["stages"],
+            "test_files": sorted(item["path"] for item in files)}
 
 
 def write_json(path, value):
@@ -184,6 +205,8 @@ def record_run(root, command, *, plan=None, no_cache=False):
         if report["source_start"]["dirty"] and (not plan or plan["checks"][0]["group"] == "complete"):
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
+        if not plan and command == ["make", "verify-local-steps"]:
+            report["plan"] = complete_plan(root)
         cache_started = time.monotonic()
         cache = verification_cache.DailyCache(root, plan, no_cache)
         report["cache"] = cache.observation
