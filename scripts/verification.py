@@ -77,7 +77,8 @@ def inventory(root, revision=None):
         test_directory = path.startswith("apps/web/test/")
         if (rule is None or (is_test and not rule["kind"].endswith("-test"))
                 or (test_directory and rule["kind"] not in {"web-test", "fixture"})
-                or (rule["kind"] == "verification-test" and path.count("/") != 1)):
+                or (rule["kind"] == "verification-test"
+                    and not re.fullmatch(r"scripts/[A-Za-z_][A-Za-z0-9_]*_tests\.py", path))):
             errors.append(path)
             continue
         group = rule["group"]

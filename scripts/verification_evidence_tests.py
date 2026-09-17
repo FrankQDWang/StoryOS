@@ -115,6 +115,10 @@ class CandidateEvidenceTests(unittest.TestCase):
 
     def test_test_lifecycle_requires_new_evidence_and_discovers_new_membership(self):
         self.prepare()
+        unsupported = self.root / "scripts/new-test_tests.py"
+        unsupported.write_text("raise RuntimeError('must not be silently skipped')\n")
+        self.assertNotEqual(self.fixture.cli("inventory", "--check").returncode, 0)
+        unsupported.unlink()
         first = self.root / "scripts/first_tests.py"
         renamed = first.with_name("renamed_tests.py")
         for action in (lambda: first.write_text("pass\n"), lambda: first.rename(renamed), renamed.unlink):

@@ -16,7 +16,7 @@ import verification
 
 
 PREFIX = "<!-- storyos-candidate-evidence:v1 -->\n"
-PROTECTED = ["AGENTS.md", "Makefile", "scripts", ".github", ".cursor", ".agents", ".githooks", ".gitignore", "rustfmt.toml", "docs/agents",
+PROTECTED = ["AGENTS.md", "**/AGENTS.md", "CONTEXT.md", "**/CONTEXT.md", "Makefile", "scripts", ".github", ".cursor", ".agents", ".githooks", ".gitignore", "rustfmt.toml", "docs/agents",
              "Cargo.toml", "crates/*/Cargo.toml", "docs/foundation", "Cargo.lock", "package.json", "pnpm-*.yaml", "apps/web/*config*", "apps/web/package.json"]
 
 
