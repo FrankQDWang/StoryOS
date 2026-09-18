@@ -24,7 +24,7 @@ start_recovery_drill_server() {
   drill_server_log=$(mktemp "${TMPDIR:-/tmp}/storyos-recovery-server.XXXXXX")
   STORYOS_DATABASE_URL=$database_url \
   STORYOS_STORAGE_ADMIN_URL="postgres://postgres:wrong@127.0.0.1:1/postgres" \
-  STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$owner_a\",\"session-b\":\"018f0000-0000-7001-8000-000000000101\"}" \
+  STORYOS_BOOTSTRAP_SESSIONS="{\"session-a\":\"$owner_a\"}" \
   STORYOS_CHALLENGE_SECRET="test-only-challenge-secret-that-is-at-least-thirty-two-bytes" \
     "$server_bin" --bind 127.0.0.1:0 \
     --web-root "$web_root" \

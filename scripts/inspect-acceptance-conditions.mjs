@@ -5,7 +5,7 @@ import { getProposal } from "../generated/typescript/storyos-public-release-1/cl
 const [container, baseUrl] = process.argv.slice(2);
 const rows = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
   "-U", "postgres", "-Atc", `SELECT json_agg(row_to_json(evidence) ORDER BY evidence.proposal_id) FROM (
-    SELECT condition.*, to_jsonb(receipt) AS acceptance, to_jsonb(validation) AS historical_validation
+    SELECT condition.*, to_jsonb(receipt) AS acceptance, to_jsonb(validation.*) AS historical_validation
     FROM storyos.proposal_validation_conditions AS condition
     JOIN storyos.acceptance_receipts AS receipt USING (owner_user_id, project_id, acceptance_receipt_id)
     JOIN storyos.validation_receipts AS validation ON
@@ -28,7 +28,12 @@ for (const row of rows) {
     assert.equal(result.proposal.validation, row.validation);
     assert.deepEqual(result.proposal.condition_refs, row.conflict_id ? [row.conflict_id] : []);
   }
-  await assert.rejects(() => readAs("session-b"), (error) => error.status === 404);
+  const isolated = execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+    "-U", "postgres", "-Atc", `BEGIN; SET LOCAL ROLE storyos_runtime;
+      SET LOCAL storyos.owner_user_id = '018f0000-0000-7001-8000-000000000101';
+      SET LOCAL storyos.project_id = '${row.project_id}';
+      SELECT count(*) FROM storyos.proposal_validation_conditions; ROLLBACK;`], { encoding: "utf8" });
+  assert.match(isolated, /\n0\nROLLBACK/);
   inspected.push({ evidence: row, proposal: result.proposal });
 }
 process.stdout.write(JSON.stringify(inspected));
