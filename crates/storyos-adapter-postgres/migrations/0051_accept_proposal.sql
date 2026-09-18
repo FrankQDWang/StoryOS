@@ -718,4 +718,3 @@ ALTER TABLE storyos.domain_receipts
       AND expected_heads = resulting_heads)
 
   ) IS TRUE);
-
