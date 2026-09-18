@@ -115,12 +115,14 @@ pub(super) async fn persist_applied(
     let created_at = insert_receipts(
         client,
         command,
-        "authoritative_applied",
-        "{}",
-        &prior_head_revision_id,
-        &ids.revision_id,
-        &[ids.revision_id.clone()],
-        &[ids.authoritative_commit_id.clone()],
+        &AcceptanceReceiptInsert {
+            result_kind: "authoritative_applied",
+            result_payload: "{}",
+            prior_head: &prior_head_revision_id,
+            resulting_head: &ids.revision_id,
+            revision_ids: std::slice::from_ref(&ids.revision_id),
+            commit_ids: std::slice::from_ref(&ids.authoritative_commit_id),
+        },
     )
     .await?;
     client
@@ -227,15 +229,18 @@ pub(super) async fn persist_zero(
     effect: AcceptProposalSettlementEffect,
 ) -> Result<AcceptProposalSettlement, AcceptProposalError> {
     let head = command.expected_authoritative_revision_id.clone();
+    let result_payload = serde_json::json!({ "reason": reason }).to_string();
     let created_at = insert_receipts(
         client,
         command,
-        result_kind,
-        &serde_json::json!({ "reason": reason }).to_string(),
-        &head,
-        &head,
-        &[],
-        &[],
+        &AcceptanceReceiptInsert {
+            result_kind,
+            result_payload: &result_payload,
+            prior_head: &head,
+            resulting_head: &head,
+            revision_ids: &[],
+            commit_ids: &[],
+        },
     )
     .await?;
     let response_project = settle_idempotency(client, command).await?;
@@ -352,15 +357,19 @@ async fn persist_authority(
     Ok(())
 }
 
+struct AcceptanceReceiptInsert<'a> {
+    result_kind: &'a str,
+    result_payload: &'a str,
+    prior_head: &'a str,
+    resulting_head: &'a str,
+    revision_ids: &'a [String],
+    commit_ids: &'a [String],
+}
+
 async fn insert_receipts(
     client: &tokio_postgres::Client,
     command: &AcceptProposalCommand,
-    result_kind: &str,
-    result_payload: &str,
-    prior_head: &str,
-    resulting_head: &str,
-    revision_ids: &[String],
-    commit_ids: &[String],
+    insert: &AcceptanceReceiptInsert<'_>,
 ) -> Result<String, AcceptProposalError> {
     let created_at = client
         .query_one(
@@ -387,12 +396,12 @@ async fn insert_receipts(
                 &command.challenge_binding.canonical_command_digest,
                 &command.challenge_binding.idempotency_key,
                 &command.expected_authoritative_revision_id,
-                &prior_head,
-                &resulting_head,
-                &revision_ids,
-                &commit_ids,
-                &result_kind,
-                &result_payload,
+                &insert.prior_head,
+                &insert.resulting_head,
+                &insert.revision_ids,
+                &insert.commit_ids,
+                &insert.result_kind,
+                &insert.result_payload,
             ],
         )
         .await
@@ -413,7 +422,7 @@ async fn insert_receipts(
                 &command.proposal_revision_id,
                 &command.validation_receipt_id,
                 &command.selected_operation_id,
-                &result_kind,
+                &insert.result_kind,
             ],
         )
         .await
