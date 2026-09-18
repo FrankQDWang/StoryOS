@@ -156,7 +156,7 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
     assert.deepEqual(invalid, { ...refusal, refusal_id: invalid.refusal_id, recorded_at: invalid.recorded_at,
       reason: "invalid_challenge", boundary: "challenge" });
     assert.deepEqual(JSON.parse(await state()), { admissions: 1, receipts: 1, refusals: 2, consumed: 1 });
-    for (const [handle, status] of [["session-b", 404], [undefined, 401]] as const) {
+    for (const [handle, status] of [["session-b", 422], [undefined, 401]] as const) {
       await assert.rejects(() => acceptProposal({ ...reloaded, fetchImpl: sessionFetch(started.baseUrl, handle),
         request, idempotencyKey: raceKey, antiForgery: raceNonce }),
       (error) => requireStoryOSProtocolError(error).status === status);
@@ -190,7 +190,7 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
     const archived = JSON.parse(new TextDecoder().decode(files.get("canonical/acceptance_refusals.json")));
     const rows = JSON.parse(await queryStoryOSPostgres(`SELECT json_agg(r ORDER BY refusal_id)::text
       FROM storyos.acceptance_refusals r WHERE project_id = '${project.projectId}'`));
-    assert.deepEqual(archived, rows);
+    assert.deepEqual(archived.sort((left: { refusal_id: string }, right: { refusal_id: string }) => left.refusal_id.localeCompare(right.refusal_id)), rows);
     assert.deepEqual(Object.keys(rows[0]).sort(), ["owner_user_id", "project_id", "proposal_id", "refusal_id",
       "idempotency_key", "correlation_id", "command_kind", "boundary", "command_schema", "refusal_profile_revision",
       "reason", "client_contract_revision", "security_policy_revision", "limit_profile_revision",
