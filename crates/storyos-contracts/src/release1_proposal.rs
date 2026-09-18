@@ -58,6 +58,44 @@ pub enum OptionalValidationReceiptInspect {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptanceRefusalReason {
+    StaleWriter,
+    SessionChanged,
+    InvalidChallenge,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptanceRefusalBoundary {
+    Challenge,
+    WriterSession,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum OptionalAcceptanceRefusalInspect {
+    Absent,
+    Present(Box<AcceptanceRefusalInspect>),
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptanceRefusalInspect {
+    pub refusal_id: String,
+    pub correlation_id: String,
+    pub reason: AcceptanceRefusalReason,
+    pub boundary: AcceptanceRefusalBoundary,
+    pub command_schema: String,
+    pub refusal_profile_revision: String,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub limit_profile_revision: String,
+    pub challenge_rate_policy_revision: String,
+    pub recorded_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct BlockProposalInspect {
     pub proposal_id: String,
@@ -66,6 +104,7 @@ pub struct BlockProposalInspect {
     pub generation: String,
     pub validation: String,
     pub condition_refs: Vec<String>,
+    pub latest_acceptance_refusal: OptionalAcceptanceRefusalInspect,
     pub closure: String,
     pub operation_id: String,
     pub operation_resolution: String,

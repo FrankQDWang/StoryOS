@@ -159,6 +159,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ("replay_generations", "canonical/replay_generations.json"),
     ("scope_counters", "canonical/scope_counters.json"),
     ("validation_receipts", "canonical/validation_receipts.json"),
+    ("acceptance_refusals", "canonical/acceptance_refusals.json"),
     (
         "volume_removal_decisions",
         "canonical/volume_removal_decisions.json",

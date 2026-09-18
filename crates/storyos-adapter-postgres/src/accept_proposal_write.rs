@@ -556,7 +556,24 @@ pub(super) async fn insert_accept_admission(
         .await
         .map_err(accept_database_error)?;
     if inserted != 1 {
-        return Err(AcceptProposalError::InvalidChallenge);
+        let session = client.query_opt(
+            "SELECT client_session_binding_ref = $4 AND client_session_generation = $5::text::numeric
+                    AND client_contract_revision = $6 AND security_policy_revision = $7
+             FROM storyos.editor_sessions WHERE owner_user_id = $1::text::uuid
+               AND project_id = $2::text::uuid AND editor_session_id = $3::text::uuid",
+            &[&command.project_scope.owner_user_id.as_ref(), &command.project_scope.project_id.as_ref(),
+              &command.editor_session_id.as_ref(), &command.client_binding.binding_ref, &client_session_generation,
+              &command.client_binding.client_contract_revision, &command.client_binding.security_policy_revision],
+        ).await.map_err(accept_database_error)?;
+        let Some(session) = session else {
+            return Err(AcceptProposalError::InvalidChallenge);
+        };
+        let reason = if session.get::<_, bool>(0) {
+            storyos_application::AcceptanceRefusalReason::StaleWriter
+        } else {
+            storyos_application::AcceptanceRefusalReason::SessionChanged
+        };
+        return Err(AcceptProposalError::PreAdmissionRefused { reason });
     }
     Ok(())
 }

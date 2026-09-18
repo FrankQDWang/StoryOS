@@ -215,6 +215,7 @@ def validate_bootstrap_sources(migration: dict[str, Any], errors: list[str]) -> 
         "crates/storyos-adapter-postgres/migrations/0050_edit_proposal_candidate.sql",
         "crates/storyos-adapter-postgres/migrations/0051_accept_proposal.sql",
         "crates/storyos-adapter-postgres/migrations/0052_acceptance_conditions.sql",
+        "crates/storyos-adapter-postgres/migrations/0053_acceptance_refusals.sql",
     ]
     if bootstrap.get("transaction_boundary") != "one_postgresql_transaction":
         fail(errors, "Release 1 bootstrap must use one PostgreSQL transaction")

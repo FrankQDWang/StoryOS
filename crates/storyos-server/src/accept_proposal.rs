@@ -268,6 +268,19 @@ fn canonical_json(value: serde_json::Value) -> serde_json::Value {
 
 fn accept_error(error: AcceptProposalError) -> ApiError {
     match error {
+        AcceptProposalError::PreAdmissionRefused { reason } => match reason {
+            storyos_application::AcceptanceRefusalReason::InvalidChallenge => problem(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "challenge_invalid",
+                "The Acceptance challenge is invalid.",
+            ),
+            storyos_application::AcceptanceRefusalReason::StaleWriter
+            | storyos_application::AcceptanceRefusalReason::SessionChanged => problem(
+                StatusCode::CONFLICT,
+                "acceptance_session_ineligible",
+                "This Acceptance session is no longer eligible. Inspect the Proposal and restore writer access before a new attempt.",
+            ),
+        },
         AcceptProposalError::BindingConflict => problem(
             StatusCode::CONFLICT,
             "idempotency_binding_conflict",

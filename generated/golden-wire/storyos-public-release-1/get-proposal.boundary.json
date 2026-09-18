@@ -12,6 +12,9 @@
     "condition_refs": [],
     "generation": "ready",
     "kind": "block_edit",
+    "latest_acceptance_refusal": {
+      "kind": "absent"
+    },
     "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
     "operation_id": "018f0000-0000-7001-8000-000000000b04",
     "operation_resolution": "pending",

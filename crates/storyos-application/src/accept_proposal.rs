@@ -57,6 +57,9 @@ pub enum AcceptProposalError {
     BindingConflict,
     HistoricalAcknowledgementUnavailable,
     InvalidChallenge,
+    PreAdmissionRefused {
+        reason: crate::AcceptanceRefusalReason,
+    },
     MissingProject,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
@@ -64,6 +67,9 @@ pub enum AcceptProposalError {
 impl std::fmt::Display for AcceptProposalError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::PreAdmissionRefused { .. } => {
+                formatter.write_str("Acceptance was refused before Admission")
+            }
             Self::BindingConflict => formatter.write_str("The Acceptance binding conflicts"),
             Self::HistoricalAcknowledgementUnavailable => {
                 formatter.write_str("The original Acceptance acknowledgement cannot be recovered")
@@ -79,7 +85,8 @@ impl std::error::Error for AcceptProposalError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             Self::Unavailable(source) => Some(source.as_ref()),
-            Self::BindingConflict
+            Self::PreAdmissionRefused { .. }
+            | Self::BindingConflict
             | Self::HistoricalAcknowledgementUnavailable
             | Self::InvalidChallenge
             | Self::MissingProject => None,
