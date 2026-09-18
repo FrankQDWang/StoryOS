@@ -157,11 +157,12 @@ async function prepare(baseUrl: string, createKey: string, title: string, ns: st
   };
   const createdVolume = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes", volume.command_schema, await digestCreateVolume(volume), id(`${ns}4`), (antiForgery) => createVolume({ baseUrl, projectId, fetchImpl, idempotencyKey: id(`${ns}4`), antiForgery, request: volume }));
   if (createdVolume.effect.kind !== "authoritative_applied") throw new Error("Create Volume must apply");
+  const volumeId = createdVolume.effect.volume_id;
   const chapter = {
     command_schema: "storyos.command.create-chapter.request.v1" as const,
     create_chapter_input: { title: "Chapter A", expected_tree_revision: "2", ...BINDING, correlation_id: id(`${ns}5`) },
   };
-  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId: createdVolume.effect.volume_id, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
+  const createdChapter = await challenged(baseUrl, fetchImpl, projectId, "POST", "/api/v1/projects/{project_id}/volumes/{volume_id}/chapters", chapter.command_schema, await digestCreateChapter(chapter), id(`${ns}6`), (antiForgery) => createChapter({ baseUrl, projectId, volumeId, fetchImpl, idempotencyKey: id(`${ns}6`), antiForgery, request: chapter }));
   if (createdChapter.effect.kind !== "authoritative_applied") throw new Error("Create Chapter must apply");
   return { fetchImpl, projectId, chapterId: createdChapter.effect.chapter_id };
 }
