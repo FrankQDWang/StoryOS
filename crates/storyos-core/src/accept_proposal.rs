@@ -8,6 +8,7 @@ pub struct AcceptProposal {
     pub retention_retained: bool,
     pub generation_ready: bool,
     pub closure_open: bool,
+    pub validation_current: bool,
     pub validation_receipt_valid: bool,
     pub validation_receipt_matches_revision: bool,
     pub selected_operation_pending: bool,
@@ -60,7 +61,11 @@ pub fn accept_proposal(command: &AcceptProposal) -> AcceptProposalResult {
             reason: AcceptProposalRefusal::StaleProposalRevision,
         };
     }
-    if !command.retention_retained || !command.generation_ready || !command.closure_open {
+    if !command.retention_retained
+        || !command.generation_ready
+        || !command.closure_open
+        || !command.validation_current
+    {
         return AcceptProposalResult::Refused {
             reason: AcceptProposalRefusal::NotEligible,
         };

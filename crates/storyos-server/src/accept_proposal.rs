@@ -228,6 +228,7 @@ fn accept_response(
             prior_authoritative_revision_ids: prior,
             resulting_authoritative_revision_ids: resulting,
             authoritative_commit_ids: commits,
+            condition_refs: settlement.condition_refs,
             result,
             created_at: settlement.receipt_created_at,
         },

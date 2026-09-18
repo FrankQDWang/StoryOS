@@ -65,6 +65,7 @@ pub(super) struct LoadedProposal {
     current_revision_id: String,
     generation: String,
     closure: String,
+    validation_current: bool,
     candidate_text: String,
     chapter_id: String,
     operation_id: String,
@@ -74,6 +75,7 @@ pub(super) struct LoadedProposal {
     receipt_revision_id: Option<String>,
     receipt_candidate_text: Option<String>,
     current_head_revision_id: Option<String>,
+    validated_target_matches_head: bool,
 }
 
 async fn persist_accept(
@@ -91,14 +93,16 @@ async fn persist_accept(
         retention_retained: true,
         generation_ready: loaded.generation == "ready",
         closure_open: loaded.closure == "open",
+        validation_current: loaded.validation_current,
         validation_receipt_valid: loaded.receipt_result.as_deref() == Some("valid")
             && loaded.receipt_id.as_deref() == Some(command.validation_receipt_id.as_str()),
         validation_receipt_matches_revision: loaded.receipt_revision_id.as_deref()
             == Some(command.proposal_revision_id.as_str()),
         selected_operation_pending: loaded.operation_id == command.selected_operation_id
             && loaded.operation_resolution == "pending",
-        expected_target_matches_head: loaded.current_head_revision_id.as_deref()
-            == Some(command.expected_authoritative_revision_id.as_str()),
+        expected_target_matches_head: loaded.validated_target_matches_head
+            && loaded.current_head_revision_id.as_deref()
+                == Some(command.expected_authoritative_revision_id.as_str()),
         candidate_unaltered: loaded.receipt_candidate_text.as_deref()
             == Some(loaded.candidate_text.as_str()),
     });
@@ -148,7 +152,13 @@ async fn load_proposal(
                     operation.operation_id::text,
                     operation.resolution, receipt.validation_receipt_id::text, receipt.result,
                     receipt.proposal_revision_id::text, receipt.candidate_text,
-                    chapter_head.current_revision_id::text
+                    chapter_head.current_revision_id::text,
+                    revision.validation = 'valid' AND NOT EXISTS (SELECT 1 FROM storyos.proposal_validation_conditions AS condition
+                      WHERE (condition.owner_user_id, condition.project_id, condition.proposal_id,
+                             condition.proposal_revision_id) =
+                            (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)),
+                    COALESCE(receipt.base_authoritative_revision_id = chapter_head.current_revision_id
+                      AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false)
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -193,6 +203,8 @@ async fn load_proposal(
         receipt_revision_id: row.get(9),
         receipt_candidate_text: row.get(10),
         current_head_revision_id: row.get(11),
+        validation_current: row.get(12),
+        validated_target_matches_head: row.get(13),
     }))
 }
 

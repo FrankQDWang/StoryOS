@@ -9,6 +9,7 @@
     "candidate_text": "Guard the narrator voice in this passage.",
     "chapter_id": "018f0000-0000-7001-8000-000000000301",
     "closure": "open",
+    "condition_refs": [],
     "generation": "ready",
     "kind": "block_edit",
     "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",

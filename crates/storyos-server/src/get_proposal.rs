@@ -31,6 +31,7 @@ pub(super) async fn get_proposal(
             revision_id: record.revision_id,
             generation: record.generation,
             validation: record.validation,
+            condition_refs: record.condition_refs,
             closure: record.closure,
             operation_id: record.operation_id,
             operation_resolution: record.operation_resolution,

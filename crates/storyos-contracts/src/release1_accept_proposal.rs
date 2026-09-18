@@ -86,6 +86,7 @@ pub struct AcceptanceReceipt {
     pub prior_authoritative_revision_ids: Vec<String>,
     pub resulting_authoritative_revision_ids: Vec<String>,
     pub authoritative_commit_ids: Vec<String>,
+    pub condition_refs: Vec<String>,
     pub result: AcceptanceReceiptResult,
     pub created_at: String,
 }

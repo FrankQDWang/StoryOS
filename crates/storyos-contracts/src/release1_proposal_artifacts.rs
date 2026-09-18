@@ -162,6 +162,7 @@ fn proposal_fixture() -> Value {
             "revision_id": "018f0000-0000-7001-8000-000000000b03",
             "generation": "ready",
             "validation": "valid",
+            "condition_refs": [],
             "closure": "open",
             "operation_id": "018f0000-0000-7001-8000-000000000b04",
             "operation_resolution": "pending",

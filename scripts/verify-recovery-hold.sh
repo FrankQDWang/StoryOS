@@ -166,6 +166,17 @@ if [ "$recovery_drill" = "mixed" ]; then
   echo "Created two empty Projects through public createProject before backup"
 fi
 
+docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
+  -c "ALTER ROLE storyos_runtime PASSWORD 'runtime'" >/dev/null
+STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
+STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
+STORYOS_VITEST_FILE_ORDER=test/node-postgresql/accept-proposal-http.integration.test.ts: \
+  pnpm --dir apps/web exec vitest run --project node-postgresql \
+    test/node-postgresql/accept-proposal-http.integration.test.ts
+start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+acceptance_before=$(node scripts/inspect-acceptance-conditions.mjs "$primary" "$STORYOS_DEV_SERVER")
+stop_recovery_drill_server
+
 role_count=$(docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
   "SELECT count(*) FROM pg_roles WHERE rolname IN ('storyos_backup', 'storyos_restore')")
 if [ "$role_count" != "2" ]; then
@@ -641,6 +652,11 @@ fi
 
 start_recovery_drill_server \
   "postgres://storyos_runtime:runtime@127.0.0.1:$hold_port/postgres"
+acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER")
+if [ "$acceptance_before" != "$acceptance_after" ]; then
+  echo "Restored Acceptance conditions or immutable evidence changed" >&2
+  exit 1
+fi
 export STORYOS_PHYSICAL_DRILL=1
 echo "Running exact-dist continued writing after restore"
 pnpm --dir apps/web exec vitest run --project browser-exact-dist

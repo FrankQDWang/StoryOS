@@ -33,6 +33,8 @@ This resolves [Specify the Manuscript Revision and Proposal State Machine](https
 
 ## Consequences
 
+- A failed Acceptance preserves its product outcome across reloads and sessions. `Invalid` updates the current Proposal validation projection; `Conflicted` records exactly one Proposal Conflict. Each change commits atomically with the Acceptance Receipt, and exact retry returns the same evidence without another condition. Historical Validation Receipts remain immutable. Acceptance stays unavailable until a new current Proposal Revision validates; target drift requires explicit replanning. The conflict surface offers replan, copy, and reject. A session refusal does not change Proposal content validity. These rules implement the existing [Acceptance allocation matrix](../foundation/manuscript-revision-proposal-state-machine.md#82-acceptance-receipt).
+- Release 1 stores an Acceptance failure condition separately from immutable Proposal Revisions and Validation Receipts. The current Proposal query reads that condition for the exact current Revision. Conflict identity is linked from the Acceptance Receipt. The owning storage family exports the condition with its Receipt and Revision references. The new bootstrap catalog requires the existing storage-owned activation or reprovision path; runtime traffic does not upgrade an older catalog.
 - Core and editor adapters need versioned Rust/TypeScript contracts plus shared digest and coordinate golden vectors.
 - Author input may require an explicit replan or recovery Draft in conservative conflict and crash windows.
 - Unified undo needs an independent Author Action Sequence, a derived Author Undo Frontier, explicit Compensation entries, and typed handlers; there is no generic durable redo.

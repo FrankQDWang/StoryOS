@@ -122,6 +122,12 @@
         "command_digest": {
           "$ref": "#/$defs/DigestValue"
         },
+        "condition_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "created_at": {
           "type": "string"
         },
@@ -175,6 +181,7 @@
         "prior_authoritative_revision_ids",
         "resulting_authoritative_revision_ids",
         "authoritative_commit_ids",
+        "condition_refs",
         "result",
         "created_at"
       ],

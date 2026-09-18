@@ -44,7 +44,7 @@ pub(super) async fn read_accept_settlement(
                         activity.project_activity_position::text,
                         commit.manuscript_object_id::text,
                         idempotency.acknowledgement_format,
-                        idempotency.response_project::text
+                        idempotency.response_project::text, receipt.condition_refs
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -173,6 +173,7 @@ pub(super) async fn read_accept_settlement(
             },
             effect,
             receipt_created_at: row.get(5),
+            condition_refs: row.get(14),
             response_project,
         })
     }

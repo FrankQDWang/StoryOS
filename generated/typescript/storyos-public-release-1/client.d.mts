@@ -397,7 +397,7 @@ export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: stri
 
 export type OptionalValidationReceiptInspect = { "kind": "absent" } | { "kind": "present", validation_receipt_id: string, result: string, };
 
-export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, };
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, };
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
@@ -407,7 +407,7 @@ export type AcceptProposalRequest = { command_schema: string, accept_proposal_in
 
 export type AcceptanceReceiptResult = "applied" | "invalid" | "conflicted" | "refused";
 
-export type AcceptanceReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, validation_receipt_id: string, selected_operation_id: string, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: AcceptanceReceiptResult, created_at: string, };
+export type AcceptanceReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, validation_receipt_id: string, selected_operation_id: string, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, condition_refs: Array<string>, result: AcceptanceReceiptResult, created_at: string, };
 
 export type AcceptProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending";
 
