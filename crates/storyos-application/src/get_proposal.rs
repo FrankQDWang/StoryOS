@@ -11,6 +11,7 @@ pub struct BlockProposalRecord {
     pub revision_id: String,
     pub generation: String,
     pub validation: String,
+    pub condition_refs: Vec<String>,
     pub closure: String,
     pub operation_id: String,
     pub operation_resolution: String,

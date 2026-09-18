@@ -17,6 +17,12 @@
         "closure": {
           "type": "string"
         },
+        "condition_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "generation": {
           "type": "string"
         },
@@ -62,6 +68,7 @@
         "revision_id",
         "generation",
         "validation",
+        "condition_refs",
         "closure",
         "operation_id",
         "operation_resolution",

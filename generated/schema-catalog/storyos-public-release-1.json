@@ -239,7 +239,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
-      "sha256": "sha256:3c3d309e2936221da37be0be4106b18079aa0cc65fa000bffbc6344976b63c84"
+      "sha256": "sha256:e819a42565e529470fe57df56399e5daf9048cba1b08aacb8c5bf2e9e9c2db5b"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-request.schema.json",
@@ -249,7 +249,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-response.schema.json",
       "schema_id": "storyos.command.accept-proposal.response.v1",
-      "sha256": "sha256:564ae1df78eb4424d1ded49ff3a6bdf7483c10aab986d8094e42bb0c26ae477d"
+      "sha256": "sha256:157e46ff6cd1655a75b375bbb7dd9b689ea35d08ec1578a6b7eca4c099b6c353"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-request.schema.json",

@@ -19,6 +19,9 @@ import {
   digestCreateChapter,
   digestCreateEditorSession,
   digestCreateVolume,
+  digestExportProjectArchive,
+  exportProjectArchive,
+  getExportOperation,
   digestUpdateProjectAssistance,
   getAgentRun,
   getChapter,
@@ -41,6 +44,8 @@ import {
   stopStoryOSServer as stopRealServer,
   withChallengeRetry,
 } from "../support/node-integration.ts";
+
+import { zipStoreFiles } from "../support/archive.ts";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const bin = (name: string) => join(repositoryRoot, "target", "release-package", process.platform === "win32" ? `${name}.exe` : name);
@@ -191,13 +196,14 @@ async function reviseCandidate(
   projectId: string,
   opened: Awaited<ReturnType<typeof getProposal>>,
   ns: string,
+  currentSession?: Awaited<ReturnType<typeof createEditorSession>>,
 ) {
   const sessionRequest: CreateEditorSessionRequest = {
     command_schema: "storyos.command.create-editor-session.request.v1",
     ...BINDING,
     correlation_id: id(`${ns}1`),
   };
-  const session = await challenged(
+  const session = currentSession ?? await challenged(
     baseUrl,
     fetchImpl,
     projectId,
@@ -230,7 +236,7 @@ async function reviseCandidate(
     editor_contract_revision: "storyos.editor-contract.release-1.v2",
     undo_group_id: id(`${ns}4`),
     completed_intent_record_id: id(`${ns}5`),
-    local_intent_sequence: "1",
+    local_intent_sequence: currentSession ? "2" : "1",
     author_edit_units: [{
       normalized_primitives: [{ kind: "replace_selection", from: 0, to: 5, text: "Keep" }],
       selection_snapshot: {
@@ -412,11 +418,11 @@ test("acceptProposal applies one pending Operation and retries the settled outco
   }
 });
 
-test("acceptProposal rejects stale revisions, invalid validation, changed heads, and altered candidates with zero authority effect", async () => {
-  const started = await startRealServer();
+test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)("acceptProposal retains %s across reload and refuses another attempt until revision", async (reason) => {
+  let started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("d211"), "Refuse Acceptance Novel", "d3");
+    const prepared = await prepare(started.baseUrl, id({ invalid_validation: "d211", changed_head: "d212", altered_candidate: "d213" }[reason]), "Refuse Acceptance Novel", "d3");
     const before = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
@@ -478,123 +484,116 @@ test("acceptProposal rejects stale revisions, invalid validation, changed heads,
     assert.equal(staleAccepted.receipt.result, "refused");
     if (staleAccepted.effect.kind !== "refused") throw new Error("expected refused");
     assert.equal(staleAccepted.effect.reason, "stale_proposal_revision");
-    const invalid: AcceptProposalRequest = {
+    if (reason === "altered_candidate") {
+      await queryPostgres(`UPDATE storyos.proposal_revisions
+        SET candidate_text = 'Tampered narrator voice.'
+        WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
+          AND revision_id = '${revised.proposal.revision_id}'::uuid`);
+    }
+    const request: AcceptProposalRequest = {
       command_schema: "storyos.command.accept-proposal.request.v1",
       accept_proposal_input: {
         proposal_revision_id: revised.proposal.revision_id,
-        validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
+        validation_receipt_id: reason === "invalid_validation"
+          ? opened.proposal.validation_receipt.validation_receipt_id
+          : revised.proposal.validation_receipt.validation_receipt_id,
         selected_operation_id: revised.proposal.operation_id,
-        expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
+        expected_authoritative_revision_id: reason === "changed_head"
+          ? id("d255") : before.chapter.current_revision.revision_id,
         editor_session_id: session.editor_session.editor_session_id,
-        ...BINDING,
-        correlation_id: id("d253"),
+        ...BINDING, correlation_id: id("d253"),
       },
     };
-    const invalidAccepted = await challenged(
-      started.baseUrl,
-      prepared.fetchImpl,
-      prepared.projectId,
-      "POST",
-      "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      invalid.command_schema,
-      await digestAcceptProposal(invalid),
-      id("d254"),
-      (antiForgery) => acceptProposal({
-        baseUrl: started.baseUrl,
-        projectId: prepared.projectId,
-        proposalId: revised.proposal.proposal_id,
-        fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("d254"),
-        antiForgery,
-        request: invalid,
-      }),
-    );
-    assert.equal(invalidAccepted.effect.kind, "invalid");
-    assert.equal(invalidAccepted.receipt.result, "invalid");
-    if (invalidAccepted.effect.kind !== "invalid") throw new Error("expected invalid");
-    assert.equal(invalidAccepted.effect.reason, "invalid_validation");
-    const invalidReload = await getProposal({
+    const command = {
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: revised.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
-    });
-    assert.deepEqual(invalidReload.proposal, { ...revised.proposal, validation: "invalid" });
-    const conflicted: AcceptProposalRequest = {
-      command_schema: "storyos.command.accept-proposal.request.v1",
-      accept_proposal_input: {
-        proposal_revision_id: revised.proposal.revision_id,
-        validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
-        selected_operation_id: revised.proposal.operation_id,
-        expected_authoritative_revision_id: id("d255"),
-        editor_session_id: session.editor_session.editor_session_id,
-        ...BINDING,
-        correlation_id: id("d256"),
-      },
+      idempotencyKey: id("d254"), request,
     };
-    const conflictedAccepted = await challenged(
-      started.baseUrl,
-      prepared.fetchImpl,
-      prepared.projectId,
-      "POST",
+    let originalNonce = "";
+    const failed = await challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      conflicted.command_schema,
-      await digestAcceptProposal(conflicted),
-      id("d257"),
-      (antiForgery) => acceptProposal({
-        baseUrl: started.baseUrl,
-        projectId: prepared.projectId,
-        proposalId: revised.proposal.proposal_id,
-        fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("d257"),
-        antiForgery,
-        request: conflicted,
-      }),
+      request.command_schema, await digestAcceptProposal(request), command.idempotencyKey,
+      async (antiForgery) => {
+        originalNonce = antiForgery;
+        if (reason === "changed_head") {
+          await queryPostgres(`CREATE FUNCTION storyos.test_condition_failure() RETURNS trigger
+            LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'condition fault'; END $$;
+            CREATE TRIGGER test_condition_failure BEFORE INSERT ON storyos.proposal_validation_conditions
+            FOR EACH ROW EXECUTE FUNCTION storyos.test_condition_failure();`);
+          try {
+            await assert.rejects(() => acceptProposal({ ...command, antiForgery }),
+              (error) => requireStoryOSProtocolError(error).status === 503);
+            assert.deepEqual((await getProposal(command)).proposal, revised.proposal);
+          } finally {
+            await queryPostgres(`DROP TRIGGER test_condition_failure ON storyos.proposal_validation_conditions;
+              DROP FUNCTION storyos.test_condition_failure();`);
+          }
+        }
+        return acceptProposal({ ...command, antiForgery });
+      },
     );
-    assert.equal(conflictedAccepted.effect.kind, "conflicted");
-    assert.equal(conflictedAccepted.receipt.result, "conflicted");
-    if (conflictedAccepted.effect.kind !== "conflicted") throw new Error("expected conflicted");
-    assert.equal(conflictedAccepted.effect.reason, "changed_head");
-    await queryPostgres(`
-      UPDATE storyos.proposal_revisions
-         SET candidate_text = 'Tampered narrator voice.'
-       WHERE owner_user_id = '${USER_A}'::uuid
-         AND project_id = '${prepared.projectId}'::uuid
-         AND revision_id = '${revised.proposal.revision_id}'::uuid;
-    `);
-    const altered: AcceptProposalRequest = {
-      command_schema: "storyos.command.accept-proposal.request.v1",
+    const validation = reason === "changed_head" ? "conflicted" : "invalid";
+    assert.deepEqual(failed.effect, { kind: validation, reason });
+    assert.equal(failed.receipt.condition_refs.length, reason === "changed_head" ? 1 : 0);
+    for (const ref of failed.receipt.condition_refs) assert.match(ref, UUID_V7);
+    const expected = {
+      ...revised.proposal, validation, condition_refs: failed.receipt.condition_refs,
+      candidate_text: reason === "altered_candidate" ? "Tampered narrator voice." : revised.proposal.candidate_text,
+    };
+    const reload = await getProposal(command);
+    assert.deepEqual(reload.proposal, expected);
+    const replayed = await Promise.all([0, 1].map(() => acceptProposal({ ...command, antiForgery: originalNonce })));
+    for (const replay of replayed) assert.deepEqual(replay, failed);
+    const retried: AcceptProposalRequest = {
+      ...request,
       accept_proposal_input: {
-        proposal_revision_id: revised.proposal.revision_id,
+        ...request.accept_proposal_input,
         validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
-        selected_operation_id: revised.proposal.operation_id,
         expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
-        editor_session_id: session.editor_session.editor_session_id,
-        ...BINDING,
-        correlation_id: id("d258"),
       },
     };
-    const alteredAccepted = await challenged(
-      started.baseUrl,
-      prepared.fetchImpl,
-      prepared.projectId,
-      "POST",
+    const refused = await challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-      altered.command_schema,
-      await digestAcceptProposal(altered),
-      id("d259"),
-      (antiForgery) => acceptProposal({
-        baseUrl: started.baseUrl,
-        projectId: prepared.projectId,
-        proposalId: revised.proposal.proposal_id,
-        fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("d259"),
-        antiForgery,
-        request: altered,
-      }),
+      retried.command_schema, await digestAcceptProposal(retried), id("d258"),
+      (antiForgery) => acceptProposal({ ...command, idempotencyKey: id("d258"), request: retried, antiForgery }),
     );
-    assert.equal(alteredAccepted.effect.kind, "invalid");
-    assert.equal(alteredAccepted.receipt.result, "invalid");
-    if (alteredAccepted.effect.kind !== "invalid") throw new Error("expected altered");
-    assert.equal(alteredAccepted.effect.reason, "altered_candidate");
+    assert.deepEqual(refused.effect, { kind: "refused", reason: "not_eligible" });
+    assert.deepEqual((await getProposal(command)).proposal, expected);
+    await assert.rejects(() => getProposal({ ...command, fetchImpl: browserFetch(started.baseUrl, "session-b") }),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+    if (reason === "changed_head") {
+      const archiveRequest = {
+        command_schema: "storyos.command.export-project-archive.request.v1" as const,
+        export_project_archive_input: { ...BINDING, correlation_id: id("d260"),
+          archive_profile: "storyos.project-export.v1",
+          archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" },
+      };
+      const archive = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+        "POST", "/api/v1/projects/{project_id}/exports", archiveRequest.command_schema,
+        await digestExportProjectArchive(archiveRequest), id("d261"),
+        (antiForgery) => exportProjectArchive({ ...command, request: archiveRequest, idempotencyKey: id("d261"), antiForgery }));
+      if (archive.effect.kind !== "admitted") throw new Error("expected admitted archive");
+      await settleOnce();
+      const archiveOptions = { ...command, exportId: archive.effect.export_id };
+      assert.equal((await getExportOperation(archiveOptions)).status, "ready");
+      const download = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${archive.effect.export_id}`,
+        { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+      assert.equal(download.status, 200);
+      const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+      const conditions = JSON.parse(new TextDecoder().decode(files.get("canonical/proposal_validation_conditions.json")));
+      assert.deepEqual(conditions, [{ owner_user_id: USER_A, project_id: prepared.projectId,
+        proposal_id: revised.proposal.proposal_id, proposal_revision_id: revised.proposal.revision_id,
+        acceptance_receipt_id: failed.receipt.receipt_id, validation: "conflicted",
+        conflict_id: failed.receipt.condition_refs[0] }]);
+    }
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+    assert.deepEqual((await getProposal({ ...command, baseUrl: started.baseUrl,
+      fetchImpl: browserFetch(started.baseUrl, "session-a") })).proposal, expected);
+
     const after = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
@@ -609,6 +608,24 @@ test("acceptProposal rejects stale revisions, invalid validation, changed heads,
       fetchImpl: prepared.fetchImpl,
     });
     assert.equal(stillPending.proposal.operation_resolution, "pending");
+    if (reason === "invalid_validation") {
+      const recovered = await reviseCandidate(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+        stillPending, "d27", session);
+      assert.equal(recovered.revised.proposal.validation, "valid");
+      assert.deepEqual(recovered.revised.proposal.condition_refs, []);
+      if (recovered.revised.proposal.validation_receipt.kind !== "present") throw new Error("expected validation");
+      const fresh: AcceptProposalRequest = { ...request, accept_proposal_input: {
+        ...request.accept_proposal_input,
+        proposal_revision_id: recovered.revised.proposal.revision_id,
+        validation_receipt_id: recovered.revised.proposal.validation_receipt.validation_receipt_id,
+      } };
+      const applied = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances", fresh.command_schema,
+        await digestAcceptProposal(fresh), id("d278"),
+        (antiForgery) => acceptProposal({ ...command, baseUrl: started.baseUrl, fetchImpl: prepared.fetchImpl,
+          request: fresh, idempotencyKey: id("d278"), antiForgery }));
+      assert.equal(applied.effect.kind, "applied");
+    }
   } finally {
     await stopRealServer(started.server);
   }

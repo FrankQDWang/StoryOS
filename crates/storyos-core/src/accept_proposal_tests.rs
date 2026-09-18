@@ -11,6 +11,7 @@ fn exact_eligible() -> AcceptProposal {
         retention_retained: true,
         generation_ready: true,
         closure_open: true,
+        validation_current: true,
         validation_receipt_valid: true,
         validation_receipt_matches_revision: true,
         selected_operation_pending: true,

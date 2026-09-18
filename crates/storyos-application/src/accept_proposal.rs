@@ -27,6 +27,7 @@ pub struct AcceptProposalSettlement {
     pub ids: AuthorCommandAdmissionIds,
     pub effect: AcceptProposalSettlementEffect,
     pub receipt_created_at: String,
+    pub condition_refs: Vec<String>,
     pub response_project: crate::Project,
 }
 

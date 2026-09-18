@@ -20,7 +20,8 @@ impl ProposalReader for PostgresProjectReader {
                         revision.base_authoritative_revision_id::text,
                         operation.reservation_state, revision.candidate_text,
                         proposal.source_run_id::text, proposal.source_decision_id::text,
-                        receipt.validation_receipt_id::text, receipt.result
+                        receipt.validation_receipt_id::text, receipt.result,
+                        failure.conflict_id::text
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
                      ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -33,18 +34,10 @@ impl ProposalReader for PostgresProjectReader {
                    JOIN storyos.proposal_operations AS operation
                      ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
                         (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
-                   LEFT JOIN LATERAL (
-                     SELECT receipt.result_payload->>'proposal_validation' AS validation
-                       FROM storyos.acceptance_receipts AS acceptance
-                       JOIN storyos.domain_receipts AS receipt
-                         ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
-                            (acceptance.owner_user_id, acceptance.project_id, acceptance.acceptance_receipt_id)
-                      WHERE (acceptance.owner_user_id, acceptance.project_id, acceptance.proposal_id,
-                             acceptance.proposal_revision_id) =
-                            (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)
-                        AND receipt.result_payload->>'proposal_validation' IN ('invalid', 'conflicted')
-                      ORDER BY receipt.created_at, receipt.receipt_id LIMIT 1
-                   ) AS failure ON true
+                   LEFT JOIN storyos.proposal_validation_conditions AS failure
+                     ON (failure.owner_user_id, failure.project_id, failure.proposal_id,
+                         failure.proposal_revision_id) =
+                        (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)
                    LEFT JOIN storyos.validation_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id, receipt.proposal_id,
                          receipt.proposal_revision_id) =
@@ -81,6 +74,7 @@ impl ProposalReader for PostgresProjectReader {
             source_decision_id: row.get(14),
             validation_receipt_id: row.get(15),
             validation_receipt_result: row.get(16),
+            condition_refs: row.get::<_, Option<String>>(17).into_iter().collect(),
         }))
     }
 }

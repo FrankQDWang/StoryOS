@@ -122,6 +122,7 @@ pub(super) async fn persist_applied(
             resulting_head: &ids.revision_id,
             revision_ids: std::slice::from_ref(&ids.revision_id),
             commit_ids: std::slice::from_ref(&ids.authoritative_commit_id),
+            condition_refs: &[],
         },
     )
     .await?;
@@ -217,6 +218,7 @@ pub(super) async fn persist_applied(
             project_activity_position,
         },
         receipt_created_at: created_at,
+        condition_refs: Vec::new(),
         response_project,
     })
 }
@@ -229,16 +231,12 @@ pub(super) async fn persist_zero(
     effect: AcceptProposalSettlementEffect,
 ) -> Result<AcceptProposalSettlement, AcceptProposalError> {
     let head = command.expected_authoritative_revision_id.clone();
-    let result_payload = serde_json::json!({
-        "reason": reason,
-        "proposal_validation": match &effect {
-            AcceptProposalSettlementEffect::Invalid { .. } => Some("invalid"),
-            AcceptProposalSettlementEffect::Conflicted { .. } => Some("conflicted"),
-            AcceptProposalSettlementEffect::Applied { .. }
-            | AcceptProposalSettlementEffect::Refused { .. } => None,
-        },
-    })
-    .to_string();
+    let result_payload = serde_json::json!({ "reason": reason }).to_string();
+    let condition_refs = if matches!(effect, AcceptProposalSettlementEffect::Conflicted { .. }) {
+        vec![Uuid::now_v7().to_string()]
+    } else {
+        Vec::new()
+    };
     let created_at = insert_receipts(
         client,
         command,
@@ -249,14 +247,41 @@ pub(super) async fn persist_zero(
             resulting_head: &head,
             revision_ids: &[],
             commit_ids: &[],
+            condition_refs: &condition_refs,
         },
     )
     .await?;
+    if matches!(
+        effect,
+        AcceptProposalSettlementEffect::Invalid { .. }
+            | AcceptProposalSettlementEffect::Conflicted { .. }
+    ) {
+        client
+            .execute(
+                "INSERT INTO storyos.proposal_validation_conditions
+               (owner_user_id, project_id, proposal_id, proposal_revision_id,
+                acceptance_receipt_id, validation, conflict_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, $6, $7::text::uuid)",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.proposal_id,
+                    &command.proposal_revision_id,
+                    &command.ids.receipt_id,
+                    &result_kind,
+                    &condition_refs.first(),
+                ],
+            )
+            .await
+            .map_err(accept_database_error)?;
+    }
     let response_project = settle_idempotency(client, command).await?;
     Ok(AcceptProposalSettlement {
         ids: command.ids.clone(),
         effect,
         receipt_created_at: created_at,
+        condition_refs,
         response_project,
     })
 }
@@ -373,6 +398,7 @@ struct AcceptanceReceiptInsert<'a> {
     resulting_head: &'a str,
     revision_ids: &'a [String],
     commit_ids: &'a [String],
+    condition_refs: &'a [String],
 }
 
 async fn insert_receipts(
@@ -392,7 +418,7 @@ async fn insert_receipts(
                      $5::text::uuid, 'acceptProposal', $6, $7::text::uuid,
                      'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
                      ARRAY[$10::text::uuid], $11::text[]::uuid[], '{}'::uuid[],
-                     $12::text[]::uuid[], '{}'::text[], '{}'::text[], '{}'::text[],
+                     $12::text[]::uuid[], '{}'::text[], '{}'::text[], $15::text[],
                      $13, $14::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -411,6 +437,7 @@ async fn insert_receipts(
                 &insert.commit_ids,
                 &insert.result_kind,
                 &insert.result_payload,
+                &insert.condition_refs,
             ],
         )
         .await

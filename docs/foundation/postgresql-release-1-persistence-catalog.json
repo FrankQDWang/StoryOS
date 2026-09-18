@@ -439,6 +439,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0051_accept_proposal.sql",
           "lf_sha256": "sha256:4bdf7fd234c428120213ee4b9067b0ca72b38f259a4e5eb6be5d521fea8892ba"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0052_acceptance_conditions.sql",
+          "lf_sha256": "sha256:d3f01db085697568707336470fb01ab1e5c464723324cbbfc43b89680fae2dc1"
         }
       ]
     },
@@ -568,7 +572,7 @@
     },
     {
       "family_id": "artifact-proposal-draft",
-      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_operation_resolutions", "proposal_generations", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "research_claims", "research_evidence_edges", "source_snapshots"],
+      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_operation_resolutions", "proposal_validation_conditions", "proposal_generations", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "research_claims", "research_evidence_edges", "source_snapshots"],
       "owner": "artifact",
       "authority_class": "artifact",
       "durability_class": "immutable_revisions_with_heads",

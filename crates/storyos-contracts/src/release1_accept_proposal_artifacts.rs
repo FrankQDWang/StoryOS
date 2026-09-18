@@ -177,6 +177,7 @@ fn command_fixture(created_at: &str) -> Value {
             "selected_operation_id": "018f0000-0000-7001-8000-000000000b04",
             "prior_authoritative_revision_ids": ["018f0000-0000-7001-8000-000000000b06"],
             "resulting_authoritative_revision_ids": ["018f0000-0000-7001-8000-000000000c15"],
+            "condition_refs": [],
             "authoritative_commit_ids": ["018f0000-0000-7001-8000-000000000c16"],
             "result": "applied",
             "created_at": created_at

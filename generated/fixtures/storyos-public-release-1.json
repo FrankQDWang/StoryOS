@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:5193bf7d206d2d06650bcb8b4d798d878fbff433da2815c324c4a23784844f50",
+  "corpus_digest": "sha256:d68239fadb6322f5d3016782699bb3f0d1a59dcbaf3c612d0d71733e56f42ac0",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [

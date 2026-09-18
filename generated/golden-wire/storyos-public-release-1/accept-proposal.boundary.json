@@ -41,6 +41,7 @@
       "profile": "storyos.command.acceptProposal.jcs.v1",
       "value_hex_lowercase": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
+    "condition_refs": [],
     "created_at": "1970-01-01T00:00:00.000Z",
     "idempotency_key": "018f0000-0000-7001-8000-000000000c14",
     "prior_authoritative_revision_ids": [
