@@ -13,8 +13,8 @@ use storyos_application::{
     ProjectCommandChallengeUse,
 };
 use storyos_core::{
-    AcceptProposal as CoreAccept, AcceptProposalConflict, AcceptProposalInvalid,
-    AcceptProposalRefusal, AcceptProposalResult, accept_proposal as classify,
+    AcceptProposal as CoreAccept, AcceptProposalInvalid, AcceptProposalRefusal,
+    AcceptProposalResult, accept_proposal as classify,
 };
 
 impl AcceptProposalStore for PostgresProjectReader {
