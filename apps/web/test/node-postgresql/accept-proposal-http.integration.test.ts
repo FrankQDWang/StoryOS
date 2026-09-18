@@ -352,11 +352,25 @@ test("acceptProposal applies one pending Operation and retries the settled outco
     });
     assert.equal(after.chapter.current_revision.body, REVISED);
     assert.equal(after.chapter.current_revision.revision_id, accepted.effect.authoritative_revision.revision_id);
+    const foreignFetch = browserFetch(started.baseUrl, "session-b");
+    const acceptDigest = await digestAcceptProposal(acceptRequest);
     await assert.rejects(
-      () => acceptProposal({
-        ...acceptOptions,
-        fetchImpl: browserFetch(started.baseUrl, "session-b"),
-      }),
+      () => challenged(
+        started.baseUrl,
+        foreignFetch,
+        prepared.projectId,
+        "POST",
+        "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+        acceptRequest.command_schema,
+        acceptDigest,
+        id("d153"),
+        (antiForgery) => acceptProposal({
+          ...acceptOptions,
+          fetchImpl: foreignFetch,
+          idempotencyKey: id("d153"),
+          antiForgery,
+        }),
+      ),
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 404 && !String(protocol.responseBody).includes(USER_A);
