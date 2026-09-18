@@ -1,5 +1,20 @@
 {
   "$defs": {
+    "AcceptanceRefusalBoundary": {
+      "enum": [
+        "challenge",
+        "writer_session"
+      ],
+      "type": "string"
+    },
+    "AcceptanceRefusalReason": {
+      "enum": [
+        "stale_writer",
+        "session_changed",
+        "invalid_challenge"
+      ],
+      "type": "string"
+    },
     "BlockProposalInspect": {
       "additionalProperties": false,
       "properties": {
@@ -29,6 +44,9 @@
         "kind": {
           "const": "block_edit",
           "type": "string"
+        },
+        "latest_acceptance_refusal": {
+          "$ref": "#/$defs/OptionalAcceptanceRefusalInspect"
         },
         "manuscript_block_id": {
           "format": "uuid",
@@ -69,6 +87,7 @@
         "generation",
         "validation",
         "condition_refs",
+        "latest_acceptance_refusal",
         "closure",
         "operation_id",
         "operation_resolution",
@@ -81,6 +100,80 @@
         "validation_receipt"
       ],
       "type": "object"
+    },
+    "OptionalAcceptanceRefusalInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "boundary": {
+              "$ref": "#/$defs/AcceptanceRefusalBoundary"
+            },
+            "challenge_rate_policy_revision": {
+              "type": "string"
+            },
+            "client_contract_revision": {
+              "type": "string"
+            },
+            "command_schema": {
+              "type": "string"
+            },
+            "correlation_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "limit_profile_revision": {
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AcceptanceRefusalReason"
+            },
+            "recorded_at": {
+              "type": "string"
+            },
+            "refusal_id": {
+              "type": "string"
+            },
+            "refusal_profile_revision": {
+              "type": "string"
+            },
+            "security_policy_revision": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "refusal_id",
+            "correlation_id",
+            "reason",
+            "boundary",
+            "command_schema",
+            "refusal_profile_revision",
+            "client_contract_revision",
+            "security_policy_revision",
+            "limit_profile_revision",
+            "challenge_rate_policy_revision",
+            "recorded_at"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "OptionalValidationReceiptInspect": {
       "oneOf": [

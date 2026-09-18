@@ -210,8 +210,9 @@ pub use release1_project_export_query::{
     GET_EXPORT_OPERATION_RESPONSE_SCHEMA_ID, GetExportOperationResponse,
 };
 pub use release1_proposal::{
-    BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID,
-    GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
+    AcceptanceRefusalBoundary, AcceptanceRefusalReason, BlockProposalInspect, GET_PROPOSAL_METHOD,
+    GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID, GET_PROPOSAL_RESPONSE_SCHEMA_ID,
+    GetProposalRequest, GetProposalResponse, OptionalAcceptanceRefusalInspect,
     OptionalValidationReceiptInspect, ProposalSourceInspect,
 };
 pub use release1_readable_export::{

@@ -36,4 +36,25 @@ for (const row of rows) {
   assert.match(isolated, /\n0\nROLLBACK/);
   inspected.push({ evidence: row, proposal: result.proposal });
 }
-process.stdout.write(JSON.stringify(inspected));
+const refusals = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+  "-U", "postgres", "-Atc", "SELECT json_agg(row_to_json(r) ORDER BY refusal_id) FROM storyos.acceptance_refusals r"], { encoding: "utf8" }));
+assert.ok(refusals.length > 0);
+const refusalProposals = [];
+for (const row of refusals) {
+  const result = await getProposal({ baseUrl, projectId: row.project_id, proposalId: row.proposal_id,
+    fetchImpl: (input, init) => {
+      const headers = new Headers(init?.headers);
+      headers.set("origin", baseUrl);
+      headers.set("cookie", "storyos_session=session-a");
+      return fetch(input, { ...init, headers });
+    } });
+  assert.equal(result.proposal.latest_acceptance_refusal.kind, "present");
+  refusalProposals.push(result.proposal);
+  const isolated = execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
+    "-U", "postgres", "-Atc", `BEGIN; SET LOCAL ROLE storyos_runtime;
+      SET LOCAL storyos.owner_user_id = '018f0000-0000-7001-8000-000000000101';
+      SET LOCAL storyos.project_id = '${row.project_id}';
+      SELECT count(*) FROM storyos.acceptance_refusals; ROLLBACK;`], { encoding: "utf8" });
+  assert.match(isolated, /\n0\nROLLBACK/);
+}
+process.stdout.write(JSON.stringify({ conditions: inspected, refusals, refusalProposals }));

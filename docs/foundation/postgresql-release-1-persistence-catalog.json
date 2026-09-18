@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:7eefe9c85be291b14bd268754e67fd76f62848c56bda7081f409fc4a1a0e010f"
+    "digest": "sha256:968c92d950247ffd2923f077210606b9e8e6ee2632516b16484931ba6cc74ba7"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:c76e8e0c43ad11a0d1d908568533bc0ebf914a65002a1c640f9b839ad94b6062",
+    "migration_chain_digest": "sha256:0c765182e623886e589401a2498137ce95aaa03abf97ccc980daae7c5b97a8f6",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:5bbf3c4893c72a08a2af4c3de54ecfcd91db66fe60b5e3f113800dcfd02eb357",
+      "manifest_sha256": "sha256:fa60128a1f9ac1785b11fcece1347ccbc5c14dde0dbfe6e50b8a0e118b98b9f7",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -443,6 +443,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0052_acceptance_conditions.sql",
           "lf_sha256": "sha256:e975d552bc815f59c15b57c66e7d3c9940ddd28a643347e2381d6a8153d75ae9"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0053_acceptance_refusals.sql",
+          "lf_sha256": "sha256:d26f7d67b247db3c4717acc31f208ff7f292ebd857216044d537d96f223808be"
         }
       ]
     },
@@ -604,7 +608,7 @@
     },
     {
       "family_id": "operational-admission-editor",
-      "table_families": ["anti_forgery_challenges", "author_command_admissions", "author_command_admission_settlements", "author_command_admission_reconfirmations", "author_command_admission_outcome_unknown_observations", "human_readable_manuscript_export_operations", "project_export_operations", "pinned_export_sources", "editor_sessions", "project_writer_generations", "editor_session_base_snapshots", "editor_input_fences", "proposal_pause_fences"],
+      "table_families": ["anti_forgery_challenges", "acceptance_refusals", "author_command_admissions", "author_command_admission_settlements", "author_command_admission_reconfirmations", "author_command_admission_outcome_unknown_observations", "human_readable_manuscript_export_operations", "project_export_operations", "pinned_export_sources", "editor_sessions", "project_writer_generations", "editor_session_base_snapshots", "editor_input_fences", "proposal_pause_fences"],
       "owner": "admission",
       "authority_class": "operational",
       "durability_class": "append_only_with_current_generation",
@@ -616,7 +620,7 @@
       "head": "current_writer_generation",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "admission_and_writer_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "deleteProject", "createEditorSession", "getEditorSession", "getApplyAuthorEditOutcome", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "admission_persistence", "operation_ids": ["createProjectChallenge", "createProjectCommandChallenge", "createProject", "updateProject", "archiveProject", "deleteProject", "createEditorSession", "getEditorSession", "getProposal", "getApplyAuthorEditOutcome", "takeOverProjectWriter"], "operation_selector": {"mode": "all_author_command_operations"}, "event_selector": null, "settlement_modes": ["challenge", "sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-run-mailbox",

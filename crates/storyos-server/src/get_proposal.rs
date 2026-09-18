@@ -32,6 +32,39 @@ pub(super) async fn get_proposal(
             generation: record.generation,
             validation: record.validation,
             condition_refs: record.condition_refs,
+            latest_acceptance_refusal: match record.latest_acceptance_refusal {
+                None => contracts::OptionalAcceptanceRefusalInspect::Absent,
+                Some(refusal) => contracts::OptionalAcceptanceRefusalInspect::Present {
+                    refusal_id: refusal.refusal_id,
+                    correlation_id: refusal.correlation_id,
+                    reason: match refusal.reason {
+                        storyos_application::AcceptanceRefusalReason::StaleWriter => {
+                            contracts::AcceptanceRefusalReason::StaleWriter
+                        }
+                        storyos_application::AcceptanceRefusalReason::SessionChanged => {
+                            contracts::AcceptanceRefusalReason::SessionChanged
+                        }
+                        storyos_application::AcceptanceRefusalReason::InvalidChallenge => {
+                            contracts::AcceptanceRefusalReason::InvalidChallenge
+                        }
+                    },
+                    boundary: match refusal.boundary {
+                        storyos_application::AcceptanceRefusalBoundary::Challenge => {
+                            contracts::AcceptanceRefusalBoundary::Challenge
+                        }
+                        storyos_application::AcceptanceRefusalBoundary::WriterSession => {
+                            contracts::AcceptanceRefusalBoundary::WriterSession
+                        }
+                    },
+                    command_schema: refusal.command_schema,
+                    refusal_profile_revision: refusal.refusal_profile_revision,
+                    client_contract_revision: refusal.client_contract_revision,
+                    security_policy_revision: refusal.security_policy_revision,
+                    limit_profile_revision: refusal.limit_profile_revision,
+                    challenge_rate_policy_revision: refusal.challenge_rate_policy_revision,
+                    recorded_at: refusal.recorded_at,
+                },
+            },
             closure: record.closure,
             operation_id: record.operation_id,
             operation_resolution: record.operation_resolution,

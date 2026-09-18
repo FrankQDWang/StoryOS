@@ -9,8 +9,8 @@ use write::{insert_accept_admission, persist_applied, persist_zero};
 use super::*;
 use storyos_application::{
     AcceptProposalCommand, AcceptProposalError, AcceptProposalSettlement,
-    AcceptProposalSettlementEffect, AcceptProposalStore, ProjectCommandChallengeError,
-    ProjectCommandChallengeUse,
+    AcceptProposalSettlementEffect, AcceptProposalStore, AcceptanceRefusalBoundary,
+    AcceptanceRefusalReason, ProjectCommandChallengeError, ProjectCommandChallengeUse,
 };
 use storyos_core::{
     AcceptProposal as CoreAccept, AcceptProposalInvalid, AcceptProposalRefusal,
@@ -26,10 +26,27 @@ impl AcceptProposalStore for PostgresProjectReader {
             .begin_serializable_project_command_transaction(&command.project_scope)
             .await
             .map_err(accept_challenge_error)?;
-        let challenge_use = transaction
+        let challenge_use = match transaction
             .consume(&command.challenge_binding, &command.nonce_digest)
             .await
-            .map_err(accept_challenge_error)?;
+        {
+            Ok(challenge_use) => challenge_use,
+            Err(ProjectCommandChallengeError::InvalidOrExpired) => {
+                transaction
+                    .rollback()
+                    .await
+                    .map_err(accept_challenge_error)?;
+                let reason = self
+                    .retain_acceptance_refusal(
+                        command,
+                        AcceptanceRefusalReason::InvalidChallenge,
+                        AcceptanceRefusalBoundary::Challenge,
+                    )
+                    .await?;
+                return Err(AcceptProposalError::PreAdmissionRefused { reason });
+            }
+            Err(error) => return Err(accept_challenge_error(error)),
+        };
         match challenge_use {
             ProjectCommandChallengeUse::ExactRetrySettled { result_reference } => {
                 transaction
@@ -52,8 +69,25 @@ impl AcceptProposalStore for PostgresProjectReader {
                         Ok(settlement)
                     }
                     Err(error) => {
-                        let _rollback = transaction.rollback().await;
-                        Err(error)
+                        transaction
+                            .rollback()
+                            .await
+                            .map_err(accept_challenge_error)?;
+                        let reason = match error {
+                            AcceptProposalError::PreAdmissionRefused { reason } => reason,
+                            AcceptProposalError::InvalidChallenge => {
+                                AcceptanceRefusalReason::InvalidChallenge
+                            }
+                            other => return Err(other),
+                        };
+                        let reason = self
+                            .retain_acceptance_refusal(
+                                command,
+                                reason,
+                                AcceptanceRefusalBoundary::WriterSession,
+                            )
+                            .await?;
+                        Err(AcceptProposalError::PreAdmissionRefused { reason })
                     }
                 }
             }
@@ -85,6 +119,23 @@ async fn persist_accept(
     let Some(loaded) = load_proposal(client, command).await? else {
         return Err(AcceptProposalError::MissingProject);
     };
+    if let Some(row) = client
+        .query_opt(
+            "SELECT reason FROM storyos.acceptance_refusals WHERE owner_user_id = $1::text::uuid
+         AND project_id = $2::text::uuid AND idempotency_key = $3::text::uuid",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.challenge_binding.idempotency_key,
+            ],
+        )
+        .await
+        .map_err(accept_database_error)?
+    {
+        let reason = crate::acceptance_refusal::parse_reason(row.get::<_, &str>(0))
+            .map_err(accept_parse_error)?;
+        return Err(AcceptProposalError::PreAdmissionRefused { reason });
+    }
     insert_accept_admission(client, command, &loaded.chapter_id).await?;
     let classified = classify(&CoreAccept {
         scope_matches: true,

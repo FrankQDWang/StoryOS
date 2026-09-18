@@ -54,6 +54,9 @@ impl ProposalReader for PostgresProjectReader {
             )
             .await
             .map_err(read_error)?;
+        let latest_acceptance_refusal =
+            crate::acceptance_refusal::read_latest_refusal(&transaction, scope, proposal_id)
+                .await?;
         transaction.commit().await.map_err(read_error)?;
         Ok(row.map(|row| BlockProposalRecord {
             project_scope: scope.clone(),
@@ -75,6 +78,7 @@ impl ProposalReader for PostgresProjectReader {
             validation_receipt_id: row.get(15),
             validation_receipt_result: row.get(16),
             condition_refs: row.get::<_, Option<String>>(17).into_iter().collect(),
+            latest_acceptance_refusal,
         }))
     }
 }

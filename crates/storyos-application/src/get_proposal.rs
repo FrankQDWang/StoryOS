@@ -12,6 +12,7 @@ pub struct BlockProposalRecord {
     pub generation: String,
     pub validation: String,
     pub condition_refs: Vec<String>,
+    pub latest_acceptance_refusal: Option<crate::AcceptanceRefusal>,
     pub closure: String,
     pub operation_id: String,
     pub operation_resolution: String,

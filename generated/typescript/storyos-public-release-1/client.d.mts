@@ -397,7 +397,13 @@ export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: stri
 
 export type OptionalValidationReceiptInspect = { "kind": "absent" } | { "kind": "present", validation_receipt_id: string, result: string, };
 
-export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, };
+export type AcceptanceRefusalReason = "stale_writer" | "session_changed" | "invalid_challenge";
+
+export type AcceptanceRefusalBoundary = "challenge" | "writer_session";
+
+export type OptionalAcceptanceRefusalInspect = { "kind": "absent" } | { "kind": "present", refusal_id: string, correlation_id: string, reason: AcceptanceRefusalReason, boundary: AcceptanceRefusalBoundary, command_schema: string, refusal_profile_revision: string, client_contract_revision: string, security_policy_revision: string, limit_profile_revision: string, challenge_rate_policy_revision: string, recorded_at: string, };
+
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, };
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
