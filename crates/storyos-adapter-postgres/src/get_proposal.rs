@@ -14,7 +14,7 @@ impl ProposalReader for PostgresProjectReader {
         let row = transaction
             .query_opt(
                 "SELECT proposal.proposal_id::text, proposal.kind, revision.revision_id::text,
-                        revision.generation, revision.validation, revision.closure,
+                        revision.generation, COALESCE(failure.validation, revision.validation), revision.closure,
                         operation.operation_id::text, operation.resolution,
                         proposal.chapter_id::text, proposal.manuscript_block_id::text,
                         revision.base_authoritative_revision_id::text,
@@ -33,6 +33,18 @@ impl ProposalReader for PostgresProjectReader {
                    JOIN storyos.proposal_operations AS operation
                      ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
                         (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+                   LEFT JOIN LATERAL (
+                     SELECT receipt.result_payload->>'proposal_validation' AS validation
+                       FROM storyos.acceptance_receipts AS acceptance
+                       JOIN storyos.domain_receipts AS receipt
+                         ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
+                            (acceptance.owner_user_id, acceptance.project_id, acceptance.acceptance_receipt_id)
+                      WHERE (acceptance.owner_user_id, acceptance.project_id, acceptance.proposal_id,
+                             acceptance.proposal_revision_id) =
+                            (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)
+                        AND receipt.result_payload->>'proposal_validation' IN ('invalid', 'conflicted')
+                      ORDER BY receipt.created_at, receipt.receipt_id LIMIT 1
+                   ) AS failure ON true
                    LEFT JOIN storyos.validation_receipts AS receipt
                      ON (receipt.owner_user_id, receipt.project_id, receipt.proposal_id,
                          receipt.proposal_revision_id) =

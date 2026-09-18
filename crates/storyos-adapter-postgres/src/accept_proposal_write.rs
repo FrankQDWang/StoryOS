@@ -229,7 +229,16 @@ pub(super) async fn persist_zero(
     effect: AcceptProposalSettlementEffect,
 ) -> Result<AcceptProposalSettlement, AcceptProposalError> {
     let head = command.expected_authoritative_revision_id.clone();
-    let result_payload = serde_json::json!({ "reason": reason }).to_string();
+    let result_payload = serde_json::json!({
+        "reason": reason,
+        "proposal_validation": match &effect {
+            AcceptProposalSettlementEffect::Invalid { .. } => Some("invalid"),
+            AcceptProposalSettlementEffect::Conflicted { .. } => Some("conflicted"),
+            AcceptProposalSettlementEffect::Applied { .. }
+            | AcceptProposalSettlementEffect::Refused { .. } => None,
+        },
+    })
+    .to_string();
     let created_at = insert_receipts(
         client,
         command,

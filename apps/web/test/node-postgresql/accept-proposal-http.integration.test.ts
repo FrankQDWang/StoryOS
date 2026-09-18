@@ -513,6 +513,11 @@ test("acceptProposal rejects stale revisions, invalid validation, changed heads,
     assert.equal(invalidAccepted.receipt.result, "invalid");
     if (invalidAccepted.effect.kind !== "invalid") throw new Error("expected invalid");
     assert.equal(invalidAccepted.effect.reason, "invalid_validation");
+    const invalidReload = await getProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: revised.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
+    });
+    assert.deepEqual(invalidReload.proposal, { ...revised.proposal, validation: "invalid" });
     const conflicted: AcceptProposalRequest = {
       command_schema: "storyos.command.accept-proposal.request.v1",
       accept_proposal_input: {
