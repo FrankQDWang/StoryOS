@@ -3,9 +3,10 @@ use serde_json::{Value, json};
 use ts_rs::{Config, TS};
 
 use crate::release1_proposal::{
-    AcceptanceRefusalBoundary, AcceptanceRefusalReason, BlockProposalInspect, GET_PROPOSAL,
-    GET_PROPOSAL_REQUEST_SCHEMA_ID, GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalResponse,
-    OptionalAcceptanceRefusalInspect, OptionalValidationReceiptInspect, ProposalSourceInspect,
+    AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
+    BlockProposalInspect, GET_PROPOSAL, GET_PROPOSAL_REQUEST_SCHEMA_ID,
+    GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalResponse, OptionalAcceptanceRefusalInspect,
+    OptionalValidationReceiptInspect, ProposalSourceInspect,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -100,11 +101,12 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ProposalSourceInspect::decl(&config),
         OptionalValidationReceiptInspect::decl(&config),
         AcceptanceRefusalReason::decl(&config),
         AcceptanceRefusalBoundary::decl(&config),
+        AcceptanceRefusalInspect::decl(&config),
         OptionalAcceptanceRefusalInspect::decl(&config),
         BlockProposalInspect::decl(&config),
         GetProposalResponse::decl(&config),

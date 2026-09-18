@@ -76,19 +76,23 @@ pub enum AcceptanceRefusalBoundary {
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OptionalAcceptanceRefusalInspect {
     Absent,
-    Present {
-        refusal_id: String,
-        correlation_id: String,
-        reason: AcceptanceRefusalReason,
-        boundary: AcceptanceRefusalBoundary,
-        command_schema: String,
-        refusal_profile_revision: String,
-        client_contract_revision: String,
-        security_policy_revision: String,
-        limit_profile_revision: String,
-        challenge_rate_policy_revision: String,
-        recorded_at: String,
-    },
+    Present(Box<AcceptanceRefusalInspect>),
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct AcceptanceRefusalInspect {
+    pub refusal_id: String,
+    pub correlation_id: String,
+    pub reason: AcceptanceRefusalReason,
+    pub boundary: AcceptanceRefusalBoundary,
+    pub command_schema: String,
+    pub refusal_profile_revision: String,
+    pub client_contract_revision: String,
+    pub security_policy_revision: String,
+    pub limit_profile_revision: String,
+    pub challenge_rate_policy_revision: String,
+    pub recorded_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
