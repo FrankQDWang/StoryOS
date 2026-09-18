@@ -95,9 +95,19 @@ pub(super) async fn read_accept_settlement(
         let Some(row) = row else {
             return Err(AcceptProposalError::HistoricalAcknowledgementUnavailable);
         };
-        let response_project = match read_command_response_project(row.get(12), row.get(13)) {
+        let response_project = match read_command_response_project(
+            row.get::<_, Option<String>>(12).as_deref(),
+            row.get::<_, Option<String>>(13).as_deref(),
+        ) {
             Ok(CommandResponseProjectEvidence::Captured(project)) => project,
-            _ => return Err(AcceptProposalError::HistoricalAcknowledgementUnavailable),
+            Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => {
+                return Err(AcceptProposalError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(AcceptProposalError::Unavailable(Box::new(
+                    std::io::Error::other("Acceptance acknowledgement evidence is damaged"),
+                )));
+            }
         };
         let result_kind: String = row.get(3);
         let reason: Option<String> = row.get(4);
