@@ -16,6 +16,7 @@ use storyos_application::{
 use storyos_contracts as contracts;
 use uuid::Uuid;
 
+mod accept_proposal;
 mod acknowledgement_hold;
 mod archive_project;
 mod author_edit;
@@ -64,6 +65,7 @@ pub use storyos_contracts::RELEASE_1_SECURITY_POLICY_REVISION;
 pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
 
+use accept_proposal::accept_proposal;
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
@@ -298,6 +300,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
         .route(
             contracts::GET_PROPOSAL_PATH,
             routing::on(method_filter(contracts::GET_PROPOSAL_METHOD), get_proposal),
+        )
+        .route(
+            contracts::ACCEPT_PROPOSAL_PATH,
+            routing::on(
+                method_filter(contracts::ACCEPT_PROPOSAL_METHOD),
+                accept_proposal,
+            ),
         )
         .route(
             contracts::GET_CHAPTER_PATH,

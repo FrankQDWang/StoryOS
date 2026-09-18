@@ -7,6 +7,8 @@ use crate::release1::{
     CREATE_EDITOR_SESSION, CREATE_PROJECT_COMMAND_CHALLENGE, GET_CHAPTER, GET_EDITOR_SESSION,
     GET_PROJECT, GET_PROTOCOL_PROFILE, PUBLIC_PROTOCOL_RELEASE, QueryOperation,
 };
+use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
+use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
 use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
 use crate::release1_agent_run_artifacts as agent_run_artifacts;
 use crate::release1_archive_project::ARCHIVE_PROJECT;
@@ -339,6 +341,15 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| proposal_artifacts::fixture_bytes(),
             |_profile| proposal_artifacts::invalid_fixture_bytes(),
             |_profile| proposal_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        accept_proposal_artifacts::FIXTURE_PATHS,
+        &ACCEPT_PROPOSAL,
+        [
+            |_profile| accept_proposal_artifacts::fixture_bytes(),
+            |_profile| accept_proposal_artifacts::invalid_fixture_bytes(),
+            |_profile| accept_proposal_artifacts::boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

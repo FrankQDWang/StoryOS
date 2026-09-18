@@ -5,6 +5,8 @@
 mod digest;
 mod project_command_targets;
 mod release1;
+mod release1_accept_proposal;
+mod release1_accept_proposal_artifacts;
 mod release1_agent_run;
 mod release1_agent_run_artifacts;
 mod release1_archive_project;
@@ -88,6 +90,13 @@ pub use release1::{
     LIMIT_PROFILE_REVISION, ManuscriptBlock, ManuscriptBlockKind, PUBLIC_PROTOCOL_RELEASE,
     ProjectOpenState, ProjectScope, Release1CompatibilityIdentity, Release1ProtocolProfile,
     StoryOSProblem, project_command_kind,
+};
+pub use release1_accept_proposal::{
+    ACCEPT_PROPOSAL_DIGEST_PROFILE, ACCEPT_PROPOSAL_METHOD, ACCEPT_PROPOSAL_PATH,
+    ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID, ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID,
+    AcceptProposalConflictReason, AcceptProposalEffect, AcceptProposalInput,
+    AcceptProposalInvalidReason, AcceptProposalRefusalReason, AcceptProposalRequest,
+    AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult,
 };
 pub use release1_agent_run::{
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,

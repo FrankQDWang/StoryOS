@@ -29,6 +29,8 @@ use crate::release1::{
     SERVER_CONTRACT_REVISION, WEB_CLIENT_CONTRACT_REVISION, WORKER_CONTRACT_REVISION,
     protocol_profile,
 };
+use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
+use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
 use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
 use crate::release1_agent_run_artifacts as agent_run_artifacts;
 use crate::release1_archive_project::ARCHIVE_PROJECT;
@@ -152,7 +154,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:76fc58a219dad33107075c516243593f7e689b3e1fcf3364703027d901d1ef0d";
+    "sha256:3725fc3e9b27b53fb097a884956ee9004469af3bc76a567c9ec159e2b571eb8d";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -269,6 +271,8 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let get_agent_run_response_schema = agent_run_artifacts::get_response_schema_bytes();
     let get_proposal_request_schema = proposal_artifacts::request_schema_bytes();
     let get_proposal_response_schema = proposal_artifacts::response_schema_bytes();
+    let accept_proposal_request_schema = accept_proposal_artifacts::request_schema_bytes();
+    let accept_proposal_response_schema = accept_proposal_artifacts::response_schema_bytes();
     let archive_project_request_schema = archive_project_artifacts::request_schema_bytes();
     let archive_project_response_schema = archive_project_artifacts::response_schema_bytes();
     let create_volume_request_schema = create_volume_artifacts::request_schema_bytes();
@@ -490,6 +494,16 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::GET_PROPOSAL_RESPONSE_SCHEMA_ID,
             proposal_artifacts::RESPONSE_SCHEMA_PATH,
             get_proposal_response_schema,
+        ),
+        (
+            crate::ACCEPT_PROPOSAL_REQUEST_SCHEMA_ID,
+            accept_proposal_artifacts::REQUEST_SCHEMA_PATH,
+            accept_proposal_request_schema,
+        ),
+        (
+            crate::ACCEPT_PROPOSAL_RESPONSE_SCHEMA_ID,
+            accept_proposal_artifacts::RESPONSE_SCHEMA_PATH,
+            accept_proposal_response_schema,
         ),
         (
             crate::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
@@ -813,6 +827,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&CREATE_AGENT_RUN, &["server_derived_project_scope", "operation_requirement", "working_target_or_explicit_not_applicable", "capability_and_destination_grant"]),
             operation_graph(&GET_AGENT_RUN, &["run_scope_join", "run_projection_watermark_or_snapshot"]),
             operation_graph(&GET_PROPOSAL, &["proposal_scope_join", "exact_revision_or_current_projection", "redaction_profile"]),
+            command_operation_graph(&ACCEPT_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "valid_validation_receipt", "selected_pending_operations", "expected_target_revisions", "acceptance_admission"]),
             command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
             command_operation_graph(&CREATE_VOLUME, &["server_derived_project_scope", "project_active", "expected_tree_revision"]),
             command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision"]),
@@ -938,6 +953,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&project_assistance_artifacts::openapi());
     paths.push_str(&agent_run_artifacts::openapi());
     paths.push_str(&proposal_artifacts::openapi());
+    paths.push_str(&accept_proposal_artifacts::openapi());
     paths.push_str(&archive_project_artifacts::openapi());
     paths.push_str(&create_volume_artifacts::openapi());
     paths.push_str(&update_volume_artifacts::openapi());
@@ -1130,6 +1146,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         CREATE_AGENT_RUN.operation_id,
         GET_AGENT_RUN.operation_id,
         GET_PROPOSAL.operation_id,
+        ACCEPT_PROPOSAL.operation_id,
         ARCHIVE_PROJECT.operation_id,
         CREATE_VOLUME.operation_id,
         UPDATE_VOLUME.operation_id,
@@ -1174,6 +1191,7 @@ fn typescript_client_bytes() -> Vec<u8> {
     let set_current_chapter_client = set_current_chapter_artifacts::typescript_client_source();
     let undo_latest_author_action_client =
         undo_latest_author_action_artifacts::typescript_client_source();
+    let accept_proposal_client = accept_proposal_artifacts::typescript_client_source();
     let author_edit_client = author_edit_artifacts::typescript_client_source();
     let author_edit_outcome_client = author_edit_outcome_artifacts::typescript_client_source();
     format!(concat!(
@@ -1242,7 +1260,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1272,6 +1290,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         project_assistance_artifacts::typescript_client_source(),
         agent_run_artifacts::typescript_client_source(),
         proposal_artifacts::typescript_client_source(),
+        accept_proposal_client,
         archive_project_client,
         create_volume_client,
         update_volume_client,
@@ -1352,6 +1371,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str("\n\n");
     declaration.push_str(&proposal_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
+    declaration.push_str(&accept_proposal_artifacts::typescript_type_declarations());
+    declaration.push_str("\n\n");
     declaration.push_str(
         concat!(
             "export declare const GENERATED_CLIENT_REVISION: string;\n",
@@ -1372,6 +1393,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(project_assistance_artifacts::typescript_declarations());
     declaration.push_str(agent_run_artifacts::typescript_declarations());
     declaration.push_str(proposal_artifacts::typescript_declarations());
+    declaration.push_str(accept_proposal_artifacts::typescript_declarations());
     declaration.push_str(archive_project_artifacts::typescript_declarations());
     declaration.push_str(create_volume_artifacts::typescript_declarations());
     declaration.push_str(update_volume_artifacts::typescript_declarations());
@@ -1652,6 +1674,10 @@ mod agent_run_tests;
 #[cfg(test)]
 #[path = "release1_proposal_artifacts_tests.rs"]
 mod proposal_tests;
+
+#[cfg(test)]
+#[path = "release1_accept_proposal_artifacts_tests.rs"]
+mod accept_proposal_tests;
 
 #[cfg(test)]
 #[path = "release1_fixture_corpus_tests.rs"]

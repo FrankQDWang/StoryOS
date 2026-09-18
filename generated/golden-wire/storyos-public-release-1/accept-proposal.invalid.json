@@ -1,0 +1,56 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000c12",
+  "command_id": "018f0000-0000-7001-8000-000000000c11",
+  "correlation_id": "018f0000-0000-7001-8000-000000000c10",
+  "effect": {
+    "author_action_sequence": "2",
+    "authoritative_commit_id": "018f0000-0000-7001-8000-000000000c16",
+    "authoritative_revision": {
+      "blocks": [
+        {
+          "block_kind": "paragraph",
+          "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
+          "text": "Keep the narrator voice in this passage."
+        }
+      ],
+      "body": "Keep the narrator voice in this passage.",
+      "revision_id": "018f0000-0000-7001-8000-000000000c15"
+    },
+    "kind": "applied",
+    "project_activity_position": "3"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000c12",
+    "authoritative_commit_ids": [
+      "018f0000-0000-7001-8000-000000000c16"
+    ],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.acceptProposal.jcs.v1",
+      "value_hex_lowercase": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "created_at": "2026-09-18T12:00:00.000Z",
+    "idempotency_key": "018f0000-0000-7001-8000-000000000c14",
+    "prior_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_id": "018f0000-0000-7001-8000-000000000b02",
+    "proposal_revision_id": "018f0000-0000-7001-8000-000000000b03",
+    "receipt_id": "018f0000-0000-7001-8000-000000000c13",
+    "result": "applied",
+    "resulting_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000c15"
+    ],
+    "selected_operation_id": "018f0000-0000-7001-8000-000000000b04",
+    "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08"
+  },
+  "schema_id": "storyos.command.accept-proposal.response.v1"
+}

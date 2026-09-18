@@ -27,6 +27,7 @@ pub use storyos_core::{ManuscriptBlock, ManuscriptBlockKind};
 
 use std::future::Future;
 
+mod accept_proposal;
 mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;
@@ -85,6 +86,10 @@ pub use author_edit_outcome::{
     get_apply_author_edit_outcome,
 };
 
+pub use accept_proposal::{
+    AcceptProposalCommand, AcceptProposalError, AcceptProposalSettlement,
+    AcceptProposalSettlementEffect, AcceptProposalStore, accept_proposal,
+};
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,
     claim_next_agent_run, complete_agent_run,
