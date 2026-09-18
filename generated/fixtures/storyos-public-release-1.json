@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:38b4b7005a3c256780a4c845728c8dbcfd8a755373cc36f1a662c52e63d082ac",
+  "corpus_digest": "sha256:5193bf7d206d2d06650bcb8b4d798d878fbff433da2815c324c4a23784844f50",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -63,6 +63,9 @@
       "generated/golden-wire/storyos-public-release-1/get-proposal.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/accept-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json",
@@ -473,6 +476,24 @@
       "fixture_id": "storyos.golden.getProposal.boundary.v1",
       "operation_id": "getProposal",
       "path": "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.acceptProposal.positive.v1",
+      "operation_id": "acceptProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.acceptProposal.invalid.v1",
+      "operation_id": "acceptProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.acceptProposal.boundary.v1",
+      "operation_id": "acceptProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json"
     },
     {
       "classification": "positive",

@@ -1,0 +1,68 @@
+{
+  "$defs": {
+    "AcceptProposalInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_authoritative_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "selected_operation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "validation_receipt_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_revision_id",
+        "validation_receipt_id",
+        "selected_operation_id",
+        "expected_authoritative_revision_id",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.accept-proposal.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "accept_proposal_input": {
+      "$ref": "#/$defs/AcceptProposalInput"
+    },
+    "command_schema": {
+      "const": "storyos.command.accept-proposal.request.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command_schema",
+    "accept_proposal_input"
+  ],
+  "title": "StoryOS Accept Proposal Request",
+  "type": "object"
+}

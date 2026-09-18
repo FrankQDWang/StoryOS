@@ -595,6 +595,7 @@ run_http_files \
   test/node-postgresql/complete-fake-model-decision-http.integration.test.ts \
   test/node-postgresql/open-block-proposal-http.integration.test.ts \
   test/node-postgresql/edit-proposal-candidate-http.integration.test.ts \
+  test/node-postgresql/accept-proposal-http.integration.test.ts \
   test/node-postgresql/archive-project-http.integration.test.ts \
   test/node-postgresql/create-volume-http.integration.test.ts \
   test/node-postgresql/update-volume-http.integration.test.ts \

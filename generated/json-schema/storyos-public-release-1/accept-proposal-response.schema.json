@@ -1,0 +1,384 @@
+{
+  "$defs": {
+    "AcceptProposalConflictReason": {
+      "enum": [
+        "changed_head"
+      ],
+      "type": "string"
+    },
+    "AcceptProposalEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "author_action_sequence": {
+              "type": "string"
+            },
+            "authoritative_commit_id": {
+              "type": "string"
+            },
+            "authoritative_revision": {
+              "$ref": "#/$defs/AuthoritativeChapterRevision"
+            },
+            "kind": {
+              "const": "applied",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "author_action_sequence",
+            "authoritative_commit_id",
+            "authoritative_revision",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "invalid",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AcceptProposalInvalidReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AcceptProposalConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/AcceptProposalRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AcceptProposalInvalidReason": {
+      "enum": [
+        "invalid_validation",
+        "altered_candidate"
+      ],
+      "type": "string"
+    },
+    "AcceptProposalRefusalReason": {
+      "enum": [
+        "wrong_scope",
+        "wrong_admission",
+        "stale_proposal_revision",
+        "not_eligible",
+        "operation_not_pending"
+      ],
+      "type": "string"
+    },
+    "AcceptanceReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "authoritative_commit_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "prior_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "proposal_id": {
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/AcceptanceReceiptResult"
+        },
+        "resulting_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "selected_operation_id": {
+          "type": "string"
+        },
+        "validation_receipt_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "project_scope",
+        "command_digest",
+        "idempotency_key",
+        "author_command_admission_id",
+        "proposal_id",
+        "proposal_revision_id",
+        "validation_receipt_id",
+        "selected_operation_id",
+        "prior_authoritative_revision_ids",
+        "resulting_authoritative_revision_ids",
+        "authoritative_commit_ids",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "AcceptanceReceiptResult": {
+      "enum": [
+        "applied",
+        "invalid",
+        "conflicted",
+        "refused"
+      ],
+      "type": "string"
+    },
+    "AuthoritativeChapterRevision": {
+      "additionalProperties": false,
+      "properties": {
+        "blocks": {
+          "items": {
+            "$ref": "#/$defs/ManuscriptBlock"
+          },
+          "type": "array"
+        },
+        "body": {
+          "type": "string"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision_id",
+        "body",
+        "blocks"
+      ],
+      "type": "object"
+    },
+    "ControlledProject": {
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/ProjectOpenState"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "open"
+      ],
+      "type": "object"
+    },
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "ManuscriptBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "manuscript_block_id": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "manuscript_block_id",
+        "block_kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "ManuscriptBlockKind": {
+      "enum": [
+        "paragraph",
+        "heading"
+      ],
+      "type": "string"
+    },
+    "ProjectOpenState": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.accept-proposal.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_command_admission_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "command_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "#/$defs/AcceptProposalEffect"
+    },
+    "project": {
+      "$ref": "#/$defs/ControlledProject"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "receipt": {
+      "$ref": "#/$defs/AcceptanceReceipt"
+    },
+    "schema_id": {
+      "const": "storyos.command.accept-proposal.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "command_id",
+    "author_command_admission_id",
+    "receipt",
+    "project",
+    "effect"
+  ],
+  "title": "StoryOS Accept Proposal Response",
+  "type": "object"
+}

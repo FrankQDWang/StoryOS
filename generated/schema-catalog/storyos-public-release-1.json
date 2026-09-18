@@ -12,6 +12,7 @@
     "createAgentRun",
     "getAgentRun",
     "getProposal",
+    "acceptProposal",
     "archiveProject",
     "createVolume",
     "updateVolume",
@@ -239,6 +240,16 @@
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
       "sha256": "sha256:3c3d309e2936221da37be0be4106b18079aa0cc65fa000bffbc6344976b63c84"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/accept-proposal-request.schema.json",
+      "schema_id": "storyos.command.accept-proposal.request.v1",
+      "sha256": "sha256:eb351010a97ad1093face422829db2b9d9483d9eebfbd387538b8053f1c4d450"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/accept-proposal-response.schema.json",
+      "schema_id": "storyos.command.accept-proposal.response.v1",
+      "sha256": "sha256:564ae1df78eb4424d1ded49ff3a6bdf7483c10aab986d8094e42bb0c26ae477d"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-request.schema.json",

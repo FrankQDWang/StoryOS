@@ -1,5 +1,6 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
+mod accept_proposal;
 mod archive_path;
 mod archive_project;
 mod archive_zip;
@@ -25,6 +26,10 @@ mod update_project;
 mod update_project_assistance;
 mod update_volume;
 
+pub use accept_proposal::{
+    AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
+    AcceptProposalResult, accept_proposal,
+};
 pub use archive_path::{
     ARCHIVE_PATH_MAX_BYTES, ARCHIVE_PATH_MAX_SEGMENTS, ARCHIVE_PATH_PROFILE, AdmittedArchivePath,
     ArchivePathRefusal, admit_archive_path,

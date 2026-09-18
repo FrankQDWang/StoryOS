@@ -401,6 +401,24 @@ export type BlockProposalInspect = { proposal_id: string, kind: string, revision
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
+export type AcceptProposalInput = { proposal_revision_id: string, validation_receipt_id: string, selected_operation_id: string, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type AcceptProposalRequest = { command_schema: string, accept_proposal_input: AcceptProposalInput, };
+
+export type AcceptanceReceiptResult = "applied" | "invalid" | "conflicted" | "refused";
+
+export type AcceptanceReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, validation_receipt_id: string, selected_operation_id: string, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: AcceptanceReceiptResult, created_at: string, };
+
+export type AcceptProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending";
+
+export type AcceptProposalInvalidReason = "invalid_validation" | "altered_candidate";
+
+export type AcceptProposalConflictReason = "changed_head";
+
+export type AcceptProposalEffect = { "kind": "applied", author_action_sequence: string, authoritative_commit_id: string, authoritative_revision: AuthoritativeChapterRevision, project_activity_position: string, } | { "kind": "invalid", reason: AcceptProposalInvalidReason, } | { "kind": "conflicted", reason: AcceptProposalConflictReason, } | { "kind": "refused", reason: AcceptProposalRefusalReason, };
+
+export type AcceptProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: AcceptanceReceipt, project: ControlledProject, effect: AcceptProposalEffect, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -432,6 +450,8 @@ export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cry
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
 export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
 export declare function getProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string }): Promise<GetProposalResponse>;
+export declare function digestAcceptProposal(request: AcceptProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function acceptProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: AcceptProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<AcceptProposalResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
