@@ -479,6 +479,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_agent_run_artifacts::CREATE_RESPONSE_SCHEMA_PATH,
         crate::release1_agent_run_artifacts::GET_RESPONSE_SCHEMA_PATH,
         crate::release1_proposal_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_accept_proposal_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_accept_proposal_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_create_volume_artifacts::REQUEST_SCHEMA_PATH,
@@ -581,7 +583,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v18"
+        "storyos.typescript-client.release-1.v19"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
