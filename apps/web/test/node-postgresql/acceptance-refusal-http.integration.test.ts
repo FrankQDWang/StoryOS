@@ -14,7 +14,7 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
   let started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const project = await prepare(started.baseUrl, id("e111"), "Refusal Evidence Novel", "e1");
+    const project = await prepare(started.baseUrl, id("f7300111"), "Refusal Evidence Novel", "e1");
     const base = { baseUrl: started.baseUrl, projectId: project.projectId, fetchImpl: project.fetchImpl };
     const run = await admitProse(started.baseUrl, project.fetchImpl, project.projectId, project.chapterId, id("e121"));
     if (run.decision.kind !== "prose_change" || run.decision.opened_proposal.kind !== "present") throw new Error("expected proposal");
