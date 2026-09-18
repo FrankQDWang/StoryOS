@@ -9,7 +9,7 @@ Start a long repository command with `block_until_ms: 0`. Continue other work. T
 
 Poll with AwaitShell only when the next step is blocked on that process. Wait for process exit. A pattern is valid only when that line cannot appear before the command ends.
 
-A successful complete `make verify` prints `verified parent #100` after the last tracker check. A successful `make verify-local` ends with the line `verified <n> transaction-control statements on PooledClient receivers`; in a complete `make verify` that line appears before the tracker check and is not the end. A failed make target may print `make: *** [verify`.
+Require process exit and the structured report result for `make verify-local`. Follow `docs/agents/verification.md` for evidence publication and merge admission. A printed stage success, including transaction-control verification, is not the complete run result. `make verify` also runs the tracker check.
 
 These strings are not AwaitShell patterns:
 

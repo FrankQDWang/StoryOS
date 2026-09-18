@@ -52,8 +52,11 @@ def input_paths(root):
     return sorted(set(paths) - {""})
 
 
-def inventory(root):
-    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+def inventory(root, revision=None):
+    policy = json.loads(git(root, "show", f"{revision}:docs/agents/verification-policy.json") if revision
+                        else (root / "docs/agents/verification-policy.json").read_text())
+    paths = git(root, "ls-tree", "-rz", "--name-only", revision).split("\0")[:-1] if revision else input_paths(root)
+    known = set(paths)
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")
     profiles = policy.get("file_profiles", {})
@@ -68,25 +71,71 @@ def inventory(root):
                 isinstance(value, str) and value for value in rule.values()):
             raise ValueError("Each input rule needs a pattern, kind, and group")
     files, errors = [], []
-    for path in input_paths(root):
+    for path in paths:
         rule = next((r for r in policy["rules"] if fnmatch.fnmatchcase(path, r["pattern"])), None)
         is_test = re.search(r"(?:_tests?\.(?:rs|py)|\.(?:test|spec)\.[cm]?[jt]sx?|/tests/.*\.rs|/test_[^/]+\.py)$", path)
         test_directory = path.startswith("apps/web/test/")
         if (rule is None or (is_test and not rule["kind"].endswith("-test"))
-                or (test_directory and rule["kind"] not in {"web-test", "fixture"})):
+                or (test_directory and rule["kind"] not in {"web-test", "fixture"})
+                or (rule["kind"] == "verification-test"
+                    and not re.fullmatch(r"scripts/[A-Za-z_][A-Za-z0-9_]*_tests\.py", path))):
             errors.append(path)
             continue
         group = rule["group"]
         if group == "cargo":
             crate = path.split("/")[1]
-            if not (root / "crates" / crate / "Cargo.toml").is_file():
+            if f"crates/{crate}/Cargo.toml" not in known:
                 errors.append(path)
                 continue
             group = f"cargo:{crate}"
         files.append({"path": path, "kind": rule["kind"], "group": group})
     if errors:
         raise ValueError("Unclassified inputs or unsupported test locations:\n" + "\n".join(errors))
+    if "complete" in policy:
+        stages, groups = policy["complete"]["stages"], policy["complete"]["groups"]
+        if (not isinstance(stages, list) or not isinstance(groups, dict) or not stages or len(stages) != len(set(stages))
+                or any(not re.fullmatch(r"[a-z][a-z0-9-]*", stage) for stage in stages)
+                or any(not isinstance(owners, list) or not owners or not set(owners) <= set(stages) for owners in groups.values())
+                or any(item["group"].split(":")[0] not in groups for item in files
+                       if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"})):
+            raise ValueError("Incomplete verification stage or test group policy")
     return {"version": 1, "files": files}
+
+
+def complete_plan(root, revision="HEAD", base="origin/main"):
+    policy_bytes = subprocess.check_output(["git", "show", f"{revision}:docs/agents/verification-policy.json"], cwd=root)
+    profile = json.loads(policy_bytes)["complete"]
+    files = [item for item in inventory(root, revision)["files"]
+             if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"}]
+    return {"version": 1, "base": git(root, "rev-parse", base), "tree": git(root, "rev-parse", f"{revision}^{{tree}}"),
+            "policy_sha256": hashlib.sha256(policy_bytes).hexdigest(), "stages": profile["stages"],
+            "test_files": sorted(item["path"] for item in files)}
+
+
+def cargo_test_inputs(root, command):
+    artifacts = subprocess.check_output([*command, "--no-run", "--message-format=json"], cwd=root, text=True)
+    compiled = set()
+    for line in artifacts.splitlines():
+        artifact = json.loads(line)
+        if artifact.get("reason") == "compiler-artifact" and artifact["profile"]["test"] and artifact.get("executable"):
+            dependencies = Path(artifact["executable"]).with_suffix(".d").read_text()
+            compiled.update((root / entry[:-1].replace("\\ ", " ")).resolve() for entry in dependencies.splitlines()
+                            if entry.endswith(":") and not entry.startswith("#"))
+    return compiled
+
+
+def rust_tests(root):
+    command = ["cargo", "test", "--workspace", "--all-targets", "--all-features"]
+    compiled = cargo_test_inputs(root, command)
+    files = sorted(item["path"] for item in inventory(root)["files"] if item["kind"] == "rust-test")
+    missing = [path for path in files if (root / path).resolve() not in compiled]
+    if missing:
+        raise ValueError(f"Selected files were not compiled into a test target: {missing}")
+    run = os.environ.get("STORYOS_VERIFICATION_RUN")
+    if run:
+        write_json(Path(run) / "rust-test-files.json", files)
+    code, interrupted = execute(command, os.environ.copy(), run is None and os.name == "posix")
+    return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
 
 
 def write_json(path, value):
@@ -184,6 +233,8 @@ def record_run(root, command, *, plan=None, no_cache=False):
         if report["source_start"]["dirty"] and (not plan or plan["checks"][0]["group"] == "complete"):
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
+        if not plan and command == ["make", "verify-local-steps"]:
+            report["plan"] = complete_plan(root)
         cache_started = time.monotonic()
         cache = verification_cache.DailyCache(root, plan, no_cache)
         report["cache"] = cache.observation
@@ -209,6 +260,8 @@ def record_run(root, command, *, plan=None, no_cache=False):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
+    if (directory / "rust-test-files.json").is_file():
+        report["rust_test_files"] = json.loads((directory / "rust-test-files.json").read_text())
     allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}
     if report["status"] == "passed" and (not steps or any(item["status"] not in allowed for item in steps)):
         report["status"] = "incomplete"
@@ -244,6 +297,7 @@ def run(root, command, *, plan=None, no_cache=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="action", required=True)
+    commands.add_parser("rust-tests")
     commands.add_parser("inventory").add_argument("--check", action="store_true")
     for action in ("run", "step"):
         command_parser = commands.add_parser(action)
@@ -253,6 +307,8 @@ def main():
     arguments = parser.parse_args()
     try:
         root = Path(git(Path.cwd(), "rev-parse", "--show-toplevel"))
+        if arguments.action == "rust-tests":
+            return rust_tests(root)
         if arguments.action == "inventory":
             result = inventory(root)
             print(f"Verified ownership of {len(result['files'])} input files" if arguments.check

@@ -36,8 +36,8 @@ policy to the first line only after reviewing all imports, file reads and enviro
 needs. This profile permits repository inputs and the locked test toolchain only;
 live services, mutable shared fixtures, release packages and ignored build outputs
 require the complete group. A changed dependency invalidates that declaration.
-Rust opt-in files must appear in compiler dependency records for a test executable,
-then run their existing crate test targets. Unlinked files fail. Crates with ignored
+All Rust test files must appear in current compiler records for a test executable.
+Complete runs and selected runs reject unlinked files and retain existing Cargo targets. Crates with ignored
 tests or conditional attributes retain the complete group. Rust production changes
 include current reverse consumers in the plan and require complete verification.
 No function filter is inferred.
@@ -56,7 +56,7 @@ daily feedback. A complete group needs a clean tree because release packaging bi
 Git identity. An empty change set or empty test discovery cannot report success.
 Complete candidate verification, PostgreSQL fixtures, ordered HTTP groups, exact-dist
 oracles and both recovery drills remain mandatory.
-The PR sentinel checks the policy and runner, but does not yet validate full reports.
+The PR sentinel checks the policy and runner; a separate gate validates complete reports.
 
 ## Daily result reuse and host budget
 
@@ -88,3 +88,29 @@ When tests or dependencies change, inspect the new plan and report. Extend a cac
 profile only after specifying its inputs, required outputs and resource ownership,
 adding public CLI invalidation tests, and obtaining independent Standards and Spec
 review. New frameworks remain ineligible until the policy and runner support them.
+
+## Candidate evidence publication
+
+1. Wait for the `verify` sentinel and independent Standards and Spec reviews. Resolve
+   findings with targeted checks. Fetch current main and the PR synthetic merge.
+2. Run `make verify-local` once on the clean candidate tree that equals that merge tree.
+3. Publish with `make verify-evidence PR=<number> REPORT=<report-path>`. If protected
+   policy inputs changed, use `VERIFY_ARGS=--policy-reviewed` only after both independent
+   reviews cover that exact change. The publication records this explicit review declaration.
+4. Wait for `candidate-evidence` success, then merge. A changed head, base, tree, policy
+   revision or discovered membership requires fresh evidence. Preserve strict branch protection.
+
+The evidence workflow runs protected main code and reads candidate Git objects as data.
+It checks the newest authorized structured report; an invalid newer report cannot fall
+back to an older success. Publication through a PR comment triggers validation without
+a source commit. The report includes its command, clean source identity and a complete
+plan bound to the base, tree, policy digest and current test files. The policy declares
+mandatory stages and group ownership, not historical test names or counts. Web records
+must cover each current file through its whole project or explicit file selection.
+
+Extend the policy and runner together for a new framework or execution group. Changes
+to verification commands, selectors, manifests, workflows or guidance require the explicit
+policy-review declaration. The protected validator still checks the candidate report.
+Reports and review declarations remain Agent-writable: they establish consistency within
+the local trust boundary, not independent proof of execution or reviewer identity.
+Complete local verification and manual Linux verification retain all existing obligations.

@@ -1,5 +1,29 @@
 {
   "version": 1,
+  "complete": {
+    "stages": [
+      "input-ownership", "project-inputs", "verification-tests",
+      "rust-format", "rust-clippy", "rust-tests",
+      "rust-doc-tests", "protocol-self-test", "persistence-self-test",
+      "author-edit-self-test", "tracker-self-test", "transaction-self-test",
+      "generated-contracts", "node-install", "web-typecheck",
+      "release-package", "web-build", "rust-release-build",
+      "foundation-tests", "project-scope", "postgres-scope",
+      "postgres-challenge", "postgres-library", "http-files",
+      "author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut",
+      "exact-dist", "recovery-fixture", "recovery-mixed",
+      "workspace-boundaries", "author-edit-policy", "transaction-guards"
+    ],
+    "groups": {
+      "cargo": ["rust-tests"],
+      "verification-tools": ["verification-tests"],
+      "node-contract": ["foundation-tests"],
+      "browser-source": ["foundation-tests"],
+      "node-postgresql": ["http-files"],
+      "node-process-cut": ["author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut"],
+      "browser-exact-dist": ["exact-dist"]
+    }
+  },
   "daily_workers": 2,
   "result_cache_profiles": ["node-contract"],
   "file_profiles": {
