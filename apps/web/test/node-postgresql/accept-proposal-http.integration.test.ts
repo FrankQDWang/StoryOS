@@ -423,7 +423,7 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id({ invalid_validation: "d211", changed_head: "d212", altered_candidate: "d213" }[reason]), "Refuse Acceptance Novel", "d3");
-    const before = await getChapter({
+    let before = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       chapterId: prepared.chapterId,
@@ -490,6 +490,23 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
         WHERE owner_user_id = '${USER_A}'::uuid AND project_id = '${prepared.projectId}'::uuid
           AND revision_id = '${revised.proposal.revision_id}'::uuid`);
     }
+    if (reason === "changed_head") {
+      // Advance the stored Head without revalidating the pending Proposal.
+      await queryPostgres(`INSERT INTO storyos.authoritative_revisions
+        SELECT owner_user_id, project_id, manuscript_object_id, '${id("d255")}'::uuid, payload_id
+        FROM storyos.authoritative_revisions WHERE project_id = '${prepared.projectId}'::uuid
+          AND revision_id = '${before.chapter.current_revision.revision_id}'::uuid;
+        INSERT INTO storyos.manuscript_revision_members
+        SELECT owner_user_id, project_id, manuscript_object_id, '${id("d255")}'::uuid,
+          manuscript_block_id, block_order FROM storyos.manuscript_revision_members
+        WHERE project_id = '${prepared.projectId}'::uuid
+          AND revision_id = '${before.chapter.current_revision.revision_id}'::uuid;
+        UPDATE storyos.authoritative_heads SET current_revision_id = '${id("d255")}'::uuid
+        WHERE project_id = '${prepared.projectId}'::uuid
+          AND manuscript_object_id = '${prepared.chapterId}'::uuid`);
+      before = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    }
     const request: AcceptProposalRequest = {
       command_schema: "storyos.command.accept-proposal.request.v1",
       accept_proposal_input: {
@@ -498,8 +515,7 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
           ? opened.proposal.validation_receipt.validation_receipt_id
           : revised.proposal.validation_receipt.validation_receipt_id,
         selected_operation_id: revised.proposal.operation_id,
-        expected_authoritative_revision_id: reason === "changed_head"
-          ? id("d255") : before.chapter.current_revision.revision_id,
+        expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING, correlation_id: id("d253"),
       },
