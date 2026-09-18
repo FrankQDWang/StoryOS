@@ -83,4 +83,3 @@ ALTER TABLE storyos.domain_receipts
         AND cardinality(resulting_heads) = 0)
     )
   ) IS TRUE);
-

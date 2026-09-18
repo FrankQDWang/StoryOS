@@ -18,4 +18,3 @@ export function zipStoreFiles(bytes: Uint8Array): Map<string, Uint8Array> {
   }
   return files;
 }
-
