@@ -229,4 +229,3 @@ export async function reviseCandidate(
   const revised = await getProposal({ baseUrl, projectId, proposalId: opened.proposal.proposal_id, fetchImpl });
   return { session, revised };
 }
-
