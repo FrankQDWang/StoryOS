@@ -24,7 +24,12 @@ impl PostgresProjectReader {
         boundary: AcceptanceRefusalBoundary,
     ) -> Result<AcceptanceRefusalReason, AcceptProposalError> {
         let mut client = self.connect().await.map_err(accept_parse_error)?;
-        let transaction = client.transaction().await.map_err(accept_database_error)?;
+        let transaction = client
+            .build_transaction()
+            .isolation_level(tokio_postgres::IsolationLevel::Serializable)
+            .start()
+            .await
+            .map_err(accept_database_error)?;
         set_scope(&transaction, &command.project_scope)
             .await
             .map_err(accept_parse_error)?;

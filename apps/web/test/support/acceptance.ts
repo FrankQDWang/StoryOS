@@ -45,7 +45,7 @@ export async function startRealServer() {
   return startStoryOSServer({
     repositoryRoot,
     serverBinary: bin("storyos-server"),
-    sessions: { "session-a": USER_A, "session-b": "018f0000-0000-7001-8000-00000000000b" },
+    sessions: { "session-a": USER_A, "session-c": USER_A, "session-b": "018f0000-0000-7001-8000-00000000000b" },
   });
 }
 
