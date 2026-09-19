@@ -79,6 +79,18 @@ pub(super) async fn persist_author_edit_settlement(
                     std::io::Error::other("successor revision members were not copied"),
                 )));
             }
+            if let Some(context) = classified.proposal_context.as_ref()
+                && context.kind == "inline_edit"
+            {
+                super::author_edit_proposal::append_proposal_revision(
+                    client,
+                    &command.project_scope,
+                    context,
+                    &ids.revision_id,
+                    &context.candidate_text,
+                )
+                .await?;
+            }
             PreparedSettlement::AuthoritativeApplied {
                 ids,
                 body: crate::manuscript_block::display_body_from_stored(&persist_body, &blocks),

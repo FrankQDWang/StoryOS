@@ -91,6 +91,20 @@ pub(super) async fn get_proposal(
                 }
                 _ => contracts::OptionalValidationReceiptInspect::Absent,
             },
+            anchors: record
+                .anchors
+                .into_iter()
+                .map(|anchor| contracts::ProposalAnchorInspect {
+                    manuscript_block_id: anchor.manuscript_block_id,
+                    base_authoritative_revision_id: anchor.base_authoritative_revision_id,
+                    manuscript_schema_version: anchor.manuscript_schema_version,
+                    coordinate_profile: anchor.coordinate_profile,
+                    from: anchor.from,
+                    to: anchor.to,
+                    boundary_profile: anchor.boundary_profile,
+                    base_slice_digest: anchor.base_slice_digest,
+                })
+                .collect(),
         },
     }))
 }

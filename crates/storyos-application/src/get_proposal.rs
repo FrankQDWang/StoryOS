@@ -25,6 +25,20 @@ pub struct BlockProposalRecord {
     pub source_decision_id: String,
     pub validation_receipt_id: Option<String>,
     pub validation_receipt_result: Option<String>,
+    pub anchors: Vec<ProposalAnchorRecord>,
+}
+
+/// One inspectable InlineEditProposal Anchor.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalAnchorRecord {
+    pub manuscript_block_id: String,
+    pub base_authoritative_revision_id: String,
+    pub manuscript_schema_version: u32,
+    pub coordinate_profile: String,
+    pub from: u32,
+    pub to: u32,
+    pub boundary_profile: String,
+    pub base_slice_digest: String,
 }
 
 /// Reads one current Block Proposal under an already authenticated exact Project Scope.

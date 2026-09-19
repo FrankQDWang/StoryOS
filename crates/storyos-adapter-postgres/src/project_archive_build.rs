@@ -147,6 +147,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/project_writer_generations.json",
     ),
     ("projects", "canonical/projects.json"),
+    ("proposal_anchors", "canonical/proposal_anchors.json"),
     ("proposal_heads", "canonical/proposal_heads.json"),
     ("proposal_operations", "canonical/proposal_operations.json"),
     (

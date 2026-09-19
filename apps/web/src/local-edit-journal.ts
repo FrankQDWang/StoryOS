@@ -61,6 +61,23 @@ const INPUT_ORIGINS = new Set<InputOrigin>([
   "move_block",
   "retype_block",
 ]);
+function areProposalAnchors(value: unknown): boolean {
+  if (!Array.isArray(value)) {
+    return false;
+  }
+  return value.every((anchor) => anchor !== null
+    && typeof anchor === "object"
+    && typeof (anchor as { manuscript_block_id?: unknown }).manuscript_block_id === "string"
+    && UUID.test((anchor as { manuscript_block_id: string }).manuscript_block_id)
+    && (anchor as { coordinate_profile?: unknown }).coordinate_profile
+      === "prosemirror-token-utf16.v1"
+    && Number.isInteger((anchor as { from?: unknown }).from)
+    && Number.isInteger((anchor as { to?: unknown }).to)
+    && Number((anchor as { from: number }).from) < Number((anchor as { to: number }).to)
+    && typeof (anchor as { base_slice_digest?: unknown }).base_slice_digest === "string"
+    && String((anchor as { base_slice_digest: string }).base_slice_digest).startsWith("sha256:"));
+}
+
 const HARD_BOUNDARY_INPUT_ORIGINS = new Set<InputOrigin>([
   "paste",
   "cut",
@@ -558,7 +575,7 @@ export async function validateJournalSnapshot(
       || typeof record.created_at !== "string"
       || Number.isNaN(Date.parse(record.created_at))
       || new Date(Date.parse(record.created_at)).toISOString() !== record.created_at
-      || JSON.stringify(record.proposal_anchors) !== JSON.stringify([])) {
+      || !areProposalAnchors(record.proposal_anchors ?? [])) {
       throw new Error("Local Edit Journal is corrupt");
     }
     priorSequence = record.local_intent_sequence;
@@ -1154,7 +1171,7 @@ async function persistAuthorEditUnit(
     target_refs: base.target_refs,
     expected_authoritative_heads: [base.authoritative_head_revision_id],
     expected_proposal_heads: base.proposal_head_revision_ids,
-    proposal_anchors: [],
+    proposal_anchors: workspace.inlineProposalAnchors ?? [],
     observed_ownership_partition: base.observed_ownership_partition,
     author_edit_unit: authorEditUnit,
     retry_source: { kind: "fresh_editor_intent" },

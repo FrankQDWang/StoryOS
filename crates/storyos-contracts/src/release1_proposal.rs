@@ -14,7 +14,7 @@ pub(super) const GET_PROPOSAL: QueryOperation = QueryOperation {
     request_schema: GET_PROPOSAL_REQUEST_SCHEMA_ID,
     response_schema: GET_PROPOSAL_RESPONSE_SCHEMA_ID,
     responses: &[
-        (200, "Current Block Proposal"),
+        (200, "Current Proposal"),
         (400, "Invalid request"),
         (401, "Authentication required"),
         (403, "Request origin refused"),
@@ -115,6 +115,20 @@ pub struct BlockProposalInspect {
     pub candidate_text: String,
     pub source: ProposalSourceInspect,
     pub validation_receipt: OptionalValidationReceiptInspect,
+    pub anchors: Vec<ProposalAnchorInspect>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProposalAnchorInspect {
+    pub manuscript_block_id: String,
+    pub base_authoritative_revision_id: String,
+    pub manuscript_schema_version: u32,
+    pub coordinate_profile: String,
+    pub from: u32,
+    pub to: u32,
+    pub boundary_profile: String,
+    pub base_slice_digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

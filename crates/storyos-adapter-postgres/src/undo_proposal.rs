@@ -21,6 +21,9 @@ pub(super) async fn persist_proposal_compensation(
         prior_revision_id: frontier.current_revision_id.clone(),
         manuscript_block_id: frontier.manuscript_block_id.clone(),
         base_authoritative_revision_id: frontier.base_authoritative_revision_id.clone(),
+        kind: String::new(),
+        ranges: Vec::new(),
+        candidate_text: frontier.restored_candidate_text.clone(),
     };
     let proposal_revision_id = append_proposal_revision(
         client,

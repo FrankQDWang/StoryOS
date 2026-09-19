@@ -1,7 +1,8 @@
 use super::{
     ADVISORY_TEXT, CLARIFICATION_QUESTION, ExecutionCapability, FakeAttemptOutcome,
-    FakeDecisionKind, FakeDispatchPlan, NativeStreamItem, NoDecisionReason, PROSE_CHANGE_TEXT,
-    StreamItemRole, StreamItemState, host_fake_wire_digest, plan_fake_model_decision,
+    FakeDecisionKind, FakeDispatchPlan, INLINE_PROSE_CHANGE_TEXT, NativeStreamItem,
+    NoDecisionReason, PROSE_CHANGE_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
+    plan_fake_model_decision,
 };
 
 fn assistant(state: StreamItemState) -> NativeStreamItem {
@@ -48,6 +49,27 @@ fn plans_prose_change_input_without_treating_it_as_authority() {
                 kind: FakeDecisionKind::ProseChange {
                     text: PROSE_CHANGE_TEXT,
                     producer_input: PROSE_CHANGE_TEXT,
+                },
+                selected: true,
+                advances_continuation: true,
+            },
+        }
+    );
+}
+
+#[test]
+fn plans_inline_phrase_change_without_treating_it_as_authority() {
+    assert_eq!(
+        plan_fake_model_decision("Revise this phrase: keep the voice."),
+        FakeDispatchPlan::Dispatch {
+            items: vec![NativeStreamItem {
+                text: Some(INLINE_PROSE_CHANGE_TEXT),
+                ..assistant(StreamItemState::Complete)
+            }],
+            outcome: FakeAttemptOutcome::Decision {
+                kind: FakeDecisionKind::ProseChange {
+                    text: INLINE_PROSE_CHANGE_TEXT,
+                    producer_input: INLINE_PROSE_CHANGE_TEXT,
                 },
                 selected: true,
                 advances_continuation: true,

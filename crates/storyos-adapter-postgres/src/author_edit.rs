@@ -466,15 +466,27 @@ async fn classify_author_edit(
         current_body.clone(),
     )
     .await?;
-    let current_ownership = loaded.ownership;
-    let proposal_context = loaded.context;
+    let current_ownership = loaded.ownership.clone();
     if !uses_versioned_payload {
-        let current_body = loaded.edit_body;
+        let routed = match super::author_edit_proposal::route_inline_author_edit(
+            &loaded,
+            current_body,
+            command.author_edit_units.clone(),
+        ) {
+            Ok(routed) => routed,
+            Err(reason) => {
+                return Ok(ClassifiedAuthorEdit {
+                    result: ApplyAuthorEditResult::Refused { reason },
+                    successor_blocks: None,
+                    proposal_context: None,
+                });
+            }
+        };
         return Ok(ClassifiedAuthorEdit {
             result: apply_core_author_edit(&ApplyAuthorEdit {
                 chapter_id: command.chapter_id.clone(),
                 current_authoritative_revision_id: current_revision_id.to_owned(),
-                current_body,
+                current_body: routed.current_body,
                 expected_authoritative_revision_id: command
                     .expected_authoritative_revision_id
                     .clone(),
@@ -484,10 +496,11 @@ async fn classify_author_edit(
                 current_ownership,
                 target_refs: command.target_refs.clone(),
                 observed_ownership_partition: command.observed_ownership_partition.clone(),
-                author_edit_units: command.author_edit_units.clone(),
+                inline_edit_disposition: routed.disposition,
+                author_edit_units: routed.author_edit_units,
             }),
             successor_blocks: None,
-            proposal_context,
+            proposal_context: routed.proposal_context,
         });
     }
     let blocks = crate::manuscript_block::load_or_upgrade_blocks(

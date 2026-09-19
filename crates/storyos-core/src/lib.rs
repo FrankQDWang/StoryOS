@@ -14,6 +14,7 @@ mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
 mod open_block_proposal;
+mod open_inline_proposal;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -47,8 +48,9 @@ pub use assemble_context::{
 };
 pub use complete_fake_decision::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
-    HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, NativeStreamItem, StreamItemRole,
-    StreamItemState, host_fake_wire_digest, plan_fake_model_decision,
+    HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
+    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, StreamItemRole, StreamItemState,
+    host_fake_wire_digest, plan_fake_model_decision,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
@@ -78,6 +80,12 @@ pub use manuscript_payload::{
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,
     OpenBlockProposalResult, open_block_proposal,
+};
+pub use open_inline_proposal::{
+    EXCLUSIVE_AUTHORITATIVE_EDGES_V1, InlineInputOwner, InlineTargetBlock, OpenInlineProposal,
+    OpenInlineProposalAnchor, OpenInlineProposalConflict, OpenInlineProposalRefusal,
+    OpenInlineProposalResult, PROPOSAL_ANCHOR_BASE_SLICE_PROFILE, PROSEMIRROR_TOKEN_UTF16_V1,
+    classify_inline_input_owner, open_inline_proposal, proposal_anchor_base_slice_digest,
 };
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,
@@ -138,6 +146,12 @@ pub use update_volume::{
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum InlineEditDisposition {
+    Unspecified,
+    AuthoritativeDespiteReservation,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyAuthorEdit {
     pub chapter_id: String,
     pub current_authoritative_revision_id: String,
@@ -147,6 +161,7 @@ pub struct ApplyAuthorEdit {
     pub current_ownership: CurrentOwnershipFacts,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
+    pub inline_edit_disposition: InlineEditDisposition,
     pub author_edit_units: Vec<AuthorEditUnit>,
 }
 
@@ -264,6 +279,14 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
             reason: AuthorEditConflict::OwnershipChanged,
         };
     }
+    if command.inline_edit_disposition == InlineEditDisposition::AuthoritativeDespiteReservation {
+        if current_partition != "mixed" || command.expected_proposal_head_revision_ids.is_empty() {
+            return ApplyAuthorEditResult::Conflicted {
+                reason: AuthorEditConflict::OwnershipChanged,
+            };
+        }
+        return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);
+    }
     if current_partition == "authoritative" {
         return apply_author_edit_body(command, AuthorEditAppliedKind::Authoritative);
     }
@@ -329,6 +352,18 @@ fn apply_author_edit_body(
             },
         }
     }
+}
+
+/// Replace one UTF-16 range and keep the remainder of the body.
+pub fn splice_utf16_range(
+    body: &str,
+    from: u32,
+    to: u32,
+    text: &str,
+) -> Result<String, AuthorEditRefusal> {
+    let mut next = body.to_owned();
+    replace_checked_utf16_range(&mut next, from, to, text)?;
+    Ok(next)
 }
 
 pub(crate) fn replace_checked_utf16_range(

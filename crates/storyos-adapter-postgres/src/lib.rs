@@ -121,6 +121,7 @@ mod manuscript_block;
 mod manuscript_search;
 mod manuscript_tree;
 mod open_block_proposal;
+mod open_inline_proposal;
 mod pinned_export_source;
 mod project_archive_build;
 mod project_export;

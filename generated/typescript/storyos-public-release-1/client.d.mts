@@ -405,7 +405,9 @@ export type AcceptanceRefusalInspect = { refusal_id: string, correlation_id: str
 
 export type OptionalAcceptanceRefusalInspect = { "kind": "absent" } | { "kind": "present" } & AcceptanceRefusalInspect;
 
-export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, };
+export type ProposalAnchorInspect = { manuscript_block_id: string, base_authoritative_revision_id: string, manuscript_schema_version: number, coordinate_profile: string, from: number, to: number, boundary_profile: string, base_slice_digest: string, };
+
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, anchors: Array<ProposalAnchorInspect>, };
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 

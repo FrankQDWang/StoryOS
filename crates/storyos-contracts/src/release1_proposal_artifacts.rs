@@ -6,7 +6,7 @@ use crate::release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
     BlockProposalInspect, GET_PROPOSAL, GET_PROPOSAL_REQUEST_SCHEMA_ID,
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalResponse, OptionalAcceptanceRefusalInspect,
-    OptionalValidationReceiptInspect, ProposalSourceInspect,
+    OptionalValidationReceiptInspect, ProposalAnchorInspect, ProposalSourceInspect,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -57,7 +57,12 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
         ] {
             proposal["properties"][field]["format"] = json!("uuid");
         }
-        proposal["properties"]["kind"]["const"] = json!("block_edit");
+        proposal["properties"]["kind"]["enum"] = json!(["block_edit", "inline_edit"]);
+    }
+    if let Some(anchor) = schema["$defs"].get_mut("ProposalAnchorInspect") {
+        for field in ["manuscript_block_id", "base_authoritative_revision_id"] {
+            anchor["properties"][field]["format"] = json!("uuid");
+        }
     }
     if let Some(source) = schema["$defs"].get_mut("ProposalSourceInspect") {
         source["properties"]["run_id"]["format"] = json!("uuid");
@@ -89,7 +94,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one current Block Proposal\n",
+            "  {}:\n    get:\n      operationId: {}\n      summary: Inspect one current Proposal\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "      responses:\n{}",
@@ -101,13 +106,14 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ProposalSourceInspect::decl(&config),
         OptionalValidationReceiptInspect::decl(&config),
         AcceptanceRefusalReason::decl(&config),
         AcceptanceRefusalBoundary::decl(&config),
         AcceptanceRefusalInspect::decl(&config),
         OptionalAcceptanceRefusalInspect::decl(&config),
+        ProposalAnchorInspect::decl(&config),
         BlockProposalInspect::decl(&config),
         GetProposalResponse::decl(&config),
     )
@@ -186,7 +192,8 @@ fn proposal_fixture() -> Value {
                 "kind": "present",
                 "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08",
                 "result": "valid"
-            }
+            },
+            "anchors": []
         }
     })
 }
