@@ -30,6 +30,15 @@ export function sessionFetch(baseUrl: string, sessionHandle?: string): typeof fe
   };
 }
 
+function childEnv(overrides: Readonly<Record<string, string>>): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value !== undefined) env[key] = value;
+  }
+  Object.assign(env, overrides);
+  return env;
+}
+
 export async function startStoryOSServer(options: {
   readonly bind?: string;
   readonly repositoryRoot: string;
@@ -40,7 +49,10 @@ export async function startStoryOSServer(options: {
 }): Promise<StoryOSServer> {
   const { bind = "127.0.0.1:0", repositoryRoot, serverBinary, sessions } = options;
   const webRoot = options.webRoot ?? join(dirname(serverBinary), "web");
-  const env: NodeJS.ProcessEnv = { ...process.env, STORYOS_WORKER: "0", ...options.extraEnv };
+  const env = childEnv({
+    STORYOS_WORKER: "0",
+    ...(options.extraEnv ?? {}),
+  });
   if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
     env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
   }
@@ -104,7 +116,7 @@ export async function runStoryOSWorker(options: {
   readonly args: readonly string[];
   readonly extraEnv?: Readonly<Record<string, string>>;
 }): Promise<void> {
-  const env = { ...process.env, ...options.extraEnv };
+  const env = childEnv(options.extraEnv ?? {});
   if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
     env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
   }

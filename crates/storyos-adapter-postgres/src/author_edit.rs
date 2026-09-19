@@ -37,11 +37,29 @@ impl AuthorEditStore for PostgresProjectReader {
 }
 
 impl PostgresProjectReader {
+    async fn pause_generating_proposals_for_input(
+        &self,
+        command: &ApplyAuthorEditCommand,
+    ) -> Result<(), AuthorEditError> {
+        let transaction = self
+            .begin_serializable_project_command_transaction(&command.project_scope)
+            .await
+            .map_err(author_edit_challenge_error)?;
+        super::stream_proposal_pause::pause_generating_proposals(&transaction.client, command)
+            .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(author_edit_challenge_error)?;
+        Ok(())
+    }
+
     pub(crate) async fn apply_author_edit_with_fault(
         &self,
         command: &ApplyAuthorEditCommand,
         fault: AuthorEditFault,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
+        self.pause_generating_proposals_for_input(command).await?;
         match self.create_author_command_admission(command).await? {
             AdmissionUse::ExistingSettlement(receipt_id) => {
                 return self.read_author_edit_settlement(command, &receipt_id).await;

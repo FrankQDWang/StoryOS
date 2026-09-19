@@ -5,7 +5,7 @@ use storyos_application::{
 use storyos_core::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, StreamItemRole, StreamItemState,
-    host_fake_wire_digest, plan_fake_model_decision,
+    host_fake_wire_digest, plan_fake_model_decision, stream_batch_plan,
 };
 use uuid::Uuid;
 
@@ -246,6 +246,21 @@ async fn settle_one_phase(
         .await?;
         return Ok(next);
     }
+    if stream_batch_plan(&author_message).is_some()
+        && let Some(decision) = decision_id.as_deref()
+    {
+        let (_proposal_id, work) = crate::stream_proposal_generation::apply_streamed_proposal(
+            client,
+            claim,
+            &chapter_id,
+            decision,
+            &author_message,
+        )
+        .await?;
+        if matches!(work, crate::stream_proposal_generation::StreamWork::Hold) {
+            return requeue_generation(client, claim).await;
+        }
+    }
     if let Some(decision) = decision_id
         && continuation_id.is_none()
         && payload
@@ -330,6 +345,7 @@ async fn persist_stream_and_decision(
             (id, status, hold)
         }
     };
+    let mut stream_hold = false;
     let opened_proposal = match (decision_id.as_deref(), outcome) {
         (
             Some(decision_id),
@@ -348,6 +364,18 @@ async fn persist_stream_and_decision(
                     text,
                 )
                 .await?
+            } else if stream_batch_plan(author_message).is_some() {
+                let (proposal_id, work) =
+                    crate::stream_proposal_generation::apply_streamed_proposal(
+                        client,
+                        claim,
+                        chapter_id,
+                        decision_id,
+                        author_message,
+                    )
+                    .await?;
+                stream_hold = matches!(work, crate::stream_proposal_generation::StreamWork::Hold);
+                proposal_id
             } else {
                 crate::open_block_proposal::open_selected_prose_change(
                     client,
@@ -404,6 +432,9 @@ async fn persist_stream_and_decision(
         /*clear_lease*/ hold.is_none(),
     )
     .await?;
+    if stream_hold {
+        return requeue_generation(client, claim).await;
+    }
     Ok(match hold {
         Some(kind) => WorkPhase::Hold(kind),
         None => WorkPhase::Done(CompleteAgentRun::Settled),
@@ -666,6 +697,21 @@ async fn update_run(
         .await
         .map_err(complete_database_error)?;
     Ok(())
+}
+
+async fn requeue_generation(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+) -> Result<WorkPhase, CompleteAgentRunError> {
+    update_run(
+        client,
+        claim,
+        "queued",
+        /*settlement*/ None,
+        /*clear_lease*/ true,
+    )
+    .await?;
+    Ok(WorkPhase::Done(CompleteAgentRun::Settled))
 }
 
 async fn hold_if_requested(kind: &str) {
