@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:65ef3cee90bd9ba1d8ef54efc687b11a7cdaa25d3e7ba0de420251c2770660b2",
+  "corpus_digest": "sha256:e98bb14c0966bf90da6ff699f1326b39c63c3624c5ef3ac82ddca8eb40257665",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -66,6 +66,9 @@
       "generated/golden-wire/storyos-public-release-1/accept-proposal.json",
       "generated/golden-wire/storyos-public-release-1/accept-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json",
+      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json",
@@ -494,6 +497,24 @@
       "fixture_id": "storyos.golden.acceptProposal.boundary.v1",
       "operation_id": "acceptProposal",
       "path": "generated/golden-wire/storyos-public-release-1/accept-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.rejectProposalOperations.positive.v1",
+      "operation_id": "rejectProposalOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.rejectProposalOperations.invalid.v1",
+      "operation_id": "rejectProposalOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.rejectProposalOperations.boundary.v1",
+      "operation_id": "rejectProposalOperations",
+      "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json"
     },
     {
       "classification": "positive",

@@ -47,6 +47,8 @@ use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
 use crate::release1_readable_export_query_artifacts as readable_export_query_artifacts;
+use crate::release1_reject_proposal_operations::REJECT_PROPOSAL_OPERATIONS;
+use crate::release1_reject_proposal_operations_artifacts as reject_proposal_operations_artifacts;
 use crate::release1_set_current_chapter::SET_CURRENT_CHAPTER;
 use crate::release1_set_current_chapter_artifacts as set_current_chapter_artifacts;
 use crate::release1_snapshot::{ACTIVITY_STREAM, GET_SNAPSHOT};
@@ -350,6 +352,15 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| accept_proposal_artifacts::fixture_bytes(),
             |_profile| accept_proposal_artifacts::invalid_fixture_bytes(),
             |_profile| accept_proposal_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        reject_proposal_operations_artifacts::FIXTURE_PATHS,
+        &REJECT_PROPOSAL_OPERATIONS,
+        [
+            |_profile| reject_proposal_operations_artifacts::fixture_bytes(),
+            |_profile| reject_proposal_operations_artifacts::invalid_fixture_bytes(),
+            |_profile| reject_proposal_operations_artifacts::boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

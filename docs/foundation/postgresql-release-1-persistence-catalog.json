@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:968c92d950247ffd2923f077210606b9e8e6ee2632516b16484931ba6cc74ba7"
+    "digest": "sha256:65056217e9c7f6867c203ef50a0c98a450feb18a35c8ef4c263bfc2ba06e3bfe"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:0c765182e623886e589401a2498137ce95aaa03abf97ccc980daae7c5b97a8f6",
+    "migration_chain_digest": "sha256:5401d897e8d510785b68faa64d8cb1e6e407fb02b8d637650138a26df548533f",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:fa60128a1f9ac1785b11fcece1347ccbc5c14dde0dbfe6e50b8a0e118b98b9f7",
+      "manifest_sha256": "sha256:a609009cfab8c92331d6e506b7ba8c53d32326a3e519e4bbb77f29f5cda61060",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -447,6 +447,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0053_acceptance_refusals.sql",
           "lf_sha256": "sha256:d26f7d67b247db3c4717acc31f208ff7f292ebd857216044d537d96f223808be"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0054_reject_proposal_operations.sql",
+          "lf_sha256": "sha256:fd970ad369016fdf422d293b4dae1bb1d11a6ad24e5c61436cea9d711de9fad2"
         }
       ]
     },
@@ -592,7 +596,7 @@
     },
     {
       "family_id": "operational-receipts-actions",
-      "table_families": ["domain_receipts", "validation_receipts", "acceptance_receipts", "undo_acceptance_receipts", "author_undo_receipts", "receipt_settlements", "domain_events", "command_idempotency", "author_action_entries"],
+      "table_families": ["domain_receipts", "validation_receipts", "acceptance_receipts", "proposal_rejection_receipts", "undo_acceptance_receipts", "author_undo_receipts", "receipt_settlements", "domain_events", "command_idempotency", "author_action_entries"],
       "owner": "core",
       "authority_class": "operational",
       "durability_class": "append_only_with_idempotency_head",

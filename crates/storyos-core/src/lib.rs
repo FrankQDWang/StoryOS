@@ -18,6 +18,7 @@ mod project_archive;
 mod project_export;
 mod readable_export;
 mod readable_export_command;
+mod reject_proposal_operations;
 mod set_current_chapter;
 mod statistics_profile;
 mod undo_latest_author_action;
@@ -96,6 +97,10 @@ pub use readable_export::{
 pub use readable_export_command::{
     ExportHumanReadableManuscript, ExportHumanReadableManuscriptRefusal,
     ExportHumanReadableManuscriptResult, export_human_readable_manuscript,
+};
+pub use reject_proposal_operations::{
+    RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
+    RejectProposalOperationsResult, reject_proposal_operations,
 };
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,

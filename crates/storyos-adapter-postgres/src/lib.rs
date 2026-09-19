@@ -127,6 +127,7 @@ mod project_export;
 mod project_export_work;
 mod readable_export;
 mod readable_export_work;
+mod reject_proposal_operations;
 mod set_current_chapter;
 mod snapshot;
 mod storage_activation;

@@ -1,0 +1,406 @@
+{
+  "$defs": {
+    "AuthorUndoDisposition": {
+      "enum": [
+        "forward"
+      ],
+      "type": "string"
+    },
+    "BoundedAuthorNote": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "omitted",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "present",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ControlledProject": {
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/ProjectOpenState"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "open"
+      ],
+      "type": "object"
+    },
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "ProjectOpenState": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "ProposalRejectionReason": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "author_declined",
+              "type": "string"
+            },
+            "note": {
+              "$ref": "#/$defs/BoundedAuthorNote"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RejectProposalOperationsConflictReason": {
+      "enum": [
+        "changed_head"
+      ],
+      "type": "string"
+    },
+    "RejectProposalOperationsEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "author_action_sequence": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "resolved",
+              "type": "string"
+            },
+            "operation_ids": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "preserved_closure": {
+              "type": "string"
+            },
+            "preserved_generation": {
+              "type": "string"
+            },
+            "preserved_validation": {
+              "type": "string"
+            },
+            "prior_resolution": {
+              "type": "string"
+            },
+            "rejection_reason": {
+              "$ref": "#/$defs/ProposalRejectionReason"
+            },
+            "resolution_event_refs": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "resulting_resolution": {
+              "type": "string"
+            },
+            "undo_disposition": {
+              "$ref": "#/$defs/AuthorUndoDisposition"
+            }
+          },
+          "required": [
+            "kind",
+            "author_action_sequence",
+            "undo_disposition",
+            "operation_ids",
+            "prior_resolution",
+            "resulting_resolution",
+            "rejection_reason",
+            "preserved_generation",
+            "preserved_validation",
+            "preserved_closure",
+            "resolution_event_refs"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/RejectProposalOperationsConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/RejectProposalOperationsRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RejectProposalOperationsRefusalReason": {
+      "enum": [
+        "wrong_scope",
+        "wrong_admission",
+        "stale_proposal_revision",
+        "not_eligible",
+        "operation_not_pending"
+      ],
+      "type": "string"
+    },
+    "RejectionReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "authoritative_commit_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "expected_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "prior_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "proposal_id": {
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/RejectionReceiptResult"
+        },
+        "resulting_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "selected_pending_operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "project_scope",
+        "command_digest",
+        "idempotency_key",
+        "author_command_admission_id",
+        "proposal_id",
+        "proposal_revision_id",
+        "selected_pending_operation_ids",
+        "expected_target_revisions",
+        "prior_authoritative_revision_ids",
+        "resulting_authoritative_revision_ids",
+        "authoritative_commit_ids",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "RejectionReceiptResult": {
+      "enum": [
+        "resolved",
+        "conflicted",
+        "refused"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "storyos.command.reject-proposal-operations.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_command_admission_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "command_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "#/$defs/RejectProposalOperationsEffect"
+    },
+    "project": {
+      "$ref": "#/$defs/ControlledProject"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "receipt": {
+      "$ref": "#/$defs/RejectionReceipt"
+    },
+    "schema_id": {
+      "const": "storyos.command.reject-proposal-operations.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "command_id",
+    "author_command_admission_id",
+    "receipt",
+    "project",
+    "effect"
+  ],
+  "title": "StoryOS Reject Proposal Operations Response",
+  "type": "object"
+}

@@ -1,0 +1,71 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000d12",
+  "command_id": "018f0000-0000-7001-8000-000000000d11",
+  "correlation_id": "018f0000-0000-7001-8000-000000000d10",
+  "effect": {
+    "author_action_sequence": "3",
+    "kind": "resolved",
+    "operation_ids": [
+      "018f0000-0000-7001-8000-000000000b04"
+    ],
+    "preserved_closure": "open",
+    "preserved_generation": "ready",
+    "preserved_validation": "valid",
+    "prior_resolution": "pending",
+    "rejection_reason": {
+      "kind": "author_declined",
+      "note": {
+        "kind": "omitted"
+      }
+    },
+    "resolution_event_refs": [
+      "018f0000-0000-7001-8000-000000000d15"
+    ],
+    "resulting_resolution": "rejected",
+    "undo_disposition": "forward"
+  },
+  "project": {
+    "open": {
+      "current_chapter_id": "018f0000-0000-7001-8000-000000000301",
+      "kind": "current_chapter"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000201",
+    "title": "Open Proposal Novel"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000d12",
+    "authoritative_commit_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.rejectProposalOperations.jcs.v1",
+      "value_hex_lowercase": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "created_at": "2026-09-19T12:00:00.000Z",
+    "expected_target_revisions": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000d14",
+    "prior_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_id": "018f0000-0000-7001-8000-000000000b02",
+    "proposal_revision_id": "018f0000-0000-7001-8000-000000000b03",
+    "receipt_id": "018f0000-0000-7001-8000-000000000d13",
+    "result": "resolved",
+    "resulting_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "selected_pending_operation_ids": [
+      "018f0000-0000-7001-8000-000000000b04"
+    ]
+  },
+  "schema_id": "storyos.command.reject-proposal-operations.response.v1"
+}
