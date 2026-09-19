@@ -133,6 +133,38 @@ pub(super) async fn persist_applied(
             )
             .await
             .map_err(accept_database_error)?;
+    } else {
+        client
+            .execute(
+                "UPDATE storyos.proposal_revisions
+                    SET base_authoritative_revision_id = $4::text::uuid
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND proposal_id = $3::text::uuid AND revision_id = $5::text::uuid",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.proposal_id,
+                    &ids.revision_id,
+                    &command.proposal_revision_id,
+                ],
+            )
+            .await
+            .map_err(accept_database_error)?;
+        client
+            .execute(
+                "UPDATE storyos.validation_receipts
+                    SET base_authoritative_revision_id = $4::text::uuid
+                  WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                    AND validation_receipt_id = $3::text::uuid",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &command.validation_receipt_id,
+                    &ids.revision_id,
+                ],
+            )
+            .await
+            .map_err(accept_database_error)?;
     }
     let created_at = insert_receipts(
         client,
