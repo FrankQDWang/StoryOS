@@ -704,11 +704,7 @@ async fn requeue_generation(
     claim: &ClaimedAgentRun,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     update_run(
-        client,
-        claim,
-        "queued",
-        /*settlement*/ None,
-        /*clear_lease*/ true,
+        client, claim, "queued", /*settlement*/ None, /*clear_lease*/ true,
     )
     .await?;
     Ok(WorkPhase::Done(CompleteAgentRun::Settled))
