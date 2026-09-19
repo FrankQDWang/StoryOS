@@ -43,6 +43,14 @@ export interface JournalPartition {
   disposition: "current_writer_open" | "read_only_observer";
 }
 
+export interface ProposalJournalAnchor {
+  manuscript_block_id: string;
+  coordinate_profile: string;
+  from: number;
+  to: number;
+  base_slice_digest: string;
+}
+
 export interface JournalIntentRecord extends Record<string, unknown> {
   completed_intent_record_id: string;
   local_intent_sequence: number;
@@ -59,7 +67,7 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   target_refs: string[];
   expected_authoritative_heads: string[];
   expected_proposal_heads: string[];
-  proposal_anchors: [];
+  proposal_anchors: ProposalJournalAnchor[];
   observed_ownership_partition: string;
   author_edit_unit?: AuthorEditUnit;
   retry_source: { kind: "fresh_editor_intent" };
@@ -207,6 +215,7 @@ export interface EditorWorkspace {
   cryptoImpl: Crypto;
   maxJsonStringUtf8Bytes: number;
   submitQueue?: Promise<PendingEditProjection | void>;
+  inlineProposalAnchors?: ProposalJournalAnchor[];
 }
 
 export interface EditorReadyState extends EditorWorkspace {

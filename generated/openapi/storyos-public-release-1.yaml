@@ -616,7 +616,7 @@ paths:
   /api/v1/projects/{project_id}/proposals/{proposal_id}:
     get:
       operationId: getProposal
-      summary: Inspect one current Block Proposal
+      summary: Inspect one current Proposal
       parameters:
         - name: project_id
           in: path
@@ -632,7 +632,7 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Current Block Proposal
+          description: Current Proposal
           content:
             application/json:
               schema:

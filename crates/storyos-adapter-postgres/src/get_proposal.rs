@@ -57,6 +57,12 @@ impl ProposalReader for PostgresProjectReader {
         let latest_acceptance_refusal =
             crate::acceptance_refusal::read_latest_refusal(&transaction, scope, proposal_id)
                 .await?;
+        let anchors = match row.as_ref() {
+            Some(row) if row.get::<_, String>(1) == "inline_edit" => {
+                read_inline_anchors(&transaction, scope, proposal_id).await?
+            }
+            _ => Vec::new(),
+        };
         transaction.commit().await.map_err(read_error)?;
         Ok(row.map(|row| BlockProposalRecord {
             project_scope: scope.clone(),
@@ -79,6 +85,47 @@ impl ProposalReader for PostgresProjectReader {
             validation_receipt_result: row.get(16),
             condition_refs: row.get::<_, Option<String>>(17).into_iter().collect(),
             latest_acceptance_refusal,
+            anchors,
         }))
     }
+}
+
+async fn read_inline_anchors(
+    client: &impl tokio_postgres::GenericClient,
+    scope: &ProjectScope,
+    proposal_id: &str,
+) -> Result<Vec<storyos_application::ProposalAnchorRecord>, ProjectReadError> {
+    let rows = client
+        .query(
+            "SELECT manuscript_block_id::text, base_authoritative_revision_id::text,
+                    manuscript_schema_version, coordinate_profile, range_from, range_to,
+                    boundary_profile, base_slice_digest
+               FROM storyos.proposal_anchors
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND proposal_id = $3::text::uuid
+              ORDER BY anchor_order",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &proposal_id,
+            ],
+        )
+        .await
+        .map_err(read_error)?;
+    rows.into_iter()
+        .map(|row| {
+            Ok(storyos_application::ProposalAnchorRecord {
+                manuscript_block_id: row.get(0),
+                base_authoritative_revision_id: row.get(1),
+                manuscript_schema_version: u32::try_from(row.get::<_, i32>(2))
+                    .map_err(ProjectReadError::unavailable)?,
+                coordinate_profile: row.get(3),
+                from: u32::try_from(row.get::<_, i32>(4)).map_err(ProjectReadError::unavailable)?,
+                to: u32::try_from(row.get::<_, i32>(5)).map_err(ProjectReadError::unavailable)?,
+                boundary_profile: row.get(6),
+                base_slice_digest: row.get(7),
+            })
+        })
+        .collect()
 }

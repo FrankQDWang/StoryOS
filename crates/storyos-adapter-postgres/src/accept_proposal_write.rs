@@ -47,13 +47,14 @@ pub(super) async fn persist_applied(
         authoritative_commit_id: Uuid::now_v7().to_string(),
         project_activity_event_id: Uuid::now_v7().to_string(),
     };
+    let accepted_body = loaded.accepted_body()?;
     persist_authority(
         client,
         command,
         &loaded.chapter_id,
         &prior_head_revision_id,
         &ids,
-        &loaded.candidate_text,
+        &accepted_body,
         authoritative_commit_sequence,
     )
     .await?;
@@ -78,7 +79,7 @@ pub(super) async fn persist_applied(
         command.project_scope.project_id.as_ref(),
         &loaded.chapter_id,
         &ids.revision_id,
-        &loaded.candidate_text,
+        &accepted_body,
     )
     .await
     .map_err(accept_database_error)?;
@@ -210,10 +211,7 @@ pub(super) async fn persist_applied(
             author_action_sequence,
             authoritative_commit_id: ids.authoritative_commit_id,
             revision_id: ids.revision_id,
-            body: crate::manuscript_block::display_body_from_stored(
-                &loaded.candidate_text,
-                &blocks,
-            ),
+            body: crate::manuscript_block::display_body_from_stored(&accepted_body, &blocks),
             blocks,
             project_activity_position,
         },

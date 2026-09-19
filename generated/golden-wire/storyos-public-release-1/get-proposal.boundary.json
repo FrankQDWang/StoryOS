@@ -5,6 +5,7 @@
     "project_id": "018f0000-0000-7001-8000-000000000201"
   },
   "proposal": {
+    "anchors": [],
     "base_authoritative_revision_id": "018f0000-0000-7001-8000-000000000b06",
     "candidate_text": "Guard the narrator voice in this passage.",
     "chapter_id": "018f0000-0000-7001-8000-000000000301",

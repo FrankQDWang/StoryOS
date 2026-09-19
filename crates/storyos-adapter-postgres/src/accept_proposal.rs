@@ -110,6 +110,68 @@ pub(super) struct LoadedProposal {
     receipt_candidate_text: Option<String>,
     current_head_revision_id: Option<String>,
     validated_target_matches_head: bool,
+    kind: String,
+    chapter_body: String,
+    manuscript_block_id: String,
+    inline_from: Option<u32>,
+    inline_to: Option<u32>,
+    inline_digest: Option<String>,
+    inline_base_slice_matches: bool,
+}
+
+impl LoadedProposal {
+    pub(super) fn accepted_body(&self) -> Result<String, AcceptProposalError> {
+        if self.kind != "inline_edit" {
+            return Ok(self.candidate_text.clone());
+        }
+        let (Some(from), Some(to)) = (self.inline_from, self.inline_to) else {
+            return Err(AcceptProposalError::Unavailable(Box::new(
+                std::io::Error::other("inline Acceptance needs exact Anchors"),
+            )));
+        };
+        storyos_core::splice_utf16_range(&self.chapter_body, from, to, &self.candidate_text)
+            .map_err(|error| {
+                AcceptProposalError::Unavailable(Box::new(std::io::Error::other(format!(
+                    "{error:?}"
+                ))))
+            })
+    }
+
+    fn inline_slice_matches(&self) -> bool {
+        if self.kind != "inline_edit" {
+            return true;
+        }
+        let (Some(from), Some(to), Some(digest)) =
+            (self.inline_from, self.inline_to, self.inline_digest.as_deref())
+        else {
+            return false;
+        };
+        let block_text = crate::manuscript_block::blocks_from_stored_payload(
+            &self.chapter_body,
+            std::slice::from_ref(&self.manuscript_block_id),
+        )
+        .into_iter()
+        .next()
+        .map(|block| block.text)
+        .unwrap_or_else(|| self.chapter_body.clone());
+        let units: Vec<u16> = block_text.encode_utf16().collect();
+        let (Ok(start), Ok(end)) = (usize::try_from(from), usize::try_from(to)) else {
+            return false;
+        };
+        let Some(slice) = units.get(start..end).and_then(|range| String::from_utf16(range).ok())
+        else {
+            return false;
+        };
+        storyos_core::proposal_anchor_base_slice_digest(
+            &self.manuscript_block_id,
+            "paragraph",
+            1,
+            storyos_core::PROSEMIRROR_TOKEN_UTF16_V1,
+            from,
+            to,
+            &slice,
+        ) == digest
+    }
 }
 
 async fn persist_accept(
@@ -152,6 +214,7 @@ async fn persist_accept(
         selected_operation_pending: loaded.operation_id == command.selected_operation_id
             && loaded.operation_resolution == "pending",
         expected_target_matches_head: loaded.validated_target_matches_head
+            && loaded.inline_base_slice_matches
             && loaded.current_head_revision_id.as_deref()
                 == Some(command.expected_authoritative_revision_id.as_str()),
         candidate_unaltered: loaded.receipt_candidate_text.as_deref()
@@ -209,7 +272,10 @@ async fn load_proposal(
                              condition.proposal_revision_id) =
                             (revision.owner_user_id, revision.project_id, revision.proposal_id, revision.revision_id)),
                     COALESCE(receipt.base_authoritative_revision_id = chapter_head.current_revision_id
-                      AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false)
+                      AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
+                    proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
+                    proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
+                    anchor.base_slice_digest
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -229,6 +295,20 @@ async fn load_proposal(
                  ON (chapter_head.owner_user_id, chapter_head.project_id,
                      chapter_head.manuscript_object_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.chapter_id)
+               LEFT JOIN storyos.authoritative_revisions AS chapter_revision
+                 ON (chapter_revision.owner_user_id, chapter_revision.project_id,
+                     chapter_revision.manuscript_object_id, chapter_revision.revision_id) =
+                    (chapter_head.owner_user_id, chapter_head.project_id,
+                     chapter_head.manuscript_object_id, chapter_head.current_revision_id)
+               LEFT JOIN storyos.authoritative_payloads AS payload
+                 ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
+                    (chapter_revision.owner_user_id, chapter_revision.project_id,
+                     chapter_revision.payload_id)
+               LEFT JOIN storyos.proposal_anchors AS anchor
+                 ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id,
+                     anchor.operation_id, anchor.anchor_order) =
+                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id,
+                     operation.operation_id, 1)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.proposal_id = $3::text::uuid",
@@ -241,21 +321,36 @@ async fn load_proposal(
         )
         .await
         .map_err(accept_database_error)?;
-    Ok(row.map(|row| LoadedProposal {
-        current_revision_id: row.get(0),
-        generation: row.get(1),
-        closure: row.get(2),
-        candidate_text: row.get(3),
-        chapter_id: row.get(4),
-        operation_id: row.get(5),
-        operation_resolution: row.get(6),
-        receipt_id: row.get(7),
-        receipt_result: row.get(8),
-        receipt_revision_id: row.get(9),
-        receipt_candidate_text: row.get(10),
-        current_head_revision_id: row.get(11),
-        validation_current: row.get(12),
-        validated_target_matches_head: row.get(13),
+    Ok(row.map(|row| {
+        let mut loaded = LoadedProposal {
+            current_revision_id: row.get(0),
+            generation: row.get(1),
+            closure: row.get(2),
+            candidate_text: row.get(3),
+            chapter_id: row.get(4),
+            operation_id: row.get(5),
+            operation_resolution: row.get(6),
+            receipt_id: row.get(7),
+            receipt_result: row.get(8),
+            receipt_revision_id: row.get(9),
+            receipt_candidate_text: row.get(10),
+            current_head_revision_id: row.get(11),
+            validation_current: row.get(12),
+            validated_target_matches_head: row.get(13),
+            kind: row.get(14),
+            chapter_body: row.get::<_, Option<String>>(15).unwrap_or_default(),
+            manuscript_block_id: row.get::<_, Option<String>>(16).unwrap_or_default(),
+            inline_from: row
+                .get::<_, Option<i32>>(17)
+                .and_then(|value| u32::try_from(value).ok()),
+            inline_to: row
+                .get::<_, Option<i32>>(18)
+                .and_then(|value| u32::try_from(value).ok()),
+            inline_digest: row.get(19),
+            inline_base_slice_matches: true,
+        };
+        loaded.inline_base_slice_matches = loaded.inline_slice_matches();
+        loaded
     }))
 }
 

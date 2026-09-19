@@ -217,7 +217,8 @@ pub use release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
     BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID,
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
-    OptionalAcceptanceRefusalInspect, OptionalValidationReceiptInspect, ProposalSourceInspect,
+    OptionalAcceptanceRefusalInspect, OptionalValidationReceiptInspect, ProposalAnchorInspect,
+    ProposalSourceInspect,
 };
 pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,

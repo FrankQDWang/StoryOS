@@ -339,14 +339,25 @@ async fn persist_stream_and_decision(
                 ..
             },
         ) => {
-            crate::open_block_proposal::open_selected_prose_change(
-                client,
-                claim,
-                chapter_id,
-                decision_id,
-                text,
-            )
-            .await?
+            if author_message.starts_with("Revise this phrase:") {
+                crate::open_inline_proposal::open_selected_inline_change(
+                    client,
+                    claim,
+                    chapter_id,
+                    decision_id,
+                    text,
+                )
+                .await?
+            } else {
+                crate::open_block_proposal::open_selected_prose_change(
+                    client,
+                    claim,
+                    chapter_id,
+                    decision_id,
+                    text,
+                )
+                .await?
+            }
         }
         _ => None,
     };
