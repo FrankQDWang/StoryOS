@@ -162,7 +162,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,getAgentRun,getProposal,acceptProposal,rejectProposalOperations,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,getAgentRun,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -483,6 +483,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_accept_proposal_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_reject_proposal_operations_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_reject_proposal_operations_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_reopen_rejected_operations_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_reopen_rejected_operations_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_create_volume_artifacts::REQUEST_SCHEMA_PATH,
@@ -704,7 +706,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v20\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v21\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])

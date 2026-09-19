@@ -48,6 +48,8 @@ mod release1_readable_export_query;
 mod release1_readable_export_query_artifacts;
 mod release1_reject_proposal_operations;
 mod release1_reject_proposal_operations_artifacts;
+mod release1_reopen_rejected_operations;
+mod release1_reopen_rejected_operations_artifacts;
 mod release1_set_current_chapter;
 mod release1_set_current_chapter_artifacts;
 mod release1_snapshot;
@@ -239,6 +241,14 @@ pub use release1_reject_proposal_operations::{
     RejectProposalOperationsEffect, RejectProposalOperationsInput,
     RejectProposalOperationsRefusalReason, RejectProposalOperationsRequest,
     RejectProposalOperationsResponse, RejectionReceipt, RejectionReceiptResult,
+};
+pub use release1_reopen_rejected_operations::{
+    REOPEN_REJECTED_OPERATIONS_DIGEST_PROFILE, REOPEN_REJECTED_OPERATIONS_METHOD,
+    REOPEN_REJECTED_OPERATIONS_PATH, REOPEN_REJECTED_OPERATIONS_REQUEST_SCHEMA_ID,
+    REOPEN_REJECTED_OPERATIONS_RESPONSE_SCHEMA_ID, ReopenReceipt, ReopenReceiptResult,
+    ReopenRejectedOperationsConflictReason, ReopenRejectedOperationsEffect,
+    ReopenRejectedOperationsInput, ReopenRejectedOperationsRefusalReason,
+    ReopenRejectedOperationsRequest, ReopenRejectedOperationsResponse,
 };
 pub use release1_set_current_chapter::{
     SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,

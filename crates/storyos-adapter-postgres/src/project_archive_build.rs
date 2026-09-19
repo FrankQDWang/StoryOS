@@ -150,6 +150,10 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
     ("proposal_heads", "canonical/proposal_heads.json"),
     ("proposal_operations", "canonical/proposal_operations.json"),
     (
+        "proposal_operation_reopenings",
+        "canonical/proposal_operation_reopenings.json",
+    ),
+    (
         "proposal_operation_resolutions",
         "canonical/proposal_operation_resolutions.json",
     ),
