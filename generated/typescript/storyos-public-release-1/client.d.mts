@@ -449,6 +449,22 @@ export type RejectProposalOperationsEffect = { "kind": "resolved", author_action
 
 export type RejectProposalOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: RejectionReceipt, project: ControlledProject, effect: RejectProposalOperationsEffect, };
 
+export type ReopenRejectedOperationsInput = { proposal_revision_id: string, selected_rejected_operation_ids: Array<string>, rejection_event_refs: Array<string>, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type ReopenRejectedOperationsRequest = { command_schema: string, reopen_rejected_operations_input: ReopenRejectedOperationsInput, };
+
+export type ReopenReceiptResult = "resolved" | "conflicted" | "refused";
+
+export type ReopenReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, source_proposal_revision_id: string, resulting_proposal_revision_id: string, selected_rejected_operation_ids: Array<string>, rejection_event_refs: Array<string>, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ReopenReceiptResult, created_at: string, };
+
+export type ReopenRejectedOperationsRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_rejected" | "unavailable_proof";
+
+export type ReopenRejectedOperationsConflictReason = "changed_head";
+
+export type ReopenRejectedOperationsEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, operation_ids: Array<string>, rejection_event_refs: Array<string>, prior_resolution: string, resulting_resolution: string, resulting_proposal_revision_id: string, resulting_validation: string, preserved_generation: string, preserved_closure: string, state_event_refs: Array<string>, } | { "kind": "conflicted", reason: ReopenRejectedOperationsConflictReason, } | { "kind": "refused", reason: ReopenRejectedOperationsRefusalReason, };
+
+export type ReopenRejectedOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenReceipt, project: ControlledProject, effect: ReopenRejectedOperationsEffect, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -484,6 +500,8 @@ export declare function digestAcceptProposal(request: AcceptProposalRequest, cry
 export declare function acceptProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: AcceptProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<AcceptProposalResponse>;
 export declare function digestRejectProposalOperations(request: RejectProposalOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function rejectProposalOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: RejectProposalOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<RejectProposalOperationsResponse>;
+export declare function digestReopenRejectedOperations(request: ReopenRejectedOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function reopenRejectedOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenRejectedOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenRejectedOperationsResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

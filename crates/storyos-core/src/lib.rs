@@ -19,6 +19,7 @@ mod project_export;
 mod readable_export;
 mod readable_export_command;
 mod reject_proposal_operations;
+mod reopen_rejected_operations;
 mod set_current_chapter;
 mod statistics_profile;
 mod undo_latest_author_action;
@@ -101,6 +102,10 @@ pub use readable_export_command::{
 pub use reject_proposal_operations::{
     RejectProposalOperations, RejectProposalOperationsConflict, RejectProposalOperationsRefusal,
     RejectProposalOperationsResult, reject_proposal_operations,
+};
+pub use reopen_rejected_operations::{
+    ReopenRejectedOperations, ReopenRejectedOperationsConflict, ReopenRejectedOperationsRefusal,
+    ReopenRejectedOperationsResult, reopen_rejected_operations,
 };
 pub use set_current_chapter::{
     SetCurrentChapter, SetCurrentChapterConflict, SetCurrentChapterNoEffect,

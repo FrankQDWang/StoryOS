@@ -14,6 +14,7 @@
     "getProposal",
     "acceptProposal",
     "rejectProposalOperations",
+    "reopenRejectedOperations",
     "archiveProject",
     "createVolume",
     "updateVolume",
@@ -261,6 +262,16 @@
       "path": "generated/json-schema/storyos-public-release-1/reject-proposal-operations-response.schema.json",
       "schema_id": "storyos.command.reject-proposal-operations.response.v1",
       "sha256": "sha256:6ec5999c57e19b13cd74c55bcb24ee4ad3fa005cbea2aa0559f0d363530a4272"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/reopen-rejected-operations-request.schema.json",
+      "schema_id": "storyos.command.reopen-rejected-operations.request.v1",
+      "sha256": "sha256:0de4dad3ad309ff5c84da53be6fde478fae6b3576b03995070d426d29f240abf"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/reopen-rejected-operations-response.schema.json",
+      "schema_id": "storyos.command.reopen-rejected-operations.response.v1",
+      "sha256": "sha256:e0e2faf48c1c35da9b1b6f3ba4efe3a10bacbf3e080dcfb87a73a5d352f0b971"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/archive-project-request.schema.json",

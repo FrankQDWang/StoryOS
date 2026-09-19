@@ -597,6 +597,7 @@ run_http_files \
   test/node-postgresql/edit-proposal-candidate-http.integration.test.ts \
   test/node-postgresql/accept-proposal-http.integration.test.ts \
   test/node-postgresql/reject-proposal-operations-http.integration.test.ts \
+  test/node-postgresql/reopen-rejected-operations-http.integration.test.ts \
   test/node-postgresql/acceptance-refusal-http.integration.test.ts \
   test/node-postgresql/archive-project-http.integration.test.ts \
   test/node-postgresql/create-volume-http.integration.test.ts \

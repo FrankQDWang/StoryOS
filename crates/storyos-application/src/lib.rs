@@ -59,6 +59,7 @@ mod project_export_work;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
+mod reopen_rejected_operations;
 mod set_current_chapter;
 mod snapshot;
 mod takeover;
@@ -189,6 +190,11 @@ pub use reject_proposal_operations::{
     RejectProposalOperationsCommand, RejectProposalOperationsError,
     RejectProposalOperationsSettlement, RejectProposalOperationsSettlementEffect,
     RejectProposalOperationsStore, RejectionNote, reject_proposal_operations,
+};
+pub use reopen_rejected_operations::{
+    ReopenRejectedOperationsCommand, ReopenRejectedOperationsError,
+    ReopenRejectedOperationsSettlement, ReopenRejectedOperationsSettlementEffect,
+    ReopenRejectedOperationsStore, reopen_rejected_operations,
 };
 pub use set_current_chapter::{
     SetCurrentChapterAuthority, SetCurrentChapterCommand, SetCurrentChapterError,
