@@ -355,6 +355,7 @@ async fn persist_stream_and_decision(
                     chapter_id,
                     decision_id,
                     text,
+                    author_message,
                 )
                 .await?
             }

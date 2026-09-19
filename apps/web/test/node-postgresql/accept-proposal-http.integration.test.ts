@@ -48,7 +48,7 @@ test("acceptProposal applies one pending Operation and retries the settled outco
       accept_proposal_input: {
         proposal_revision_id: revised.proposal.revision_id,
         validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
-        selected_operation_id: revised.proposal.operation_id,
+        selected_operation_ids: [revised.proposal.operation_id],
         expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING,
@@ -198,7 +198,7 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
       accept_proposal_input: {
         proposal_revision_id: opened.proposal.revision_id,
         validation_receipt_id: opened.proposal.validation_receipt.validation_receipt_id,
-        selected_operation_id: opened.proposal.operation_id,
+        selected_operation_ids: [opened.proposal.operation_id],
         expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING,
@@ -258,7 +258,7 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
         validation_receipt_id: reason === "invalid_validation"
           ? opened.proposal.validation_receipt.validation_receipt_id
           : revised.proposal.validation_receipt.validation_receipt_id,
-        selected_operation_id: revised.proposal.operation_id,
+        selected_operation_ids: [revised.proposal.operation_id],
         expected_authoritative_revision_id: before.chapter.current_revision.revision_id,
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING, correlation_id: id("d253"),

@@ -579,15 +579,15 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.server_contract_revision,
-        "storyos.server.release-1.v4"
+        "storyos.server.release-1.v5"
     );
     assert_eq!(
         profile.release_identity.worker_contract_revision,
-        "storyos.worker.release-1.v4"
+        "storyos.worker.release-1.v5"
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v21"
+        "storyos.typescript-client.release-1.v22"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -706,7 +706,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v21\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v22\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])

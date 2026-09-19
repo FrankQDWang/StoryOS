@@ -6,7 +6,8 @@ use crate::release1_proposal::{
     AcceptanceRefusalBoundary, AcceptanceRefusalInspect, AcceptanceRefusalReason,
     BlockProposalInspect, GET_PROPOSAL, GET_PROPOSAL_REQUEST_SCHEMA_ID,
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalResponse, OptionalAcceptanceRefusalInspect,
-    OptionalValidationReceiptInspect, ProposalAnchorInspect, ProposalSourceInspect,
+    OptionalValidationReceiptInspect, ProposalAnchorInspect, ProposalOperationInspect,
+    ProposalSourceInspect,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -59,6 +60,11 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
         }
         proposal["properties"]["kind"]["enum"] = json!(["block_edit", "inline_edit"]);
     }
+    if let Some(operation) = schema["$defs"].get_mut("ProposalOperationInspect") {
+        for field in ["operation_id", "manuscript_block_id"] {
+            operation["properties"][field]["format"] = json!("uuid");
+        }
+    }
     if let Some(anchor) = schema["$defs"].get_mut("ProposalAnchorInspect") {
         for field in ["manuscript_block_id", "base_authoritative_revision_id"] {
             anchor["properties"][field]["format"] = json!("uuid");
@@ -106,13 +112,14 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ProposalSourceInspect::decl(&config),
         OptionalValidationReceiptInspect::decl(&config),
         AcceptanceRefusalReason::decl(&config),
         AcceptanceRefusalBoundary::decl(&config),
         AcceptanceRefusalInspect::decl(&config),
         OptionalAcceptanceRefusalInspect::decl(&config),
+        ProposalOperationInspect::decl(&config),
         ProposalAnchorInspect::decl(&config),
         BlockProposalInspect::decl(&config),
         GetProposalResponse::decl(&config),
@@ -178,6 +185,12 @@ fn proposal_fixture() -> Value {
             "closure": "open",
             "operation_id": "018f0000-0000-7001-8000-000000000b04",
             "operation_resolution": "pending",
+            "operations": [{
+                "operation_id": "018f0000-0000-7001-8000-000000000b04",
+                "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
+                "resolution": "pending",
+                "reservation_state": "unresolved"
+            }],
             "chapter_id": "018f0000-0000-7001-8000-000000000301",
             "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
             "base_authoritative_revision_id": "018f0000-0000-7001-8000-000000000b06",

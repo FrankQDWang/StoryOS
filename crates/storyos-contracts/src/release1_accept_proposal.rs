@@ -47,7 +47,7 @@ pub const ACCEPT_PROPOSAL_METHOD: &str = ACCEPT_PROPOSAL.method;
 pub struct AcceptProposalInput {
     pub proposal_revision_id: String,
     pub validation_receipt_id: String,
-    pub selected_operation_id: String,
+    pub selected_operation_ids: Vec<String>,
     pub expected_authoritative_revision_id: String,
     pub editor_session_id: String,
     pub client_contract_revision: String,
@@ -82,7 +82,7 @@ pub struct AcceptanceReceipt {
     pub proposal_id: String,
     pub proposal_revision_id: String,
     pub validation_receipt_id: String,
-    pub selected_operation_id: String,
+    pub selected_operation_ids: Vec<String>,
     pub prior_authoritative_revision_ids: Vec<String>,
     pub resulting_authoritative_revision_ids: Vec<String>,
     pub authoritative_commit_ids: Vec<String>,
@@ -99,6 +99,9 @@ pub enum AcceptProposalRefusalReason {
     StaleProposalRevision,
     NotEligible,
     OperationNotPending,
+    DuplicateIdentities,
+    MissingRequiredDependencies,
+    IncompleteBundleClosure,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

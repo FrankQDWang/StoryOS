@@ -662,7 +662,7 @@ paths:
   /api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances:
     post:
       operationId: acceptProposal
-      summary: Accept one exact pending Proposal Operation
+      summary: Accept a permitted pending Proposal Operation set
       parameters:
         - name: project_id
           in: path

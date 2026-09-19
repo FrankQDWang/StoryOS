@@ -18,7 +18,7 @@ pub struct AcceptProposalCommand {
     pub proposal_id: String,
     pub proposal_revision_id: String,
     pub validation_receipt_id: String,
-    pub selected_operation_id: String,
+    pub selected_operation_ids: Vec<String>,
     pub expected_authoritative_revision_id: String,
 }
 
@@ -132,7 +132,8 @@ pub async fn accept_proposal(
         || command.proposal_id.is_empty()
         || command.proposal_revision_id.is_empty()
         || command.validation_receipt_id.is_empty()
-        || command.selected_operation_id.is_empty()
+        || command.selected_operation_ids.is_empty()
+        || command.selected_operation_ids.iter().any(String::is_empty)
         || command.expected_authoritative_revision_id.is_empty()
     {
         return Err(AcceptProposalError::BindingConflict);

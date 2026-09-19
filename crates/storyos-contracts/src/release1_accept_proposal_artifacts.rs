@@ -28,7 +28,9 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     let input = &mut schema["$defs"]["AcceptProposalInput"]["properties"];
     input["proposal_revision_id"]["format"] = json!("uuid");
     input["validation_receipt_id"]["format"] = json!("uuid");
-    input["selected_operation_id"]["format"] = json!("uuid");
+    input["selected_operation_ids"]["items"]["format"] = json!("uuid");
+    input["selected_operation_ids"]["minItems"] = json!(1);
+    input["selected_operation_ids"]["uniqueItems"] = json!(true);
     input["expected_authoritative_revision_id"]["format"] = json!("uuid");
     input["editor_session_id"]["format"] = json!("uuid");
     input["correlation_id"]["format"] = json!("uuid");
@@ -71,7 +73,7 @@ pub(super) fn openapi() -> String {
         .collect::<String>();
     format!(
         concat!(
-            "  {}:\n    post:\n      operationId: {}\n      summary: Accept one exact pending Proposal Operation\n",
+            "  {}:\n    post:\n      operationId: {}\n      summary: Accept a permitted pending Proposal Operation set\n",
             "      parameters:\n        - name: project_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: proposal_id\n          in: path\n          required: true\n          schema:\n            type: string\n            format: uuid\n",
             "        - name: Origin\n          in: header\n          required: true\n          schema:\n            type: string\n            format: uri\n",
@@ -174,7 +176,7 @@ fn command_fixture(created_at: &str) -> Value {
             "proposal_id": "018f0000-0000-7001-8000-000000000b02",
             "proposal_revision_id": "018f0000-0000-7001-8000-000000000b03",
             "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08",
-            "selected_operation_id": "018f0000-0000-7001-8000-000000000b04",
+            "selected_operation_ids": ["018f0000-0000-7001-8000-000000000b04"],
             "prior_authoritative_revision_ids": ["018f0000-0000-7001-8000-000000000b06"],
             "resulting_authoritative_revision_ids": ["018f0000-0000-7001-8000-000000000c15"],
             "condition_refs": [],

@@ -16,6 +16,7 @@ pub struct BlockProposalRecord {
     pub closure: String,
     pub operation_id: String,
     pub operation_resolution: String,
+    pub operations: Vec<ProposalOperationRecord>,
     pub chapter_id: String,
     pub manuscript_block_id: String,
     pub base_authoritative_revision_id: String,
@@ -26,6 +27,15 @@ pub struct BlockProposalRecord {
     pub validation_receipt_id: Option<String>,
     pub validation_receipt_result: Option<String>,
     pub anchors: Vec<ProposalAnchorRecord>,
+}
+
+/// One inspectable Proposal Operation incarnation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalOperationRecord {
+    pub operation_id: String,
+    pub manuscript_block_id: String,
+    pub resolution: String,
+    pub reservation_state: String,
 }
 
 /// One inspectable InlineEditProposal Anchor.

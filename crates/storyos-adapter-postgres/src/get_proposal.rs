@@ -1,4 +1,6 @@
-use storyos_application::{BlockProposalRecord, ProjectReadError, ProjectScope, ProposalReader};
+use storyos_application::{
+    BlockProposalRecord, ProjectReadError, ProjectScope, ProposalOperationRecord, ProposalReader,
+};
 
 use super::{PostgresProjectReader, read_error, set_scope};
 
@@ -31,9 +33,14 @@ impl ProposalReader for PostgresProjectReader {
                          revision.revision_id) =
                         (head.owner_user_id, head.project_id, head.proposal_id,
                          head.current_revision_id)
-                   JOIN storyos.proposal_operations AS operation
-                     ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
-                        (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+                   JOIN LATERAL (
+                     SELECT operation.operation_id, operation.resolution, operation.reservation_state
+                       FROM storyos.proposal_operations AS operation
+                      WHERE (operation.owner_user_id, operation.project_id, operation.proposal_id) =
+                            (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+                      ORDER BY operation.operation_id
+                      LIMIT 1
+                   ) AS operation ON true
                    LEFT JOIN storyos.proposal_validation_conditions AS failure
                      ON (failure.owner_user_id, failure.project_id, failure.proposal_id,
                          failure.proposal_revision_id) =
@@ -57,6 +64,7 @@ impl ProposalReader for PostgresProjectReader {
         let latest_acceptance_refusal =
             crate::acceptance_refusal::read_latest_refusal(&transaction, scope, proposal_id)
                 .await?;
+        let operations = read_operations(&transaction, scope, proposal_id).await?;
         let anchors = match row.as_ref() {
             Some(row) if row.get::<_, String>(1) == "inline_edit" => {
                 read_inline_anchors(&transaction, scope, proposal_id).await?
@@ -74,6 +82,7 @@ impl ProposalReader for PostgresProjectReader {
             closure: row.get(5),
             operation_id: row.get(6),
             operation_resolution: row.get(7),
+            operations,
             chapter_id: row.get(8),
             manuscript_block_id: row.get(9),
             base_authoritative_revision_id: row.get(10),
@@ -88,6 +97,38 @@ impl ProposalReader for PostgresProjectReader {
             anchors,
         }))
     }
+}
+
+async fn read_operations(
+    client: &impl tokio_postgres::GenericClient,
+    scope: &ProjectScope,
+    proposal_id: &str,
+) -> Result<Vec<ProposalOperationRecord>, ProjectReadError> {
+    let rows = client
+        .query(
+            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state
+               FROM storyos.proposal_operations
+              WHERE owner_user_id = $1::text::uuid
+                AND project_id = $2::text::uuid
+                AND proposal_id = $3::text::uuid
+              ORDER BY operation_id",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &proposal_id,
+            ],
+        )
+        .await
+        .map_err(read_error)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| ProposalOperationRecord {
+            operation_id: row.get(0),
+            manuscript_block_id: row.get(1),
+            resolution: row.get(2),
+            reservation_state: row.get(3),
+        })
+        .collect())
 }
 
 async fn read_inline_anchors(

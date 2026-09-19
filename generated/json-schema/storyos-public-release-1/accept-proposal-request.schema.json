@@ -25,9 +25,14 @@
         "security_policy_revision": {
           "type": "string"
         },
-        "selected_operation_id": {
-          "format": "uuid",
-          "type": "string"
+        "selected_operation_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array",
+          "uniqueItems": true
         },
         "validation_receipt_id": {
           "format": "uuid",
@@ -37,7 +42,7 @@
       "required": [
         "proposal_revision_id",
         "validation_receipt_id",
-        "selected_operation_id",
+        "selected_operation_ids",
         "expected_authoritative_revision_id",
         "editor_session_id",
         "client_contract_revision",

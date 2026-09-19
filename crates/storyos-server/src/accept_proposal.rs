@@ -46,7 +46,12 @@ pub(super) async fn accept_proposal(
     valid_uuid(&input.correlation_id)?;
     valid_uuid(&input.proposal_revision_id)?;
     valid_uuid(&input.validation_receipt_id)?;
-    valid_uuid(&input.selected_operation_id)?;
+    if input.selected_operation_ids.is_empty() {
+        return Err(invalid_request());
+    }
+    for operation_id in &input.selected_operation_ids {
+        valid_uuid(operation_id)?;
+    }
     valid_uuid(&input.expected_authoritative_revision_id)?;
     valid_uuid(&input.editor_session_id)?;
     let idempotency_key = exact_header(&headers, "idempotency-key")?;
@@ -109,7 +114,7 @@ pub(super) async fn accept_proposal(
         proposal_id,
         proposal_revision_id: input.proposal_revision_id.clone(),
         validation_receipt_id: input.validation_receipt_id.clone(),
-        selected_operation_id: input.selected_operation_id.clone(),
+        selected_operation_ids: input.selected_operation_ids.clone(),
         expected_authoritative_revision_id: input.expected_authoritative_revision_id.clone(),
     };
     let settlement = storyos_application::accept_proposal(&store, &command)
@@ -198,6 +203,15 @@ fn accept_response(
                     storyos_core::AcceptProposalRefusal::OperationNotPending => {
                         contracts::AcceptProposalRefusalReason::OperationNotPending
                     }
+                    storyos_core::AcceptProposalRefusal::DuplicateIdentities => {
+                        contracts::AcceptProposalRefusalReason::DuplicateIdentities
+                    }
+                    storyos_core::AcceptProposalRefusal::MissingRequiredDependencies => {
+                        contracts::AcceptProposalRefusalReason::MissingRequiredDependencies
+                    }
+                    storyos_core::AcceptProposalRefusal::IncompleteBundleClosure => {
+                        contracts::AcceptProposalRefusalReason::IncompleteBundleClosure
+                    }
                 },
             },
             vec![command.expected_authoritative_revision_id.clone()],
@@ -224,7 +238,7 @@ fn accept_response(
             proposal_id: command.proposal_id.clone(),
             proposal_revision_id: command.proposal_revision_id.clone(),
             validation_receipt_id: command.validation_receipt_id.clone(),
-            selected_operation_id: command.selected_operation_id.clone(),
+            selected_operation_ids: command.selected_operation_ids.clone(),
             prior_authoritative_revision_ids: prior,
             resulting_authoritative_revision_ids: resulting,
             authoritative_commit_ids: commits,

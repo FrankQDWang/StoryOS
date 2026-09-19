@@ -136,7 +136,10 @@ pub use delete_volume::{
     DeleteVolumeSettlementEffect, DeleteVolumeStore, delete_volume,
 };
 pub use export_work::{ClaimedExportWork, ExportWorkStore, claim_next_export_work};
-pub use get_proposal::{BlockProposalRecord, ProposalAnchorRecord, ProposalReader, open_proposal};
+pub use get_proposal::{
+    BlockProposalRecord, ProposalAnchorRecord, ProposalOperationRecord, ProposalReader,
+    open_proposal,
+};
 pub use list_projects::{ProjectLibrary, ProjectLifecycle, ProjectListItem, list_owned_projects};
 pub use manuscript_search::{
     MANUSCRIPT_SEARCH_LIMIT_PROFILE_REVISION, ManuscriptSearchBlockFact,
