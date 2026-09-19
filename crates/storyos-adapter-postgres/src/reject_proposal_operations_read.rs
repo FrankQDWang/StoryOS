@@ -61,7 +61,8 @@ pub(super) async fn read_reject_settlement(
                      ON (action.owner_user_id, action.project_id, action.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
               LEFT JOIN LATERAL (
-                    SELECT resolution.resolution_event_id, resolution.proposal_id,
+                    SELECT resolution.resolution_event_id, resolution.owner_user_id,
+                           resolution.project_id, resolution.proposal_id,
                            resolution.proposal_revision_id
                       FROM storyos.proposal_operation_resolutions AS resolution
                      WHERE (resolution.owner_user_id, resolution.project_id,
