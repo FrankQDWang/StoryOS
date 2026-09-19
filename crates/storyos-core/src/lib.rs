@@ -1,6 +1,7 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
 mod accept_proposal;
+mod append_proposal_generation_batch;
 mod archive_path;
 mod archive_project;
 mod archive_zip;
@@ -15,6 +16,7 @@ mod delete_volume;
 mod manuscript_payload;
 mod open_block_proposal;
 mod open_inline_proposal;
+mod pause_proposal_generation;
 mod project_archive;
 mod project_export;
 mod readable_export;
@@ -34,6 +36,11 @@ pub use accept_proposal::{
     AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionFacts,
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
+pub use append_proposal_generation_batch::{
+    AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,
+    AppendProposalGenerationBatchRefusal, AppendProposalGenerationBatchResult,
+    append_proposal_generation_batch,
+};
 pub use archive_path::{
     ARCHIVE_PATH_MAX_BYTES, ARCHIVE_PATH_MAX_SEGMENTS, ARCHIVE_PATH_PROFILE, AdmittedArchivePath,
     ArchivePathRefusal, admit_archive_path,
@@ -51,7 +58,8 @@ pub use complete_fake_decision::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
     INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT,
-    StreamItemRole, StreamItemState, host_fake_wire_digest, plan_fake_model_decision,
+    STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
+    plan_fake_model_decision, stream_batch_plan,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,
@@ -87,6 +95,10 @@ pub use open_inline_proposal::{
     OpenInlineProposalAnchor, OpenInlineProposalConflict, OpenInlineProposalRefusal,
     OpenInlineProposalResult, PROPOSAL_ANCHOR_BASE_SLICE_PROFILE, PROSEMIRROR_TOKEN_UTF16_V1,
     classify_inline_input_owner, open_inline_proposal, proposal_anchor_base_slice_digest,
+};
+pub use pause_proposal_generation::{
+    PauseProposalGeneration, PauseProposalGenerationRefusal, PauseProposalGenerationResult,
+    pause_proposal_generation,
 };
 pub use project_archive::{
     ARCHIVE_ENTRY_DIGEST_PROFILE, ARCHIVE_ROOT_DIGEST_PROFILE, ARCHIVE_SERIALIZATION_PROFILE,

@@ -10,6 +10,8 @@ pub const PROSE_CHANGE_TEXT: &str = "Guard the narrator voice in this passage.";
 pub const SECOND_PROSE_CHANGE_TEXT: &str = "Keep the second block voice in this passage.";
 pub const INLINE_PROSE_CHANGE_TEXT: &str = "narrator tone";
 pub const INLINE_PROSE_CHANGE_SOURCE: &str = "narrator voice";
+pub const STREAM_FIRST_TEXT: &str = "Guard";
+pub const STREAM_SECOND_TEXT: &str = "Guard the narrator";
 pub const CLARIFICATION_QUESTION: &str = "Which wording should stay in this sentence?";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -111,6 +113,23 @@ pub fn plan_fake_model_decision(author_message: &str) -> FakeDispatchPlan {
     if let Some(scripted) = scripted_plan(author_message) {
         return scripted;
     }
+    if author_message.starts_with("Stream this passage:") {
+        return FakeDispatchPlan::Dispatch {
+            items: vec![
+                assistant_item("1", StreamItemState::Provisional, STREAM_FIRST_TEXT),
+                assistant_item("2", StreamItemState::Provisional, STREAM_SECOND_TEXT),
+                assistant_item("3", StreamItemState::Complete, PROSE_CHANGE_TEXT),
+            ],
+            outcome: FakeAttemptOutcome::Decision {
+                kind: FakeDecisionKind::ProseChange {
+                    text: PROSE_CHANGE_TEXT,
+                    producer_input: PROSE_CHANGE_TEXT,
+                },
+                selected: true,
+                advances_continuation: true,
+            },
+        };
+    }
     if author_message.starts_with("Revise this phrase:") {
         return complete_decision(
             FakeDecisionKind::ProseChange {
@@ -150,6 +169,17 @@ pub fn plan_fake_model_decision(author_message: &str) -> FakeDispatchPlan {
         /*selected*/ true,
         /*advances_continuation*/ true,
     )
+}
+
+/// Canonical Proposal batches for one scripted fake-model stream.
+pub fn stream_batch_plan(author_message: &str) -> Option<Vec<(u64, &'static str)>> {
+    author_message
+        .starts_with("Stream this passage:")
+        .then_some(vec![
+            (1, STREAM_FIRST_TEXT),
+            (2, STREAM_SECOND_TEXT),
+            (3, PROSE_CHANGE_TEXT),
+        ])
 }
 
 /// Digest one non-secret Host-fake wire payload.

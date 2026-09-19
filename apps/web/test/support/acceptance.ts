@@ -49,11 +49,12 @@ export async function startRealServer() {
   });
 }
 
-export async function settleOnce() {
+export async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
   await runStoryOSWorker({
     repositoryRoot,
     workerBinary: bin("storyos-worker"),
     args: ["--once"],
+    ...(extraEnv === undefined ? {} : { extraEnv }),
   });
 }
 

@@ -68,17 +68,17 @@ struct PersistAppliedProposal<'a> {
     validation_result: &'a str,
 }
 
-struct OpenTarget {
-    block_id: String,
-    revision_id: String,
+pub(crate) struct OpenTarget {
+    pub block_id: String,
+    pub revision_id: String,
 }
 
-struct OpenTargets {
-    unreserved: Vec<OpenTarget>,
-    conflicting: Option<OpenTarget>,
+pub(crate) struct OpenTargets {
+    pub unreserved: Vec<OpenTarget>,
+    pub conflicting: Option<OpenTarget>,
 }
 
-async fn select_open_targets(
+pub(crate) async fn select_open_targets(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
     chapter_id: &str,

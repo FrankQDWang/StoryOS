@@ -23,6 +23,10 @@ import {
   storyosEditorProps,
   storyosManuscriptExtensions,
 } from "./manuscript-tiptap-adapter.ts";
+import {
+  closeProposalAgentWriteGate,
+  createProposalAgentWriteGate,
+} from "./proposal-agent-write-gate.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
 export interface ManuscriptEditorProps {
@@ -347,7 +351,12 @@ export function ManuscriptEditor({
     };
     controllerRef.current = controller;
     const { dom } = editor.view;
+    const agentWriteGate = createProposalAgentWriteGate();
+    const onFirstAuthorInput = (): void => {
+      closeProposalAgentWriteGate(agentWriteGate);
+    };
     const onCompositionStart = (): void => {
+      onFirstAuthorInput();
       composingRef.current = true;
       idle.setHoldSubmission(true);
     };
@@ -369,9 +378,11 @@ export function ManuscriptEditor({
       if (local !== undefined) onProjectionRef.current(local, "local");
       void idle.persist(edit, "composition_confirmation", new Date().toISOString());
     };
+    dom.addEventListener("beforeinput", onFirstAuthorInput);
     dom.addEventListener("compositionstart", onCompositionStart);
     dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
+      dom.removeEventListener("beforeinput", onFirstAuthorInput);
       dom.removeEventListener("compositionstart", onCompositionStart);
       dom.removeEventListener("compositionend", onCompositionEnd);
       idle.close();

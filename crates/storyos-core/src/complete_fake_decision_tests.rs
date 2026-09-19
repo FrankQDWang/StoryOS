@@ -1,8 +1,8 @@
 use super::{
     ADVISORY_TEXT, CLARIFICATION_QUESTION, ExecutionCapability, FakeAttemptOutcome,
     FakeDecisionKind, FakeDispatchPlan, INLINE_PROSE_CHANGE_TEXT, NativeStreamItem,
-    NoDecisionReason, PROSE_CHANGE_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
-    plan_fake_model_decision,
+    NoDecisionReason, PROSE_CHANGE_TEXT, STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole,
+    StreamItemState, host_fake_wire_digest, plan_fake_model_decision, stream_batch_plan,
 };
 
 fn assistant(state: StreamItemState) -> NativeStreamItem {
@@ -54,6 +54,46 @@ fn plans_prose_change_input_without_treating_it_as_authority() {
                 advances_continuation: true,
             },
         }
+    );
+}
+
+#[test]
+fn plans_a_progressive_stream_without_treating_native_items_as_batches() {
+    assert_eq!(
+        plan_fake_model_decision("Stream this passage: keep the voice."),
+        FakeDispatchPlan::Dispatch {
+            items: vec![
+                NativeStreamItem {
+                    item_id: "1",
+                    text: Some(STREAM_FIRST_TEXT),
+                    state: StreamItemState::Provisional,
+                    ..assistant(StreamItemState::Complete)
+                },
+                NativeStreamItem {
+                    item_id: "2",
+                    text: Some(STREAM_SECOND_TEXT),
+                    state: StreamItemState::Provisional,
+                    ..assistant(StreamItemState::Complete)
+                },
+                NativeStreamItem {
+                    item_id: "3",
+                    text: Some(PROSE_CHANGE_TEXT),
+                    ..assistant(StreamItemState::Complete)
+                },
+            ],
+            outcome: FakeAttemptOutcome::Decision {
+                kind: FakeDecisionKind::ProseChange {
+                    text: PROSE_CHANGE_TEXT,
+                    producer_input: PROSE_CHANGE_TEXT,
+                },
+                selected: true,
+                advances_continuation: true,
+            },
+        }
+    );
+    assert_eq!(
+        stream_batch_plan("Revise this passage: keep the voice."),
+        None
     );
 }
 
