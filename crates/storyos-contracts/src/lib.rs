@@ -46,6 +46,8 @@ mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
 mod release1_readable_export_query_artifacts;
+mod release1_reject_proposal_operations;
+mod release1_reject_proposal_operations_artifacts;
 mod release1_set_current_chapter;
 mod release1_set_current_chapter_artifacts;
 mod release1_snapshot;
@@ -228,6 +230,15 @@ pub use release1_readable_export_query::{
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_REQUEST_SCHEMA_ID,
     GET_HUMAN_READABLE_MANUSCRIPT_EXPORT_RESPONSE_SCHEMA_ID,
     GetHumanReadableManuscriptExportResponse,
+};
+pub use release1_reject_proposal_operations::{
+    AuthorUndoDisposition, BoundedAuthorNote, ProposalRejectionReason,
+    REJECT_PROPOSAL_OPERATIONS_DIGEST_PROFILE, REJECT_PROPOSAL_OPERATIONS_METHOD,
+    REJECT_PROPOSAL_OPERATIONS_PATH, REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID,
+    REJECT_PROPOSAL_OPERATIONS_RESPONSE_SCHEMA_ID, RejectProposalOperationsConflictReason,
+    RejectProposalOperationsEffect, RejectProposalOperationsInput,
+    RejectProposalOperationsRefusalReason, RejectProposalOperationsRequest,
+    RejectProposalOperationsResponse, RejectionReceipt, RejectionReceiptResult,
 };
 pub use release1_set_current_chapter::{
     SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,
