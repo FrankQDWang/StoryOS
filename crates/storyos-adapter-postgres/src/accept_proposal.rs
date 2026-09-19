@@ -141,9 +141,11 @@ impl LoadedProposal {
         if self.kind != "inline_edit" {
             return true;
         }
-        let (Some(from), Some(to), Some(digest)) =
-            (self.inline_from, self.inline_to, self.inline_digest.as_deref())
-        else {
+        let (Some(from), Some(to), Some(digest)) = (
+            self.inline_from,
+            self.inline_to,
+            self.inline_digest.as_deref(),
+        ) else {
             return false;
         };
         let block_text = crate::manuscript_block::blocks_from_stored_payload(
@@ -158,7 +160,9 @@ impl LoadedProposal {
         let (Ok(start), Ok(end)) = (usize::try_from(from), usize::try_from(to)) else {
             return false;
         };
-        let Some(slice) = units.get(start..end).and_then(|range| String::from_utf16(range).ok())
+        let Some(slice) = units
+            .get(start..end)
+            .and_then(|range| String::from_utf16(range).ok())
         else {
             return false;
         };
