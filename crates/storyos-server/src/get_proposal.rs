@@ -70,6 +70,16 @@ pub(super) async fn get_proposal(
             closure: record.closure,
             operation_id: record.operation_id,
             operation_resolution: record.operation_resolution,
+            operations: record
+                .operations
+                .into_iter()
+                .map(|operation| contracts::ProposalOperationInspect {
+                    operation_id: operation.operation_id,
+                    manuscript_block_id: operation.manuscript_block_id,
+                    resolution: operation.resolution,
+                    reservation_state: operation.reservation_state,
+                })
+                .collect(),
             chapter_id: record.chapter_id,
             manuscript_block_id: record.manuscript_block_id,
             base_authoritative_revision_id: record.base_authoritative_revision_id,

@@ -31,7 +31,8 @@ mod update_volume;
 
 pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
-    AcceptProposalResult, accept_proposal,
+    AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionFacts,
+    ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 pub use archive_path::{
     ARCHIVE_PATH_MAX_BYTES, ARCHIVE_PATH_MAX_SEGMENTS, ARCHIVE_PATH_PROFILE, AdmittedArchivePath,
@@ -49,8 +50,8 @@ pub use assemble_context::{
 pub use complete_fake_decision::{
     ExecutionCapability, FakeAttemptOutcome, FakeDecisionKind, FakeDispatchPlan,
     HOST_FAKE_EXECUTION_PROFILE, HOST_FAKE_MAPPING_REVISION, INLINE_PROSE_CHANGE_SOURCE,
-    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, StreamItemRole, StreamItemState,
-    host_fake_wire_digest, plan_fake_model_decision,
+    INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT,
+    StreamItemRole, StreamItemState, host_fake_wire_digest, plan_fake_model_decision,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,

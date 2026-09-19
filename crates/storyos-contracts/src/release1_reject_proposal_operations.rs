@@ -111,6 +111,9 @@ pub enum RejectProposalOperationsRefusalReason {
     StaleProposalRevision,
     NotEligible,
     OperationNotPending,
+    DuplicateIdentities,
+    MissingRequiredDependencies,
+    IncompleteBundleClosure,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

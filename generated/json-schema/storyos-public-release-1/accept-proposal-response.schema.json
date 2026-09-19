@@ -103,7 +103,10 @@
         "wrong_admission",
         "stale_proposal_revision",
         "not_eligible",
-        "operation_not_pending"
+        "operation_not_pending",
+        "duplicate_identities",
+        "missing_required_dependencies",
+        "incomplete_bundle_closure"
       ],
       "type": "string"
     },
@@ -161,8 +164,11 @@
           },
           "type": "array"
         },
-        "selected_operation_id": {
-          "type": "string"
+        "selected_operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
         },
         "validation_receipt_id": {
           "type": "string"
@@ -177,7 +183,7 @@
         "proposal_id",
         "proposal_revision_id",
         "validation_receipt_id",
-        "selected_operation_id",
+        "selected_operation_ids",
         "prior_authoritative_revision_ids",
         "resulting_authoritative_revision_ids",
         "authoritative_commit_ids",

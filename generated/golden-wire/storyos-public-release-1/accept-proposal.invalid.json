@@ -50,7 +50,9 @@
     "resulting_authoritative_revision_ids": [
       "018f0000-0000-7001-8000-000000000c15"
     ],
-    "selected_operation_id": "018f0000-0000-7001-8000-000000000b04",
+    "selected_operation_ids": [
+      "018f0000-0000-7001-8000-000000000b04"
+    ],
     "validation_receipt_id": "018f0000-0000-7001-8000-000000000b08"
   },
   "schema_id": "storyos.command.accept-proposal.response.v1"

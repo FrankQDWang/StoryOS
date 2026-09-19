@@ -11,20 +11,20 @@
   "release_identity": {
     "activity_profile": "storyos.project-activity.v1",
     "api_major": 1,
-    "contract_graph_digest": "sha256:cd6af5b8fbc28d8d8a1c0a869f456c2dd3e662e056b35ed9deba95c3c248c17c",
+    "contract_graph_digest": "sha256:04a74b7e20b3be1e1e607c972385e3df85569b329a4093ade88da7ad305bbbec",
     "contract_graph_revision": "release1-wire-catalog-2026-09-14-responses-memory",
     "envelope_profile": "storyos.public.envelope.v1",
-    "fixture_corpus_digest": "sha256:3d01f3014da328b431f66118bed976736c49c5da96a24b9218de776008ad91f2",
-    "generated_client_revision": "storyos.typescript-client.release-1.v21",
-    "json_schema_catalog_digest": "sha256:741253c9b08bfd8e97ac6d7f81d1cba92433a4d840fd336b4c5657f0fda41a00",
+    "fixture_corpus_digest": "sha256:5dfad74695611b3d96109ad850ba81fcb6ff5391b92de8451e6e00d307c10188",
+    "generated_client_revision": "storyos.typescript-client.release-1.v22",
+    "json_schema_catalog_digest": "sha256:6d55c7fd7f69d061fa19475cb7f9f1688f3cc258497511af5ed08c50707e6682",
     "limit_profile_revision": "storyos.foundation.absolute.v1",
-    "openapi_digest": "sha256:fbaf185d2199dc0565bf6ccdbb14c1fb3a05ce93a6087f84988ca49fbaec1590",
+    "openapi_digest": "sha256:a4bec8e35488c8df5af6e15b0477a4cdc030f9ef0c04ebcb1e7a934acff37e94",
     "public_protocol_release": "storyos.public.release.1",
     "schema_id": "storyos.compatibility.release-identity.v1",
-    "server_contract_revision": "storyos.server.release-1.v4",
-    "typescript_artifact_digest": "sha256:bf3f8813860f9496d41cba56bd5d1c6c8c40a4d86e0e00988756dcc1698c089e",
+    "server_contract_revision": "storyos.server.release-1.v5",
+    "typescript_artifact_digest": "sha256:5ce880a9ce783196d827a479e6f4592d68e96d876da4ab8e26f4dcfabbcb7f18",
     "web_client_contract_revision": "storyos.web-client.release-1.v3",
-    "worker_contract_revision": "storyos.worker.release-1.v4"
+    "worker_contract_revision": "storyos.worker.release-1.v5"
   },
   "required_capabilities": [
     "project_lifecycle",

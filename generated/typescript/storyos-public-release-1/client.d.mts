@@ -405,21 +405,23 @@ export type AcceptanceRefusalInspect = { refusal_id: string, correlation_id: str
 
 export type OptionalAcceptanceRefusalInspect = { "kind": "absent" } | { "kind": "present" } & AcceptanceRefusalInspect;
 
+export type ProposalOperationInspect = { operation_id: string, manuscript_block_id: string, resolution: string, reservation_state: string, };
+
 export type ProposalAnchorInspect = { manuscript_block_id: string, base_authoritative_revision_id: string, manuscript_schema_version: number, coordinate_profile: string, from: number, to: number, boundary_profile: string, base_slice_digest: string, };
 
-export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, anchors: Array<ProposalAnchorInspect>, };
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, operations: Array<ProposalOperationInspect>, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, anchors: Array<ProposalAnchorInspect>, };
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
-export type AcceptProposalInput = { proposal_revision_id: string, validation_receipt_id: string, selected_operation_id: string, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+export type AcceptProposalInput = { proposal_revision_id: string, validation_receipt_id: string, selected_operation_ids: Array<string>, expected_authoritative_revision_id: string, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
 export type AcceptProposalRequest = { command_schema: string, accept_proposal_input: AcceptProposalInput, };
 
 export type AcceptanceReceiptResult = "applied" | "invalid" | "conflicted" | "refused";
 
-export type AcceptanceReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, validation_receipt_id: string, selected_operation_id: string, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, condition_refs: Array<string>, result: AcceptanceReceiptResult, created_at: string, };
+export type AcceptanceReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, validation_receipt_id: string, selected_operation_ids: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, condition_refs: Array<string>, result: AcceptanceReceiptResult, created_at: string, };
 
-export type AcceptProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending";
+export type AcceptProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending" | "duplicate_identities" | "missing_required_dependencies" | "incomplete_bundle_closure";
 
 export type AcceptProposalInvalidReason = "invalid_validation" | "altered_candidate";
 
@@ -441,7 +443,7 @@ export type RejectionReceiptResult = "resolved" | "conflicted" | "refused";
 
 export type RejectionReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, selected_pending_operation_ids: Array<string>, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: RejectionReceiptResult, created_at: string, };
 
-export type RejectProposalOperationsRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending";
+export type RejectProposalOperationsRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "operation_not_pending" | "duplicate_identities" | "missing_required_dependencies" | "incomplete_bundle_closure";
 
 export type RejectProposalOperationsConflictReason = "changed_head";
 

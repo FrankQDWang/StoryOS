@@ -235,10 +235,17 @@ async fn persist_applied_inline(
         .execute(
             "INSERT INTO storyos.proposal_operations
                (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
-                resolution, reservation_state)
+                resolution, reservation_state, candidate_text)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, 'pending', 'unresolved')",
-            &[&owner, &project, &proposal_id, &operation_id, &block_id],
+                     $5::text::uuid, 'pending', 'unresolved', $6)",
+            &[
+                &owner,
+                &project,
+                &proposal_id,
+                &operation_id,
+                &block_id,
+                &candidate_text,
+            ],
         )
         .await
         .map_err(database_error)?;

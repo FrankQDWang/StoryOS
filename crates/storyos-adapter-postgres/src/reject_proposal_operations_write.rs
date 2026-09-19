@@ -34,18 +34,19 @@ pub(super) async fn persist_resolved(
             "UPDATE storyos.proposal_operations
                 SET resolution = 'rejected', reservation_state = 'resolved'
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
-                AND proposal_id = $3::text::uuid AND operation_id = $4::text::uuid
+                AND proposal_id = $3::text::uuid
+                AND operation_id = ANY($4::text[]::uuid[])
                 AND resolution = 'pending'",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &command.proposal_id,
-                &command.selected_pending_operation_id,
+                &command.selected_pending_operation_ids,
             ],
         )
         .await
         .map_err(reject_database_error)?;
-    if updated != 1 {
+    if updated != u64::try_from(command.selected_pending_operation_ids.len()).unwrap_or(0) {
         return Err(RejectProposalOperationsError::BindingConflict);
     }
     let resolution_event_id = Uuid::now_v7().to_string();
@@ -79,7 +80,7 @@ pub(super) async fn persist_resolved(
         ids: command.ids.clone(),
         effect: RejectProposalOperationsSettlementEffect::Resolved {
             author_action_sequence,
-            operation_id: command.selected_pending_operation_id.clone(),
+            operation_ids: command.selected_pending_operation_ids.clone(),
             rejection_note: command.rejection_note.clone(),
             preserved_generation: loaded.generation.clone(),
             preserved_validation: loaded.validation.clone(),
@@ -161,6 +162,9 @@ async fn insert_receipts(
         RejectionNote::Omitted => None,
         RejectionNote::Present { text } => Some(text.as_str()),
     };
+    let Some(selected_operation_id) = command.selected_pending_operation_ids.first() else {
+        return Err(RejectProposalOperationsError::BindingConflict);
+    };
     client
         .execute(
             "INSERT INTO storyos.proposal_rejection_receipts
@@ -175,7 +179,7 @@ async fn insert_receipts(
                 &command.ids.receipt_id,
                 &command.proposal_id,
                 &command.proposal_revision_id,
-                &command.selected_pending_operation_id,
+                selected_operation_id,
                 &result_kind,
                 &if result_kind == "proposal_operations_resolved" {
                     Some("author_declined")
@@ -188,6 +192,9 @@ async fn insert_receipts(
         .await
         .map_err(reject_database_error)?;
     if let (Some(event_id), Some(sequence)) = (resolution_event_id, author_action_sequence) {
+        let Some(first_operation_id) = command.selected_pending_operation_ids.first() else {
+            return Err(RejectProposalOperationsError::BindingConflict);
+        };
         client
             .execute(
                 "INSERT INTO storyos.proposal_operation_resolutions
@@ -203,13 +210,38 @@ async fn insert_receipts(
                     &event_id,
                     &command.proposal_id,
                     &command.proposal_revision_id,
-                    &command.selected_pending_operation_id,
+                    first_operation_id,
                     &command.ids.receipt_id,
                     &sequence.to_string(),
                 ],
             )
             .await
             .map_err(reject_database_error)?;
+        for operation_id in command.selected_pending_operation_ids.iter().skip(1) {
+            let extra_event_id = Uuid::now_v7().to_string();
+            client
+                .execute(
+                    "INSERT INTO storyos.proposal_operation_resolutions
+                       (owner_user_id, project_id, resolution_event_id, proposal_id,
+                        proposal_revision_id, operation_id, prior_resolution, resulting_resolution,
+                        rejection_receipt_id, author_action_sequence)
+                     VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                             $5::text::uuid, $6::text::uuid, 'pending', 'rejected',
+                             $7::text::uuid, $8::text::numeric)",
+                    &[
+                        &command.project_scope.owner_user_id.as_ref(),
+                        &command.project_scope.project_id.as_ref(),
+                        &extra_event_id,
+                        &command.proposal_id,
+                        &command.proposal_revision_id,
+                        operation_id,
+                        &command.ids.receipt_id,
+                        &sequence.to_string(),
+                    ],
+                )
+                .await
+                .map_err(reject_database_error)?;
+        }
     }
     client
         .execute(

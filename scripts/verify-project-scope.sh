@@ -597,6 +597,7 @@ run_http_files \
   test/node-postgresql/edit-proposal-candidate-http.integration.test.ts \
   test/node-postgresql/edit-inline-proposal-http.integration.test.ts \
   test/node-postgresql/accept-proposal-http.integration.test.ts \
+  test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts \
   test/node-postgresql/reject-proposal-operations-http.integration.test.ts \
   test/node-postgresql/reopen-rejected-operations-http.integration.test.ts \
   test/node-postgresql/acceptance-refusal-http.integration.test.ts \

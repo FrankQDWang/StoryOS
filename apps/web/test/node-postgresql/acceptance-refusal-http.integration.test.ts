@@ -39,7 +39,7 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
       ...BINDING, correlation_id: id("e151"), editor_session_id: session.editor_session.editor_session_id,
       proposal_revision_id: revised.proposal.revision_id,
       validation_receipt_id: revised.proposal.validation_receipt.validation_receipt_id,
-      selected_operation_id: revised.proposal.operation_id,
+      selected_operation_ids: [revised.proposal.operation_id],
       expected_authoritative_revision_id: revised.proposal.base_authoritative_revision_id,
     } };
     const digest = await digestAcceptProposal(request);

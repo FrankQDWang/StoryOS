@@ -13,8 +13,9 @@ use storyos_application::{
     RejectProposalOperationsSettlementEffect, RejectProposalOperationsStore,
 };
 use storyos_core::{
+    ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionIntent,
     RejectProposalOperations as CoreReject, RejectProposalOperationsResult,
-    reject_proposal_operations as classify,
+    classify_proposal_selection, reject_proposal_operations as classify,
 };
 
 impl RejectProposalOperationsStore for PostgresProjectReader {
@@ -70,8 +71,7 @@ pub(super) struct LoadedProposal {
     validation: String,
     closure: String,
     chapter_id: String,
-    operation_id: String,
-    operation_resolution: String,
+    bundle_policy: String,
     current_head_revision_id: Option<String>,
 }
 
@@ -83,13 +83,22 @@ async fn persist_reject(
         return Err(RejectProposalOperationsError::MissingProject);
     };
     insert_reject_admission(client, command, &loaded.chapter_id).await?;
+    let operations = load_operations(client, command).await?;
+    let selection = classify_proposal_selection(
+        &command.selected_pending_operation_ids,
+        &operations,
+        ProposalBundlePolicy::from_stored(&loaded.bundle_policy),
+        ProposalSelectionIntent::Reject,
+    );
     let classified = classify(&CoreReject {
         scope_matches: true,
         admission_valid: true,
         proposal_revision_current: loaded.current_revision_id == command.proposal_revision_id,
         closure_open: loaded.closure == "open",
-        selected_operations_pending: loaded.operation_id == command.selected_pending_operation_id
-            && loaded.operation_resolution == "pending",
+        selected_operations_pending: selection.all_selected_pending,
+        selection_duplicate_free: selection.duplicate_free,
+        required_dependencies_met: selection.required_dependencies_met,
+        bundle_closure_complete: selection.bundle_closure_complete,
         expected_target_matches_head: loaded.current_head_revision_id.as_deref()
             == Some(command.expected_authoritative_revision_id.as_str()),
     });
@@ -127,8 +136,8 @@ async fn load_proposal(
     let row = client
         .query_opt(
             "SELECT head.current_revision_id::text, revision.generation, revision.validation,
-                    revision.closure, proposal.chapter_id::text, operation.operation_id::text,
-                    operation.resolution, chapter_head.current_revision_id::text
+                    revision.closure, proposal.chapter_id::text,
+                    chapter_head.current_revision_id::text, proposal.bundle_policy
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -138,9 +147,6 @@ async fn load_proposal(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
-               JOIN storyos.proposal_operations AS operation
-                 ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
                LEFT JOIN storyos.authoritative_heads AS chapter_head
                  ON (chapter_head.owner_user_id, chapter_head.project_id,
                      chapter_head.manuscript_object_id) =
@@ -162,10 +168,39 @@ async fn load_proposal(
         validation: row.get(2),
         closure: row.get(3),
         chapter_id: row.get(4),
-        operation_id: row.get(5),
-        operation_resolution: row.get(6),
-        current_head_revision_id: row.get(7),
+        current_head_revision_id: row.get(5),
+        bundle_policy: row.get(6),
     }))
+}
+
+async fn load_operations(
+    client: &tokio_postgres::Client,
+    command: &RejectProposalOperationsCommand,
+) -> Result<Vec<ProposalOperationSelection>, RejectProposalOperationsError> {
+    let rows = client
+        .query(
+            "SELECT operation_id::text, resolution,
+                    COALESCE(predecessor_operation_ids::text[], '{}')
+               FROM storyos.proposal_operations
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND proposal_id = $3::text::uuid
+              ORDER BY operation_id",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.proposal_id,
+            ],
+        )
+        .await
+        .map_err(reject_database_error)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| ProposalOperationSelection {
+            operation_id: row.get(0),
+            resolution: row.get(1),
+            predecessor_operation_ids: row.get(2),
+        })
+        .collect())
 }
 
 pub(super) fn refuse_reason(
@@ -180,6 +215,15 @@ pub(super) fn refuse_reason(
         storyos_core::RejectProposalOperationsRefusal::NotEligible => "not_eligible",
         storyos_core::RejectProposalOperationsRefusal::OperationNotPending => {
             "operation_not_pending"
+        }
+        storyos_core::RejectProposalOperationsRefusal::DuplicateIdentities => {
+            "duplicate_identities"
+        }
+        storyos_core::RejectProposalOperationsRefusal::MissingRequiredDependencies => {
+            "missing_required_dependencies"
+        }
+        storyos_core::RejectProposalOperationsRefusal::IncompleteBundleClosure => {
+            "incomplete_bundle_closure"
         }
     }
 }

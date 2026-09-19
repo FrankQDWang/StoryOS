@@ -163,6 +163,19 @@ pub(super) async fn read_accept_settlement(
             ("refused", Some("operation_not_pending")) => AcceptProposalSettlementEffect::Refused {
                 reason: AcceptProposalRefusal::OperationNotPending,
             },
+            ("refused", Some("duplicate_identities")) => AcceptProposalSettlementEffect::Refused {
+                reason: AcceptProposalRefusal::DuplicateIdentities,
+            },
+            ("refused", Some("missing_required_dependencies")) => {
+                AcceptProposalSettlementEffect::Refused {
+                    reason: AcceptProposalRefusal::MissingRequiredDependencies,
+                }
+            }
+            ("refused", Some("incomplete_bundle_closure")) => {
+                AcceptProposalSettlementEffect::Refused {
+                    reason: AcceptProposalRefusal::IncompleteBundleClosure,
+                }
+            }
             _ => return Err(AcceptProposalError::HistoricalAcknowledgementUnavailable),
         };
         Ok(AcceptProposalSettlement {

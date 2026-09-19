@@ -376,6 +376,24 @@ pub(super) async fn append_proposal_revision(
         )
         .await
         .map_err(author_edit_database_error)?;
+    client
+        .execute(
+            "UPDATE storyos.proposal_operations
+                SET candidate_text = $4
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND proposal_id = $3::text::uuid
+                AND manuscript_block_id = $5::text::uuid
+                AND resolution = 'pending'",
+            &[
+                &owner,
+                &project,
+                &context.proposal_id,
+                &candidate_text,
+                &context.manuscript_block_id,
+            ],
+        )
+        .await
+        .map_err(author_edit_database_error)?;
     Ok(revision_id)
 }
 

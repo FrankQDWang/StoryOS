@@ -14,7 +14,8 @@ use storyos_application::{
 };
 use storyos_core::{
     AcceptProposal as CoreAccept, AcceptProposalInvalid, AcceptProposalRefusal,
-    AcceptProposalResult, accept_proposal as classify,
+    AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection,
+    ProposalSelectionIntent, accept_proposal as classify, classify_proposal_selection,
 };
 
 impl AcceptProposalStore for PostgresProjectReader {
@@ -102,8 +103,8 @@ pub(super) struct LoadedProposal {
     validation_current: bool,
     candidate_text: String,
     chapter_id: String,
-    operation_id: String,
-    operation_resolution: String,
+    operations: Vec<LoadedOperation>,
+    bundle_policy: String,
     receipt_id: Option<String>,
     receipt_result: Option<String>,
     receipt_revision_id: Option<String>,
@@ -112,6 +113,7 @@ pub(super) struct LoadedProposal {
     validated_target_matches_head: bool,
     kind: String,
     chapter_body: String,
+    chapter_blocks: Vec<storyos_core::ManuscriptBlock>,
     manuscript_block_id: String,
     inline_from: Option<u32>,
     inline_to: Option<u32>,
@@ -119,10 +121,21 @@ pub(super) struct LoadedProposal {
     inline_base_slice_matches: bool,
 }
 
+pub(super) struct LoadedOperation {
+    operation_id: String,
+    manuscript_block_id: String,
+    resolution: String,
+    candidate_text: String,
+    predecessor_operation_ids: Vec<String>,
+}
+
 impl LoadedProposal {
-    pub(super) fn accepted_body(&self) -> Result<String, AcceptProposalError> {
+    pub(super) fn accepted_body(
+        &self,
+        selected_ids: &[String],
+    ) -> Result<String, AcceptProposalError> {
         if self.kind != "inline_edit" {
-            return Ok(self.candidate_text.clone());
+            return Ok(self.composed_block_body(selected_ids));
         }
         let (Some(from), Some(to)) = (self.inline_from, self.inline_to) else {
             return Err(AcceptProposalError::Unavailable(Box::new(
@@ -135,6 +148,29 @@ impl LoadedProposal {
                     "{error:?}"
                 ))))
             })
+    }
+
+    fn composed_block_body(&self, selected_ids: &[String]) -> String {
+        let selected: std::collections::BTreeSet<&str> =
+            selected_ids.iter().map(String::as_str).collect();
+        if self.chapter_blocks.is_empty() {
+            return self
+                .operations
+                .iter()
+                .find(|operation| selected.contains(operation.operation_id.as_str()))
+                .map(|operation| operation.candidate_text.clone())
+                .unwrap_or_else(|| self.candidate_text.clone());
+        }
+        let mut blocks = self.chapter_blocks.clone();
+        for block in &mut blocks {
+            if let Some(operation) = self.operations.iter().find(|operation| {
+                selected.contains(operation.operation_id.as_str())
+                    && operation.manuscript_block_id == block.manuscript_block_id
+            }) {
+                block.text = operation.candidate_text.clone();
+            }
+        }
+        crate::manuscript_block::persist_canonical_bytes(&blocks)
     }
 
     fn inline_slice_matches(&self) -> bool {
@@ -203,6 +239,20 @@ async fn persist_accept(
         return Err(AcceptProposalError::PreAdmissionRefused { reason });
     }
     insert_accept_admission(client, command, &loaded.chapter_id).await?;
+    let selection = classify_proposal_selection(
+        &command.selected_operation_ids,
+        &loaded
+            .operations
+            .iter()
+            .map(|operation| ProposalOperationSelection {
+                operation_id: operation.operation_id.clone(),
+                resolution: operation.resolution.clone(),
+                predecessor_operation_ids: operation.predecessor_operation_ids.clone(),
+            })
+            .collect::<Vec<_>>(),
+        ProposalBundlePolicy::from_stored(&loaded.bundle_policy),
+        ProposalSelectionIntent::Accept,
+    );
     let classified = classify(&CoreAccept {
         scope_matches: true,
         admission_valid: true,
@@ -215,8 +265,10 @@ async fn persist_accept(
             && loaded.receipt_id.as_deref() == Some(command.validation_receipt_id.as_str()),
         validation_receipt_matches_revision: loaded.receipt_revision_id.as_deref()
             == Some(command.proposal_revision_id.as_str()),
-        selected_operation_pending: loaded.operation_id == command.selected_operation_id
-            && loaded.operation_resolution == "pending",
+        selected_operation_pending: selection.all_selected_pending,
+        selection_duplicate_free: selection.duplicate_free,
+        required_dependencies_met: selection.required_dependencies_met,
+        bundle_closure_complete: selection.bundle_closure_complete,
         expected_target_matches_head: loaded.validated_target_matches_head
             && loaded.inline_base_slice_matches
             && loaded.current_head_revision_id.as_deref()
@@ -267,8 +319,7 @@ async fn load_proposal(
         .query_opt(
             "SELECT head.current_revision_id::text, revision.generation, revision.closure,
                     revision.candidate_text, proposal.chapter_id::text,
-                    operation.operation_id::text,
-                    operation.resolution, receipt.validation_receipt_id::text, receipt.result,
+                    receipt.validation_receipt_id::text, receipt.result,
                     receipt.proposal_revision_id::text, receipt.candidate_text,
                     chapter_head.current_revision_id::text,
                     revision.validation = 'valid' AND NOT EXISTS (SELECT 1 FROM storyos.proposal_validation_conditions AS condition
@@ -279,7 +330,7 @@ async fn load_proposal(
                       AND revision.base_authoritative_revision_id = chapter_head.current_revision_id, false),
                     proposal.kind, convert_from(payload.canonical_bytes, 'UTF8'),
                     proposal.manuscript_block_id::text, anchor.range_from, anchor.range_to,
-                    anchor.base_slice_digest
+                    anchor.base_slice_digest, proposal.bundle_policy
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -289,9 +340,14 @@ async fn load_proposal(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
-               JOIN storyos.proposal_operations AS operation
-                 ON (operation.owner_user_id, operation.project_id, operation.proposal_id) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+               LEFT JOIN LATERAL (
+                 SELECT operation.operation_id
+                   FROM storyos.proposal_operations AS operation
+                  WHERE (operation.owner_user_id, operation.project_id, operation.proposal_id) =
+                        (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+                  ORDER BY operation.operation_id
+                  LIMIT 1
+               ) AS primary_operation ON true
                LEFT JOIN storyos.validation_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.validation_receipt_id) =
                     (proposal.owner_user_id, proposal.project_id, $4::text::uuid)
@@ -312,7 +368,7 @@ async fn load_proposal(
                  ON (anchor.owner_user_id, anchor.project_id, anchor.proposal_id,
                      anchor.operation_id, anchor.anchor_order) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id,
-                     operation.operation_id, 1)
+                     primary_operation.operation_id, 1)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.proposal_id = $3::text::uuid",
@@ -325,37 +381,92 @@ async fn load_proposal(
         )
         .await
         .map_err(accept_database_error)?;
-    Ok(row.map(|row| {
-        let mut loaded = LoadedProposal {
-            current_revision_id: row.get(0),
-            generation: row.get(1),
-            closure: row.get(2),
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let chapter_id: String = row.get(4);
+    let chapter_body: String = row.get::<_, Option<String>>(13).unwrap_or_default();
+    let current_head_revision_id: Option<String> = row.get(9);
+    let operations = load_operations(
+        client,
+        command.project_scope.owner_user_id.as_ref(),
+        command.project_scope.project_id.as_ref(),
+        &command.proposal_id,
+    )
+    .await?;
+    let chapter_blocks = match current_head_revision_id.as_deref() {
+        Some(revision_id) => crate::manuscript_block::load_revision_blocks(
+            client,
+            command.project_scope.owner_user_id.as_ref(),
+            command.project_scope.project_id.as_ref(),
+            &chapter_id,
+            revision_id,
+            &chapter_body,
+        )
+        .await
+        .map_err(accept_database_error)?,
+        None => Vec::new(),
+    };
+    let mut loaded = LoadedProposal {
+        current_revision_id: row.get(0),
+        generation: row.get(1),
+        closure: row.get(2),
+        candidate_text: row.get(3),
+        chapter_id,
+        operations,
+        bundle_policy: row.get(18),
+        receipt_id: row.get(5),
+        receipt_result: row.get(6),
+        receipt_revision_id: row.get(7),
+        receipt_candidate_text: row.get(8),
+        current_head_revision_id,
+        validation_current: row.get(10),
+        validated_target_matches_head: row.get(11),
+        kind: row.get(12),
+        chapter_body,
+        chapter_blocks,
+        manuscript_block_id: row.get::<_, Option<String>>(14).unwrap_or_default(),
+        inline_from: row
+            .get::<_, Option<i32>>(15)
+            .and_then(|value| u32::try_from(value).ok()),
+        inline_to: row
+            .get::<_, Option<i32>>(16)
+            .and_then(|value| u32::try_from(value).ok()),
+        inline_digest: row.get(17),
+        inline_base_slice_matches: true,
+    };
+    loaded.inline_base_slice_matches = loaded.inline_slice_matches();
+    Ok(Some(loaded))
+}
+
+async fn load_operations(
+    client: &tokio_postgres::Client,
+    owner_user_id: &str,
+    project_id: &str,
+    proposal_id: &str,
+) -> Result<Vec<LoadedOperation>, AcceptProposalError> {
+    let rows = client
+        .query(
+            "SELECT operation_id::text, manuscript_block_id::text, resolution, candidate_text,
+                    COALESCE(predecessor_operation_ids::text[], '{}')
+               FROM storyos.proposal_operations
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND proposal_id = $3::text::uuid
+              ORDER BY operation_id",
+            &[&owner_user_id, &project_id, &proposal_id],
+        )
+        .await
+        .map_err(accept_database_error)?;
+    Ok(rows
+        .into_iter()
+        .map(|row| LoadedOperation {
+            operation_id: row.get(0),
+            manuscript_block_id: row.get(1),
+            resolution: row.get(2),
             candidate_text: row.get(3),
-            chapter_id: row.get(4),
-            operation_id: row.get(5),
-            operation_resolution: row.get(6),
-            receipt_id: row.get(7),
-            receipt_result: row.get(8),
-            receipt_revision_id: row.get(9),
-            receipt_candidate_text: row.get(10),
-            current_head_revision_id: row.get(11),
-            validation_current: row.get(12),
-            validated_target_matches_head: row.get(13),
-            kind: row.get(14),
-            chapter_body: row.get::<_, Option<String>>(15).unwrap_or_default(),
-            manuscript_block_id: row.get::<_, Option<String>>(16).unwrap_or_default(),
-            inline_from: row
-                .get::<_, Option<i32>>(17)
-                .and_then(|value| u32::try_from(value).ok()),
-            inline_to: row
-                .get::<_, Option<i32>>(18)
-                .and_then(|value| u32::try_from(value).ok()),
-            inline_digest: row.get(19),
-            inline_base_slice_matches: true,
-        };
-        loaded.inline_base_slice_matches = loaded.inline_slice_matches();
-        loaded
-    }))
+            predecessor_operation_ids: row.get(4),
+        })
+        .collect())
 }
 
 pub(super) fn invalid_reason(reason: &AcceptProposalInvalid) -> &'static str {
@@ -372,6 +483,9 @@ pub(super) fn refuse_reason(reason: &AcceptProposalRefusal) -> &'static str {
         AcceptProposalRefusal::StaleProposalRevision => "stale_proposal_revision",
         AcceptProposalRefusal::NotEligible => "not_eligible",
         AcceptProposalRefusal::OperationNotPending => "operation_not_pending",
+        AcceptProposalRefusal::DuplicateIdentities => "duplicate_identities",
+        AcceptProposalRefusal::MissingRequiredDependencies => "missing_required_dependencies",
+        AcceptProposalRefusal::IncompleteBundleClosure => "incomplete_bundle_closure",
     }
 }
 

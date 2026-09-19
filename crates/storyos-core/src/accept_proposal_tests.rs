@@ -1,6 +1,7 @@
 use super::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
-    AcceptProposalResult, accept_proposal,
+    AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection,
+    ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
 };
 
 fn exact_eligible() -> AcceptProposal {
@@ -15,6 +16,9 @@ fn exact_eligible() -> AcceptProposal {
         validation_receipt_valid: true,
         validation_receipt_matches_revision: true,
         selected_operation_pending: true,
+        selection_duplicate_free: true,
+        required_dependencies_met: true,
+        bundle_closure_complete: true,
         expected_target_matches_head: true,
         candidate_unaltered: true,
     }
@@ -73,6 +77,34 @@ fn refuses_wrong_scope_admission_stale_revision_and_ineligible_state() {
 }
 
 #[test]
+fn refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closure() {
+    let mut duplicates = exact_eligible();
+    duplicates.selection_duplicate_free = false;
+    assert_eq!(
+        accept_proposal(&duplicates),
+        AcceptProposalResult::Refused {
+            reason: AcceptProposalRefusal::DuplicateIdentities,
+        }
+    );
+    let mut missing = exact_eligible();
+    missing.required_dependencies_met = false;
+    assert_eq!(
+        accept_proposal(&missing),
+        AcceptProposalResult::Refused {
+            reason: AcceptProposalRefusal::MissingRequiredDependencies,
+        }
+    );
+    let mut incomplete = exact_eligible();
+    incomplete.bundle_closure_complete = false;
+    assert_eq!(
+        accept_proposal(&incomplete),
+        AcceptProposalResult::Refused {
+            reason: AcceptProposalRefusal::IncompleteBundleClosure,
+        }
+    );
+}
+
+#[test]
 fn invalidates_bad_validation_and_altered_candidates() {
     let mut invalid = exact_eligible();
     invalid.validation_receipt_valid = false;
@@ -98,6 +130,83 @@ fn invalidates_bad_validation_and_altered_candidates() {
             reason: AcceptProposalInvalid::AlteredCandidate,
         }
     );
+}
+
+#[test]
+fn classifies_duplicate_dependency_and_bundle_selection_sets() {
+    let first = ProposalOperationSelection {
+        operation_id: "op-1".to_owned(),
+        resolution: "pending".to_owned(),
+        predecessor_operation_ids: Vec::new(),
+    };
+    let second = ProposalOperationSelection {
+        operation_id: "op-2".to_owned(),
+        resolution: "pending".to_owned(),
+        predecessor_operation_ids: vec!["op-1".to_owned()],
+    };
+    let operations = [first.clone(), second.clone()];
+    let duplicates = classify_proposal_selection(
+        &["op-1".to_owned(), "op-1".to_owned()],
+        &operations,
+        ProposalBundlePolicy::None,
+        ProposalSelectionIntent::Accept,
+    );
+    assert!(!duplicates.duplicate_free);
+    let missing = classify_proposal_selection(
+        &["op-2".to_owned()],
+        &operations,
+        ProposalBundlePolicy::None,
+        ProposalSelectionIntent::Accept,
+    );
+    assert!(missing.duplicate_free);
+    assert!(missing.all_selected_pending);
+    assert!(!missing.required_dependencies_met);
+    let incomplete = classify_proposal_selection(
+        &["op-1".to_owned()],
+        &operations,
+        ProposalBundlePolicy::Atomic,
+        ProposalSelectionIntent::Accept,
+    );
+    assert!(incomplete.required_dependencies_met);
+    assert!(!incomplete.bundle_closure_complete);
+    let closed = classify_proposal_selection(
+        &["op-2".to_owned(), "op-1".to_owned()],
+        &operations,
+        ProposalBundlePolicy::Atomic,
+        ProposalSelectionIntent::Accept,
+    );
+    assert!(closed.required_dependencies_met);
+    assert!(closed.bundle_closure_complete);
+    let applied_first = ProposalOperationSelection {
+        resolution: "applied".to_owned(),
+        ..first.clone()
+    };
+    let after_apply = classify_proposal_selection(
+        &["op-2".to_owned()],
+        &[applied_first, second.clone()],
+        ProposalBundlePolicy::None,
+        ProposalSelectionIntent::Accept,
+    );
+    assert!(after_apply.required_dependencies_met);
+    assert!(after_apply.bundle_closure_complete);
+    let rejected_first = ProposalOperationSelection {
+        resolution: "rejected".to_owned(),
+        ..first
+    };
+    let after_reject = classify_proposal_selection(
+        &["op-2".to_owned()],
+        &[rejected_first.clone(), second.clone()],
+        ProposalBundlePolicy::None,
+        ProposalSelectionIntent::Accept,
+    );
+    assert!(!after_reject.required_dependencies_met);
+    let reject_remaining = classify_proposal_selection(
+        &["op-2".to_owned()],
+        &[rejected_first, second],
+        ProposalBundlePolicy::None,
+        ProposalSelectionIntent::Reject,
+    );
+    assert!(reject_remaining.required_dependencies_met);
 }
 
 #[test]

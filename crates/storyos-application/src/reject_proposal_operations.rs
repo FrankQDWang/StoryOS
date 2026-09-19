@@ -23,7 +23,7 @@ pub struct RejectProposalOperationsCommand {
     pub editor_session_id: EditorSessionId,
     pub proposal_id: String,
     pub proposal_revision_id: String,
-    pub selected_pending_operation_id: String,
+    pub selected_pending_operation_ids: Vec<String>,
     pub expected_authoritative_revision_id: String,
     pub rejection_note: RejectionNote,
 }
@@ -40,7 +40,7 @@ pub struct RejectProposalOperationsSettlement {
 pub enum RejectProposalOperationsSettlementEffect {
     Resolved {
         author_action_sequence: u64,
-        operation_id: String,
+        operation_ids: Vec<String>,
         rejection_note: RejectionNote,
         preserved_generation: String,
         preserved_validation: String,
@@ -129,7 +129,11 @@ pub async fn reject_proposal_operations(
         || challenge.command_schema != "storyos.command.reject-proposal-operations.request.v1"
         || command.proposal_id.is_empty()
         || command.proposal_revision_id.is_empty()
-        || command.selected_pending_operation_id.is_empty()
+        || command.selected_pending_operation_ids.is_empty()
+        || command
+            .selected_pending_operation_ids
+            .iter()
+            .any(String::is_empty)
         || command.expected_authoritative_revision_id.is_empty()
     {
         return Err(RejectProposalOperationsError::BindingConflict);

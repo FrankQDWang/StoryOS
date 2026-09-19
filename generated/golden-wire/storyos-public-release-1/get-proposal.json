@@ -19,6 +19,14 @@
     "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
     "operation_id": "018f0000-0000-7001-8000-000000000b04",
     "operation_resolution": "pending",
+    "operations": [
+      {
+        "manuscript_block_id": "018f0000-0000-7001-8000-000000000b05",
+        "operation_id": "018f0000-0000-7001-8000-000000000b04",
+        "reservation_state": "unresolved",
+        "resolution": "pending"
+      }
+    ],
     "proposal_id": "018f0000-0000-7001-8000-000000000b02",
     "reservation_state": "unresolved",
     "revision_id": "018f0000-0000-7001-8000-000000000b03",

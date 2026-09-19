@@ -40,16 +40,17 @@ pub(super) async fn reject_proposal_operations(
     if body.command_schema != contracts::REJECT_PROPOSAL_OPERATIONS_REQUEST_SCHEMA_ID
         || input.client_contract_revision != session.client_contract_revision
         || input.security_policy_revision != session.security_policy_revision
-        || input.selected_pending_operation_ids.len() != 1
+        || input.selected_pending_operation_ids.is_empty()
         || input.expected_target_revisions.len() != 1
     {
         return Err(invalid_request());
     }
-    let selected_pending_operation_id = input.selected_pending_operation_ids[0].clone();
     let expected_authoritative_revision_id = input.expected_target_revisions[0].clone();
     valid_uuid(&input.correlation_id)?;
     valid_uuid(&input.proposal_revision_id)?;
-    valid_uuid(&selected_pending_operation_id)?;
+    for operation_id in &input.selected_pending_operation_ids {
+        valid_uuid(operation_id)?;
+    }
     valid_uuid(&expected_authoritative_revision_id)?;
     valid_uuid(&input.editor_session_id)?;
     let rejection_note = match &input.rejection_reason {
@@ -122,7 +123,7 @@ pub(super) async fn reject_proposal_operations(
         editor_session_id: EditorSessionId::new(input.editor_session_id.clone()),
         proposal_id,
         proposal_revision_id: input.proposal_revision_id.clone(),
-        selected_pending_operation_id,
+        selected_pending_operation_ids: input.selected_pending_operation_ids.clone(),
         expected_authoritative_revision_id,
         rejection_note,
     };
@@ -143,7 +144,7 @@ fn reject_response(
     let (result, effect) = match settlement.effect {
         RejectProposalOperationsSettlementEffect::Resolved {
             author_action_sequence,
-            operation_id,
+            operation_ids,
             rejection_note,
             preserved_generation,
             preserved_validation,
@@ -154,7 +155,7 @@ fn reject_response(
             contracts::RejectProposalOperationsEffect::Resolved {
                 author_action_sequence: author_action_sequence.to_string(),
                 undo_disposition: contracts::AuthorUndoDisposition::Forward,
-                operation_ids: vec![operation_id],
+                operation_ids,
                 prior_resolution: "pending".to_owned(),
                 resulting_resolution: "rejected".to_owned(),
                 rejection_reason: contracts::ProposalRejectionReason::AuthorDeclined {
@@ -200,6 +201,15 @@ fn reject_response(
                     storyos_core::RejectProposalOperationsRefusal::OperationNotPending => {
                         contracts::RejectProposalOperationsRefusalReason::OperationNotPending
                     }
+                    storyos_core::RejectProposalOperationsRefusal::DuplicateIdentities => {
+                        contracts::RejectProposalOperationsRefusalReason::DuplicateIdentities
+                    }
+                    storyos_core::RejectProposalOperationsRefusal::MissingRequiredDependencies => {
+                        contracts::RejectProposalOperationsRefusalReason::MissingRequiredDependencies
+                    }
+                    storyos_core::RejectProposalOperationsRefusal::IncompleteBundleClosure => {
+                        contracts::RejectProposalOperationsRefusalReason::IncompleteBundleClosure
+                    }
                 },
             },
         ),
@@ -222,7 +232,7 @@ fn reject_response(
             author_command_admission_id: settlement.ids.author_command_admission_id,
             proposal_id: command.proposal_id.clone(),
             proposal_revision_id: command.proposal_revision_id.clone(),
-            selected_pending_operation_ids: vec![command.selected_pending_operation_id.clone()],
+            selected_pending_operation_ids: command.selected_pending_operation_ids.clone(),
             expected_target_revisions: vec![command.expected_authoritative_revision_id.clone()],
             prior_authoritative_revision_ids: vec![
                 command.expected_authoritative_revision_id.clone(),

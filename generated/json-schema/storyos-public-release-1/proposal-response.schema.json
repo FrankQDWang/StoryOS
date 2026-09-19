@@ -68,6 +68,12 @@
         "operation_resolution": {
           "type": "string"
         },
+        "operations": {
+          "items": {
+            "$ref": "#/$defs/ProposalOperationInspect"
+          },
+          "type": "array"
+        },
         "proposal_id": {
           "format": "uuid",
           "type": "string"
@@ -100,6 +106,7 @@
         "closure",
         "operation_id",
         "operation_resolution",
+        "operations",
         "chapter_id",
         "manuscript_block_id",
         "base_authoritative_revision_id",
@@ -291,6 +298,32 @@
         "to",
         "boundary_profile",
         "base_slice_digest"
+      ],
+      "type": "object"
+    },
+    "ProposalOperationInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "manuscript_block_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "operation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "reservation_state": {
+          "type": "string"
+        },
+        "resolution": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation_id",
+        "manuscript_block_id",
+        "resolution",
+        "reservation_state"
       ],
       "type": "object"
     },

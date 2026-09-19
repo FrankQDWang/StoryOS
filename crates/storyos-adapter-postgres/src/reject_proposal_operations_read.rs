@@ -60,10 +60,17 @@ pub(super) async fn read_reject_settlement(
               LEFT JOIN storyos.author_action_entries AS action
                      ON (action.owner_user_id, action.project_id, action.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
-              LEFT JOIN storyos.proposal_operation_resolutions AS resolution
-                     ON (resolution.owner_user_id, resolution.project_id,
-                         resolution.rejection_receipt_id) =
-                        (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN LATERAL (
+                    SELECT resolution.resolution_event_id, resolution.owner_user_id,
+                           resolution.project_id, resolution.proposal_id,
+                           resolution.proposal_revision_id
+                      FROM storyos.proposal_operation_resolutions AS resolution
+                     WHERE (resolution.owner_user_id, resolution.project_id,
+                            resolution.rejection_receipt_id) =
+                           (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+                     ORDER BY resolution.operation_id
+                     LIMIT 1
+                   ) AS resolution ON true
               LEFT JOIN storyos.proposal_revisions AS resolution_head
                      ON (resolution_head.owner_user_id, resolution_head.project_id,
                          resolution_head.proposal_id, resolution_head.revision_id) =
@@ -115,7 +122,7 @@ pub(super) async fn read_reject_settlement(
                 RejectProposalOperationsSettlementEffect::Resolved {
                     author_action_sequence: parse_u64(row.get::<_, String>(6))
                         .map_err(reject_parse_error)?,
-                    operation_id: command.selected_pending_operation_id.clone(),
+                    operation_ids: command.selected_pending_operation_ids.clone(),
                     rejection_note: match row.get::<_, Option<String>>(11) {
                         Some(text) => RejectionNote::Present { text },
                         None => RejectionNote::Omitted,
@@ -152,6 +159,21 @@ pub(super) async fn read_reject_settlement(
             ("refused", Some("operation_not_pending")) => {
                 RejectProposalOperationsSettlementEffect::Refused {
                     reason: RejectProposalOperationsRefusal::OperationNotPending,
+                }
+            }
+            ("refused", Some("duplicate_identities")) => {
+                RejectProposalOperationsSettlementEffect::Refused {
+                    reason: RejectProposalOperationsRefusal::DuplicateIdentities,
+                }
+            }
+            ("refused", Some("missing_required_dependencies")) => {
+                RejectProposalOperationsSettlementEffect::Refused {
+                    reason: RejectProposalOperationsRefusal::MissingRequiredDependencies,
+                }
+            }
+            ("refused", Some("incomplete_bundle_closure")) => {
+                RejectProposalOperationsSettlementEffect::Refused {
+                    reason: RejectProposalOperationsRefusal::IncompleteBundleClosure,
                 }
             }
             _ => return Err(RejectProposalOperationsError::HistoricalAcknowledgementUnavailable),

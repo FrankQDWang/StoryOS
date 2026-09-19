@@ -10,6 +10,9 @@ fn exact_pending() -> RejectProposalOperations {
         proposal_revision_current: true,
         closure_open: true,
         selected_operations_pending: true,
+        selection_duplicate_free: true,
+        required_dependencies_met: true,
+        bundle_closure_complete: true,
         expected_target_matches_head: true,
     }
 }
@@ -62,6 +65,34 @@ fn refuses_wrong_scope_admission_stale_revision_and_non_pending_work() {
         reject_proposal_operations(&not_pending),
         RejectProposalOperationsResult::Refused {
             reason: RejectProposalOperationsRefusal::OperationNotPending,
+        }
+    );
+}
+
+#[test]
+fn refuses_duplicate_identities_missing_dependencies_and_incomplete_bundle_closure() {
+    let mut duplicates = exact_pending();
+    duplicates.selection_duplicate_free = false;
+    assert_eq!(
+        reject_proposal_operations(&duplicates),
+        RejectProposalOperationsResult::Refused {
+            reason: RejectProposalOperationsRefusal::DuplicateIdentities,
+        }
+    );
+    let mut missing = exact_pending();
+    missing.required_dependencies_met = false;
+    assert_eq!(
+        reject_proposal_operations(&missing),
+        RejectProposalOperationsResult::Refused {
+            reason: RejectProposalOperationsRefusal::MissingRequiredDependencies,
+        }
+    );
+    let mut incomplete = exact_pending();
+    incomplete.bundle_closure_complete = false;
+    assert_eq!(
+        reject_proposal_operations(&incomplete),
+        RejectProposalOperationsResult::Refused {
+            reason: RejectProposalOperationsRefusal::IncompleteBundleClosure,
         }
     );
 }
