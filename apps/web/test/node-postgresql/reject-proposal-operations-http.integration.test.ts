@@ -16,14 +16,14 @@ test("rejectProposalOperations freezes one pending Operation without changing au
   let started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("f111"), "Reject Proposal Novel", "f2");
+    const prepared = await prepare(started.baseUrl, id("b111"), "Reject Proposal Novel", "b2");
     const before = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,
       chapterId: prepared.chapterId,
       fetchImpl: prepared.fetchImpl,
     });
-    const queried = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("f131"));
+    const queried = await admitProse(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("b131"));
     assert.equal(queried.decision.kind, "prose_change");
     if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {
       throw new Error("expected opened prose");
@@ -44,7 +44,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
         instruction: { kind: "absent" as const },
         cause: { kind: "author_request" as const },
         ...BINDING,
-        correlation_id: id("f133"),
+        correlation_id: id("b133"),
       },
     };
     const discussed = await challenged(
@@ -55,12 +55,12 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       "/api/v1/projects/{project_id}/agent-runs",
       discussion.command_schema,
       await digestCreateAgentRun(discussion),
-      id("f132"),
+      id("b132"),
       (antiForgery) => createAgentRun({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("f132"),
+        idempotencyKey: id("b132"),
         antiForgery,
         request: discussion,
       }),
@@ -84,7 +84,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
     const sessionRequest = {
       command_schema: "storyos.command.create-editor-session.request.v1" as const,
       ...BINDING,
-      correlation_id: id("f141"),
+      correlation_id: id("b141"),
     };
     const session = await challenged(
       started.baseUrl,
@@ -94,12 +94,12 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       "/api/v1/projects/{project_id}/editor-sessions",
       sessionRequest.command_schema,
       await digestCreateEditorSession(sessionRequest),
-      id("f142"),
+      id("b142"),
       (antiForgery) => createEditorSession({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
-        idempotencyKey: id("f142"),
+        idempotencyKey: id("b142"),
         antiForgery,
         request: sessionRequest,
       }),
@@ -113,7 +113,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
         rejection_reason: { kind: "author_declined", note: { kind: "omitted" } },
         editor_session_id: session.editor_session.editor_session_id,
         ...BINDING,
-        correlation_id: id("f151"),
+        correlation_id: id("b151"),
       },
     };
     const rejectOptions = {
@@ -121,7 +121,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       projectId: prepared.projectId,
       proposalId: opened.proposal.proposal_id,
       fetchImpl: prepared.fetchImpl,
-      idempotencyKey: id("f152"),
+      idempotencyKey: id("b152"),
       antiForgery: "",
       request: rejectRequest,
     };
@@ -133,7 +133,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
       rejectRequest.command_schema,
       await digestRejectProposalOperations(rejectRequest),
-      id("f152"),
+      id("b152"),
       async (antiForgery) => {
         await queryPostgres(`CREATE FUNCTION storyos.test_rejection_failure() RETURNS trigger
           LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'rejection fault'; END $$;
@@ -199,11 +199,11 @@ test("rejectProposalOperations freezes one pending Operation without changing au
         "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
         rejectRequest.command_schema,
         rejectDigest,
-        id("f153"),
+        id("b153"),
         (antiForgery) => rejectProposalOperations({
           ...rejectOptions,
           fetchImpl: foreignFetch,
-          idempotencyKey: id("f153"),
+          idempotencyKey: id("b153"),
           antiForgery,
         }),
       ),
@@ -216,8 +216,8 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       command_schema: "storyos.command.reject-proposal-operations.request.v1",
       reject_proposal_operations_input: {
         ...rejectRequest.reject_proposal_operations_input,
-        editor_session_id: id("f160"),
-        correlation_id: id("f161"),
+        editor_session_id: id("b160"),
+        correlation_id: id("b161"),
       },
     };
     const wrongAdmissionDigest = await digestRejectProposalOperations(wrongAdmission);
@@ -230,10 +230,10 @@ test("rejectProposalOperations freezes one pending Operation without changing au
         "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
         wrongAdmission.command_schema,
         wrongAdmissionDigest,
-        id("f162"),
+        id("b162"),
         (antiForgery) => rejectProposalOperations({
           ...rejectOptions,
-          idempotencyKey: id("f162"),
+          idempotencyKey: id("b162"),
           antiForgery,
           request: wrongAdmission,
         }),
@@ -244,7 +244,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       command_schema: "storyos.command.reject-proposal-operations.request.v1",
       reject_proposal_operations_input: {
         ...rejectRequest.reject_proposal_operations_input,
-        correlation_id: id("f171"),
+        correlation_id: id("b171"),
       },
     };
     const refused = await challenged(
@@ -255,10 +255,10 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections",
       second.command_schema,
       await digestRejectProposalOperations(second),
-      id("f172"),
+      id("b172"),
       (antiForgery) => rejectProposalOperations({
         ...rejectOptions,
-        idempotencyKey: id("f172"),
+        idempotencyKey: id("b172"),
         antiForgery,
         request: second,
       }),
@@ -268,7 +268,7 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       command_schema: "storyos.command.export-project-archive.request.v1" as const,
       export_project_archive_input: {
         ...BINDING,
-        correlation_id: id("f180"),
+        correlation_id: id("b180"),
         archive_profile: "storyos.project-export.v1",
         archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1",
       },
@@ -281,13 +281,13 @@ test("rejectProposalOperations freezes one pending Operation without changing au
       "/api/v1/projects/{project_id}/exports",
       archiveRequest.command_schema,
       await digestExportProjectArchive(archiveRequest),
-      id("f181"),
+      id("b181"),
       (antiForgery) => exportProjectArchive({
         baseUrl: started.baseUrl,
         projectId: prepared.projectId,
         fetchImpl: prepared.fetchImpl,
         request: archiveRequest,
-        idempotencyKey: id("f181"),
+        idempotencyKey: id("b181"),
         antiForgery,
       }),
     );
