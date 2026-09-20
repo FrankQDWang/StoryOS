@@ -29,7 +29,9 @@ class CandidateCommandTests(unittest.TestCase):
 
     def install_child(self, child):
         command = [sys.executable, str(verification_tests.COMMAND), 'step', 'sample', '--', sys.executable, '-c', child]
-        (self.root / 'Makefile').write_text('verify-local-steps:\n\t@' + shlex.join(command) + '\n')
+        entry = shlex.join([sys.executable, str(verification_tests.COMMAND), 'run'])
+        (self.root / 'Makefile').write_text(f'verify-local:\n\t@{entry} --base $(BASE) $(VERIFY_ARGS) -- make verify-local-steps\n'
+                                          + 'verify-local-steps:\n\t@' + shlex.join(command) + '\n')
         self.repo.git('add', '.')
         self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
                       'commit', '--quiet', '-m', 'Set complete child.')
@@ -79,10 +81,9 @@ class CandidateCommandTests(unittest.TestCase):
         data['complete']['stages'].append('leaf')
         policy.write_text(json.dumps(data))
         self.install_child(child)
-        self.repo.environment.update(MAKEFLAGS='--no-print-directory', MAKELEVEL='1', MFLAGS='--no-print-directory')
-        self.assertNotEqual(self.run_complete('--issue', '746', '--pr', '123').returncode, 0)
-        for key in ('MAKEFLAGS', 'MAKELEVEL', 'MFLAGS'):
-            self.repo.environment.pop(key)
+        first = subprocess.run(['make', 'verify-local', 'BASE=origin/main', 'VERIFY_ARGS=--issue 746 --pr 123'],
+                               cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
+        self.assertNotEqual(first.returncode, 0)
         report = self.repo.report()
         self.assertEqual((report['issue'], report['pr'], report['purpose']), (746, 123, 'candidate'))
         self.assertNotEqual(self.run_complete().returncode, 0)
