@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/edit-inline-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import { acceptProposal, digestAcceptProposal, digestExportProjectArchive, exportProjectArchive,

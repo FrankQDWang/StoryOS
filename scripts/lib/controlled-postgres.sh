@@ -1,4 +1,10 @@
-# Source after setting repository_root; shared by verify-project-scope.sh and dev-postgres.sh.
+# Source after setting repository_root.
+
+# Earlier stages use the 10-per-minute Command Challenge budget of the fixture Project.
+reset_command_challenge_rate_windows() {
+  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
+    -c "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0" >/dev/null
+}
 
 start_postgres() {
   name=$1

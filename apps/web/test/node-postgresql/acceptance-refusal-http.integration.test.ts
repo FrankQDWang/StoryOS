@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/reopen-rejected-operations-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";

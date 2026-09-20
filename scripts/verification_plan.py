@@ -99,9 +99,7 @@ def execute_plan(root, plan):
     directory = Path(os.environ["STORYOS_VERIFICATION_RUN"])
     for check in plan["checks"]:
         group = check["group"]
-        if group == "complete":
-            command = ["make", "verify-local-steps"]
-        elif group == "policy":
+        if group == "policy":
             command = ["make", "verify-policy"]
         elif group == "web-typecheck":
             command = ["make", "web-typecheck"]
@@ -161,6 +159,10 @@ def main():
         if args.action == "plan":
             print(json.dumps(plan, indent=2))
             return 0
+        if any(check["group"] == "complete" for check in plan["checks"]):
+            raise ValueError("Daily scope is pending: automatic complete verification is disabled. "
+                             "Inspect make verify-plan BASE=<base> and run the applicable targeted checks. "
+                             "Complete verification requires the reviewed final candidate workflow.")
         if args.action == "execute":
             return execute_plan(root, plan)
         command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],

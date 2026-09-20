@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/project-export-pinned-source-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { join } from "node:path";

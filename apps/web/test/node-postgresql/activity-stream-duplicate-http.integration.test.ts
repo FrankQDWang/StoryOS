@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":[]}
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
