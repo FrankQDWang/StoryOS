@@ -25,6 +25,10 @@ Bundle. Keep secrets in environment variables, not recorded command arguments.
 Use `make verify-plan BASE=origin/main` to inspect the changed files and reasons.
 Use `make verify-changed BASE=origin/main` to execute that scope. Set BASE to the
 actual comparison commit or ref; `BASE=HEAD` checks current working changes only.
+The daily entry never dispatches complete verification. A plan with a `complete`
+group is currently pending: inspect its reasons and use applicable targeted checks.
+Production and shared-input selection will be extended separately. Do not use
+`make verify-local` to resolve a pending daily plan; follow candidate review first.
 Save plans under ignored `target/` and run a saved plan with
 `python3 scripts/verification_plan.py run --base origin/main --plan target/plan.json`.
 The runner recomputes the plan and refuses stale or edited plans. Reports bind
@@ -39,11 +43,11 @@ require the complete group. A changed dependency invalidates that declaration.
 All Rust test files must appear in current compiler records for a test executable.
 Complete runs and selected runs reject unlinked files and retain existing Cargo targets. Crates with ignored
 tests or conditional attributes retain the complete group. Rust production changes
-include current reverse consumers in the plan and require complete verification.
+include current reverse consumers in the plan and leave daily execution pending.
 No function filter is inferred.
 
 When adding, renaming or deleting tests, run `make verify-policy` and inspect a fresh
-plan. Renames and deletions expand to complete verification and remove obsolete
+plan. Renames and deletions leave daily execution pending and remove obsolete
 files from current test membership. Unknown locations or execution profiles fail.
 A new framework or shared resource requires a reviewed policy and runner extension,
 with a public command regression. Review declarations with the same independent
@@ -52,11 +56,35 @@ Standards and Spec process as code. Test names and counts are discovered, not fi
 Use these commands from Codex, Cursor and Grok Build. If a client does not load
 AGENTS.md, include this document in its project instructions. The checked policy
 is the common owner; client instructions link here. Selected dirty-tree runs are
-daily feedback. A complete group needs a clean tree because release packaging binds
+daily feedback. Complete candidate verification needs a clean tree because release packaging binds
 Git identity. An empty change set or empty test discovery cannot report success.
 Complete candidate verification, PostgreSQL fixtures, ordered HTTP groups, exact-dist
 oracles and both recovery drills remain mandatory.
 The PR sentinel checks the policy and runner; a separate gate validates complete reports.
+
+## Shared Web test phases
+
+Shared HTTP and process-cut tests require one first-line JSON declaration:
+
+```typescript
+// Verification: {"phase":"http-main","after":[]}
+```
+
+`after` contains repository-relative paths in the same phase. Add only required
+dependencies. Independent ready files run in sorted path order. The policy owns
+the serial phase order, test project, report stage, and preparation action. File
+declarations cannot reorder phases or request resources. The current phases share
+one prepared PostgreSQL fixture; challenge resets and fixture reloads stay at their
+declared boundaries. The exact-dist preparation remains outside these phases.
+
+Use `python3 scripts/verification_shared.py plan` to inspect ordered members.
+The complete runner consumes this discovery through the `run` action after its
+existing package and database preparation. New supported shared tests join their
+declared phase automatically. Remove or update dependent declarations when moving,
+renaming or deleting a file. Missing or duplicate declarations, unknown phases,
+dangling or cross-phase dependencies, cycles, and empty phases fail policy checks
+before expensive children start. `make verify-policy` and the project input check
+validate this structure. Independent policy self-tests also precede Rust compilation.
 
 ## Daily result reuse and host budget
 

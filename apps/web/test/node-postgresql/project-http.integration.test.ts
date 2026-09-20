@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-bootstrap","after":["apps/web/test/node-postgresql/protocol-http-host.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { request as httpRequest } from "node:http";

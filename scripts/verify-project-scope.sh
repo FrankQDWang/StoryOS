@@ -113,6 +113,7 @@ record_google_chrome_version() {
 }
 
 verify_web_migration_guards
+python3 scripts/verification_shared.py plan >/dev/null
 if [ "${1:-}" = "--check-inputs" ]; then
   exit 0
 fi
@@ -359,19 +360,6 @@ prove_bound_request_path_activation() {
   rm -f "$log" "$headers" "$body"
 }
 
-# Earlier stages use the 10-per-minute Command Challenge budget of the fixture Project.
-reset_command_challenge_rate_windows() {
-  docker exec "$1" psql -X -v ON_ERROR_STOP=1 -U postgres \
-    -c "UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0" >/dev/null
-}
-
-# The node-postgresql files share one database and one fixture, so ScriptOrderSequencer
-# keeps the given order instead of the Vitest default order.
-run_http_files() {
-  STORYOS_VITEST_FILE_ORDER=$(printf '%s:' "$@") \
-    timed_stage http-files -- pnpm --dir apps/web exec vitest run --project node-postgresql "$@"
-}
-
 container="storyos-issue105-$$"
 oracle_container="storyos-storage-oracle-$$"
 activation_container="storyos-storage-activation-$$"
@@ -572,63 +560,7 @@ echo "Running PostgreSQL Application and RLS tests"
 timed_stage postgres-scope -- cargo test --workspace --all-features --test project_scope -- --ignored --nocapture
 timed_stage postgres-challenge -- cargo test --workspace --all-features --test project_command_challenge -- --ignored --nocapture
 timed_stage postgres-library -- cargo test --workspace --all-features --lib -- --ignored --nocapture
-echo "Running HTTP protocol host and Project Scope tests"
-run_http_files \
-  test/node-postgresql/protocol-http-host.integration.test.ts \
-  test/node-postgresql/project-http.integration.test.ts
-echo "Running HTTP ApplyAuthorEdit process-cut tests"
-reset_command_challenge_rate_windows "$container"
-timed_stage author-edit-process-cut -- pnpm --dir apps/web exec vitest run --project node-process-cut \
-  test/node-process-cut/apply-author-edit-process-cut.integration.test.ts
-echo "Running HTTP Activity Stream, Project, structure, query, and export tests"
-reset_command_challenge_rate_windows "$container"
-run_http_files \
-  test/node-postgresql/activity-stream-duplicate-http.integration.test.ts \
-  test/node-postgresql/activity-stream-cross-table-http.integration.test.ts \
-  test/node-postgresql/snapshot-replay-http.integration.test.ts \
-  test/node-postgresql/create-project-challenge-http.integration.test.ts \
-  test/node-postgresql/create-project-http.integration.test.ts \
-  test/node-postgresql/list-projects-http.integration.test.ts \
-  test/node-postgresql/update-project-http.integration.test.ts \
-  test/node-postgresql/update-project-assistance-http.integration.test.ts \
-  test/node-postgresql/create-agent-run-http.integration.test.ts \
-  test/node-postgresql/complete-fake-model-decision-http.integration.test.ts \
-  test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts \
-  test/node-postgresql/continue-conversation-input-http.integration.test.ts \
-  test/node-postgresql/open-block-proposal-http.integration.test.ts \
-  test/node-postgresql/stream-proposal-generation-http.integration.test.ts \
-  test/node-postgresql/edit-proposal-candidate-http.integration.test.ts \
-  test/node-postgresql/edit-inline-proposal-http.integration.test.ts \
-  test/node-postgresql/accept-proposal-http.integration.test.ts \
-  test/node-postgresql/settle-multi-operation-selections-http.integration.test.ts \
-  test/node-postgresql/reject-proposal-operations-http.integration.test.ts \
-  test/node-postgresql/reopen-rejected-operations-http.integration.test.ts \
-  test/node-postgresql/acceptance-refusal-http.integration.test.ts \
-  test/node-postgresql/archive-project-http.integration.test.ts \
-  test/node-postgresql/create-volume-http.integration.test.ts \
-  test/node-postgresql/update-volume-http.integration.test.ts \
-  test/node-postgresql/create-chapter-http.integration.test.ts \
-  test/node-postgresql/update-chapter-http.integration.test.ts \
-  test/node-postgresql/set-current-chapter-http.integration.test.ts \
-  test/node-postgresql/delete-chapter-http.integration.test.ts \
-  test/node-postgresql/delete-volume-http.integration.test.ts \
-  test/node-postgresql/undo-latest-author-action-http.integration.test.ts \
-  test/node-postgresql/manuscript-tree-http.integration.test.ts \
-  test/node-postgresql/manuscript-search-http.integration.test.ts \
-  test/node-postgresql/takeover-http.integration.test.ts \
-  test/node-postgresql/takeover-late-result-http.integration.test.ts \
-  test/node-postgresql/project-export-admission-http.integration.test.ts \
-  test/node-postgresql/project-export-pinned-source-http.integration.test.ts \
-  test/node-postgresql/readable-export-admission-http.integration.test.ts \
-  test/node-postgresql/readable-export-pinned-source-http.integration.test.ts
-echo "Running HTTP human-readable export process-cut tests"
-reload_controlled_fixture "$container"
-timed_stage readable-export-process-cut -- pnpm --dir apps/web exec vitest run --project node-process-cut \
-  test/node-process-cut/readable-export-admission-process-cut.integration.test.ts
-echo "Running HTTP Project Export Archive process-cut tests"
-reload_controlled_fixture "$container"
-timed_stage project-export-process-cut -- pnpm --dir apps/web exec vitest run --project node-process-cut \
-  test/node-process-cut/project-export-admission-process-cut.integration.test.ts
+python3 scripts/verification_shared.py run
 echo "Restoring the controlled Project fixture for S1-JRN-001"
 reload_controlled_fixture "$container"
 reset_command_challenge_rate_windows "$container"

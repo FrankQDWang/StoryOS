@@ -75,7 +75,23 @@ class FilePlanTests(unittest.TestCase):
         plan = json.loads(self.cli("plan").stdout)
         self.assertEqual(plan["checks"][-1]["group"], "complete")
         self.assertNotEqual(self.cli("run").returncode, 0)
-        self.assertEqual(self.repo.report()["status"], "failed")
+        self.assertFalse(list(self.root.glob("target/verification/*/report.json")))
+
+    def test_daily_entry_refuses_complete_dispatch_on_a_clean_changed_tree(self):
+        self.install_runner_fixture()
+        makefile = self.root / "Makefile"
+        makefile.write_text(makefile.read_text() + "verify-local-steps:\n\t@mkdir -p target; touch target/complete-started\n")
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Change a shared input.")
+        for action in ("run", "execute"):
+            with self.subTest(action=action):
+                result = self.cli(action)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("pending", result.stderr)
+                self.assertIn("verify-plan", result.stderr)
+                self.assertFalse((self.root / "target/complete-started").exists())
+        self.assertFalse(list(self.root.glob("target/verification/*/report.json")))
 
     def install_runner_fixture(self):
         policy = json.loads(self.policy_path.read_text())

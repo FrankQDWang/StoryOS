@@ -24,6 +24,38 @@
       "browser-exact-dist": ["exact-dist"]
     }
   },
+  "shared_phases": [
+    {
+      "name": "http-bootstrap",
+      "group": "node-postgresql",
+      "stage": "http-files",
+      "prepare": "none"
+    },
+    {
+      "name": "author-edit-process-cut",
+      "group": "node-process-cut",
+      "stage": "author-edit-process-cut",
+      "prepare": "reset-challenge"
+    },
+    {
+      "name": "http-main",
+      "group": "node-postgresql",
+      "stage": "http-files",
+      "prepare": "reset-challenge"
+    },
+    {
+      "name": "readable-export-process-cut",
+      "group": "node-process-cut",
+      "stage": "readable-export-process-cut",
+      "prepare": "reload-fixture"
+    },
+    {
+      "name": "project-export-process-cut",
+      "group": "node-process-cut",
+      "stage": "project-export-process-cut",
+      "prepare": "reload-fixture"
+    }
+  ],
   "daily_workers": 2,
   "result_cache_profiles": ["node-contract"],
   "file_profiles": {

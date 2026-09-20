@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-bootstrap","after":[]}
 import assert from "node:assert/strict";
 import { cpSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

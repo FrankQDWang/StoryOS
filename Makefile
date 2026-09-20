@@ -22,18 +22,19 @@ verify-policy:
 	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p '*_tests.py'
 
 contracts: verify-policy
-	$(VERIFY_STEP) rust-format -- cargo fmt --all -- --check
-	$(VERIFY_STEP) rust-clippy -- cargo clippy --workspace --all-targets --all-features -- -D warnings
-	$(VERIFY_STEP) rust-tests -- python3 scripts/verification.py rust-tests
-	$(VERIFY_STEP) rust-doc-tests -- cargo test --workspace --doc --all-features
 	$(VERIFY_STEP) protocol-self-test -- python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
 	$(VERIFY_STEP) persistence-self-test -- python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
 	$(VERIFY_STEP) author-edit-self-test -- python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py --self-test
 	$(VERIFY_STEP) tracker-self-test -- python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	$(VERIFY_STEP) transaction-self-test -- python3 scripts/verify-transaction-control-receivers.py --self-test
+	$(VERIFY_STEP) rust-format -- cargo fmt --all -- --check
+	$(VERIFY_STEP) rust-clippy -- cargo clippy --workspace --all-targets --all-features -- -D warnings
+	$(VERIFY_STEP) rust-tests -- python3 scripts/verification.py rust-tests
+	$(VERIFY_STEP) rust-doc-tests -- cargo test --workspace --doc --all-features
 	$(VERIFY_STEP) generated-contracts -- cargo run --quiet -p storyos-contracts -- check
 	$(MAKE) web
 web-typecheck:
+	@python3 scripts/verification_shared.py plan >/dev/null
 	$(VERIFY_STEP) node-install -- pnpm install --frozen-lockfile
 	$(VERIFY_STEP) web-typecheck -- pnpm --dir apps/web run typecheck
 

@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/open-block-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { test } from "vitest";

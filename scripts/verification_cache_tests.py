@@ -110,22 +110,26 @@ class DailyCacheTests(unittest.TestCase):
 
     def test_rename_deletion_and_shared_changes_cannot_reuse_a_leaf_result(self):
         self.assertEqual(self.run_daily()[0].returncode, 0)
+        reports = list(self.root.glob("target/verification/*/report.json"))
+
+        def pending_plan():
+            result = self.fixture.cli("run")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("pending", result.stderr)
+            self.assertNotIn("executed selected files", result.stdout)
+            self.assertEqual(list(self.root.glob("target/verification/*/report.json")), reports)
+            return json.loads(self.fixture.cli("plan").stdout)
+
         self.fixture.repo.git("add", str(self.test))
         self.fixture.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                               "commit", "--quiet", "-m", "Register the test file.")
         renamed = self.test.with_name("renamed.test.ts")
         self.fixture.repo.git("mv", str(self.test), str(renamed))
-        result, report = self.run_daily()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(report["plan"]["checks"][0]["group"], "complete")
+        self.assertEqual(pending_plan()["checks"][0]["group"], "complete")
         renamed.unlink()
-        result, report = self.run_daily()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn(str(renamed.relative_to(self.root)), report["plan"]["test_files"])
+        self.assertNotIn(str(renamed.relative_to(self.root)), pending_plan()["test_files"])
         (self.root / "AGENTS.md").write_text("Changed shared policy input.\n")
-        result, report = self.run_daily()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(report["plan"]["checks"][0]["group"], "complete")
+        self.assertEqual(pending_plan()["checks"][0]["group"], "complete")
 
     def test_failure_and_source_changes_do_not_publish_reusable_results(self):
         self.test.write_text(self.test.read_text() + "// NO_TESTS\n")

@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/update-project-assistance-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { existsSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";

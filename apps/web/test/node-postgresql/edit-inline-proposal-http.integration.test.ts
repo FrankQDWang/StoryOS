@@ -1,3 +1,4 @@
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/edit-proposal-candidate-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";

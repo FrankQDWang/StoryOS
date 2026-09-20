@@ -1,3 +1,4 @@
+// Verification: {"phase":"author-edit-process-cut","after":[]}
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import type { ChildProcess } from "node:child_process";

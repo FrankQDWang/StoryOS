@@ -17,6 +17,7 @@ import time
 import uuid
 
 import verification_cache
+import verification_shared
 
 
 def git(root, *arguments):
@@ -99,6 +100,8 @@ def inventory(root, revision=None):
                 or any(item["group"].split(":")[0] not in groups for item in files
                        if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"})):
             raise ValueError("Incomplete verification stage or test group policy")
+    if "shared_phases" in policy:
+        verification_shared.plan(root, policy, files, revision)
     return {"version": 1, "files": files}
 
 
