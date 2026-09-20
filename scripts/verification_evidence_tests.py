@@ -98,8 +98,9 @@ class CandidateEvidenceTests(unittest.TestCase):
         test.parent.mkdir(parents=True)
         test.write_text("A newly discovered Web test input.\n")
         self.commit()
-        self.prepare("--policy-reviewed")
-        self.assertNotEqual(self.check().returncode, 0)
+        result = self.fixture.cli("run", "--", "make", "verify-local-steps")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("No recorded execution covers", self.fixture.report()["error"])
 
     def test_missing_failed_stale_and_cached_reports_are_refused(self):
         original = json.loads(self.prepare().read_text())

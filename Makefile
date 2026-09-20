@@ -52,7 +52,7 @@ project-scope: release-package
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 verify-local:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run -- make verify-local-steps
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run --base "$(BASE)" $(VERIFY_ARGS) -- make verify-local-steps
 
 verify-local-steps: contracts
 	@$(VERIFY_STEP) workspace-boundaries -- sh -c 'cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py'
