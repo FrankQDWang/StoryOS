@@ -106,8 +106,8 @@ test("continuation consumes an eligible prior binding and keeps current input in
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
-    const prepared = await prepare(started.baseUrl, id("c211"), "Continue Novel", "c2");
-    const first = await admit(started.baseUrl, prepared, id("c221"), FIRST);
+    const prepared = await prepare(started.baseUrl, id("c411"), "Continue Novel", "c42");
+    const first = await admit(started.baseUrl, prepared, id("c431"), FIRST);
     const firstInspect = await inspect(started.baseUrl, prepared, first.effect.run_id);
     const firstBinding = produced(firstInspect);
     assert.equal(firstInspect.status, "completed");
@@ -116,7 +116,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
     assert.equal(selected(firstInspect, "author_instruction"), FIRST);
     assert.equal(selected(firstInspect, "working_target"), "");
     await rewriteChapter(prepared.projectId, prepared.chapterId, `'${EDITED}'`);
-    const second = await admit(started.baseUrl, prepared, id("c223"), CORRECTION, {
+    const second = await admit(started.baseUrl, prepared, id("c433"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
@@ -135,11 +135,11 @@ test("continuation consumes an eligible prior binding and keeps current input in
     const afterEdit = await inspect(started.baseUrl, prepared, first.effect.run_id);
     assert.equal(selected(afterEdit, "author_instruction"), FIRST);
     assert.equal(selected(afterEdit, "working_target"), "");
-    const other = await admit(started.baseUrl, prepared, id("c225"), FIRST);
+    const other = await admit(started.baseUrl, prepared, id("c435"), FIRST);
     assert.notEqual(other.conversation_id, first.conversation_id);
     assert.equal(other.effect.project_agent_id, first.effect.project_agent_id);
     assert.equal(attempt(await inspect(started.baseUrl, prepared, other.effect.run_id)).input_mapping, "none");
-    const full = await admit(started.baseUrl, prepared, id("c227"), FULL, {
+    const full = await admit(started.baseUrl, prepared, id("c437"), FULL, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
@@ -156,7 +156,7 @@ test("continuation consumes an eligible prior binding and keeps current input in
        WHERE project_id = '${prepared.projectId}'::uuid
          AND continuation_binding_id = '${produced(fullInspect)}'::uuid;
     `);
-    const stale = await admit(started.baseUrl, prepared, id("c229"), CORRECTION, {
+    const stale = await admit(started.baseUrl, prepared, id("c439"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
@@ -169,13 +169,13 @@ test("continuation consumes an eligible prior binding and keeps current input in
        WHERE project_id = '${prepared.projectId}'::uuid
          AND continuation_binding_id = '${produced(staleInspect)}'::uuid;
     `);
-    const restricted = await admit(started.baseUrl, prepared, id("c22b"), CORRECTION, {
+    const restricted = await admit(started.baseUrl, prepared, id("c43b"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
     assert.equal(attempt(await inspect(started.baseUrl, prepared, restricted.effect.run_id)).input_mapping, "new_transport");
     await rewriteChapter(prepared.projectId, prepared.chapterId, "repeat('a', 10001)");
-    const blocked = await admit(started.baseUrl, prepared, id("c22d"), CORRECTION, {
+    const blocked = await admit(started.baseUrl, prepared, id("c43d"), CORRECTION, {
       kind: "existing",
       conversation_id: first.conversation_id,
     });
