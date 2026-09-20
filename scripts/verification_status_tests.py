@@ -32,7 +32,9 @@ class TargetedStatusTests(unittest.TestCase):
     def test_status_is_read_only_and_rejects_stale_or_failed_results(self):
         self.assertEqual(self.status()['status'], 'pending')
         self.assertFalse((self.root / 'target').exists())
+        self.repo.environment['PYTHONDONTWRITEBYTECODE'] = '1'
         result = self.repo.cli('targeted', '--check', 'sample', '--issue', '744')
+        self.repo.environment.pop('PYTHONDONTWRITEBYTECODE')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.status()['status'], 'passed')
         report = self.repo.report()
@@ -63,6 +65,18 @@ class TargetedStatusTests(unittest.TestCase):
         self.assertTrue(report['actual_started_at'])
         self.assertTrue(report['heartbeat_at'])
         self.assertTrue(all(step['started_at'] and step['ended_at'] for step in report['steps']))
+
+    def test_new_failure_after_reboot_overrides_old_success(self):
+        self.assertEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
+        first = next(self.root.glob('target/verification/*/report.json'))
+        (self.root / 'target/fail').touch()
+        self.assertNotEqual(self.repo.cli('targeted', '--check', 'sample').returncode, 0)
+        for path in self.root.glob('target/verification/*/report.json'):
+            report = json.loads(path.read_text())
+            report.update(started_monotonic=90000 if path == first else 100,
+                          started_at='2026-09-19T10:00:00+00:00' if path == first else '2026-09-20T10:00:00+00:00')
+            path.write_text(json.dumps(report))
+        self.assertEqual(self.status()['status'], 'failed')
 
     def test_daily_status_and_readable_plan_do_not_launch_children(self):
         fixture = verification_plan_tests.FilePlanTests()

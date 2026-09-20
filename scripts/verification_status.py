@@ -1,5 +1,6 @@
 """Read current results and execute policy-registered targeted checks."""
 
+from datetime import datetime
 import hashlib
 import json
 import os
@@ -27,7 +28,7 @@ def targeted_plan(root, check):
             'workers': 'existing-targeted-profile'}
     import verification_candidate
     plan['execution_inputs_sha256'] = verification_cache.digest({k: v for k, v in verification_candidate.environment().items()
-        if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT'}})
+        if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}})
     plan['digest'] = verification_cache.digest(plan)
     return plan
 
@@ -65,8 +66,8 @@ def status(root, plan):
             previous = report.get('plan', {})
             if (previous.get('check') == plan.get('check') and report.get('profile') ==
                     ('targeted' if 'check' in plan else 'daily')):
-                reports.append((report.get('started_monotonic', 0), path, report))
-        except (OSError, ValueError, TypeError):
+                reports.append((datetime.fromisoformat(report['started_at']).timestamp(), path, report))
+        except (OSError, ValueError, TypeError, KeyError):
             continue
     if reports:
         _, path, report = max(reports)

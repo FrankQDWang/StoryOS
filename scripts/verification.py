@@ -239,7 +239,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     directory = root / "target/verification" / ((context or {}).get("run_id") or f"{timestamp}-{uuid.uuid4().hex[:8]}")
     (directory / "steps").mkdir(parents=True)
     report_path = directory / "report.json"
-    report = {"version": 1, "started_at": timestamp, "command": command, "status": "running",
+    report = {"version": 1, "started_at": datetime.now(timezone.utc).isoformat(), "command": command, "status": "running",
               "profile": "daily" if plan else "complete",
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
