@@ -143,6 +143,26 @@ print('executed selected files')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("stale", result.stderr.lower())
 
+    def test_package_script_changes_keep_known_proofs_pending(self):
+        self.install_runner_fixture()
+        policy = json.loads(self.policy_path.read_text())
+        policy["daily_consumers"] = json.loads((Path(__file__).parent.parent /
+            "docs/agents/verification-policy.json").read_text())["daily_consumers"]
+        self.policy_path.write_text(json.dumps(policy))
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Declare actual script consumers.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        for name in ("package-release.py", "verify-project-scope.sh"):
+            path = self.root / "scripts" / name
+            path.write_text("Changed shared script.\n")
+            result = self.cli("run")
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("input-policy-checked", result.stdout)
+            self.assertIn("Daily scope pending: exact-dist", result.stdout)
+            self.assertIn("Daily scope pending: recovery", result.stdout)
+            path.unlink()
+
     def test_dirty_package_obligation_does_not_hide_independent_feedback(self):
         self.install_runner_fixture()
         policy = json.loads(self.policy_path.read_text())
