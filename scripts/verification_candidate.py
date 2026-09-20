@@ -22,7 +22,7 @@ import verification_cache
 def environment():
     return {key: value for key, value in os.environ.items() if key not in {
         'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL', 'MAKEOVERRIDES', 'MAKE_TERMOUT', 'MAKE_TERMERR',
-        'BASE', 'VERIFY_ARGS', 'PR', 'REPORT', 'MANPATH', 'PWD', 'OLDPWD', 'PYTHONDONTWRITEBYTECODE'}}
+        'BASE', 'VERIFY_ARGS', 'PR', 'REPORT', 'MANPATH', 'PWD', 'OLDPWD'}}
 
 
 def identity(root, command, base):
@@ -36,7 +36,7 @@ def identity(root, command, base):
         tools.append([name, executable, hashlib.sha256(Path(executable).read_bytes()).hexdigest() if executable else None, subprocess.check_output(
             [executable, '--version'], cwd=root, stderr=subprocess.STDOUT, text=True).strip() if executable else None])
     inputs = {key: value for key, value in environment().items()
-                   if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT'}}
+                   if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}}
     return {'version': 1, 'source': {key: value for key, value in source.items() if key != 'write_stamps_sha256'},
             'plan': runner.complete_plan(root, base=base), 'command': command, 'tools': tools,
             'inputs': verification_cache.digest(inputs),
