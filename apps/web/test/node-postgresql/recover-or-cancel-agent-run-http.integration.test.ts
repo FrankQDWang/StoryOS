@@ -21,7 +21,9 @@ import {
   digestCreateVolume,
   digestPauseAgentRun,
   digestUpdateProjectAssistance,
+  activityStream,
   getAgentRun,
+  getManuscriptTree,
   getProposal,
   pauseAgentRun,
   updateProjectAssistance,
@@ -315,6 +317,16 @@ async function waitFor(
   throw new Error(`hold inspect timed out: status=${last?.status ?? "none"} decision=${last?.decision.kind ?? "none"}`);
 }
 
+function activityEvent(body: string, eventKind: string) {
+  return body.split("\n\n").map((block) => {
+    const data = block.split("\n").find((line) => line.startsWith("data:"));
+    return data === undefined ? undefined : JSON.parse(data.slice(5).trim()) as {
+      event_kind?: string;
+      event_schema?: string;
+    };
+  }).find((event) => event?.event_kind === eventKind);
+}
+
 function problemCode(error: unknown): string | undefined {
   const protocol = requireStoryOSProtocolError(error);
   if (protocol.responseBody === undefined) return undefined;
@@ -353,6 +365,19 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     assert.equal(pausedInspect.status, "paused");
     assert.equal(pausedInspect.decision.kind, "absent");
     assert.equal(pausedInspect.usage.kind, "unknown");
+    const tree = await getManuscriptTree({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      fetchImpl: prepared.fetchImpl,
+    });
+    const pausedActivity = activityEvent(await activityStream({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      snapshotId: tree.snapshot.snapshot_id,
+      protocolRelease: "storyos.public.release.1",
+      fetchImpl: prepared.fetchImpl,
+    }), "agent_run_paused");
+    assert.equal(pausedActivity?.event_schema, "storyos.event.agent-run-paused.v1");
     const alreadyPaused = await postPause(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, id("c143"), id("c144"));
     assert.equal(alreadyPaused.response.effect.kind, "no_effect");
     if (alreadyPaused.response.effect.kind !== "no_effect") throw new Error("expected already paused");
@@ -406,6 +431,14 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
     assert.equal(cancelledInspect.status, "cancelled");
     assert.equal(cancelledInspect.decision.kind, "absent");
     assert.equal(cancelledInspect.usage.kind, "unknown");
+    const cancelledActivity = activityEvent(await activityStream({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      snapshotId: tree.snapshot.snapshot_id,
+      protocolRelease: "storyos.public.release.1",
+      fetchImpl: prepared.fetchImpl,
+    }), "agent_run_cancelled");
+    assert.equal(cancelledActivity?.event_schema, "storyos.event.agent-run-cancelled.v1");
     const alreadyCancelled = await postCancel(started.baseUrl, prepared.fetchImpl, prepared.projectId, created.effect.run_id, id("c173"), id("c174"));
     assert.equal(alreadyCancelled.response.effect.kind, "no_effect");
     if (alreadyCancelled.response.effect.kind !== "no_effect") throw new Error("expected already cancelled");
@@ -461,12 +494,8 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     assert.equal(afterCancel.decision.kind, "absent");
     assert.equal(afterCancel.usage.kind, "unknown");
     assert.equal(afterCancel.model_attempt.kind, "present");
-    const cancelledDispatch = await queryPostgres(`
-      SELECT attempt.dispatch_state
-        FROM storyos.model_attempts AS attempt
-       WHERE attempt.run_id = '${dispatchRun.effect.run_id}'::uuid;
-    `);
-    assert.equal(cancelledDispatch, "uncertain");
+    if (afterCancel.model_attempt.kind !== "present") throw new Error("expected attempt");
+    assert.equal(afterCancel.model_attempt.dispatch_state, "uncertain");
     await settleOnce();
     assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id)).status, "cancelled");
 
@@ -546,7 +575,10 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     });
     assert.equal(proposal.proposal.closure, "open");
     assert.equal(proposal.proposal.operation_resolution, "pending");
-    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id)).status, "cancelled");
+    assert.equal(proposal.proposal.reservation_state, "unresolved");
+    const cancelledProposalInspect = await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id);
+    assert.equal(cancelledProposalInspect.status, "cancelled");
+    assert.equal(cancelledProposalInspect.decision.kind, "prose_change");
   } finally {
     if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
     if (existsSync(decisionHold)) unlinkSync(decisionHold);
