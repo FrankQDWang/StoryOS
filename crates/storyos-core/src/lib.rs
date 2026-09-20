@@ -8,6 +8,7 @@ mod archive_project;
 mod archive_zip;
 mod assemble_context;
 mod complete_fake_decision;
+mod continuation_input;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;
@@ -65,6 +66,10 @@ pub use complete_fake_decision::{
     INLINE_PROSE_CHANGE_TEXT, NativeStreamItem, PROSE_CHANGE_TEXT, SECOND_PROSE_CHANGE_TEXT,
     STREAM_FIRST_TEXT, STREAM_SECOND_TEXT, StreamItemRole, StreamItemState, host_fake_wire_digest,
     plan_fake_model_decision, stream_batch_plan,
+};
+pub use continuation_input::{
+    ContinuationIdentity, ContinuationInputMapping, ContinuationMappingInput,
+    continuation_mapping_can_represent, map_continuation_input,
 };
 pub use create_agent_run::{
     AssistanceAdmission, ChapterAdmission, ConversationAdmission, CreateAgentRun,

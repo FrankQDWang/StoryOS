@@ -96,6 +96,24 @@ pub enum AgentRunDecisionInspect {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AgentRunInputMapping {
+    None,
+    Incremental,
+    Full,
+    NewTransport,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRunContinuationAdmission {
+    pub processing_destination_identity: String,
+    pub evidence_revision: String,
+    pub model_registration_revision: String,
+    pub adapter_mapping: String,
+    pub project_model_use_binding_revision: String,
+    pub external_compatibility_decision: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AgentRunModelInspect {
     pub model_attempt_id: String,
@@ -103,6 +121,10 @@ pub struct AgentRunModelInspect {
     pub outbound_disclosure_event_id: String,
     pub model_invocation_id: String,
     pub dispatch_state: String,
+    pub prior_continuation_binding_id: Option<String>,
+    pub known_prior_continuation_binding_id: Option<String>,
+    pub input_mapping: AgentRunInputMapping,
+    pub admission: AgentRunContinuationAdmission,
     pub evidence: Vec<AgentRunEvidence>,
     pub items: Vec<AgentRunStreamItem>,
     pub usage_kind: String,

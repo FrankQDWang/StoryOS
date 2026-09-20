@@ -8,7 +8,8 @@ use crate::release1_agent_run::{
     CREATE_AGENT_RUN, CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_REQUEST_SCHEMA_ID,
     CREATE_AGENT_RUN_RESPONSE_SCHEMA_ID, ContextBlockReason, ContextProjectionInspect,
     ContextPurpose, ContextRejectionInspect, ContextRejectionReason, ContextSourceClass,
-    ContextSourceInspect, ContextSufficiency, ConversationSelection, CreateAgentRunEffect,
+    ContextSourceInspect, ContextSufficiency, ContinuationAdmissionInspect,
+    ContinuationInputMappingInspect, ConversationSelection, CreateAgentRunEffect,
     CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
     DestinationIo, EvidenceAvailability, GET_AGENT_RUN, GET_AGENT_RUN_REQUEST_SCHEMA_ID,
     GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest, GetAgentRunResponse, HostControlInspect,
@@ -162,6 +163,7 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
         "OptionalModelAttemptInspect",
         "OptionalContinuationInspect",
         "OptionalOpenedProposalInspect",
+        "ContinuationAdmissionInspect",
     ] {
         if let Some(definition) = schema["$defs"].get_mut(name) {
             constrain_uuid_fields(
@@ -176,6 +178,10 @@ pub(super) fn get_response_schema_bytes() -> Vec<u8> {
                     "continuation_binding_id",
                     "reference_id",
                     "proposal_id",
+                    "processing_destination_identity",
+                    "model_registration_revision",
+                    "project_model_use_binding_revision",
+                    "external_compatibility_decision",
                 ],
             );
         }
@@ -227,7 +233,7 @@ pub(super) fn openapi() -> String {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         ConversationSelection::decl(&config),
         AuthorMessage::decl(&config),
         AssistanceWorkingTarget::decl(&config),
@@ -260,6 +266,8 @@ pub(super) fn typescript_type_declarations() -> String {
         OptionalContinuationInspect::decl(&config),
         OptionalOpenedProposalInspect::decl(&config),
         OptionalDecisionInspect::decl(&config),
+        ContinuationInputMappingInspect::decl(&config),
+        ContinuationAdmissionInspect::decl(&config),
         OptionalModelAttemptInspect::decl(&config),
         AgentRunStreamItemInspect::decl(&config),
         AgentRunUsageInspect::decl(&config),

@@ -323,6 +323,43 @@ fn inspect_model(
             outbound_disclosure_event_id: model.outbound_disclosure_event_id.clone(),
             model_invocation_id: model.model_invocation_id.clone(),
             dispatch_state: model.dispatch_state.clone(),
+            prior_continuation: inspect_continuation(
+                model.prior_continuation_binding_id.as_deref(),
+            ),
+            known_prior_continuation: inspect_continuation(
+                model.known_prior_continuation_binding_id.as_deref(),
+            ),
+            input_mapping: match model.input_mapping {
+                storyos_application::AgentRunInputMapping::None => {
+                    contracts::ContinuationInputMappingInspect::None
+                }
+                storyos_application::AgentRunInputMapping::Incremental => {
+                    contracts::ContinuationInputMappingInspect::Incremental
+                }
+                storyos_application::AgentRunInputMapping::Full => {
+                    contracts::ContinuationInputMappingInspect::Full
+                }
+                storyos_application::AgentRunInputMapping::NewTransport => {
+                    contracts::ContinuationInputMappingInspect::NewTransport
+                }
+            },
+            admission: Box::new(contracts::ContinuationAdmissionInspect {
+                processing_destination_identity: model
+                    .admission
+                    .processing_destination_identity
+                    .clone(),
+                evidence_revision: model.admission.evidence_revision.clone(),
+                model_registration_revision: model.admission.model_registration_revision.clone(),
+                adapter_mapping: model.admission.adapter_mapping.clone(),
+                project_model_use_binding_revision: model
+                    .admission
+                    .project_model_use_binding_revision
+                    .clone(),
+                external_compatibility_decision: model
+                    .admission
+                    .external_compatibility_decision
+                    .clone(),
+            }),
         },
         None => contracts::OptionalModelAttemptInspect::Absent,
     }

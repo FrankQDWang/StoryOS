@@ -383,7 +383,11 @@ export type OptionalOpenedProposalInspect = { "kind": "absent" } | { "kind": "pr
 
 export type OptionalDecisionInspect = { "kind": "absent" } | { "kind": "execution_refused", capability: string, } | { "kind": "advisory", decision_id: string, selected: boolean, text: string, continuation: OptionalContinuationInspect, } | { "kind": "prose_change", decision_id: string, selected: boolean, text: string, producer_input: string, continuation: OptionalContinuationInspect, authoritative: boolean, opened_proposal: OptionalOpenedProposalInspect, } | { "kind": "clarification", decision_id: string, selected: boolean, question: string, required_reply: string, continuation: OptionalContinuationInspect, };
 
-export type OptionalModelAttemptInspect = { "kind": "absent" } | { "kind": "present", model_attempt_id: string, destination_attempt_id: string, outbound_disclosure_event_id: string, model_invocation_id: string, dispatch_state: string, };
+export type ContinuationInputMappingInspect = "none" | "incremental" | "full" | "new_transport";
+
+export type ContinuationAdmissionInspect = { processing_destination_identity: string, evidence_revision: string, model_registration_revision: string, adapter_mapping: string, project_model_use_binding_revision: string, external_compatibility_decision: string, };
+
+export type OptionalModelAttemptInspect = { "kind": "absent" } | { "kind": "present", model_attempt_id: string, destination_attempt_id: string, outbound_disclosure_event_id: string, model_invocation_id: string, dispatch_state: string, prior_continuation: OptionalContinuationInspect, known_prior_continuation: OptionalContinuationInspect, input_mapping: ContinuationInputMappingInspect, admission: ContinuationAdmissionInspect, };
 
 export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, phase: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, hosted_report: string | null, };
 

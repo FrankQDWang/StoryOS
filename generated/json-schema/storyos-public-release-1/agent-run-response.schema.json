@@ -493,6 +493,51 @@
         }
       ]
     },
+    "ContinuationAdmissionInspect": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_mapping": {
+          "type": "string"
+        },
+        "evidence_revision": {
+          "type": "string"
+        },
+        "external_compatibility_decision": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "model_registration_revision": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "processing_destination_identity": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_model_use_binding_revision": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "processing_destination_identity",
+        "evidence_revision",
+        "model_registration_revision",
+        "adapter_mapping",
+        "project_model_use_binding_revision",
+        "external_compatibility_decision"
+      ],
+      "type": "object"
+    },
+    "ContinuationInputMappingInspect": {
+      "enum": [
+        "none",
+        "incremental",
+        "full",
+        "new_transport"
+      ],
+      "type": "string"
+    },
     "CurrentAvailabilityInspect": {
       "additionalProperties": false,
       "properties": {
@@ -786,6 +831,9 @@
         {
           "additionalProperties": false,
           "properties": {
+            "admission": {
+              "$ref": "#/$defs/ContinuationAdmissionInspect"
+            },
             "destination_attempt_id": {
               "format": "uuid",
               "type": "string"
@@ -793,9 +841,15 @@
             "dispatch_state": {
               "type": "string"
             },
+            "input_mapping": {
+              "$ref": "#/$defs/ContinuationInputMappingInspect"
+            },
             "kind": {
               "const": "present",
               "type": "string"
+            },
+            "known_prior_continuation": {
+              "$ref": "#/$defs/OptionalContinuationInspect"
             },
             "model_attempt_id": {
               "format": "uuid",
@@ -808,6 +862,9 @@
             "outbound_disclosure_event_id": {
               "format": "uuid",
               "type": "string"
+            },
+            "prior_continuation": {
+              "$ref": "#/$defs/OptionalContinuationInspect"
             }
           },
           "required": [
@@ -816,7 +873,11 @@
             "destination_attempt_id",
             "outbound_disclosure_event_id",
             "model_invocation_id",
-            "dispatch_state"
+            "dispatch_state",
+            "prior_continuation",
+            "known_prior_continuation",
+            "input_mapping",
+            "admission"
           ],
           "type": "object"
         }

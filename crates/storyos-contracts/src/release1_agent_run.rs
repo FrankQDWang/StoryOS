@@ -382,6 +382,26 @@ pub enum OptionalDecisionInspect {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ContinuationInputMappingInspect {
+    None,
+    Incremental,
+    Full,
+    NewTransport,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ContinuationAdmissionInspect {
+    pub processing_destination_identity: String,
+    pub evidence_revision: String,
+    pub model_registration_revision: String,
+    pub adapter_mapping: String,
+    pub project_model_use_binding_revision: String,
+    pub external_compatibility_decision: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OptionalModelAttemptInspect {
     Absent,
@@ -391,6 +411,10 @@ pub enum OptionalModelAttemptInspect {
         outbound_disclosure_event_id: String,
         model_invocation_id: String,
         dispatch_state: String,
+        prior_continuation: OptionalContinuationInspect,
+        known_prior_continuation: OptionalContinuationInspect,
+        input_mapping: ContinuationInputMappingInspect,
+        admission: Box<ContinuationAdmissionInspect>,
     },
 }
 
