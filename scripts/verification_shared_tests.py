@@ -120,8 +120,8 @@ for arg in sys.argv:
         package = self.root / "target/release-package"
         package.mkdir()
         shutil.copy(tools / "pnpm", package / "storyos-storage")
-        result = subprocess.run(["sh", "scripts/verify-daily-database.sh", "database", "node-postgresql"],
-                                cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
+        result = subprocess.run(["sh", "verify-daily-database.sh", "database", "node-postgresql"],
+                                cwd=self.root / "scripts", env=self.repo.environment, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         children = [json.loads(line) for line in (self.root / "target/children.jsonl").read_text().splitlines()]
         self.assertEqual(sum(c[0] == "docker" and c[1][0] == "run" for c in children), 1)
