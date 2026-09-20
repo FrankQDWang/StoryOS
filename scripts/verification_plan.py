@@ -120,7 +120,7 @@ def build_plan(root, base, workers=None):
 def execute_plan(root, plan):
     directory = Path(os.environ["STORYOS_VERIFICATION_RUN"])
     cargo_done = package_done = database_done = False
-    os.environ.update(CARGO_BUILD_JOBS=str(plan["workers"]), RUST_TEST_THREADS=str(plan["workers"]))
+    os.environ["CARGO_BUILD_JOBS"] = str(plan["workers"])
     for check in plan["checks"]:
         group = check["group"]
         if check.get("status") == "pending":
