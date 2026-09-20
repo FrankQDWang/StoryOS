@@ -3,6 +3,7 @@ use storyos_application::{
     AgentRunStatus, AgentRunStreamItem, AuthorCommandAdmissionIds, CreateAgentRunAdmission,
     CreateAgentRunCommand, CreateAgentRunError, EvidenceAvailability, ProjectScope,
 };
+use storyos_core::AgentRunLifecycle;
 
 use crate::command_response_project::{
     CommandResponseProjectEvidence, read_command_response_project,
@@ -213,13 +214,15 @@ pub(super) async fn load_agent_run(
 }
 
 fn parse_run_status(status: &str) -> Result<AgentRunStatus, CreateAgentRunError> {
-    match status {
-        "queued" => Ok(AgentRunStatus::Queued),
-        "claimed" => Ok(AgentRunStatus::Claimed),
-        "waiting" => Ok(AgentRunStatus::Waiting),
-        "completed" => Ok(AgentRunStatus::Completed),
-        "refused" => Ok(AgentRunStatus::Refused),
-        _ => Err(CreateAgentRunError::Unavailable(Box::new(
+    match AgentRunLifecycle::parse(status) {
+        Some(AgentRunLifecycle::Queued) => Ok(AgentRunStatus::Queued),
+        Some(AgentRunLifecycle::Claimed) => Ok(AgentRunStatus::Claimed),
+        Some(AgentRunLifecycle::Waiting) => Ok(AgentRunStatus::Waiting),
+        Some(AgentRunLifecycle::Paused) => Ok(AgentRunStatus::Paused),
+        Some(AgentRunLifecycle::Completed) => Ok(AgentRunStatus::Completed),
+        Some(AgentRunLifecycle::Refused) => Ok(AgentRunStatus::Refused),
+        Some(AgentRunLifecycle::Cancelled) => Ok(AgentRunStatus::Cancelled),
+        None => Err(CreateAgentRunError::Unavailable(Box::new(
             std::io::Error::other("The AgentRun status is unknown"),
         ))),
     }

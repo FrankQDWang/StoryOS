@@ -197,7 +197,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
-export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun";
+export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "cancelAgentRun";
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
@@ -339,7 +339,7 @@ export type CreateAgentRunEffect = { "kind": "admitted", project_agent_id: strin
 
 export type CreateAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, acknowledgement: ExportAcknowledgement, operation_ref: AgentRunRef | null, project: ControlledProject, project_agent_id: string, conversation_id: string, memory_settings_revision: string, effect: CreateAgentRunEffect, };
 
-export type AgentRunStatus = "queued" | "claimed" | "waiting" | "completed" | "refused";
+export type AgentRunStatus = "queued" | "claimed" | "waiting" | "paused" | "completed" | "refused" | "cancelled";
 
 export type ContextPurpose = "current_passage_assistance";
 
@@ -392,6 +392,30 @@ export type AgentRunUsageInspect = { kind: string, };
 export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
 export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+
+export type PauseAgentRunInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type PauseAgentRunRequest = { command_schema: string, pause_agent_run_input: PauseAgentRunInput, };
+
+export type PauseAgentRunNoEffectReason = "already_paused";
+
+export type PauseAgentRunConflictReason = "terminal_run";
+
+export type PauseAgentRunEffect = { "kind": "applied", run_id: string, status: AgentRunStatus, fence_generation: string, project_activity_position: string, } | { "kind": "no_effect", reason: PauseAgentRunNoEffectReason, } | { "kind": "conflicted", reason: PauseAgentRunConflictReason, };
+
+export type PauseAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: PauseAgentRunEffect, };
+
+export type CancelAgentRunInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type CancelAgentRunRequest = { command_schema: string, cancel_agent_run_input: CancelAgentRunInput, };
+
+export type CancelAgentRunNoEffectReason = "already_cancelled";
+
+export type CancelAgentRunConflictReason = "terminal_run";
+
+export type CancelAgentRunEffect = { "kind": "applied", run_id: string, status: AgentRunStatus, fence_generation: string, project_activity_position: string, } | { "kind": "no_effect", reason: CancelAgentRunNoEffectReason, } | { "kind": "conflicted", reason: CancelAgentRunConflictReason, };
+
+export type CancelAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CancelAgentRunEffect, };
 
 export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: string, decision_id: string, };
 
@@ -499,6 +523,10 @@ export declare function updateProjectAssistance(options: StoryOSQueryOptions & {
 export declare function digestCreateAgentRun(request: CreateAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function createAgentRun(options: StoryOSQueryOptions & { projectId: string; request: CreateAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CreateAgentRunResponse>;
 export declare function getAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; modelAttemptId?: string | null }): Promise<GetAgentRunResponse>;
+export declare function digestPauseAgentRun(request: PauseAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;
+export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;
 export declare function getProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string }): Promise<GetProposalResponse>;
 export declare function digestAcceptProposal(request: AcceptProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function acceptProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: AcceptProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<AcceptProposalResponse>;

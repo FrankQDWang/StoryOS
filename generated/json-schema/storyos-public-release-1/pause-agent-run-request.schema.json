@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "PauseAgentRunInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.pause-agent-run.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.pause-agent-run.request.v1",
+      "type": "string"
+    },
+    "pause_agent_run_input": {
+      "$ref": "#/$defs/PauseAgentRunInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "pause_agent_run_input"
+  ],
+  "title": "StoryOS Pause Agent Run Request",
+  "type": "object"
+}

@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:5dfad74695611b3d96109ad850ba81fcb6ff5391b92de8451e6e00d307c10188",
+  "corpus_digest": "sha256:1e50118a054e15dad90ac6e76a32fc0c35ee3f403a1908a222e9a8d1b3c936fb",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -60,6 +60,12 @@
       "generated/golden-wire/storyos-public-release-1/get-agent-run.json",
       "generated/golden-wire/storyos-public-release-1/get-agent-run.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/pause-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json",
+      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
@@ -464,6 +470,42 @@
       "fixture_id": "storyos.golden.getAgentRun.boundary.v1",
       "operation_id": "getAgentRun",
       "path": "generated/golden-wire/storyos-public-release-1/get-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.pauseAgentRun.positive.v1",
+      "operation_id": "pauseAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.pauseAgentRun.invalid.v1",
+      "operation_id": "pauseAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.pauseAgentRun.boundary.v1",
+      "operation_id": "pauseAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/pause-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.cancelAgentRun.positive.v1",
+      "operation_id": "cancelAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.cancelAgentRun.invalid.v1",
+      "operation_id": "cancelAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.cancelAgentRun.boundary.v1",
+      "operation_id": "cancelAgentRun",
+      "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json"
     },
     {
       "classification": "positive",

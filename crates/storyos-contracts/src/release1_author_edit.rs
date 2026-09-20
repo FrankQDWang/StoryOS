@@ -167,6 +167,12 @@ pub enum DomainReceiptCommandKind {
     #[serde(rename = "createAgentRun")]
     #[ts(rename = "createAgentRun")]
     CreateAgentRun,
+    #[serde(rename = "pauseAgentRun")]
+    #[ts(rename = "pauseAgentRun")]
+    PauseAgentRun,
+    #[serde(rename = "cancelAgentRun")]
+    #[ts(rename = "cancelAgentRun")]
+    CancelAgentRun,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

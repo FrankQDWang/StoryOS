@@ -507,7 +507,9 @@
         "exportHumanReadableManuscript",
         "exportProjectArchive",
         "updateProjectAssistance",
-        "createAgentRun"
+        "createAgentRun",
+        "pauseAgentRun",
+        "cancelAgentRun"
       ],
       "type": "string"
     },
