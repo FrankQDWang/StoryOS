@@ -1,5 +1,17 @@
 {
   "$defs": {
+    "AgentRunStatus": {
+      "enum": [
+        "queued",
+        "claimed",
+        "waiting",
+        "paused",
+        "completed",
+        "refused",
+        "cancelled"
+      ],
+      "type": "string"
+    },
     "ControlledProject": {
       "additionalProperties": false,
       "properties": {
@@ -19,109 +31,6 @@
         "open"
       ],
       "type": "object"
-    },
-    "DeleteChapterConflictReason": {
-      "enum": [
-        "stale_tree_revision"
-      ],
-      "type": "string"
-    },
-    "DeleteChapterEffect": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "chapter_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "authoritative_applied",
-              "type": "string"
-            },
-            "project_activity_position": {
-              "type": "string"
-            },
-            "tree_revision": {
-              "type": "string"
-            },
-            "volume_id": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "chapter_id",
-            "volume_id",
-            "tree_revision",
-            "project_activity_position"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "no_effect",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/DeleteChapterNoEffectReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/DeleteChapterConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "refused",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/DeleteChapterRefusalReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
-        }
-      ]
-    },
-    "DeleteChapterNoEffectReason": {
-      "enum": [
-        "already_removed"
-      ],
-      "type": "string"
-    },
-    "DeleteChapterRefusalReason": {
-      "enum": [
-        "archived_project",
-        "invalid_chapter_join"
-      ],
-      "type": "string"
     },
     "DigestAlgorithm": {
       "enum": [
@@ -300,6 +209,86 @@
       ],
       "type": "string"
     },
+    "PauseAgentRunConflictReason": {
+      "enum": [
+        "terminal_run"
+      ],
+      "type": "string"
+    },
+    "PauseAgentRunEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "fence_generation": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "applied",
+              "type": "string"
+            },
+            "project_activity_position": {
+              "type": "string"
+            },
+            "run_id": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "status": {
+              "$ref": "#/$defs/AgentRunStatus"
+            }
+          },
+          "required": [
+            "kind",
+            "run_id",
+            "status",
+            "fence_generation",
+            "project_activity_position"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "no_effect",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/PauseAgentRunNoEffectReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/PauseAgentRunConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "PauseAgentRunNoEffectReason": {
+      "enum": [
+        "already_paused"
+      ],
+      "type": "string"
+    },
     "ProjectOpenState": {
       "oneOf": [
         {
@@ -338,9 +327,11 @@
       "additionalProperties": false,
       "properties": {
         "owner_user_id": {
+          "format": "uuid",
           "type": "string"
         },
         "project_id": {
+          "format": "uuid",
           "type": "string"
         }
       },
@@ -351,7 +342,7 @@
       "type": "object"
     }
   },
-  "$id": "storyos.command.delete-chapter.response.v1",
+  "$id": "storyos.command.pause-agent-run.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -368,7 +359,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/DeleteChapterEffect"
+      "$ref": "#/$defs/PauseAgentRunEffect"
     },
     "project": {
       "$ref": "#/$defs/ControlledProject"
@@ -380,7 +371,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.delete-chapter.response.v1",
+      "const": "storyos.command.pause-agent-run.response.v1",
       "type": "string"
     }
   },
@@ -394,6 +385,6 @@
     "project",
     "effect"
   ],
-  "title": "StoryOS Delete Chapter Response",
+  "title": "StoryOS Pause Agent Run Response",
   "type": "object"
 }

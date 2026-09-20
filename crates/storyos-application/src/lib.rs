@@ -32,6 +32,7 @@ pub use acceptance_refusal::{
     AcceptanceRefusal, AcceptanceRefusalBoundary, AcceptanceRefusalReason,
 };
 mod accept_proposal;
+mod agent_run_control;
 mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;
@@ -95,6 +96,11 @@ pub use author_edit_outcome::{
 pub use accept_proposal::{
     AcceptProposalCommand, AcceptProposalError, AcceptProposalSettlement,
     AcceptProposalSettlementEffect, AcceptProposalStore, accept_proposal,
+};
+pub use agent_run_control::{
+    AgentRunControlCommand, AgentRunControlConflict, AgentRunControlEffect, AgentRunControlError,
+    AgentRunControlIntent, AgentRunControlNoEffect, AgentRunControlSettlement,
+    AgentRunControlStatus, AgentRunControlStore, control_agent_run,
 };
 pub use agent_run_work::{
     AgentRunWorkStore, ClaimedAgentRun, CompleteAgentRun, CompleteAgentRunError,

@@ -593,6 +593,7 @@ run_http_files \
   test/node-postgresql/update-project-assistance-http.integration.test.ts \
   test/node-postgresql/create-agent-run-http.integration.test.ts \
   test/node-postgresql/complete-fake-model-decision-http.integration.test.ts \
+  test/node-postgresql/recover-or-cancel-agent-run-http.integration.test.ts \
   test/node-postgresql/open-block-proposal-http.integration.test.ts \
   test/node-postgresql/stream-proposal-generation-http.integration.test.ts \
   test/node-postgresql/edit-proposal-candidate-http.integration.test.ts \

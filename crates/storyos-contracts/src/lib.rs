@@ -9,6 +9,8 @@ mod release1_accept_proposal;
 mod release1_accept_proposal_artifacts;
 mod release1_agent_run;
 mod release1_agent_run_artifacts;
+mod release1_agent_run_control;
+mod release1_agent_run_control_artifacts;
 mod release1_archive_project;
 mod release1_archive_project_artifacts;
 mod release1_artifacts;
@@ -116,6 +118,16 @@ pub use release1_agent_run::{
     OptionalContinuationInspect, OptionalDecisionInspect, OptionalManifestRef,
     OptionalModelAttemptInspect, OptionalOpenedProposalInspect, ProjectionMode, SourceAvailability,
     TokenCountingProfileInspect,
+};
+pub use release1_agent_run_control::{
+    CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,
+    CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID, CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    CancelAgentRunConflictReason, CancelAgentRunEffect, CancelAgentRunInput,
+    CancelAgentRunNoEffectReason, CancelAgentRunRequest, CancelAgentRunResponse,
+    PAUSE_AGENT_RUN_DIGEST_PROFILE, PAUSE_AGENT_RUN_METHOD, PAUSE_AGENT_RUN_PATH,
+    PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID, PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+    PauseAgentRunConflictReason, PauseAgentRunEffect, PauseAgentRunInput,
+    PauseAgentRunNoEffectReason, PauseAgentRunRequest, PauseAgentRunResponse,
 };
 pub use release1_archive_project::{
     ARCHIVE_PROJECT_DIGEST_PROFILE, ARCHIVE_PROJECT_METHOD, ARCHIVE_PROJECT_PATH,

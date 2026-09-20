@@ -1,5 +1,5 @@
 /// Event kinds that current Activity table families and the Release 1
-/// route catalog already admit, including the Stage 3 AgentRun created kind.
+/// route catalog already admit, including Stage 3 AgentRun control kinds.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectActivityKind {
     AuthoritativeAuthorEditApplied,
@@ -18,6 +18,8 @@ pub enum ProjectActivityKind {
     HumanReadableManuscriptExportSettled,
     ProjectExportSettled,
     AgentRunCreated,
+    AgentRunPaused,
+    AgentRunCancelled,
 }
 
 impl ProjectActivityKind {
@@ -41,6 +43,8 @@ impl ProjectActivityKind {
             }
             "project_export_settled" => Self::ProjectExportSettled,
             "agent_run_created" => Self::AgentRunCreated,
+            "agent_run_paused" => Self::AgentRunPaused,
+            "agent_run_cancelled" => Self::AgentRunCancelled,
             _ => return None,
         })
     }
@@ -65,6 +69,8 @@ impl ProjectActivityKind {
             }
             Self::ProjectExportSettled => "project_export_settled",
             Self::AgentRunCreated => "agent_run_created",
+            Self::AgentRunPaused => "agent_run_paused",
+            Self::AgentRunCancelled => "agent_run_cancelled",
         }
     }
 
@@ -90,6 +96,8 @@ impl ProjectActivityKind {
             }
             Self::ProjectExportSettled => "storyos.event.project-export-settled.v1",
             Self::AgentRunCreated => "storyos.event.agent-run-created.v1",
+            Self::AgentRunPaused => "storyos.event.agent-run-paused.v1",
+            Self::AgentRunCancelled => "storyos.event.agent-run-cancelled.v1",
         }
     }
 

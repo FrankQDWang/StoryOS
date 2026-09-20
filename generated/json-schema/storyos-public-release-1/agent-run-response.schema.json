@@ -81,8 +81,10 @@
         "queued",
         "claimed",
         "waiting",
+        "paused",
         "completed",
-        "refused"
+        "refused",
+        "cancelled"
       ],
       "type": "string"
     },

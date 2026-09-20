@@ -1,6 +1,7 @@
 //! Pure StoryOS Core classification for bounded author commands.
 
 mod accept_proposal;
+mod agent_run_control;
 mod append_proposal_generation_batch;
 mod archive_path;
 mod archive_project;
@@ -35,6 +36,10 @@ pub use accept_proposal::{
     AcceptProposal, AcceptProposalConflict, AcceptProposalInvalid, AcceptProposalRefusal,
     AcceptProposalResult, ProposalBundlePolicy, ProposalOperationSelection, ProposalSelectionFacts,
     ProposalSelectionIntent, accept_proposal, classify_proposal_selection,
+};
+pub use agent_run_control::{
+    AgentRunLifecycle, CancelAgentRunResult, PauseAgentRunResult, classify_cancel_agent_run,
+    classify_pause_agent_run,
 };
 pub use append_proposal_generation_batch::{
     AppendProposalGenerationBatch, AppendProposalGenerationBatchConflict,

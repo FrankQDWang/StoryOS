@@ -153,7 +153,10 @@ async fn settle_one_phase(
         return Err(CompleteAgentRunError::StaleFence);
     };
     let status: String = run.get(0);
-    if matches!(status.as_str(), "completed" | "waiting" | "refused") {
+    if matches!(
+        status.as_str(),
+        "completed" | "waiting" | "refused" | "paused" | "cancelled"
+    ) {
         return Ok(WorkPhase::Done(CompleteAgentRun::AlreadySettled));
     }
     let author_message: String = run.get(1);

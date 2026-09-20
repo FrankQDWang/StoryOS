@@ -11,6 +11,8 @@ use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
 use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
 use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
 use crate::release1_agent_run_artifacts as agent_run_artifacts;
+use crate::release1_agent_run_control::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN};
+use crate::release1_agent_run_control_artifacts as agent_run_control_artifacts;
 use crate::release1_archive_project::ARCHIVE_PROJECT;
 use crate::release1_archive_project_artifacts as archive_project_artifacts;
 use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
@@ -336,6 +338,24 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| agent_run_artifacts::get_fixture_bytes(),
             |_profile| agent_run_artifacts::get_invalid_fixture_bytes(),
             |_profile| agent_run_artifacts::get_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        agent_run_control_artifacts::PAUSE_FIXTURE_PATHS,
+        &PAUSE_AGENT_RUN,
+        [
+            |_profile| agent_run_control_artifacts::pause_fixture_bytes(),
+            |_profile| agent_run_control_artifacts::pause_invalid_fixture_bytes(),
+            |_profile| agent_run_control_artifacts::pause_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        agent_run_control_artifacts::CANCEL_FIXTURE_PATHS,
+        &CANCEL_AGENT_RUN,
+        [
+            |_profile| agent_run_control_artifacts::cancel_fixture_bytes(),
+            |_profile| agent_run_control_artifacts::cancel_invalid_fixture_bytes(),
+            |_profile| agent_run_control_artifacts::cancel_boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

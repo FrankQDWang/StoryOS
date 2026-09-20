@@ -46,10 +46,10 @@ pub async fn run_once(
             Ok(())
         }
         Ok(None) => match claim_next_agent_run(store).await {
-            Ok(Some(claim)) => {
-                complete_agent_run(store, &claim).await?;
-                Ok(())
-            }
+            Ok(Some(claim)) => match complete_agent_run(store, &claim).await {
+                Ok(_) | Err(CompleteAgentRunError::StaleFence) => Ok(()),
+                Err(error) => Err(error.into()),
+            },
             Ok(None) => Ok(()),
             Err(error) => Err(error.into()),
         },

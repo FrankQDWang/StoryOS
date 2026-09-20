@@ -33,6 +33,8 @@ use crate::release1_accept_proposal::ACCEPT_PROPOSAL;
 use crate::release1_accept_proposal_artifacts as accept_proposal_artifacts;
 use crate::release1_agent_run::{CREATE_AGENT_RUN, GET_AGENT_RUN};
 use crate::release1_agent_run_artifacts as agent_run_artifacts;
+use crate::release1_agent_run_control::{CANCEL_AGENT_RUN, PAUSE_AGENT_RUN};
+use crate::release1_agent_run_control_artifacts as agent_run_control_artifacts;
 use crate::release1_archive_project::ARCHIVE_PROJECT;
 use crate::release1_archive_project_artifacts as archive_project_artifacts;
 use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
@@ -158,7 +160,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:04a74b7e20b3be1e1e607c972385e3df85569b329a4093ade88da7ad305bbbec";
+    "sha256:80ea1212fc973fb9bf7495c1892d97369572210a8627c18b6098bb05803b5e45";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -273,6 +275,13 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let create_agent_run_response_schema = agent_run_artifacts::create_response_schema_bytes();
     let get_agent_run_request_schema = agent_run_artifacts::get_request_schema_bytes();
     let get_agent_run_response_schema = agent_run_artifacts::get_response_schema_bytes();
+    let pause_agent_run_request_schema = agent_run_control_artifacts::pause_request_schema_bytes();
+    let pause_agent_run_response_schema =
+        agent_run_control_artifacts::pause_response_schema_bytes();
+    let cancel_agent_run_request_schema =
+        agent_run_control_artifacts::cancel_request_schema_bytes();
+    let cancel_agent_run_response_schema =
+        agent_run_control_artifacts::cancel_response_schema_bytes();
     let get_proposal_request_schema = proposal_artifacts::request_schema_bytes();
     let get_proposal_response_schema = proposal_artifacts::response_schema_bytes();
     let accept_proposal_request_schema = accept_proposal_artifacts::request_schema_bytes();
@@ -496,6 +505,26 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::GET_AGENT_RUN_RESPONSE_SCHEMA_ID,
             agent_run_artifacts::GET_RESPONSE_SCHEMA_PATH,
             get_agent_run_response_schema,
+        ),
+        (
+            crate::PAUSE_AGENT_RUN_REQUEST_SCHEMA_ID,
+            agent_run_control_artifacts::PAUSE_REQUEST_SCHEMA_PATH,
+            pause_agent_run_request_schema,
+        ),
+        (
+            crate::PAUSE_AGENT_RUN_RESPONSE_SCHEMA_ID,
+            agent_run_control_artifacts::PAUSE_RESPONSE_SCHEMA_PATH,
+            pause_agent_run_response_schema,
+        ),
+        (
+            crate::CANCEL_AGENT_RUN_REQUEST_SCHEMA_ID,
+            agent_run_control_artifacts::CANCEL_REQUEST_SCHEMA_PATH,
+            cancel_agent_run_request_schema,
+        ),
+        (
+            crate::CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
+            agent_run_control_artifacts::CANCEL_RESPONSE_SCHEMA_PATH,
+            cancel_agent_run_response_schema,
         ),
         (
             crate::GET_PROPOSAL_REQUEST_SCHEMA_ID,
@@ -857,6 +886,8 @@ fn contract_graph_bytes() -> Vec<u8> {
             operation_graph(&GET_PROJECT_ASSISTANCE, &["server_derived_project_scope", "project_visibility"]),
             command_operation_graph(&UPDATE_PROJECT_ASSISTANCE, &["server_derived_project_scope", "expected_assistance_revision", "project_active"]),
             command_operation_graph(&CREATE_AGENT_RUN, &["server_derived_project_scope", "operation_requirement", "working_target_or_explicit_not_applicable", "capability_and_destination_grant"]),
+            command_operation_graph(&PAUSE_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_pauseable", "current_fence_generation"]),
+            command_operation_graph(&CANCEL_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_cancellable", "current_fence_generation"]),
             operation_graph(&GET_AGENT_RUN, &["run_scope_join", "run_projection_watermark_or_snapshot"]),
             operation_graph(&GET_PROPOSAL, &["proposal_scope_join", "exact_revision_or_current_projection", "redaction_profile"]),
             command_operation_graph(&ACCEPT_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "valid_validation_receipt", "selected_pending_operations", "expected_target_revisions", "acceptance_admission"]),
@@ -986,6 +1017,7 @@ fn openapi_bytes() -> Vec<u8> {
     }
     paths.push_str(&project_assistance_artifacts::openapi());
     paths.push_str(&agent_run_artifacts::openapi());
+    paths.push_str(&agent_run_control_artifacts::openapi());
     paths.push_str(&proposal_artifacts::openapi());
     paths.push_str(&accept_proposal_artifacts::openapi());
     paths.push_str(&reject_proposal_operations_artifacts::openapi());
@@ -1180,6 +1212,8 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         GET_PROJECT_ASSISTANCE.operation_id,
         UPDATE_PROJECT_ASSISTANCE.operation_id,
         CREATE_AGENT_RUN.operation_id,
+        PAUSE_AGENT_RUN.operation_id,
+        CANCEL_AGENT_RUN.operation_id,
         GET_AGENT_RUN.operation_id,
         GET_PROPOSAL.operation_id,
         ACCEPT_PROPOSAL.operation_id,
@@ -1302,7 +1336,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1331,6 +1365,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         update_project_client,
         project_assistance_artifacts::typescript_client_source(),
         agent_run_artifacts::typescript_client_source(),
+        agent_run_control_artifacts::typescript_client_source(),
         proposal_artifacts::typescript_client_source(),
         accept_proposal_client,
         reject_proposal_operations_client,
@@ -1413,6 +1448,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str("\n\n");
     declaration.push_str(&agent_run_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
+    declaration.push_str(&agent_run_control_artifacts::typescript_type_declarations());
+    declaration.push_str("\n\n");
     declaration.push_str(&proposal_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
     declaration.push_str(&accept_proposal_artifacts::typescript_type_declarations());
@@ -1440,6 +1477,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(update_project_artifacts::typescript_declarations());
     declaration.push_str(project_assistance_artifacts::typescript_declarations());
     declaration.push_str(agent_run_artifacts::typescript_declarations());
+    declaration.push_str(agent_run_control_artifacts::typescript_declarations());
     declaration.push_str(proposal_artifacts::typescript_declarations());
     declaration.push_str(accept_proposal_artifacts::typescript_declarations());
     declaration.push_str(reject_proposal_operations_artifacts::typescript_declarations());
@@ -1720,6 +1758,10 @@ mod project_assistance_tests;
 #[cfg(test)]
 #[path = "release1_agent_run_artifacts_tests.rs"]
 mod agent_run_tests;
+
+#[cfg(test)]
+#[path = "release1_agent_run_control_artifacts_tests.rs"]
+mod agent_run_control_tests;
 
 #[cfg(test)]
 #[path = "release1_proposal_artifacts_tests.rs"]

@@ -61,8 +61,10 @@ pub enum AgentRunStatus {
     Queued,
     Claimed,
     Waiting,
+    Paused,
     Completed,
     Refused,
+    Cancelled,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -301,7 +301,7 @@ async fn conversation_admission(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND conversation_id = $3::text::uuid
-                AND status IN ('queued', 'claimed', 'waiting')",
+                AND status IN ('queued', 'claimed', 'waiting', 'paused')",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),

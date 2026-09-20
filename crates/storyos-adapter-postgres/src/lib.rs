@@ -94,6 +94,7 @@ mod set_current_chapter_authority_tests;
 
 mod accept_proposal;
 mod acceptance_refusal;
+mod agent_run_control;
 mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;

@@ -235,8 +235,10 @@ fn inspect_status(status: storyos_application::AgentRunStatus) -> contracts::Age
         storyos_application::AgentRunStatus::Queued => contracts::AgentRunStatus::Queued,
         storyos_application::AgentRunStatus::Claimed => contracts::AgentRunStatus::Claimed,
         storyos_application::AgentRunStatus::Waiting => contracts::AgentRunStatus::Waiting,
+        storyos_application::AgentRunStatus::Paused => contracts::AgentRunStatus::Paused,
         storyos_application::AgentRunStatus::Completed => contracts::AgentRunStatus::Completed,
         storyos_application::AgentRunStatus::Refused => contracts::AgentRunStatus::Refused,
+        storyos_application::AgentRunStatus::Cancelled => contracts::AgentRunStatus::Cancelled,
     }
 }
 

@@ -18,6 +18,7 @@ use uuid::Uuid;
 
 mod accept_proposal;
 mod acknowledgement_hold;
+mod agent_run_control;
 mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
@@ -68,6 +69,7 @@ pub use web_assets::WebAssetSet;
 pub use web_host::router_with_web;
 
 use accept_proposal::accept_proposal;
+use agent_run_control::{cancel_agent_run, pause_agent_run};
 use archive_project::archive_project;
 use author_edit::apply_author_edit;
 use author_edit_outcome::{
@@ -292,6 +294,20 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::CREATE_AGENT_RUN_METHOD),
                 create_agent_run,
+            ),
+        )
+        .route(
+            contracts::PAUSE_AGENT_RUN_PATH,
+            routing::on(
+                method_filter(contracts::PAUSE_AGENT_RUN_METHOD),
+                pause_agent_run,
+            ),
+        )
+        .route(
+            contracts::CANCEL_AGENT_RUN_PATH,
+            routing::on(
+                method_filter(contracts::CANCEL_AGENT_RUN_METHOD),
+                cancel_agent_run,
             ),
         )
         .route(
