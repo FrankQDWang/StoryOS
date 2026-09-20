@@ -110,14 +110,12 @@ class DailyCacheTests(unittest.TestCase):
 
     def test_rename_deletion_and_shared_changes_cannot_reuse_a_leaf_result(self):
         self.assertEqual(self.run_daily()[0].returncode, 0)
-        reports = list(self.root.glob("target/verification/*/report.json"))
-
         def pending_plan():
             result = self.fixture.cli("run")
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("pending", result.stderr)
+            self.assertIn("pending", result.stdout)
             self.assertNotIn("executed selected files", result.stdout)
-            self.assertEqual(list(self.root.glob("target/verification/*/report.json")), reports)
+            self.assertNotIn("daily-result-reuse", result.stdout)
             return json.loads(self.fixture.cli("plan").stdout)
 
         self.fixture.repo.git("add", str(self.test))
@@ -125,11 +123,16 @@ class DailyCacheTests(unittest.TestCase):
                               "commit", "--quiet", "-m", "Register the test file.")
         renamed = self.test.with_name("renamed.test.ts")
         self.fixture.repo.git("mv", str(self.test), str(renamed))
-        self.assertEqual(pending_plan()["checks"][0]["group"], "complete")
+        result, report = self.run_daily()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(report["cache"]["status"], "miss")
+        self.assertIn("executed selected files", result.stdout)
         renamed.unlink()
         self.assertNotIn(str(renamed.relative_to(self.root)), pending_plan()["test_files"])
         (self.root / "AGENTS.md").write_text("Changed shared policy input.\n")
-        self.assertEqual(pending_plan()["checks"][0]["group"], "complete")
+        result = self.fixture.cli("run")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertNotIn("executed selected files", result.stdout)
 
     def test_failure_and_source_changes_do_not_publish_reusable_results(self):
         self.test.write_text(self.test.read_text() + "// NO_TESTS\n")

@@ -18,6 +18,7 @@ import uuid
 
 import verification_cache
 import verification_shared
+import verification_daily
 
 
 def git(root, *arguments):
@@ -57,6 +58,7 @@ def inventory(root, revision=None):
     policy = json.loads(git(root, "show", f"{revision}:docs/agents/verification-policy.json") if revision
                         else (root / "docs/agents/verification-policy.json").read_text())
     paths = git(root, "ls-tree", "-rz", "--name-only", revision).split("\0")[:-1] if revision else input_paths(root)
+    verification_daily.validate(policy)
     known = set(paths)
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")
@@ -91,7 +93,7 @@ def inventory(root, revision=None):
             group = f"cargo:{crate}"
         files.append({"path": path, "kind": rule["kind"], "group": group})
     if errors:
-        raise ValueError("Unclassified inputs or unsupported test locations:\n" + "\n".join(errors))
+        raise ValueError("Unclassified inputs or unsupported test locations; update docs/agents/verification-policy.json:\n" + "\n".join(errors))
     if "complete" in policy:
         stages, groups = policy["complete"]["stages"], policy["complete"]["groups"]
         if (not isinstance(stages, list) or not isinstance(groups, dict) or not stages or len(stages) != len(set(stages))
@@ -277,6 +279,10 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
+    if (plan and code == 2 and report["status"] == "failed" and steps
+            and all(item["status"] == "passed" for item in steps)
+            and any(c.get("status") == "pending" for c in plan["checks"])):
+        report["status"] = "pending"
     if (directory / "rust-test-files.json").is_file():
         report["rust_test_files"] = json.loads((directory / "rust-test-files.json").read_text())
     allowed = {"cached"} if cache and cache.observation["status"] == "hit" else {"passed"}

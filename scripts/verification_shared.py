@@ -70,11 +70,16 @@ def main():
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "run"))
+    parser.add_argument("--groups", nargs="+", choices=("database", "node-postgresql", "node-process-cut"))
     args = parser.parse_args()
     try:
         root = Path(verification.git(Path.cwd(), "rev-parse", "--show-toplevel"))
         policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
         phases = plan(root, policy, verification.inventory(root)["files"])
+        if args.groups:
+            phases = [phase for phase in phases if phase["group"] in args.groups]
+            if not phases:
+                return 0
         if args.action == "plan":
             print(json.dumps(phases, indent=2))
             return 0
@@ -89,11 +94,24 @@ def main():
                                cwd=root, env={**os.environ, "repository_root": str(root)}, check=True)
             files = [path.removeprefix("apps/web/") for path in phase["files"]]
             os.environ["STORYOS_VITEST_FILE_ORDER"] = ":".join(files)
+            extra = []
+            if args.groups:
+                output = Path(os.environ.get("STORYOS_VERIFICATION_RUN", str(root / "target"))) / f"{phase['name']}.json"
+                output.parent.mkdir(parents=True, exist_ok=True)
+                extra = ["--cache=false", "--passWithNoTests=false", "--allowOnly=false",
+                         "--reporter=default", "--reporter=json", f"--outputFile={output}"]
             code = verification.step(root, phase["stage"],
                                      ["pnpm", "--dir", "apps/web", "exec", "vitest", "run",
-                                      "--project", phase["group"], *files])
+                                      "--project", phase["group"], *files, *extra])
             if code:
                 return code
+            if args.groups:
+                result = json.loads(output.read_text())
+                suites = result.get("testResults", [])
+                if (result.get("success") is not True
+                        or {suite["name"] for suite in suites} != {str(root / path) for path in phase["files"]}
+                        or any(not any(test["status"] == "passed" for test in suite["assertionResults"]) for suite in suites)):
+                    raise ValueError("Shared daily files were missing or had no passing tests")
         return 0
     except (ValueError, OSError, KeyError, TypeError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")

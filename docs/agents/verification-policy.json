@@ -57,6 +57,32 @@
       "prepare": "reload-fixture"
     }
   ],
+  "daily_consumers": [
+    {"pattern": "crates/storyos-application/*", "groups": ["database", "node-postgresql"]},
+    {"pattern": "crates/storyos-server/*", "groups": ["database", "node-postgresql", "node-contract"]},
+    {"pattern": "crates/storyos-worker/*", "groups": ["database", "node-process-cut"]},
+    {"pattern": "crates/storyos-adapter-postgres/*", "groups": ["database", "node-postgresql", "node-process-cut"]},
+    {"pattern": "crates/storyos-contracts/*", "groups": ["contracts", "node-contract", "browser-source", "node-postgresql"]},
+    {"pattern": "crates/*/migrations/*", "groups": ["database", "node-postgresql"]},
+    {"pattern": "crates/*/fixtures/*", "groups": ["database", "node-postgresql"]},
+    {"pattern": "generated/*", "groups": ["contracts", "node-contract", "browser-source", "node-postgresql"]},
+    {"pattern": "docs/*", "groups": ["contracts"]},
+    {"pattern": "docs/agents/verification*", "groups": ["policy"]},
+    {"pattern": "*.md", "groups": ["contracts"]},
+    {"pattern": "apps/web/src/*", "groups": ["node-contract", "browser-source"]},
+    {"pattern": "apps/web/test/support/*", "groups": ["node-contract", "browser-source", "node-postgresql", "node-process-cut"]},
+    {"pattern": "apps/web/test/node-postgresql/*", "groups": ["node-postgresql"]},
+    {"pattern": "apps/web/test/browser-source/*", "groups": ["browser-source"]},
+    {"pattern": "apps/web/*.json", "groups": ["web-typecheck", "node-contract", "browser-source", "node-postgresql", "node-process-cut"]},
+    {"pattern": "apps/web/*config.ts", "groups": ["web-typecheck", "node-contract", "browser-source", "node-postgresql", "node-process-cut"]},
+    {"pattern": "package.json", "groups": ["web-typecheck", "node-contract", "browser-source", "node-postgresql", "node-process-cut"]},
+    {"pattern": "pnpm-*.yaml", "groups": ["web-typecheck", "node-contract", "browser-source", "node-postgresql", "node-process-cut"]},
+    {"pattern": "scripts/*", "groups": ["policy"]},
+    {"pattern": "scripts/lib/*postgres*", "groups": ["database", "node-postgresql", "node-process-cut"]},
+    {"pattern": "scripts/verify-daily-database.sh", "groups": ["database", "node-postgresql", "node-process-cut"]},
+    {"pattern": "scripts/verify-recovery*", "groups": ["recovery"]},
+    {"pattern": "Makefile", "groups": ["policy", "pending"]}
+  ],
   "daily_workers": 2,
   "result_cache_profiles": ["node-contract"],
   "file_profiles": {

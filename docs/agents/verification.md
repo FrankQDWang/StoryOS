@@ -25,10 +25,10 @@ Bundle. Keep secrets in environment variables, not recorded command arguments.
 Use `make verify-plan BASE=origin/main` to inspect the changed files and reasons.
 Use `make verify-changed BASE=origin/main` to execute that scope. Set BASE to the
 actual comparison commit or ref; `BASE=HEAD` checks current working changes only.
-The daily entry never dispatches complete verification. A plan with a `complete`
-group is currently pending: inspect its reasons and use applicable targeted checks.
-Production and shared-input selection will be extended separately. Do not use
-`make verify-local` to resolve a pending daily plan; follow candidate review first.
+The daily entry never dispatches complete verification. Each check is ready or pending.
+Ready checks execute on dirty sources. Package consumers stay pending until sources
+are clean. A pending result returns exit code 2 and cannot publish a cache entry.
+Exact-dist, recovery, and unresolved scopes retain explicit pending obligations.
 Save plans under ignored `target/` and run a saved plan with
 `python3 scripts/verification_plan.py run --base origin/main --plan target/plan.json`.
 The runner recomputes the plan and refuses stale or edited plans. Reports bind
@@ -40,14 +40,21 @@ policy to the first line only after reviewing all imports, file reads and enviro
 needs. This profile permits repository inputs and the locked test toolchain only;
 live services, mutable shared fixtures, release packages and ignored build outputs
 require the complete group. A changed dependency invalidates that declaration.
-All Rust test files must appear in current compiler records for a test executable.
-Complete runs and selected runs reject unlinked files and retain existing Cargo targets. Crates with ignored
-tests or conditional attributes retain the complete group. Rust production changes
-include current reverse consumers in the plan and leave daily execution pending.
-No function filter is inferred.
+Rust selections batch current owners and reverse consumers with all features. Prior
+ownership and dependencies retain affected groups after moves or deletions. Database
+consumers retain the workspace feature profile. Compiler records must cover selected
+Rust test files. Unknown ownership fails with a policy action.
+
+The policy declares cross-language consumers. Plans list effective groups, files,
+preparation, shared phases, reasons, and an unknown estimate when no comparable
+sample exists. Shared database execution prepares one controlled fixture, then runs
+only selected groups with existing phase order and resets. It does not start the
+SQL activation oracles, exact-dist journeys, or recovery drills. Those complete
+proof obligations remain unchanged. Locked Web preparation and package creation each
+run at most once. Package consumers do not extend the isolated Node cache profile.
 
 When adding, renaming or deleting tests, run `make verify-policy` and inspect a fresh
-plan. Renames and deletions leave daily execution pending and remove obsolete
+plan. Renames and deletions retain prior groups and remove obsolete
 files from current test membership. Unknown locations or execution profiles fail.
 A new framework or shared resource requires a reviewed policy and runner extension,
 with a public command regression. Review declarations with the same independent
