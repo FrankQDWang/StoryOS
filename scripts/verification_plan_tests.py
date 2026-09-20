@@ -59,7 +59,7 @@ class FilePlanTests(unittest.TestCase):
         extra = self.add_test()
         plan = json.loads(self.cli("plan").stdout)
         self.assertEqual(plan["changes"], sorted(str(p.relative_to(self.root)) for p in (old, renamed, extra)))
-        self.assertEqual(plan["checks"][-1]["group"], "complete")
+        self.assertEqual(plan["checks"][-1]["group"], "node-contract")
         self.assertNotIn(str(old.relative_to(self.root)), plan["test_files"])
         self.assertIn(str(renamed.relative_to(self.root)), plan["test_files"])
         self.assertTrue(plan["checks"][-1]["reasons"])
@@ -73,9 +73,9 @@ class FilePlanTests(unittest.TestCase):
         path = self.add_test()
         path.write_text("import {test} from 'vitest'; test('needs a package',()=>{});\n")
         plan = json.loads(self.cli("plan").stdout)
-        self.assertEqual(plan["checks"][-1]["group"], "complete")
+        self.assertEqual(plan["checks"][-1]["status"], "pending")
         self.assertNotEqual(self.cli("run").returncode, 0)
-        self.assertFalse(list(self.root.glob("target/verification/*/report.json")))
+        self.assertFalse((self.root / "target/complete-started").exists())
 
     def test_daily_entry_refuses_complete_dispatch_on_a_clean_changed_tree(self):
         self.install_runner_fixture()
@@ -84,14 +84,14 @@ class FilePlanTests(unittest.TestCase):
         self.repo.git("add", ".")
         self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
                       "commit", "--quiet", "-m", "Change a shared input.")
-        for action in ("run", "execute"):
+        for action in ("run",):
             with self.subTest(action=action):
                 result = self.cli(action)
                 self.assertNotEqual(result.returncode, 0)
-                self.assertIn("pending", result.stderr)
-                self.assertIn("verify-plan", result.stderr)
+                self.assertIn("pending", result.stdout)
+                self.assertIn("verify-plan", result.stdout)
                 self.assertFalse((self.root / "target/complete-started").exists())
-        self.assertFalse(list(self.root.glob("target/verification/*/report.json")))
+        self.assertEqual(self.repo.report()["status"], "pending")
 
     def install_runner_fixture(self):
         policy = json.loads(self.policy_path.read_text())
@@ -143,6 +143,47 @@ print('executed selected files')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("stale", result.stderr.lower())
 
+    def test_package_script_changes_keep_known_proofs_pending(self):
+        self.install_runner_fixture()
+        policy = json.loads(self.policy_path.read_text())
+        policy["daily_consumers"] = json.loads((Path(__file__).parent.parent /
+            "docs/agents/verification-policy.json").read_text())["daily_consumers"]
+        self.policy_path.write_text(json.dumps(policy))
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Declare actual script consumers.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        for name in ("package-release.py", "verify-project-scope.sh"):
+            path = self.root / "scripts" / name
+            path.write_text("Changed shared script.\n")
+            result = self.cli("run")
+            self.assertEqual(result.returncode, 2, result.stderr)
+            self.assertIn("input-policy-checked", result.stdout)
+            self.assertIn("Daily scope pending: exact-dist", result.stdout)
+            self.assertIn("Daily scope pending: recovery", result.stdout)
+            path.unlink()
+
+    def test_dirty_package_obligation_does_not_hide_independent_feedback(self):
+        self.install_runner_fixture()
+        policy = json.loads(self.policy_path.read_text())
+        policy["daily_consumers"] = [{"pattern": "docs/fixture.md", "groups": ["database"]}]
+        self.policy_path.write_text(json.dumps(policy))
+        self.repo.git("add", ".")
+        self.repo.git("-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                      "commit", "--quiet", "-m", "Declare a package consumer.")
+        self.base = self.repo.git("rev-parse", "HEAD")
+        (self.root / "docs/fixture.md").write_text("Changed fixture contract.\n")
+        self.add_test()
+        result = self.cli("run")
+        self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertIn("executed selected files", result.stdout)
+        report = self.repo.report()
+        self.assertEqual(report["status"], "pending")
+        self.assertEqual([(c["group"], c["status"]) for c in report["plan"]["checks"]],
+                         [("policy", "ready"), ("web-typecheck", "ready"),
+                          ("node-contract", "ready"), ("database", "pending")])
+        self.assertFalse((self.root / "target/complete-started").exists())
+
     def test_staged_changes_remain_selected_when_working_bytes_match_the_base(self):
         path = self.add_test()
         self.repo.git("add", ".")
@@ -179,12 +220,20 @@ print('executed selected files')
 
     def test_rust_source_lists_current_targets_and_reverse_dependencies(self):
         self.install_cargo_fixture()
-        (self.root / "crates/core/src/lib.rs").write_text("pub fn value() -> u8 { 2 }\n")
+        for name in ("core", "api"):
+            (self.root / f"crates/{name}/src/lib.rs").write_text(
+                '#[test]\nfn observable() { assert_eq!(2 + 2, 4); }\n')
+        self.install_runner_fixture()
+        path = self.root / "crates/core/src/lib.rs"
+        path.write_text(path.read_text() + "pub fn value() -> u8 { 2 }\n")
         result = self.cli("plan")
         self.assertEqual(result.returncode, 0, result.stderr)
         plan = json.loads(result.stdout)
         self.assertEqual(sorted(plan["cargo_targets"]), ["api", "core"])
-        self.assertEqual(plan["checks"][-1]["group"], "complete")
+        self.assertEqual([c["group"] for c in plan["checks"]], ["policy", "cargo:api", "cargo:core"])
+        result = self.cli("run")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.count("test observable ... ok"), 2)
 
     def test_rust_file_runs_its_crate_and_refuses_zero_discovered_tests(self):
         self.install_cargo_fixture()
@@ -212,6 +261,6 @@ print('executed selected files')
         orphan.unlink()
         for attribute in ("#[ ignore ]", "#[cfg_attr(test, ignore)]"):
             path.write_text(marker + attribute + "\n#[test]\nfn excluded() { panic!(); }\n")
-            self.assertEqual(json.loads(self.cli("plan").stdout)["checks"][-1]["group"], "complete")
+            self.assertEqual(json.loads(self.cli("plan").stdout)["checks"][-1]["status"], "pending")
         path.write_text(marker)
         self.assertNotEqual(self.cli("run").returncode, 0)

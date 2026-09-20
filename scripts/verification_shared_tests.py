@@ -41,6 +41,11 @@ class SharedCommandTests(unittest.TestCase):
 with pathlib.Path('target/children.jsonl').open('a') as output:
     output.write(json.dumps([pathlib.Path(sys.argv[0]).name, sys.argv[1:],
                              os.environ.get('STORYOS_VITEST_FILE_ORDER')]) + '\\n')
+for arg in sys.argv:
+    if arg.startswith('--outputFile='):
+        files = [str((pathlib.Path('apps/web') / p).resolve()) for p in sys.argv if p.endswith('.test.ts')]
+        pathlib.Path(arg.split('=', 1)[1]).write_text(json.dumps({'success': True, 'testResults': [
+            {'name': p, 'assertionResults': [{'status': 'passed'}]} for p in files]}))
 """)
             executable.chmod(0o755)
         self.repo.environment.update(PATH=f"{tools}{os.pathsep}{os.environ['PATH']}",
@@ -61,8 +66,8 @@ with pathlib.Path('target/children.jsonl').open('a') as output:
         file.write_text('// Verification: ' + json.dumps({"phase": phase, "after": list(after)}) + '\n')
         return path
 
-    def cli(self, action):
-        return subprocess.run([sys.executable, str(Path(__file__).with_name("verification_shared.py")), action],
+    def cli(self, action, *args):
+        return subprocess.run([sys.executable, str(Path(__file__).with_name("verification_shared.py")), action, *args],
                               cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
 
     def test_discovered_order_and_fixture_boundaries_drive_real_children(self):
@@ -93,6 +98,40 @@ with pathlib.Path('target/children.jsonl').open('a') as output:
         (self.root / renamed).unlink()
         self.assertIn("empty", self.cli("plan").stderr)
 
+    def test_daily_database_selection_preserves_resets_without_other_groups(self):
+        result = self.cli("run", "--groups", "database")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.root / "target/children.jsonl").exists())
+        result = self.cli("run", "--groups", "node-postgresql")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        children = [json.loads(line) for line in (self.root / "target/children.jsonl").read_text().splitlines()]
+        self.assertEqual([c[0] for c in children], ["pnpm", "docker", "pnpm", "docker", "docker", "pnpm"])
+
+    def test_daily_database_entry_prepares_once_and_keeps_workspace_features(self):
+        scripts = Path(__file__).parent
+        for path in scripts.glob("verification*.py"):
+            if not path.name.endswith("_tests.py"):
+                shutil.copy(path, self.root / "scripts")
+        shutil.copy(scripts / "verify-daily-database.sh", self.root / "scripts")
+        tools = self.root / "target/tools"
+        docker = tools / "docker"
+        docker.write_text(docker.read_text() + "\nprint('PostgreSQL init process complete' if 'logs' in sys.argv else '127.0.0.1:5432')\n")
+        shutil.copy(tools / "pnpm", tools / "cargo")
+        package = self.root / "target/release-package"
+        package.mkdir()
+        shutil.copy(tools / "pnpm", package / "storyos-storage")
+        result = subprocess.run(["sh", "scripts/verify-daily-database.sh", "database", "node-postgresql"],
+                                cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        children = [json.loads(line) for line in (self.root / "target/children.jsonl").read_text().splitlines()]
+        self.assertEqual(sum(c[0] == "docker" and c[1][0] == "run" for c in children), 1)
+        self.assertEqual(sum(c[0] == "storyos-storage" for c in children), 1)
+        cargo = [c[1] for c in children if c[0] == "cargo"]
+        self.assertEqual(cargo, [["test", "--locked", "--workspace", "--all-features", *target,
+                                 "--", "--ignored", "--nocapture"] for target in
+                                [["--test", "project_scope"], ["--test", "project_command_challenge"], ["--lib"]]])
+        self.assertFalse(any("browser-exact-dist" in c[1] or "verify-local-steps" in c[1] for c in children))
+
     def test_invalid_declarations_fail_policy_and_execution_before_children(self):
         original = (self.root / self.a).read_text()
         cases = ["", original * 2,
@@ -113,7 +152,7 @@ with pathlib.Path('target/children.jsonl').open('a') as output:
         self.assertNotEqual(self.repo.cli("inventory", "--check").returncode, 0)
 
     def test_package_prerequisite_rejects_bad_membership_before_node_install(self):
-        for name in ("verification.py", "verification_shared.py", "verification_cache.py"):
+        for name in ("verification.py", "verification_shared.py", "verification_cache.py", "verification_daily.py"):
             shutil.copy(Path(__file__).parent / name, self.root / "scripts")
         (self.root / self.a).write_text("// Missing declaration.\n")
         result = subprocess.run(["make", "-f", str(Path(__file__).resolve().parent.parent / "Makefile"),

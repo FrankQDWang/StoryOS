@@ -62,7 +62,8 @@ class DailyCache:
         self.root, self.path, self.no_cache, self.required = root, None, no_cache, None
         self.observation = {"status": "disabled", "reason": "The selected group has no reviewed cache profile"}
         policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
-        if (not plan or "node-contract" not in policy.get("result_cache_profiles", [])
+        if (not plan or any(c.get("requires_package") for c in plan["checks"])
+                or "node-contract" not in policy.get("result_cache_profiles", [])
                 or [check["group"] for check in plan["checks"]] != ["policy", "web-typecheck", "node-contract"]):
             return
         try:
