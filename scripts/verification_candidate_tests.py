@@ -40,8 +40,12 @@ class CandidateCommandTests(unittest.TestCase):
         return self.repo.cli('run', *args, '--', 'make', 'verify-local-steps')
 
     def test_matching_success_reuses_report_without_launch(self):
+        self.repo.environment['PYTHONDONTWRITEBYTECODE'] = '1'
         first = self.run_complete()
         self.assertEqual(first.returncode, 0, first.stderr)
+        self.repo.environment.pop('PYTHONDONTWRITEBYTECODE')
+        status = self.repo.cli('status', '--attempt', self.repo.report()['run_id'], '--json')
+        self.assertEqual(json.loads(status.stdout)['status'], 'passed')
         second = self.run_complete()
         self.assertEqual(second.returncode, 0, second.stderr)
         self.assertEqual((self.root / 'target/launches').read_text(), 'x')

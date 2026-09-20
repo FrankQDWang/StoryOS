@@ -28,7 +28,7 @@ def targeted_plan(root, check):
             'workers': 'existing-targeted-profile'}
     import verification_candidate
     plan['execution_inputs_sha256'] = verification_cache.digest({k: v for k, v in verification_candidate.environment().items()
-        if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}})
+        if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT'}})
     plan['digest'] = verification_cache.digest(plan)
     return plan
 

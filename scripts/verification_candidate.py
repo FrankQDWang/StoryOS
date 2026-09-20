@@ -22,7 +22,7 @@ import verification_cache
 def environment():
     return {key: value for key, value in os.environ.items() if key not in {
         'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL', 'MAKEOVERRIDES', 'MAKE_TERMOUT', 'MAKE_TERMERR',
-        'BASE', 'VERIFY_ARGS', 'PR', 'REPORT', 'MANPATH', 'PWD', 'OLDPWD'}}
+        'BASE', 'VERIFY_ARGS', 'PR', 'REPORT', 'MANPATH', 'PWD', 'OLDPWD', 'PYTHONDONTWRITEBYTECODE'}}
 
 
 def identity(root, command, base):
