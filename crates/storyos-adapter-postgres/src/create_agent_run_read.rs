@@ -166,6 +166,9 @@ pub(super) async fn load_agent_run(
         .map(serde_json::from_str)
         .transpose()
         .map_err(agent_run_parse_error)?;
+    let continuation = payload
+        .as_ref()
+        .and_then(crate::agent_run_continuation::parse_wire);
     let model = match row.get::<_, Option<String>>(6) {
         Some(model_attempt_id) => Some(AgentRunModelInspect {
             model_attempt_id,
@@ -173,6 +176,20 @@ pub(super) async fn load_agent_run(
             outbound_disclosure_event_id: row.get(8),
             model_invocation_id: row.get(9),
             dispatch_state: row.get(10),
+            prior_continuation_binding_id: continuation
+                .as_ref()
+                .and_then(|wire| wire.prior_binding_id.clone()),
+            known_prior_continuation_binding_id: continuation
+                .as_ref()
+                .and_then(|wire| wire.known_prior_binding_id.clone()),
+            input_mapping: continuation
+                .as_ref()
+                .map(|wire| crate::agent_run_continuation::inspect_mapping(wire.mapping))
+                .unwrap_or(storyos_application::AgentRunInputMapping::None),
+            admission: continuation
+                .as_ref()
+                .map(|wire| crate::agent_run_continuation::inspect_admission(&wire.admission))
+                .unwrap_or_else(crate::agent_run_continuation::default_inspect_admission),
             evidence: payload
                 .as_ref()
                 .and_then(|value: &serde_json::Value| value.get("evidence"))

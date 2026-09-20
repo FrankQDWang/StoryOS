@@ -214,6 +214,11 @@ async fn settle_one_phase(
             &author_message,
             &chapter_id,
             &assembly_manifest_id,
+            assistance.as_ref().ok_or_else(|| {
+                CompleteAgentRunError::Unavailable(Box::new(std::io::Error::other(
+                    "Dispatch requires current assistance admission",
+                )))
+            })?,
         )
         .await?;
         return Ok(WorkPhase::Hold("dispatch"));
@@ -245,6 +250,7 @@ async fn settle_one_phase(
             &items,
             &outcome,
             /*include_decision*/ !items_empty,
+            crate::agent_run_continuation::parse_wire(&payload).as_ref(),
         )
         .await?;
         return Ok(next);
@@ -273,11 +279,21 @@ async fn settle_one_phase(
             == Some(true)
     {
         let binding = Uuid::now_v7().to_string();
+        let mut next_payload = payload.clone();
+        if let Some(wire) = crate::agent_run_continuation::parse_wire(&payload) {
+            next_payload["produced_binding"] =
+                crate::agent_run_continuation::encode_produced_binding(
+                    &binding,
+                    attempt_id.as_deref().expect("attempt exists"),
+                    &wire.admission,
+                );
+        }
         client
             .execute(
                 "UPDATE storyos.model_attempts
                     SET continuation_binding_id = $4::text::uuid,
-                        dispatch_state = 'settled'
+                        dispatch_state = 'settled',
+                        payload = $6::text::jsonb
                   WHERE owner_user_id = $1::text::uuid
                     AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
@@ -289,6 +305,7 @@ async fn settle_one_phase(
                     &claim.run_id,
                     &binding,
                     &decision,
+                    &next_payload.to_string(),
                 ],
             )
             .await
@@ -325,6 +342,7 @@ async fn persist_stream_and_decision(
     items: &[storyos_core::NativeStreamItem],
     outcome: &FakeAttemptOutcome,
     include_decision: bool,
+    continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> Result<WorkPhase, CompleteAgentRunError> {
     let (decision_id, status, hold) = match (include_decision, outcome) {
         (false, FakeAttemptOutcome::NoDecision { .. }) => (None, "completed", None),
@@ -402,6 +420,7 @@ async fn persist_stream_and_decision(
         outcome,
         decision_id.as_deref(),
         opened_proposal.as_deref(),
+        continuation,
     );
     client
         .execute(
@@ -451,6 +470,7 @@ async fn persist_uncertain_attempt(
     author_message: &str,
     chapter_id: &str,
     assembly_manifest_id: &str,
+    assistance: &storyos_application::ProjectAssistanceRecord,
 ) -> Result<(), CompleteAgentRunError> {
     let model_attempt_id = Uuid::now_v7().to_string();
     let destination_attempt_id = Uuid::now_v7().to_string();
@@ -459,6 +479,14 @@ async fn persist_uncertain_attempt(
     let outbound_disclosure_manifest_id = Uuid::now_v7().to_string();
     let wire_payload_projection_id = Uuid::now_v7().to_string();
     let model_invocation_id = Uuid::now_v7().to_string();
+    let continuation = crate::agent_run_continuation::decide_continuation(
+        client,
+        claim,
+        conversation_id,
+        author_message,
+        assistance,
+    )
+    .await?;
     let digest = host_fake_wire_digest(author_message, chapter_id);
     let payload = serde_json::json!({
         "execution_profile": {
@@ -470,12 +498,19 @@ async fn persist_uncertain_attempt(
         "wire": {
             "digest": digest,
             "author_message": author_message,
-            "chapter_id": chapter_id
+            "chapter_id": chapter_id,
+            "prior_continuation_binding_id": continuation.prior_binding_id
         },
         "items": [],
         "decision": null,
         "usage": { "kind": "unknown" },
-        "evidence": evidence_values(&model_attempt_id, author_message, assembly_manifest_id)
+        "continuation": crate::agent_run_continuation::encode_wire(&continuation),
+        "evidence": evidence_values(
+            &model_attempt_id,
+            author_message,
+            assembly_manifest_id,
+            continuation.known_prior_binding_id.as_deref(),
+        )
     });
     client
         .execute(
@@ -538,6 +573,7 @@ fn encode_payload(
     outcome: &FakeAttemptOutcome,
     decision_id: Option<&str>,
     opened_proposal: Option<&str>,
+    continuation: Option<&crate::agent_run_continuation::ContinuationWire>,
 ) -> serde_json::Value {
     let encoded_items: Vec<serde_json::Value> = items
         .iter()
@@ -626,12 +662,19 @@ fn encode_payload(
         "wire": {
             "digest": host_fake_wire_digest(author_message, chapter_id),
             "author_message": author_message,
-            "chapter_id": chapter_id
+            "chapter_id": chapter_id,
+            "prior_continuation_binding_id": continuation.and_then(|wire| wire.prior_binding_id.clone())
         },
         "items": encoded_items,
         "decision": decision,
         "usage": { "kind": "unknown" },
-        "evidence": evidence_values(attempt_id, author_message, assembly_manifest_id)
+        "continuation": continuation.map(crate::agent_run_continuation::encode_wire),
+        "evidence": evidence_values(
+            attempt_id,
+            author_message,
+            assembly_manifest_id,
+            continuation.and_then(|wire| wire.known_prior_binding_id.as_deref()),
+        )
     })
 }
 
@@ -639,8 +682,9 @@ fn evidence_values(
     attempt_id: &str,
     author_message: &str,
     assembly_manifest_id: &str,
+    known_prior_binding_id: Option<&str>,
 ) -> Vec<serde_json::Value> {
-    vec![
+    let mut values = vec![
         serde_json::json!({
             "kind": "sent_content",
             "attempt_id": attempt_id,
@@ -653,19 +697,28 @@ fn evidence_values(
             "availability": "current",
             "reference_id": assembly_manifest_id
         }),
-        serde_json::json!({
-            "kind": "provider_report",
+    ];
+    if let Some(reference_id) = known_prior_binding_id {
+        values.push(serde_json::json!({
+            "kind": "stored_reference",
             "attempt_id": attempt_id,
             "availability": "current",
-            "report": "host_fake_no_provider_usage"
-        }),
-        serde_json::json!({
-            "kind": "provider_opaque",
-            "attempt_id": attempt_id,
-            "availability": "unknown",
-            "unknown_facts": ["provider_internal_content"]
-        }),
-    ]
+            "reference_id": reference_id
+        }));
+    }
+    values.push(serde_json::json!({
+        "kind": "provider_report",
+        "attempt_id": attempt_id,
+        "availability": "current",
+        "report": "host_fake_no_provider_usage"
+    }));
+    values.push(serde_json::json!({
+        "kind": "provider_opaque",
+        "attempt_id": attempt_id,
+        "availability": "unknown",
+        "unknown_facts": ["provider_internal_content"]
+    }));
+    values
 }
 
 async fn update_run(

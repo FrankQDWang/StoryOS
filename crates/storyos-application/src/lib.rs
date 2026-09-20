@@ -112,10 +112,11 @@ pub use archive_project::{
 };
 pub use chapter_query::{ChapterQueryFacts, ChapterQueryReader, OpenChapter, open_chapter};
 pub use create_agent_run::{
-    AgentRunContext, AgentRunDecisionInspect, AgentRunEvidence, AgentRunModelInspect,
-    AgentRunRecord, AgentRunStatus, AgentRunStreamItem, ConversationSelection,
-    CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError, CreateAgentRunStore,
-    EvidenceAvailability, WorkingTargetAvailability, open_agent_run, request_create_agent_run,
+    AgentRunContext, AgentRunContinuationAdmission, AgentRunDecisionInspect, AgentRunEvidence,
+    AgentRunInputMapping, AgentRunModelInspect, AgentRunRecord, AgentRunStatus, AgentRunStreamItem,
+    ConversationSelection, CreateAgentRunAdmission, CreateAgentRunCommand, CreateAgentRunError,
+    CreateAgentRunStore, EvidenceAvailability, WorkingTargetAvailability, open_agent_run,
+    request_create_agent_run,
 };
 pub use create_chapter::{
     CreateChapterAuthority, CreateChapterCommand, CreateChapterError, CreateChapterPublicOrder,
