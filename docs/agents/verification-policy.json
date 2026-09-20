@@ -1,5 +1,19 @@
 {
   "version": 1,
+  "targeted": {
+    "verify-policy": {"command": ["make", "verify-policy"], "clean": false},
+    "contracts": {"command": ["make", "contracts"], "clean": true},
+    "web-typecheck": {"command": ["make", "web-typecheck"], "clean": false},
+    "release-package": {"command": ["make", "release-package"], "clean": true},
+    "web-foundation": {"command": ["make", "web-foundation"], "clean": true},
+    "web": {"command": ["make", "web"], "clean": true},
+    "project-scope": {"command": ["make", "project-scope"], "clean": true},
+    "verify-tracker": {"command": ["make", "verify-tracker"], "clean": false},
+    "verify-pr": {"command": ["make", "verify-pr"], "clean": false},
+    "verify-contract-inputs": {"command": ["make", "verify-contract-inputs"], "clean": false},
+    "verification-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "*_tests.py"], "clean": false},
+    "rust-tests": {"command": ["python3", "scripts/verification.py", "rust-tests"], "clean": false}
+  },
   "complete": {
     "recovery": {"project-scope": ["make", "project-scope"]},
     "stages": [

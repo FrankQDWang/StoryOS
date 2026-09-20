@@ -172,3 +172,39 @@ policy-review declaration. The protected validator still checks the candidate re
 Reports and review declarations remain Agent-writable: they establish consistency within
 the local trust boundary, not independent proof of execution or reviewer identity.
 Complete local verification and manual Linux verification retain all existing obligations.
+
+## Current status and targeted checks
+
+`make verify-status BASE=origin/main` reads the current daily plan and retained
+results. It does not run tests or write observations. Use
+`python3 scripts/verification_plan.py status --base origin/main` for JSON, or
+`make verify-plan VERIFY_ARGS='--format text'` for a readable plan. An empty
+change set remains pending. A prior result can be passed, failed, or stale;
+package-dependent work on dirty sources has unmet prerequisites.
+
+`make verify-targeted CHECK=verify-policy VERIFY_ARGS='--issue 744'` runs a check
+registered in the policy. Query it with
+`python3 scripts/verification.py status --check verify-policy --json`.
+Source bytes and write stamps, policy, test membership, command, execution input
+digest, and plan identity bind targeted results. Only a current passed result
+can satisfy a current prerequisite. These results do not replace candidate evidence.
+The Make test targets use this same entry when called outside a managed run.
+Public step, Rust, shared database, package, and recovery script entries create a
+root record or inherit the existing run. Direct Cargo, Vitest, or other shell
+commands outside these entries remain outside managed observation.
+
+Use `VERIFY_ARGS='--issue 744 --pr 123'` on daily or targeted Make entries for
+explicit attribution. Missing attribution stays null. Nested steps retain their
+parent step ID and do not create another root. Reports retain actual child start,
+UTC and monotonic intervals, process birth identity, and five-second heartbeats.
+Request records distinguish refused requests from execution. A cached daily result
+has no actual child start. Records remain below ignored `target/verification/`.
+Keep secrets in environment variables; do not put them in command arguments,
+purpose, trigger, or recovery reason fields.
+
+`python3 scripts/verification.py status --attempt <run-id> --json` reads the
+existing complete attempt and prints its next recovery command. Recovery uses the
+original failed boundary and its policy-owned preparation. Each recovery has a
+separate retained report linked by `recovery_of`; the attempt component still owns
+retry admission. A failed recovery cannot clear the original failure. Status
+reports distinguish active and lost process identity without changing admission.

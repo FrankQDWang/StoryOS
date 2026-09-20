@@ -10,6 +10,9 @@ import tempfile
 
 
 root = Path(__file__).resolve().parents[1]
+if not os.environ.get("STORYOS_VERIFICATION_RUN"):
+    import verification
+    raise SystemExit(verification.step(root, "release-package", [sys.executable, str(Path(__file__).resolve())]))
 timer = [sys.executable, str(root / "scripts/verification.py"), "step"]
 
 

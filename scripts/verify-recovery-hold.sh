@@ -13,6 +13,9 @@ set -eu
 
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
+if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
+  exec python3 scripts/verification.py step recovery-drill -- sh "$repository_root/scripts/verify-recovery-hold.sh" "$@"
+fi
 
 suffix=$$
 network="storyos-recovery-net-$suffix"

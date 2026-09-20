@@ -83,6 +83,8 @@ def main():
         if args.action == "plan":
             print(json.dumps(phases, indent=2))
             return 0
+        if not os.environ.get("STORYOS_VERIFICATION_RUN"):
+            return verification.step(root, "shared-tests", [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
         if not phases or not os.environ.get("STORYOS_TEST_POSTGRES_CONTAINER"):
             raise ValueError("Shared execution requires a phase policy and a prepared PostgreSQL fixture")
         for phase in phases:

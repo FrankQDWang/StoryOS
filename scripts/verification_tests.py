@@ -21,7 +21,9 @@ class VerificationCommandTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.environment = {key: value for key, value in os.environ.items()
                             if not key.startswith("STORYOS_VERIFICATION_")}
+        self.environment["PYTHONDONTWRITEBYTECODE"] = "1"
         self.git("init", "--quiet", "--initial-branch=main")
+        self.git("config", "core.excludesFile", os.devnull)
         (self.root / "scripts").mkdir()
         (self.root / "docs/agents").mkdir(parents=True)
         (self.root / ".gitignore").write_text("target/\n")

@@ -10,6 +10,12 @@ PACKAGE = {"browser-source", "node-postgresql", "node-process-cut", "database"}
 
 
 def validate(policy):
+    for name, entry in policy.get("targeted", {}).items():
+        if (not re.fullmatch(r"[a-z][a-z0-9-]*", name) or set(entry) != {"command", "clean"}
+                or type(entry['clean']) is not bool or not isinstance(entry['command'], list)
+                or not entry['command'] or not all(isinstance(arg, str) for arg in entry['command'])
+                or any(arg in {'verify-local', 'verify-local-steps', 'verify'} for arg in entry['command'])):
+            raise ValueError("Invalid targeted check; complete execution is not a targeted entry")
     rules = policy.get("daily_consumers", [])
     for rule in rules:
         if (set(rule) != {"pattern", "groups"} or not isinstance(rule["pattern"], str)
