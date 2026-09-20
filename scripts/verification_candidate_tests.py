@@ -57,6 +57,8 @@ class CandidateCommandTests(unittest.TestCase):
             try:
                 while process.stdout.readline().strip() != 'ready':
                     self.assertIsNone(process.poll())
+                status = self.repo.cli('status', '--attempt', self.repo.report()['run_id'], '--json')
+                self.assertEqual(json.loads(status.stdout)['execution'], 'active')
                 duplicate = self.run_complete()
                 self.assertEqual(duplicate.returncode, 0, duplicate.stderr)
                 self.assertIn('active', duplicate.stdout)
@@ -86,16 +88,23 @@ class CandidateCommandTests(unittest.TestCase):
         self.assertNotEqual(first.returncode, 0)
         report = self.repo.report()
         self.assertEqual((report['issue'], report['pr'], report['purpose']), (746, 123, 'candidate'))
+        status = self.repo.cli('status', '--attempt', report['run_id'], '--json')
+        self.assertEqual(json.loads(status.stdout)['status'], 'failed')
+        self.assertIn('recover --attempt', json.loads(status.stdout)['next_command'])
         self.assertNotEqual(self.run_complete().returncode, 0)
         self.assertEqual((self.root / 'target/launches').read_text(), 'x')
         self.assertNotEqual(self.repo.cli('recover', '--attempt', report['run_id'], '--reason', 'Check failure').returncode, 0)
         (self.root / 'target/repaired').touch()
         self.assertEqual(self.repo.cli('recover', '--attempt', report['run_id'], '--reason', 'Fixture restored').returncode, 0)
+        recoveries = [json.loads(p.read_text()) for p in self.root.glob('target/verification/*/report.json')
+                      if json.loads(p.read_text()).get('profile') == 'recovery']
+        self.assertEqual(sorted(r['status'] for r in recoveries), ['failed', 'passed'])
+        self.assertTrue(all(r['recovery_of'] == report['run_id'] for r in recoveries))
         retry = self.run_complete()
         self.assertEqual(retry.returncode, 0, retry.stderr)
         reports = [json.loads(p.read_text()) for p in self.root.glob('target/verification/*/report.json')]
-        self.assertEqual(sorted(r['status'] for r in reports), ['failed', 'passed'])
-        self.assertEqual(next(r for r in reports if r['status'] == 'passed')['retry_reason'], 'Fixture restored')
+        self.assertEqual(sorted(r['status'] for r in reports if r['profile'] == 'complete'), ['failed', 'passed'])
+        self.assertEqual(next(r for r in reports if r['status'] == 'passed' and r['profile'] == 'complete')['retry_reason'], 'Fixture restored')
         self.assertEqual((self.root / 'target/launches').read_text(), 'xxxx')
 
     def test_dirty_preflight_is_not_an_attempt_and_changed_base_cannot_reuse(self):

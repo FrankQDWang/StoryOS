@@ -59,7 +59,7 @@ def cargo_targets(root, changes, files, revisions):
             for name in sorted(affected & packages.keys())}
 
 
-def build_plan(root, base, workers=None):
+def build_plan(root, base, workers=None, *, allow_empty=False):
     base = verification.git(root, "rev-parse", "--verify", f"{base}^{{commit}}")
     source = verification.source_identity(root)
     files = {item["path"]: item for item in verification.inventory(root)["files"]}
@@ -71,7 +71,7 @@ def build_plan(root, base, workers=None):
     changes.update(subprocess.check_output(
         ["git", "ls-files", "--others", "--exclude-standard", "-z"], cwd=root).decode().split("\0"))
     changes.discard("")
-    if not changes:
+    if not changes and not allow_empty:
         raise ValueError("No changed inputs; there is no selected test run")
     policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
     limit = min(policy.get("daily_workers", 2), os.cpu_count() or 1)
@@ -189,7 +189,10 @@ def execute_plan(root, plan):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("plan", "run", "execute"))
+    parser.add_argument("action", choices=("plan", "status", "run", "execute"))
+    parser.add_argument("--format", choices=("json", "text"), default="json")
+    parser.add_argument("--issue", type=int)
+    parser.add_argument("--pr", type=int)
     parser.add_argument("--base", default="origin/main")
     parser.add_argument("--plan", type=Path)
     parser.add_argument("--expected")
@@ -198,18 +201,22 @@ def main():
     args = parser.parse_args()
     try:
         root = Path(verification.git(Path.cwd(), "rev-parse", "--show-toplevel"))
-        plan = build_plan(root, args.base, args.workers)
+        plan = build_plan(root, args.base, args.workers, allow_empty=args.action == "status")
         if ((args.plan and json.loads(args.plan.read_text()) != plan)
                 or (args.expected and args.expected != plan["digest"])):
             raise ValueError("The verification plan is stale or has been changed")
-        if args.action == "plan":
-            print(json.dumps(plan, indent=2))
+        if args.action in {"plan", "status"}:
+            if args.action == "plan" and args.format == "json":
+                print(json.dumps(plan, indent=2))
+            else:
+                verification.verification_status.display(verification.verification_status.status(root, plan), args.format == "json")
             return 0
         if args.action == "execute":
             return execute_plan(root, plan)
         command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],
                    "--expected", plan["digest"], "--workers", str(plan["workers"])]
-        return verification.run(root, command, plan=plan, no_cache=args.no_cache)
+        return verification.run(root, command, plan=plan, no_cache=args.no_cache,
+                                context={"issue": args.issue, "pr": args.pr})
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

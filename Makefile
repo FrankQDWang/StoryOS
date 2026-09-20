@@ -1,3 +1,11 @@
+.DEFAULT_GOAL := contracts
+PUBLIC_CHECKS := verify-policy contracts web-typecheck release-package web-foundation web project-scope verify-tracker verify-pr verify-contract-inputs
+ifeq ($(STORYOS_VERIFICATION_RUN),)
+.PHONY: $(PUBLIC_CHECKS)
+$(PUBLIC_CHECKS):
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check $@ $(VERIFY_ARGS)
+endif
+
 .PHONY: contracts generate-contracts project-scope release-package verify verify-local verify-local-steps verify-policy verify-plan verify-changed verify-pr verify-tracker web web-foundation web-typecheck
 
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
@@ -16,6 +24,7 @@ verify-plan:
 verify-changed:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py run --base "$(BASE)" $(VERIFY_ARGS)
 
+ifneq ($(STORYOS_VERIFICATION_RUN),)
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
@@ -44,11 +53,13 @@ web: web-foundation
 
 project-scope: release-package
 	STORYOS_WEB_TYPECHECKED=1 $(VERIFY_STEP) project-scope -- scripts/verify-project-scope.sh
+endif
 generate-contracts:
 	cargo run --quiet -p storyos-contracts -- generate
 verify-local:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run --base "$(BASE)" $(VERIFY_ARGS) -- make verify-local-steps
 
+ifneq ($(STORYOS_VERIFICATION_RUN),)
 verify-local-steps: contracts
 	@$(VERIFY_STEP) workspace-boundaries -- sh -c 'cargo metadata --no-deps --format-version 1 | python3 scripts/verify-workspace-boundaries.py'
 	@$(VERIFY_STEP) author-edit-policy -- python3 docs/foundation/verify-manuscript-author-edit-batch-policy.py
@@ -91,10 +102,15 @@ verify-pr: verify-policy
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	@$(MAKE) verify-tracker
 
+else
+verify-local-steps: verify-local
+endif
+
 verify: verify-local
 	@$(MAKE) verify-tracker
 
 .PHONY: verify-contract-inputs
+ifneq ($(STORYOS_VERIFICATION_RUN),)
 verify-contract-inputs:
 	$(VERIFY_STEP) protocol-self-test -- python3 docs/foundation/verify-versioned-protocol-route-catalog.py --self-test
 	$(VERIFY_STEP) persistence-self-test -- python3 docs/foundation/verify-postgresql-release-1-persistence-catalog.py --self-test
@@ -102,3 +118,11 @@ verify-contract-inputs:
 	$(VERIFY_STEP) tracker-self-test -- python3 scripts/verify-stage1-ticket-bindings.py --self-test
 	$(VERIFY_STEP) transaction-self-test -- python3 scripts/verify-transaction-control-receivers.py --self-test
 	$(VERIFY_STEP) generated-contracts -- cargo run --quiet -p storyos-contracts -- check
+endif
+
+.PHONY: verify-status verify-targeted
+verify-status:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py status --base "$(BASE)" --format text $(VERIFY_ARGS)
+
+verify-targeted:
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)

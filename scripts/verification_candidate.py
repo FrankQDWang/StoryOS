@@ -46,14 +46,15 @@ def identity(root, command, base):
                      subprocess.check_output(['ps', '-o', 'lstart=', '-p', '1'], text=True).strip()]}
 
 
-def observe(root, outcome, **fields):
+def observe(root, outcome, *, emit=True, **fields):
     import verification as runner
     directory = root / 'target/verification/requests'
     directory.mkdir(parents=True, exist_ok=True)
     event = {'version': 1, 'id': uuid.uuid4().hex, 'outcome': outcome,
              'utc': datetime.now(timezone.utc).isoformat(), 'monotonic': time.monotonic(), **fields}
     runner.write_json(directory / f"{event['id']}.json", event)
-    print(json.dumps(event), flush=True)
+    if emit:
+        print(json.dumps(event), flush=True)
 
 
 def process_identity():
@@ -194,22 +195,34 @@ def recover(root, attempt, reason):
                     'report_sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'source': started,
                     'utc': datetime.now(timezone.utc).isoformat(), 'boundaries': [s['stage'] for s in failures]}
         recovery_path = path.parent / 'recovery.json'
-        def record_process(fields):
-            recovery['process'].update(fields)
-            runner.write_json(recovery_path, recovery)
-        record_process({})
-        runner.write_json(active_path, {'status': 'running', 'report': str(recovery_path)})
-        passed = True
-        recovery_commands = json.loads((root / 'docs/agents/verification-policy.json').read_text())['complete'].get('recovery', {})
-        for failure in failures:
-            command = recovery_commands.get(failure['stage'], failure['command'])
-            code, interrupted = runner.execute(command, environment(), True, record_process)
-            passed = passed and code == 0 and not interrupted
-        if report['status'] == 'infrastructure-failed':
-            passed = shutil.which(report['command'][0]) is not None
-        passed = passed and started == runner.source_identity(root)
+        run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
+        command = [sys.executable, str(Path(runner.__file__).resolve()), 'step', 'recovery-check', '--',
+                   sys.executable, str(Path(runner.__file__).resolve()), 'recover-steps', '--attempt', attempt]
+        runner.write_json(active_path, {'status': 'running', 'report': str(path.parent.parent / run_id / 'report.json')})
+        observe(root, 'requested', profile='recovery', run_id=run_id, recovery_of=attempt, issue=report.get('issue'))
+        code = runner.record_run(root, command, context={'run_id': run_id, 'profile': 'recovery',
+                                 'issue': report.get('issue'), 'pr': report.get('pr'), 'recovery_of': attempt,
+                                 'retry_reason': reason, 'effective_scope': recovery['boundaries']})
+        recovery['run_id'] = run_id
+        passed = code == 0 and started == runner.source_identity(root)
         recovery['status'] = 'passed' if passed else 'failed'
         runner.write_json(recovery_path, recovery)
         runner.write_json(active_path, {'status': 'settled'})
-        observe(root, 'recovery', run_id=attempt, **recovery)
+        observe(root, 'recovery', recovery_of=attempt, **recovery)
         return 0 if passed else 1
+
+
+def recovery_steps(root, attempt):
+    import verification as runner
+    if not os.environ.get('STORYOS_VERIFICATION_RUN') or Path(attempt).name != attempt:
+        raise ValueError('Recovery steps require the admitted recovery run')
+    report = json.loads((root / 'target/verification' / attempt / 'report.json').read_text())
+    commands = json.loads((root / 'docs/agents/verification-policy.json').read_text())['complete'].get('recovery', {})
+    for failure in report.get('steps', []):
+        if failure['status'] == 'failed' and failure.get('parent') is None:
+            code = runner.step(root, failure['stage'], commands.get(failure['stage'], failure['command']))
+            if code:
+                return code
+    if report['status'] == 'infrastructure-failed' and not shutil.which(report['command'][0]):
+        return 1
+    return 0

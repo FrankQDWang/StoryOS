@@ -2,6 +2,9 @@
 set -eu
 repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repository_root"
+if [ -z "${STORYOS_VERIFICATION_RUN:-}" ]; then
+  exec python3 scripts/verification.py step daily-database -- sh "$0" "$@"
+fi
 . "$repository_root/scripts/lib/controlled-postgres.sh"
 container="storyos-daily-$$"
 trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
