@@ -72,12 +72,12 @@ def gate(root):
         raise
 
 
-def check(root, packet, candidate, baseline, head, base):
+def check(root, packet, candidate, baseline, head, base, *, policy_review_required=True):
     expected = verification.complete_plan(root, candidate, base)
     if (packet["head"], packet["base"], packet["baseline"]) != (head, base, baseline):
         raise ValueError("Stale candidate or protected baseline")
     changed = verification.git(root, "diff", "--name-only", baseline, candidate, "--", *PROTECTED)
-    if changed and packet.get("policy_review") != {"tree": expected["tree"], "standards": "PASS", "spec": "PASS"}:
+    if policy_review_required and changed and packet.get("policy_review") != {"tree": expected["tree"], "standards": "PASS", "spec": "PASS"}:
         raise ValueError("Policy inputs changed; explicit independent Standards and Spec review is required")
     with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(packet["report"], validate=True))) as archive:
         raw = archive.read(2_000_001)

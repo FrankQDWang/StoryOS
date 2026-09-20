@@ -90,7 +90,7 @@ validate this structure. Independent policy self-tests also precede Rust compila
 
 The reviewed Node profile caches passed policy checks, Web preparation and type
 checks, and selected Node tests as one group. A hit records a `cached` step and its
-producer report. Cargo and complete groups always execute. Selected Vitest runs disable result-cache writes.
+producer report. Cargo groups always execute. Complete candidate reuse follows the admission rules below. Selected Vitest runs disable result-cache writes.
 
 The key binds current non-ignored input bytes, modes and link targets; test-file membership;
 checks and workers; runners and toolchains; host identity; and an environment digest.
@@ -116,6 +116,29 @@ When tests or dependencies change, inspect the new plan and report. Extend a cac
 profile only after specifying its inputs, required outputs and resource ownership,
 adding public CLI invalidation tests, and obtaining independent Standards and Spec
 review. New frameworks remain ineligible until the policy and runner support them.
+
+## Complete attempt admission
+
+`make verify-local BASE=origin/main VERIFY_ARGS='--issue 746 --pr 123'` records
+explicit attribution. Omit unknown identities. Optional `--purpose` and `--trigger`
+record invocation context. Source, base, policy, membership, command, tool bytes
+and versions (including Chrome), runners, host, and an environment digest bind
+admission. Environment values and inherited Make orchestration flags are excluded.
+An active duplicate returns its run identity. A valid matching success returns
+its original report without another child. Older reports lack reuse authority.
+
+An unchanged failure refuses a complete retry. Run
+`python3 scripts/verification.py recover --attempt <run-id> --reason '<reason>'`.
+Recovery executes the failed owning stage with policy-declared preparation.
+Interruption or process loss requires child cleanup; a known launch infrastructure
+fault also requires an available executable. Successful recovery binds the original
+report and unchanged source. Invalid evidence needs correction at its owner.
+
+Local records under `target/verification/` retain requests, refusals, attempts,
+reuse, recovery reasons, process identity, and UTC/monotonic timing. Preflight
+refusal consumes no attempt. These are not product domain records. The readiness
+boundary checks clean source and input ownership; review imports arrive separately.
+Existing independent reviews and protected evidence publication remain required.
 
 ## Candidate evidence publication
 

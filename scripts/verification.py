@@ -147,13 +147,18 @@ def write_json(path, value):
     temporary.replace(path)
 
 
-def execute(command, environment, new_group):
+def execute(command, environment, new_group, observation=None):
     interrupted = 0
     try:
         child = subprocess.Popen(command, env=environment, start_new_session=new_group)
     except OSError as error:
+        if observation:
+            observation({"launch_error": type(error).__name__})
         print(str(error), file=sys.stderr)
         return 127, interrupted
+
+    if observation:
+        observation({"child_group": child.pid})
 
     def interrupt(signum, _frame):
         nonlocal interrupted
@@ -212,18 +217,26 @@ def step(root, stage, command):
     return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
 
 
-def record_run(root, command, *, plan=None, no_cache=False):
+def record_run(root, command, *, plan=None, no_cache=False, context=None):
     if os.environ.get("STORYOS_VERIFICATION_RUN"):
         raise ValueError("A complete verification run cannot be nested")
     started = time.monotonic()
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    directory = root / "target/verification" / f"{timestamp}-{uuid.uuid4().hex[:8]}"
+    directory = root / "target/verification" / (context["run_id"] if context else f"{timestamp}-{uuid.uuid4().hex[:8]}")
     (directory / "steps").mkdir(parents=True)
     report_path = directory / "report.json"
     report = {"version": 1, "started_at": timestamp, "command": command, "status": "running",
               "profile": "daily" if plan else "complete",
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
+    if context:
+        import verification_candidate
+        report.update(context, run_id=directory.name)
+    def process_observation(fields):
+        report["process"].update(fields)
+        report["attempt_started"] = "launch_error" not in fields
+        write_json(report_path, report)
+
     write_json(report_path, report)
     code, interrupted = 1, 0
     cache = None
@@ -237,7 +250,7 @@ def record_run(root, command, *, plan=None, no_cache=False):
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
         if not plan and command == ["make", "verify-local-steps"]:
-            report["plan"] = complete_plan(root)
+            report["plan"] = complete_plan(root, base=context["base"] if context else "origin/main")
         cache_started = time.monotonic()
         cache = verification_cache.DailyCache(root, plan, no_cache)
         report["cache"] = cache.observation
@@ -250,8 +263,9 @@ def record_run(root, command, *, plan=None, no_cache=False):
             code = 0
         else:
             cache.discard()
-            code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_RUN": str(directory)},
-                                        os.name == "posix")
+            code, interrupted = execute(command, {**(verification_candidate.environment() if context else os.environ),
+                                                  "STORYOS_VERIFICATION_RUN": str(directory)},
+                                        os.name == "posix", process_observation if context else None)
         report["source_end"] = source_identity(root)
         report["status"] = "passed" if code == 0 else "failed"
         if report["source_end"] != report["source_start"]:
@@ -279,6 +293,10 @@ def record_run(root, command, *, plan=None, no_cache=False):
         except (OSError, ValueError) as error:
             report.update(status="failed", error=str(error))
     report.update(duration_seconds=time.monotonic() - started, exit_code=code)
+    if context:
+        report.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic())
+        if report["process"].get("launch_error"):
+            report["status"] = "infrastructure-failed"
     write_json(report_path, report)
     if cache:
         cache.publish(report_path)
@@ -288,8 +306,11 @@ def record_run(root, command, *, plan=None, no_cache=False):
     return 128 + interrupted if interrupted else (code if code > 0 else 1)
 
 
-def run(root, command, *, plan=None, no_cache=False):
+def run(root, command, *, plan=None, no_cache=False, context=None):
     try:
+        if not plan and command == ["make", "verify-local-steps"]:
+            import verification_candidate
+            return verification_candidate.run(root, command, context or {"base": "origin/main"})
         with verification_cache.budget(root):
             return record_run(root, command, plan=plan, no_cache=no_cache)
     except (OSError, ValueError) as error:
@@ -302,10 +323,19 @@ def main():
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("rust-tests")
     commands.add_parser("inventory").add_argument("--check", action="store_true")
+    recovery = commands.add_parser("recover")
+    recovery.add_argument("--attempt", required=True)
+    recovery.add_argument("--reason", required=True)
     for action in ("run", "step"):
         command_parser = commands.add_parser(action)
         if action == "step":
             command_parser.add_argument("stage")
+        else:
+            command_parser.add_argument("--base", default="origin/main")
+            for name in ("issue", "pr"):
+                command_parser.add_argument(f"--{name}", type=int)
+            command_parser.add_argument("--purpose", default="candidate")
+            command_parser.add_argument("--trigger", default="explicit-request")
         command_parser.add_argument("command", nargs=argparse.REMAINDER)
     arguments = parser.parse_args()
     try:
@@ -317,12 +347,16 @@ def main():
             print(f"Verified ownership of {len(result['files'])} input files" if arguments.check
                   else json.dumps(result, indent=2))
             return 0
+        if arguments.action == "recover":
+            import verification_candidate
+            return verification_candidate.recover(root, arguments.attempt, arguments.reason)
         command = arguments.command
         if command[:1] == ["--"]:
             command = command[1:]
         if not command:
             raise ValueError("A verification command is required")
-        return run(root, command) if arguments.action == "run" else step(root, arguments.stage, command)
+        return run(root, command, context={key: getattr(arguments, key) for key in
+                   ("base", "issue", "pr", "purpose", "trigger")}) if arguments.action == "run" else step(root, arguments.stage, command)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

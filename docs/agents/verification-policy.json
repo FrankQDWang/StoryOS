@@ -1,6 +1,7 @@
 {
   "version": 1,
   "complete": {
+    "recovery": {"project-scope": ["make", "project-scope"]},
     "stages": [
       "input-ownership", "project-inputs", "verification-tests",
       "rust-format", "rust-clippy", "rust-tests",
