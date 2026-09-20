@@ -19,19 +19,25 @@ import uuid
 import verification_cache
 
 
+def environment():
+    return {key: value for key, value in os.environ.items() if key not in {'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL'}}
+
+
 def identity(root, command, base):
     import verification as runner
     source = runner.source_identity(root)
     tools = []
-    for name in ('git', 'make', 'cargo', 'rustc', 'node', 'pnpm', 'docker'):
-        executable = shutil.which(name)
+    chrome = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    chrome = chrome if os.access(chrome, os.X_OK) else (shutil.which('google-chrome-stable') or shutil.which('google-chrome'))
+    for name in ('git', 'make', 'cargo', 'rustc', 'node', 'pnpm', 'docker', 'chrome', 'python'):
+        executable = chrome if name == 'chrome' else (sys.executable if name == 'python' else shutil.which(name))
         tools.append([name, executable, hashlib.sha256(Path(executable).read_bytes()).hexdigest() if executable else None, subprocess.check_output(
             [executable, '--version'], cwd=root, stderr=subprocess.STDOUT, text=True).strip() if executable else None])
-    environment = {key: value for key, value in os.environ.items()
+    inputs = {key: value for key, value in environment().items()
                    if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT'}}
     return {'version': 1, 'source': {key: value for key, value in source.items() if key != 'write_stamps_sha256'},
             'plan': runner.complete_plan(root, base=base), 'command': command, 'tools': tools,
-            'inputs': verification_cache.digest(environment),
+            'inputs': verification_cache.digest(inputs),
             'runners': verification_cache.digest([(p.name, hashlib.sha256(p.read_bytes()).hexdigest())
                                                   for p in sorted(Path(__file__).parent.glob('verification*.py'))]),
             'host': [platform.node(), platform.platform(), sys.version, sys.executable,
@@ -71,6 +77,19 @@ def validate_success(root, report):
                                 policy_review_required=False)
 
 
+def require_cleanup(active_path):
+    if active_path.exists():
+        active = json.loads(active_path.read_text())
+        if active.get('status') == 'running' and Path(active['report']).exists():
+            group = json.loads(Path(active['report']).read_text())['process'].get('child_group')
+            if group:
+                try:
+                    os.killpg(group, 0)
+                except ProcessLookupError:
+                    return
+                raise ValueError('Lost attempt children require process cleanup before admission')
+
+
 def run(root, command, context):
     import verification as runner
     directory = root / 'target/verification'
@@ -93,6 +112,7 @@ def run(root, command, context):
                         observe(root, 'active', run_id=active['run_id'], report=active['report'])
                         return 0
                     raise
+                require_cleanup(active_path)
                 readiness(root, candidate)
                 previous = []
                 for path in directory.glob('*/report.json'):
@@ -159,31 +179,35 @@ def recover(root, attempt, reason):
         candidate = identity(root, report['command'], report['base'])
         if candidate != report['candidate'] or report['status'] in {'passed', 'source-changed', 'incomplete'}:
             raise ValueError('Recovery requires the unchanged failed candidate; correct invalid evidence at its owner')
-        group = report['process'].get('child_group')
-        if group:
-            try:
-                os.killpg(group, 0)
-            except ProcessLookupError:
-                pass
-            else:
-                raise ValueError('Attempt children still exist; complete process cleanup before recovery')
+        active_path = root / 'target/verification/active.json'
+        require_cleanup(active_path)
         failures = [s for s in report.get('steps', []) if s['status'] == 'failed'
-                    and not any(child.get('parent') == s['id'] for child in report['steps'])]
+                    and s.get('parent') is None]
         if report['status'] == 'failed' and not failures:
             raise ValueError('No registered targeted boundary; correct the failed source before retry')
         if report['status'] == 'running':
             observe(root, 'lost-process', run_id=attempt, process=report['process'])
         started = runner.source_identity(root)
+        recovery = {'version': 1, 'candidate': candidate, 'reason': reason, 'status': 'running', 'process': process_identity(),
+                    'report_sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'source': started,
+                    'utc': datetime.now(timezone.utc).isoformat(), 'boundaries': [s['stage'] for s in failures]}
+        recovery_path = path.parent / 'recovery.json'
+        def record_process(fields):
+            recovery['process'].update(fields)
+            runner.write_json(recovery_path, recovery)
+        record_process({})
+        runner.write_json(active_path, {'status': 'running', 'report': str(recovery_path)})
         passed = True
+        recovery_commands = json.loads((root / 'docs/agents/verification-policy.json').read_text())['complete'].get('recovery', {})
         for failure in failures:
-            code, interrupted = runner.execute(failure['command'], os.environ.copy(), True)
+            command = recovery_commands.get(failure['stage'], failure['command'])
+            code, interrupted = runner.execute(command, environment(), True, record_process)
             passed = passed and code == 0 and not interrupted
         if report['status'] == 'infrastructure-failed':
             passed = shutil.which(report['command'][0]) is not None
         passed = passed and started == runner.source_identity(root)
-        recovery = {'version': 1, 'candidate': candidate, 'reason': reason, 'status': 'passed' if passed else 'failed',
-                    'report_sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
-                    'utc': datetime.now(timezone.utc).isoformat(), 'source': started, 'boundaries': [s['stage'] for s in failures]}
-        runner.write_json(path.parent / 'recovery.json', recovery)
+        recovery['status'] = 'passed' if passed else 'failed'
+        runner.write_json(recovery_path, recovery)
+        runner.write_json(active_path, {'status': 'settled'})
         observe(root, 'recovery', run_id=attempt, **recovery)
         return 0 if passed else 1

@@ -1,7 +1,6 @@
 """Observe complete admission through the public command and real child processes."""
 
 import json
-from pathlib import Path
 import shutil
 import shlex
 import os
@@ -25,12 +24,15 @@ class CandidateCommandTests(unittest.TestCase):
         data['rules'].append({'pattern': 'Makefile', 'kind': 'verification', 'group': 'complete'})
         policy.write_text(json.dumps(data))
         child = "from pathlib import Path; p=Path('target/launches'); p.write_text(p.read_text()+'x' if p.exists() else 'x')"
+        self.install_child(child)
+        self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+
+    def install_child(self, child):
         command = [sys.executable, str(verification_tests.COMMAND), 'step', 'sample', '--', sys.executable, '-c', child]
         (self.root / 'Makefile').write_text('verify-local-steps:\n\t@' + shlex.join(command) + '\n')
         self.repo.git('add', '.')
         self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
-                      'commit', '--quiet', '-m', 'Add complete fixture.')
-        self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+                      'commit', '--quiet', '-m', 'Set complete child.')
 
     def run_complete(self, *args):
         return self.repo.cli('run', *args, '--', 'make', 'verify-local-steps')
@@ -46,11 +48,7 @@ class CandidateCommandTests(unittest.TestCase):
 
     def test_running_duplicate_returns_active_attempt_and_interruption_requires_recovery(self):
         child = "import signal; print('ready', flush=True); signal.pause()"
-        command = [sys.executable, str(verification_tests.COMMAND), 'step', 'sample', '--', sys.executable, '-c', child]
-        (self.root / 'Makefile').write_text('verify-local-steps:\n\t@' + shlex.join(command) + '\n')
-        self.repo.git('add', '.')
-        self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
-                      'commit', '--quiet', '-m', 'Wait for interruption.')
+        self.install_child(child)
         with subprocess.Popen([sys.executable, str(verification_tests.COMMAND), 'run', '--', 'make', 'verify-local-steps'],
                               cwd=self.root, env=self.repo.environment, stdout=subprocess.PIPE,
                               stderr=subprocess.PIPE, text=True) as process:
@@ -73,12 +71,18 @@ class CandidateCommandTests(unittest.TestCase):
 
     def test_failure_requires_successful_targeted_recovery_and_retains_attempts(self):
         child = "from pathlib import Path; p=Path('target/launches'); p.write_text(p.read_text()+'x' if p.exists() else 'x'); raise SystemExit(0 if Path('target/repaired').exists() else 7)"
-        command = [sys.executable, str(verification_tests.COMMAND), 'step', 'sample', '--', sys.executable, '-c', child]
-        (self.root / 'Makefile').write_text('verify-local-steps:\n\t@' + shlex.join(command) + '\n')
-        self.repo.git('add', '.')
-        self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
-                      'commit', '--quiet', '-m', 'Fail at a targeted boundary.')
+        leaf = [sys.executable, str(verification_tests.COMMAND), 'step', 'leaf', '--', sys.executable, '-c',
+                "import os; assert os.environ.get('PREPARED') == 'yes'; " + child]
+        child = f"import os, subprocess; raise SystemExit(subprocess.call({leaf!r}, env={{**os.environ, 'PREPARED': 'yes'}}))"
+        policy = self.root / 'docs/agents/verification-policy.json'
+        data = json.loads(policy.read_text())
+        data['complete']['stages'].append('leaf')
+        policy.write_text(json.dumps(data))
+        self.install_child(child)
+        self.repo.environment.update(MAKEFLAGS='--no-print-directory', MAKELEVEL='1', MFLAGS='--no-print-directory')
         self.assertNotEqual(self.run_complete('--issue', '746', '--pr', '123').returncode, 0)
+        for key in ('MAKEFLAGS', 'MAKELEVEL', 'MFLAGS'):
+            self.repo.environment.pop(key)
         report = self.repo.report()
         self.assertEqual((report['issue'], report['pr'], report['purpose']), (746, 123, 'candidate'))
         self.assertNotEqual(self.run_complete().returncode, 0)
@@ -148,7 +152,11 @@ class CandidateCommandTests(unittest.TestCase):
         tool.chmod(0o755)
         marker = self.root / 'target/disable-launch'
         marker.touch()
-        self.repo.environment['PATH'] = str(tools) + os.pathsep + self.repo.environment['PATH']
+        for name in ('git', 'cargo', 'rustc', 'node', 'pnpm', 'docker', 'ps'):
+            executable = shutil.which(name)
+            if executable:
+                (tools / name).symlink_to(executable)
+        self.repo.environment['PATH'] = str(tools)
         self.assertNotEqual(self.run_complete().returncode, 0)
         report = self.repo.report()
         self.assertEqual(report['status'], 'infrastructure-failed')
@@ -160,3 +168,28 @@ class CandidateCommandTests(unittest.TestCase):
         retry = self.run_complete()
         self.assertEqual(retry.returncode, 0, retry.stderr)
         self.assertEqual((self.root / 'target/launches').read_text(), 'x')
+
+    def test_lost_parent_cannot_admit_changed_candidate_while_children_survive(self):
+        child = "import signal; print('ready', flush=True); signal.pause()"
+        self.install_child(child)
+        with subprocess.Popen([sys.executable, str(verification_tests.COMMAND), 'run', '--', 'make', 'verify-local-steps'],
+                              cwd=self.root, env=self.repo.environment, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True) as process:
+            group = None
+            try:
+                while process.stdout.readline().strip() != 'ready':
+                    self.assertIsNone(process.poll())
+                group = self.repo.report()['process']['child_group']
+                process.kill()
+                process.wait(timeout=10)
+                self.repo.environment['CANDIDATE_CASE'] = 'changed'
+                result = self.run_complete()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('cleanup', result.stderr)
+                self.assertEqual(len(list(self.root.glob('target/verification/*/report.json'))), 1)
+            finally:
+                if group:
+                    os.killpg(group, signal.SIGTERM)
+                if process.poll() is None:
+                    process.kill()
+                process.communicate(timeout=10)

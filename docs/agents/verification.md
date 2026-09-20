@@ -121,31 +121,24 @@ review. New frameworks remain ineligible until the policy and runner support the
 
 `make verify-local BASE=origin/main VERIFY_ARGS='--issue 746 --pr 123'` records
 explicit attribution. Omit unknown identities. Optional `--purpose` and `--trigger`
-record invocation context; they do not grant admission. The complete entry binds
-source, base, policy, discovered membership, command, tool bytes and versions,
-runner bytes, host, and an environment digest. Environment values are not recorded.
+record invocation context. Source, base, policy, membership, command, tool bytes
+and versions (including Chrome), runners, host, and an environment digest bind
+admission. Environment values and inherited Make orchestration flags are excluded.
+An active duplicate returns its run identity. A valid matching success returns
+its original report without another child. Older reports lack reuse authority.
 
-A duplicate active request returns its run identity. A valid matching complete
-success returns its original report without another child. Historical reports
-without candidate identity are retained but cannot authorize reuse. Request records
-in `target/verification/requests/` distinguish admission, refusal, active return,
-reuse, recovery, and completion. Reports retain process identity and UTC and
-monotonic timing. These files are local observations, not product domain records.
+An unchanged failure refuses a complete retry. Run
+`python3 scripts/verification.py recover --attempt <run-id> --reason '<reason>'`.
+Recovery executes the failed owning stage with policy-declared preparation.
+Interruption or process loss requires child cleanup; a known launch infrastructure
+fault also requires an available executable. Successful recovery binds the original
+report and unchanged source. Invalid evidence needs correction at its owner.
 
-An unchanged failed attempt refuses another complete run. Use the named targeted
-boundary through `python3 scripts/verification.py recover --attempt <run-id>
---reason '<recovery reason>'`. Recovery runs the recorded failed leaf commands;
-it does not run the complete entry. A failed recovery cannot authorize a retry.
-An interrupted or lost process requires its child process group to be absent.
-A known launch infrastructure failure also requires the executable to be available.
-Recovery binds the original report and unchanged source; every observation and
-attempt is retained. Invalid or source-changing evidence needs correction at its
-owner. Preflight refusal creates a request record without consuming an attempt.
-
-The readiness boundary currently enforces clean source and input ownership.
-Candidate-bound review imports are delivered separately. Existing independent
-reviews and evidence publication remain required; local reuse does not assert
-review approval or bypass the protected evidence gate.
+Local records under `target/verification/` retain requests, refusals, attempts,
+reuse, recovery reasons, process identity, and UTC/monotonic timing. Preflight
+refusal consumes no attempt. These are not product domain records. The readiness
+boundary checks clean source and input ownership; review imports arrive separately.
+Existing independent reviews and protected evidence publication remain required.
 
 ## Candidate evidence publication
 

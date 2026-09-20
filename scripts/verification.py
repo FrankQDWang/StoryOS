@@ -230,6 +230,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
               "environment": {"system": platform.system(), "machine": platform.machine(),
                               "python": platform.python_version()}}
     if context:
+        import verification_candidate
         report.update(context, run_id=directory.name)
     def process_observation(fields):
         report["process"].update(fields)
@@ -262,7 +263,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             code = 0
         else:
             cache.discard()
-            code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_RUN": str(directory)},
+            code, interrupted = execute(command, {**(verification_candidate.environment() if context else os.environ),
+                                                  "STORYOS_VERIFICATION_RUN": str(directory)},
                                         os.name == "posix", process_observation if context else None)
         report["source_end"] = source_identity(root)
         report["status"] = "passed" if code == 0 else "failed"
