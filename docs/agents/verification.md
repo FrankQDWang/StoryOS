@@ -87,6 +87,32 @@ Complete candidate verification, PostgreSQL fixtures, ordered HTTP groups, exact
 oracles and both recovery drills remain mandatory.
 The PR sentinel checks the policy and runner; a separate gate validates complete reports.
 
+## Retained workflow graphs
+
+Daily and targeted plans include a version 1 `graph`. Complete reports retain the
+same graph beside `plan` to preserve the protected evidence format. Use
+`make verify-plan VERIFY_ARGS='--profile complete'` to read the committed HEAD
+workflow without execution. Daily exports read current working inputs.
+
+The policy owns operation types, preparation requirements, and check membership.
+The exporter combines these definitions with discovered files and shared phases.
+Each graph binds source, policy, file membership, and plan identity. Stable file
+IDs contain the check profile and repository-relative path. A rename removes the
+old ID and adds a new ID; snapshots do not infer a rename from similar bytes.
+Missing historical graphs remain unknown. No old report is changed.
+Published evidence uses graph digests to fit the comment limit. The validator
+rebuilds the complete graph from candidate inputs and checks its digest. Local
+reports retain the full snapshots.
+
+`dependencies` run from prerequisite to consumer. Edges marked `both-selected`
+retain phase order without selecting an excluded phase. `relations` distinguish
+containment from file membership. A file is a whole selection unit, never a test
+name filter. Membership does not claim separate execution, success, or duration.
+Nodes mark selection and distinguish checks, aggregates, files, builds, setup,
+resets, and cleanup. Existing plan checks retain pending reasons. Graph export
+validates identities, edges, cycles, and file coverage before execution. It does
+not schedule work or change the existing execution order.
+
 ## Shared Web test phases
 
 Shared HTTP and process-cut tests require one first-line JSON declaration:

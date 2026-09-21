@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 import verification_cache
+import verification_graph
 
 
 def targeted_plan(root, check):
@@ -29,6 +30,7 @@ def targeted_plan(root, check):
     import verification_candidate
     plan['execution_inputs_sha256'] = verification_cache.digest({k: v for k, v in verification_candidate.environment().items()
         if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}})
+    verification_graph.attach(root, plan, json.loads(policy), files)
     plan['digest'] = verification_cache.digest(plan)
     return plan
 

@@ -78,7 +78,8 @@ def gate(root):
 
 
 def check(root, packet, candidate, baseline, head, base, *, policy_review_required=True, emit=True):
-    expected = verification.complete_plan(root, candidate, base)
+    expected = verification.complete_plan(root, candidate, base, with_graph=True)
+    graph = expected.pop("graph", None)
     if (packet["head"], packet["base"], packet["baseline"]) != (head, base, baseline):
         raise ValueError("Stale candidate or protected baseline")
     changed = verification.git(root, "diff", "--name-only", baseline, candidate, "--", *PROTECTED)
@@ -87,6 +88,8 @@ def check(root, packet, candidate, baseline, head, base, *, policy_review_requir
     if len(raw) > 2_000_000:
         raise ValueError("Evidence exceeds the report size limit")
     report = json.loads(raw)
+    if graph is not None and report.get("graph") not in (graph, {"version": 1, "sha256": verification.verification_graph.digest(graph)}):
+        raise ValueError("Evidence workflow graph is missing or stale")
     if (type(report["version"]) is not int or report["version"] != 1 or report["profile"] != "complete" or report["status"] != "passed"
             or report["command"] != ["make", "verify-local-steps"] or report["cache"]["status"] != "disabled"
             or set(report["environment"]) != {"system", "machine", "python"}
@@ -168,7 +171,7 @@ def main():
             packet = {"pr": args.pr, "head": args.head, "base": args.base, "baseline": args.baseline,
                       "summary": {"tree": report["source_start"]["tree"], "command": "make verify-local",
                                   "result": report["status"], "clean": not report["source_start"]["dirty"]},
-                      "report": base64.b64encode(gzip.compress(args.report.read_bytes(), mtime=0)).decode()}
+                      "report": base64.b64encode(gzip.compress(json.dumps(verification.verification_graph.evidence(report)).encode(), mtime=0)).decode()}
             if report.get("admission"):
                 packet["admission_version"] = 1
             policy = json.loads(verification.git(root, "show", f"{args.candidate}:docs/agents/verification-policy.json"))

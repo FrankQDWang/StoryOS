@@ -153,7 +153,7 @@ for arg in sys.argv:
 
     def test_package_prerequisite_rejects_bad_membership_before_node_install(self):
         for name in ("verification.py", "verification_shared.py", "verification_cache.py", "verification_daily.py",
-                     "verification_status.py", "verification_candidate.py"):
+                     "verification_status.py", "verification_graph.py", "verification_candidate.py"):
             shutil.copy(Path(__file__).parent / name, self.root / "scripts")
         (self.root / self.a).write_text("// Missing declaration.\n")
         result = subprocess.run(["make", "-f", str(Path(__file__).resolve().parent.parent / "Makefile"),
