@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 import subprocess
 import time
@@ -29,6 +30,11 @@ def sentinel(route, head, base, tree):
     if check.get('status') != 'completed' or check.get('conclusion') != 'success':
         raise ValueError('Current synthetic-merge verify success is required')
     logs = subprocess.check_output(['gh', 'api', f"{route}/actions/jobs/{check['id']}/logs", "--allow-escape-sequences"], text=True)
+    if tree is None:
+        trees = re.findall(r'Synthetic merge tree: ([0-9a-f]{40})(?:\r?\n|$)', logs)
+        if len(set(trees)) != 1:
+            raise ValueError('Verify must record one synthetic tree')
+        tree = trees[0]
     for label, value in [('Pull request base', base), ('Pull request head', head), ('Synthetic merge tree', tree)]:
         if not any(line.endswith(f'{label}: {value}') for line in logs.splitlines()):
             raise ValueError('Verify sentinel does not cover the current synthetic merge')
@@ -46,7 +52,8 @@ def current(root, pr, purpose):
     head, base = pull['head']['sha'], pull['base']['sha']
     if verification.git(root, 'rev-list', '--parents', '-n', '1', ref).split()[1:] != [base, head]:
         raise ValueError('Review candidate must match the PR synthetic merge parents')
-    verify = sentinel(route, head, base, verification.git(root, 'rev-parse', f'{ref}^{{tree}}'))
+    verify = sentinel(route, head, base, None if pull.get('merged') and purpose != 'candidate'
+                      else verification.git(root, 'rev-parse', f'{ref}^{{tree}}'))
     if purpose == 'candidate' and pull['state'] != 'open':
         raise ValueError('Candidate admission requires an open PR')
     revision = ref
@@ -94,7 +101,7 @@ def admission(root, context):
     expected, verify = current(root, context.get('pr'), context.get('purpose', 'candidate'))
     if (context.get('executor_context') != request['executor_context']
             or verification.git(root, 'rev-parse', context['base']) != expected['base']
-            or request['source'] != verification.source_identity(root) or request['verify'] != verify):
+            or request['verify'] != verify):
         raise ValueError('Review source, executor, base, or verify result changed')
     directory = root / 'target/verification/reviews' / request['digest']
     reviews = {}
@@ -109,7 +116,7 @@ def admission(root, context):
         if state['status'] != 'passed':
             raise ValueError(f"Required targeted result {check} is {state['status']}; {state['next_command']}")
         targeted[check] = json.loads(Path(state['report']).read_text())
-    return {'version': 1, 'request': request, 'reviews': reviews, 'targeted': targeted}
+    return {'version': 1, 'request': request, 'reviews': reviews, 'targeted': targeted, 'source': verification.source_identity(root)}
 
 
 def check_report(root, report, revision, base, head, pr):
@@ -126,7 +133,7 @@ def check_report(root, report, revision, base, head, pr):
     expected = binding(root, revision, base, head, pr, report['purpose'])
     validate(request, record['reviews'], expected)
     candidate = report['candidate']
-    if (request['source'] != report['source_start'] or request['executor_context'] != report['executor_context']
+    if (record['source'] != report['source_start'] or request['executor_context'] != report['executor_context']
             or report['pr'] != pr or candidate['plan'] != report['plan']
             or candidate['source'] != {k: v for k, v in report['source_start'].items() if k != 'write_stamps_sha256'}
             or candidate['command'] != report['command'] or set(record['targeted']) != set(policy['targeted'])):
@@ -134,8 +141,8 @@ def check_report(root, report, revision, base, head, pr):
     for check, result in record['targeted'].items():
         plan = result['plan']
         if (result['status'] != 'passed' or result['profile'] != 'targeted' or result['exit_code'] != 0
-                or result['source_start'] != request['source'] or result['source_end'] != request['source']
-                or plan['source'] != request['source'] or plan['check'] != check
+                or result['source_start'] != record['source'] or result['source_end'] != record['source']
+                or plan['source'] != record['source'] or plan['check'] != check
                 or plan['policy_sha256'] != expected['policy_sha256']
                 or plan['command'] != candidate_policy['targeted'][check]['command']
                 or plan['execution_inputs_sha256'] != candidate['inputs']
@@ -161,7 +168,7 @@ def main():
         if args.action == 'request':
             candidate, verify = current(root, args.pr, args.purpose)
             value = {'version': 1, 'candidate': candidate, 'verify': verify,
-                     'source': verification.source_identity(root), 'executor_context': args.executor_context}
+                     'executor_context': args.executor_context}
             value['digest'] = verification_cache.digest(value)
             path = root / 'target/verification/reviews' / value['digest'] / 'request.json'
         else:

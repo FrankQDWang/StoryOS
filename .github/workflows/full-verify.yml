@@ -2,10 +2,18 @@ name: Full repository verification
 
 on:
   workflow_dispatch:
+    inputs:
+      review_bundle:
+        description: Candidate request and independent reviews for manual-linux as JSON
+        required: true
+        type: string
 
 permissions:
+  actions: read
+  checks: read
   contents: read
   issues: read
+  pull-requests: read
 
 concurrency:
   group: storyos-full-verify-${{ github.ref }}
@@ -66,6 +74,31 @@ jobs:
           printf 'Google Chrome Stable: %s\n' "$chrome_version"
 
       - name: Run repository verification
-        run: make verify
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, pathlib, subprocess
+          bundle = json.loads(os.environ.pop('STORYOS_REVIEW_BUNDLE'))
+          request = bundle['request']
+          if request['candidate']['purpose'] != 'manual-linux':
+              raise SystemExit('Use a reviewed manual-linux request')
+          directory = pathlib.Path('target/verification/manual-linux')
+          directory.mkdir(parents=True, exist_ok=True)
+          path = directory / 'request.json'
+          path.write_text(json.dumps(request))
+          for axis in ('standards', 'spec'):
+              record = directory / (axis + '.json')
+              record.write_text(json.dumps(bundle['reviews'][axis]))
+              subprocess.run(['python3', 'scripts/verification_reviews.py', 'import', '--request', str(path), '--record', str(record)], check=True)
+          policy = json.loads(pathlib.Path('docs/agents/verification-policy.json').read_text())
+          for check in policy['complete']['admission']['targeted']:
+              subprocess.run(['make', 'verify-targeted', 'CHECK=' + check], check=True)
+          subprocess.run(['python3', 'scripts/verification.py', 'run', '--purpose', 'manual-linux',
+                          '--pr', str(request['candidate']['pr']), '--base', request['candidate']['base'],
+                          '--executor-context', request['executor_context'], '--review-request', str(path),
+                          '--', 'make', 'verify-local-steps'], check=True)
+          subprocess.run(['make', 'verify-tracker'], check=True)
+          PYTHON
         env:
           GH_TOKEN: ${{ github.token }}
+          STORYOS_REVIEW_BUNDLE: ${{ inputs.review_bundle }}
+          PYTHONDONTWRITEBYTECODE: "1"

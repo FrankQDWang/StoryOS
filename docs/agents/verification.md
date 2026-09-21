@@ -1,62 +1,35 @@
 # Repository verification
 
-## Start here
-
-Start each task with `make verify-status BASE=origin/main`. Read the plan and next
-command before execution. For ordinary edits, use `make verify-changed`; run the
-smallest registered check after a fix. For test additions, moves, renames, or
-removals, run `make verify-policy` and inspect a new plan. Pending is not PASS.
-Commit only when the source is ready for candidate review.
+Start with `make verify-status BASE=origin/main`; use `make verify-changed` after edits.
+For test lifecycle changes, run `make verify-policy` and inspect a new plan.
 
 ## Candidate review and admission
 
-Open the PR and wait for its current `verify` sentinel. Keep one executor context
-identifier for this delivery. Create a request on the clean matching candidate:
+Open the PR and wait for current `verify` success. On the clean candidate, run
+`python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
+Give its printed request and scoped diff to separate Standards and Spec reviewers.
+Each returns JSON with `request_sha256` (the request digest), `axis` (`standards`
+or `spec`), a distinct `reviewer_context`, `result` (`PASS` or `FAIL`), and `evidence`.
+Neither reviewer context may equal the executor context. Import each record with
+`python3 scripts/verification_reviews.py import --request <path> --record <review-json>`.
 
-```sh
-python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>
-```
+The newest retained import per axis governs admission. Requests bind candidate
+identity, policy, membership, scope, purpose, and sentinel success. Context IDs assert
+consistency, not authenticated identity. After review fixes or policy drift,
+commit, refresh the sentinel and request, and obtain new independent imports.
+Run the policy-required targeted checks on current sources in the same environment, then run `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` once.
 
-The command prints an ignored request path. Give that exact request and its scoped
-base-to-candidate diff to separate Standards and Spec reviewers. Each reviewer
-returns JSON with `request_sha256` equal to the request digest, `axis` equal to
-`standards` or `spec`, a distinct `reviewer_context`, `result` (`PASS` or `FAIL`),
-and `evidence` describing the review. Neither reviewer context may equal the
-executor context. Import each returned record:
+For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json`
+and its recovery command. Recovery needs current reviews and targeted results.
+Source fixes return to targeted checks and a new candidate. Retain every attempt.
 
-```sh
-python3 scripts/verification_reviews.py import --request <request-path> --record <review-json>
-```
-
-All imports remain retained; the newest record for each axis governs admission.
-Context identifiers assert consistency, not authenticated identity. Review requests
-bind PR, base, head, synthetic tree, policy, membership, scope, source, and verify
-success. Policy changes and review fixes require targeted checks, a new committed
-candidate, current sentinel success, and new independent imports.
-
-Run the policy-required targeted checks on this exact clean source and with the
-same environment used for complete verification. Inspect their current status.
-Then run the complete entry once:
-
-```sh
-make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <request-path>'
-```
-
-Publish the report with `make verify-evidence`. Its embedded admission and review
-records must agree with the report and the current candidate. The installation PR
-uses the existing protected validator and `--policy-reviewed` after actual review;
-the compatible reader and new records land before protected-main enforcement
-activates. Later candidates require records; a boolean declaration is insufficient.
-Historical reports keep their original fields and gain no invented review facts.
-
-After a failed complete run, use `status --attempt` and the returned recovery
-command. Unchanged failures require current review and targeted records before
-scoped recovery. Source fixes return to targeted checks and a new candidate;
-retain every attempt. Equal merged trees use `make verify-tracker` only. For a
-different merged tree, create a fresh request with `--purpose post-merge-different-tree`
-and use that same purpose and the request's base with `make verify`. Manual Linux
-verification uses `--purpose manual-linux` in both commands, with local targeted
-results and fresh independent imports. These purposes retain the complete stages.
+Equal merged trees use `make verify-tracker` only. A different tree needs a fresh
+request and `make verify` with `--purpose post-merge-different-tree` and the request's
+base. Manual Linux uses `--purpose manual-linux` in both request and execution.
+The manual Linux workflow accepts JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}`.
+Supply actual independent reviews for its exact selected Git tree. It imports them
+and runs fresh targeted checks on Linux before complete execution. Local source
+stamps belong to admission, so review records remain portable across checkouts.
 
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.

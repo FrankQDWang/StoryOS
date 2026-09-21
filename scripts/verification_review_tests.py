@@ -31,7 +31,7 @@ class ReviewAdmissionTests(unittest.TestCase):
         return subprocess.run([sys.executable, str(verification_candidate_tests.verification_tests.COMMAND.with_name('verification_reviews.py')), *args],
                               cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
 
-    def prepare_reviews(self):
+    def prepare_reviews(self, purpose="candidate"):
         import os
         import sys
         self.base = self.repo.git('rev-parse', 'origin/main')
@@ -55,7 +55,7 @@ class ReviewAdmissionTests(unittest.TestCase):
                       'if "check-runs" in sys.argv[2] else json.dumps(p))\n')
         gh.chmod(0o755)
         self.repo.environment['PATH'] = str(tools) + os.pathsep + self.repo.environment['PATH']
-        result = self.review_cli('request', '--pr', '745', '--executor-context', 'executor')
+        result = self.review_cli('request', '--pr', '745', '--executor-context', 'executor', '--purpose', purpose)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.request_path = result.stdout.strip()
         self.request = json.loads(__import__('pathlib').Path(self.request_path).read_text())
@@ -67,8 +67,8 @@ class ReviewAdmissionTests(unittest.TestCase):
             imported = self.review_cli('import', '--request', self.request_path, '--record', str(record))
             self.assertEqual(imported.returncode, 0, imported.stderr)
 
-    def complete(self):
-        return self.fixture.run_complete('--pr', '745', '--executor-context', 'executor', '--review-request', self.request_path)
+    def complete(self, purpose="candidate"):
+        return self.fixture.run_complete('--pr', '745', '--executor-context', 'executor', '--review-request', self.request_path, '--purpose', purpose)
 
     def test_current_reviews_admit_and_policy_drift_refuses_before_second_child(self):
         self.prepare_reviews()
@@ -151,3 +151,21 @@ class ReviewAdmissionTests(unittest.TestCase):
         self.assertIn('Review', result.stderr)
         self.assertEqual(path.read_bytes(), original)
         self.assertFalse(any(json.loads(p.read_text())['profile'] == 'recovery' for p in self.root.glob('target/verification/*/report.json')))
+
+    def test_different_merge_tree_gets_a_new_post_merge_request(self):
+        self.prepare_reviews()
+        (self.root / 'AGENTS.md').write_text('Merged source differs from the verified candidate.\n')
+        self.fixture.install_child("print('new candidate')")
+        tree = self.repo.git('rev-parse', 'HEAD^{tree}')
+        merged = self.repo.git('commit-tree', tree, '-p', self.base, '-p', self.head, '-m', 'Changed merge tree')
+        self.live.write_text(json.dumps({'head': {'sha': self.head}, 'base': {'sha': self.base},
+                                        'state': 'closed', 'merged': True, 'merge_commit_sha': merged}))
+        result = self.review_cli('request', '--pr', '745', '--executor-context', 'executor', '--purpose', 'post-merge-different-tree')
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_manual_linux_reviews_survive_checkout_stamps_with_fresh_targeted_results(self):
+        self.prepare_reviews('manual-linux')
+        (self.root / 'AGENTS.md').touch()
+        self.assertEqual(self.repo.cli('targeted', '--check', 'cheap').returncode, 0)
+        result = self.complete('manual-linux')
+        self.assertEqual(result.returncode, 0, result.stderr)
