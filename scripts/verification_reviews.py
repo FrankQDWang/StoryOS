@@ -101,7 +101,7 @@ def admission(root, context):
     expected, verify = current(root, context.get('pr'), context.get('purpose', 'candidate'))
     if (context.get('executor_context') != request['executor_context']
             or verification.git(root, 'rev-parse', context['base']) != expected['base']
-            or request['verify'] != verify):
+            or request['verify'] != {k: v for k, v in verify.items() if k != 'check_id'}):
         raise ValueError('Review source, executor, base, or verify result changed')
     directory = root / 'target/verification/reviews' / request['digest']
     reviews = {}
@@ -116,7 +116,7 @@ def admission(root, context):
         if state['status'] != 'passed':
             raise ValueError(f"Required targeted result {check} is {state['status']}; {state['next_command']}")
         targeted[check] = json.loads(Path(state['report']).read_text())
-    return {'version': 1, 'request': request, 'reviews': reviews, 'targeted': targeted, 'source': verification.source_identity(root)}
+    return {'version': 1, 'request': request, 'reviews': reviews, 'targeted': targeted, 'verify': verify, 'source': verification.source_identity(root)}
 
 
 def check_report(root, report, revision, base, head, pr):
@@ -133,7 +133,8 @@ def check_report(root, report, revision, base, head, pr):
     expected = binding(root, revision, base, head, pr, report['purpose'])
     validate(request, record['reviews'], expected)
     candidate = report['candidate']
-    if (record['source'] != report['source_start'] or request['executor_context'] != report['executor_context']
+    if ({k: v for k, v in record['verify'].items() if k != 'check_id'} != request['verify']
+            or record['source'] != report['source_start'] or request['executor_context'] != report['executor_context']
             or report['pr'] != pr or candidate['plan'] != report['plan']
             or candidate['source'] != {k: v for k, v in report['source_start'].items() if k != 'write_stamps_sha256'}
             or candidate['command'] != report['command'] or set(record['targeted']) != set(policy['targeted'])):
@@ -167,7 +168,7 @@ def main():
         root = Path(verification.git(Path.cwd(), 'rev-parse', '--show-toplevel'))
         if args.action == 'request':
             candidate, verify = current(root, args.pr, args.purpose)
-            value = {'version': 1, 'candidate': candidate, 'verify': verify,
+            value = {'version': 1, 'candidate': candidate, 'verify': {k: v for k, v in verify.items() if k != 'check_id'},
                      'executor_context': args.executor_context}
             value['digest'] = verification_cache.digest(value)
             path = root / 'target/verification/reviews' / value['digest'] / 'request.json'

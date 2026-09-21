@@ -186,7 +186,7 @@ def recover(root, attempt, reason):
         candidate = identity(root, report['command'], report['base'])
         if candidate != report['candidate'] or report['status'] in {'passed', 'source-changed', 'incomplete'}:
             raise ValueError('Recovery requires the unchanged failed candidate; correct invalid evidence at its owner')
-        readiness(root, candidate, report)
+        admission = readiness(root, candidate, report)
         active_path = root / 'target/verification/active.json'
         require_cleanup(active_path)
         failures = [s for s in report.get('steps', []) if s['status'] == 'failed'
@@ -196,7 +196,7 @@ def recover(root, attempt, reason):
         if report['status'] == 'running':
             observe(root, 'lost-process', run_id=attempt, process=report['process'])
         started = runner.source_identity(root)
-        recovery = {'version': 1, 'candidate': candidate, 'reason': reason, 'status': 'running', 'process': process_identity(),
+        recovery = {'version': 1, 'candidate': candidate, 'admission': admission, 'reason': reason, 'status': 'running', 'process': process_identity(),
                     'report_sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'source': started,
                     'utc': datetime.now(timezone.utc).isoformat(), 'boundaries': [s['stage'] for s in failures]}
         recovery_path = path.parent / 'recovery.json'
@@ -206,7 +206,7 @@ def recover(root, attempt, reason):
         runner.write_json(active_path, {'status': 'running', 'report': str(path.parent.parent / run_id / 'report.json')})
         observe(root, 'requested', profile='recovery', run_id=run_id, recovery_of=attempt, issue=report.get('issue'))
         code = runner.record_run(root, command, context={'run_id': run_id, 'profile': 'recovery',
-                                 'issue': report.get('issue'), 'pr': report.get('pr'), 'recovery_of': attempt,
+                                 'issue': report.get('issue'), 'pr': report.get('pr'), 'recovery_of': attempt, 'admission': admission,
                                  'retry_reason': reason, 'effective_scope': recovery['boundaries']})
         recovery['run_id'] = run_id
         passed = code == 0 and started == runner.source_identity(root)

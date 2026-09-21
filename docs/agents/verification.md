@@ -5,31 +5,21 @@ For test lifecycle changes, run `make verify-policy` and inspect a new plan.
 
 ## Candidate review and admission
 
-Open the PR and wait for current `verify` success. On the clean candidate, run
-`python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
-Give its printed request and scoped diff to separate Standards and Spec reviewers.
-Each returns JSON with `request_sha256` (the request digest), `axis` (`standards`
-or `spec`), a distinct `reviewer_context`, `result` (`PASS` or `FAIL`), and `evidence`.
-Neither reviewer context may equal the executor context. Import each record with
-`python3 scripts/verification_reviews.py import --request <path> --record <review-json>`.
-
-The newest retained import per axis governs admission. Requests bind candidate
-identity, policy, membership, scope, purpose, and sentinel success. Context IDs assert
-consistency, not authenticated identity. After review fixes or policy drift,
-commit, refresh the sentinel and request, and obtain new independent imports.
-Run the policy-required targeted checks on current sources in the same environment, then run `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` once.
+1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
+2. Give the printed request and scoped diff to separate Standards and Spec reviewers. Each returns JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context`, `result` (`PASS` or `FAIL`), and `evidence`. All three contexts must differ; IDs assert consistency, not authenticated identity.
+3. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
+4. Run the policy-required targeted checks on current sources in the same environment. Run `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` once, then follow evidence publication below.
 
 For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json`
 and its recovery command. Recovery needs current reviews and targeted results.
 Source fixes return to targeted checks and a new candidate. Retain every attempt.
 
-Equal merged trees use `make verify-tracker` only. A different tree needs a fresh
-request and `make verify` with `--purpose post-merge-different-tree` and the request's
-base. Manual Linux uses `--purpose manual-linux` in both request and execution.
-The manual Linux workflow accepts JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}`.
-Supply actual independent reviews for its exact selected Git tree. It imports them
-and runs fresh targeted checks on Linux before complete execution. Local source
-stamps belong to admission, so review records remain portable across checkouts.
+Equal merged trees use `make verify-tracker` only. Different trees need a fresh request
+and `make verify` with `--purpose post-merge-different-tree` and the request's base.
+Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
+JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
+It imports actual independent reviews and runs fresh targeted checks on Linux.
+Local source stamps belong to admission; candidate-bound reviews remain portable.
 
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.
