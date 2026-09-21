@@ -68,7 +68,6 @@ def attach(root, plan, policy, files, revision=None):
             if 'check:' + stage != owner and group not in {'node-postgresql', 'node-process-cut'}:
                 relations.add(('check:' + stage, owner, 'contains'))
         if group.startswith('cargo:'):
-            relations.add(('check:cargo', owner, 'contains'))
             dependencies.update(('check:' + dep, owner) for dep in profiles.get('cargo', {}).get('requires', []))
     previous = None
     for phase in verification_shared.plan(root, policy, current, revision):
@@ -120,8 +119,6 @@ def attach(root, plan, policy, files, revision=None):
             if owner not in nodes:
                 raise ValueError(f'Missing workflow profile: {check["group"]}')
             selected.add(owner)
-            if check['group'].startswith('cargo:'):
-                selected.add('check:cargo')
             selected.update(file_ids[path] for path in check['files'] if path in file_ids)
             if check.get('requires_package'):
                 selected.add('check:release-package')
