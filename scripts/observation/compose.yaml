@@ -4,6 +4,9 @@ services:
     command: [python, /collector.py, watch, --records, /records, --database, /observation/runs.sqlite]
     volumes:
       - ../verification_observation.py:/collector.py:ro
+      - ../verification_observation_cost.py:/verification_observation_cost.py:ro
+      - ../verification_observation_rules.py:/verification_observation_rules.py:ro
+      - ./settings.json:/observation/settings.json:ro
       - ../../target/verification:/records:ro
       - ../../target/observation/data:/observation
     network_mode: none
@@ -27,7 +30,8 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
-      GF_UNIFIED_ALERTING_ENABLED: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_UNIFIED_ALERTING_ENABLED: "true"
     cap_drop: [ALL]
     mem_limit: 512m
     cpus: 1

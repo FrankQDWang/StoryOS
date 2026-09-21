@@ -271,3 +271,43 @@ check starts an actual disposable managed command and queries the provisioned
 Grafana dashboard through the real SQLite plugin on a temporary loopback port.
 It removes its containers and temporary database when complete. It does not run
 the product suite. `make verify-policy` discovers the collector tests normally.
+
+### Issue cost and advisory rules
+
+The same dashboard shows `issue_cost`, `request_cost`, `stage_cost`, and
+`violations`. Root totals include only recorded actual starts. They retain the
+profile and final state, including failures and interruptions. Reused reports
+and refused requests stay separate. `observed_runs` retains historical and
+incomplete observations; missing attribution and duration remain unknown.
+
+Stage intervals partition each root duration. Child intervals replace parent
+intervals; concurrent leaf intervals have one `concurrent` cost. Remaining time
+is `unclassified`. These are elapsed costs, not CPU measurements. An optional
+`blocked_intervals` list contains explicit monotonic start/end pairs. An empty
+list records zero; an absent list means unknown. Multiple roots need one explicit
+`blocked_clock` identity before their intervals can form an Issue-wide union.
+The Issue blocked total repeats across its profile rows; do not sum those cells.
+Current executors do not measure user blocking, so their value remains unknown.
+
+Advisory rules detect daily complete dispatch, duplicate candidate starts without
+recorded recovery, unassigned starts, overlapping checkout resource use, stale
+heartbeats, and comparable runtime growth. Requests do not become executed
+violations. A stale heartbeat means unknown liveness. Runtime comparison requires
+an explicit recorded `build_state` (`cold` or `warm`), equal effective scope,
+policy, tools, execution inputs, runners, host and repository. Missing facts or
+samples stay unknown. Current reports omit build state and do not establish a
+runtime benchmark. Never edit original reports to add these observations.
+
+`scripts/observation/settings.json` sets the heartbeat and comparison thresholds,
+record batch cap, and database size guard. Compose caps CPU and memory. Grafana
+refreshes every five seconds and evaluates provisioned rules every ten seconds.
+There is no external notification destination. Grafana rules query the same
+`violations` view as the dashboard and cannot authorize execution or retries.
+
+Collection prints wall and CPU seconds, peak process RSS and database bytes.
+`make observe-smoke` measures 1,000 synthetic retained roots plus one actual
+bounded managed command, queries the real dashboard, waits for a firing rule,
+restarts observation without restarting that command, and records container CPU,
+memory and block I/O. This is synthetic overhead evidence, not a product speedup.
+The original records survive observation downtime and rebuild. The database
+size guard stops further collection above 256 MiB; it never removes raw records.

@@ -31,7 +31,7 @@ def main():
         value['targeted'] = {'sample': {'command': [sys.executable, '-c', child], 'clean': False}}
         policy.write_text(json.dumps(value))
         process = subprocess.Popen([sys.executable, str(verification_tests.COMMAND), 'targeted',
-            '--check', 'sample', '--issue', '749'], cwd=repo.root, env=repo.environment,
+            '--check', 'sample', '--issue', '750'], cwd=repo.root, env=repo.environment,
             stdin=subprocess.PIPE, stdout=subprocess.DEVNULL)
         records = repo.root / 'target/verification'
         deadline = time.monotonic() + 120
@@ -39,6 +39,16 @@ def main():
             if time.monotonic() > deadline or process.poll() is not None:
                 raise RuntimeError('Synthetic managed command did not start')
             time.sleep(0.1)
+        for index in range(1000):
+            directory = records / f'synthetic-{index:04}'
+            directory.mkdir()
+            (directory / 'report.json').write_text(json.dumps({'record_version': 1,
+                'run_id': directory.name, 'status': 'interrupted', 'profile': 'targeted',
+                'attempt_started': True, 'started_monotonic': 100, 'duration_seconds': 10,
+                'started_at': '2026-09-21T00:00:00+00:00'}))
+        measured = subprocess.check_output([sys.executable, str(root / 'scripts/verification_observation.py'),
+            'collect', '--records', str(records), '--database', str(output / 'data/runs.sqlite')], text=True)
+        overhead = [json.loads(line) for line in measured.splitlines()]
         override = output / 'compose.yaml'
         override.write_text('services:\n  collector:\n    volumes:\n'
             f'      - {records}:/records:ro\n      - {output}/data:/observation\n'
@@ -50,6 +60,7 @@ def main():
         url = 'http://' + port
         dashboard = json.loads((root / 'scripts/observation/dashboards/live.json').read_text())
         deadline = time.monotonic() + 90
+        refresh_started = time.monotonic()
         while True:
             try:
                 with urllib.request.urlopen(url + '/api/dashboards/uid/storyos-verification', timeout=3) as response:
@@ -64,7 +75,7 @@ def main():
                     if result.get('error'):
                         raise RuntimeError(result['error'])
                     frames.extend(result['frames'])
-                if 'sample' in json.dumps(frames) and '749' in json.dumps(frames):
+                if 'sample' in json.dumps(frames) and '750' in json.dumps(frames):
                     break
             except (OSError, http.client.HTTPException, RuntimeError):
                 if time.monotonic() > deadline:
@@ -72,6 +83,47 @@ def main():
             if time.monotonic() > deadline:
                 raise RuntimeError('The Grafana live query did not show the managed command')
             time.sleep(1)
+        with urllib.request.urlopen(url + '/api/prometheus/grafana/api/v1/rules', timeout=5) as response:
+            alert_rules = json.load(response)
+        deadline = time.monotonic() + 60
+        while not any(rule.get('name') == 'unassigned' and rule.get('state') == 'firing'
+                      for group in alert_rules['data']['groups'] for rule in group['rules']):
+            if time.monotonic() > deadline:
+                raise RuntimeError(f'Grafana did not evaluate the synthetic violation: {alert_rules}')
+            time.sleep(1)
+            with urllib.request.urlopen(url + '/api/prometheus/grafana/api/v1/rules', timeout=5) as response:
+                alert_rules = json.load(response)
+        subprocess.run([*compose, 'restart', 'collector', 'grafana'], check=True, timeout=30)
+        url = 'http://' + subprocess.check_output([*compose, 'port', 'grafana', '3000'], text=True).strip()
+        if process.poll() is not None or len(list(records.glob('*/report.json'))) != 1001:
+            raise RuntimeError('Observation restart changed the managed run')
+        deadline = time.monotonic() + 60
+        while True:
+            if time.monotonic() > deadline:
+                raise RuntimeError('Grafana did not recover after restart')
+            try:
+                with urllib.request.urlopen(url + '/api/health', timeout=3) as response:
+                    if json.load(response)['database'] == 'ok':
+                        break
+            except (OSError, http.client.HTTPException):
+                if time.monotonic() > deadline:
+                    raise
+            time.sleep(1)
+        query = {**dashboard['panels'][0]['targets'][0], 'datasource': dashboard['panels'][0]['datasource']}
+        deadline = time.monotonic() + 30
+        while True:
+            request = urllib.request.Request(url + '/api/ds/query', data=json.dumps({'queries': [query]}).encode(),
+                                             headers={'Content-Type': 'application/json'})
+            with urllib.request.urlopen(request, timeout=5) as response:
+                recovered = json.load(response)['results']['A']
+            if not recovered.get('error') and 'sample' in json.dumps(recovered):
+                break
+            if time.monotonic() > deadline:
+                raise RuntimeError('The observation query did not recover')
+            time.sleep(1)
+        refresh_seconds = time.monotonic() - refresh_started
+        stats = subprocess.check_output(['docker', 'stats', '--no-stream', '--format', '{{json .}}',
+            *subprocess.check_output([*compose, 'ps', '-q'], text=True).split()], text=True)
         for sql in ("CREATE TABLE forbidden_write (value TEXT)",
                     "ATTACH DATABASE '/var/lib/grafana/grafana.db' AS private"):
             query = {**dashboard['panels'][0]['targets'][0], 'queryText': sql,
@@ -86,7 +138,7 @@ def main():
                 rejected = json.load(response)['results']['A']
             if not rejected.get('error'):
                 raise RuntimeError('The data source did not reject a forbidden query')
-        print(json.dumps({'result': 'PASS', 'url': url, 'frames': frames}), flush=True)
+        print(json.dumps({'result': 'PASS', 'url': url, 'overhead': overhead, 'refresh_and_alert_seconds': refresh_seconds, 'container_stats': stats, 'alert_evaluation': 'firing', 'queried_panels': len(dashboard['panels'])}), flush=True)
     finally:
         if process:
             process.communicate(input=b'x', timeout=15)
