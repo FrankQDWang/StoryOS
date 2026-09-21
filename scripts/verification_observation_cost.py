@@ -35,6 +35,17 @@ def number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
 
 
+def validate(value):
+    for key in ('blocked_clock', 'stage', 'id', 'parent', 'profile'):
+        if value.get(key) is not None and not isinstance(value[key], str):
+            raise ValueError(f'Invalid {key}')
+    if value.get('issue') is not None and type(value['issue']) is not int:
+        raise ValueError('Invalid Issue attribution')
+    if 'blocked_intervals' in value and not (isinstance(value['blocked_intervals'], list) and all(
+            isinstance(pair, list) and len(pair) == 2 and all(number(x) for x in pair)
+            and pair[0] <= pair[1] for pair in value['blocked_intervals'])):
+        raise ValueError('Invalid blocking intervals')
+
 def partition(start, end, intervals):
     points = sorted({start, end, *(x for a, b, *_ in intervals for x in (a, b))})
     for a, b in zip(points, points[1:]):

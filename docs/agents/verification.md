@@ -262,7 +262,7 @@ start. The provisioned data source is not editable, opens SQLite with `mode=ro`,
 and has `attachLimit: 0`. Only the observation directory is mounted, read-only.
 The plugin's default internal-database block list remains enabled. The collector
 has no network. Grafana has no configured external notification destination, and
-analytics and alerting are disabled. Setup needs Internet access to pull images
+analytics is disabled; advisory alert evaluation stays local. Setup needs Internet access to pull images
 and the plugin; this does not change product hosting.
 
 Run `make verify-targeted CHECK=verification-observation-tests` for collector

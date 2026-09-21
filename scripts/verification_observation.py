@@ -70,6 +70,7 @@ def read_record(path, records):
         if kind == 'request' and (value.get('version') != 1 or not value.get('id') or not value.get('outcome')):
             quality = 'legacy'
         payload = {key: value[key] for key in FIELDS if key in value}
+        cost.validate(payload)
         if quality == 'legacy':
             payload.pop('issue', None)
             payload.pop('pr', None)
@@ -111,8 +112,9 @@ def collect(records, database, rebuild=False):
                 "SELECT 1 FROM sqlite_master WHERE type='table'").fetchone()):
             raise ValueError('The database is not a StoryOS observation read model')
         connection.execute('PRAGMA application_id=749')
-        if rebuild:
+        if rebuild or connection.execute('PRAGMA user_version').fetchone()[0] != 750:
             connection.execute('DROP VIEW IF EXISTS current_execution')
+            connection.execute('PRAGMA user_version=750')
         connection.executescript(SCHEMA + cost.SCHEMA + rules.SCHEMA)
         connection.execute('BEGIN IMMEDIATE')
         if rebuild:
