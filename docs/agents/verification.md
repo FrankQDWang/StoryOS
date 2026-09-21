@@ -1,5 +1,23 @@
 # Repository verification
 
+Start with `make verify-status BASE=origin/main`; use `make verify-changed` after edits.
+For test lifecycle changes, run `make verify-policy` and inspect a new plan.
+
+## Candidate review and admission
+
+1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
+2. Give the printed request and scoped diff to separate Standards and Spec reviewers. Each returns JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context`, `result` (`PASS` or `FAIL`), and `evidence`. All three contexts must differ; IDs assert consistency, not authenticated identity.
+3. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
+4. Run the policy-required targeted checks on current sources in the same environment. Run `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` once, then follow evidence publication below.
+
+For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
+Source fixes return to targeted checks and a new candidate. Retain every attempt.
+
+Equal merged trees use `make verify-tracker` only. Different trees need a fresh request and `make verify` with `--purpose post-merge-different-tree` and the request's base.
+Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
+JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
+It imports actual independent reviews and runs fresh targeted checks on Linux. Local source stamps belong to admission; candidate-bound reviews remain portable.
+
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.
 The [input policy](verification-policy.json) includes tracked files and new files that Git does not ignore. Its
@@ -144,7 +162,7 @@ report and unchanged source. Invalid evidence needs correction at its owner.
 Local records under `target/verification/` retain requests, refusals, attempts,
 reuse, recovery reasons, process identity, and UTC/monotonic timing. Preflight
 refusal consumes no attempt. These are not product domain records. The readiness
-boundary checks clean source and input ownership; review imports arrive separately.
+boundary checks clean source, input ownership, current targeted results, and independent review imports.
 Existing independent reviews and protected evidence publication remain required.
 
 ## Candidate evidence publication
@@ -152,9 +170,9 @@ Existing independent reviews and protected evidence publication remain required.
 1. Wait for the `verify` sentinel and independent Standards and Spec reviews. Resolve
    findings with targeted checks. Fetch current main and the PR synthetic merge.
 2. Run `make verify-local` once on the clean candidate tree that equals that merge tree.
-3. Publish with `make verify-evidence PR=<number> REPORT=<report-path>`. If protected
-   policy inputs changed, use `VERIFY_ARGS=--policy-reviewed` only after both independent
-   reviews cover that exact change. The publication records this explicit review declaration.
+3. Publish with `make verify-evidence PR=<number> REPORT=<report-path>`. The activated
+   contract requires current candidate review imports. Use `VERIFY_ARGS=--policy-reviewed`
+   only for the compatible installation against the earlier protected reader.
 4. Wait for `candidate-evidence` success, then merge. A changed head, base, tree, policy
    revision or discovered membership requires fresh evidence. Preserve strict branch protection.
 

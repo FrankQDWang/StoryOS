@@ -62,7 +62,12 @@ def gate(root):
                 break
         else:
             raise ValueError("No authorized complete candidate report was published")
+        if packet.get("pr") not in {None, number}:
+            raise ValueError("Evidence belongs to another PR")
         check(root, packet, candidate, baseline, head, base)
+        if packet.get("admission_version"):
+            import verification_reviews
+            verification_reviews.sentinel(route, head, base, verification.git(root, "rev-parse", f"{candidate}^{{tree}}"))
         latest = api(f"{route}/pulls/{number}")
         if (latest["head"]["sha"], latest["base"]["sha"]) != (head, base):
             raise ValueError("The candidate changed during validation")
@@ -72,13 +77,11 @@ def gate(root):
         raise
 
 
-def check(root, packet, candidate, baseline, head, base, *, policy_review_required=True):
+def check(root, packet, candidate, baseline, head, base, *, policy_review_required=True, emit=True):
     expected = verification.complete_plan(root, candidate, base)
     if (packet["head"], packet["base"], packet["baseline"]) != (head, base, baseline):
         raise ValueError("Stale candidate or protected baseline")
     changed = verification.git(root, "diff", "--name-only", baseline, candidate, "--", *PROTECTED)
-    if policy_review_required and changed and packet.get("policy_review") != {"tree": expected["tree"], "standards": "PASS", "spec": "PASS"}:
-        raise ValueError("Policy inputs changed; explicit independent Standards and Spec review is required")
     with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(packet["report"], validate=True))) as archive:
         raw = archive.read(2_000_001)
     if len(raw) > 2_000_000:
@@ -98,6 +101,12 @@ def check(root, packet, candidate, baseline, head, base, *, policy_review_requir
             or any(not re.fullmatch(r"[0-9a-f]{64}", source[key])
                    for key in ("inputs_sha256", "write_stamps_sha256", "index_sha256"))):
         raise ValueError("Candidate source identity changed or does not match")
+    import verification_reviews
+    verification_reviews.check_report(root, report, candidate, base, head, packet.get("pr"))
+    if policy_review_required and changed and not report.get("admission") and packet.get("policy_review") != {"tree": expected["tree"], "standards": "PASS", "spec": "PASS"}:
+        raise ValueError("Policy inputs changed; explicit independent Standards and Spec review is required")
+    if bool(report.get("admission")) != (packet.get("admission_version") == 1):
+        raise ValueError("Evidence admission version is inconsistent")
     steps = report["steps"]
     if not steps or {step["stage"] for step in steps} != set(expected["stages"]):
         raise ValueError("Mandatory verification stages are missing or unreviewed")
@@ -125,7 +134,8 @@ def check(root, packet, candidate, baseline, head, base, *, policy_review_requir
                    or any(arg == item["path"].removeprefix("apps/web/") or arg.endswith("/" + item["path"]) for arg in command)
                    for command in project):
             raise ValueError(f"No recorded execution covers {item['path']}")
-    print(f"Candidate evidence passed: {expected['tree']}")
+    if emit:
+        print(f"Candidate evidence passed: {expected['tree']}")
 
 
 def main():
@@ -155,16 +165,24 @@ def main():
             raise ValueError("The candidate head, base and protected baseline are required")
         if args.action in {"prepare", "publish"}:
             report = json.loads(args.report.read_bytes())
-            packet = {"head": args.head, "base": args.base, "baseline": args.baseline,
+            packet = {"pr": args.pr, "head": args.head, "base": args.base, "baseline": args.baseline,
                       "summary": {"tree": report["source_start"]["tree"], "command": "make verify-local",
                                   "result": report["status"], "clean": not report["source_start"]["dirty"]},
                       "report": base64.b64encode(gzip.compress(args.report.read_bytes(), mtime=0)).decode()}
+            if report.get("admission"):
+                packet["admission_version"] = 1
+            policy = json.loads(verification.git(root, "show", f"{args.candidate}:docs/agents/verification-policy.json"))
+            if policy["complete"].get("admission") or report.get("admission"):
+                check(root, packet, args.candidate, args.baseline, args.head, args.base, emit=False)
             if args.policy_reviewed:
                 packet["policy_review"] = {"tree": report["source_start"]["tree"], "standards": "PASS", "spec": "PASS"}
             body = PREFIX + json.dumps(packet, indent=2)
             if len(body) > 60_000:
                 raise ValueError("Evidence exceeds the publication size limit")
             if args.action == "publish":
+                if report.get("admission"):
+                    import verification_reviews
+                    verification_reviews.admission(root, report)
                 check(root, packet, args.candidate, args.baseline, args.head, args.base)
                 print(api(f"repos/{repository}/issues/{args.pr}/comments", {"body": body})["html_url"])
             else:

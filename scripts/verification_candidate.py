@@ -62,21 +62,25 @@ def process_identity():
         ['ps', '-o', 'lstart=', '-p', str(os.getpid())], text=True).strip(), 'nonce': uuid.uuid4().hex}
 
 
-def readiness(root, candidate):
-    """Validate preflight; candidate-bound review admission extends this boundary."""
+def readiness(root, candidate, context):
+    """Validate current source, targeted checks, and independent review records."""
     import verification as runner
     if candidate['source']['dirty']:
         raise ValueError('Complete verification requires a clean tracked and untracked worktree')
     runner.inventory(root)
+    import verification_reviews
+    return verification_reviews.admission(root, context)
 
 
 def validate_success(root, report):
     import verification_evidence
     source, plan = report['source_start'], report['plan']
-    packet = {'head': source['commit'], 'base': plan['base'], 'baseline': plan['base'],
+    head = report['admission']['request']['candidate']['head'] if report.get('admission') else source['commit']
+    packet = {'head': head, 'pr': report.get('pr'), 'base': plan['base'], 'baseline': plan['base'],
               'report': base64.b64encode(gzip.compress(json.dumps(report).encode())).decode()}
-    # This validates report structure only; publication still requires independent review.
-    verification_evidence.check(root, packet, source['commit'], plan['base'], source['commit'], plan['base'],
+    if report.get('admission'):
+        packet['admission_version'] = 1
+    verification_evidence.check(root, packet, source['commit'], plan['base'], head, plan['base'],
                                 policy_review_required=False)
 
 
@@ -116,7 +120,7 @@ def run(root, command, context):
                         return 0
                     raise
                 require_cleanup(active_path)
-                readiness(root, candidate)
+                admission = readiness(root, candidate, context)
                 previous = []
                 for path in directory.glob('*/report.json'):
                     report = json.loads(path.read_text())
@@ -143,7 +147,7 @@ def run(root, command, context):
                 run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
                 process = process_identity()
                 context = {**context, 'candidate': candidate, 'run_id': run_id, 'record_version': 1,
-                           'repository': str(root.resolve()), 'parent': None, 'executor_context': process['nonce'],
+                           'repository': str(root.resolve()), 'parent': None, 'executor_context': context.get('executor_context') or process['nonce'], 'admission': admission,
                            'requested_scope': 'complete', 'effective_scope': candidate['plan'],
                            'retry_reason': retry['reason'] if retry else None, 'process': process,
                            'started_monotonic': time.monotonic(), 'attempt_started': False}
@@ -182,6 +186,7 @@ def recover(root, attempt, reason):
         candidate = identity(root, report['command'], report['base'])
         if candidate != report['candidate'] or report['status'] in {'passed', 'source-changed', 'incomplete'}:
             raise ValueError('Recovery requires the unchanged failed candidate; correct invalid evidence at its owner')
+        admission = readiness(root, candidate, report)
         active_path = root / 'target/verification/active.json'
         require_cleanup(active_path)
         failures = [s for s in report.get('steps', []) if s['status'] == 'failed'
@@ -191,7 +196,7 @@ def recover(root, attempt, reason):
         if report['status'] == 'running':
             observe(root, 'lost-process', run_id=attempt, process=report['process'])
         started = runner.source_identity(root)
-        recovery = {'version': 1, 'candidate': candidate, 'reason': reason, 'status': 'running', 'process': process_identity(),
+        recovery = {'version': 1, 'candidate': candidate, 'admission': admission, 'reason': reason, 'status': 'running', 'process': process_identity(),
                     'report_sha256': hashlib.sha256(path.read_bytes()).hexdigest(), 'source': started,
                     'utc': datetime.now(timezone.utc).isoformat(), 'boundaries': [s['stage'] for s in failures]}
         recovery_path = path.parent / 'recovery.json'
@@ -201,7 +206,7 @@ def recover(root, attempt, reason):
         runner.write_json(active_path, {'status': 'running', 'report': str(path.parent.parent / run_id / 'report.json')})
         observe(root, 'requested', profile='recovery', run_id=run_id, recovery_of=attempt, issue=report.get('issue'))
         code = runner.record_run(root, command, context={'run_id': run_id, 'profile': 'recovery',
-                                 'issue': report.get('issue'), 'pr': report.get('pr'), 'recovery_of': attempt,
+                                 'issue': report.get('issue'), 'pr': report.get('pr'), 'recovery_of': attempt, 'admission': admission,
                                  'retry_reason': reason, 'effective_scope': recovery['boundaries']})
         recovery['run_id'] = run_id
         passed = code == 0 and started == runner.source_identity(root)
