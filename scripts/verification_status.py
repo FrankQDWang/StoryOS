@@ -23,7 +23,7 @@ def targeted_plan(root, check):
     entry = registered[check]
     plan = {'version': 1, 'check': check, 'source': runner.source_identity(root),
             'policy_sha256': hashlib.sha256(policy).hexdigest(), 'command': entry['command'],
-            'test_files': sorted(f['path'] for f in files if f['kind'].endswith('-test')),
+            'test_files': sorted(f['path'] for f in files if f['kind'].endswith('-test') and (root / f['path']).is_file()),
             'checks': [{'group': check, 'status': 'pending' if entry['clean'] and
                        runner.source_identity(root)['dirty'] else 'ready'}],
             'workers': 'existing-targeted-profile'}

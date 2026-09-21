@@ -33,6 +33,8 @@ def attach(root, plan, policy, files, revision=None):
     profiles = workflow['profiles']
     if set(operations) & (set(profiles) | set(stages)):
         raise ValueError('Duplicate workflow operation identity')
+    if set(workflow['targeted']) != set(policy.get('targeted', {})):
+        raise ValueError('Missing targeted workflow membership')
     if set(workflow['stage_types']) - set(stages):
         raise ValueError('Workflow type has no mandatory stage')
     for name in sorted(set(stages) | set(operations) | set(profiles)):
@@ -43,6 +45,7 @@ def attach(root, plan, policy, files, revision=None):
         if len(required) != len(set(required)):
             raise ValueError(f'Duplicate dependency: {name}')
         dependencies.update(('check:' + dep, 'check:' + name) for dep in required)
+        ordering.update(('check:' + dep, 'check:' + name) for dep in entry.get('after', []))
     for check in policy.get('targeted', {}):
         node('targeted:' + check, 'aggregate', profile='targeted:' + check)
         relations.update(('targeted:' + check, member, 'contains') for member in workflow['targeted'].get(check, []))
@@ -62,7 +65,7 @@ def attach(root, plan, policy, files, revision=None):
         file_ids[path] = name
         relations.add((owner, name, 'member'))
         for stage in groups.get(group.split(':')[0], []):
-            if 'check:' + stage != owner:
+            if 'check:' + stage != owner and group not in {'node-postgresql', 'node-process-cut'}:
                 relations.add(('check:' + stage, owner, 'contains'))
         if group.startswith('cargo:'):
             dependencies.update(('check:' + dep, owner) for dep in profiles.get('cargo', {}).get('requires', []))
@@ -76,6 +79,7 @@ def attach(root, plan, policy, files, revision=None):
         if phase['prepare'] != 'none':
             reset = node('prepare:' + phase['name'], 'reset', operation=phase['prepare'])
             dependencies.add((reset, name))
+            dependencies.update(('check:' + dep, reset) for dep in profiles.get(phase['group'], {}).get('requires', []))
             if previous:
                 ordering.add((previous, reset))
         for path in phase['files']:

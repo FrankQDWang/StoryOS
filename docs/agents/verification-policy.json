@@ -41,10 +41,10 @@
     "operations": {
       "rust-test-build": {"type": "build", "requires": []},
       "database-setup": {"type": "setup", "requires": ["release-package"]},
-      "database-cleanup": {"type": "cleanup", "requires": ["database-setup"]},
+      "database-cleanup": {"type": "cleanup", "requires": ["database-setup"], "after": ["database", "node-postgresql", "node-process-cut", "postgres-scope", "postgres-challenge", "postgres-library", "exact-dist", "recovery-fixture", "recovery-mixed"]},
       "exact-dist-reset": {"type": "reset", "requires": ["database-setup"]},
       "exact-dist-host": {"type": "setup", "requires": ["exact-dist-reset"]},
-      "exact-dist-cleanup": {"type": "cleanup", "requires": ["exact-dist-host"]}
+      "exact-dist-cleanup": {"type": "cleanup", "requires": ["exact-dist-host"], "after": ["exact-dist"]}
     },
     "profiles": {
       "verify-tracker": {},
@@ -73,6 +73,7 @@
       "project-scope": {"requires": ["release-package"], "members": ["postgres-scope", "postgres-challenge", "postgres-library", "http-files", "author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut", "exact-dist", "recovery-fixture", "recovery-mixed"]}
     },
     "targeted": {
+      "verify-tracker": ["check:verify-tracker"],
       "verify-policy": ["check:input-ownership", "check:project-inputs", "check:verification-tests"],
       "verification-observation-tests": ["check:verification-tools"],
       "verify-contract-inputs": ["check:protocol-self-test", "check:persistence-self-test", "check:author-edit-self-test", "check:tracker-self-test", "check:transaction-self-test", "check:generated-contracts"],

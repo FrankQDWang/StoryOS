@@ -68,6 +68,10 @@ class GraphPlanTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         nodes = json.loads(result.stdout)['plan']['graph']['nodes']
         self.assertTrue(all(n['selected'] for n in nodes if n['type'] == 'test-file'))
+        self.other.unlink()
+        result = self.fixture.repo.cli('status', '--check', 'sample', '--json')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(str(self.other.relative_to(self.fixture.root)), json.loads(result.stdout)['plan']['test_files'])
         self.assertFalse(list(self.fixture.root.glob('target/verification/*/report.json')))
 
     def test_invalid_workflow_fails_at_the_public_plan_boundary(self):
@@ -95,7 +99,9 @@ class GraphPlanTests(unittest.TestCase):
         policy['shared_phases'] = [
             {'name': name, 'group': 'node-postgresql', 'stage': 'http-files', 'prepare': prepare}
             for name, prepare in [('first', 'none'), ('second', 'reset-challenge')]]
-        policy['workflow']['profiles']['node-postgresql'] = {}
+        policy['workflow']['operations']['database-setup'] = {'type': 'setup', 'requires': []}
+        policy['workflow']['operations']['database-cleanup'] = {'type': 'cleanup', 'requires': ['database-setup'], 'after': ['node-postgresql']}
+        policy['workflow']['profiles']['node-postgresql'] = {'requires': ['database-setup']}
         policy['workflow']['profiles']['release-package'] = {}
         paths = ['apps/web/test/node-postgresql/' + name + '.test.ts' for name in ['a', 'b', 'c']]
         for path, phase, after in zip(paths, ['first', 'first', 'second'], [[], paths[:1], []]):
@@ -108,6 +114,9 @@ class GraphPlanTests(unittest.TestCase):
         graph = json.loads(result.stdout)['graph']
         self.assertIn({'from': 'file:node-postgresql:' + paths[0], 'to': 'file:node-postgresql:' + paths[1]}, graph['dependencies'])
         self.assertIn({'from': 'prepare:second', 'to': 'phase:second'}, graph['dependencies'])
+        self.assertIn({'from': 'check:database-setup', 'to': 'prepare:second'}, graph['dependencies'])
+        self.assertIn({'from': 'check:node-postgresql', 'to': 'check:database-cleanup', 'when': 'both-selected'}, graph['dependencies'])
+        self.assertNotIn({'from': 'check:http-files', 'to': 'check:node-postgresql', 'type': 'contains'}, graph['relations'])
         self.assertTrue(next(n for n in graph['nodes'] if n['id'] == 'prepare:second')['selected'])
         (self.fixture.root / paths[0]).unlink()
         self.assertNotEqual(self.fixture.cli('plan').returncode, 0)
