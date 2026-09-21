@@ -12,6 +12,7 @@ services:
       - ../../target/observation/data:/observation
     network_mode: none
     read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
     cap_drop: [ALL]
     mem_limit: 128m
     cpus: 0.25

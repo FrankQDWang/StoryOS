@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import urllib.request
+import urllib.error
 
 
 EXAMPLES = ('partial', 'complete', 'running', 'failed', 'reused', 'legacy')
@@ -64,10 +65,14 @@ def check(url):
                             query[field] = query[field].replace('${'+key+':sqlstring}', "'"+value+"'")
                     request = urllib.request.Request(url+'/api/ds/query', data=json.dumps({'queries':[query]}).encode(),
                                                      headers={'Content-Type':'application/json'})
-                    with urllib.request.urlopen(request, timeout=10) as response:
+                    try:
+                        response = urllib.request.urlopen(request, timeout=10)
+                    except urllib.error.HTTPError as error:
+                        response = error
+                    with response:
                         result = json.load(response)['results'][target['refId']]
                     if result.get('error'):
-                        raise RuntimeError(result['error'])
+                        raise RuntimeError(f"{example} / {panel['title']}: {result['error']}")
                     if target['refId']=='nodes':
                         frames = result['frames']
                         ids = frames[0]['data']['values'][0] if frames else []

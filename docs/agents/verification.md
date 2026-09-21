@@ -378,3 +378,6 @@ Run `make observe-dashboard` after edits. Observation tests reject generated dri
 `make observe-smoke` also queries collapsed and expanded DAGs through Grafana for
 labelled synthetic partial, complete, running, failed, reused, and legacy examples.
 These examples prove display behavior, not product execution or candidate evidence.
+The read-only collector has a 64 MiB temporary mount for SQLite sort files. The
+smoke check forces a sort spill and requires a container-collected change after
+the initial import; a stale database cannot satisfy that check.

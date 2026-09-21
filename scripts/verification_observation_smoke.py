@@ -46,11 +46,16 @@ def main():
             (directory / 'report.json').write_text(json.dumps({'record_version': 1,
                 'run_id': directory.name, 'status': 'interrupted', 'profile': 'targeted',
                 'attempt_started': True, 'started_monotonic': 100, 'duration_seconds': 10,
+                'execution_scope': {'synthetic_sort_payload': 'x' * 4096},
                 'started_at': '2026-09-21T00:00:00+00:00'}))
         dag.prepare(records)
         measured = subprocess.check_output([sys.executable, str(root / 'scripts/verification_observation.py'),
             'collect', '--records', str(records), '--database', str(output / 'data/runs.sqlite')], text=True)
         overhead = [json.loads(line) for line in measured.splitlines()]
+        changed = records / 'synthetic-0000/report.json'
+        refreshed = json.loads(changed.read_text())
+        refreshed['status'] = 'passed'
+        changed.write_text(json.dumps(refreshed))
         override = output / 'compose.yaml'
         override.write_text('services:\n  collector:\n    volumes:\n'
             f'      - {records}:/records:ro\n      - {output}/data:/observation\n'
@@ -77,7 +82,17 @@ def main():
                     if result.get('error'):
                         raise RuntimeError(result['error'])
                     frames.extend(result['frames'])
-                if 'sample' in json.dumps(frames) and '750' in json.dumps(frames):
+                sql = "SELECT run FROM observed_runs WHERE run='synthetic-0000' AND status='passed'"
+                query = {**dashboard['panels'][0]['targets'][0], 'queryText': sql,
+                         'rawQueryText': sql, 'datasource': dashboard['panels'][0]['datasource']}
+                request = urllib.request.Request(url + '/api/ds/query', data=json.dumps({'queries': [query]}).encode(),
+                                                 headers={'Content-Type': 'application/json'})
+                with urllib.request.urlopen(request, timeout=5) as response:
+                    live = json.load(response)['results']['A']
+                if live.get('error'):
+                    raise RuntimeError(live['error'])
+                updated_rows = [frame['data']['values'] for frame in live.get('frames', [])]
+                if 'sample' in json.dumps(frames) and '750' in json.dumps(frames) and updated_rows == [[['synthetic-0000']]]:
                     break
             except (OSError, http.client.HTTPException, RuntimeError):
                 if time.monotonic() > deadline:
