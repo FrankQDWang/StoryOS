@@ -25,6 +25,8 @@ services:
       - ./provisioning:/etc/grafana/provisioning:ro
       - ./dashboards:/dashboards:ro
     environment:
+      GF_USERS_DEFAULT_THEME: light
+      GF_USERS_DEFAULT_LANGUAGE: zh-Hans
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_AUTH_DISABLE_LOGIN_FORM: "true"

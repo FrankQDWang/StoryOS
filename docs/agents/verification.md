@@ -364,7 +364,12 @@ Open <http://127.0.0.1:3749/d/storyos-run> or use the run link on the main dashb
 Select the time range, Issue, profile, and run. The workflow shows retained nodes,
 including unselected operations. Select a node, then use its inspect link to show
 its details and file members. Select `__none` to collapse files. The URL preserves
-run, group, and node selection; refresh uses the configured layered layout.
+run, group, and node selection. Topology-derived fixed coordinates prevent refresh
+from restarting Grafana layout. Expanding files preserves existing step positions.
+The local UI uses a light theme and Simplified Chinese labels. Step names lead;
+state and duration are secondary. Raw node IDs and evidence stay unchanged.
+A compact step list keeps names readable beside large graphs.
+Read-only queries wait at most five seconds for a collector write lock.
 Dependency edges show required order. Contains and member edges show grouping only.
 Use the node menu, zoom controls, and detail tables to inspect large graphs.
 

@@ -47,11 +47,15 @@ class DashboardTests(unittest.TestCase):
                 subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'), action,
                     '--records', str(records), '--database', str(root / 'data.sqlite')], check=True, capture_output=True)
                 with sqlite3.connect(root / 'data.sqlite') as connection:
-                    rows = query('Workflow')
-                    self.assertEqual({r[0]: r[2] for r in rows},
-                                     {'setup': 'failed', 'group': 'blocked', 'other': 'not-selected'})
-                    self.assertEqual({r[0] for r in query('Workflow', group='group')}, {'setup', 'group', 'other', 'file'})
-                    self.assertEqual(query('Run', run='legacy')[0][3:7], (None, None, None, 'unavailable'))
-                    self.assertIn('sample-tree', str(query('Run')))
-                    self.assertIn('required setup', str(query('Node attempts · UTC')))
-                    self.assertEqual(query('Workflow', run='legacy'), [])
+                    rows = query('验证流程 · 步骤与依赖')
+                    self.assertEqual({r[0]: r[4].split(' · ')[0] for r in rows},
+                                     {'setup': '失败', 'group': '被阻塞', 'other': '未选择'})
+                    expanded = query('验证流程 · 步骤与依赖', group='group')
+                    self.assertEqual({r[0] for r in expanded}, {'setup', 'group', 'other', 'file'})
+                    coordinates = {r[0]: r[6:8] for r in rows}
+                    self.assertEqual({r[0]: r[6:8] for r in expanded if r[0]!='file'}, coordinates)
+                    self.assertLess(coordinates['setup'][0], coordinates['group'][0])
+                    self.assertEqual(query('运行概览', run='legacy')[0][3:7], (None, None, None, 'unavailable'))
+                    self.assertIn('sample-tree', str(query('运行概览')))
+                    self.assertIn('required setup', str(query('执行记录 · UTC')))
+                    self.assertEqual(query('验证流程 · 步骤与依赖', run='legacy'), [])
