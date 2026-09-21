@@ -1,0 +1,33 @@
+services:
+  collector:
+    image: python:3.13.7-alpine
+    command: [python, /collector.py, watch, --records, /records, --database, /observation/runs.sqlite]
+    volumes:
+      - ../verification_observation.py:/collector.py:ro
+      - ../../target/verification:/records:ro
+      - ../../target/observation/data:/observation
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+  grafana:
+    build: .
+    entrypoint: [sh, -c, 'export GF_SECURITY_ADMIN_PASSWORD=$$(head -c 32 /dev/urandom | base64); exec /run.sh']
+    ports: ["127.0.0.1:3749:3000"]
+    volumes:
+      - ../../target/observation/data:/observation:ro
+      - ./provisioning:/etc/grafana/provisioning:ro
+      - ./dashboards:/dashboards:ro
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_BASIC_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_UNIFIED_ALERTING_ENABLED: "false"
+    cap_drop: [ALL]
+    mem_limit: 512m
+    cpus: 1

@@ -226,3 +226,48 @@ original failed boundary and its policy-owned preparation. Each recovery has a
 separate retained report linked by `recovery_of`; the attempt component still owns
 retry admission. A failed recovery cannot clear the original failure. Status
 reports distinguish active and lost process identity without changing admission.
+
+## Local run observation
+
+Use Docker Engine with Compose 2.24.4 or later and Python 3.13 or later.
+`make observe-start` builds the pinned Grafana OSS image and SQLite plugin, imports
+retained records, and starts a five-second collector. Open
+<http://127.0.0.1:3749/d/storyos-verification>. `make observe-status` shows container
+state and current records. `make observe-stop` removes the observation containers;
+records and the read model remain. `make observe-rebuild` rebuilds the read model
+from retained files. Collection catches up after a restart without test execution.
+
+The collector reads only `target/verification/*/report.json`, step files, and
+request files. It writes `target/observation/data/runs.sqlite`. These directories
+are ignored source and cache inputs. SQLite is disposable observation, not
+admission or test evidence. No executor imports this database. The dashboard shows
+root Issue attribution (or unknown), live stages, scope, reason, elapsed time to
+the last heartbeat, and heartbeat age. Display elapsed time uses UTC and is an
+estimate; recorded monotonic durations remain in the read model. A stale heartbeat
+means unknown liveness, not completion. It does not change the reported status.
+Legacy and malformed inputs stay in the diagnostics view. Raw records are never
+changed; missing historical attribution remains unknown. Deleted input records
+stay in the read model until a rebuild. Rebuild does not preserve derived facts.
+
+The public collector accepts `collect`, `watch`, `status`, and `rebuild`, with
+`--records` and `--database` for disposable inputs. `watch --interval` accepts
+1 to 3600 seconds. Each collection transaction writes at most 200 changed records;
+watch catches up on later polls and one-shot commands drain the backlog. Each
+input is limited to 16 MiB. Containers have CPU and memory limits. Collection scans
+retained paths; volume overhead measurement belongs to the Issue-cost follow-up.
+
+Grafana binds only to loopback and permits anonymous Viewer access. Login and basic
+authentication are disabled; its unused administrator password is random on each
+start. The provisioned data source is not editable, opens SQLite with `mode=ro`,
+and has `attachLimit: 0`. Only the observation directory is mounted, read-only.
+The plugin's default internal-database block list remains enabled. The collector
+has no network. Grafana has no configured external notification destination, and
+analytics and alerting are disabled. Setup needs Internet access to pull images
+and the plugin; this does not change product hosting.
+
+Run `make verify-targeted CHECK=verification-observation-tests` for collector
+regressions. Run `make observe-smoke` after installation changes. This bounded
+check starts an actual disposable managed command and queries the provisioned
+Grafana dashboard through the real SQLite plugin on a temporary loopback port.
+It removes its containers and temporary database when complete. It does not run
+the product suite. `make verify-policy` discovers the collector tests normally.
