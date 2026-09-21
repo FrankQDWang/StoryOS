@@ -12,6 +12,7 @@ services:
       - ../../target/observation/data:/observation
     network_mode: none
     read_only: true
+    tmpfs: ["/tmp:size=64m,mode=1777"]
     cap_drop: [ALL]
     mem_limit: 128m
     cpus: 0.25
@@ -24,6 +25,8 @@ services:
       - ./provisioning:/etc/grafana/provisioning:ro
       - ./dashboards:/dashboards:ro
     environment:
+      GF_USERS_DEFAULT_THEME: light
+      GF_USERS_DEFAULT_LANGUAGE: zh-Hans
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
       GF_AUTH_DISABLE_LOGIN_FORM: "true"

@@ -1,0 +1,2670 @@
+{
+  "uid": "storyos-run",
+  "title": "StoryOS \u00b7 \u9a8c\u8bc1\u8fd0\u884c",
+  "schemaVersion": 39,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "5s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "issue",
+        "label": "\u4efb\u52a1",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '*' UNION SELECT DISTINCT COALESCE(CAST(json_extract(payload,'$.issue') AS TEXT),'unknown') FROM records WHERE kind='run'",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "*",
+          "value": "*"
+        }
+      },
+      {
+        "name": "profile",
+        "label": "\u9a8c\u8bc1\u6a21\u5f0f",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '*' UNION SELECT DISTINCT COALESCE(CAST(json_extract(payload,'$.profile') AS TEXT),'unknown') FROM records WHERE kind='run'",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "*",
+          "value": "*"
+        }
+      },
+      {
+        "name": "run",
+        "label": "\u8fd0\u884c \u00b7 UTC",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT run AS __value,\n COALESCE(json_extract(payload,'$.started_at'),'unknown time')||' \u00b7 '||run AS __text\n FROM records WHERE kind='run'\n AND (${issue:sqlstring}='*' OR COALESCE(CAST(json_extract(payload,'$.issue') AS TEXT),'unknown')=${issue:sqlstring})\n AND (${profile:sqlstring}='*' OR COALESCE(json_extract(payload,'$.profile'),'unknown')=${profile:sqlstring})\n AND (json_extract(payload,'$.started_at') IS NULL OR\n unixepoch(json_extract(payload,'$.started_at'))*1000 BETWEEN ${__from} AND ${__to})\n ORDER BY json_extract(payload,'$.started_at') DESC,run",
+        "refresh": 2,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "group",
+        "label": "\u5c55\u5f00\u5206\u7ec4",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '__none' AS __value,'\u672a\u9009\u62e9' AS __text UNION SELECT node_id,REPLACE(node_id,'check:','') FROM node_states WHERE run_id=${run:sqlstring} AND type!='test-file' ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "\u672a\u9009\u62e9",
+          "value": "__none"
+        }
+      },
+      {
+        "name": "node",
+        "label": "\u67e5\u770b\u6b65\u9aa4",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '__none' AS __value,'\u672a\u9009\u62e9' AS __text UNION SELECT node_id,REPLACE(node_id,'check:','') FROM node_states WHERE run_id=${run:sqlstring} ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "\u672a\u9009\u62e9",
+          "value": "__none"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 2,
+      "title": "\u8fd0\u884c\u6982\u89c8",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "SELECT json_extract(r.payload,'$.issue') AS issue,\n json_extract(r.payload,'$.profile') AS profile,json_extract(r.payload,'$.status') AS state,\n (SELECT SUM(selected) FROM node_states WHERE run_id=r.run) AS selected,\n CASE WHEN g.run_id IS NOT NULL THEN (SELECT COUNT(DISTINCT node_id) FROM node_attempts WHERE run_id=r.run) END AS executed,\n CASE WHEN g.run_id IS NOT NULL THEN (SELECT COUNT(*) FROM node_states WHERE run_id=r.run) END AS total,\n CASE WHEN g.run_id IS NULL THEN 'unavailable' ELSE 'retained' END AS graph,r.run AS run_id,\n COALESCE(json_extract(r.payload,'$.actual_started_at'),\n CASE WHEN json_extract(r.payload,'$.attempt_started')=1 THEN json_extract(r.payload,'$.started_at') END,'unknown') AS actual_start_UTC,\n COALESCE(json_extract(r.payload,'$.ended_at'),'unknown / not ended') AS end_UTC,\n COALESCE(json_extract(g.payload,'$.identity.source'),'unavailable') AS source,\n r.path AS retained_report,g.graph_sha256,json_extract(r.payload,'$.heartbeat_at') AS heartbeat_UTC\n FROM records r LEFT JOIN run_graphs g ON r.run=g.run_id WHERE r.kind='run' AND r.run=${run:sqlstring}",
+          "rawQueryText": "SELECT json_extract(r.payload,'$.issue') AS issue,\n json_extract(r.payload,'$.profile') AS profile,json_extract(r.payload,'$.status') AS state,\n (SELECT SUM(selected) FROM node_states WHERE run_id=r.run) AS selected,\n CASE WHEN g.run_id IS NOT NULL THEN (SELECT COUNT(DISTINCT node_id) FROM node_attempts WHERE run_id=r.run) END AS executed,\n CASE WHEN g.run_id IS NOT NULL THEN (SELECT COUNT(*) FROM node_states WHERE run_id=r.run) END AS total,\n CASE WHEN g.run_id IS NULL THEN 'unavailable' ELSE 'retained' END AS graph,r.run AS run_id,\n COALESCE(json_extract(r.payload,'$.actual_started_at'),\n CASE WHEN json_extract(r.payload,'$.attempt_started')=1 THEN json_extract(r.payload,'$.started_at') END,'unknown') AS actual_start_UTC,\n COALESCE(json_extract(r.payload,'$.ended_at'),'unknown / not ended') AS end_UTC,\n COALESCE(json_extract(g.payload,'$.identity.source'),'unavailable') AS source,\n r.path AS retained_report,g.graph_sha256,json_extract(r.payload,'$.heartbeat_at') AS heartbeat_UTC\n FROM records r LEFT JOIN run_graphs g ON r.run=g.run_id WHERE r.kind='run' AND r.run=${run:sqlstring}",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "\u672a\u77e5",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "passed": {
+                  "text": "\u901a\u8fc7"
+                },
+                "failed": {
+                  "text": "\u5931\u8d25"
+                },
+                "running": {
+                  "text": "\u8fd0\u884c\u4e2d"
+                },
+                "blocked": {
+                  "text": "\u88ab\u963b\u585e"
+                },
+                "pending": {
+                  "text": "\u5f85\u6267\u884c"
+                },
+                "interrupted": {
+                  "text": "\u5df2\u4e2d\u65ad"
+                },
+                "cached": {
+                  "text": "\u590d\u7528"
+                },
+                "not-selected": {
+                  "text": "\u672a\u9009\u62e9"
+                },
+                "unknown": {
+                  "text": "\u672a\u77e5"
+                },
+                "complete": {
+                  "text": "\u5b8c\u6574\u9a8c\u8bc1"
+                },
+                "targeted": {
+                  "text": "\u9488\u5bf9\u6027\u9a8c\u8bc1"
+                },
+                "daily": {
+                  "text": "\u65e5\u5e38\u9a8c\u8bc1"
+                },
+                "retained": {
+                  "text": "\u5df2\u4fdd\u7559"
+                },
+                "unavailable": {
+                  "text": "\u4e0d\u53ef\u7528"
+                },
+                "unknown / not ended": {
+                  "text": "\u672a\u77e5 / \u5c1a\u672a\u7ed3\u675f"
+                },
+                "not a file": {
+                  "text": "\u975e\u6587\u4ef6\u8282\u70b9"
+                },
+                "none recorded": {
+                  "text": "\u65e0\u8bb0\u5f55"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": false,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "issue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4efb\u52a1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "profile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9a8c\u8bc1\u6a21\u5f0f"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u9009\u62e9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "executed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u6267\u884c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u603b\u8282\u70b9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6570\u636e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8fd0\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actual_start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "end_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u675f\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6e90\u7801\u8eab\u4efd"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4fdd\u7559\u62a5\u544a"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph_sha256"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6307\u7eb9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heartbeat_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6700\u8fd1\u66f4\u65b0 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4 ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7c7b\u578b"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "membership"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u5f52\u5c5e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selection_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9009\u62e9\u539f\u56e0"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prerequisites"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5148\u51b3\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downstream"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u540e\u7eed\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "members"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5206\u7ec4\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "producer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u590d\u7528\u6765\u6e90"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "parent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7236\u7ea7"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "execution_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u8303\u56f4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8017\u65f6\uff08\u79d2\uff09"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "outcome"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bf7\u6c42\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 3,
+      "title": "\u9a8c\u8bc1\u6d41\u7a0b \u00b7 \u6b65\u9aa4\u4e0e\u4f9d\u8d56",
+      "type": "nodeGraph",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 16,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\n, levels(id,depth) AS (\n SELECT node_id,0 FROM n UNION SELECT e.target,l.depth+1 FROM levels l JOIN e ON e.source=l.id\n WHERE l.depth<(SELECT COUNT(*) FROM n)),\n ranked AS (SELECT n.*,MAX(levels.depth) AS depth FROM n JOIN levels ON levels.id=n.node_id GROUP BY node_id),\n step_positions AS (SELECT node_id,depth*180 AS x,\n (ROW_NUMBER() OVER (PARTITION BY depth ORDER BY EXISTS(SELECT 1 FROM e WHERE source=ranked.node_id AND kind='dependency') DESC,node_id)-1)*125 AS y FROM ranked WHERE type!='test-file'),\n positions AS (SELECT * FROM step_positions UNION ALL SELECT node_id,\n COALESCE((SELECT x FROM step_positions WHERE node_id=${group:sqlstring}),0)+((ROW_NUMBER() OVER (ORDER BY node_id)-1)%4)*180,\n (SELECT MAX(y) FROM step_positions)+125+((ROW_NUMBER() OVER (ORDER BY node_id)-1)/4)*125\n FROM visible WHERE type='test-file')\nSELECT node_id AS id,\n COALESCE(path,REPLACE(node_id,'check:','')) AS title,\n CASE REPLACE(REPLACE(REPLACE(REPLACE(node_id,'check:',''),'phase:',''),'prepare:',''),'targeted:','') WHEN 'setup' THEN '\u51c6\u5907\u73af\u5883' WHEN 'build' THEN '\u6784\u5efa' WHEN 'tests' THEN '\u6d4b\u8bd5' WHEN 'cleanup' THEN '\u6e05\u7406\u73af\u5883' WHEN 'optional' THEN '\u53ef\u9009\u68c0\u67e5' WHEN 'input-ownership' THEN '\u8f93\u5165\u5f52\u5c5e' WHEN 'project-inputs' THEN '\u9879\u76ee\u8f93\u5165' WHEN 'verification-tests' THEN '\u9a8c\u8bc1\u5de5\u5177\u6d4b\u8bd5' WHEN 'workspace-boundaries' THEN '\u5de5\u4f5c\u533a\u8fb9\u754c' WHEN 'rust-format' THEN 'Rust \u683c\u5f0f' WHEN 'rust-clippy' THEN 'Rust \u9759\u6001\u68c0\u67e5' WHEN 'rust-test-build' THEN '\u7f16\u8bd1\u6d4b\u8bd5' WHEN 'rust-tests' THEN 'Rust \u6d4b\u8bd5' WHEN 'rust-doc-tests' THEN 'Rust \u6587\u6863\u6d4b\u8bd5' WHEN 'rust-release-build' THEN '\u53d1\u5e03\u6784\u5efa' WHEN 'generated-contracts' THEN '\u751f\u6210\u5951\u7ea6' WHEN 'contracts' THEN '\u5951\u7ea6\u9a8c\u8bc1' WHEN 'node-install' THEN '\u5b89\u88c5\u4f9d\u8d56' WHEN 'web-typecheck' THEN 'Web \u7c7b\u578b\u68c0\u67e5' WHEN 'web-build' THEN 'Web \u6784\u5efa' WHEN 'release-package' THEN '\u53d1\u5e03\u5305' WHEN 'project-scope' THEN '\u9879\u76ee\u8303\u56f4' WHEN 'database-setup' THEN '\u51c6\u5907\u6570\u636e\u5e93' WHEN 'database-cleanup' THEN '\u6e05\u7406\u6570\u636e\u5e93' WHEN 'exact-dist-host' THEN '\u542f\u52a8\u6210\u54c1\u670d\u52a1' WHEN 'exact-dist-reset' THEN '\u91cd\u7f6e\u6210\u54c1\u73af\u5883' WHEN 'exact-dist-cleanup' THEN '\u6e05\u7406\u6210\u54c1\u73af\u5883' WHEN 'browser-source' THEN '\u6e90\u7801\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'browser-exact-dist' THEN '\u6210\u54c1\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'verify-tracker' THEN '\u7968\u636e\u68c0\u67e5' WHEN 'observation-smoke' THEN '\u89c2\u6d4b\u9a8c\u6536' WHEN 'node-contract' THEN 'Node \u5951\u7ea6\u6d4b\u8bd5' WHEN 'node-postgresql' THEN 'PostgreSQL \u6d4b\u8bd5' WHEN 'node-process-cut' THEN '\u8fdb\u7a0b\u4e2d\u65ad\u6d4b\u8bd5' WHEN 'recovery' THEN '\u6062\u590d\u9a8c\u8bc1' WHEN 'recovery-drill' THEN '\u6062\u590d\u6f14\u7ec3' WHEN 'policy' THEN '\u9a8c\u8bc1\u7b56\u7565' WHEN 'verification-tools' THEN '\u9a8c\u8bc1\u5de5\u5177' WHEN 'author-edit-policy' THEN '\u5199\u5165\u7b56\u7565' WHEN 'author-edit-process-cut' THEN '\u5199\u5165\u6545\u969c' WHEN 'author-edit-self-test' THEN '\u5199\u5165\u81ea\u68c0' WHEN 'cargo' THEN 'Rust \u5de5\u4f5c\u533a' WHEN 'cargo:storyos-adapter-postgres' THEN '\u6570\u636e\u5e93\u9002\u914d' WHEN 'cargo:storyos-application' THEN '\u5e94\u7528\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-contracts' THEN '\u5951\u7ea6\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-core' THEN '\u6838\u5fc3\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-server' THEN '\u670d\u52a1\u5c42\u6d4b\u8bd5' WHEN 'daily-database' THEN '\u65e5\u5e38\u6570\u636e\u5e93' WHEN 'database' THEN '\u6570\u636e\u5e93\u6d4b\u8bd5' WHEN 'exact-dist' THEN '\u6210\u54c1\u9a8c\u8bc1' WHEN 'foundation-tests' THEN '\u57fa\u7840\u6d4b\u8bd5' WHEN 'http-files' THEN 'HTTP \u6587\u4ef6' WHEN 'pending' THEN '\u5f85\u6267\u884c\u5206\u7ec4' WHEN 'persistence-self-test' THEN '\u6301\u4e45\u5316\u81ea\u68c0' WHEN 'postgres-challenge' THEN '\u6570\u636e\u5e93\u6311\u6218' WHEN 'postgres-library' THEN '\u6570\u636e\u5e93\u85cf\u4e66' WHEN 'postgres-scope' THEN '\u6570\u636e\u5e93\u8303\u56f4' WHEN 'project-export-process-cut' THEN '\u9879\u76ee\u5bfc\u51fa\u6545\u969c' WHEN 'protocol-self-test' THEN '\u534f\u8bae\u81ea\u68c0' WHEN 'readable-export-process-cut' THEN '\u6587\u672c\u5bfc\u51fa\u6545\u969c' WHEN 'recovery-check' THEN '\u6062\u590d\u68c0\u67e5' WHEN 'recovery-fixture' THEN '\u6062\u590d\u6837\u672c' WHEN 'recovery-mixed' THEN '\u6df7\u5408\u6062\u590d' WHEN 'shared-tests' THEN '\u5171\u4eab\u6d4b\u8bd5' WHEN 'tracker-self-test' THEN '\u7968\u636e\u81ea\u68c0' WHEN 'transaction-guards' THEN '\u4e8b\u52a1\u8fb9\u754c' WHEN 'transaction-self-test' THEN '\u4e8b\u52a1\u81ea\u68c0' WHEN 'http-bootstrap' THEN 'HTTP \u542f\u52a8' WHEN 'http-main' THEN 'HTTP \u4e3b\u6d41\u7a0b' WHEN 'verification-node-tests' THEN '\u6267\u884c\u8bb0\u5f55\u6d4b\u8bd5' WHEN 'verification-observation-tests' THEN '\u89c2\u6d4b\u6d4b\u8bd5' WHEN 'verify-contract-inputs' THEN '\u5951\u7ea6\u8f93\u5165' WHEN 'verify-policy' THEN '\u7b56\u7565\u68c0\u67e5' WHEN 'verify-pr' THEN 'PR \u68c0\u67e5' WHEN 'web' THEN 'Web \u9a8c\u8bc1' WHEN 'web-foundation' THEN 'Web \u57fa\u7840' ELSE COALESCE(SUBSTR(path,LENGTH(RTRIM(path,REPLACE(path,'/','')))+1),REPLACE(node_id,'check:','')) END AS mainstat,\n CASE WHEN node_id LIKE 'phase:%' THEN '\u9636\u6bb5' WHEN node_id LIKE 'prepare:%' THEN '\u91cd\u7f6e'\n WHEN node_id LIKE 'targeted:%' THEN '\u9488\u5bf9\u6027\u9a8c\u8bc1' ELSE type END AS subtitle,CASE state WHEN 'passed' THEN '\u901a\u8fc7' WHEN 'failed' THEN '\u5931\u8d25' WHEN 'running' THEN '\u8fd0\u884c\u4e2d' WHEN 'blocked' THEN '\u88ab\u963b\u585e' WHEN 'pending' THEN '\u5f85\u6267\u884c' WHEN 'interrupted' THEN '\u5df2\u4e2d\u65ad' WHEN 'cached' THEN '\u590d\u7528' WHEN 'not-selected' THEN '\u672a\u9009\u62e9' WHEN 'unknown' THEN '\u672a\u77e5' ELSE state END||' \u00b7 '||COALESCE(CAST(ROUND(duration_seconds,2) AS TEXT)||' s','\u2014') AS secondarystat,\n 44 AS nodeRadius,x-(SELECT MAX(x) FROM positions JOIN n USING(node_id) WHERE type!='test-file')/2 AS fixedX,\n y-(SELECT MAX(y) FROM positions JOIN n USING(node_id) WHERE type!='test-file')/2-85 AS fixedY,\n CASE state WHEN 'passed' THEN '#73BF69' WHEN 'failed' THEN '#F2495C'\n WHEN 'running' THEN '#5794F2' WHEN 'blocked' THEN '#FF9830' WHEN 'pending' THEN '#FADE2A'\n WHEN 'interrupted' THEN '#B877D9' WHEN 'cached' THEN '#8AB8FF'\n WHEN 'not-selected' THEN '#6E7681' ELSE '#CCCCDC' END AS color\n FROM visible JOIN positions USING(node_id) ORDER BY node_id",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\n, levels(id,depth) AS (\n SELECT node_id,0 FROM n UNION SELECT e.target,l.depth+1 FROM levels l JOIN e ON e.source=l.id\n WHERE l.depth<(SELECT COUNT(*) FROM n)),\n ranked AS (SELECT n.*,MAX(levels.depth) AS depth FROM n JOIN levels ON levels.id=n.node_id GROUP BY node_id),\n step_positions AS (SELECT node_id,depth*180 AS x,\n (ROW_NUMBER() OVER (PARTITION BY depth ORDER BY EXISTS(SELECT 1 FROM e WHERE source=ranked.node_id AND kind='dependency') DESC,node_id)-1)*125 AS y FROM ranked WHERE type!='test-file'),\n positions AS (SELECT * FROM step_positions UNION ALL SELECT node_id,\n COALESCE((SELECT x FROM step_positions WHERE node_id=${group:sqlstring}),0)+((ROW_NUMBER() OVER (ORDER BY node_id)-1)%4)*180,\n (SELECT MAX(y) FROM step_positions)+125+((ROW_NUMBER() OVER (ORDER BY node_id)-1)/4)*125\n FROM visible WHERE type='test-file')\nSELECT node_id AS id,\n COALESCE(path,REPLACE(node_id,'check:','')) AS title,\n CASE REPLACE(REPLACE(REPLACE(REPLACE(node_id,'check:',''),'phase:',''),'prepare:',''),'targeted:','') WHEN 'setup' THEN '\u51c6\u5907\u73af\u5883' WHEN 'build' THEN '\u6784\u5efa' WHEN 'tests' THEN '\u6d4b\u8bd5' WHEN 'cleanup' THEN '\u6e05\u7406\u73af\u5883' WHEN 'optional' THEN '\u53ef\u9009\u68c0\u67e5' WHEN 'input-ownership' THEN '\u8f93\u5165\u5f52\u5c5e' WHEN 'project-inputs' THEN '\u9879\u76ee\u8f93\u5165' WHEN 'verification-tests' THEN '\u9a8c\u8bc1\u5de5\u5177\u6d4b\u8bd5' WHEN 'workspace-boundaries' THEN '\u5de5\u4f5c\u533a\u8fb9\u754c' WHEN 'rust-format' THEN 'Rust \u683c\u5f0f' WHEN 'rust-clippy' THEN 'Rust \u9759\u6001\u68c0\u67e5' WHEN 'rust-test-build' THEN '\u7f16\u8bd1\u6d4b\u8bd5' WHEN 'rust-tests' THEN 'Rust \u6d4b\u8bd5' WHEN 'rust-doc-tests' THEN 'Rust \u6587\u6863\u6d4b\u8bd5' WHEN 'rust-release-build' THEN '\u53d1\u5e03\u6784\u5efa' WHEN 'generated-contracts' THEN '\u751f\u6210\u5951\u7ea6' WHEN 'contracts' THEN '\u5951\u7ea6\u9a8c\u8bc1' WHEN 'node-install' THEN '\u5b89\u88c5\u4f9d\u8d56' WHEN 'web-typecheck' THEN 'Web \u7c7b\u578b\u68c0\u67e5' WHEN 'web-build' THEN 'Web \u6784\u5efa' WHEN 'release-package' THEN '\u53d1\u5e03\u5305' WHEN 'project-scope' THEN '\u9879\u76ee\u8303\u56f4' WHEN 'database-setup' THEN '\u51c6\u5907\u6570\u636e\u5e93' WHEN 'database-cleanup' THEN '\u6e05\u7406\u6570\u636e\u5e93' WHEN 'exact-dist-host' THEN '\u542f\u52a8\u6210\u54c1\u670d\u52a1' WHEN 'exact-dist-reset' THEN '\u91cd\u7f6e\u6210\u54c1\u73af\u5883' WHEN 'exact-dist-cleanup' THEN '\u6e05\u7406\u6210\u54c1\u73af\u5883' WHEN 'browser-source' THEN '\u6e90\u7801\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'browser-exact-dist' THEN '\u6210\u54c1\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'verify-tracker' THEN '\u7968\u636e\u68c0\u67e5' WHEN 'observation-smoke' THEN '\u89c2\u6d4b\u9a8c\u6536' WHEN 'node-contract' THEN 'Node \u5951\u7ea6\u6d4b\u8bd5' WHEN 'node-postgresql' THEN 'PostgreSQL \u6d4b\u8bd5' WHEN 'node-process-cut' THEN '\u8fdb\u7a0b\u4e2d\u65ad\u6d4b\u8bd5' WHEN 'recovery' THEN '\u6062\u590d\u9a8c\u8bc1' WHEN 'recovery-drill' THEN '\u6062\u590d\u6f14\u7ec3' WHEN 'policy' THEN '\u9a8c\u8bc1\u7b56\u7565' WHEN 'verification-tools' THEN '\u9a8c\u8bc1\u5de5\u5177' WHEN 'author-edit-policy' THEN '\u5199\u5165\u7b56\u7565' WHEN 'author-edit-process-cut' THEN '\u5199\u5165\u6545\u969c' WHEN 'author-edit-self-test' THEN '\u5199\u5165\u81ea\u68c0' WHEN 'cargo' THEN 'Rust \u5de5\u4f5c\u533a' WHEN 'cargo:storyos-adapter-postgres' THEN '\u6570\u636e\u5e93\u9002\u914d' WHEN 'cargo:storyos-application' THEN '\u5e94\u7528\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-contracts' THEN '\u5951\u7ea6\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-core' THEN '\u6838\u5fc3\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-server' THEN '\u670d\u52a1\u5c42\u6d4b\u8bd5' WHEN 'daily-database' THEN '\u65e5\u5e38\u6570\u636e\u5e93' WHEN 'database' THEN '\u6570\u636e\u5e93\u6d4b\u8bd5' WHEN 'exact-dist' THEN '\u6210\u54c1\u9a8c\u8bc1' WHEN 'foundation-tests' THEN '\u57fa\u7840\u6d4b\u8bd5' WHEN 'http-files' THEN 'HTTP \u6587\u4ef6' WHEN 'pending' THEN '\u5f85\u6267\u884c\u5206\u7ec4' WHEN 'persistence-self-test' THEN '\u6301\u4e45\u5316\u81ea\u68c0' WHEN 'postgres-challenge' THEN '\u6570\u636e\u5e93\u6311\u6218' WHEN 'postgres-library' THEN '\u6570\u636e\u5e93\u85cf\u4e66' WHEN 'postgres-scope' THEN '\u6570\u636e\u5e93\u8303\u56f4' WHEN 'project-export-process-cut' THEN '\u9879\u76ee\u5bfc\u51fa\u6545\u969c' WHEN 'protocol-self-test' THEN '\u534f\u8bae\u81ea\u68c0' WHEN 'readable-export-process-cut' THEN '\u6587\u672c\u5bfc\u51fa\u6545\u969c' WHEN 'recovery-check' THEN '\u6062\u590d\u68c0\u67e5' WHEN 'recovery-fixture' THEN '\u6062\u590d\u6837\u672c' WHEN 'recovery-mixed' THEN '\u6df7\u5408\u6062\u590d' WHEN 'shared-tests' THEN '\u5171\u4eab\u6d4b\u8bd5' WHEN 'tracker-self-test' THEN '\u7968\u636e\u81ea\u68c0' WHEN 'transaction-guards' THEN '\u4e8b\u52a1\u8fb9\u754c' WHEN 'transaction-self-test' THEN '\u4e8b\u52a1\u81ea\u68c0' WHEN 'http-bootstrap' THEN 'HTTP \u542f\u52a8' WHEN 'http-main' THEN 'HTTP \u4e3b\u6d41\u7a0b' WHEN 'verification-node-tests' THEN '\u6267\u884c\u8bb0\u5f55\u6d4b\u8bd5' WHEN 'verification-observation-tests' THEN '\u89c2\u6d4b\u6d4b\u8bd5' WHEN 'verify-contract-inputs' THEN '\u5951\u7ea6\u8f93\u5165' WHEN 'verify-policy' THEN '\u7b56\u7565\u68c0\u67e5' WHEN 'verify-pr' THEN 'PR \u68c0\u67e5' WHEN 'web' THEN 'Web \u9a8c\u8bc1' WHEN 'web-foundation' THEN 'Web \u57fa\u7840' ELSE COALESCE(SUBSTR(path,LENGTH(RTRIM(path,REPLACE(path,'/','')))+1),REPLACE(node_id,'check:','')) END AS mainstat,\n CASE WHEN node_id LIKE 'phase:%' THEN '\u9636\u6bb5' WHEN node_id LIKE 'prepare:%' THEN '\u91cd\u7f6e'\n WHEN node_id LIKE 'targeted:%' THEN '\u9488\u5bf9\u6027\u9a8c\u8bc1' ELSE type END AS subtitle,CASE state WHEN 'passed' THEN '\u901a\u8fc7' WHEN 'failed' THEN '\u5931\u8d25' WHEN 'running' THEN '\u8fd0\u884c\u4e2d' WHEN 'blocked' THEN '\u88ab\u963b\u585e' WHEN 'pending' THEN '\u5f85\u6267\u884c' WHEN 'interrupted' THEN '\u5df2\u4e2d\u65ad' WHEN 'cached' THEN '\u590d\u7528' WHEN 'not-selected' THEN '\u672a\u9009\u62e9' WHEN 'unknown' THEN '\u672a\u77e5' ELSE state END||' \u00b7 '||COALESCE(CAST(ROUND(duration_seconds,2) AS TEXT)||' s','\u2014') AS secondarystat,\n 44 AS nodeRadius,x-(SELECT MAX(x) FROM positions JOIN n USING(node_id) WHERE type!='test-file')/2 AS fixedX,\n y-(SELECT MAX(y) FROM positions JOIN n USING(node_id) WHERE type!='test-file')/2-85 AS fixedY,\n CASE state WHEN 'passed' THEN '#73BF69' WHEN 'failed' THEN '#F2495C'\n WHEN 'running' THEN '#5794F2' WHEN 'blocked' THEN '#FF9830' WHEN 'pending' THEN '#FADE2A'\n WHEN 'interrupted' THEN '#B877D9' WHEN 'cached' THEN '#8AB8FF'\n WHEN 'not-selected' THEN '#6E7681' ELSE '#CCCCDC' END AS color\n FROM visible JOIN positions USING(node_id) ORDER BY node_id",
+          "queryType": "table",
+          "timeColumns": []
+        },
+        {
+          "refId": "edges",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT id,source,target,kind AS mainstat,rule AS detail__rule,\n CASE kind WHEN 'dependency' THEN '#64748B' ELSE '#CBD5E1' END AS color,\n CASE kind WHEN 'dependency' THEN 2 ELSE 1 END AS thickness\n FROM e WHERE source IN (SELECT node_id FROM visible) AND target IN (SELECT node_id FROM visible)\n ORDER BY id",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT id,source,target,kind AS mainstat,rule AS detail__rule,\n CASE kind WHEN 'dependency' THEN '#64748B' ELSE '#CBD5E1' END AS color,\n CASE kind WHEN 'dependency' THEN 2 ELSE 1 END AS thickness\n FROM e WHERE source IN (SELECT node_id FROM visible) AND target IN (SELECT node_id FROM visible)\n ORDER BY id",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "\u67e5\u770b\u6b65\u9aa4\u4e0e\u6587\u4ef6",
+                    "targetBlank": true,
+                    "url": "/d/storyos-run?${issue:queryparam}&${profile:queryparam}&${run:queryparam}&from=${__from}&to=${__to}&theme=light&var-node=${__data.fields.id:percentencode}&var-group=${__data.fields.id:percentencode}"
+                  },
+                  {
+                    "title": "\u6536\u8d77\u6587\u4ef6",
+                    "url": "/d/storyos-run?${issue:queryparam}&${profile:queryparam}&${run:queryparam}&from=${__from}&to=${__to}&theme=light&var-node=${__data.fields.id:percentencode}&var-group=__none"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "mainstat"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "secondarystat"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001 \u00b7 \u8017\u65f6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "color"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001\u8272"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "layoutAlgorithm": "layered",
+        "zoomMode": "cooperative"
+      }
+    },
+    {
+      "id": 7,
+      "title": "\u6b65\u9aa4\u6e05\u5355 \u00b7 \u6309\u4f9d\u8d56\u987a\u5e8f",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 13
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\n, levels(id,depth) AS (\n SELECT node_id,0 FROM n UNION SELECT e.target,l.depth+1 FROM levels l JOIN e ON e.source=l.id\n WHERE l.depth<(SELECT COUNT(*) FROM n)),\n ranked AS (SELECT n.*,MAX(levels.depth) AS depth FROM n JOIN levels ON levels.id=n.node_id GROUP BY node_id),\n step_positions AS (SELECT node_id,depth*180 AS x,\n (ROW_NUMBER() OVER (PARTITION BY depth ORDER BY EXISTS(SELECT 1 FROM e WHERE source=ranked.node_id AND kind='dependency') DESC,node_id)-1)*125 AS y FROM ranked WHERE type!='test-file'),\n positions AS (SELECT * FROM step_positions UNION ALL SELECT node_id,\n COALESCE((SELECT x FROM step_positions WHERE node_id=${group:sqlstring}),0)+((ROW_NUMBER() OVER (ORDER BY node_id)-1)%4)*180,\n (SELECT MAX(y) FROM step_positions)+125+((ROW_NUMBER() OVER (ORDER BY node_id)-1)/4)*125\n FROM visible WHERE type='test-file')\nSELECT\n CASE REPLACE(REPLACE(REPLACE(REPLACE(node_id,'check:',''),'phase:',''),'prepare:',''),'targeted:','') WHEN 'setup' THEN '\u51c6\u5907\u73af\u5883' WHEN 'build' THEN '\u6784\u5efa' WHEN 'tests' THEN '\u6d4b\u8bd5' WHEN 'cleanup' THEN '\u6e05\u7406\u73af\u5883' WHEN 'optional' THEN '\u53ef\u9009\u68c0\u67e5' WHEN 'input-ownership' THEN '\u8f93\u5165\u5f52\u5c5e' WHEN 'project-inputs' THEN '\u9879\u76ee\u8f93\u5165' WHEN 'verification-tests' THEN '\u9a8c\u8bc1\u5de5\u5177\u6d4b\u8bd5' WHEN 'workspace-boundaries' THEN '\u5de5\u4f5c\u533a\u8fb9\u754c' WHEN 'rust-format' THEN 'Rust \u683c\u5f0f' WHEN 'rust-clippy' THEN 'Rust \u9759\u6001\u68c0\u67e5' WHEN 'rust-test-build' THEN '\u7f16\u8bd1\u6d4b\u8bd5' WHEN 'rust-tests' THEN 'Rust \u6d4b\u8bd5' WHEN 'rust-doc-tests' THEN 'Rust \u6587\u6863\u6d4b\u8bd5' WHEN 'rust-release-build' THEN '\u53d1\u5e03\u6784\u5efa' WHEN 'generated-contracts' THEN '\u751f\u6210\u5951\u7ea6' WHEN 'contracts' THEN '\u5951\u7ea6\u9a8c\u8bc1' WHEN 'node-install' THEN '\u5b89\u88c5\u4f9d\u8d56' WHEN 'web-typecheck' THEN 'Web \u7c7b\u578b\u68c0\u67e5' WHEN 'web-build' THEN 'Web \u6784\u5efa' WHEN 'release-package' THEN '\u53d1\u5e03\u5305' WHEN 'project-scope' THEN '\u9879\u76ee\u8303\u56f4' WHEN 'database-setup' THEN '\u51c6\u5907\u6570\u636e\u5e93' WHEN 'database-cleanup' THEN '\u6e05\u7406\u6570\u636e\u5e93' WHEN 'exact-dist-host' THEN '\u542f\u52a8\u6210\u54c1\u670d\u52a1' WHEN 'exact-dist-reset' THEN '\u91cd\u7f6e\u6210\u54c1\u73af\u5883' WHEN 'exact-dist-cleanup' THEN '\u6e05\u7406\u6210\u54c1\u73af\u5883' WHEN 'browser-source' THEN '\u6e90\u7801\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'browser-exact-dist' THEN '\u6210\u54c1\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'verify-tracker' THEN '\u7968\u636e\u68c0\u67e5' WHEN 'observation-smoke' THEN '\u89c2\u6d4b\u9a8c\u6536' WHEN 'node-contract' THEN 'Node \u5951\u7ea6\u6d4b\u8bd5' WHEN 'node-postgresql' THEN 'PostgreSQL \u6d4b\u8bd5' WHEN 'node-process-cut' THEN '\u8fdb\u7a0b\u4e2d\u65ad\u6d4b\u8bd5' WHEN 'recovery' THEN '\u6062\u590d\u9a8c\u8bc1' WHEN 'recovery-drill' THEN '\u6062\u590d\u6f14\u7ec3' WHEN 'policy' THEN '\u9a8c\u8bc1\u7b56\u7565' WHEN 'verification-tools' THEN '\u9a8c\u8bc1\u5de5\u5177' WHEN 'author-edit-policy' THEN '\u5199\u5165\u7b56\u7565' WHEN 'author-edit-process-cut' THEN '\u5199\u5165\u6545\u969c' WHEN 'author-edit-self-test' THEN '\u5199\u5165\u81ea\u68c0' WHEN 'cargo' THEN 'Rust \u5de5\u4f5c\u533a' WHEN 'cargo:storyos-adapter-postgres' THEN '\u6570\u636e\u5e93\u9002\u914d' WHEN 'cargo:storyos-application' THEN '\u5e94\u7528\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-contracts' THEN '\u5951\u7ea6\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-core' THEN '\u6838\u5fc3\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-server' THEN '\u670d\u52a1\u5c42\u6d4b\u8bd5' WHEN 'daily-database' THEN '\u65e5\u5e38\u6570\u636e\u5e93' WHEN 'database' THEN '\u6570\u636e\u5e93\u6d4b\u8bd5' WHEN 'exact-dist' THEN '\u6210\u54c1\u9a8c\u8bc1' WHEN 'foundation-tests' THEN '\u57fa\u7840\u6d4b\u8bd5' WHEN 'http-files' THEN 'HTTP \u6587\u4ef6' WHEN 'pending' THEN '\u5f85\u6267\u884c\u5206\u7ec4' WHEN 'persistence-self-test' THEN '\u6301\u4e45\u5316\u81ea\u68c0' WHEN 'postgres-challenge' THEN '\u6570\u636e\u5e93\u6311\u6218' WHEN 'postgres-library' THEN '\u6570\u636e\u5e93\u85cf\u4e66' WHEN 'postgres-scope' THEN '\u6570\u636e\u5e93\u8303\u56f4' WHEN 'project-export-process-cut' THEN '\u9879\u76ee\u5bfc\u51fa\u6545\u969c' WHEN 'protocol-self-test' THEN '\u534f\u8bae\u81ea\u68c0' WHEN 'readable-export-process-cut' THEN '\u6587\u672c\u5bfc\u51fa\u6545\u969c' WHEN 'recovery-check' THEN '\u6062\u590d\u68c0\u67e5' WHEN 'recovery-fixture' THEN '\u6062\u590d\u6837\u672c' WHEN 'recovery-mixed' THEN '\u6df7\u5408\u6062\u590d' WHEN 'shared-tests' THEN '\u5171\u4eab\u6d4b\u8bd5' WHEN 'tracker-self-test' THEN '\u7968\u636e\u81ea\u68c0' WHEN 'transaction-guards' THEN '\u4e8b\u52a1\u8fb9\u754c' WHEN 'transaction-self-test' THEN '\u4e8b\u52a1\u81ea\u68c0' WHEN 'http-bootstrap' THEN 'HTTP \u542f\u52a8' WHEN 'http-main' THEN 'HTTP \u4e3b\u6d41\u7a0b' WHEN 'verification-node-tests' THEN '\u6267\u884c\u8bb0\u5f55\u6d4b\u8bd5' WHEN 'verification-observation-tests' THEN '\u89c2\u6d4b\u6d4b\u8bd5' WHEN 'verify-contract-inputs' THEN '\u5951\u7ea6\u8f93\u5165' WHEN 'verify-policy' THEN '\u7b56\u7565\u68c0\u67e5' WHEN 'verify-pr' THEN 'PR \u68c0\u67e5' WHEN 'web' THEN 'Web \u9a8c\u8bc1' WHEN 'web-foundation' THEN 'Web \u57fa\u7840' ELSE COALESCE(SUBSTR(path,LENGTH(RTRIM(path,REPLACE(path,'/','')))+1),REPLACE(node_id,'check:','')) END AS step,CASE state WHEN 'passed' THEN '\u901a\u8fc7' WHEN 'failed' THEN '\u5931\u8d25' WHEN 'running' THEN '\u8fd0\u884c\u4e2d' WHEN 'blocked' THEN '\u88ab\u963b\u585e' WHEN 'pending' THEN '\u5f85\u6267\u884c' WHEN 'interrupted' THEN '\u5df2\u4e2d\u65ad' WHEN 'cached' THEN '\u590d\u7528' WHEN 'not-selected' THEN '\u672a\u9009\u62e9' WHEN 'unknown' THEN '\u672a\u77e5' ELSE state END AS state,node_id\n FROM visible JOIN positions USING(node_id) WHERE type!='test-file' ORDER BY x,y,node_id",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\n, levels(id,depth) AS (\n SELECT node_id,0 FROM n UNION SELECT e.target,l.depth+1 FROM levels l JOIN e ON e.source=l.id\n WHERE l.depth<(SELECT COUNT(*) FROM n)),\n ranked AS (SELECT n.*,MAX(levels.depth) AS depth FROM n JOIN levels ON levels.id=n.node_id GROUP BY node_id),\n step_positions AS (SELECT node_id,depth*180 AS x,\n (ROW_NUMBER() OVER (PARTITION BY depth ORDER BY EXISTS(SELECT 1 FROM e WHERE source=ranked.node_id AND kind='dependency') DESC,node_id)-1)*125 AS y FROM ranked WHERE type!='test-file'),\n positions AS (SELECT * FROM step_positions UNION ALL SELECT node_id,\n COALESCE((SELECT x FROM step_positions WHERE node_id=${group:sqlstring}),0)+((ROW_NUMBER() OVER (ORDER BY node_id)-1)%4)*180,\n (SELECT MAX(y) FROM step_positions)+125+((ROW_NUMBER() OVER (ORDER BY node_id)-1)/4)*125\n FROM visible WHERE type='test-file')\nSELECT\n CASE REPLACE(REPLACE(REPLACE(REPLACE(node_id,'check:',''),'phase:',''),'prepare:',''),'targeted:','') WHEN 'setup' THEN '\u51c6\u5907\u73af\u5883' WHEN 'build' THEN '\u6784\u5efa' WHEN 'tests' THEN '\u6d4b\u8bd5' WHEN 'cleanup' THEN '\u6e05\u7406\u73af\u5883' WHEN 'optional' THEN '\u53ef\u9009\u68c0\u67e5' WHEN 'input-ownership' THEN '\u8f93\u5165\u5f52\u5c5e' WHEN 'project-inputs' THEN '\u9879\u76ee\u8f93\u5165' WHEN 'verification-tests' THEN '\u9a8c\u8bc1\u5de5\u5177\u6d4b\u8bd5' WHEN 'workspace-boundaries' THEN '\u5de5\u4f5c\u533a\u8fb9\u754c' WHEN 'rust-format' THEN 'Rust \u683c\u5f0f' WHEN 'rust-clippy' THEN 'Rust \u9759\u6001\u68c0\u67e5' WHEN 'rust-test-build' THEN '\u7f16\u8bd1\u6d4b\u8bd5' WHEN 'rust-tests' THEN 'Rust \u6d4b\u8bd5' WHEN 'rust-doc-tests' THEN 'Rust \u6587\u6863\u6d4b\u8bd5' WHEN 'rust-release-build' THEN '\u53d1\u5e03\u6784\u5efa' WHEN 'generated-contracts' THEN '\u751f\u6210\u5951\u7ea6' WHEN 'contracts' THEN '\u5951\u7ea6\u9a8c\u8bc1' WHEN 'node-install' THEN '\u5b89\u88c5\u4f9d\u8d56' WHEN 'web-typecheck' THEN 'Web \u7c7b\u578b\u68c0\u67e5' WHEN 'web-build' THEN 'Web \u6784\u5efa' WHEN 'release-package' THEN '\u53d1\u5e03\u5305' WHEN 'project-scope' THEN '\u9879\u76ee\u8303\u56f4' WHEN 'database-setup' THEN '\u51c6\u5907\u6570\u636e\u5e93' WHEN 'database-cleanup' THEN '\u6e05\u7406\u6570\u636e\u5e93' WHEN 'exact-dist-host' THEN '\u542f\u52a8\u6210\u54c1\u670d\u52a1' WHEN 'exact-dist-reset' THEN '\u91cd\u7f6e\u6210\u54c1\u73af\u5883' WHEN 'exact-dist-cleanup' THEN '\u6e05\u7406\u6210\u54c1\u73af\u5883' WHEN 'browser-source' THEN '\u6e90\u7801\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'browser-exact-dist' THEN '\u6210\u54c1\u6d4f\u89c8\u5668\u6d4b\u8bd5' WHEN 'verify-tracker' THEN '\u7968\u636e\u68c0\u67e5' WHEN 'observation-smoke' THEN '\u89c2\u6d4b\u9a8c\u6536' WHEN 'node-contract' THEN 'Node \u5951\u7ea6\u6d4b\u8bd5' WHEN 'node-postgresql' THEN 'PostgreSQL \u6d4b\u8bd5' WHEN 'node-process-cut' THEN '\u8fdb\u7a0b\u4e2d\u65ad\u6d4b\u8bd5' WHEN 'recovery' THEN '\u6062\u590d\u9a8c\u8bc1' WHEN 'recovery-drill' THEN '\u6062\u590d\u6f14\u7ec3' WHEN 'policy' THEN '\u9a8c\u8bc1\u7b56\u7565' WHEN 'verification-tools' THEN '\u9a8c\u8bc1\u5de5\u5177' WHEN 'author-edit-policy' THEN '\u5199\u5165\u7b56\u7565' WHEN 'author-edit-process-cut' THEN '\u5199\u5165\u6545\u969c' WHEN 'author-edit-self-test' THEN '\u5199\u5165\u81ea\u68c0' WHEN 'cargo' THEN 'Rust \u5de5\u4f5c\u533a' WHEN 'cargo:storyos-adapter-postgres' THEN '\u6570\u636e\u5e93\u9002\u914d' WHEN 'cargo:storyos-application' THEN '\u5e94\u7528\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-contracts' THEN '\u5951\u7ea6\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-core' THEN '\u6838\u5fc3\u5c42\u6d4b\u8bd5' WHEN 'cargo:storyos-server' THEN '\u670d\u52a1\u5c42\u6d4b\u8bd5' WHEN 'daily-database' THEN '\u65e5\u5e38\u6570\u636e\u5e93' WHEN 'database' THEN '\u6570\u636e\u5e93\u6d4b\u8bd5' WHEN 'exact-dist' THEN '\u6210\u54c1\u9a8c\u8bc1' WHEN 'foundation-tests' THEN '\u57fa\u7840\u6d4b\u8bd5' WHEN 'http-files' THEN 'HTTP \u6587\u4ef6' WHEN 'pending' THEN '\u5f85\u6267\u884c\u5206\u7ec4' WHEN 'persistence-self-test' THEN '\u6301\u4e45\u5316\u81ea\u68c0' WHEN 'postgres-challenge' THEN '\u6570\u636e\u5e93\u6311\u6218' WHEN 'postgres-library' THEN '\u6570\u636e\u5e93\u85cf\u4e66' WHEN 'postgres-scope' THEN '\u6570\u636e\u5e93\u8303\u56f4' WHEN 'project-export-process-cut' THEN '\u9879\u76ee\u5bfc\u51fa\u6545\u969c' WHEN 'protocol-self-test' THEN '\u534f\u8bae\u81ea\u68c0' WHEN 'readable-export-process-cut' THEN '\u6587\u672c\u5bfc\u51fa\u6545\u969c' WHEN 'recovery-check' THEN '\u6062\u590d\u68c0\u67e5' WHEN 'recovery-fixture' THEN '\u6062\u590d\u6837\u672c' WHEN 'recovery-mixed' THEN '\u6df7\u5408\u6062\u590d' WHEN 'shared-tests' THEN '\u5171\u4eab\u6d4b\u8bd5' WHEN 'tracker-self-test' THEN '\u7968\u636e\u81ea\u68c0' WHEN 'transaction-guards' THEN '\u4e8b\u52a1\u8fb9\u754c' WHEN 'transaction-self-test' THEN '\u4e8b\u52a1\u81ea\u68c0' WHEN 'http-bootstrap' THEN 'HTTP \u542f\u52a8' WHEN 'http-main' THEN 'HTTP \u4e3b\u6d41\u7a0b' WHEN 'verification-node-tests' THEN '\u6267\u884c\u8bb0\u5f55\u6d4b\u8bd5' WHEN 'verification-observation-tests' THEN '\u89c2\u6d4b\u6d4b\u8bd5' WHEN 'verify-contract-inputs' THEN '\u5951\u7ea6\u8f93\u5165' WHEN 'verify-policy' THEN '\u7b56\u7565\u68c0\u67e5' WHEN 'verify-pr' THEN 'PR \u68c0\u67e5' WHEN 'web' THEN 'Web \u9a8c\u8bc1' WHEN 'web-foundation' THEN 'Web \u57fa\u7840' ELSE COALESCE(SUBSTR(path,LENGTH(RTRIM(path,REPLACE(path,'/','')))+1),REPLACE(node_id,'check:','')) END AS step,CASE state WHEN 'passed' THEN '\u901a\u8fc7' WHEN 'failed' THEN '\u5931\u8d25' WHEN 'running' THEN '\u8fd0\u884c\u4e2d' WHEN 'blocked' THEN '\u88ab\u963b\u585e' WHEN 'pending' THEN '\u5f85\u6267\u884c' WHEN 'interrupted' THEN '\u5df2\u4e2d\u65ad' WHEN 'cached' THEN '\u590d\u7528' WHEN 'not-selected' THEN '\u672a\u9009\u62e9' WHEN 'unknown' THEN '\u672a\u77e5' ELSE state END AS state,node_id\n FROM visible JOIN positions USING(node_id) WHERE type!='test-file' ORDER BY x,y,node_id",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "\u672a\u77e5",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "passed": {
+                  "text": "\u901a\u8fc7"
+                },
+                "failed": {
+                  "text": "\u5931\u8d25"
+                },
+                "running": {
+                  "text": "\u8fd0\u884c\u4e2d"
+                },
+                "blocked": {
+                  "text": "\u88ab\u963b\u585e"
+                },
+                "pending": {
+                  "text": "\u5f85\u6267\u884c"
+                },
+                "interrupted": {
+                  "text": "\u5df2\u4e2d\u65ad"
+                },
+                "cached": {
+                  "text": "\u590d\u7528"
+                },
+                "not-selected": {
+                  "text": "\u672a\u9009\u62e9"
+                },
+                "unknown": {
+                  "text": "\u672a\u77e5"
+                },
+                "complete": {
+                  "text": "\u5b8c\u6574\u9a8c\u8bc1"
+                },
+                "targeted": {
+                  "text": "\u9488\u5bf9\u6027\u9a8c\u8bc1"
+                },
+                "daily": {
+                  "text": "\u65e5\u5e38\u9a8c\u8bc1"
+                },
+                "retained": {
+                  "text": "\u5df2\u4fdd\u7559"
+                },
+                "unavailable": {
+                  "text": "\u4e0d\u53ef\u7528"
+                },
+                "unknown / not ended": {
+                  "text": "\u672a\u77e5 / \u5c1a\u672a\u7ed3\u675f"
+                },
+                "not a file": {
+                  "text": "\u975e\u6587\u4ef6\u8282\u70b9"
+                },
+                "none recorded": {
+                  "text": "\u65e0\u8bb0\u5f55"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": false,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "issue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4efb\u52a1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "profile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9a8c\u8bc1\u6a21\u5f0f"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u9009\u62e9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "executed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u6267\u884c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u603b\u8282\u70b9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6570\u636e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8fd0\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actual_start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "end_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u675f\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6e90\u7801\u8eab\u4efd"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4fdd\u7559\u62a5\u544a"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph_sha256"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6307\u7eb9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heartbeat_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6700\u8fd1\u66f4\u65b0 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4 ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7c7b\u578b"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "membership"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u5f52\u5c5e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selection_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9009\u62e9\u539f\u56e0"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prerequisites"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5148\u51b3\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downstream"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u540e\u7eed\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "members"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5206\u7ec4\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "producer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u590d\u7528\u6765\u6e90"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "parent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7236\u7ea7"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "execution_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u8303\u56f4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8017\u65f6\uff08\u79d2\uff09"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "outcome"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bf7\u6c42\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "step"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4"
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "\u67e5\u770b\u6b65\u9aa4",
+                    "url": "/d/storyos-run?${issue:queryparam}&${profile:queryparam}&${run:queryparam}&from=${__from}&to=${__to}&var-node=${__data.fields.node_id:percentencode}&var-group=__none"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 1,
+      "title": "\u9605\u8bfb\u63d0\u793a",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 24,
+        "h": 3
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "\u5706\u5fc3\u662f\u6b65\u9aa4\uff0c\u7b2c\u4e8c\u884c\u662f\u72b6\u6001\u4e0e\u8017\u65f6\u3002\u5b9e\u7ebf\u7bad\u5934\u8868\u793a\u5148\u51b3\u4f9d\u8d56\uff0c\u7ec6\u7ebf\u8868\u793a\u5206\u7ec4\u5f52\u5c5e\u3002\u70b9\u51fb\u6b65\u9aa4\u67e5\u770b\u8be6\u60c5\uff1b\u5c06\u5c55\u5f00\u5206\u7ec4\u8bbe\u4e3a\u300c\u672a\u9009\u62e9\u300d\u5373\u53ef\u6536\u8d77\u6587\u4ef6\u3002 \u7eff\u8272\u901a\u8fc7 \u00b7 \u7ea2\u8272\u5931\u8d25 \u00b7 \u84dd\u8272\u8fd0\u884c\u4e2d \u00b7 \u6a59\u8272\u963b\u585e \u00b7 \u9ec4\u8272\u5f85\u6267\u884c \u00b7 \u7070\u8272\u672a\u9009\u62e9\u3002\u65f6\u95f4\u4e3a UTC\uff1b\u2014 \u8868\u793a\u672a\u8bb0\u5f55\uff0c\u672a\u77e5\u4e0d\u7b49\u4e8e\u96f6\u3002\u8fd0\u884c\u4e2d\u662f\u6700\u540e\u8bb0\u5f55\u7684\u72b6\u6001\uff0c\u8bf7\u7ed3\u5408\u300c\u6700\u8fd1\u66f4\u65b0 UTC\u300d\u5224\u65ad\u662f\u5426\u4ecd\u6d3b\u8dc3\u3002"
+      }
+    },
+    {
+      "id": 4,
+      "title": "\u6b65\u9aa4\u8be6\u60c5",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 20,
+        "w": 24,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT n.node_id,n.type,n.state,n.selected,\n COALESCE(n.path,'not a file') AS file,json_extract(n.definition,'$.execution') AS membership,\n (SELECT group_concat(json_extract(c.value,'$.reasons'),char(10)) FROM records r,json_each(r.payload,'$.node_checks') c\n WHERE r.run=n.run_id AND r.kind='run' AND json_extract(c.value,'$.group')=json_extract(n.definition,'$.profile')) AS selection_reason,\n (SELECT group_concat(source, char(10)) FROM e WHERE target=n.node_id AND kind='dependency') AS prerequisites,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind='dependency') AS downstream,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind IN ('contains','member')) AS members,\n COALESCE(n.producer,'none recorded') AS producer,g.graph_sha256\n FROM n,g WHERE n.node_id=${node:sqlstring}",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS MATERIALIZED (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT n.node_id,n.type,n.state,n.selected,\n COALESCE(n.path,'not a file') AS file,json_extract(n.definition,'$.execution') AS membership,\n (SELECT group_concat(json_extract(c.value,'$.reasons'),char(10)) FROM records r,json_each(r.payload,'$.node_checks') c\n WHERE r.run=n.run_id AND r.kind='run' AND json_extract(c.value,'$.group')=json_extract(n.definition,'$.profile')) AS selection_reason,\n (SELECT group_concat(source, char(10)) FROM e WHERE target=n.node_id AND kind='dependency') AS prerequisites,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind='dependency') AS downstream,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind IN ('contains','member')) AS members,\n COALESCE(n.producer,'none recorded') AS producer,g.graph_sha256\n FROM n,g WHERE n.node_id=${node:sqlstring}",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "\u672a\u77e5",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "passed": {
+                  "text": "\u901a\u8fc7"
+                },
+                "failed": {
+                  "text": "\u5931\u8d25"
+                },
+                "running": {
+                  "text": "\u8fd0\u884c\u4e2d"
+                },
+                "blocked": {
+                  "text": "\u88ab\u963b\u585e"
+                },
+                "pending": {
+                  "text": "\u5f85\u6267\u884c"
+                },
+                "interrupted": {
+                  "text": "\u5df2\u4e2d\u65ad"
+                },
+                "cached": {
+                  "text": "\u590d\u7528"
+                },
+                "not-selected": {
+                  "text": "\u672a\u9009\u62e9"
+                },
+                "unknown": {
+                  "text": "\u672a\u77e5"
+                },
+                "complete": {
+                  "text": "\u5b8c\u6574\u9a8c\u8bc1"
+                },
+                "targeted": {
+                  "text": "\u9488\u5bf9\u6027\u9a8c\u8bc1"
+                },
+                "daily": {
+                  "text": "\u65e5\u5e38\u9a8c\u8bc1"
+                },
+                "retained": {
+                  "text": "\u5df2\u4fdd\u7559"
+                },
+                "unavailable": {
+                  "text": "\u4e0d\u53ef\u7528"
+                },
+                "unknown / not ended": {
+                  "text": "\u672a\u77e5 / \u5c1a\u672a\u7ed3\u675f"
+                },
+                "not a file": {
+                  "text": "\u975e\u6587\u4ef6\u8282\u70b9"
+                },
+                "none recorded": {
+                  "text": "\u65e0\u8bb0\u5f55"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": false,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "issue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4efb\u52a1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "profile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9a8c\u8bc1\u6a21\u5f0f"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u9009\u62e9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "executed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u6267\u884c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u603b\u8282\u70b9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6570\u636e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8fd0\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actual_start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "end_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u675f\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6e90\u7801\u8eab\u4efd"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4fdd\u7559\u62a5\u544a"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph_sha256"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6307\u7eb9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heartbeat_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6700\u8fd1\u66f4\u65b0 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4 ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7c7b\u578b"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "membership"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u5f52\u5c5e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selection_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9009\u62e9\u539f\u56e0"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prerequisites"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5148\u51b3\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downstream"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u540e\u7eed\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "members"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5206\u7ec4\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "producer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u590d\u7528\u6765\u6e90"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "parent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7236\u7ea7"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "execution_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u8303\u56f4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8017\u65f6\uff08\u79d2\uff09"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "outcome"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bf7\u6c42\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 5,
+      "title": "\u6267\u884c\u8bb0\u5f55 \u00b7 UTC",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 25,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "SELECT a.attempt_id,a.parent,a.result,a.selection_reason,a.execution_scope,\n COALESCE(a.started_at,'unknown') AS start_UTC,COALESCE(a.ended_at,'unknown') AS end_UTC,\n COALESCE(CAST(a.duration_seconds AS TEXT),'unknown') AS seconds,r.path AS retained_evidence\n FROM node_attempts a LEFT JOIN records r ON r.run=a.run_id AND r.kind='step'\n AND json_extract(r.payload,'$.id')=a.attempt_id\n WHERE a.run_id=${run:sqlstring} AND a.node_id=${node:sqlstring} ORDER BY a.started_at,a.attempt_id",
+          "rawQueryText": "SELECT a.attempt_id,a.parent,a.result,a.selection_reason,a.execution_scope,\n COALESCE(a.started_at,'unknown') AS start_UTC,COALESCE(a.ended_at,'unknown') AS end_UTC,\n COALESCE(CAST(a.duration_seconds AS TEXT),'unknown') AS seconds,r.path AS retained_evidence\n FROM node_attempts a LEFT JOIN records r ON r.run=a.run_id AND r.kind='step'\n AND json_extract(r.payload,'$.id')=a.attempt_id\n WHERE a.run_id=${run:sqlstring} AND a.node_id=${node:sqlstring} ORDER BY a.started_at,a.attempt_id",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "\u672a\u77e5",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "passed": {
+                  "text": "\u901a\u8fc7"
+                },
+                "failed": {
+                  "text": "\u5931\u8d25"
+                },
+                "running": {
+                  "text": "\u8fd0\u884c\u4e2d"
+                },
+                "blocked": {
+                  "text": "\u88ab\u963b\u585e"
+                },
+                "pending": {
+                  "text": "\u5f85\u6267\u884c"
+                },
+                "interrupted": {
+                  "text": "\u5df2\u4e2d\u65ad"
+                },
+                "cached": {
+                  "text": "\u590d\u7528"
+                },
+                "not-selected": {
+                  "text": "\u672a\u9009\u62e9"
+                },
+                "unknown": {
+                  "text": "\u672a\u77e5"
+                },
+                "complete": {
+                  "text": "\u5b8c\u6574\u9a8c\u8bc1"
+                },
+                "targeted": {
+                  "text": "\u9488\u5bf9\u6027\u9a8c\u8bc1"
+                },
+                "daily": {
+                  "text": "\u65e5\u5e38\u9a8c\u8bc1"
+                },
+                "retained": {
+                  "text": "\u5df2\u4fdd\u7559"
+                },
+                "unavailable": {
+                  "text": "\u4e0d\u53ef\u7528"
+                },
+                "unknown / not ended": {
+                  "text": "\u672a\u77e5 / \u5c1a\u672a\u7ed3\u675f"
+                },
+                "not a file": {
+                  "text": "\u975e\u6587\u4ef6\u8282\u70b9"
+                },
+                "none recorded": {
+                  "text": "\u65e0\u8bb0\u5f55"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": false,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "issue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4efb\u52a1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "profile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9a8c\u8bc1\u6a21\u5f0f"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u9009\u62e9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "executed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u6267\u884c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u603b\u8282\u70b9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6570\u636e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8fd0\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actual_start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "end_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u675f\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6e90\u7801\u8eab\u4efd"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4fdd\u7559\u62a5\u544a"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph_sha256"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6307\u7eb9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heartbeat_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6700\u8fd1\u66f4\u65b0 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4 ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7c7b\u578b"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "membership"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u5f52\u5c5e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selection_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9009\u62e9\u539f\u56e0"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prerequisites"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5148\u51b3\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downstream"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u540e\u7eed\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "members"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5206\u7ec4\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "producer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u590d\u7528\u6765\u6e90"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "parent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7236\u7ea7"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "execution_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u8303\u56f4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8017\u65f6\uff08\u79d2\uff09"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "outcome"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bf7\u6c42\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    },
+    {
+      "id": 6,
+      "title": "\u8bf7\u6c42\u8bb0\u5f55 \u00b7 \u590d\u7528\u4e0d\u4f1a\u542f\u52a8\u6267\u884c",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 24,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "SELECT json_extract(payload,'$.utc') AS UTC,json_extract(payload,'$.outcome') AS outcome,path AS evidence FROM records WHERE kind='request' AND json_extract(payload,'$.run_id')=${run:sqlstring} ORDER BY UTC",
+          "rawQueryText": "SELECT json_extract(payload,'$.utc') AS UTC,json_extract(payload,'$.outcome') AS outcome,path AS evidence FROM records WHERE kind='request' AND json_extract(payload,'$.run_id')=${run:sqlstring} ORDER BY UTC",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "\u672a\u77e5",
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "passed": {
+                  "text": "\u901a\u8fc7"
+                },
+                "failed": {
+                  "text": "\u5931\u8d25"
+                },
+                "running": {
+                  "text": "\u8fd0\u884c\u4e2d"
+                },
+                "blocked": {
+                  "text": "\u88ab\u963b\u585e"
+                },
+                "pending": {
+                  "text": "\u5f85\u6267\u884c"
+                },
+                "interrupted": {
+                  "text": "\u5df2\u4e2d\u65ad"
+                },
+                "cached": {
+                  "text": "\u590d\u7528"
+                },
+                "not-selected": {
+                  "text": "\u672a\u9009\u62e9"
+                },
+                "unknown": {
+                  "text": "\u672a\u77e5"
+                },
+                "complete": {
+                  "text": "\u5b8c\u6574\u9a8c\u8bc1"
+                },
+                "targeted": {
+                  "text": "\u9488\u5bf9\u6027\u9a8c\u8bc1"
+                },
+                "daily": {
+                  "text": "\u65e5\u5e38\u9a8c\u8bc1"
+                },
+                "retained": {
+                  "text": "\u5df2\u4fdd\u7559"
+                },
+                "unavailable": {
+                  "text": "\u4e0d\u53ef\u7528"
+                },
+                "unknown / not ended": {
+                  "text": "\u672a\u77e5 / \u5c1a\u672a\u7ed3\u675f"
+                },
+                "not a file": {
+                  "text": "\u975e\u6587\u4ef6\u8282\u70b9"
+                },
+                "none recorded": {
+                  "text": "\u65e0\u8bb0\u5f55"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": false,
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "issue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4efb\u52a1"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "profile"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9a8c\u8bc1\u6a21\u5f0f"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u72b6\u6001"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selected"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u9009\u62e9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "executed"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5df2\u6267\u884c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u603b\u8282\u70b9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6570\u636e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8fd0\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "actual_start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "end_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u675f\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "source"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6e90\u7801\u8eab\u4efd"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_report"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u4fdd\u7559\u62a5\u544a"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "graph_sha256"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6d41\u7a0b\u6307\u7eb9"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "heartbeat_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6700\u8fd1\u66f4\u65b0 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6b65\u9aa4 ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7c7b\u578b"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "file"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "membership"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u5f52\u5c5e"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "selection_reason"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u9009\u62e9\u539f\u56e0"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prerequisites"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5148\u51b3\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "downstream"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u540e\u7eed\u6b65\u9aa4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "members"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5206\u7ec4\u6587\u4ef6"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "producer"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u590d\u7528\u6765\u6e90"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "attempt_id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c ID"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "parent"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7236\u7ea7"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "result"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "execution_scope"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u6267\u884c\u8303\u56f4"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "start_UTC"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u5f00\u59cb\u65f6\u95f4 UTC"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "seconds"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8017\u65f6\uff08\u79d2\uff09"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "retained_evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "outcome"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bf7\u6c42\u7ed3\u679c"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "evidence"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "\u8bc1\u636e\u8def\u5f84"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ]
+}
