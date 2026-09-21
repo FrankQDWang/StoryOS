@@ -103,7 +103,10 @@ def run(root, command, context):
     directory.mkdir(parents=True, exist_ok=True)
     try:
         if os.environ.get('STORYOS_VERIFICATION_RUN'):
-            raise ValueError('A complete verification run cannot be nested')
+            parent = json.loads((Path(os.environ['STORYOS_VERIFICATION_RUN']) / 'report.json').read_text())
+            observe(root, 'refused', issue=parent.get('issue'), requested_scope=parent.get('profile'),
+                    complete_dispatch_attempt=True, reason='A complete verification run cannot be nested')
+            return 1
         with ExitStack() as resources:
             with (directory / 'admission.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)

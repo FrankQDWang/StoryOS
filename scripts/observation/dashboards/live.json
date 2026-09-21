@@ -1,25 +1,15 @@
 {
-  "uid": "storyos-verification",
-  "title": "StoryOS verification",
+  "uid": "storyos-verification", "title": "StoryOS verification",
   "schemaVersion": 39, "refresh": "5s", "editable": false,
   "panels": [
-    {
-      "id": 1,
-      "title": "Current managed commands",
-      "type": "table",
-      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12},
-      "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"},
-      "targets": [{"refId": "A", "queryText": "SELECT COALESCE(issue, 'unknown') AS issue, run_id, profile, stage, parent_step, scope, reason, ROUND(elapsed_seconds, 1) AS elapsed_seconds, heartbeat_at, liveness, ROUND(heartbeat_age_seconds, 1) AS heartbeat_age_seconds FROM current_execution ORDER BY run_id, stage", "rawQueryText": "SELECT COALESCE(issue, 'unknown') AS issue, run_id, profile, stage, parent_step, scope, reason, ROUND(elapsed_seconds, 1) AS elapsed_seconds, heartbeat_at, liveness, ROUND(heartbeat_age_seconds, 1) AS heartbeat_age_seconds FROM current_execution ORDER BY run_id, stage", "queryType": "table", "timeColumns": []}],
-      "options": {"showHeader": true}
-    },
-    {
-      "id": 2,
-      "title": "Record diagnostics",
-      "type": "table",
-      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 12},
-      "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"},
-      "targets": [{"refId": "A", "queryText": "SELECT path, quality, diagnostic FROM records WHERE quality != 'valid' ORDER BY path", "rawQueryText": "SELECT path, quality, diagnostic FROM records WHERE quality != 'valid' ORDER BY path", "queryType": "table", "timeColumns": []}],
-      "options": {"showHeader": true}
-    }
+    {"id": 1, "title": "Current managed commands", "type": "table", "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT COALESCE(issue, 'unknown') AS issue, run_id, profile, stage, parent_step, scope, reason, ROUND(elapsed_seconds, 1) AS elapsed_seconds, heartbeat_at, liveness, ROUND(heartbeat_age_seconds, 1) AS heartbeat_age_seconds FROM current_execution ORDER BY run_id, stage", "rawQueryText": "SELECT COALESCE(issue, 'unknown') AS issue, run_id, profile, stage, parent_step, scope, reason, ROUND(elapsed_seconds, 1) AS elapsed_seconds, heartbeat_at, liveness, ROUND(heartbeat_age_seconds, 1) AS heartbeat_age_seconds FROM current_execution ORDER BY run_id, stage", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 2, "title": "Record diagnostics", "type": "table", "gridPos": {"x": 0, "y": 12, "w": 24, "h": 12}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT path, quality, diagnostic FROM records WHERE quality != 'valid' ORDER BY path", "rawQueryText": "SELECT path, quality, diagnostic FROM records WHERE quality != 'valid' ORDER BY path", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 3, "title": "Issue execution cost", "type": "table", "gridPos": {"x": 0, "y": 20, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT COALESCE(issue,'unknown') AS issue,profile,status,attempts,COALESCE(seconds,'unknown') AS elapsed_seconds,COALESCE(blocked_seconds,'unknown') AS blocked_seconds FROM issue_cost", "rawQueryText": "SELECT COALESCE(issue,'unknown') AS issue,profile,status,attempts,COALESCE(seconds,'unknown') AS elapsed_seconds,COALESCE(blocked_seconds,'unknown') AS blocked_seconds FROM issue_cost", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 4, "title": "Request outcomes", "type": "table", "gridPos": {"x": 0, "y": 30, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT COALESCE(issue,'unknown') AS issue,outcome,requests FROM request_cost", "rawQueryText": "SELECT COALESCE(issue,'unknown') AS issue,outcome,requests FROM request_cost", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 5, "title": "Exclusive stage cost", "type": "table", "gridPos": {"x": 0, "y": 40, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT * FROM stage_cost", "rawQueryText": "SELECT * FROM stage_cost", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 6, "title": "Rule violations", "type": "table", "gridPos": {"x": 0, "y": 50, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT * FROM violations", "rawQueryText": "SELECT * FROM violations", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 7, "title": "Comparable timing", "type": "table", "gridPos": {"x": 0, "y": 60, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT * FROM timing_comparison", "rawQueryText": "SELECT * FROM timing_comparison", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 8, "title": "Observation limits", "type": "table", "gridPos": {"x": 0, "y": 70, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT * FROM observation_settings", "rawQueryText": "SELECT * FROM observation_settings", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}},
+    {"id": 9, "title": "Historical and incomplete observations", "type": "table", "gridPos": {"x": 0, "y": 80, "w": 24, "h": 10}, "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"}, "targets": [{"refId": "A", "queryText": "SELECT run,quality,COALESCE(issue,'unknown') AS issue,status,COALESCE(actual_start,'unknown') AS actual_start,COALESCE(observed_seconds,'unknown') AS observed_seconds FROM observed_runs", "rawQueryText": "SELECT run,quality,COALESCE(issue,'unknown') AS issue,status,COALESCE(actual_start,'unknown') AS actual_start,COALESCE(observed_seconds,'unknown') AS observed_seconds FROM observed_runs", "queryType": "table", "timeColumns": []}], "options": {"showHeader": true}}
   ]
 }

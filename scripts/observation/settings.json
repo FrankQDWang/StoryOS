@@ -1,0 +1,8 @@
+{
+  "heartbeat_seconds": 30,
+  "regression_min_samples": 3,
+  "regression_ratio": 1.5,
+  "regression_min_seconds": 30,
+  "max_batch_records": 200,
+  "max_database_bytes": 268435456
+}
