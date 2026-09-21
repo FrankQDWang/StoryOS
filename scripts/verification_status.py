@@ -39,7 +39,7 @@ def execute(root, check, context):
     import verification as runner
     plan = targeted_plan(root, check)
     if os.environ.get('STORYOS_VERIFICATION_RUN'):
-        return runner.step(root, check, plan['command'])
+        return runner.step(root, check, plan['command'], node_id="targeted:" + check)
     if plan['checks'][0]['status'] == 'pending':
         import verification_candidate
         verification_candidate.observe(root, 'refused', issue=context.get('issue'),

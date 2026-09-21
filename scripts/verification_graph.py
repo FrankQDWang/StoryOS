@@ -161,3 +161,22 @@ def evidence(value):
     if isinstance(value, list):
         return [evidence(item) for item in value]
     return value
+
+
+def bind_attempt(report, stage, node_id=None):
+    """Bind an executor boundary to its retained graph, without expanding members."""
+    plan = report.get('plan') or {}
+    graph = report.get('graph') or plan.get('graph')
+    if not graph:
+        return {}
+    nodes = {node['id']: node for node in graph['nodes']}
+    name = node_id or 'check:' + stage
+    if name not in nodes:
+        return {}
+    node = nodes[name]
+    checks = [check for check in plan.get('checks', []) if check['group'] == node.get('profile')
+              or (name == 'check:cargo' and check['group'].startswith('cargo:'))]
+    return {'node_version': 1, 'run_id': report['run_id'], 'graph_sha256': digest(graph),
+            'node_id': name, 'selection_reason': [reason for check in checks for reason in check.get('reasons', [])]
+            or ['Registered command boundary'],
+            'execution_scope': checks or {'profile': node.get('profile'), 'node': name}}

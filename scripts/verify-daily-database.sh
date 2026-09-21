@@ -21,10 +21,11 @@ for group in "$@"; do
   case "$group" in
     database)
       for target in project_scope project_command_challenge; do
-        python3 scripts/verification.py step daily-postgres-target -- cargo test --locked --workspace --all-features \
+        case "$target" in project_scope) stage=postgres-scope ;; project_command_challenge) stage=postgres-challenge ;; esac
+        python3 scripts/verification.py step "$stage" -- cargo test --locked --workspace --all-features \
           --test "$target" -- --ignored --nocapture
       done
-      python3 scripts/verification.py step daily-postgres-library -- cargo test --locked --workspace --all-features \
+      python3 scripts/verification.py step postgres-library -- cargo test --locked --workspace --all-features \
         --lib -- --ignored --nocapture ;;
     node-postgresql|node-process-cut) ;;
     *) echo "Unsupported daily database group: $group" >&2; exit 1 ;;

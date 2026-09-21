@@ -337,3 +337,23 @@ restarts observation without restarting that command, and records container CPU,
 memory and block I/O. This is synthetic overhead evidence, not a product speedup.
 The original records survive observation downtime and rebuild. The database
 size guard stops further collection above 256 MiB; it never removes raw records.
+
+### Retained node attempts
+
+Managed command steps bind their attempt ID and parent to a retained graph digest
+and node ID. Build and reset observations use `nodes/`; required evidence stages
+keep their existing `steps/` records. They retain the selection reason, execution scope, actual child
+start, UTC end, monotonic duration, and result. Shared phases and resets use their
+own nodes. Cargo build and grouped execution remain separate boundaries. Graph
+membership alone never creates an attempt or a file duration. Uninstrumented
+members remain unknown after execution; a missing finish is not success.
+
+The collector exposes `run_graphs`, `node_attempts`, and `node_states`. These
+read models preserve full membership, pending and unselected nodes, failed
+prerequisites, actual attempts, and cache producer links. Complete reuse stays a
+request against its original run. Cache hits create no executed node attempts.
+Nested step intervals still use the existing exclusive cost calculation; do not
+sum node durations as an Issue bill. Queue and resource wait times remain unknown
+without an explicit observation. Legacy reports gain no graph or timing facts.
+Run `make verify-targeted CHECK=verification-node-tests` for these public command
+and SQLite replay regressions.

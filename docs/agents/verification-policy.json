@@ -1,6 +1,7 @@
 {
   "version": 1,
   "targeted": {
+    "verification-node-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_node_tests.py"], "clean": false},
     "verification-observation-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_observation_tests.py"], "clean": false},
     "verify-policy": {"command": ["make", "verify-policy"], "clean": false},
     "contracts": {"command": ["make", "contracts"], "clean": true},
@@ -47,6 +48,11 @@
       "exact-dist-cleanup": {"type": "cleanup", "requires": ["exact-dist-host"], "after": ["exact-dist"]}
     },
     "profiles": {
+      "daily-database": {"members": ["database", "node-postgresql", "node-process-cut"]},
+      "shared-tests": {"members": ["node-postgresql", "node-process-cut"]},
+      "recovery-check": {},
+      "recovery-drill": {},
+      "observation-smoke": {},
       "verify-tracker": {},
       "policy": {"members": ["input-ownership", "project-inputs", "verification-tests"]},
       "contracts": {"members": ["protocol-self-test", "persistence-self-test", "author-edit-self-test", "tracker-self-test", "transaction-self-test", "generated-contracts"]},
@@ -73,6 +79,7 @@
       "project-scope": {"requires": ["release-package"], "members": ["postgres-scope", "postgres-challenge", "postgres-library", "http-files", "author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut", "exact-dist", "recovery-fixture", "recovery-mixed"]}
     },
     "targeted": {
+      "verification-node-tests": ["check:verification-tools"],
       "verify-tracker": ["check:verify-tracker"],
       "verify-policy": ["check:input-ownership", "check:project-inputs", "check:verification-tests"],
       "verification-observation-tests": ["check:verification-tools"],

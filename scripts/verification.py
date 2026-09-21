@@ -14,6 +14,7 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
 import uuid
 
 import verification_cache
@@ -123,7 +124,16 @@ def complete_plan(root, revision="HEAD", base="origin/main", *, with_graph=False
 
 
 def cargo_test_inputs(root, command):
-    artifacts = subprocess.check_output([*command, "--no-run", "--message-format=json"], cwd=root, text=True)
+    build = [*command, "--no-run", "--message-format=json"]
+    if os.environ.get("STORYOS_VERIFICATION_RUN"):
+        with tempfile.TemporaryFile(mode="w+") as output:
+            code = step(root, "rust-test-build", build, stdout=output, node_only=True)
+            if code:
+                raise subprocess.CalledProcessError(code, build)
+            output.seek(0)
+            artifacts = output.read()
+    else:
+        artifacts = subprocess.check_output(build, cwd=root, text=True)
     compiled = set()
     for line in artifacts.splitlines():
         artifact = json.loads(line)
@@ -144,8 +154,7 @@ def rust_tests(root):
     run = os.environ.get("STORYOS_VERIFICATION_RUN")
     if run:
         write_json(Path(run) / "rust-test-files.json", files)
-    code, interrupted = execute(command, os.environ.copy(), run is None and os.name == "posix")
-    return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
+    return step(root, "cargo", command, node_only=True)
 
 
 def write_json(path, value):
@@ -154,10 +163,10 @@ def write_json(path, value):
     temporary.replace(path)
 
 
-def execute(command, environment, new_group, observation=None):
+def execute(command, environment, new_group, observation=None, stdout=None):
     interrupted = 0
     try:
-        child = subprocess.Popen(command, env=environment, start_new_session=new_group)
+        child = subprocess.Popen(command, env=environment, start_new_session=new_group, stdout=stdout)
     except OSError as error:
         if observation:
             observation({"launch_error": type(error).__name__})
@@ -206,7 +215,7 @@ def execute(command, environment, new_group, observation=None):
     return code, interrupted
 
 
-def step(root, stage, command):
+def step(root, stage, command, *, node_id=None, stdout=None, node_only=False):
     if not re.fullmatch(r"[a-z][a-z0-9-]*", stage):
         raise ValueError("Stage names use lowercase words separated by hyphens")
     run_path = os.environ.get("STORYOS_VERIFICATION_RUN")
@@ -217,19 +226,28 @@ def step(root, stage, command):
     if directory.parent != (root / "target/verification").resolve() or not directory.is_dir():
         raise ValueError("The verification run must be inside target/verification")
     identifier = uuid.uuid4().hex
-    path = directory / "steps" / f"{identifier}.json"
+    path = directory / ("nodes" if node_only else "steps") / f"{identifier}.json"
+    path.parent.mkdir(exist_ok=True)
     started = time.monotonic()
     result = {"id": identifier, "stage": stage, "command": command,
               "parent": os.environ.get("STORYOS_VERIFICATION_PARENT"),
               "started_monotonic": started, "started_at": datetime.now(timezone.utc).isoformat(), "status": "running"}
+    retained = json.loads((directory / "report.json").read_text())
+    if node_id is None and not result["parent"] and (retained.get("plan") or {}).get("check") == stage:
+        node_id = "targeted:" + stage
+    result.update(verification_graph.bind_attempt(retained, stage, node_id))
+    result["attempt_started"] = False
     write_json(path, result)
     def observation(fields):
         result.update(fields)
+        if "child_group" in fields:
+            result.update(attempt_started=True, started_at=datetime.now(timezone.utc).isoformat(),
+                          started_monotonic=time.monotonic())
         write_json(path, result)
     observation({"heartbeat_at": result["started_at"]})
-    code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier}, False, observation)
+    code, interrupted = execute(command, {**os.environ, "STORYOS_VERIFICATION_PARENT": identifier}, False, observation, stdout)
     result.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic(),
-                  duration_seconds=time.monotonic() - started, exit_code=code,
+                  duration_seconds=time.monotonic() - result["started_monotonic"], exit_code=code,
                   status="interrupted" if interrupted else ("passed" if code == 0 else "failed"))
     write_json(path, result)
     return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
@@ -280,6 +298,17 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         if not plan and command == ["make", "verify-local-steps"]:
             report["plan"] = complete_plan(root, base=context["base"] if context else "origin/main", with_graph=True)
             report["graph"] = report["plan"].pop("graph", None)
+        if not plan and "graph" not in report:
+            policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+            snapshot = {"source": report["source_start"], "checks": [],
+                        "test_files": [f["path"] for f in report["inventory"]["files"]
+                                       if f["kind"].endswith("-test")]}
+            stage = command[command.index("step") + 1] if "step" in command else None
+            if stage in set(policy.get("workflow", {}).get("profiles", {})) | set(policy.get("complete", {}).get("stages", [])):
+                snapshot["checks"] = [{"group": stage, "files": [], "status": "ready", "reasons": ["Explicit public command"]}]
+            verification_graph.attach(root, snapshot, policy, report["inventory"]["files"])
+            report["graph"] = snapshot.get("graph")
+        write_json(report_path, report)
         cache_started = time.monotonic()
         cache = verification_cache.DailyCache(root, plan, no_cache)
         report["cache"] = cache.observation

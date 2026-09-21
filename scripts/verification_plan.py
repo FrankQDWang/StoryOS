@@ -173,7 +173,8 @@ def execute_plan(root, plan):
                        "--reporter=json", f"--outputFile={output}"]
         else:
             raise ValueError(f"Unsupported execution group: {group}")
-        code = verification.step(root, group.replace(":", "-").replace("_", "-").lower(), command)
+        code = verification.step(root, group.replace(":", "-").replace("_", "-").lower(), command,
+                                 node_id="check:cargo" if group.startswith("cargo:") else "check:" + group)
         if code:
             return code
         if group in {"node-contract", "browser-source"}:

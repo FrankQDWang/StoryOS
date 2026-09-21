@@ -87,13 +87,16 @@ def main():
             return verification.step(root, "shared-tests", [sys.executable, str(Path(__file__).resolve()), *sys.argv[1:]])
         if not phases or not os.environ.get("STORYOS_TEST_POSTGRES_CONTAINER"):
             raise ValueError("Shared execution requires a phase policy and a prepared PostgreSQL fixture")
+        os.environ["repository_root"] = str(root)
         for phase in phases:
             prepare = {"none": None, "reset-challenge": "reset_command_challenge_rate_windows",
                        "reload-fixture": "reload_controlled_fixture"}[phase["prepare"]]
             if prepare:
-                subprocess.run(["sh", "-ec", '. "$repository_root/scripts/lib/controlled-postgres.sh"; '
+                code = verification.step(root, "shared-reset", ["sh", "-ec", '. "$repository_root/scripts/lib/controlled-postgres.sh"; '
                                 '"$1" "$STORYOS_TEST_POSTGRES_CONTAINER"', "shared-prepare", prepare],
-                               cwd=root, env={**os.environ, "repository_root": str(root)}, check=True)
+                               node_id="prepare:" + phase["name"], node_only=True)
+                if code:
+                    return code
             files = [path.removeprefix("apps/web/") for path in phase["files"]]
             os.environ["STORYOS_VITEST_FILE_ORDER"] = ":".join(files)
             extra = []
@@ -104,7 +107,7 @@ def main():
                          "--reporter=default", "--reporter=json", f"--outputFile={output}"]
             code = verification.step(root, phase["stage"],
                                      ["pnpm", "--dir", "apps/web", "exec", "vitest", "run",
-                                      "--project", phase["group"], *files, *extra])
+                                      "--project", phase["group"], *files, *extra], node_id="phase:" + phase["name"])
             if code:
                 return code
             if args.groups:
