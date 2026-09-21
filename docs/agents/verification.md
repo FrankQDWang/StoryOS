@@ -10,16 +10,13 @@ For test lifecycle changes, run `make verify-policy` and inspect a new plan.
 3. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
 4. Run the policy-required targeted checks on current sources in the same environment. Run `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` once, then follow evidence publication below.
 
-For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json`
-and its recovery command. Recovery needs current reviews and targeted results.
+For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
 Source fixes return to targeted checks and a new candidate. Retain every attempt.
 
-Equal merged trees use `make verify-tracker` only. Different trees need a fresh request
-and `make verify` with `--purpose post-merge-different-tree` and the request's base.
+Equal merged trees use `make verify-tracker` only. Different trees need a fresh request and `make verify` with `--purpose post-merge-different-tree` and the request's base.
 Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
 JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
-It imports actual independent reviews and runs fresh targeted checks on Linux.
-Local source stamps belong to admission; candidate-bound reviews remain portable.
+It imports actual independent reviews and runs fresh targeted checks on Linux. Local source stamps belong to admission; candidate-bound reviews remain portable.
 
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.
