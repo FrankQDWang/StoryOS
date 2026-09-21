@@ -20,6 +20,7 @@ import verification_cache
 import verification_shared
 import verification_daily
 import verification_status
+import verification_graph
 
 
 def git(root, *arguments):
@@ -108,14 +109,17 @@ def inventory(root, revision=None):
     return {"version": 1, "files": files}
 
 
-def complete_plan(root, revision="HEAD", base="origin/main"):
+def complete_plan(root, revision="HEAD", base="origin/main", *, with_graph=False):
     policy_bytes = subprocess.check_output(["git", "show", f"{revision}:docs/agents/verification-policy.json"], cwd=root)
     profile = json.loads(policy_bytes)["complete"]
     files = [item for item in inventory(root, revision)["files"]
              if item["kind"].endswith("-test") and item["kind"] not in {"historical-test", "prototype-test"}]
-    return {"version": 1, "base": git(root, "rev-parse", base), "tree": git(root, "rev-parse", f"{revision}^{{tree}}"),
+    plan = {"version": 1, "base": git(root, "rev-parse", base), "tree": git(root, "rev-parse", f"{revision}^{{tree}}"),
             "policy_sha256": hashlib.sha256(policy_bytes).hexdigest(), "stages": profile["stages"],
             "test_files": sorted(item["path"] for item in files)}
+    if with_graph:
+        verification_graph.attach(root, plan, json.loads(policy_bytes), files, revision)
+    return plan
 
 
 def cargo_test_inputs(root, command):
@@ -274,7 +278,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
         if not plan and command == ["make", "verify-local-steps"]:
-            report["plan"] = complete_plan(root, base=context["base"] if context else "origin/main")
+            report["plan"] = complete_plan(root, base=context["base"] if context else "origin/main", with_graph=True)
+            report["graph"] = report["plan"].pop("graph", None)
         cache_started = time.monotonic()
         cache = verification_cache.DailyCache(root, plan, no_cache)
         report["cache"] = cache.observation

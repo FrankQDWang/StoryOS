@@ -12,6 +12,7 @@ import tomllib
 import verification
 import verification_cache
 import verification_daily
+import verification_graph
 
 
 def cargo_targets(root, changes, files, revisions):
@@ -113,6 +114,7 @@ def build_plan(root, base, workers=None, *, allow_empty=False):
                 break
         except (OSError, ValueError, KeyError):
             continue
+    verification_graph.attach(root, plan, policy, list(files.values()))
     plan["digest"] = hashlib.sha256(json.dumps(plan, sort_keys=True).encode()).hexdigest()
     return plan
 
@@ -190,6 +192,7 @@ def execute_plan(root, plan):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("plan", "status", "run", "execute"))
+    parser.add_argument("--profile", choices=("daily", "complete"), default="daily")
     parser.add_argument("--format", choices=("json", "text"), default="json")
     parser.add_argument("--issue", type=int)
     parser.add_argument("--pr", type=int)
@@ -201,6 +204,11 @@ def main():
     args = parser.parse_args()
     try:
         root = Path(verification.git(Path.cwd(), "rev-parse", "--show-toplevel"))
+        if args.profile == "complete":
+            if args.action != "plan":
+                raise ValueError("Complete graph export is read-only; use verify-local to execute")
+            print(json.dumps(verification.complete_plan(root, base=args.base, with_graph=True), indent=2))
+            return 0
         plan = build_plan(root, args.base, args.workers, allow_empty=args.action == "status")
         if ((args.plan and json.loads(args.plan.read_text()) != plan)
                 or (args.expected and args.expected != plan["digest"])):

@@ -10,6 +10,7 @@ import subprocess
 import sys
 
 import verification_cache
+import verification_graph
 
 
 def targeted_plan(root, check):
@@ -22,13 +23,14 @@ def targeted_plan(root, check):
     entry = registered[check]
     plan = {'version': 1, 'check': check, 'source': runner.source_identity(root),
             'policy_sha256': hashlib.sha256(policy).hexdigest(), 'command': entry['command'],
-            'test_files': sorted(f['path'] for f in files if f['kind'].endswith('-test')),
+            'test_files': sorted(f['path'] for f in files if f['kind'].endswith('-test') and (root / f['path']).is_file()),
             'checks': [{'group': check, 'status': 'pending' if entry['clean'] and
                        runner.source_identity(root)['dirty'] else 'ready'}],
             'workers': 'existing-targeted-profile'}
     import verification_candidate
     plan['execution_inputs_sha256'] = verification_cache.digest({k: v for k, v in verification_candidate.environment().items()
         if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}})
+    verification_graph.attach(root, plan, json.loads(policy), files)
     plan['digest'] = verification_cache.digest(plan)
     return plan
 
