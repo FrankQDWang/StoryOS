@@ -1,0 +1,25 @@
+{
+  "uid": "storyos-verification",
+  "title": "StoryOS verification",
+  "schemaVersion": 39, "refresh": "5s", "editable": false,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Current managed commands",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 12},
+      "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"},
+      "targets": [{"refId": "A", "queryText": "SELECT COALESCE(issue, 'unknown') AS issue, run_id, profile, stage, parent_step, scope, reason, ROUND(elapsed_seconds, 1) AS elapsed_seconds, heartbeat_at, liveness, ROUND(heartbeat_age_seconds, 1) AS heartbeat_age_seconds FROM current_execution ORDER BY run_id, stage", "rawQueryText": "SELECT COALESCE(issue, 'unknown') AS issue, run_id, profile, stage, parent_step, scope, reason, ROUND(elapsed_seconds, 1) AS elapsed_seconds, heartbeat_at, liveness, ROUND(heartbeat_age_seconds, 1) AS heartbeat_age_seconds FROM current_execution ORDER BY run_id, stage", "queryType": "table", "timeColumns": []}],
+      "options": {"showHeader": true}
+    },
+    {
+      "id": 2,
+      "title": "Record diagnostics",
+      "type": "table",
+      "gridPos": {"x": 0, "y": 12, "w": 24, "h": 12},
+      "datasource": {"type": "frser-sqlite-datasource", "uid": "storyos-verification"},
+      "targets": [{"refId": "A", "queryText": "SELECT path, quality, diagnostic FROM records WHERE quality != 'valid' ORDER BY path", "rawQueryText": "SELECT path, quality, diagnostic FROM records WHERE quality != 'valid' ORDER BY path", "queryType": "table", "timeColumns": []}],
+      "options": {"showHeader": true}
+    }
+  ]
+}

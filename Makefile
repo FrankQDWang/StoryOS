@@ -126,3 +126,19 @@ verify-status:
 
 verify-targeted:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py targeted --check "$(CHECK)" $(VERIFY_ARGS)
+
+OBSERVE = docker compose -p storyos-observation -f scripts/observation/compose.yaml
+.PHONY: observe-start observe-stop observe-status observe-rebuild observe-smoke
+observe-start:
+	@mkdir -p target/verification target/observation/data
+	@python3 scripts/verification_observation.py collect
+	@$(OBSERVE) up -d --build
+observe-stop:
+	@$(OBSERVE) down
+observe-status:
+	@$(OBSERVE) ps
+	@python3 scripts/verification_observation.py status
+observe-rebuild:
+	@python3 scripts/verification_observation.py rebuild
+observe-smoke:
+	@$(VERIFY_STEP) observation-smoke -- python3 scripts/verification_observation_smoke.py

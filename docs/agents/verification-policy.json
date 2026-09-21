@@ -1,6 +1,7 @@
 {
   "version": 1,
   "targeted": {
+    "verification-observation-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_observation_tests.py"], "clean": false},
     "verify-policy": {"command": ["make", "verify-policy"], "clean": false},
     "contracts": {"command": ["make", "contracts"], "clean": true},
     "web-typecheck": {"command": ["make", "web-typecheck"], "clean": false},
