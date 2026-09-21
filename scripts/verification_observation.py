@@ -75,7 +75,7 @@ def read_record(path, records):
         if not checks:
             payload['scope'] = {key: plan[key] for key in ('stages', 'test_files') if key in plan} if isinstance(plan, dict) else None
         payload['reason'] = value.get('retry_reason') or value.get('reason') or value.get('trigger')
-        return str(relative), fingerprint, kind, run, quality, ('Unversioned record; facts are historical' if quality == 'legacy' else None), json.dumps(payload, sort_keys=True)
+        return str(relative), fingerprint, kind, run, quality, ('Unversioned record; facts are historical' if quality == 'legacy' else None), json.dumps(payload, sort_keys=True, allow_nan=False)
     except (OSError, ValueError, TypeError, AttributeError) as error:
         return str(relative), fingerprint, kind, run, 'malformed', str(error), '{}'
 

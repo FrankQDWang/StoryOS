@@ -70,6 +70,9 @@ class ObservationTests(unittest.TestCase):
             (records / 'complete/report.json').write_text(json.dumps({'record_version': 1,
                 'run_id': 'complete', 'status': 'running', 'profile': 'complete',
                 'plan': {'stages': ['rust-tests'], 'test_files': ['sample.rs']}}))
+            (records / 'nonfinite').mkdir()
+            (records / 'nonfinite/report.json').write_text(
+                '{"record_version":1,"run_id":"nonfinite","status":"running","duration_seconds":NaN}')
             (records / 'linked').symlink_to(root, target_is_directory=True)
             (root / 'report.json').write_text('{"status":"passed"}')
             database = root / 'observation.sqlite'
@@ -77,11 +80,11 @@ class ObservationTests(unittest.TestCase):
                 '--database', str(database)], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             batches = [json.loads(line) for line in result.stdout.splitlines()]
-            self.assertEqual([batch['updated'] for batch in batches], [200, 7])
+            self.assertEqual([batch['updated'] for batch in batches], [200, 8])
             with sqlite3.connect(database) as connection:
                 self.assertEqual(connection.execute('SELECT issue, scope FROM current_execution').fetchall(),
                     [(None, '{"stages":["rust-tests"],"test_files":["sample.rs"]}')])
-                self.assertEqual(connection.execute("SELECT quality FROM records WHERE path='linked/report.json'").fetchone(),
+                self.assertEqual(connection.execute("SELECT quality FROM records WHERE path='nonfinite/report.json'").fetchone(),
                                  ('malformed',))
 
 
