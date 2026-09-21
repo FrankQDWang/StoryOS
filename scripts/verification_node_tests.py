@@ -46,6 +46,51 @@ class NodeObservationTests(unittest.TestCase):
         with sqlite3.connect(database) as connection:
             self.assertEqual(connection.execute('SELECT * FROM node_attempts ORDER BY attempt_id').fetchall(), before)
 
+    def test_cargo_build_and_execution_keep_member_timing_unknown(self):
+        import verification_plan_tests
+        fixture = verification_plan_tests.FilePlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.install_cargo_fixture()
+        policy = json.loads(fixture.policy_path.read_text())
+        policy['rules'].insert(0, {'pattern': 'crates/*/src/*_tests.rs', 'kind': 'rust-test', 'group': 'cargo'})
+        policy['complete'] = {'stages': ['rust-tests'], 'groups': {'cargo': ['rust-tests']}}
+        policy['targeted'] = {'rust-tests': {'command': [sys.executable, str(RUNNER), 'rust-tests'], 'clean': False}}
+        policy['workflow'] = {'version': 1, 'stage_types': {},
+            'operations': {'rust-test-build': {'type': 'build', 'requires': []}},
+            'profiles': {'cargo': {'requires': ['rust-test-build']}}, 'targeted': {'rust-tests': ['check:rust-tests']}}
+        fixture.policy_path.write_text(json.dumps(policy))
+        (fixture.root / 'crates/core/src/lib.rs').write_text('#[cfg(test)] mod value_tests;')
+        (fixture.root / 'crates/core/src/value_tests.rs').write_text('#[test] fn value() { assert_eq!(2 + 2, 4); }')
+        result = fixture.repo.cli('targeted', '--check', 'rust-tests')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = fixture.repo.report()
+        records = list((fixture.root / 'target/verification' / report['run_id'] / 'nodes').glob('*.json'))
+        self.assertEqual({json.loads(path.read_text())['node_id'] for path in records}, {'check:rust-test-build', 'check:cargo'})
+        self.assertEqual([step['stage'] for step in report['steps']], ['rust-tests'])
+        self.assertTrue(any(node.get('path') == 'crates/core/src/value_tests.rs' and node['execution'] == 'member-only'
+                            for node in report['plan']['graph']['nodes']))
+
+    def test_failed_prerequisite_blocks_selected_transitive_and_ordered_nodes(self):
+        fixture = verification_graph_tests.GraphPlanTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        fixture.policy['workflow']['profiles']['web-typecheck'] = {'requires': ['node-contract']}
+        fixture.policy['workflow']['profiles']['contracts'] = {'after': ['web-typecheck']}
+        fixture.policy['targeted'] = {'sample': {'command': [sys.executable, str(RUNNER), 'step', 'node-install', '--',
+                                                           sys.executable, '-c', 'exit(7)'], 'clean': False}}
+        fixture.policy['workflow']['targeted'] = {'sample': ['check:web-typecheck', 'check:contracts']}
+        fixture.save()
+        self.assertEqual(fixture.fixture.repo.cli('targeted', '--check', 'sample').returncode, 7)
+        root = fixture.fixture.root
+        database = root / 'target/read.sqlite'
+        result = subprocess.run([sys.executable, str(COMMAND), 'collect', '--records', str(root / 'target/verification'),
+                                 '--database', str(database)], capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        with sqlite3.connect(database) as connection:
+            self.assertEqual(connection.execute("SELECT node_id,state FROM node_states WHERE node_id IN ('check:contracts','check:node-contract','check:web-typecheck') ORDER BY node_id").fetchall(),
+                             [('check:contracts', 'blocked'), ('check:node-contract', 'blocked'), ('check:web-typecheck', 'blocked')])
+
     def test_cached_graph_links_producer_without_node_attempts(self):
         import verification_cache_tests
         fixture = verification_cache_tests.DailyCacheTests()
@@ -117,11 +162,11 @@ class NodeObservationTests(unittest.TestCase):
         with sqlite3.connect(database) as connection:
             self.assertEqual(connection.execute('SELECT state,duration_seconds FROM node_states WHERE node_id=?', ('targeted:sample',)).fetchone(), ('unknown', None))
             self.assertEqual(connection.execute("SELECT quality FROM records WHERE path LIKE '%duplicate.json'").fetchone(), ('malformed',))
-        step['duration_seconds'] = float('nan')
-        path.write_text(json.dumps(step))
-        self.assertEqual(subprocess.run(collect, capture_output=True).returncode, 0)
-        with sqlite3.connect(database) as connection:
-            self.assertEqual(connection.execute('SELECT COUNT(*) FROM node_attempts').fetchone(), (0,))
+        for fields in ({'duration_seconds': float('nan')}, {'started_at': []}, {'ended_at': 'not-a-time'}):
+            path.write_text(json.dumps({**step, **fields}))
+            self.assertEqual(subprocess.run(collect, capture_output=True).returncode, 0)
+            with sqlite3.connect(database) as connection:
+                self.assertEqual(connection.execute('SELECT COUNT(*) FROM node_attempts').fetchone(), (0,))
 
 
 if __name__ == '__main__':

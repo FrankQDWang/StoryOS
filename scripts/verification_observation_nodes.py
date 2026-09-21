@@ -1,5 +1,6 @@
 """Project retained graph membership and actual command attempts separately."""
 
+from datetime import datetime
 import hashlib
 import json
 import math
@@ -18,6 +19,9 @@ CREATE TABLE IF NOT EXISTS node_states (
 
 
 def validate(value):
+    producer = (value.get('cache') or {}).get('producer')
+    if producer is not None and not isinstance(producer, str):
+        raise ValueError('Invalid cache producer')
     graph = value.get('graph') or (value.get('plan') or {}).get('graph')
     if graph is not None:
         if (not isinstance(graph, dict) or graph.get('version') != 1
@@ -44,6 +48,10 @@ def validate(value):
             raise ValueError('Invalid node attempt identity')
         if not isinstance(value.get('selection_reason'), list) or not value.get('execution_scope'):
             raise ValueError('Missing node attempt scope')
+        for key in ('started_at', 'ended_at'):
+            item = value.get(key)
+            if item is not None and (not isinstance(item, str) or datetime.fromisoformat(item).tzinfo is None):
+                raise ValueError('Invalid node timestamp')
         for key in ('duration_seconds', 'started_monotonic', 'ended_monotonic'):
             item = value.get(key)
             if item is not None and (type(item) not in (int, float) or not math.isfinite(item) or item < 0):
@@ -77,6 +85,16 @@ def refresh(connection, runs):
                     (run, digest, name, step['id'], step.get('parent'), json.dumps(step['selection_reason']),
                      json.dumps(step['execution_scope']), step.get('started_at'), step.get('ended_at'),
                      step.get('duration_seconds'), step['status']))
+        failed = {name for name, entries in attempts.items() if
+                  max(entries.values(), key=lambda step: step.get('started_monotonic', 0))['status'] in {'failed', 'interrupted'}}
+        blocked = set()
+        while True:
+            following = {edge['to'] for edge in graph.get('dependencies', []) if
+                         edge['from'] in failed | blocked and nodes[edge['to']]['selected'] and
+                         (edge.get('when') != 'both-selected' or nodes[edge['from']]['selected'])}
+            if following <= blocked:
+                break
+            blocked.update(following)
         checks = {check['group']: check for check in root.get('node_checks', [])}
         for name, node in nodes.items():
             entries = list(attempts.get(name, {}).values())
@@ -91,9 +109,7 @@ def refresh(connection, runs):
                     state = 'unknown'
             elif node['selected'] and checks.get(node.get('profile'), {}).get('status') == 'pending':
                 state = 'pending'
-            elif node['selected'] and any(edge['to'] == name and any(
-                    step['status'] in {'failed', 'interrupted'} for step in attempts.get(edge['from'], {}).values())
-                    for edge in graph.get('dependencies', []) if edge.get('when') != 'both-selected'):
+            elif name in blocked:
                 state = 'blocked'
             elif node['selected'] and root.get('status') not in {'running', 'pending'}:
                 state = 'unknown'

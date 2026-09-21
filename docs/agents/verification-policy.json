@@ -48,6 +48,11 @@
       "exact-dist-cleanup": {"type": "cleanup", "requires": ["exact-dist-host"], "after": ["exact-dist"]}
     },
     "profiles": {
+      "daily-database": {"members": ["database", "node-postgresql", "node-process-cut"]},
+      "shared-tests": {"members": ["node-postgresql", "node-process-cut"]},
+      "recovery-check": {},
+      "recovery-drill": {},
+      "observation-smoke": {},
       "verify-tracker": {},
       "policy": {"members": ["input-ownership", "project-inputs", "verification-tests"]},
       "contracts": {"members": ["protocol-self-test", "persistence-self-test", "author-edit-self-test", "tracker-self-test", "transaction-self-test", "generated-contracts"]},

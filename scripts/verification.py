@@ -154,8 +154,7 @@ def rust_tests(root):
     run = os.environ.get("STORYOS_VERIFICATION_RUN")
     if run:
         write_json(Path(run) / "rust-test-files.json", files)
-    code, interrupted = execute(command, os.environ.copy(), run is None and os.name == "posix")
-    return 128 + interrupted if interrupted else (code if code >= 0 else 128 - code)
+    return step(root, "cargo", command, node_only=True)
 
 
 def write_json(path, value):
@@ -304,6 +303,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
             snapshot = {"source": report["source_start"], "checks": [],
                         "test_files": [f["path"] for f in report["inventory"]["files"]
                                        if f["kind"].endswith("-test")]}
+            stage = command[command.index("step") + 1] if "step" in command else None
+            if stage in set(policy.get("workflow", {}).get("profiles", {})) | set(policy.get("complete", {}).get("stages", [])):
+                snapshot["checks"] = [{"group": stage, "files": [], "status": "ready", "reasons": ["Explicit public command"]}]
             verification_graph.attach(root, snapshot, policy, report["inventory"]["files"])
             report["graph"] = snapshot.get("graph")
         write_json(report_path, report)

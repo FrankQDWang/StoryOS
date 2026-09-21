@@ -108,6 +108,12 @@ for arg in sys.argv:
         self.assertEqual([c[0] for c in children], ["pnpm", "docker", "pnpm", "docker", "docker", "pnpm"])
 
     def test_daily_database_entry_prepares_once_and_keeps_workspace_features(self):
+        policy = json.loads(self.policy.read_text())
+        stages = ['postgres-scope', 'postgres-challenge', 'postgres-library', 'http-files']
+        policy['complete'] = {'stages': stages, 'groups': {'node-postgresql': ['http-files']}}
+        policy['workflow'] = {'version': 1, 'operations': {}, 'targeted': {}, 'stage_types': {},
+                              'profiles': {'daily-database': {}, 'node-postgresql': {}}}
+        self.policy.write_text(json.dumps(policy))
         scripts = Path(__file__).parent
         for path in scripts.glob("verification*.py"):
             if not path.name.endswith("_tests.py"):
@@ -131,6 +137,11 @@ for arg in sys.argv:
                                  "--", "--ignored", "--nocapture"] for target in
                                 [["--test", "project_scope"], ["--test", "project_command_challenge"], ["--lib"]]])
         self.assertFalse(any("browser-exact-dist" in c[1] or "verify-local-steps" in c[1] for c in children))
+        report = self.repo.report()
+        self.assertTrue(all(step.get('node_id') for step in report['steps']))
+        self.assertEqual({step['node_id'] for step in report['steps']},
+                         {'check:daily-database', 'check:postgres-scope', 'check:postgres-challenge',
+                          'check:postgres-library', 'phase:first', 'phase:second', 'phase:third'})
 
     def test_invalid_declarations_fail_policy_and_execution_before_children(self):
         original = (self.root / self.a).read_text()
