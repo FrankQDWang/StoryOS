@@ -357,3 +357,24 @@ sum node durations as an Issue bill. Queue and resource wait times remain unknow
 without an explicit observation. Legacy reports gain no graph or timing facts.
 Run `make verify-targeted CHECK=verification-node-tests` for these public command
 and SQLite replay regressions.
+
+### Single-run DAG
+
+Open <http://127.0.0.1:3749/d/storyos-run> or use the run link on the main dashboard.
+Select the time range, Issue, profile, and run. The workflow shows retained nodes,
+including unselected operations. Select a node, then use its inspect link to show
+its details and file members. Select `__none` to collapse files. The URL preserves
+run, group, and node selection; refresh uses the configured layered layout.
+Dependency edges show required order. Contains and member edges show grouping only.
+Use the node menu, zoom controls, and detail tables to inspect large graphs.
+
+Times use UTC. Unknown timing is not zero. Selected counts include file membership;
+executed counts require actual node attempts. Reused observations link their producer
+and add no attempts. Legacy runs show unavailable graph data. Evidence paths are
+relative to `target/verification/`; they are local records, not served files.
+
+`scripts/verification_observation_dashboard.py` owns the generated `run.json`.
+Run `make observe-dashboard` after edits. Observation tests reject generated drift.
+`make observe-smoke` also queries collapsed and expanded DAGs through Grafana for
+labelled synthetic partial, complete, running, failed, reused, and legacy examples.
+These examples prove display behavior, not product execution or candidate evidence.

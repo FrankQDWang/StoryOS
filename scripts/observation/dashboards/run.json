@@ -1,0 +1,337 @@
+{
+  "uid": "storyos-run",
+  "title": "StoryOS \u00b7 Verification run",
+  "schemaVersion": 39,
+  "editable": false,
+  "timezone": "utc",
+  "refresh": "5s",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "issue",
+        "label": "Issue",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '*' UNION SELECT DISTINCT COALESCE(CAST(json_extract(payload,'$.issue') AS TEXT),'unknown') FROM records WHERE kind='run'",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "*",
+          "value": "*"
+        }
+      },
+      {
+        "name": "profile",
+        "label": "Profile",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '*' UNION SELECT DISTINCT COALESCE(CAST(json_extract(payload,'$.profile') AS TEXT),'unknown') FROM records WHERE kind='run'",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "*",
+          "value": "*"
+        }
+      },
+      {
+        "name": "run",
+        "label": "Run \u00b7 UTC",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT run AS __value,\n COALESCE(json_extract(payload,'$.started_at'),'unknown time')||' \u00b7 '||run AS __text\n FROM records WHERE kind='run'\n AND (${issue:sqlstring}='*' OR COALESCE(CAST(json_extract(payload,'$.issue') AS TEXT),'unknown')=${issue:sqlstring})\n AND (${profile:sqlstring}='*' OR COALESCE(json_extract(payload,'$.profile'),'unknown')=${profile:sqlstring})\n AND (json_extract(payload,'$.started_at') IS NULL OR\n unixepoch(json_extract(payload,'$.started_at'))*1000 BETWEEN ${__from} AND ${__to})\n ORDER BY json_extract(payload,'$.started_at') DESC,run",
+        "refresh": 2,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false
+      },
+      {
+        "name": "group",
+        "label": "Expand group",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '__none' UNION SELECT node_id FROM node_states WHERE run_id=${run:sqlstring} AND type!='test-file' ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "__none",
+          "value": "__none"
+        }
+      },
+      {
+        "name": "node",
+        "label": "Inspect node",
+        "type": "query",
+        "datasource": {
+          "type": "frser-sqlite-datasource",
+          "uid": "storyos-verification"
+        },
+        "query": "SELECT '__none' UNION SELECT node_id FROM node_states WHERE run_id=${run:sqlstring} ORDER BY 1",
+        "refresh": 1,
+        "sort": 0,
+        "multi": false,
+        "includeAll": false,
+        "current": {
+          "text": "__none",
+          "value": "__none"
+        }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 2,
+      "title": "Run",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "SELECT json_extract(r.payload,'$.issue') AS issue,\n json_extract(r.payload,'$.profile') AS profile,json_extract(r.payload,'$.status') AS state,\n (SELECT SUM(selected) FROM node_states WHERE run_id=r.run) AS selected,\n (SELECT COUNT(DISTINCT node_id) FROM node_attempts WHERE run_id=r.run) AS executed,\n (SELECT COUNT(*) FROM node_states WHERE run_id=r.run) AS total,\n CASE WHEN g.run_id IS NULL THEN 'unavailable' ELSE 'retained' END AS graph,r.run AS run_id,\n COALESCE(json_extract(r.payload,'$.actual_started_at'),\n CASE WHEN json_extract(r.payload,'$.attempt_started')=1 THEN json_extract(r.payload,'$.started_at') END,'unknown') AS actual_start_UTC,\n COALESCE(json_extract(r.payload,'$.ended_at'),'unknown / not ended') AS end_UTC,\n COALESCE(json_extract(g.payload,'$.identity.source'),'unavailable') AS source,\n r.path AS retained_report,g.graph_sha256,json_extract(r.payload,'$.heartbeat_at') AS heartbeat_UTC\n FROM records r LEFT JOIN run_graphs g ON r.run=g.run_id WHERE r.kind='run' AND r.run=${run:sqlstring}",
+          "rawQueryText": "SELECT json_extract(r.payload,'$.issue') AS issue,\n json_extract(r.payload,'$.profile') AS profile,json_extract(r.payload,'$.status') AS state,\n (SELECT SUM(selected) FROM node_states WHERE run_id=r.run) AS selected,\n (SELECT COUNT(DISTINCT node_id) FROM node_attempts WHERE run_id=r.run) AS executed,\n (SELECT COUNT(*) FROM node_states WHERE run_id=r.run) AS total,\n CASE WHEN g.run_id IS NULL THEN 'unavailable' ELSE 'retained' END AS graph,r.run AS run_id,\n COALESCE(json_extract(r.payload,'$.actual_started_at'),\n CASE WHEN json_extract(r.payload,'$.attempt_started')=1 THEN json_extract(r.payload,'$.started_at') END,'unknown') AS actual_start_UTC,\n COALESCE(json_extract(r.payload,'$.ended_at'),'unknown / not ended') AS end_UTC,\n COALESCE(json_extract(g.payload,'$.identity.source'),'unavailable') AS source,\n r.path AS retained_report,g.graph_sha256,json_extract(r.payload,'$.heartbeat_at') AS heartbeat_UTC\n FROM records r LEFT JOIN run_graphs g ON r.run=g.run_id WHERE r.kind='run' AND r.run=${run:sqlstring}",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "unknown",
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 3,
+      "title": "Workflow",
+      "type": "nodeGraph",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 24,
+        "h": 12
+      },
+      "targets": [
+        {
+          "refId": "nodes",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT node_id AS id,\n COALESCE(path,REPLACE(node_id,'check:','')) AS title,state AS mainstat,\n type AS subtitle,COALESCE(CAST(ROUND(duration_seconds,3) AS TEXT)||' s','time unknown') AS secondarystat,\n CASE state WHEN 'passed' THEN '#73BF69' WHEN 'failed' THEN '#F2495C'\n WHEN 'running' THEN '#5794F2' WHEN 'blocked' THEN '#FF9830' WHEN 'pending' THEN '#FADE2A'\n WHEN 'interrupted' THEN '#B877D9' WHEN 'cached' THEN '#8AB8FF'\n WHEN 'not-selected' THEN '#6E7681' ELSE '#CCCCDC' END AS color\n FROM visible ORDER BY node_id",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT node_id AS id,\n COALESCE(path,REPLACE(node_id,'check:','')) AS title,state AS mainstat,\n type AS subtitle,COALESCE(CAST(ROUND(duration_seconds,3) AS TEXT)||' s','time unknown') AS secondarystat,\n CASE state WHEN 'passed' THEN '#73BF69' WHEN 'failed' THEN '#F2495C'\n WHEN 'running' THEN '#5794F2' WHEN 'blocked' THEN '#FF9830' WHEN 'pending' THEN '#FADE2A'\n WHEN 'interrupted' THEN '#B877D9' WHEN 'cached' THEN '#8AB8FF'\n WHEN 'not-selected' THEN '#6E7681' ELSE '#CCCCDC' END AS color\n FROM visible ORDER BY node_id",
+          "queryType": "table",
+          "timeColumns": []
+        },
+        {
+          "refId": "edges",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT id,source,target,kind AS mainstat,rule AS detail__rule,\n CASE kind WHEN 'dependency' THEN '#8E8E9E' ELSE '#454554' END AS color,\n CASE kind WHEN 'dependency' THEN 2 ELSE 1 END AS thickness\n FROM e WHERE source IN (SELECT node_id FROM visible) AND target IN (SELECT node_id FROM visible)\n ORDER BY id",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT id,source,target,kind AS mainstat,rule AS detail__rule,\n CASE kind WHEN 'dependency' THEN '#8E8E9E' ELSE '#454554' END AS color,\n CASE kind WHEN 'dependency' THEN 2 ELSE 1 END AS thickness\n FROM e WHERE source IN (SELECT node_id FROM visible) AND target IN (SELECT node_id FROM visible)\n ORDER BY id",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Inspect node and expand its files",
+                    "targetBlank": true,
+                    "url": "/d/storyos-run?${issue:queryparam}&${profile:queryparam}&${run:queryparam}&from=${__from}&to=${__to}&var-node=${__data.fields.id:percentencode}&var-group=${__data.fields.id:percentencode}"
+                  },
+                  {
+                    "title": "Collapse files",
+                    "url": "/d/storyos-run?${issue:queryparam}&${profile:queryparam}&${run:queryparam}&from=${__from}&to=${__to}&var-node=${__data.fields.id:percentencode}&var-group=__none"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "layoutAlgorithm": "layered",
+        "zoomMode": "cooperative"
+      }
+    },
+    {
+      "id": 1,
+      "title": "Read the retained workflow",
+      "type": "text",
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 24,
+        "h": 5
+      },
+      "options": {
+        "mode": "markdown",
+        "content": "Select a time range, Issue, profile, and run. Click a node to inspect it and expand its file members. Choose `__none` to collapse files. Refresh preserves these URL selections and the layered layout.\n\n**States:** green passed \u00b7 red failed \u00b7 blue running \u00b7 orange blocked \u00b7 yellow pending \u00b7 purple interrupted \u00b7 gray not-selected \u00b7 pale unknown/cached (see label). **Edges:** dependency = required order; contains/member = grouping only. File membership does not prove execution or timing. **Times:** UTC; unknown is not zero. A running label is the last retained state; check the heartbeat."
+      }
+    },
+    {
+      "id": 4,
+      "title": "Node",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT n.node_id,n.type,n.state,n.selected,\n COALESCE(n.path,'not a file') AS file,json_extract(n.definition,'$.execution') AS membership,\n (SELECT group_concat(json_extract(c.value,'$.reasons'),char(10)) FROM records r,json_each(r.payload,'$.node_checks') c\n WHERE r.run=n.run_id AND r.kind='run' AND json_extract(c.value,'$.group')=json_extract(n.definition,'$.profile')) AS selection_reason,\n (SELECT group_concat(source, char(10)) FROM e WHERE target=n.node_id AND kind='dependency') AS prerequisites,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind='dependency') AS downstream,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind IN ('contains','member')) AS members,\n COALESCE(n.producer,'none recorded') AS producer,g.graph_sha256\n FROM n,g WHERE n.node_id=${node:sqlstring}",
+          "rawQueryText": "WITH RECURSIVE\n g AS (SELECT * FROM run_graphs WHERE run_id=${run:sqlstring}),\n n AS (SELECT s.*,j.value AS definition FROM node_states s JOIN g USING(run_id),\n       json_each(g.payload,'$.nodes') j WHERE s.node_id=json_extract(j.value,'$.id')),\n e AS (SELECT 'dependency:'||j.key AS id,json_extract(j.value,'$.from') AS source,\n       json_extract(j.value,'$.to') AS target,'dependency' AS kind,\n       COALESCE(json_extract(j.value,'$.when'),'required') AS rule\n       FROM g,json_each(g.payload,'$.dependencies') j\n       UNION ALL SELECT 'relation:'||j.key,json_extract(j.value,'$.from'),\n       json_extract(j.value,'$.to'),json_extract(j.value,'$.type'),'membership only'\n       FROM g,json_each(g.payload,'$.relations') j),\n members(id) AS (SELECT ${group:sqlstring} UNION SELECT e.target FROM e JOIN members m ON e.source=m.id\n                 WHERE e.kind IN ('contains','member')),\n visible AS (SELECT * FROM n WHERE type!='test-file' OR node_id IN (SELECT id FROM members))\nSELECT n.node_id,n.type,n.state,n.selected,\n COALESCE(n.path,'not a file') AS file,json_extract(n.definition,'$.execution') AS membership,\n (SELECT group_concat(json_extract(c.value,'$.reasons'),char(10)) FROM records r,json_each(r.payload,'$.node_checks') c\n WHERE r.run=n.run_id AND r.kind='run' AND json_extract(c.value,'$.group')=json_extract(n.definition,'$.profile')) AS selection_reason,\n (SELECT group_concat(source, char(10)) FROM e WHERE target=n.node_id AND kind='dependency') AS prerequisites,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind='dependency') AS downstream,\n (SELECT group_concat(target, char(10)) FROM e WHERE source=n.node_id AND kind IN ('contains','member')) AS members,\n COALESCE(n.producer,'none recorded') AS producer,g.graph_sha256\n FROM n,g WHERE n.node_id=${node:sqlstring}",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "unknown",
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 5,
+      "title": "Node attempts \u00b7 UTC",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 24,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "SELECT a.attempt_id,a.parent,a.result,a.selection_reason,a.execution_scope,\n COALESCE(a.started_at,'unknown') AS start_UTC,COALESCE(a.ended_at,'unknown') AS end_UTC,\n COALESCE(CAST(a.duration_seconds AS TEXT),'unknown') AS seconds,r.path AS retained_evidence\n FROM node_attempts a LEFT JOIN records r ON r.run=a.run_id AND r.kind='step'\n AND json_extract(r.payload,'$.id')=a.attempt_id\n WHERE a.run_id=${run:sqlstring} AND a.node_id=${node:sqlstring} ORDER BY a.started_at,a.attempt_id",
+          "rawQueryText": "SELECT a.attempt_id,a.parent,a.result,a.selection_reason,a.execution_scope,\n COALESCE(a.started_at,'unknown') AS start_UTC,COALESCE(a.ended_at,'unknown') AS end_UTC,\n COALESCE(CAST(a.duration_seconds AS TEXT),'unknown') AS seconds,r.path AS retained_evidence\n FROM node_attempts a LEFT JOIN records r ON r.run=a.run_id AND r.kind='step'\n AND json_extract(r.payload,'$.id')=a.attempt_id\n WHERE a.run_id=${run:sqlstring} AND a.node_id=${node:sqlstring} ORDER BY a.started_at,a.attempt_id",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "unknown",
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 6,
+      "title": "Requests \u00b7 Reuse starts no new execution",
+      "type": "table",
+      "datasource": {
+        "type": "frser-sqlite-datasource",
+        "uid": "storyos-verification"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 36,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryText": "SELECT json_extract(payload,'$.utc') AS UTC,json_extract(payload,'$.outcome') AS outcome,path AS evidence FROM records WHERE kind='request' AND json_extract(payload,'$.run_id')=${run:sqlstring} ORDER BY UTC",
+          "rawQueryText": "SELECT json_extract(payload,'$.utc') AS UTC,json_extract(payload,'$.outcome') AS outcome,path AS evidence FROM records WHERE kind='request' AND json_extract(payload,'$.run_id')=${run:sqlstring} ORDER BY UTC",
+          "queryType": "table",
+          "timeColumns": []
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "unknown",
+          "custom": {
+            "cellOptions": {
+              "type": "auto"
+            },
+            "wrapText": true
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    }
+  ]
+}

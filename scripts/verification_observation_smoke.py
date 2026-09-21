@@ -11,6 +11,7 @@ import urllib.error
 import urllib.request
 
 import verification_tests
+import verification_observation_dashboard_smoke as dag
 
 
 def main():
@@ -46,6 +47,7 @@ def main():
                 'run_id': directory.name, 'status': 'interrupted', 'profile': 'targeted',
                 'attempt_started': True, 'started_monotonic': 100, 'duration_seconds': 10,
                 'started_at': '2026-09-21T00:00:00+00:00'}))
+        dag.prepare(records)
         measured = subprocess.check_output([sys.executable, str(root / 'scripts/verification_observation.py'),
             'collect', '--records', str(records), '--database', str(output / 'data/runs.sqlite')], text=True)
         overhead = [json.loads(line) for line in measured.splitlines()]
@@ -95,7 +97,7 @@ def main():
                 alert_rules = json.load(response)
         subprocess.run([*compose, 'restart', 'collector', 'grafana'], check=True, timeout=30)
         url = 'http://' + subprocess.check_output([*compose, 'port', 'grafana', '3000'], text=True).strip()
-        if process.poll() is not None or len(list(records.glob('*/report.json'))) != 1001:
+        if process.poll() is not None or len(list(records.glob('*/report.json'))) != 1001 + len(dag.EXAMPLES):
             raise RuntimeError('Observation restart changed the managed run')
         deadline = time.monotonic() + 60
         while True:
@@ -121,6 +123,7 @@ def main():
             if time.monotonic() > deadline:
                 raise RuntimeError('The observation query did not recover')
             time.sleep(1)
+        dag_queries = dag.check(url)
         refresh_seconds = time.monotonic() - refresh_started
         stats = subprocess.check_output(['docker', 'stats', '--no-stream', '--format', '{{json .}}',
             *subprocess.check_output([*compose, 'ps', '-q'], text=True).split()], text=True)
@@ -138,7 +141,7 @@ def main():
                 rejected = json.load(response)['results']['A']
             if not rejected.get('error'):
                 raise RuntimeError('The data source did not reject a forbidden query')
-        print(json.dumps({'result': 'PASS', 'url': url, 'overhead': overhead, 'refresh_and_alert_seconds': refresh_seconds, 'container_stats': stats, 'alert_evaluation': 'firing', 'queried_panels': len(dashboard['panels'])}), flush=True)
+        print(json.dumps({'result': 'PASS', 'url': url, 'overhead': overhead, 'refresh_and_alert_seconds': refresh_seconds, 'container_stats': stats, 'alert_evaluation': 'firing', 'queried_panels': len(dashboard['panels']), 'dag_queries': dag_queries}), flush=True)
     finally:
         if process:
             process.communicate(input=b'x', timeout=15)
