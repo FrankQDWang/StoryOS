@@ -251,7 +251,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
                   process=verification_candidate.process_identity(), attempt_started=False)
     report.update(context, run_id=directory.name)
     report["requested_scope"] = report["profile"]
-    report["executor_context"] = report["process"]["nonce"]
+    report["executor_context"] = context.get("executor_context") or report["process"]["nonce"]
     report["heartbeat_at"] = datetime.now(timezone.utc).isoformat()
     def process_observation(fields):
         report["process"].update(fields)
@@ -376,6 +376,8 @@ def main():
             command_parser.add_argument("--base", default="origin/main")
             for name in ("issue", "pr"):
                 command_parser.add_argument(f"--{name}", type=int)
+            command_parser.add_argument("--review-request")
+            command_parser.add_argument("--executor-context")
             command_parser.add_argument("--purpose", default="candidate")
             command_parser.add_argument("--trigger", default="explicit-request")
         command_parser.add_argument("command", nargs=argparse.REMAINDER)
@@ -409,7 +411,7 @@ def main():
         if not command:
             raise ValueError("A verification command is required")
         return run(root, command, context={key: getattr(arguments, key) for key in
-                   ("base", "issue", "pr", "purpose", "trigger")}) if arguments.action == "run" else step(root, arguments.stage, command)
+                   ("base", "issue", "pr", "purpose", "trigger", "review_request", "executor_context")}) if arguments.action == "run" else step(root, arguments.stage, command)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

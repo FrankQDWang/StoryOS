@@ -1,5 +1,63 @@
 # Repository verification
 
+## Start here
+
+Start each task with `make verify-status BASE=origin/main`. Read the plan and next
+command before execution. For ordinary edits, use `make verify-changed`; run the
+smallest registered check after a fix. For test additions, moves, renames, or
+removals, run `make verify-policy` and inspect a new plan. Pending is not PASS.
+Commit only when the source is ready for candidate review.
+
+## Candidate review and admission
+
+Open the PR and wait for its current `verify` sentinel. Keep one executor context
+identifier for this delivery. Create a request on the clean matching candidate:
+
+```sh
+python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>
+```
+
+The command prints an ignored request path. Give that exact request and its scoped
+base-to-candidate diff to separate Standards and Spec reviewers. Each reviewer
+returns JSON with `request_sha256` equal to the request digest, `axis` equal to
+`standards` or `spec`, a distinct `reviewer_context`, `result` (`PASS` or `FAIL`),
+and `evidence` describing the review. Neither reviewer context may equal the
+executor context. Import each returned record:
+
+```sh
+python3 scripts/verification_reviews.py import --request <request-path> --record <review-json>
+```
+
+All imports remain retained; the newest record for each axis governs admission.
+Context identifiers assert consistency, not authenticated identity. Review requests
+bind PR, base, head, synthetic tree, policy, membership, scope, source, and verify
+success. Policy changes and review fixes require targeted checks, a new committed
+candidate, current sentinel success, and new independent imports.
+
+Run the policy-required targeted checks on this exact clean source and with the
+same environment used for complete verification. Inspect their current status.
+Then run the complete entry once:
+
+```sh
+make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <request-path>'
+```
+
+Publish the report with `make verify-evidence`. Its embedded admission and review
+records must agree with the report and the current candidate. The installation PR
+uses the existing protected validator and `--policy-reviewed` after actual review;
+the compatible reader and new records land before protected-main enforcement
+activates. Later candidates require records; a boolean declaration is insufficient.
+Historical reports keep their original fields and gain no invented review facts.
+
+After a failed complete run, use `status --attempt` and the returned recovery
+command. Unchanged failures require current review and targeted records before
+scoped recovery. Source fixes return to targeted checks and a new candidate;
+retain every attempt. Equal merged trees use `make verify-tracker` only. For a
+different merged tree, create a fresh request with `--purpose post-merge-different-tree`
+and use that same purpose and the request's base with `make verify`. Manual Linux
+verification uses `--purpose manual-linux` in both commands, with local targeted
+results and fresh independent imports. These purposes retain the complete stages.
+
 Use `make verify-policy` to check file ownership and the verification command.
 Use `python3 scripts/verification.py inventory` to inspect the input list as JSON.
 The [input policy](verification-policy.json) includes tracked files and new files that Git does not ignore. Its
@@ -144,7 +202,7 @@ report and unchanged source. Invalid evidence needs correction at its owner.
 Local records under `target/verification/` retain requests, refusals, attempts,
 reuse, recovery reasons, process identity, and UTC/monotonic timing. Preflight
 refusal consumes no attempt. These are not product domain records. The readiness
-boundary checks clean source and input ownership; review imports arrive separately.
+boundary checks clean source, input ownership, current targeted results, and independent review imports.
 Existing independent reviews and protected evidence publication remain required.
 
 ## Candidate evidence publication
@@ -152,9 +210,9 @@ Existing independent reviews and protected evidence publication remain required.
 1. Wait for the `verify` sentinel and independent Standards and Spec reviews. Resolve
    findings with targeted checks. Fetch current main and the PR synthetic merge.
 2. Run `make verify-local` once on the clean candidate tree that equals that merge tree.
-3. Publish with `make verify-evidence PR=<number> REPORT=<report-path>`. If protected
-   policy inputs changed, use `VERIFY_ARGS=--policy-reviewed` only after both independent
-   reviews cover that exact change. The publication records this explicit review declaration.
+3. Publish with `make verify-evidence PR=<number> REPORT=<report-path>`. The activated
+   contract requires current candidate review imports. Use `VERIFY_ARGS=--policy-reviewed`
+   only for the compatible installation against the earlier protected reader.
 4. Wait for `candidate-evidence` success, then merge. A changed head, base, tree, policy
    revision or discovered membership requires fresh evidence. Preserve strict branch protection.
 

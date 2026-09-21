@@ -5,7 +5,6 @@ alwaysApply: true
 
 # Verification selection
 
-Read `docs/agents/verification.md` after source or test edits, including test additions,
-renames, deletions and dependency changes. Use its file plan, execution declarations
-and repository commands. Root AGENTS.md owns the complete candidate review and
-verification order. Keep one policy owner instead of client-specific test lists.
+Start with `make verify-status BASE=origin/main`. Follow `docs/agents/verification.md`
+for ordinary edits, test lifecycle changes, candidate reviews, and failed complete
+runs. Keep all command and policy details in that common guide.

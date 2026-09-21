@@ -15,6 +15,7 @@
     "rust-tests": {"command": ["python3", "scripts/verification.py", "rust-tests"], "clean": false}
   },
   "complete": {
+    "admission": {"version": 1, "targeted": ["verify-policy"]},
     "recovery": {"project-scope": ["make", "project-scope"]},
     "stages": [
       "input-ownership", "project-inputs", "verification-tests",
