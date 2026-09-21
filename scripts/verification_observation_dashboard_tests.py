@@ -51,7 +51,7 @@ class DashboardTests(unittest.TestCase):
                     self.assertEqual({r[0]: r[2] for r in rows},
                                      {'setup': 'failed', 'group': 'blocked', 'other': 'not-selected'})
                     self.assertEqual({r[0] for r in query('Workflow', group='group')}, {'setup', 'group', 'other', 'file'})
-                    self.assertIn('unavailable', str(query('Run', run='legacy')))
+                    self.assertEqual(query('Run', run='legacy')[0][3:7], (None, None, None, 'unavailable'))
                     self.assertIn('sample-tree', str(query('Run')))
                     self.assertIn('required setup', str(query('Node attempts · UTC')))
                     self.assertEqual(query('Workflow', run='legacy'), [])
