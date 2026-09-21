@@ -68,6 +68,7 @@ def attach(root, plan, policy, files, revision=None):
             if 'check:' + stage != owner and group not in {'node-postgresql', 'node-process-cut'}:
                 relations.add(('check:' + stage, owner, 'contains'))
         if group.startswith('cargo:'):
+            relations.add(('check:cargo', owner, 'contains'))
             dependencies.update(('check:' + dep, owner) for dep in profiles.get('cargo', {}).get('requires', []))
     previous = None
     for phase in verification_shared.plan(root, policy, current, revision):
@@ -119,6 +120,8 @@ def attach(root, plan, policy, files, revision=None):
             if owner not in nodes:
                 raise ValueError(f'Missing workflow profile: {check["group"]}')
             selected.add(owner)
+            if check['group'].startswith('cargo:'):
+                selected.add('check:cargo')
             selected.update(file_ids[path] for path in check['files'] if path in file_ids)
             if check.get('requires_package'):
                 selected.add('check:release-package')
@@ -161,3 +164,22 @@ def evidence(value):
     if isinstance(value, list):
         return [evidence(item) for item in value]
     return value
+
+
+def bind_attempt(report, stage, node_id=None):
+    """Bind an executor boundary to its retained graph, without expanding members."""
+    plan = report.get('plan') or {}
+    graph = report.get('graph') or plan.get('graph')
+    if not graph:
+        return {}
+    nodes = {node['id']: node for node in graph['nodes']}
+    name = node_id or 'check:' + stage
+    if name not in nodes:
+        return {}
+    node = nodes[name]
+    checks = [check for check in plan.get('checks', []) if check['group'] == node.get('profile')
+              or (name == 'check:cargo' and check['group'].startswith('cargo:'))]
+    return {'node_version': 1, 'run_id': report['run_id'], 'graph_sha256': digest(graph),
+            'node_id': name, 'selection_reason': [reason for check in checks for reason in check.get('reasons', [])]
+            or ['Registered command boundary'],
+            'execution_scope': checks or {'profile': node.get('profile'), 'node': name}}

@@ -5,6 +5,7 @@ services:
     volumes:
       - ../verification_observation.py:/collector.py:ro
       - ../verification_observation_cost.py:/verification_observation_cost.py:ro
+      - ../verification_observation_nodes.py:/verification_observation_nodes.py:ro
       - ../verification_observation_rules.py:/verification_observation_rules.py:ro
       - ./settings.json:/observation/settings.json:ro
       - ../../target/verification:/records:ro
