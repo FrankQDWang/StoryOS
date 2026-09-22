@@ -30,6 +30,7 @@ class Probe:
                         value = json.loads(raw)
                         if not isinstance(value, dict):
                             raise ValueError('Invalid collector health')
+                        json.dumps(value, allow_nan=False)
                         item = {key: value[key] for key in ('checked_at', 'status', 'pending', 'records',
                                 'seconds', 'database_bytes', 'error') if key in value}
                         if item.get('status') not in {'ok', 'unavailable'} or 'checked_at' not in item:

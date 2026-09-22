@@ -174,3 +174,11 @@ class QueryTests(unittest.TestCase):
         code, health = self.get('/api/v1/health')
         self.assertEqual((code, health['collector']['status'], health['query']['status'], health['grafana']['status']),
                          (200, 'unavailable', 'ok', 'ok'))
+
+    def test_corrupt_collector_numbers_do_not_hide_other_health(self):
+        (self.root / 'probe-collector.json').write_text(
+            '{"status":"ok","checked_at":"2026-09-22T00:00:00Z","seconds":1e999}')
+        self.start()
+        code, health = self.get('/api/v1/health')
+        self.assertEqual((code, health.get('collector', {}).get('status'), health.get('query', {}).get('status')),
+                         (200, 'unavailable', 'ok'))
