@@ -112,4 +112,21 @@ History uses server search and 50-row pages. Overview shows 12 recent roots and
 up to 100 unfinished roots, with an explicit history link direction on truncation.
 Same-tab session storage retains page settings, scroll and applied row membership.
 A poll can update row facts; only Update applies changed order or membership.
-The health page and evidence drawer are separate US40 delivery boundaries.
+The health page remains a separate US40 delivery boundary.
+
+The run drawer reads the run, file, attempt and request endpoints. It follows
+100-row pages, up to 10000 rows per section; larger results require Agent paging.
+Separate page reads do not claim snapshot isolation. New membership requires
+Update Range. Known facts refresh in place. File evidence requires a matching
+node ID and graph digest; stage results and durations never become file results.
+Multiple retained file attempts have their own durations summed only when all
+have an end and known duration, and the projected file state is known. The
+reconciled projection owns the file result; raw attempts do not override unknown.
+
+The hash route retains page, run, level and file node ID. Same-tab storage retains
+the last four visited runs, each level's scroll, and file filters and order.
+Close or Escape restores source-row focus. Contextual Back follows the drawer
+hierarchy; browser Back follows navigation history. Diagnostic links open a new
+tab; closing that tab returns to the retained source. Evidence paths are displayed
+only when they match the API allowlist. An Agent must inspect those local records
+and their timestamps; the drawer grants no execution or repair authority.

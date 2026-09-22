@@ -55,4 +55,38 @@
 .supervision button:disabled{opacity:.45;cursor:default}
 .supervision a{color:#6c60a1;text-decoration:none}
 .supervision a:hover{text-decoration:underline}
+.supervision .peek{position:absolute;right:0;top:0;bottom:0;width:min(620px,calc(100% - 410px));display:flex;flex-direction:column;border-left:1px solid #dedde8;background:#fff;z-index:20;overflow:hidden}
+.supervision .detail-bar{display:flex;justify-content:space-between;padding:6px 24px;flex:none}
+.supervision .detail-bar [data-close]{margin-left:auto}
+.supervision .detail-bar button,.supervision .secondary,.supervision .detail-update button{border:0;background:none;padding:7px 2px;min-height:32px;font-size:12px;color:#716a82}
+.supervision .detail-bar button:hover,.supervision .secondary:hover,.supervision .detail-update button:hover{text-decoration:underline}
+.supervision .detail-body{padding:8px 28px 26px;overflow:auto;flex:1;scrollbar-gutter:stable}
+.supervision .detail-title small{font-size:12px;color:#9693a2}
+.supervision .detail-title h2{font-size:19px;margin:5px 0 16px;color:#35323e;font-weight:600}
+.supervision .summary-state{display:flex;align-items:center;gap:14px;margin-bottom:24px}
+.supervision .summary-state strong{font-size:17px;font-weight:500}
+.supervision dl{display:grid;grid-template-columns:100px 1fr;gap:13px 16px;font-size:12px;line-height:1.8}
+.supervision dt{color:#9994a3;font-weight:400}
+.supervision dd{margin:0;color:#666170;overflow-wrap:anywhere}
+.supervision h3{font-size:13px;font-weight:600;margin:25px 0 12px}
+.supervision .scope{display:flex;flex-wrap:wrap;gap:4px 20px;padding:2px 0}
+.supervision .scope button{display:flex;align-items:center;flex-direction:row-reverse;gap:8px;border:0;background:none;padding:7px 2px;color:#646070}
+.supervision .scope button:hover{background:#f4f2f8}
+.supervision .scope b{font-size:14px;font-weight:500;color:#514a78}
+.supervision .scope span{font-size:12px}
+.supervision .detail-body p{font-size:13px;color:#7f788b;line-height:1.8}
+.supervision .detail-body .notice{font-size:12px;color:#817c89;margin:18px 0;line-height:1.8}
+.supervision .wrap{flex-wrap:wrap}
+.supervision .wrap input{flex-basis:100%}
+.supervision .file-row{display:block;width:100%;background:#fff;border:0;text-align:left;padding:14px 2px}
+.supervision .file-row:hover{background:#f8f7fc}
+.supervision .file-row strong{display:block;overflow-wrap:anywhere;font-size:12px;font-weight:500;color:#555064}
+.supervision .file-row span{font-size:11px;color:#9993a3}
+.supervision .path{overflow-wrap:anywhere;line-height:1.8}
+.supervision pre{white-space:pre-wrap;overflow-wrap:anywhere;font:11px/1.8 ui-monospace,monospace;background:none;padding:0}
+.supervision .stage{display:flex;justify-content:space-between;padding:10px 0;font-size:11px;gap:12px}
+.supervision .stage strong{font-weight:400;overflow-wrap:anywhere}
+.supervision .detail-error,.supervision .detail-update{padding:4px 28px;color:#a65252;font-size:12px}
+.supervision .detail-error[hidden],.supervision .detail-update[hidden]{display:none}
+@media(max-width:1000px){.supervision .peek{width:65%}}
 @media(max-width:1000px){.supervision .nav{width:160px}.supervision .body{padding-left:24px;padding-right:24px}.supervision header{padding:16px 24px}.supervision .row{grid-template-columns:minmax(130px,1fr) 90px 140px 80px;gap:8px}.supervision .row small{display:block;margin:0}.supervision .sync{display:none}.supervision .status-strip{gap:12px;font-size:12px}.supervision .status-strip b{font-size:12px}}
