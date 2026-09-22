@@ -1,4 +1,18 @@
 services:
+  query:
+    image: python:3.13.7-alpine
+    command: [python, /query.py, --container, --database, /observation/runs.sqlite]
+    ports: ["127.0.0.1:3754:3754"]
+    volumes:
+      - ../verification_observation_api.py:/query.py:ro
+      - ../../target/observation/data:/observation:ro
+    read_only: true
+    tmpfs: ["/tmp:size=32m,mode=1777"]
+    cap_drop: [ALL]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: none
   collector:
     image: python:3.13.7-alpine
     command: [python, /collector.py, watch, --records, /records, --database, /observation/runs.sqlite]
