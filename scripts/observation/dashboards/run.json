@@ -2,6 +2,13 @@
   "uid": "storyos-run",
   "title": "StoryOS \u00b7 \u9a8c\u8bc1\u8fd0\u884c",
   "schemaVersion": 39,
+  "links": [
+    {
+      "title": "\u6bd4\u8f83\u4e24\u8f6e\u8fd0\u884c",
+      "url": "/d/storyos-compare?theme=light&var-left=${run:percentencode}",
+      "type": "link"
+    }
+  ],
   "editable": false,
   "timezone": "utc",
   "refresh": "5s",

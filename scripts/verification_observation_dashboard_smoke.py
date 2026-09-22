@@ -80,4 +80,31 @@ def check(url):
                         if len(ids)!=expected:
                             raise RuntimeError(f'{example} / {group}: expected {expected} nodes, got {ids}')
                     queried += 1
+    return queried + check_comparison(url)
+
+
+def check_comparison(url):
+    dashboard = json.loads((Path(__file__).with_name('observation') / 'dashboards/compare.json').read_text())
+    queried = 0
+    for left,right in [('partial','complete'), ('failed','complete'), ('reused','complete'), ('legacy','partial')]:
+        for panel in dashboard['panels']:
+            for target in panel.get('targets', []):
+                query = {**target, 'datasource': panel['datasource']}
+                for field in ['queryText', 'rawQueryText']:
+                    for key,value in {'left': left, 'right': right}.items():
+                        query[field] = query[field].replace('${'+key+':sqlstring}', "'synthetic-dag-"+value+"'")
+                request = urllib.request.Request(url+'/api/ds/query', data=json.dumps({'queries': [query]}).encode(),
+                                                 headers={'Content-Type': 'application/json'})
+                with urllib.request.urlopen(request, timeout=30) as response:
+                    result = json.load(response)['results'][target['refId']]
+                if result.get('error'):
+                    raise RuntimeError(f"Comparison / {panel['title']}: {result['error']}")
+                frames = result.get('frames', [])
+                if panel['id'] in {1,2,3} and not (frames and frames[0]['data']['values'][0]):
+                    raise RuntimeError('Comparison lost retained run or graph rows')
+                if panel['id']==1:
+                    expected = 'not comparable' if left=='legacy' else 'descriptive only'
+                    if frames[0]['data']['values'][0] != [expected]:
+                        raise RuntimeError('Comparison fabricated comparable evidence')
+                queried += 1
     return queried

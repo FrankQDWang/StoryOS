@@ -386,3 +386,25 @@ These examples prove display behavior, not product execution or candidate eviden
 The read-only collector has a 64 MiB temporary mount for SQLite sort files. The
 smoke check forces a sort spill and requires a container-collected change after
 the initial import; a stale database cannot satisfy that check.
+
+### Two-run comparison and timeline
+
+Open <http://127.0.0.1:3749/d/storyos-compare> or follow the comparison link from
+one run. Select left and right retained runs. Stable IDs preserve removed files;
+renames appear as removal and addition. Definition changes include dependencies
+and membership, but selection is separate. Inspect the definition and edge cells
+for details. Column filters narrow the table. Missing graphs stay unavailable.
+
+The UTC timeline gives each actual attempt its own row. Use the time picker to
+zoom to the runs. Attempts without both timestamps remain in the detail table;
+no end time or file duration is invented. Overlap includes nested attempts and
+is not additive cost. Explicit blocked intervals use the recorded run UTC and
+monotonic anchor. Missing waits remain unknown. Complete reuse requests point to
+the original run and add no attempt; daily reuse retains its producer link.
+
+Duration deltas are descriptive unless scope, definitions, policy, toolchain,
+execution inputs, runners, host, repository, and build state match. Even then,
+a delta alone does not prove a cause. Observation does not authorize recovery.
+`make observe-dashboard` generates both dashboards; `make observe-smoke` queries
+both through the real SQLite plugin. Synthetic examples prove display behavior,
+not real-candidate recovery. Historical records are never changed.

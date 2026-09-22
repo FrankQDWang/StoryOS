@@ -187,6 +187,7 @@ def dashboard():
         '绿色通过 · 红色失败 · 蓝色运行中 · 橙色阻塞 · 黄色待执行 · 灰色未选择。时间为 UTC；— 表示未记录，未知不等于零。运行中是最后记录的状态，请结合「最近更新 UTC」判断是否仍活跃。'}}
     requests = f"SELECT json_extract(payload,'$.utc') AS UTC,json_extract(payload,'$.outcome') AS outcome,path AS evidence FROM records WHERE kind='request' AND json_extract(payload,'$.run_id')={RUN} ORDER BY UTC"
     return {'uid': 'storyos-run', 'title': 'StoryOS · 验证运行', 'schemaVersion': 39,
+        'links': [{'title': '比较两轮运行', 'url': '/d/storyos-compare?theme=light&var-left=${run:percentencode}', 'type': 'link'}],
         'editable': False, 'timezone': 'utc', 'refresh': '5s', 'time': {'from': 'now-7d', 'to': 'now'},
         'templating': {'list': variables}, 'panels': [panel(2, '运行概览', 0, 4, SUMMARY), workflow, steps, help_panel,
         panel(4, '步骤详情', 20, 5, DETAIL), panel(5, '执行记录 · UTC', 25, 6, ATTEMPTS),
@@ -194,9 +195,11 @@ def dashboard():
 
 
 if __name__ == '__main__':
-    rendered = json.dumps(dashboard(), indent=2) + '\n'
-    if '--check' in sys.argv:
-        if not DESTINATION.exists() or DESTINATION.read_text() != rendered:
-            raise SystemExit('Run make observe-dashboard to update the generated dashboard')
-    else:
-        DESTINATION.write_text(rendered)
+    import verification_observation_compare as compare
+    for destination, content in [(DESTINATION, dashboard()), (compare.DESTINATION, compare.dashboard())]:
+        rendered = json.dumps(content, indent=2) + '\n'
+        if '--check' in sys.argv:
+            if not destination.exists() or destination.read_text() != rendered:
+                raise SystemExit('Run make observe-dashboard to update the generated dashboard')
+        else:
+            destination.write_text(rendered)
