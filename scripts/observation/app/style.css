@@ -1,0 +1,58 @@
+.supervision{position:fixed;inset:40px 0 0;z-index:10;display:flex;background:#fff;color:#25262d;font:14px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
+.supervision *{box-sizing:border-box}
+.supervision button,.supervision input,.supervision select{font:inherit}
+.supervision button{cursor:pointer}
+.supervision button:focus-visible,.supervision a:focus-visible{outline:2px solid #6964cd;outline-offset:2px}
+.supervision .nav{width:204px;flex:none;background:#f7f7f9;padding:28px 16px;display:flex;flex-direction:column}
+.supervision .brand{font-size:22px;font-weight:700;letter-spacing:-.7px;padding:0 12px 32px}
+.supervision .brand small{display:block;color:#747582;font-size:12px;letter-spacing:2px;font-weight:400;margin-top:3px}
+.supervision .nav-label{font-size:11px;color:#90909a;margin:0 12px 9px}
+.supervision .nav button{text-align:left;border:0;background:none;border-radius:6px;padding:9px 12px;margin:2px 0;color:#62636e}
+.supervision .nav button.active{background:#eae9f3;color:#514a9e;font-weight:600}
+.supervision .nav button:hover{background:#eeeef2}
+.supervision .nav-bottom{margin-top:auto;padding:18px 12px 0;color:#83838f;font-size:12px}
+.supervision .nav-bottom b{color:#5e5e6b;font-weight:500}
+.supervision .nav-bottom p{margin:5px 0 12px}
+.supervision .workspace{flex:1;min-width:0;display:flex;flex-direction:column}
+.supervision header{height:72px;flex:none;padding:16px 38px;display:flex;align-items:center;justify-content:space-between}
+.supervision header small{color:#90909a;font-size:11px}
+.supervision h1{font-size:18px;margin:3px 0;font-weight:600}
+.supervision .sync{font-size:11px;color:#858590}
+.supervision .body{overflow:auto;flex:1;padding:0 38px 40px;scrollbar-gutter:stable}
+.supervision h2{font-size:15px;margin:28px 0 12px;font-weight:600}
+.supervision h2 span{font-size:11px;color:#91919c;margin-left:10px;font-weight:400}
+.supervision .empty{padding:16px 0;color:#6e6e7a}
+.supervision .empty small{display:block;font-size:12px;color:#90909a;margin-top:5px}
+.supervision .empty strong{font-weight:500;color:#535360}
+.supervision .muted{color:#878792;font-size:12px;margin:0 0 12px}
+.supervision .row{display:grid;grid-template-columns:minmax(170px,1.4fr) 120px minmax(150px,1fr) 95px;gap:16px;align-items:center;width:100%;border:0;text-align:left;background:none;padding:11px 12px;color:#62626f;font-size:12px}
+.supervision .row.heading{padding:8px 12px;font-size:11px;color:#92909b}
+.supervision button.row:hover{background:#f8f8fc}
+.supervision button.row.selected{background:#f0effa;box-shadow:inset 3px 0 #766ac4}
+.supervision .row strong{font-size:13px;color:#3b3b45;font-weight:500}
+.supervision .row small{margin-left:10px;color:#93939f;font-size:11px}
+.supervision .badge{background:none;padding:0;border-radius:0;color:#747480;font-size:11px;white-space:nowrap}
+.supervision .badge.failed{color:#a65252}
+.supervision .badge.stale{color:#a27a35}
+.supervision .badge.running{color:#655ab5}
+.supervision footer{font-size:11px;color:#a0a0a9;padding-top:28px}
+.supervision .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+.supervision input,.supervision select{height:34px;line-height:18px;border:1px solid #dfdfe7;background:#fff;color:#636370;border-radius:5px;padding:7px 10px;font-size:12px;min-width:0}
+.supervision input{flex:1}
+.supervision details.display{position:relative;margin-left:auto;white-space:nowrap;font-size:12px}
+.supervision details.display label{position:absolute;z-index:3;right:0;top:32px;background:#f7f7f9;padding:12px;min-width:180px;color:#72727e}
+.supervision details.display select{display:block;width:100%;margin-top:8px}
+.supervision summary{cursor:pointer;color:#747480;padding:6px 0;min-height:32px}
+.supervision .update,.supervision .error{padding:8px 38px;color:#78659b;font-size:12px}
+.supervision .update[hidden],.supervision .error[hidden]{display:none}
+.supervision .update button,.supervision .pagination button{background:none;border:0;color:#71628f;padding:5px 0;margin-right:15px;min-height:32px}
+.supervision .update button:hover,.supervision .pagination button:hover{text-decoration:underline}
+.supervision .status-strip{display:flex;align-items:center;justify-content:space-between;gap:24px;padding:17px 0;font-size:14px;color:#646470}
+.supervision .status-strip span+span{margin-left:28px}
+.supervision .status-strip b{font-size:14px;font-weight:500;color:#32323c;margin-left:7px}
+.supervision .body.history{padding-top:20px}
+.supervision .pagination{display:flex;gap:20px;align-items:center;margin-top:20px;color:#878792;font-size:12px}
+.supervision button:disabled{opacity:.45;cursor:default}
+.supervision a{color:#6c60a1;text-decoration:none}
+.supervision a:hover{text-decoration:underline}
+@media(max-width:1000px){.supervision .nav{width:160px}.supervision .body{padding-left:24px;padding-right:24px}.supervision header{padding:16px 24px}.supervision .row{grid-template-columns:minmax(130px,1fr) 90px 140px 80px;gap:8px}.supervision .row small{display:block;margin:0}.supervision .sync{display:none}.supervision .status-strip{gap:12px;font-size:12px}.supervision .status-strip b{font-size:12px}}

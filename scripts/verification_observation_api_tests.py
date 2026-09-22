@@ -182,3 +182,13 @@ class QueryTests(unittest.TestCase):
         code, health = self.get('/api/v1/health')
         self.assertEqual((code, health.get('collector', {}).get('status'), health.get('query', {}).get('status')),
                          (200, 'unavailable', 'ok'))
+
+    def test_overview_cost_counts_only_actual_roots_and_keeps_unknown_duration(self):
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        self.write('actual', attempt_started=True, actual_started_at=now, duration_seconds=12)
+        self.write('unknown-cost', attempt_started=True, actual_started_at=now, status='interrupted')
+        self.write('reused', attempt_started=False, actual_started_at=now, duration_seconds=999)
+        self.start()
+        code, value = self.get('/api/v1/overview')
+        self.assertEqual((code, value.get('starts'), value.get('seconds')), (200, 2, None))

@@ -21,6 +21,18 @@ RUNS = "SELECT run,quality," + ','.join(
 
 
 def query(connection, path, parameters):
+    if path == '/api/v1/overview':
+        if parameters:
+            raise ValueError('unsupported_parameter')
+        heartbeat = connection.execute("SELECT value FROM observation_settings WHERE name='heartbeat_seconds'").fetchone()[0]
+        counts = connection.execute("SELECT count(*) AS unfinished, count(CASE WHEN "
+            "(julianday('now')-julianday(heartbeat_at))*86400 BETWEEN 0 AND ? THEN 1 END) AS active "
+            "FROM (" + RUNS + ") WHERE status='running'", (heartbeat,)).fetchone()
+        costs = connection.execute("SELECT count(*) AS starts, CASE WHEN count(c.seconds)=count(*) "
+            "THEN coalesce(sum(c.seconds),0) END AS seconds FROM run_cost c JOIN records r ON r.run=c.run "
+            "AND r.kind='run' WHERE julianday(coalesce(json_extract(r.payload,'$.actual_started_at'),"
+            "json_extract(r.payload,'$.started_at'))) BETWEEN julianday('now','-1 day') AND julianday('now')").fetchone()
+        return {**dict(counts), **dict(costs), 'heartbeat_seconds': heartbeat}
     match = re.fullmatch(r'/api/v1/runs/([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?:/(files|attempts))?', path)
     args, allowed = [], {'limit', 'offset'}
     if path == '/api/v1/runs':
