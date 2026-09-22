@@ -15,6 +15,8 @@ must use tracked source only.
 | `qa/flat/02-history.png` | `9de924346447b135c9ff23216349a29e48ba0aa2630aceb0504e5c4b7c87a2b0` |
 | `qa/drawer-spacing/01-summary.png` | `6c470ce5d16e3c9022c0407ce412d5d908d2232cb2cf7d7f5371dabe911d3312` |
 
+Health reference: `qa/flat/03-health.png`, SHA-256 `802cd474fb2dc03d7ee8a9265580af45bcf57ef9543342d915f2df6c62574c3b`.
+
 ## Layout and interaction
 
 - Keep the native Grafana shell. The App starts below its 40 px header.
@@ -34,8 +36,8 @@ must use tracked source only.
 - Poll known row facts in place. New membership, status groups, and order require
   explicit user application. Failed reads label retained data and the last success;
   a successful read clears that error. Never discard reading state on a poll.
-- Keep `page`, `run`, `level`, and `file` in the hash route. The next drawer ticket
-  owns summary, files, file evidence, and diagnostics. Close restores row focus.
+- Keep `page`, `run`, `level`, and `file` in the hash route. The drawer provides
+  summary, files, file evidence, and diagnostics. Close restores row focus.
 - The drawer fills the App height and touches the right edge. Summary has only
   the Chinese Close action; nested views have contextual Back. Escape closes it;
   browser Back follows visited levels. Each level retains filters and scroll.
@@ -46,3 +48,10 @@ US40-C owns navigation and lists. US40-D owns the evidence drawer. US40 integrat
 owns the health page and clean rebuild acceptance. US41 owns further anomaly,
 cost, graph, timeline, and comparison presentation. Existing dashboards and alerts
 remain available. All screenshots and build output stay under `target/observation`.
+
+Monitoring health uses one unboxed status strip and a definition list. Each
+component shows its own UTC observation and age. Keep collector, query, and
+Grafana status independent. Display collector errors and failed health-record
+writes. Retained observations become stale while disconnected. Links open in
+a new tab and describe how to return. The [handoff and acceptance guide](ACCEPTANCE.md)
+records reproducible checks and the limits of fixture evidence.

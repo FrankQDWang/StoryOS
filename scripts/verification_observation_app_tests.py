@@ -9,6 +9,33 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class AppTests(unittest.TestCase):
+    def test_health_ages_independent_observations_after_a_failed_read(self):
+        script = r'''
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
+vm.runInThisContext(fs.readFileSync('scripts/observation/app/health.js','utf8'));
+(async()=>{
+    const now=Date.parse('2026-09-22T12:00:00Z');
+    const item={status:'ok',reported_status:'ok',checked_at:'2026-09-22T11:59:50Z',age_seconds:10};
+    const data={queried_at:'2026-09-22T12:00:00Z',stale_after_seconds:30,collector:item,query:{...item,status:'unavailable',reported_status:'unavailable'},grafana:{...item,age_seconds:29}};
+    const model=new HealthObservation(async()=>data);
+    await model.refresh();
+    assert.deepEqual(model.component('collector',now),{...item,status:'ok',age_seconds:10});
+    assert.equal(model.component('query',now).status,'unavailable');
+    assert.equal(model.component('collector',now-10).status,'ok');
+    assert.equal(model.component('grafana',now+2000).status,'stale');
+    model.request=async()=>{throw Error('offline')};
+    await assert.rejects(model.refresh(),/offline/);
+    assert.equal(model.component('collector',now+21000).status,'stale');
+    const restored=new HealthObservation(async()=>data,JSON.parse(JSON.stringify(model.data)));
+    assert.deepEqual(restored.component('collector',now+21000),model.component('collector',now+21000));
+    assert.equal(new HealthObservation(async()=>({})).component('collector',now).status,'unavailable');
+    model.data.collector={...item,age_seconds:-1};
+    assert.equal(model.component('collector',now).status,'stale');
+})().catch(e=>{console.error(e);process.exitCode=1});
+'''
+        result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def test_drawer_keeps_membership_and_requires_file_attempts(self):
         script = r'''
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');

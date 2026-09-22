@@ -14,7 +14,7 @@ OUTPUT = ROOT / 'target/observation/plugins/storyos-supervision-app'
 
 def main():
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    code = '\n'.join((SOURCE / name).read_text() for name in ('model.js', 'views.js', 'drawer-model.js', 'drawer-view.js', 'app.js'))
+    code = '\n'.join((SOURCE / name).read_text() for name in ('model.js', 'views.js', 'drawer-model.js', 'drawer-view.js', 'health.js', 'app.js'))
     code = code.replace('__STYLE_DIGEST__', hashlib.sha256((SOURCE / 'style.css').read_bytes()).hexdigest()[:12])
     (OUTPUT / 'module.js').write_text("define(['react','@grafana/data'], async function(React,grafana){\n" + code +
         '\nreturn {plugin:new grafana.AppPlugin().setRootPage(App)};\n});\n')

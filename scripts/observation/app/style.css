@@ -90,3 +90,11 @@
 .supervision .detail-error[hidden],.supervision .detail-update[hidden]{display:none}
 @media(max-width:1000px){.supervision .peek{width:65%}}
 @media(max-width:1000px){.supervision .nav{width:160px}.supervision .body{padding-left:24px;padding-right:24px}.supervision header{padding:16px 24px}.supervision .row{grid-template-columns:minmax(130px,1fr) 90px 140px 80px;gap:8px}.supervision .row small{display:block;margin:0}.supervision .sync{display:none}.supervision .status-strip{gap:12px;font-size:12px}.supervision .status-strip b{font-size:12px}}
+
+.supervision .health-strip{display:flex;flex-wrap:wrap;gap:28px;padding:17px 0;color:#646470}
+.supervision .health-strip b{margin-left:8px;font-weight:500}
+.supervision .green{color:#568b6b}
+.supervision .amber,.supervision .health-warning{color:#a27a35}
+.supervision .health-facts{grid-template-columns:120px 1fr}
+.supervision .health p{font-size:13px;color:#7f788b;line-height:1.8}
+.supervision .health p.muted{font-size:12px;color:#878792}
