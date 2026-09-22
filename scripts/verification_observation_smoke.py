@@ -21,7 +21,8 @@ def main():
     compose = ['docker', 'compose', '-p', 'storyos-observation-smoke', '-f',
                str(root / 'scripts/observation/compose.yaml')]
     process = None
-    temporary_directory = tempfile.TemporaryDirectory()
+    (root / 'target/observation').mkdir(parents=True, exist_ok=True)
+    temporary_directory = tempfile.TemporaryDirectory(dir=root / 'target/observation')
     try:
         temporary = temporary_directory.name
         output = Path(temporary)
@@ -60,16 +61,25 @@ def main():
         override.write_text('services:\n  collector:\n    volumes:\n'
             f'      - {records}:/records:ro\n      - {output}/data:/observation\n'
             '  grafana:\n    ports: !override ["127.0.0.1::3000"]\n    volumes:\n'
+            f'      - {output}/data:/observation:ro\n'
+            '  query:\n    ports: !override ["127.0.0.1::3754"]\n    volumes:\n'
             f'      - {output}/data:/observation:ro\n')
         compose += ['-f', str(override)]
         subprocess.run([*compose, 'up', '-d', '--build'], check=True, timeout=180)
         port = subprocess.check_output([*compose, 'port', 'grafana', '3000'], text=True).strip()
         url = 'http://' + port
+        query_port = subprocess.check_output([*compose, 'port', 'query', '3754'], text=True).strip()
         dashboard = json.loads((root / 'scripts/observation/dashboards/live.json').read_text())
         deadline = time.monotonic() + 90
         refresh_started = time.monotonic()
         while True:
             try:
+                request = urllib.request.Request('http://' + query_port + '/api/v1/runs?q=synthetic-0000',
+                                                 headers={'Host': '127.0.0.1:3754'})
+                with urllib.request.urlopen(request, timeout=8) as response:
+                    roots = json.load(response)['items']
+                if len(roots) != 1 or roots[0]['status'] != 'passed':
+                    raise RuntimeError('Query service has not observed the retained update')
                 with urllib.request.urlopen(url + '/api/dashboards/uid/storyos-verification', timeout=3) as response:
                     assert json.load(response)['dashboard']['title'] == dashboard['title']
                 frames = []
