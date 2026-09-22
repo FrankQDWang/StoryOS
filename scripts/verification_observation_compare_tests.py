@@ -83,8 +83,8 @@ class ComparisonTests(unittest.TestCase):
             'parallel': (1, 'passed', '2026-09-21T00:00:07+00:00'), 'retry': (None, 'running', None)})
         self.assertEqual(self.query(5, right='left')[0]['overlaps'], 1)
         intervals = self.query(4)
-        self.assertEqual({r['lane'] for r in intervals}, {'左 · 准备环境 · 1', '左 · 测试 · 1', 'left · measured wait · 0'})
-        self.assertEqual([r['end']-r['start'] for r in intervals if 'wait' in r['lane']], [1])
+        self.assertEqual({r['lane'] for r in intervals}, {'左 · 准备环境 · 1', '左 · 测试 · 1', '左 · 已测量等待 · 0'})
+        self.assertEqual([r['end']-r['start'] for r in intervals if '已测量等待' in r['lane']], [1])
         self.assertEqual([(r['selected'], r['executed'], r['reused']) for r in self.query(2)], [(3, 2, 0), (3, 0, 3)])
 
     def test_duration_comparison_requires_full_evidence(self):
@@ -94,6 +94,9 @@ class ComparisonTests(unittest.TestCase):
             self.write_run(name, self.graph, candidate=candidate, build_state='warm', repository='/sample', duration_seconds=10, attempt_started=True)
             self.write_attempt(name, 'run', '2026-09-21T00:00:00+00:00', '2026-09-21T00:00:05+00:00')
         self.assertEqual(self.query(1)[0]['comparison'], 'comparable evidence')
+        for name in ['left', 'right']:
+            self.write_run(name, self.graph, candidate=candidate, build_state='warm', duration_seconds=10, attempt_started=True)
+        self.assertEqual(self.query(1)[0]['comparison'], 'descriptive only')
         candidate['host'] = {'identity': 'another-host'}
         self.write_run('right', self.graph, candidate=candidate, build_state='warm', duration_seconds=5)
         self.assertEqual((self.query(1)[0]['comparison'], self.query(1)[0]['delta_seconds']), ('descriptive only', -5))

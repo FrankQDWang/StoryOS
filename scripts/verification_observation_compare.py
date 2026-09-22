@@ -5,18 +5,22 @@ from verification_observation_dashboard import DESTINATION, STEPS, panel, variab
 DESTINATION = DESTINATION.with_name('compare.json')
 LEFT, RIGHT = '${left:sqlstring}', '${right:sqlstring}'
 PAIR = f"""WITH pair(side,run_id) AS (VALUES ('left',{LEFT}),('right',{RIGHT})),
- roots AS (SELECT p.*,r.payload,r.quality,g.payload AS graph FROM pair p
+ roots AS MATERIALIZED (SELECT p.*,r.payload,r.quality,g.payload AS graph FROM pair p
  LEFT JOIN records r ON r.run=p.run_id AND r.kind='run'
  LEFT JOIN run_graphs g ON g.run_id=p.run_id),
  definitions AS (SELECT side,json_extract(j.value,'$.id') AS node_id,
  json_remove(j.value,'$.selected') AS definition FROM roots,json_each(graph,'$.nodes') j),
- edges AS (SELECT side,j.value AS edge FROM roots,json_each(graph,'$.dependencies') j
+ edges AS MATERIALIZED (SELECT side,j.value AS edge FROM roots,json_each(graph,'$.dependencies') j
  UNION ALL SELECT side,j.value FROM roots,json_each(graph,'$.relations') j),
- n AS MATERIALIZED (SELECT d.*,s.selected,s.state,s.producer,
- (SELECT COUNT(*) FROM node_attempts a WHERE a.run_id=p.run_id AND a.node_id=d.node_id) AS executed,
- (SELECT group_concat(edge) FROM (SELECT edge FROM edges e WHERE e.side=d.side
- AND (json_extract(edge,'$.from')=d.node_id OR json_extract(edge,'$.to')=d.node_id) ORDER BY edge)) AS edges
- FROM definitions d JOIN pair p USING(side) JOIN node_states s USING(run_id,node_id))
+ incident AS (SELECT side,json_extract(edge,'$.from') AS node_id,edge FROM edges
+ UNION SELECT side,json_extract(edge,'$.to'),edge FROM edges),
+ edge_sets AS MATERIALIZED (SELECT side,node_id,group_concat(edge) AS edges
+ FROM (SELECT * FROM incident ORDER BY side,node_id,edge) GROUP BY side,node_id),
+ counts AS MATERIALIZED (SELECT run_id,node_id,COUNT(*) AS executed FROM node_attempts
+ WHERE run_id IN (SELECT run_id FROM pair) GROUP BY run_id,node_id),
+ n AS MATERIALIZED (SELECT d.*,s.selected,s.state,s.producer,COALESCE(c.executed,0) AS executed,e.edges
+ FROM definitions d JOIN pair p USING(side) JOIN node_states s USING(run_id,node_id)
+ LEFT JOIN counts c USING(run_id,node_id) LEFT JOIN edge_sets e USING(side,node_id))
 """
 DIFFERENCE = PAIR + """SELECT ids.node_id,
  CASE WHEN (SELECT COUNT(graph) FROM roots)!=2 THEN 'unavailable'
@@ -33,6 +37,8 @@ COMPARISON = PAIR + """SELECT
  CASE WHEN l.graph IS NULL OR r.graph IS NULL THEN 'not comparable'
  WHEN json_extract(l.payload,'$.status')='passed' AND json_extract(r.payload,'$.status')='passed'
  AND json_extract(l.payload,'$.attempt_started')=1 AND json_extract(r.payload,'$.attempt_started')=1
+ AND json_type(l.payload,'$.repository')='text' AND LENGTH(json_extract(l.payload,'$.repository'))>0
+ AND json_type(r.payload,'$.repository')='text' AND LENGTH(json_extract(r.payload,'$.repository'))>0
  AND EXISTS (SELECT 1 FROM n WHERE executed>0)
  AND json_extract(l.payload,'$.comparison_key') IS NOT NULL AND
  json_extract(l.payload,'$.comparison_key')=json_extract(r.payload,'$.comparison_key')
@@ -73,7 +79,7 @@ STEP = "CASE REPLACE(node_id,'check:','') " + ' '.join(f"WHEN '{key}' THEN '{val
 TIMELINE = INTERVALS + f"""SELECT start,end,CASE side WHEN 'left' THEN '左' ELSE '右' END||' · '||{STEP}||' · '||
  attempt_number AS lane,result AS state
  FROM timed WHERE start IS NOT NULL AND end>=start
- UNION ALL SELECT start,end,side||' · measured wait · '||key,'measured wait'
+ UNION ALL SELECT start,end,CASE side WHEN 'left' THEN '左' ELSE '右' END||' · 已测量等待 · '||key,'measured wait'
  FROM waits WHERE start IS NOT NULL AND end>=start ORDER BY start,lane"""
 ATTEMPTS = INTERVALS + """SELECT side,node_id,attempt_number,attempt_id,result,started_at AS start_UTC,ended_at AS end_UTC,
  duration_seconds AS seconds,
@@ -122,7 +128,7 @@ def dashboard():
         if item['type']=='table':
             item['fieldConfig']['defaults']['custom'].update(filterable=True, minWidth=90)
             item['fieldConfig']['overrides'].append({'matcher': {'id': 'byName', 'options': 'node_id'},
-                'properties': [{'id': 'custom.width', 'value': 300}]})
+                'properties': [{'id': 'custom.width', 'value': 300}, {'id': 'custom.wrapText', 'value': True}]})
     timeline['fieldConfig']['overrides'] = []
     panels[1]['fieldConfig']['overrides'].append({'matcher': {'id': 'byName', 'options': 'run_id'},
         'properties': [{'id': 'links', 'value': [{'title': '查看完整运行 DAG',
