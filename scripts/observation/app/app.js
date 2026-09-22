@@ -9,19 +9,22 @@ function mount(host) {
     };
     const shown=new WeakSet();
     let lists={home:new RunList(request,{limit:12,...retained.home}), current:new RunList(request,{status:'running',limit:100,...retained.current}), history:new RunList(request,retained.history)};
-    let overview=retained.overview||{}, last=retained.last||'', error='', disposed=false, busy=false, editTimer;
+    let overview=retained.overview||{}, last=retained.last||'', error='', disposed=false, busy=false, detailBusy=false, editTimer;
+    const evidence=new Map(Object.entries(retained.evidence||{}).map(([id,value])=>[id,new RunEvidence(request,id,value)]));
     const readRoute=() => {
         const route=new URLSearchParams(location.hash.slice(1));
-        return {page:['home','history','health'].includes(route.get('page'))?route.get('page'):'home',run:route.get('run')||'',level:route.get('level')||'summary',file:route.get('file')||''};
+        return {page:['home','history','health'].includes(route.get('page'))?route.get('page'):'home',run:route.get('run')||'',level:['summary','files','file','diagnostics'].includes(route.get('level'))?route.get('level'):'summary',file:route.get('file')||''};
     };
     let view=readRoute();
     function save() {
         const body=host.querySelector('.body');
         if (body && lists[view.page]) lists[view.page].scroll=body.scrollTop;
-        try { sessionStorage.setItem(key,JSON.stringify({home:lists.home.saved(),current:lists.current.saved(),history:lists.history.saved(),overview,last})); } catch {}
+        const detail=host.querySelector('.detail-body');
+        if(detail&&evidence.has(view.run))evidence.get(view.run).scrolls[view.level+':'+view.file]=detail.scrollTop;
+        try { sessionStorage.setItem(key,JSON.stringify({home:lists.home.saved(),current:lists.current.saved(),history:lists.history.saved(),overview,last,evidence:Object.fromEntries([...evidence].slice(-4).map(([id,model])=>[id,model.saved()]))})); } catch {}
     }
     function render() {
-        const focused=document.activeElement, setting=focused?.dataset.setting, caret=focused?.selectionStart;
+        const focused=host.contains(document.activeElement)?document.activeElement:null, caret=focused?.selectionStart;
         const names={home:'总览',history:'运行历史',health:'监控健康'};
         const pending=view.page==='home'?lists.home.pending||lists.current.pending:lists.history.pending;
         host.innerHTML='<div class="supervision"><aside class="nav"><div class="brand">StoryOS<small>仓库监督</small></div><div class="nav-label">工作空间</div>'+Object.entries(names).map(([page,label])=>'<button data-page="'+page+'" class="'+(page===view.page?'active':'')+'" '+(page===view.page?'aria-current="page"':'')+'>'+label+'</button>').join('')+
@@ -30,8 +33,35 @@ function mount(host) {
             '<footer>只读监督 · 缺失证据保持未知 · 统计不证明计划已最小化</footer></main></div></div>';
         host.querySelector('.body').scrollTop=lists[view.page]?.scroll||0;
         feedback();
-        const input=setting&&host.querySelector('[data-setting="'+setting+'"]');
-        if(input){input.focus({preventScroll:true});if(input.setSelectionRange&&caret!=null)input.setSelectionRange(caret,caret)}
+        renderDetail();
+        keepFocus(host,focused,caret);
+    }
+    function renderDetail() {
+        let panel=host.querySelector('.peek');
+        if(!view.run){panel?.remove();return}
+        if(!evidence.has(view.run))evidence.set(view.run,new RunEvidence(request,view.run));
+        if(!panel){panel=document.createElement('section');panel.className='peek';panel.setAttribute('role','dialog');panel.setAttribute('aria-labelledby','drawer-title');host.querySelector('.supervision').append(panel)}
+        const focused=panel.contains(document.activeElement)?document.activeElement:null, caret=focused?.selectionStart;
+        const model=evidence.get(view.run);
+        panel.innerHTML=drawerView(model,view,lists[view.page]?.heartbeat||120);
+        panel.querySelector('.detail-body').scrollTop=model.scrolls[view.level+':'+view.file]||0;
+        keepFocus(panel,focused,caret);
+    }
+    function keepFocus(scope,previous,caret) {
+        if(!previous)return;
+        const marker=['data-setting','data-detail-setting','data-close','data-detail-back','data-file','data-level','data-scope','data-detail-update','data-update','data-run','href'].find(name=>previous.hasAttribute(name));
+        const control=marker&&[...scope.querySelectorAll('button,a,input,select')].find(node=>node.getAttribute(marker)===previous.getAttribute(marker));
+        const target=control||scope.querySelector('[data-close]');
+        if(target){target.focus({preventScroll:true});if(target.setSelectionRange&&caret!=null)target.setSelectionRange(caret,caret)}
+    }
+    async function refreshDetail() {
+        if(detailBusy||disposed||!view.run)return;
+        const run=view.run, model=evidence.get(run);
+        if(!model)return;
+        detailBusy=true;
+        try {await model.refresh();model.error=''}
+        catch(failure){model.error=failure.message+'；保留上次证据，最近读取 '+(model.root?.queried_at||'未知')}
+        finally {detailBusy=false;if(!disposed&&view.run===run){save();renderDetail()}else if(!disposed)refreshDetail()}
     }
     function feedback() {
         const box=host.querySelector('.error');
@@ -40,9 +70,14 @@ function mount(host) {
         host.querySelector('[data-sync]').textContent=error?'连接失败 · 上次成功 '+(last||'未知'):'每 10 秒读取 · '+(last||'连接中');
     }
     function navigate(patch) {
+        const previous=view.run;
         save(); view={...view,...patch};
         history.pushState(null,'','/a/storyos-supervision-app?theme=light#'+new URLSearchParams(view));
-        render(); poll();
+        render(); poll(); refreshDetail(); restoreFocus(previous);
+    }
+    function restoreFocus(previous) {
+        if(previous&&!view.run)host.querySelectorAll('[data-run]').forEach(button=>{if(button.dataset.run===previous)button.focus({preventScroll:true})});
+        else if(view.run)host.querySelector('[data-detail-back],[data-close]')?.focus({preventScroll:true});
     }
     async function poll() {
         if (busy || disposed || view.page==='health') return;
@@ -75,7 +110,13 @@ function mount(host) {
     function click(event) {
         const button=event.target.closest('button');
         if (!button || button.disabled) return;
-        if (button.hasAttribute('data-page')) navigate({page:button.dataset.page,run:'',level:'summary',file:''});
+        if(button.hasAttribute('data-close'))navigate({run:'',level:'summary',file:''});
+        else if(button.hasAttribute('data-detail-back'))navigate({level:view.level==='file'?'files':'summary',file:''});
+        else if(button.hasAttribute('data-level'))navigate({level:button.dataset.level,file:''});
+        else if(button.hasAttribute('data-file'))navigate({level:'file',file:button.dataset.file});
+        else if(button.hasAttribute('data-scope')){const model=evidence.get(view.run);model.settings.filter=button.dataset.scope;model.visible=null;navigate({level:'files',file:''})}
+        else if(button.hasAttribute('data-detail-update')){save();evidence.get(view.run).apply();renderDetail();save()}
+        else if (button.hasAttribute('data-page')) navigate({page:button.dataset.page,run:'',level:'summary',file:''});
         else if (button.hasAttribute('data-run')) navigate({run:button.dataset.run,level:'summary',file:''});
         else if (button.hasAttribute('data-update')) {
             save(); lists[view.page].apply(); if(view.page==='home')lists.current.apply(); render(); save();
@@ -90,18 +131,21 @@ function mount(host) {
         if(input){input.focus({preventScroll:true});if(input.setSelectionRange)input.setSelectionRange(input.value.length,input.value.length)}
     }
     function input(event) {
+        const detailSetting=event.target.dataset.detailSetting;
+        if(detailSetting){const model=evidence.get(view.run);model.settings[detailSetting]=event.target.value;model.visible=null;model.scrolls['files:']=0;renderDetail();save();return}
         const name=event.target.dataset.setting;
         if(!name)return;
         clearTimeout(editTimer);
         const value=event.target.value;
         editTimer=setTimeout(()=>change(name,value),name==='q'?300:0);
     }
-    function pop() { save(); view=readRoute(); render(); poll(); }
+    function pop() {const previous=view.run;save();view=readRoute();render();poll();refreshDetail();restoreFocus(previous)}
+    function escape(event) {if(event.key==='Escape'&&view.run){event.preventDefault();navigate({run:'',level:'summary',file:''})}}
     host.addEventListener('click',click); host.addEventListener('input',input);
-    window.addEventListener('popstate',pop); window.addEventListener('beforeunload',save);
-    const css=document.createElement('link'); css.rel='stylesheet'; css.href='/public/plugins/storyos-supervision-app/style.css?v=__STYLE_DIGEST__'; css.onload=()=>{if(!disposed){render();poll()}}; document.head.append(css);
-    const timer=setInterval(poll,10000);
-    return () => { disposed=true; save(); clearInterval(timer); clearTimeout(editTimer); css.remove();host.removeEventListener('click',click);host.removeEventListener('input',input);window.removeEventListener('popstate',pop);window.removeEventListener('beforeunload',save); };
+    window.addEventListener('popstate',pop); window.addEventListener('beforeunload',save);window.addEventListener('keydown',escape,true);
+    const css=document.createElement('link'); css.rel='stylesheet'; css.href='/public/plugins/storyos-supervision-app/style.css?v=__STYLE_DIGEST__'; css.onload=()=>{if(!disposed){render();poll();refreshDetail()}}; document.head.append(css);
+    const timer=setInterval(()=>{poll();refreshDetail()},10000);
+    return () => { disposed=true; save(); clearInterval(timer); clearTimeout(editTimer); css.remove();host.removeEventListener('click',click);host.removeEventListener('input',input);window.removeEventListener('popstate',pop);window.removeEventListener('beforeunload',save);window.removeEventListener('keydown',escape,true); };
 }
 function App() {
     const ref=React.useRef(null);
