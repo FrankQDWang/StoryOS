@@ -1,6 +1,7 @@
 """Build a disposable observation database without importing the executor."""
 
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -169,6 +170,8 @@ def main():
     parser.add_argument('--interval', type=float, default=5)
     args = parser.parse_args()
     args.records, args.database = args.records.resolve(), args.database.resolve()
+    if args.database.is_relative_to(args.records):
+        parser.error('Keep observation output outside source records')
     if not 1 <= args.interval <= 3600:
         parser.error('Use a collection interval between 1 and 3600 seconds')
     if args.action == 'status':
@@ -181,15 +184,28 @@ def main():
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
     while not stop.is_set():
+        error = None
         try:
             result = collect(args.records, args.database, args.action == 'rebuild')
+            health = {'status': 'ok', **result}
             print(json.dumps(result), flush=True)
             if args.action == 'rebuild':
                 args.action = 'collect'
-        except (OSError, ValueError, sqlite3.Error) as error:
+        except (OSError, ValueError, sqlite3.Error) as failure:
+            error = str(failure)
+            health = {'status': 'unavailable', 'error': error}
+        health['checked_at'] = datetime.now(timezone.utc).isoformat()
+        try:
+            args.database.parent.mkdir(parents=True, exist_ok=True)
+            temporary = args.database.with_name('collector.tmp')
+            temporary.write_text(json.dumps(health, allow_nan=False))
+            temporary.replace(args.database.with_name('collector.json'))
+        except OSError as failure:
+            error = error or str(failure)
+        if error:
             if args.action != 'watch':
                 parser.exit(1, f'{error}\n')
-            print(json.dumps({'error': str(error)}), flush=True)
+            print(json.dumps({'error': error}), flush=True)
         if args.action != 'watch':
             if result['pending']:
                 continue

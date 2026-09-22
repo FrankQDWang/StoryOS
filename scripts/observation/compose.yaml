@@ -1,11 +1,15 @@
 services:
   query:
     image: python:3.13.7-alpine
-    command: [python, /query.py, --container, --database, /observation/runs.sqlite]
+    command: [python, /query.py, --container, --database, /observation/runs.sqlite,
+      --collector-health, /observation/collector.json, --health-file, /health/probe.json,
+      --grafana-url, "http://grafana:3000"]
     ports: ["127.0.0.1:3754:3754"]
     volumes:
       - ../verification_observation_api.py:/query.py:ro
+      - ../verification_observation_health.py:/verification_observation_health.py:ro
       - ../../target/observation/data:/observation:ro
+      - ../../target/observation/health:/health
     read_only: true
     tmpfs: ["/tmp:size=32m,mode=1777"]
     cap_drop: [ALL]
@@ -30,6 +34,8 @@ services:
     cap_drop: [ALL]
     mem_limit: 128m
     cpus: 0.25
+    logging:
+      driver: none
   grafana:
     build: .
     entrypoint: [sh, -c, 'export GF_SECURITY_ADMIN_PASSWORD=$$(head -c 32 /dev/urandom | base64); exec /run.sh']
@@ -38,7 +44,14 @@ services:
       - ../../target/observation/data:/observation:ro
       - ./provisioning:/etc/grafana/provisioning:ro
       - ./dashboards:/dashboards:ro
+      - ../../target/observation/grafana:/var/lib/storyos-grafana
     environment:
+      GF_PATHS_DATA: /var/lib/storyos-grafana
+      GF_PATHS_LOGS: /var/lib/storyos-grafana/logs
+      GF_LOG_MODE: file
+      GF_LOG_LEVEL: warn
+      GF_LOG_FILE_MAX_SIZE_SHIFT: "20"
+      GF_LOG_FILE_MAX_DAYS: "2"
       GF_USERS_DEFAULT_THEME: light
       GF_USERS_DEFAULT_LANGUAGE: zh-Hans
       GF_AUTH_ANONYMOUS_ENABLED: "true"
@@ -53,3 +66,5 @@ services:
     cap_drop: [ALL]
     mem_limit: 512m
     cpus: 1
+    logging:
+      driver: none

@@ -27,6 +27,9 @@ def main():
         temporary = temporary_directory.name
         output = Path(temporary)
         (output / 'data').mkdir()
+        (output / 'health').mkdir()
+        (output / 'grafana').mkdir(mode=0o777)
+        (output / 'grafana').chmod(0o777)
         policy = repo.root / 'docs/agents/verification-policy.json'
         value = json.loads(policy.read_text())
         child = "import sys; print('ready', flush=True); sys.stdin.read(1)"
@@ -62,8 +65,9 @@ def main():
             f'      - {records}:/records:ro\n      - {output}/data:/observation\n'
             '  grafana:\n    ports: !override ["127.0.0.1::3000"]\n    volumes:\n'
             f'      - {output}/data:/observation:ro\n'
+            f'      - {output}/grafana:/var/lib/storyos-grafana\n'
             '  query:\n    ports: !override ["127.0.0.1::3754"]\n    volumes:\n'
-            f'      - {output}/data:/observation:ro\n')
+            f'      - {output}/data:/observation:ro\n      - {output}/health:/health\n')
         compose += ['-f', str(override)]
         subprocess.run([*compose, 'up', '-d', '--build'], check=True, timeout=180)
         port = subprocess.check_output([*compose, 'port', 'grafana', '3000'], text=True).strip()
@@ -80,6 +84,12 @@ def main():
                     roots = json.load(response)['items']
                 if len(roots) != 1 or roots[0]['status'] != 'passed':
                     raise RuntimeError('Query service has not observed the retained update')
+                request = urllib.request.Request('http://' + query_port + '/api/v1/health',
+                                                 headers={'Host': '127.0.0.1:3754'})
+                with urllib.request.urlopen(request, timeout=10) as response:
+                    health = json.load(response)
+                if any(health[name]['status'] != 'ok' for name in ('collector', 'query', 'grafana')):
+                    raise RuntimeError('Independent health probes are not ready')
                 with urllib.request.urlopen(url + '/api/dashboards/uid/storyos-verification', timeout=3) as response:
                     assert json.load(response)['dashboard']['title'] == dashboard['title']
                 frames = []

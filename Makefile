@@ -134,12 +134,14 @@ observe-dashboard:
 observe-start:
 	@python3 scripts/verification_observation_dashboard.py --check
 	@mkdir -p target/verification target/observation/data
+	@python3 scripts/verification_observation_runtime.py
 	@python3 scripts/verification_observation.py collect
 	@$(OBSERVE) up -d --build
 observe-stop:
 	@$(OBSERVE) down
 observe-status:
 	@$(OBSERVE) ps
+	@curl --fail --silent --show-error --max-time 10 http://127.0.0.1:3754/api/v1/health
 	@python3 scripts/verification_observation.py status
 observe-rebuild:
 	@python3 scripts/verification_observation.py rebuild
