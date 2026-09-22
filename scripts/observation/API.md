@@ -89,3 +89,27 @@ suggesting action. Periodic probing does not schedule an Agent, admit a test,
 retry work, or correct state. Ordinary shell activity and remote CI stay outside
 coverage. Controlled fixtures and container smoke prove these health boundaries;
 they do not prove natural failures or recovery.
+
+## Approved App
+
+Run `make observe-start` and open
+`http://127.0.0.1:3749/a/storyos-supervision-app?theme=light`.
+`make observe-build` assembles only tracked App inputs into
+`target/observation/plugins/storyos-supervision-app`. Stop and start observation
+after source changes to reload the query process. Use a hard browser reload
+when replacing an existing plugin build; Grafana caches its module for one hour. Existing dashboards and alerts
+stay available. The [interaction contract](INTERACTION.md) binds the approved reference.
+
+GET `/api/v1/overview` accepts no parameters. It returns all unfinished root
+counts, roots with a recent non-future heartbeat, and the projection's heartbeat
+threshold. The last 24-hour start count and duration sum use only `run_cost`
+actual roots whose actual start (or retained start fallback) is in that UTC window.
+Any missing root duration makes the sum null. Empty windows have zero starts and
+zero cost. Nested stages and reused requests are excluded. Each response has its
+own query timestamp; summary and list reads need not represent one snapshot.
+
+History uses server search and 50-row pages. Overview shows 12 recent roots and
+up to 100 unfinished roots, with an explicit history link direction on truncation.
+Same-tab session storage retains page settings, scroll and applied row membership.
+A poll can update row facts; only Update applies changed order or membership.
+The health page and evidence drawer are separate US40 delivery boundaries.

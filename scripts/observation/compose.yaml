@@ -44,6 +44,7 @@ services:
       - ../../target/observation/data:/observation:ro
       - ./provisioning:/etc/grafana/provisioning:ro
       - ./dashboards:/dashboards:ro
+      - ../../target/observation/plugins/storyos-supervision-app:/var/lib/grafana/plugins/storyos-supervision-app:ro
       - ../../target/observation/grafana:/var/lib/storyos-grafana
     environment:
       GF_PATHS_DATA: /var/lib/storyos-grafana
@@ -61,6 +62,7 @@ services:
       GF_ANALYTICS_REPORTING_ENABLED: "false"
       GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
       GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: storyos-supervision-app
       GF_PLUGINS_PREINSTALL_DISABLED: "true"
       GF_UNIFIED_ALERTING_ENABLED: "true"
     cap_drop: [ALL]
