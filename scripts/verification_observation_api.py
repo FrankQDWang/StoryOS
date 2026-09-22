@@ -1,6 +1,7 @@
 """Serve bounded read-only queries over the disposable observation projection."""
 
 import argparse
+from contextlib import closing
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
@@ -9,6 +10,8 @@ from pathlib import Path
 import sqlite3
 import time
 from urllib.parse import parse_qs, urlsplit
+
+from verification_observation_health import Probe
 
 
 FIELDS = ('issue', 'profile', 'status', 'started_at', 'actual_started_at',
@@ -97,7 +100,12 @@ class Handler(BaseHTTPRequestHandler):
             parameters = parse_qs(parts.query, keep_blank_values=True, max_num_fields=8)
             if any(len(values) != 1 for values in parameters.values()):
                 raise ValueError('duplicate_parameter')
-            with sqlite3.connect(self.server.database.as_uri() + '?mode=ro', uri=True, timeout=1) as connection:
+            if parts.path == '/api/v1/health':
+                if parameters:
+                    raise ValueError('unsupported_parameter')
+                self.respond(200, self.server.probe.snapshot())
+                return
+            with closing(sqlite3.connect(self.server.database.as_uri() + '?mode=ro', uri=True, timeout=1)) as connection:
                 connection.row_factory = sqlite3.Row
                 deadline = time.monotonic() + 5
                 connection.set_progress_handler(lambda: time.monotonic() > deadline, 1000)
@@ -144,11 +152,23 @@ def main():
     parser.add_argument('--database', type=Path, default=Path('target/observation/data/runs.sqlite'))
     parser.add_argument('--port', type=int, default=3754)
     parser.add_argument('--container', action='store_true')
+    parser.add_argument('--collector-health', type=Path, default=Path('target/observation/data/collector.json'))
+    parser.add_argument('--health-file', type=Path, default=Path('target/observation/health/probe.json'))
+    parser.add_argument('--grafana-url', default='http://127.0.0.1:3749')
     args = parser.parse_args()
+    grafana = urlsplit(args.grafana_url)
+    if grafana.scheme != 'http' or grafana.hostname not in {'127.0.0.1', 'grafana'} or grafana.path or grafana.query or grafana.fragment or grafana.username:
+        parser.error('Use a local Grafana HTTP origin')
     with HTTPServer(('0.0.0.0' if args.container else '127.0.0.1', args.port), Handler) as server:
         server.database = args.database.resolve()
+        server.probe = Probe(server.database, args.collector_health, args.grafana_url, args.health_file)
+        server.probe.thread.start()
         print(f'http://127.0.0.1:{server.server_port}', flush=True)
-        server.serve_forever()
+        try:
+            server.serve_forever()
+        finally:
+            server.probe.stop.set()
+            server.probe.thread.join(timeout=7)
 
 
 if __name__ == '__main__':

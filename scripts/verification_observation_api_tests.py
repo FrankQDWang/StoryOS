@@ -1,12 +1,14 @@
 """Verify the read-only HTTP contract against labelled retained fixtures."""
 
 import hashlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
 import selectors
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 import urllib.error
 import urllib.request
@@ -33,12 +35,16 @@ class QueryTests(unittest.TestCase):
             'record_version': 1, 'run_id': name, 'status': 'passed',
             'issue': 773, 'profile': 'targeted', **fields}))
 
-    def start(self):
+    def start(self, *, missing_database=False, grafana='http://127.0.0.1:1'):
         subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'),
             'collect', '--records', str(self.records), '--database', str(self.database)],
             check=True, capture_output=True)
+        if missing_database:
+            self.database.unlink()
         process = subprocess.Popen([sys.executable, '-u', str(ROOT / 'scripts/verification_observation_api.py'),
-            '--database', str(self.database), '--port', '0'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            '--database', str(self.database), '--port', '0', '--grafana-url', grafana,
+            '--collector-health', str(self.root / 'probe-collector.json'), '--health-file', str(self.root / 'probe.json')],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         def stop():
             process.terminate()
             process.communicate(timeout=5)
@@ -135,3 +141,36 @@ class QueryTests(unittest.TestCase):
         self.database.unlink()
         self.assertEqual(self.get('/api/v1/runs')[0], 503)
         self.assertFalse(self.database.exists())
+
+    def test_health_keeps_stale_collector_and_query_failure_independent(self):
+        (self.root / 'probe-collector.json').write_text(json.dumps({
+            'checked_at': '2000-01-01T00:00:00+00:00', 'status': 'ok', 'pending': 0, 'records': 7}))
+        self.start(missing_database=True)
+        code, health = self.get('/api/v1/health')
+        self.assertEqual(code, 200)
+        self.assertEqual({name: health[name]['status'] for name in ('collector', 'query', 'grafana')},
+                         {'collector': 'stale', 'query': 'unavailable', 'grafana': 'unavailable'})
+        self.assertEqual(health['collector']['records'], 7)
+        self.assertFalse(self.database.exists())
+        self.assertTrue((self.root / 'probe.json').is_file())
+
+    def test_grafana_can_be_healthy_when_collection_is_unavailable(self):
+        class GrafanaFixture(BaseHTTPRequestHandler):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                self.wfile.write(b'{"database":"ok"}')
+            def log_message(self, *_args):
+                pass
+        server = HTTPServer(('127.0.0.1', 0), GrafanaFixture)
+        thread = threading.Thread(target=server.serve_forever)
+        thread.start()
+        def stop():
+            server.shutdown()
+            thread.join(timeout=3)
+            server.server_close()
+        self.addCleanup(stop)
+        self.start(grafana=f'http://127.0.0.1:{server.server_port}')
+        code, health = self.get('/api/v1/health')
+        self.assertEqual((code, health['collector']['status'], health['query']['status'], health['grafana']['status']),
+                         (200, 'unavailable', 'ok', 'ok'))

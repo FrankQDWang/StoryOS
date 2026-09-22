@@ -38,6 +38,9 @@ class ObservationTests(unittest.TestCase):
                 with sqlite3.connect(f'file:{database}?mode=ro', uri=True) as connection:
                     return connection.execute(sql).fetchall()
             self.assertEqual(collect()['updated'], 2)
+            health = json.loads((database.parent / 'collector.json').read_text())
+            self.assertEqual({key: health[key] for key in ('status', 'records', 'pending')},
+                             {'status': 'ok', 'records': 2, 'pending': 0})
             self.assertEqual(collect()['updated'], 0)
             self.assertEqual(query('SELECT issue, stage, status FROM current_execution'), [(749, 'sample', 'running')])
             self.assertEqual(original, {str(p): p.read_bytes() for p in records.rglob('*.json')})
