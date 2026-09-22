@@ -112,7 +112,11 @@ History uses server search and 50-row pages. Overview shows 12 recent roots and
 up to 100 unfinished roots, with an explicit history link direction on truncation.
 Same-tab session storage retains page settings, scroll and applied row membership.
 A poll can update row facts; only Update applies changed order or membership.
-The health page remains a separate US40 delivery boundary.
+The health page reads only `/health`, independently of run-list reads. It retains
+the last observation on failure and adds elapsed browser time to each reported
+component age. A small browser/container clock offset cannot make fresh API ages
+stale. The API owns future-timestamp detection. Page scroll and observations survive
+same-tab navigation and reload; poll results retain focused links and controls.
 
 The run drawer reads the run, file, attempt and request endpoints. It follows
 100-row pages, up to 10000 rows per section; larger results require Agent paging.

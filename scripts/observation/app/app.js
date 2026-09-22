@@ -7,7 +7,8 @@ function mount(host) {
         if (!response.ok) throw Object.assign(Error('只读接口不可用（'+response.status+'）'),{status:response.status});
         return response.json();
     };
-    const shown=new WeakSet();
+    const health=new HealthObservation(request,retained.health), shown=new WeakSet();
+    let healthBusy=false, healthError='', healthScroll=retained.healthScroll||0;
     let lists={home:new RunList(request,{limit:12,...retained.home}), current:new RunList(request,{status:'running',limit:100,...retained.current}), history:new RunList(request,retained.history)};
     let overview=retained.overview||{}, last=retained.last||'', error='', disposed=false, busy=false, detailBusy=false, editTimer;
     const evidence=new Map(Object.entries(retained.evidence||{}).map(([id,value])=>[id,new RunEvidence(request,id,value)]));
@@ -19,19 +20,20 @@ function mount(host) {
     function save() {
         const body=host.querySelector('.body');
         if (body && lists[view.page]) lists[view.page].scroll=body.scrollTop;
+        if(body&&view.page==='health')healthScroll=body.scrollTop;
         const detail=host.querySelector('.detail-body');
         if(detail&&evidence.has(view.run))evidence.get(view.run).scrolls[view.level+':'+view.file]=detail.scrollTop;
-        try { sessionStorage.setItem(key,JSON.stringify({home:lists.home.saved(),current:lists.current.saved(),history:lists.history.saved(),overview,last,evidence:Object.fromEntries([...evidence].slice(-4).map(([id,model])=>[id,model.saved()]))})); } catch {}
+        try { sessionStorage.setItem(key,JSON.stringify({home:lists.home.saved(),current:lists.current.saved(),history:lists.history.saved(),overview,last,health:health.data,healthScroll,evidence:Object.fromEntries([...evidence].slice(-4).map(([id,model])=>[id,model.saved()]))})); } catch {}
     }
     function render() {
         const focused=host.contains(document.activeElement)?document.activeElement:null, caret=focused?.selectionStart;
         const names={home:'总览',history:'运行历史',health:'监控健康'};
-        const pending=view.page==='home'?lists.home.pending||lists.current.pending:lists.history.pending;
+        const pending=view.page==='home'?lists.home.pending||lists.current.pending:view.page==='history'&&lists.history.pending;
         host.innerHTML='<div class="supervision"><aside class="nav"><div class="brand">StoryOS<small>仓库监督</small></div><div class="nav-label">工作空间</div>'+Object.entries(names).map(([page,label])=>'<button data-page="'+page+'" class="'+(page===view.page?'active':'')+'" '+(page===view.page?'aria-current="page"':'')+'>'+label+'</button>').join('')+
             '<div class="nav-bottom"><b>只读观察</b><p>本机 · Grafana App</p><small>仅受管理的本地验证<br>不含远程 CI 与 shell 绕行</small></div></aside><div class="workspace"><header><div><small>StoryOS / 本地验证</small><h1>'+names[view.page]+'</h1></div><span class="sync" data-sync></span></header><div class="update" '+
-            (pending?'':'hidden')+'><button data-update>运行有变化 · 更新列表</button><span>分组与顺序已保留，点击后应用</span></div><div class="error" role="status" hidden></div><main class="body '+view.page+'">'+(view.page==='home'?overviewView(lists.home,lists.current,overview,view.run):view.page==='history'?historyView(lists.history,view.run):'<h2>监控健康</h2><p><a href="'+api+'/health" target="_blank" rel="noopener">查看带时间戳的健康数据</a></p><p class="muted">在新标签查看，关闭该标签即可返回。</p>')+
+            (pending?'':'hidden')+'><button data-update>运行有变化 · 更新列表</button><span>分组与顺序已保留，点击后应用</span></div><div class="error" role="status" hidden></div><main class="body '+view.page+'">'+(view.page==='home'?overviewView(lists.home,lists.current,overview,view.run):view.page==='history'?historyView(lists.history,view.run):healthView(health,api))+
             '<footer>只读监督 · 缺失证据保持未知 · 统计不证明计划已最小化</footer></main></div></div>';
-        host.querySelector('.body').scrollTop=lists[view.page]?.scroll||0;
+        host.querySelector('.body').scrollTop=view.page==='health'?healthScroll:lists[view.page]?.scroll||0;
         feedback();
         renderDetail();
         keepFocus(host,focused,caret);
@@ -49,7 +51,7 @@ function mount(host) {
     }
     function keepFocus(scope,previous,caret) {
         if(!previous)return;
-        const marker=['data-setting','data-detail-setting','data-close','data-detail-back','data-file','data-level','data-scope','data-detail-update','data-update','data-run','href'].find(name=>previous.hasAttribute(name));
+        const marker=['data-page','data-setting','data-detail-setting','data-close','data-detail-back','data-file','data-level','data-scope','data-detail-update','data-update','data-run','href'].find(name=>previous.hasAttribute(name));
         const control=marker&&[...scope.querySelectorAll('button,a,input,select')].find(node=>node.getAttribute(marker)===previous.getAttribute(marker));
         const target=control||scope.querySelector('[data-close]');
         if(target){target.focus({preventScroll:true});if(target.setSelectionRange&&caret!=null)target.setSelectionRange(caret,caret)}
@@ -65,9 +67,10 @@ function mount(host) {
     }
     function feedback() {
         const box=host.querySelector('.error');
-        box.hidden=!error;
-        box.textContent=error;
-        host.querySelector('[data-sync]').textContent=error?'连接失败 · 上次成功 '+(last||'未知'):'每 10 秒读取 · '+(last||'连接中');
+        const currentError=view.page==='health'?healthError:error;
+        box.hidden=!currentError;
+        box.textContent=currentError;
+        host.querySelector('[data-sync]').textContent=view.page==='health'?'最近读取 · '+(health.data.queried_at||'连接中'):error?'连接失败 · 上次成功 '+(last||'未知'):'每 10 秒读取 · '+(last||'连接中');
     }
     function navigate(patch) {
         const previous=view.run;
@@ -80,7 +83,16 @@ function mount(host) {
         else if(view.run)host.querySelector('[data-detail-back],[data-close]')?.focus({preventScroll:true});
     }
     async function poll() {
-        if (busy || disposed || view.page==='health') return;
+        if(disposed)return;
+        if(view.page==='health'){
+            if(healthBusy)return;
+            healthBusy=true;
+            try {await health.refresh();healthError=''}
+            catch{healthError='只读接口连接失败；保留上次观察，年龄继续增长。'}
+            finally {healthBusy=false;if(!disposed&&view.page==='health'){save();render()}}
+            return;
+        }
+        if (busy) return;
         busy=true;
         const page=view.page, current=lists[page], initial=!shown.has(current);
         try {
