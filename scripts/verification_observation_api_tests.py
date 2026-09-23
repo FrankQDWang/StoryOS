@@ -120,6 +120,8 @@ class QueryTests(unittest.TestCase):
         self.assertEqual([(f['state'], f['duration_seconds'], f['producer']) for f in cached['items']],
                          [('cached', None, 'fixture-group')])
         self.assertEqual(self.get('/api/v1/runs/fixture-cached/attempts')[1]['items'], [])
+        self.assertEqual([r['run'] for r in self.get('/api/v1/runs?activity=reused')[1]['items']], ['fixture-cached'])
+        self.assertEqual(self.get('/api/v1/runs?activity=invalid')[0], 400)
         states = self.get('/api/v1/runs')[1]['items']
         self.assertEqual({r['run']: r['status'] for r in states}, {
             'fixture-group': 'passed', 'fixture-legacy': 'passed', 'fixture-cached': 'passed',
@@ -210,14 +212,16 @@ class QueryTests(unittest.TestCase):
         requests = self.records / 'requests'
         requests.mkdir()
         (requests / 'prevented.json').write_text(json.dumps({'version': 1, 'id': 'prevented',
-            'outcome': 'refused', 'issue': 772, 'profile': 'complete', 'requested_scope': 'daily'}))
+            'outcome': 'refused', 'run_id': 'left', 'issue': 999, 'utc': '2026-09-23T01:00:00Z',
+            'profile': 'complete', 'requested_scope': 'daily'}))
         self.start()
         original = {str(p): p.read_bytes() for p in self.records.rglob('*.json')}
         code, violations = self.get('/api/v1/violations')
         self.assertEqual(code, 200)
         self.assertIn(('daily-complete', 'prevented', 'requests/prevented.json'),
             [(row['rule'], row['disposition'], row['evidence']) for row in violations['items']])
-        self.assertEqual(next(row['issue'] for row in violations['items'] if row['evidence']=='requests/prevented.json'), 772)
+        self.assertEqual(next((row['issue'],row['started_at']) for row in violations['items']
+            if row['evidence']=='requests/prevented.json'), (999, '2026-09-23T01:00:00Z'))
         self.assertIn(('unassigned', 'executed', 'unassigned/report.json'),
             [(row['rule'], row['disposition'], row['evidence']) for row in violations['items']])
         code, cost = self.get('/api/v1/runs/left/cost')

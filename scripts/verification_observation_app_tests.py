@@ -43,12 +43,16 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/drawer-model.js','u
 (async()=>{
     const file={node_id:'file:a',graph_sha256:'g',path:'a.rs',selected:1,state:'unknown'};
     let files=[file], attempts=[{attempt_id:'stage',node_id:'check:a',graph_sha256:'g',result:'passed',duration_seconds:9}];
+    let graph={graph:{nodes:[{id:'a'}]},states:[]},cost={root:{seconds:2},stages:[],issue:null};
     const request=async path=>path.includes('/files?')?{items:files,next_offset:null}:
         path.includes('/attempts?')?{items:attempts,next_offset:null}:
-        path.includes('/requests?')?{items:[],next_offset:null}:{record:{run:'run',status:'running'},has_graph:true};
+        path.includes('/requests?')?{items:[],next_offset:null}:path.endsWith('/graph')?graph:path.endsWith('/cost')?cost:{record:{run:'run',status:'running'},has_graph:true};
     const model=new RunEvidence(request,'run');
     await model.refresh();
     assert.deepEqual(model.fileFact(file),{state:'unknown',seconds:null,attempts:[]});
+    graph={graph:{nodes:[{id:'a'},{id:'b'}]},states:[]};cost={root:{seconds:3},stages:[],issue:null};
+    await model.refresh();assert.equal(model.pending,true);assert.equal(model.graph.graph.nodes.length,1);assert.equal(model.cost.root.seconds,2);
+    model.apply();assert.equal(model.graph.graph.nodes.length,2);assert.equal(model.cost.root.seconds,3);
     attempts=[...attempts,{attempt_id:'file',node_id:'file:a',graph_sha256:'g',result:'passed',duration_seconds:2,ended_at:'2026-09-22T00:00:02Z'}];
     files=[{...file,state:'passed'},{...file,node_id:'file:b',path:'b.rs'}];
     await model.refresh();
@@ -56,6 +60,10 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/drawer-model.js','u
     assert.equal(model.fileFact(file).seconds,null);
     model.apply(); assert.equal(model.files.length,2);
     assert.equal(model.fileFact(model.files[0]).seconds,2);
+    let difference='common';model.request=async()=>({comparison:{comparison:'descriptive only'},differences:{items:[{node_id:'a',difference}],next_offset:null}});
+    await model.loadComparison('other');difference='changed-definition';await model.loadComparison('other');
+    assert.equal(model.comparison.differences[0].difference,'common');assert.equal(model.pending,true);
+    model.apply();assert.equal(model.comparison.differences[0].difference,'changed-definition');model.request=request;
     attempts=[attempts[0],{...attempts[1],result:'running',ended_at:null,duration_seconds:null}];
     files=[file,files[1]];
     await model.refresh(); assert.equal(model.pending,true);

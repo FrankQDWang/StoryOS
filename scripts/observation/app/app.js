@@ -15,7 +15,7 @@ function mount(host) {
     const evidence=new Map(Object.entries(retained.evidence||{}).map(([id,value])=>[id,new RunEvidence(request,id,value)]));
     const readRoute=() => {
         const route=new URLSearchParams(location.hash.slice(1));
-        return {page:['home','review','history','health'].includes(route.get('page'))?route.get('page'):'home',run:route.get('run')||'',level:['summary','files','file','graph','node','timeline','compare','cost','diagnostics'].includes(route.get('level'))?route.get('level'):'summary',file:route.get('file')||'',node:route.get('node')||'',right:route.get('right')||''};
+        return {page:['home','review','history','health'].includes(route.get('page'))?route.get('page'):'home',run:route.get('run')||'',level:['summary','files','file','graph','node','timeline','compare','cost','diagnostics'].includes(route.get('level'))?route.get('level'):'summary',file:route.get('file')||'',node:route.get('node')||'',origin:['graph','timeline'].includes(route.get('origin'))?route.get('origin'):'',right:route.get('right')||''};
     };
     let view=readRoute();
     function save() {
@@ -132,10 +132,10 @@ function mount(host) {
         const button=event.target.closest('button');
         if (!button || button.disabled) return;
         if(button.hasAttribute('data-close'))navigate({run:'',level:'summary',file:''});
-        else if(button.hasAttribute('data-detail-back'))navigate({level:view.level==='file'?'files':view.level==='node'?'graph':'summary',file:'',node:''});
+        else if(button.hasAttribute('data-detail-back'))navigate({level:view.level==='file'?'files':view.level==='node'?view.origin||'graph':'summary',file:'',node:'',origin:''});
         else if(button.hasAttribute('data-level'))navigate({level:button.dataset.level,file:'',node:''});
         else if(button.hasAttribute('data-file'))navigate({level:'file',file:button.dataset.file});
-        else if(button.hasAttribute('data-node'))navigate({level:'node',node:button.dataset.node});
+        else if(button.hasAttribute('data-node'))navigate({level:'node',node:button.dataset.node,origin:view.level});
         else if(button.hasAttribute('data-compare-run'))navigate({level:'compare',right:button.dataset.compareRun});
         else if(button.hasAttribute('data-compare-search')){const model=evidence.get(view.run);model.searchComparison().then(()=>{renderDetail();save()}).catch(failure=>{model.error=failure.message;renderDetail()})}
         else if(button.hasAttribute('data-scope')){const model=evidence.get(view.run);model.settings.filter=button.dataset.scope;model.visible=null;navigate({level:'files',file:''})}
@@ -149,7 +149,7 @@ function mount(host) {
     function change(name,value) {
         save();
         const old=lists.history;
-        lists.history=new RunList(request,{q:old.q,status:old.status,sort:old.sort,[name]:value,offset:name==='offset'?value:0});
+        lists.history=new RunList(request,{q:old.q,status:old.status,activity:old.activity,sort:old.sort,[name]:value,offset:name==='offset'?value:0});
         render(); save(); poll();
         const input=host.querySelector('[data-setting="'+name+'"]');
         if(input){input.focus({preventScroll:true});if(input.setSelectionRange)input.setSelectionRange(input.value.length,input.value.length)}

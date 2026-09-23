@@ -2,7 +2,7 @@ const stamp = value => Number.isFinite(parseTime(value))?new Date(parseTime(valu
 const evidencePath = value => /^(?:[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/report\.json|requests\/[A-Za-z0-9_-]+\.json)$/.test(value||'')?'target/verification/'+value:'未知';
 function drawerView(model,view,heartbeat) {
     const titles={summary:'运行摘要',files:'文件范围',file:'文件证据',graph:'执行图与时间线',node:'节点详情',timeline:'UTC 尝试时间线',compare:'两轮比较',cost:'任务成本',diagnostics:'诊断与证据'};
-    const bar='<div class="detail-bar">'+(view.level==='summary'?'':'<button data-detail-back>'+(view.level==='file'?'返回文件列表':view.level==='node'?'返回执行图与时间线':'返回运行摘要')+'</button>')+'<button data-close aria-label="关闭详情">关闭</button></div>';
+    const bar='<div class="detail-bar">'+(view.level==='summary'?'':'<button data-detail-back>'+(view.level==='file'?'返回文件列表':view.level==='node'&&view.origin==='timeline'?'返回 UTC 时间线':view.level==='node'?'返回执行图与时间线':'返回运行摘要')+'</button>')+'<button data-close aria-label="关闭详情">关闭</button></div>';
     const content=model.root?drawerContent(model,view,heartbeat):'<p>读取保留证据…</p>';
     return bar+'<div class="detail-error" role="status" '+(model.error?'':'hidden')+'>'+escapeText(model.error||'')+'</div>'+
         '<div class="detail-update" '+(model.pending?'':'hidden')+'><button data-detail-update>证据有变化 · 更新范围</button></div><div class="detail-body"><div class="detail-title"><small>任务 '+escapeText(model.root?.record.issue??'未归属')+' / '+escapeText(profiles[model.root?.record.profile]||model.root?.record.profile||'历史记录')+

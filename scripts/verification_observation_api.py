@@ -43,7 +43,8 @@ def query(connection, path, parameters):
     if path == '/api/v1/violations':
         limit, offset = page_parameters(parameters, {'limit', 'offset'})
         sql = ("SELECT v.run,v.rule,v.disposition,v.evidence," + ','.join(
-            f"COALESCE(json_extract(r.payload,'$.{field}'),json_extract(src.payload,'$.{source}')) AS {field}" for field, source in
+            f"CASE WHEN src.kind='request' THEN json_extract(src.payload,'$.{source}') "
+            f"ELSE json_extract(r.payload,'$.{field}') END AS {field}" for field, source in
             (('issue', 'issue'), ('profile', 'profile'), ('status', 'status'), ('started_at', 'utc'))) +
             " FROM violations v LEFT JOIN records r ON r.run=v.run AND r.kind='run' LEFT JOIN records src ON src.path=v.evidence")
         return rows_page(connection, sql, [], 'v.rule,started_at DESC,v.run,v.evidence', limit, offset)
@@ -78,7 +79,7 @@ def query(connection, path, parameters):
     match = re.fullmatch(r'/api/v1/runs/([A-Za-z0-9][A-Za-z0-9_-]{0,127})(?:/(files|attempts|graph|cost))?', path)
     args, allowed = [], {'limit', 'offset'}
     if path == '/api/v1/runs':
-        allowed |= {'q', 'status', 'sort'}
+        allowed |= {'q', 'status', 'sort', 'activity'}
         search, status = parameters.get('q', ''), parameters.get('status', '')
         if len(search) > 128 or len(status) > 32:
             raise ValueError('invalid_filter')
@@ -93,6 +94,12 @@ def query(connection, path, parameters):
         if status:
             sql += ' AND status=?'
             args.append(status)
+        activity = parameters.get('activity', '')
+        if activity not in ('', 'started', 'reused', 'not-started'):
+            raise ValueError('invalid_activity')
+        if activity:
+            sql += " AND " + {'started':'attempt_started=1', 'reused':"cache_status='hit'",
+                               'not-started':'attempt_started=0'}[activity]
     elif path == '/api/v1/requests':
         allowed |= {'run'}
         sql = "SELECT path AS evidence,quality," + ','.join(

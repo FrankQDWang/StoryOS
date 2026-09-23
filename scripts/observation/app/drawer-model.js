@@ -2,7 +2,7 @@ class RunEvidence {
     constructor(request,run,saved={}) {
         this.request=request; this.run=run;
         Object.assign(this,{root:null,files:[],attempts:[],requests:[],graph:null,cost:null,comparison:null,compareRight:'',compareSearch:'',compareOptions:[],compareFilter:'changed',compareSort:'kind',graphSearch:'',graphFilter:'active',timelineSort:'start',settings:{q:'',filter:'all',sort:'path'},scrolls:{},visible:null,applied:''},saved);
-        this.latest=null; this.pending=false;
+        this.latest=null; this.latestComparison=null; this.pending=false;
     }
     async pages(path) {
         const items=[];
@@ -20,12 +20,13 @@ class RunEvidence {
         const path='/runs/'+encodeURIComponent(this.run), root=await this.request(path);
         const files=await this.pages(path+'/files'), attempts=await this.pages(path+'/attempts');
         const requests=await this.pages('/requests?run='+encodeURIComponent(this.run));
-        const graph=await this.request(path+'/graph'), cost=await this.request(path+'/cost');
+        const graphReply=await this.request(path+'/graph'), costReply=await this.request(path+'/cost');
+        const graph={graph:graphReply.graph,states:graphReply.states},cost={root:costReply.root,stages:costReply.stages,issue:costReply.issue};
         const signature=JSON.stringify([files.map(f=>[f.node_id,f.graph_sha256,f.selected,f.state]),attempts.map(a=>[a.attempt_id,a.result,a.duration_seconds,a.ended_at]),requests.map(r=>r.evidence)]);
-        this.root=root;this.graph=graph;this.cost=cost;this.latest={files,attempts,requests,signature};
+        this.root=root;this.latest={files,attempts,requests,graph,cost,signature};
         if(!this.applied)this.apply();
         else {
-            this.pending=signature!==this.applied;
+            this.pending=signature!==this.applied||JSON.stringify(graph)!==JSON.stringify(this.graph)||JSON.stringify(cost)!==JSON.stringify(this.cost)||this.latestComparison!=null;
             const current=new Map(files.map(f=>[f.graph_sha256+f.node_id,f]));
             this.files=this.files.map(f=>current.has(f.graph_sha256+f.node_id)?{...current.get(f.graph_sha256+f.node_id),selected:f.selected}:{...f,state:'unknown',duration_seconds:null,missing:true});
             const actual=new Map(attempts.map(a=>[a.attempt_id,a]));
@@ -47,12 +48,15 @@ class RunEvidence {
             if(items.length>10000)throw Error('差异超过本页读取上限，请使用 Agent 接口分页核查');
             offset=page.differences.next_offset;
         } while(offset!=null);
-        this.comparison={...result,differences:items};this.compareRight=right;
+        const next={comparison:result.comparison,runs:result.runs,differences:items};
+        if(this.compareRight!==right||!this.comparison){this.comparison=next;this.compareRight=right;this.latestComparison=null}
+        else if(JSON.stringify(next)!==JSON.stringify(this.comparison)){this.latestComparison=next;this.pending=true}
     }
     apply() {
         if(!this.latest)return;
-        const {files,attempts,requests,signature}=this.latest;
-        this.files=files;this.attempts=attempts;this.requests=requests;this.applied=signature;this.pending=false;this.visible=null;
+        const {files,attempts,requests,graph,cost,signature}=this.latest;
+        this.files=files;this.attempts=attempts;this.requests=requests;this.graph=graph;this.cost=cost;this.applied=signature;this.pending=false;this.visible=null;
+        if(this.latestComparison){this.comparison=this.latestComparison;this.latestComparison=null}
     }
     fileFact(file) {
         const attempts=file.missing?[]:this.attempts.filter(a=>a.node_id===file.node_id&&a.graph_sha256===file.graph_sha256);

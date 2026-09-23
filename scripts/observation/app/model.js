@@ -6,7 +6,7 @@ function runState(row, heartbeat = 120) {
 class RunList {
     constructor(request, saved = {}) {
         this.request = request;
-        Object.assign(this, {q:'', status:'', sort:'newest', offset:0, limit:50, scroll:0,
+        Object.assign(this, {q:'', status:'', activity:'', sort:'newest', offset:0, limit:50, scroll:0,
             rows:[], total:null, next_offset:null, applied:'', heartbeat:120}, saved);
         this.latest = null;
         this.pending = false;
@@ -15,7 +15,7 @@ class RunList {
         return JSON.stringify(rows.map(row => [row.run, runState(row, this.heartbeat)]));
     }
     async refresh() {
-        const parameters = new URLSearchParams({q:this.q, status:this.status, sort:this.sort,
+        const parameters = new URLSearchParams({q:this.q, status:this.status, activity:this.activity, sort:this.sort,
             offset:this.offset, limit:this.limit});
         const page = await this.request('/runs?' + parameters);
         const facts = new Map(page.items.map(row => [row.run,row]));
@@ -44,14 +44,14 @@ class RunList {
         this.pending = false;
     }
     saved() {
-        const {q,status,sort,offset,limit,scroll,rows,total,next_offset,applied,heartbeat} = this;
-        return {q,status,sort,offset,limit,scroll,rows,total,next_offset,applied,heartbeat};
+        const {q,status,activity,sort,offset,limit,scroll,rows,total,next_offset,applied,heartbeat} = this;
+        return {q,status,activity,sort,offset,limit,scroll,rows,total,next_offset,applied,heartbeat};
     }
 }
 class ReviewFindings {
     constructor(request, saved = {}) {
         this.request=request;
-        Object.assign(this,{rows:[],applied:'',scroll:0,rule:'all',sort:'newest',openRules:[]},saved);
+        Object.assign(this,{rows:[],applied:'',scroll:0,rule:'all',disposition:'all',sort:'newest',openRules:[]},saved);
         this.latest=null;this.pending=false;
     }
     async refresh() {
@@ -70,5 +70,5 @@ class ReviewFindings {
         if(!this.latest)return;
         this.rows=this.latest;this.applied=JSON.stringify(this.rows.map(row=>[row.rule,row.run,row.disposition,row.evidence]));this.pending=false;
     }
-    saved(){const {rows,applied,scroll,rule,sort,openRules}=this;return {rows,applied,scroll,rule,sort,openRules}}
+    saved(){const {rows,applied,scroll,rule,disposition,sort,openRules}=this;return {rows,applied,scroll,rule,disposition,sort,openRules}}
 }
