@@ -48,3 +48,27 @@ class RunList {
         return {q,status,sort,offset,limit,scroll,rows,total,next_offset,applied,heartbeat};
     }
 }
+class ReviewFindings {
+    constructor(request, saved = {}) {
+        this.request=request;
+        Object.assign(this,{rows:[],applied:'',scroll:0,rule:'all',sort:'newest',openRules:[]},saved);
+        this.latest=null;this.pending=false;
+    }
+    async refresh() {
+        const rows=[];let offset=0;
+        do {
+            const page=await this.request('/violations?limit=100&offset='+offset);
+            rows.push(...page.items);
+            if(rows.length>10000)throw Error('规则记录超过本页读取上限，请使用 Agent 接口分页核查');
+            offset=page.next_offset;
+        } while(offset!=null);
+        this.latest=rows;
+        const signature=JSON.stringify(rows.map(row=>[row.rule,row.run,row.disposition,row.evidence]));
+        if(!this.applied)this.apply();else this.pending=signature!==this.applied;
+    }
+    apply() {
+        if(!this.latest)return;
+        this.rows=this.latest;this.applied=JSON.stringify(this.rows.map(row=>[row.rule,row.run,row.disposition,row.evidence]));this.pending=false;
+    }
+    saved(){const {rows,applied,scroll,rule,sort,openRules}=this;return {rows,applied,scroll,rule,sort,openRules}}
+}

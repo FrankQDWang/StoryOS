@@ -20,8 +20,14 @@ facts are null. HTTP success does not establish source freshness or process life
 | `/runs/<run>/files` | Paginated `node_states` file rows: node and graph identity, path, selected flag, state, duration, producer. Order is path then node ID. |
 | `/runs/<run>/attempts` | Paginated actual `node_attempts`, ordered by start then attempt ID. Selection reason and execution scope retain their JSON text representation. |
 | `/requests` | Paginated request ID, run ID, Issue, outcome, UTC, profile, quality and allowlisted evidence; optional `run` filter. Order is UTC descending then evidence path. |
+| `/violations` | Paginated findings from the existing `violations` view. Each row has rule, disposition, run, source evidence, and available root context. A prevented request has no root start. |
+| `/runs/<run>/graph` | Retained graph definition and projected node states. A missing graph is null, not an empty execution claim. |
+| `/runs/<run>/cost` | One root's cost and exclusive stages. An attributed root also returns Issue profile totals, exclusive stage totals, request counts, and one Issue blocked-wait total. |
+| `/compare?left=<run>&right=<run>` | Existing comparison quality, run scope summaries, and paginated node differences. The two run IDs must differ. |
 
 All lists accept `limit` (1–100, default 50) and `offset` (0–1000000).
+The comparison difference list accepts `limit` up to 500. Its `next_offset`
+pages through all retained nodes. Each page recomputes the current comparison.
 `next_offset: null` ends the list. Each response uses one SQLite read transaction;
 separate pages are live reads, not one historical snapshot. A client must apply
 membership/order changes explicitly and restart paging when refreshing its list.
@@ -37,6 +43,11 @@ pending, blocked and cached are not actual file attempts. A grouped pass never
 establishes file success or duration. Missing attempts mean unknown execution.
 Request reuse is separate from a new root; daily cache hits retain their producer.
 No sum or minimal-selection claim is derived by this API.
+The `violations` view supplies all six existing rule categories. Its evidence
+path points to the retained report or request. The API does not serve that file.
+The comparison uses the same query definitions as the provisioned dashboard.
+It reports descriptive deltas when build state, scope, definitions, or other
+required facts do not establish comparable evidence.
 
 Only run IDs with 1–128 ASCII letters, digits, underscores or hyphens, starting
 with a letter or digit, are accepted. Evidence references are relative to

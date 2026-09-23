@@ -80,6 +80,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 vm.runInThisContext(fs.readFileSync('scripts/observation/app/model.js', 'utf8'));
+vm.runInThisContext(fs.readFileSync('scripts/observation/app/views.js', 'utf8'));
 (async () => {
     let rows = [{run:'a', status:'running'}, {run:'b', status:'passed'}];
     const calls = [];
@@ -109,6 +110,7 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/model.js', 'utf8'))
     model.request = async () => {throw Error('offline')};
     await assert.rejects(model.refresh(), /offline/);
     assert.equal(model.rows[0].run,'a');
+    assert.match(runTable([{run:'reused',status:'passed',cache_status:'hit',attempt_started:0,duration_seconds:10}],null,120),/结果复用 · 无新增执行/);
     model.request = request;
     await model.refresh();
     assert.equal(model.pending,true);
@@ -119,6 +121,20 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/model.js', 'utf8'))
     await model.refresh();
     assert.equal(model.rows[1].status,'unknown');
     assert.equal(model.pending,true);
+    let findings=[{rule:'unassigned',run:'a',disposition:'executed',evidence:'a/report.json'}];
+    const review=new ReviewFindings(async()=>({items:findings,next_offset:null}));
+    await review.refresh();
+    review.rule='unassigned';review.scroll=90;review.openRules=['unassigned'];
+    findings=[{rule:'stale-heartbeat',run:'b',disposition:'unknown-liveness',evidence:'b/report.json'}];
+    await review.refresh();
+    assert.equal(review.pending,true);
+    assert.equal(review.rows[0].run,'a');
+    const reopened=new ReviewFindings(review.request,JSON.parse(JSON.stringify(review.saved())));
+    assert.deepEqual([reopened.rule,reopened.scroll,reopened.openRules],['unassigned',90,['unassigned']]);
+    reopened.apply();
+    assert.equal(reopened.rows[0].run,'a');
+    await reopened.refresh();reopened.apply();
+    assert.equal(reopened.rows[0].run,'b');
 })().catch(error => {console.error(error); process.exitCode=1});
 '''
         result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True, timeout=10)

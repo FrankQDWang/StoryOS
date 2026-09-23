@@ -1,7 +1,7 @@
 # Local supervision acceptance and Agent handoff
 
-This guide covers US40. US41 anomaly and analysis presentation and Rust speed
-work remain separate. Use the [API contract](API.md) and
+This guide covers US40 and US41. Rust speed work remains separate. Use the
+[US41 source map](US41-MAPPING.md), [API contract](API.md), and
 [approved interaction contract](INTERACTION.md). Observation cannot admit,
 execute, retry, or correct verification work.
 
@@ -56,6 +56,14 @@ Retain screenshots, API samples, source hash comparisons, rebuild output, and th
 acceptance matrix under `target/observation/`. Retain managed verification reports
 under `target/verification/`. Record exact candidate, independent reviews, complete
 report, merged-tree equality and tracker result in the ticket Resolution.
+
+For US41, inspect all six collapsed rule groups in Chrome and expand a real
+finding. Check a real run's direct graph entry, node detail, UTC timeline,
+exclusive cost, and two-run comparison. Confirm that quality and unknown build
+state appear before a duration interpretation. Use labelled disposable fixtures
+for prevented requests, reused results, missing graphs, and measured waits.
+Verify source filters, sorting, scroll, Back, keyboard focus, and the new-tab
+return. Check the provisioned Grafana dashboards and alert rules after restart.
 
 Natural intermittent SQLite lock failures can occur independently of a readable
 health response. Show the current observation and retain prior UI evidence; do

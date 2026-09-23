@@ -192,3 +192,44 @@ class QueryTests(unittest.TestCase):
         self.start()
         code, value = self.get('/api/v1/overview')
         self.assertEqual((code, value.get('starts'), value.get('seconds')), (200, 2, None))
+
+    def test_analysis_reads_rule_cost_graph_and_comparison_sources(self):
+        graph = {'version': 1, 'nodes': [
+            {'id': 'group', 'type': 'check', 'selected': True},
+            {'id': 'file', 'type': 'test-file', 'path': 'a.py', 'selected': True}],
+            'dependencies': [], 'relations': [{'from': 'group', 'to': 'file', 'type': 'member'}]}
+        changed = json.loads(json.dumps(graph))
+        changed['nodes'][1]['path'] = 'b.py'
+        self.write('left', issue=772, graph=graph, attempt_started=True,
+            started_at='2026-09-23T00:00:00Z', started_monotonic=10,
+            duration_seconds=5, blocked_intervals=[], blocked_clock='fixture')
+        self.write('right', issue=772, graph=changed, attempt_started=True,
+            started_at='2026-09-23T00:01:00Z', started_monotonic=20,
+            duration_seconds=8, blocked_intervals=[], blocked_clock='fixture')
+        self.write('unassigned', issue=None, attempt_started=True)
+        requests = self.records / 'requests'
+        requests.mkdir()
+        (requests / 'prevented.json').write_text(json.dumps({'version': 1, 'id': 'prevented',
+            'outcome': 'refused', 'issue': 772, 'profile': 'complete', 'requested_scope': 'daily'}))
+        self.start()
+        original = {str(p): p.read_bytes() for p in self.records.rglob('*.json')}
+        code, violations = self.get('/api/v1/violations')
+        self.assertEqual(code, 200)
+        self.assertIn(('daily-complete', 'prevented', 'requests/prevented.json'),
+            [(row['rule'], row['disposition'], row['evidence']) for row in violations['items']])
+        self.assertEqual(next(row['issue'] for row in violations['items'] if row['evidence']=='requests/prevented.json'), 772)
+        self.assertIn(('unassigned', 'executed', 'unassigned/report.json'),
+            [(row['rule'], row['disposition'], row['evidence']) for row in violations['items']])
+        code, cost = self.get('/api/v1/runs/left/cost')
+        self.assertEqual((code, cost['root']['seconds'], cost['issue']['blocked_seconds']), (200, 5, 0))
+        self.assertEqual(cost['stages'], [{'stage': 'unclassified', 'seconds': 5}])
+        self.assertEqual(cost['issue']['stages'], [{'stage': 'unclassified', 'seconds': 13}])
+        code, retained = self.get('/api/v1/runs/left/graph')
+        self.assertEqual((code, retained['graph']['nodes'][1]['path'], len(retained['states'])), (200, 'a.py', 2))
+        code, compared = self.get('/api/v1/compare?left=left&right=right')
+        self.assertEqual((code, compared['comparison']['comparison']), (200, 'descriptive only'))
+        self.assertEqual([(row['node_id'], row['difference']) for row in compared['differences']['items']],
+            [('file', 'changed-definition'), ('group', 'common')])
+        self.assertEqual(self.get('/api/v1/compare?left=left&right=missing')[0], 404)
+        self.assertEqual(self.get('/api/v1/compare?left=left&right=../bad')[0], 400)
+        self.assertEqual(original, {str(p): p.read_bytes() for p in self.records.rglob('*.json')})

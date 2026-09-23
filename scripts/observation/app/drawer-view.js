@@ -1,8 +1,8 @@
 const stamp = value => Number.isFinite(parseTime(value))?new Date(parseTime(value)).toISOString().slice(0,19).replace('T',' '):'未知';
 const evidencePath = value => /^(?:[A-Za-z0-9][A-Za-z0-9_-]{0,127}\/report\.json|requests\/[A-Za-z0-9_-]+\.json)$/.test(value||'')?'target/verification/'+value:'未知';
 function drawerView(model,view,heartbeat) {
-    const titles={summary:'运行摘要',files:'文件范围',file:'文件证据',diagnostics:'诊断与证据'};
-    const bar='<div class="detail-bar">'+(view.level==='summary'?'':'<button data-detail-back>'+(view.level==='file'?'返回文件列表':'返回运行摘要')+'</button>')+'<button data-close aria-label="关闭详情">关闭</button></div>';
+    const titles={summary:'运行摘要',files:'文件范围',file:'文件证据',graph:'执行图与时间线',node:'节点详情',timeline:'UTC 尝试时间线',compare:'两轮比较',cost:'任务成本',diagnostics:'诊断与证据'};
+    const bar='<div class="detail-bar">'+(view.level==='summary'?'':'<button data-detail-back>'+(view.level==='file'?'返回文件列表':view.level==='node'?'返回执行图与时间线':'返回运行摘要')+'</button>')+'<button data-close aria-label="关闭详情">关闭</button></div>';
     const content=model.root?drawerContent(model,view,heartbeat):'<p>读取保留证据…</p>';
     return bar+'<div class="detail-error" role="status" '+(model.error?'':'hidden')+'>'+escapeText(model.error||'')+'</div>'+
         '<div class="detail-update" '+(model.pending?'':'hidden')+'><button data-detail-update>证据有变化 · 更新范围</button></div><div class="detail-body"><div class="detail-title"><small>任务 '+escapeText(model.root?.record.issue??'未归属')+' / '+escapeText(profiles[model.root?.record.profile]||model.root?.record.profile||'历史记录')+
@@ -12,10 +12,16 @@ function drawerContent(model,view,heartbeat) {
     const root=model.root, r=root.record, files=model.files, settings=model.settings;
     if(view.level==='summary') {
         const counts={all:files.length,selected:files.filter(f=>f.selected).length,started:files.filter(f=>model.fileFact(f).attempts.length).length,unknown:files.filter(f=>model.fileFact(f).state==='unknown').length};
-        return '<div class="summary-state">'+badge(r,heartbeat)+'<strong>'+duration(elapsed(r,heartbeat))+'</strong></div><dl><dt>开始 · UTC</dt><dd>'+stamp(r.started_at)+'</dd><dt>结束 · UTC</dt><dd>'+stamp(r.ended_at)+'</dd><dt>触发原因 · 原文</dt><dd>'+escapeText(root.reason||'原记录未保留触发原因')+'</dd></dl><h3>范围摘要</h3><div class="scope">'+
+        const refused=model.requests.filter(item=>item.outcome==='refused').length, reused=model.requests.filter(item=>item.outcome==='reused').length;
+        return '<div class="summary-state">'+badge(r,heartbeat)+'<strong>'+runDuration(r,heartbeat)+'</strong></div><dl><dt>开始 · UTC</dt><dd>'+stamp(r.started_at)+'</dd><dt>结束 · UTC</dt><dd>'+stamp(r.ended_at)+'</dd><dt>触发原因 · 原文</dt><dd>'+escapeText(root.reason||'原记录未保留触发原因')+'</dd></dl><div class="fact-line">实际启动 '+(r.attempt_started?'1':'0')+' · 被拒绝请求 '+refused+' · 已复用请求 '+reused+(r.cache_status==='hit'?' · 日常结果复用':'')+'</div><div class="analysis-entry"><button data-level="graph">执行图与时间线 →</button><button data-level="compare">两轮比较 →</button><button data-level="cost">任务成本 →</button></div><h3>范围摘要</h3><div class="scope">'+
             [['all','清单文件'],['selected','计划选择'],['started','有启动记录'],['unknown','状态未知']].map(([filter,label])=>'<button data-scope="'+filter+'"><b>'+escapeText(root.has_graph?counts[filter]:null)+'</b><span>'+label+'</span></button>').join('')+
             '</div><p class="notice">'+(root.has_graph?'缺少逐文件 attempt 时，实际执行与耗时保持未知。':'此历史记录未保留文件图，文件数量与范围未知。')+' 计划符合不等于选择最小。</p><h3>异常与不确定性</h3><p>'+escapeText(runState(r,heartbeat)==='stale'?'心跳已过期，实际进程存活未知。':r.status==='failed'?'本轮失败；展开诊断查看阶段证据。':'不能由阶段通过推断文件通过。请结合保留证据判断。')+'</p><button class="secondary" data-level="diagnostics">诊断与证据</button>';
     }
+    if(view.level==='graph')return graphView(model,view.run)+'<button class="text-link" data-level="timeline">查看 UTC 尝试时间线 →</button>';
+    if(view.level==='node')return nodeView(model,view.node);
+    if(view.level==='timeline')return timelineView(model,view.run);
+    if(view.level==='compare')return comparisonView(model,view.run,view.right);
+    if(view.level==='cost')return costView(model);
     if(view.level==='files') {
         if(!root.has_graph)return '<p class="notice">此历史记录未保留文件图，文件数量与选择范围未知。</p>';
         const candidates=files.filter(f=>f.path.toLowerCase().includes(settings.q.toLowerCase())&&
