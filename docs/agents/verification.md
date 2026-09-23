@@ -187,10 +187,32 @@ cleaned in place. `cargo clean` is not used because it can remove Cargo lock-fil
 paths while another process still holds those file descriptors.
 
 Direct shell `cargo` commands are outside managed admission. Do not point an
-external `CARGO_TARGET_DIR` at an owned generation. The old default `target/debug`
-cache remains outside this mechanism until the US36 migration ticket retires it.
-The explicit `target/web-release` build and all release packages, verification
-reports, observation data, and unrelated target output are protected.
+external `CARGO_TARGET_DIR` at an owned generation. The historical default
+`target/debug` cache has a one-time automatic migration. The manager validates
+its Cargo directory shape, owner path, links, and open references before it
+moves the whole directory to a persisted quarantine path. The old default path
+then no longer names that directory. The manager seals the quarantine, checks
+open files, directory descriptors, mapped files, and Cargo lock inodes again,
+and keeps the quarantine when a build still holds it. The next managed entry
+resumes cleanup. Ordinary direct Cargo may use a new default path, but it
+cannot make the quarantined directory eligible for deletion while it holds an
+old file or directory descriptor. This protocol does not claim protection from
+arbitrary same-user commands that deliberately access the quarantine path.
+This migration runs on the macOS operator host, where the full open-file audit
+is available. Other hosts leave a historical default cache untouched; their
+managed Rust generation still works.
+
+The migration record is `target/verification/legacy-rust-cache.json`. It keeps
+the old directory identity, original permissions, logical and allocated bytes,
+cleanup reason, and recovery state. The entry seal is restored only after the
+old path is detached and the open-reference audit passes. A stopped rename,
+seal, or partial deletion resumes from the record. Unknown content, links,
+changed ownership, or an incomplete open-file audit stop deletion. Only empty
+`target/issue-763-isolated` task scratch is removed with the historical cache.
+The byte counts deduplicate hard links by file identity; they do not prove
+physical space reclaimed on APFS. The explicit `target/web-release` build and
+all release packages, verification reports, observation data, and unrelated
+target output are protected.
 
 When tests or dependencies change, inspect the new plan and report. Extend a cache
 profile only after specifying its inputs, required outputs and resource ownership,

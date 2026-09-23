@@ -1,8 +1,10 @@
 """Public command checks for owned Rust build-cache generations."""
 
 import json
+import fcntl
 import os
 from pathlib import Path
+import select
 import subprocess
 import sys
 import tempfile
@@ -10,6 +12,7 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("verification_rust_cache.py")
+CARGO_ARTIFACT = "deps/storyos_probe-aaaaaaaaaaaaaaaa.d"
 
 
 class RustCacheTests(unittest.TestCase):
@@ -43,6 +46,17 @@ class RustCacheTests(unittest.TestCase):
         path.write_text(json.dumps(state))
         return path, old, new
 
+    def legacy_debug(self):
+        debug = self.root / "target/debug"
+        (self.root / "target/CACHEDIR.TAG").write_text(
+            "Signature: 8a477f597d28d172789f06886806bc55\n")
+        for name in (".fingerprint", "build", "deps", "incremental"):
+            (debug / name).mkdir(parents=True, exist_ok=True)
+        (debug / CARGO_ARTIFACT).write_bytes(b"cache" * 8192)
+        for name in (".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"):
+            (debug / name).touch()
+        return debug
+
     def test_public_run_adopts_existing_workset_and_records_target(self):
         workset = self.measured_workset()
         (workset / "debug/deps").mkdir(parents=True)
@@ -53,6 +67,27 @@ class RustCacheTests(unittest.TestCase):
         state = json.loads((self.root / "target/verification/rust-cache.json").read_text())
         self.assertEqual(state["active"]["path"], "target/issue-763-workset")
         self.assertTrue((workset / ".storyos-rust-cache.json").is_file())
+
+    def test_hardlinked_cache_object_counts_one_allocated_inode(self):
+        workset = self.measured_workset()
+        first = workset / "debug/first"
+        first.write_bytes(b"x" * 8192)
+        os.link(first, workset / "debug/second")
+        result = self.cli("status")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        usage = json.loads(result.stdout)["usage"]
+        self.assertEqual(usage["logical_bytes"], first.stat().st_size +
+                         (workset / ".storyos-rust-cache.json").stat().st_size)
+        self.assertEqual(usage["files"], 3)
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_absent_legacy_cache_is_recorded_once(self):
+        self.assertEqual(self.cli("status").returncode, 0)
+        debug = self.legacy_debug()
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertTrue(debug.exists())
+        record = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+        self.assertEqual(record["reason"], "No historical default debug cache")
 
     def test_retired_generation_is_recovered_after_interrupted_cleanup(self):
         self.assertEqual(self.cli("status").returncode, 0)
@@ -212,6 +247,326 @@ class RustCacheTests(unittest.TestCase):
             process.communicate(timeout=10)
         self.assertEqual(self.cli("status").returncode, 0)
         self.assertFalse(old.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_public_status_retires_only_owned_legacy_debug_and_empty_scratch(self):
+        debug = self.legacy_debug()
+        scratch = self.root / "target/issue-763-isolated"
+        scratch.mkdir()
+        protected = self.root / "target/observation/data"
+        protected.mkdir(parents=True)
+        (protected / "keep").write_text("keep")
+        workset = self.measured_workset()
+        result = self.cli("status")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(debug.exists())
+        self.assertFalse(scratch.exists())
+        self.assertTrue(workset.exists())
+        self.assertEqual((protected / "keep").read_text(), "keep")
+        legacy = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+        self.assertEqual(legacy["state"], "complete")
+        self.assertEqual(legacy["removed_bytes"]["logical_bytes"], len(b"cache" * 8192))
+        self.assertEqual(self.cli("status").returncode, 0)
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_nonempty_unknown_scratch_blocks_retirement(self):
+        debug = self.legacy_debug()
+        scratch = self.root / "target/issue-763-isolated"
+        scratch.mkdir()
+        (scratch / "user-data").write_text("keep")
+        result = self.cli("status")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(debug.exists())
+        self.assertEqual((scratch / "user-data").read_text(), "keep")
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_changed_top_level_and_nested_ownership_blocks_retirement(self):
+        debug = self.legacy_debug()
+        group = next((gid for gid in os.getgroups() if gid != debug.stat().st_gid), None)
+        if group is None:
+            self.skipTest("No second group is available")
+        for path in (debug / ".cargo-lock", debug / CARGO_ARTIFACT):
+            with self.subTest(path=path):
+                original = path.stat().st_gid
+                try:
+                    os.chown(path, -1, group)
+                except PermissionError:
+                    self.skipTest("This host does not allow changing the file group")
+                try:
+                    self.assertNotEqual(self.cli("status").returncode, 0)
+                    self.assertTrue(path.exists())
+                finally:
+                    os.chown(path, -1, original)
+
+    def test_linked_verification_parent_is_not_used_by_cache_manager(self):
+        user = self.root / "user-data"
+        user.mkdir()
+        (user / "keep").write_text("keep")
+        (self.root / "target/verification").rmdir()
+        (self.root / "target/verification").symlink_to(user)
+        result = self.cli("status")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((user / "keep").read_text(), "keep")
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_unknown_or_linked_legacy_content_stops_whole_directory_retirement(self):
+        debug = self.legacy_debug()
+        (debug / "user-notes").write_text("keep")
+        self.assertNotEqual(self.cli("status").returncode, 0)
+        self.assertEqual((debug / "user-notes").read_text(), "keep")
+        (debug / "user-notes").unlink()
+        external = self.root / "external"
+        external.write_text("keep")
+        (debug / "deps/link").symlink_to(external)
+        self.assertNotEqual(self.cli("status").returncode, 0)
+        self.assertEqual(external.read_text(), "keep")
+        self.assertTrue(debug.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_unknown_nested_content_stops_retirement_in_each_cargo_subtree(self):
+        debug = self.legacy_debug()
+        paths = ("deps/user-notes", "build/storyos-core-aaaaaaaaaaaaaaaa/user-notes",
+                 ".fingerprint/storyos-core-aaaaaaaaaaaaaaaa/user-notes",
+                 "incremental/storyos_core-abc123/s-abc-123/user-notes")
+        for relative in paths:
+            with self.subTest(relative=relative):
+                file = debug / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("keep")
+                self.assertNotEqual(self.cli("status").returncode, 0)
+                self.assertEqual(file.read_text(), "keep")
+                file.unlink()
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_open_file_and_queued_replaced_lock_defer_retirement(self):
+        debug = self.legacy_debug()
+        child = subprocess.Popen([sys.executable, "-c",
+                                  "import sys; f=open(sys.argv[1]); print('ready',flush=True); sys.stdin.readline()",
+                                  str(debug / CARGO_ARTIFACT)], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(child.stdout.readline(), "ready\n")
+            result = self.cli("status")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(debug.exists())
+            self.assertEqual(json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+                             ["deferred"]["reason"], "open Cargo path or lock")
+        finally:
+            child.stdin.write("\n")
+            child.stdin.flush()
+            child.communicate(timeout=10)
+        lock = debug / ".cargo-lock"
+        child = subprocess.Popen([sys.executable, "-c",
+                                  "import sys; f=open(sys.argv[1]); print('ready',flush=True); sys.stdin.readline()",
+                                  str(lock)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(child.stdout.readline(), "ready\n")
+            replacement = debug / ".replacement"
+            replacement.touch()
+            replacement.replace(lock)
+            result = self.cli("status")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(debug.exists())
+        finally:
+            child.stdin.write("\n")
+            child.stdin.flush()
+            child.communicate(timeout=10)
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertFalse(debug.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS path seal")
+    def test_direct_default_path_cannot_enter_quarantine_after_seal(self):
+        debug = self.legacy_debug()
+        ready = self.root / "ready"
+        go = self.root / "go"
+        os.mkfifo(ready)
+        os.mkfifo(go)
+        hook = self.root / "sitecustomize.py"
+        hook.write_text("import os\nfrom pathlib import Path\noriginal=Path.chmod\n"
+                        "def chmod(self, mode, *args, **kwargs):\n"
+                        "    result=original(self, mode, *args, **kwargs)\n"
+                        "    if self.name.startswith('deleting-legacy-') and mode==0:\n"
+                        "        with open(os.environ['AUDIT_READY'],'w') as f: f.write('ready\\n')\n"
+                        "        with open(os.environ['AUDIT_GO']) as f: f.read()\n"
+                        "    return result\nPath.chmod=chmod\n")
+        env = {**os.environ, "PYTHONPATH": str(self.root), "AUDIT_READY": str(ready),
+               "AUDIT_GO": str(go)}
+        process = subprocess.Popen([sys.executable, str(SCRIPT), "--root", str(self.root), "status"],
+                                   env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        try:
+            with os.fdopen(os.open(ready, os.O_RDONLY | os.O_NONBLOCK)) as signal:
+                readable, _, _ = select.select([signal], [], [], 10)
+                self.assertTrue(readable)
+                self.assertEqual(signal.readline(), "ready\n")
+            record = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+            quarantine = self.root / record["path"]
+            attempted = subprocess.run([sys.executable, "-c", "import sys; open(sys.argv[1])",
+                                        str(quarantine / ".cargo-lock")], capture_output=True, text=True)
+            self.assertNotEqual(attempted.returncode, 0)
+            debug.mkdir()
+            (debug / ".cargo-lock").write_text("new default Cargo target")
+            with go.open("w") as signal:
+                signal.write("go\n")
+            stdout, stderr = process.communicate(timeout=15)
+            self.assertEqual(process.returncode, 0, stderr + stdout)
+            self.assertFalse(quarantine.exists())
+            self.assertEqual((debug / ".cargo-lock").read_text(), "new default Cargo target")
+        finally:
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=10)
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_process_death_after_seal_recovers_without_deleting_active_workset(self):
+        debug = self.legacy_debug()
+        workset = self.measured_workset()
+        hook = self.root / "sitecustomize.py"
+        hook.write_text("import os\nfrom pathlib import Path\noriginal=Path.chmod\n"
+                        "def chmod(self, mode, *args, **kwargs):\n"
+                        "    result=original(self, mode, *args, **kwargs)\n"
+                        "    if self.name.startswith('deleting-legacy-') and mode==0: os._exit(77)\n"
+                        "    return result\nPath.chmod=chmod\n")
+        result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(self.root), "status"],
+                                env={**os.environ, "PYTHONPATH": str(self.root)})
+        self.assertEqual(result.returncode, 77)
+        record = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+        quarantine = self.root / record["path"]
+        self.assertFalse(debug.exists())
+        self.assertEqual(quarantine.stat().st_mode & 0o777, 0)
+        hook.unlink()
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertFalse(debug.exists())
+        self.assertTrue(workset.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_open_old_directory_descriptor_defers_retirement(self):
+        debug = self.legacy_debug()
+        child = subprocess.Popen([sys.executable, "-c",
+                                  "import os,sys; fd=os.open(sys.argv[1],os.O_RDONLY); "
+                                  "print('ready',flush=True); sys.stdin.readline()", str(debug / "deps")],
+                                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+        try:
+            self.assertEqual(child.stdout.readline(), "ready\n")
+            result = self.cli("status")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(debug.exists())
+        finally:
+            child.stdin.write("\n")
+            child.stdin.flush()
+            child.communicate(timeout=10)
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertFalse(debug.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS Cargo lock")
+    def test_real_queued_cargo_cannot_overlap_retirement(self):
+        debug = self.legacy_debug()
+        (self.root / "Cargo.toml").write_text("[package]\nname='storyos-probe'\nversion='0.1.0'\nedition='2021'\n")
+        (self.root / "src").mkdir()
+        (self.root / "src/main.rs").write_text("fn main() {}\n")
+        subprocess.run(["cargo", "generate-lockfile", "--offline"], cwd=self.root,
+                       check=True, capture_output=True)
+        with (debug / ".cargo-lock").open("a") as held:
+            fcntl.flock(held, fcntl.LOCK_EX)
+            cargo_environment = os.environ.copy()
+            cargo_environment.pop("CARGO_TARGET_DIR", None)
+            cargo_environment.pop("STORYOS_RUST_CACHE_ROOT", None)
+            cargo = subprocess.Popen(["cargo", "build", "--offline"], cwd=self.root,
+                                     env=cargo_environment, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True)
+            try:
+                line = cargo.stderr.readline()
+                self.assertIn("Blocking waiting for file lock", line)
+                result = self.cli("status")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(debug.exists())
+                replacement = debug / ".new-cargo-lock"
+                replacement.touch()
+                replacement.replace(debug / ".cargo-lock")
+                result = self.cli("status")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(debug.exists())
+            finally:
+                fcntl.flock(held, fcntl.LOCK_UN)
+                stdout, stderr = cargo.communicate(timeout=60)
+                self.assertEqual(cargo.returncode, 0, stderr + stdout)
+                self.assertTrue((debug / "storyos-probe").is_file())
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertFalse(debug.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_rename_and_partial_delete_interruptions_resume(self):
+        debug = self.legacy_debug()
+        hook = self.root / "sitecustomize.py"
+        hook.write_text("import os\nfrom pathlib import Path\noriginal=Path.rename\n"
+                        "def rename(self, target):\n"
+                        "    result=original(self,target)\n"
+                        "    if str(target).find('deleting-legacy-')>=0: os._exit(77)\n"
+                        "    return result\nPath.rename=rename\n")
+        result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(self.root), "status"],
+                                env={**os.environ, "PYTHONPATH": str(self.root)})
+        self.assertEqual(result.returncode, 77)
+        record = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+        quarantine = self.root / record["path"]
+        self.assertFalse(debug.exists())
+        self.assertTrue(quarantine.exists())
+        self.assertNotEqual(quarantine.stat().st_mode & 0o777, 0)
+        hook.write_text("import os,shutil\nfrom pathlib import Path\noriginal=shutil.rmtree\n"
+                        "def rmtree(path,*args,**kwargs):\n"
+                        "    if Path(path).name.startswith('deleting-legacy-'):\n"
+                        "        (Path(path)/'deps/storyos_probe-aaaaaaaaaaaaaaaa.d').unlink()\n"
+                        "        os._exit(77)\n"
+                        "    return original(path,*args,**kwargs)\nshutil.rmtree=rmtree\n")
+        result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(self.root), "status"],
+                                env={**os.environ, "PYTHONPATH": str(self.root)})
+        self.assertEqual(result.returncode, 77)
+        self.assertFalse((quarantine / CARGO_ARTIFACT).exists())
+        hook.unlink()
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertFalse(quarantine.exists())
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS open-file audit")
+    def test_reference_acquired_in_rename_window_keeps_quarantine(self):
+        self.legacy_debug()
+        ready = self.root / "ready"
+        go = self.root / "go"
+        os.mkfifo(ready)
+        os.mkfifo(go)
+        hook = self.root / "sitecustomize.py"
+        hook.write_text("import os\nfrom pathlib import Path\noriginal=Path.rename\n"
+                        "def rename(self,target):\n"
+                        "    result=original(self,target)\n"
+                        "    if str(target).find('deleting-legacy-')>=0:\n"
+                        "        with open(os.environ['AUDIT_READY'],'w') as f: f.write('ready\\n')\n"
+                        "        with open(os.environ['AUDIT_GO']) as f: f.read()\n"
+                        "    return result\nPath.rename=rename\n")
+        process = subprocess.Popen([sys.executable, str(SCRIPT), "--root", str(self.root), "status"],
+                                   env={**os.environ, "PYTHONPATH": str(self.root),
+                                        "AUDIT_READY": str(ready), "AUDIT_GO": str(go)},
+                                   stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        opened = None
+        try:
+            with os.fdopen(os.open(ready, os.O_RDONLY | os.O_NONBLOCK)) as signal:
+                readable, _, _ = select.select([signal], [], [], 10)
+                self.assertTrue(readable)
+                self.assertEqual(signal.readline(), "ready\n")
+            record = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
+            quarantine = self.root / record["path"]
+            opened = (quarantine / CARGO_ARTIFACT).open("rb")
+            with go.open("w") as signal:
+                signal.write("go\n")
+            stdout, stderr = process.communicate(timeout=15)
+            self.assertEqual(process.returncode, 0, stderr + stdout)
+            self.assertTrue(quarantine.exists())
+            self.assertEqual(quarantine.stat().st_mode & 0o777, 0)
+        finally:
+            if opened is not None:
+                opened.close()
+            if process.poll() is None:
+                process.kill()
+                process.communicate(timeout=10)
+        hook.unlink()
+        self.assertEqual(self.cli("status").returncode, 0)
+        self.assertFalse(quarantine.exists())
 
 
 if __name__ == "__main__":

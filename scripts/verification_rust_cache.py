@@ -13,6 +13,7 @@ import tempfile
 import uuid
 
 import verification_cache
+import verification_legacy_cache
 
 
 HIGH_WATER = 12 * 1024**3
@@ -73,6 +74,7 @@ def owned_path(root, entry, *, quarantine=False):
 
 def measure(path):
     logical = allocated = files = 0
+    seen = set()
     pending = [path]
     while pending:
         current = pending.pop()
@@ -83,9 +85,12 @@ def measure(path):
             if stat.S_ISDIR(info.st_mode):
                 pending.append(Path(child.path))
             elif stat.S_ISREG(info.st_mode):
-                logical += info.st_size
-                allocated += info.st_blocks * 512
                 files += 1
+                inode = (info.st_dev, info.st_ino)
+                if inode not in seen:
+                    seen.add(inode)
+                    logical += info.st_size
+                    allocated += info.st_blocks * 512
             else:
                 raise ValueError(f"Rust cache contains an unsupported entry: {child.path}")
     return {"logical_bytes": logical, "allocated_bytes": allocated, "files": files}
@@ -204,6 +209,7 @@ def prepare(root):
         create(root, state["active"])
         state["pending_create"] = False
         write_state(root, state)
+    legacy = verification_legacy_cache.migrate(root)
     retire(root, state)
     usage = validate(root, state["active"])
     scratch = root / "target/issue-763-isolated"
@@ -229,7 +235,8 @@ def prepare(root):
     return {"generation": state["active"]["id"], "target_dir": str(target), "profile": "dev",
             "warmup": state["active"]["warmup"], "usage": usage, "scratch_usage": scratch_usage,
             "high_water_bytes": high_water, "total_limit_bytes": total_limit,
-            "state": "over-budget" if usage["allocated_bytes"] > high_water else "ready"}
+            "state": "over-budget" if usage["allocated_bytes"] > high_water else "ready",
+            "legacy": legacy}
 
 
 def finish(root, *, complete_success=False):
