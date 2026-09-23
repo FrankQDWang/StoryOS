@@ -17,12 +17,21 @@ import time
 import uuid
 
 import verification_cache
+import verification_rust_cache
 
 
 def environment():
     return {key: value for key, value in os.environ.items() if key not in {
         'MAKEFLAGS', 'MFLAGS', 'MAKELEVEL', 'MAKEOVERRIDES', 'MAKE_TERMOUT', 'MAKE_TERMERR',
         'BASE', 'VERIFY_ARGS', 'PR', 'REPORT', 'MANPATH', 'PWD', 'OLDPWD'}}
+
+
+def execution_inputs(cache):
+    inputs = {key: value for key, value in environment().items()
+              if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT',
+                             'STORYOS_RUST_CACHE_ROOT', 'PYTHONDONTWRITEBYTECODE'}}
+    inputs['CARGO_TARGET_DIR'] = cache['target_dir']
+    return inputs
 
 
 def identity(root, command, base):
@@ -35,11 +44,10 @@ def identity(root, command, base):
         executable = chrome if name == 'chrome' else (sys.executable if name == 'python' else shutil.which(name))
         tools.append([name, executable, hashlib.sha256(Path(executable).read_bytes()).hexdigest() if executable else None, subprocess.check_output(
             [executable, '--version'], cwd=root, stderr=subprocess.STDOUT, text=True).strip() if executable else None])
-    inputs = {key: value for key, value in environment().items()
-                   if key not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}}
+    cache = verification_rust_cache.identity(root)
     return {'version': 1, 'source': {key: value for key, value in source.items() if key != 'write_stamps_sha256'},
             'plan': runner.complete_plan(root, base=base), 'command': command, 'tools': tools,
-            'inputs': verification_cache.digest(inputs),
+            'inputs': verification_cache.digest(execution_inputs(cache)), 'rust_cache': cache,
             'runners': verification_cache.digest([(p.name, hashlib.sha256(p.read_bytes()).hexdigest())
                                                   for p in sorted(Path(__file__).parent.glob('verification*.py'))]),
             'host': [platform.node(), platform.platform(), sys.version, sys.executable,
@@ -110,11 +118,11 @@ def run(root, command, context):
         with ExitStack() as resources:
             with (directory / 'admission.lock').open('a') as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
-                candidate = identity(root, command, context['base'])
                 active_path = directory / 'active.json'
                 try:
                     resources.enter_context(verification_cache.budget(root))
                 except ValueError:
+                    candidate = identity(root, command, context['base'])
                     active = json.loads(active_path.read_text()) if active_path.exists() else {}
                     if (active.get('candidate') == candidate and active.get('status') == 'running'
                             and subprocess.check_output(['ps', '-o', 'lstart=', '-p', str(active['process']['pid'])],
@@ -122,6 +130,8 @@ def run(root, command, context):
                         observe(root, 'active', run_id=active['run_id'], report=active['report'])
                         return 0
                     raise
+                rust_cache = verification_rust_cache.prepare(root)
+                candidate = identity(root, command, context['base'])
                 require_cleanup(active_path)
                 admission = readiness(root, candidate, context)
                 previous = []
@@ -149,7 +159,7 @@ def run(root, command, context):
                                          f"use verification.py recover --attempt {report['run_id']} --reason <reason>")
                 run_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '-' + uuid.uuid4().hex[:8]
                 process = process_identity()
-                context = {**context, 'candidate': candidate, 'run_id': run_id, 'record_version': 1,
+                context = {**context, 'candidate': candidate, 'rust_cache': rust_cache, 'run_id': run_id, 'record_version': 1,
                            'repository': str(root.resolve()), 'parent': None, 'executor_context': context.get('executor_context') or process['nonce'], 'admission': admission,
                            'requested_scope': 'complete', 'effective_scope': candidate['plan'],
                            'retry_reason': retry['reason'] if retry else None, 'process': process,
@@ -184,6 +194,7 @@ def recover(root, attempt, reason):
     if not reason.strip() or Path(attempt).name != attempt:
         raise ValueError('Recovery needs an attempt identity and a reason')
     with verification_cache.budget(root):
+        rust_cache = verification_rust_cache.prepare(root)
         path = root / 'target/verification' / attempt / 'report.json'
         report = json.loads(path.read_text())
         candidate = identity(root, report['command'], report['base'])
@@ -208,7 +219,7 @@ def recover(root, attempt, reason):
                    sys.executable, str(Path(runner.__file__).resolve()), 'recover-steps', '--attempt', attempt]
         runner.write_json(active_path, {'status': 'running', 'report': str(path.parent.parent / run_id / 'report.json')})
         observe(root, 'requested', profile='recovery', run_id=run_id, recovery_of=attempt, issue=report.get('issue'))
-        code = runner.record_run(root, command, context={'run_id': run_id, 'profile': 'recovery',
+        code = runner.record_run(root, command, context={'run_id': run_id, 'profile': 'recovery', 'rust_cache': rust_cache,
                                  'issue': report.get('issue'), 'pr': report.get('pr'), 'recovery_of': attempt, 'admission': admission,
                                  'retry_reason': reason, 'effective_scope': recovery['boundaries']})
         recovery['run_id'] = run_id

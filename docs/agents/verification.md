@@ -163,6 +163,35 @@ descendants are terminated and fail the run. The input policy caps daily Cargo b
 jobs, Rust test threads and Vitest workers. Use `VERIFY_ARGS='--workers 1'` to lower
 that cap. Groups stay serial. Complete runs retain their existing worker configuration.
 
+## Rust build-cache generations
+
+Repository verification commands and `make generate-contracts` use one owned Cargo
+target directory at a time. The first managed directory is the measured
+`target/issue-763-workset`; new directories live under `target/rust-cache/`.
+An existing measured directory needs its owner marker before adoption.
+`python3 scripts/verification_rust_cache.py status` shows the active generation,
+logical and allocated bytes, task scratch, high-water mark, and admission limit.
+The policy sets 12 GiB for the active high-water mark and 20 GiB for the active
+plus task-scratch limit. These are measured engineering limits, not a promise
+about future workspace size. A new generation stays in warmup until a passing
+complete run establishes its full build set. An over-limit set refuses the next
+managed run with a budget action instead of rotating repeatedly.
+
+The host budget covers managed builds and retirement. The runner records the
+generation and target path in targeted and complete execution identity. Only an
+inactive generation with a matching owner marker can enter the persisted retired
+list. Cleanup moves it to a fixed quarantine path and removes that whole
+directory under the budget lock. A stopped cleanup resumes from that list.
+Unknown top-level content or links stop cleanup. The active directory is never
+cleaned in place. `cargo clean` is not used because it can remove Cargo lock-file
+paths while another process still holds those file descriptors.
+
+Direct shell `cargo` commands are outside managed admission. Do not point an
+external `CARGO_TARGET_DIR` at an owned generation. The old default `target/debug`
+cache remains outside this mechanism until the US36 migration ticket retires it.
+The explicit `target/web-release` build and all release packages, verification
+reports, observation data, and unrelated target output are protected.
+
 When tests or dependencies change, inspect the new plan and report. Extend a cache
 profile only after specifying its inputs, required outputs and resource ownership,
 adding public CLI invalidation tests, and obtaining independent Standards and Spec

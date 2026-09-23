@@ -13,6 +13,7 @@ import verification
 import verification_cache
 import verification_daily
 import verification_graph
+import verification_rust_cache
 
 
 def cargo_targets(root, changes, files, revisions):
@@ -91,7 +92,7 @@ def build_plan(root, base, workers=None, *, allow_empty=False):
     plan = {"version": 1, "base": base, "source": source, "changes": sorted(changes), "checks": checks,
             "workers": workers, "historical_estimate_seconds": None,
             "preparation": ["web-typecheck"] if any(c["group"] == "web-typecheck" for c in checks) else [],
-            "cargo_targets": targets,
+            "cargo_targets": targets, "rust_cache": verification_rust_cache.identity(root),
             "test_files": sorted(path for path, item in files.items()
                                  if item["kind"].endswith("-test") and (root / path).is_file())}
     if any(c.get("requires_package") and c["status"] == "ready" for c in checks):
@@ -210,6 +211,17 @@ def main():
                 raise ValueError("Complete graph export is read-only; use verify-local to execute")
             print(json.dumps(verification.complete_plan(root, base=args.base, with_graph=True), indent=2))
             return 0
+        if args.action == "run":
+            with verification_cache.budget(root):
+                verification_rust_cache.prepare(root)
+                plan = build_plan(root, args.base, args.workers)
+                if ((args.plan and json.loads(args.plan.read_text()) != plan)
+                        or (args.expected and args.expected != plan["digest"])):
+                    raise ValueError("The verification plan is stale or has been changed")
+                command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],
+                           "--expected", plan["digest"], "--workers", str(plan["workers"])]
+                return verification.run(root, command, plan=plan, no_cache=args.no_cache,
+                                        context={"issue": args.issue, "pr": args.pr}, locked=True)
         plan = build_plan(root, args.base, args.workers, allow_empty=args.action == "status")
         if ((args.plan and json.loads(args.plan.read_text()) != plan)
                 or (args.expected and args.expected != plan["digest"])):
@@ -222,10 +234,7 @@ def main():
             return 0
         if args.action == "execute":
             return execute_plan(root, plan)
-        command = [sys.executable, str(Path(__file__).resolve()), "execute", "--base", plan["base"],
-                   "--expected", plan["digest"], "--workers", str(plan["workers"])]
-        return verification.run(root, command, plan=plan, no_cache=args.no_cache,
-                                context={"issue": args.issue, "pr": args.pr})
+        raise ValueError("Unsupported verification action")
     except (ValueError, OSError, KeyError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

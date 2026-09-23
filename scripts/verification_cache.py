@@ -18,6 +18,8 @@ def digest(value):
 
 @contextmanager
 def budget(root):
+    if (root / "target").is_symlink() or (root / "target/verification").is_symlink():
+        raise ValueError("The verification budget path must remain inside the repository")
     directory = root / "target/verification"
     directory.mkdir(parents=True, exist_ok=True)
     with (directory / "host.lock").open("a") as lock:
@@ -74,7 +76,8 @@ class DailyCache:
                               subprocess.check_output([name, "--version"], cwd=root, text=True,
                                                       stderr=subprocess.PIPE)))
             environment = {key: value for key, value in os.environ.items()
-                           if key not in {"STORYOS_VERIFICATION_RUN", "STORYOS_VERIFICATION_PARENT", "_", "SHLVL"}}
+                           if key not in {"STORYOS_VERIFICATION_RUN", "STORYOS_VERIFICATION_PARENT",
+                                          "STORYOS_RUST_CACHE_ROOT", "_", "SHLVL"}}
             runners = [(path.name, hashlib.sha256(path.read_bytes()).hexdigest())
                        for path in sorted(Path(__file__).parent.glob("verification*.py"))]
             key = digest({"version": 1, "inputs": plan["source"]["inputs_sha256"],
