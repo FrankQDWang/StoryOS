@@ -198,6 +198,9 @@ resumes cleanup. Ordinary direct Cargo may use a new default path, but it
 cannot make the quarantined directory eligible for deletion while it holds an
 old file or directory descriptor. This protocol does not claim protection from
 arbitrary same-user commands that deliberately access the quarantine path.
+This migration runs on the macOS operator host, where the full open-file audit
+is available. Other hosts leave a historical default cache untouched; their
+managed Rust generation still works.
 
 The migration record is `target/verification/legacy-rust-cache.json`. It keeps
 the old directory identity, original permissions, logical and allocated bytes,

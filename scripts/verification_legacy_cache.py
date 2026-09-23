@@ -16,6 +16,15 @@ TOP_LEVEL = {".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock",
              ".fingerprint", "build", "deps", "examples", "incremental"}
 LOCKS = (".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock")
 OUTPUT = re.compile(r"(?:libstoryos_[a-z_]+\.(?:d|rlib)|storyos-[a-z-]+(?:\.d)?)\Z")
+CRATE = re.compile(r"[A-Za-z0-9_-]+-[0-9a-f]{16}\Z")
+DEPS = re.compile(r"(?:lib)?[A-Za-z0-9_]+-[0-9a-f]{16}(?:\.(?:d|rlib|rmeta|dylib|"
+                  r"[A-Za-z0-9_.-]+\.rcgu\.o|long-type-[0-9]+\.txt))?\Z")
+FINGERPRINT = re.compile(r"(?:dep-|output-)?(?:lib|test-lib|bin|test-bin|test-integration-test|"
+                         r"test-bench)-[A-Za-z0-9_-]+(?:\.json)?\Z")
+BUILD_FILES = {"build-script-build", "output", "root-output", "stderr", "invoked.timestamp"}
+GENERATED_BUILD_FILES = {"private.rs", "embedded_bootstrap.rs", "category.rs"}
+INCREMENTAL_FILE = re.compile(r"(?:[0-9a-z]+\.o|(?:query-cache|dep-graph|work-products|"
+                              r"dep-graph\.part)\.bin|metadata\.rmeta)\Z")
 
 
 def record_path(root):
@@ -41,9 +50,62 @@ def write_record(root, record):
 
 def identity(path):
     info = path.lstat()
-    if not stat.S_ISDIR(info.st_mode) or path.is_symlink():
+    if not stat.S_ISDIR(info.st_mode) or path.is_symlink() or info.st_uid != os.geteuid():
         raise ValueError(f"Legacy Rust cache is not a directory: {path}")
-    return {"device": info.st_dev, "inode": info.st_ino}
+    return {"device": info.st_dev, "inode": info.st_ino, "uid": info.st_uid, "gid": info.st_gid}
+
+
+def nested_cache_artifact(top, parts, *, directory):
+    depth = len(parts)
+    name = parts[-1]
+    if top == "deps":
+        return not directory and depth == 1 and DEPS.fullmatch(name) is not None
+    if top == "examples":
+        return False
+    if top == ".fingerprint":
+        if directory:
+            return depth == 1 and CRATE.fullmatch(name) is not None
+        return depth == 2 and (name == "invoked.timestamp" or FINGERPRINT.fullmatch(name) is not None
+                               or name in ("build-script-build-script-build",
+                                           "build-script-build-script-build.json",
+                                           "dep-build-script-build-script-build",
+                                           "run-build-script-build-script-build",
+                                           "run-build-script-build-script-build.json"))
+    if top == "incremental":
+        if directory:
+            return ((depth == 1 and re.fullmatch(r"[A-Za-z0-9_]+-[0-9a-z]+", name) is not None)
+                    or (depth == 2 and re.fullmatch(r"s-[0-9a-z-]+(?:-working)?", name) is not None))
+        return ((depth == 2 and re.fullmatch(r"s-[0-9a-z-]+\.lock", name) is not None)
+                or (depth == 3 and INCREMENTAL_FILE.fullmatch(name) is not None))
+    if top == "build":
+        if directory:
+            return ((depth == 1 and CRATE.fullmatch(name) is not None)
+                    or (depth == 2 and name == "out"))
+        return ((depth == 2 and (name in BUILD_FILES or
+                                 re.fullmatch(r"build_script_build-[0-9a-f]{16}(?:\.d)?", name) is not None))
+                or (depth == 3 and parts[-2] == "out" and name in GENERATED_BUILD_FILES))
+    return False
+
+
+def inspect_nested(path):
+    for top in ("deps", ".fingerprint", "incremental", "build", "examples"):
+        start = path / top
+        if not start.exists():
+            continue
+        for base, directories, files in os.walk(start):
+            relative = Path(base).relative_to(start).parts
+            for name in directories:
+                child = Path(base) / name
+                info = child.lstat()
+                if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+                        or not nested_cache_artifact(top, (*relative, name), directory=True)):
+                    raise ValueError(f"Historical Cargo cache has unknown nested content: {child}")
+            for name in files:
+                child = Path(base) / name
+                info = child.lstat()
+                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                        or not nested_cache_artifact(top, (*relative, name), directory=False)):
+                    raise ValueError(f"Historical Cargo cache has unknown nested content: {child}")
 
 
 def inspect(path):
@@ -51,6 +113,10 @@ def inspect(path):
 
     if path.is_symlink() or not path.is_dir():
         raise ValueError("The historical Cargo debug path is not an owned directory")
+    tag = path.parent / "CACHEDIR.TAG"
+    if tag.is_symlink() or not tag.is_file() or not tag.read_text().startswith(
+            "Signature: 8a477f597d28d172789f06886806bc55\n"):
+        raise ValueError("The historical Cargo target has no Cargo cache tag")
     unknown = {child.name for child in path.iterdir() if child.name not in TOP_LEVEL
                and not OUTPUT.fullmatch(child.name)}
     if unknown:
@@ -63,6 +129,7 @@ def inspect(path):
     if not all((path / name).is_dir() and not (path / name).is_symlink()
                for name in (".fingerprint", "build", "deps", "incremental")):
         raise ValueError("Historical Cargo output directories are missing or linked")
+    inspect_nested(path)
     return measure(path)
 
 
@@ -81,6 +148,7 @@ def inspect_partial(path):
             raise ValueError("Quarantined Cargo lock has an unexpected entry type")
         if child.name in TOP_LEVEL - set(LOCKS) and (not child.is_dir() or child.is_symlink()):
             raise ValueError("Quarantined Cargo directory has an unexpected entry type")
+    inspect_nested(path)
     return measure(path)
 
 
@@ -109,34 +177,12 @@ def references(path, lock_ids):
                 if name == str(path.resolve()) or name.startswith(prefix) or (device, inode) in lock_ids:
                     found.append({"pid": pid, "path": name})
         return found
-    if sys.platform.startswith("linux"):
-        found = []
-        for process in Path("/proc").iterdir():
-            if not process.name.isdigit() or int(process.name) == os.getpid():
-                continue
-            try:
-                status = (process / "status").read_text()
-                uid = next(line for line in status.splitlines() if line.startswith("Uid:"))
-                if int(uid.split()[1]) != os.geteuid():
-                    continue
-                paths = [process / "cwd", process / "root", *(process / "fd").iterdir()]
-                for descriptor in paths:
-                    name = os.readlink(descriptor)
-                    try:
-                        info = descriptor.stat()
-                    except FileNotFoundError:
-                        continue
-                    if name == str(path) or name.startswith(prefix) or (info.st_dev, info.st_ino) in lock_ids:
-                        found.append({"pid": int(process.name), "path": name})
-            except (FileNotFoundError, ProcessLookupError):
-                continue
-            except PermissionError as error:
-                raise ValueError("The open-file audit lacks permission; keep the historical cache") from error
-        return found
-    raise ValueError("This host cannot audit open files for historical cache retirement")
+    raise ValueError("Historical cache retirement needs the macOS open-file audit")
 
 
 def migrate(root):
+    if sys.platform != "darwin":
+        return {"state": "unsupported", "reason": "Historical migration requires macOS open-file audit"}
     target = root / "target"
     cache_parent = target / "rust-cache"
     old = target / "debug"

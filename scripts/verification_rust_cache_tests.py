@@ -12,6 +12,7 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("verification_rust_cache.py")
+CARGO_ARTIFACT = "deps/storyos_probe-aaaaaaaaaaaaaaaa.d"
 
 
 class RustCacheTests(unittest.TestCase):
@@ -47,9 +48,11 @@ class RustCacheTests(unittest.TestCase):
 
     def legacy_debug(self):
         debug = self.root / "target/debug"
+        (self.root / "target/CACHEDIR.TAG").write_text(
+            "Signature: 8a477f597d28d172789f06886806bc55\n")
         for name in (".fingerprint", "build", "deps", "incremental"):
             (debug / name).mkdir(parents=True, exist_ok=True)
-        (debug / "deps/artifact").write_bytes(b"cache" * 8192)
+        (debug / CARGO_ARTIFACT).write_bytes(b"cache" * 8192)
         for name in (".cargo-lock", ".cargo-build-lock", ".cargo-artifact-lock"):
             (debug / name).touch()
         return debug
@@ -77,6 +80,7 @@ class RustCacheTests(unittest.TestCase):
                          (workset / ".storyos-rust-cache.json").stat().st_size)
         self.assertEqual(usage["files"], 3)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_absent_legacy_cache_is_recorded_once(self):
         self.assertEqual(self.cli("status").returncode, 0)
         debug = self.legacy_debug()
@@ -244,6 +248,7 @@ class RustCacheTests(unittest.TestCase):
         self.assertEqual(self.cli("status").returncode, 0)
         self.assertFalse(old.exists())
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_public_status_retires_only_owned_legacy_debug_and_empty_scratch(self):
         debug = self.legacy_debug()
         scratch = self.root / "target/issue-763-isolated"
@@ -263,6 +268,18 @@ class RustCacheTests(unittest.TestCase):
         self.assertEqual(legacy["removed_bytes"]["logical_bytes"], len(b"cache" * 8192))
         self.assertEqual(self.cli("status").returncode, 0)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_nonempty_unknown_scratch_blocks_retirement(self):
+        debug = self.legacy_debug()
+        scratch = self.root / "target/issue-763-isolated"
+        scratch.mkdir()
+        (scratch / "user-data").write_text("keep")
+        result = self.cli("status")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(debug.exists())
+        self.assertEqual((scratch / "user-data").read_text(), "keep")
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_unknown_or_linked_legacy_content_stops_whole_directory_retirement(self):
         debug = self.legacy_debug()
         (debug / "user-notes").write_text("keep")
@@ -276,11 +293,27 @@ class RustCacheTests(unittest.TestCase):
         self.assertEqual(external.read_text(), "keep")
         self.assertTrue(debug.exists())
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_unknown_nested_content_stops_retirement_in_each_cargo_subtree(self):
+        debug = self.legacy_debug()
+        paths = ("deps/user-notes", "build/storyos-core-aaaaaaaaaaaaaaaa/user-notes",
+                 ".fingerprint/storyos-core-aaaaaaaaaaaaaaaa/user-notes",
+                 "incremental/storyos_core-abc123/s-abc-123/user-notes")
+        for relative in paths:
+            with self.subTest(relative=relative):
+                file = debug / relative
+                file.parent.mkdir(parents=True, exist_ok=True)
+                file.write_text("keep")
+                self.assertNotEqual(self.cli("status").returncode, 0)
+                self.assertEqual(file.read_text(), "keep")
+                file.unlink()
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_open_file_and_queued_replaced_lock_defer_retirement(self):
         debug = self.legacy_debug()
         child = subprocess.Popen([sys.executable, "-c",
                                   "import sys; f=open(sys.argv[1]); print('ready',flush=True); sys.stdin.readline()",
-                                  str(debug / "deps/artifact")], stdin=subprocess.PIPE,
+                                  str(debug / CARGO_ARTIFACT)], stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, text=True)
         try:
             self.assertEqual(child.stdout.readline(), "ready\n")
@@ -354,6 +387,7 @@ class RustCacheTests(unittest.TestCase):
                 process.kill()
                 process.communicate(timeout=10)
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_process_death_after_seal_recovers_without_deleting_active_workset(self):
         debug = self.legacy_debug()
         workset = self.measured_workset()
@@ -375,6 +409,7 @@ class RustCacheTests(unittest.TestCase):
         self.assertFalse(debug.exists())
         self.assertTrue(workset.exists())
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_open_old_directory_descriptor_defers_retirement(self):
         debug = self.legacy_debug()
         child = subprocess.Popen([sys.executable, "-c",
@@ -411,6 +446,12 @@ class RustCacheTests(unittest.TestCase):
                 result = self.cli("status")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertTrue(debug.exists())
+                replacement = debug / ".new-cargo-lock"
+                replacement.touch()
+                replacement.replace(debug / ".cargo-lock")
+                result = self.cli("status")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertTrue(debug.exists())
             finally:
                 fcntl.flock(held, fcntl.LOCK_UN)
                 stdout, stderr = cargo.communicate(timeout=60)
@@ -418,6 +459,7 @@ class RustCacheTests(unittest.TestCase):
         self.assertEqual(self.cli("status").returncode, 0)
         self.assertFalse(debug.exists())
 
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_rename_and_partial_delete_interruptions_resume(self):
         debug = self.legacy_debug()
         hook = self.root / "sitecustomize.py"
@@ -437,13 +479,13 @@ class RustCacheTests(unittest.TestCase):
         hook.write_text("import os,shutil\nfrom pathlib import Path\noriginal=shutil.rmtree\n"
                         "def rmtree(path,*args,**kwargs):\n"
                         "    if Path(path).name.startswith('deleting-legacy-'):\n"
-                        "        (Path(path)/'deps/artifact').unlink()\n"
+                        "        (Path(path)/'deps/storyos_probe-aaaaaaaaaaaaaaaa.d').unlink()\n"
                         "        os._exit(77)\n"
                         "    return original(path,*args,**kwargs)\nshutil.rmtree=rmtree\n")
         result = subprocess.run([sys.executable, str(SCRIPT), "--root", str(self.root), "status"],
                                 env={**os.environ, "PYTHONPATH": str(self.root)})
         self.assertEqual(result.returncode, 77)
-        self.assertFalse((quarantine / "deps/artifact").exists())
+        self.assertFalse((quarantine / CARGO_ARTIFACT).exists())
         hook.unlink()
         self.assertEqual(self.cli("status").returncode, 0)
         self.assertFalse(quarantine.exists())
@@ -475,7 +517,7 @@ class RustCacheTests(unittest.TestCase):
                 self.assertEqual(signal.readline(), "ready\n")
             record = json.loads((self.root / "target/verification/legacy-rust-cache.json").read_text())
             quarantine = self.root / record["path"]
-            opened = (quarantine / "deps/artifact").open("rb")
+            opened = (quarantine / CARGO_ARTIFACT).open("rb")
             with go.open("w") as signal:
                 signal.write("go\n")
             stdout, stderr = process.communicate(timeout=15)
