@@ -8,6 +8,8 @@ services:
     volumes:
       - ../verification_observation_api.py:/query.py:ro
       - ../verification_observation_health.py:/verification_observation_health.py:ro
+      - ../verification_observation_compare.py:/verification_observation_compare.py:ro
+      - ../verification_observation_dashboard.py:/verification_observation_dashboard.py:ro
       - ../../target/observation/data:/observation:ro
       - ../../target/observation/health:/health
     read_only: true

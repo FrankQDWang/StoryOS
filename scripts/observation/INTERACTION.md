@@ -49,6 +49,12 @@ owns the health page and clean rebuild acceptance. US41 owns further anomaly,
 cost, graph, timeline, and comparison presentation. Existing dashboards and alerts
 remain available. All screenshots and build output stay under `target/observation`.
 
+US41 adds collapsed groups for every rule and direct summary entries to cost,
+graph, timeline, and comparison. The graph starts with active steps and can show
+all nodes; comparison starts with changed nodes. Deeper views have contextual
+Back. Full dashboards open in new tabs with underlined, focused links and a
+new-tab cue. Return keeps source filters, order, scroll, and open rule groups.
+
 Monitoring health uses one unboxed status strip and a definition list. Each
 component shows its own UTC observation and age. Keep collector, query, and
 Grafana status independent. Display collector errors and failed health-record

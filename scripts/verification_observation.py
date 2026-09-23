@@ -121,9 +121,10 @@ def collect(records, database, rebuild=False):
                 "SELECT 1 FROM sqlite_master WHERE type='table'").fetchone()):
             raise ValueError('The database is not a StoryOS observation read model')
         connection.execute('PRAGMA application_id=749')
-        if rebuild or connection.execute('PRAGMA user_version').fetchone()[0] != 750:
+        if rebuild or connection.execute('PRAGMA user_version').fetchone()[0] != 752:
             connection.execute('DROP VIEW IF EXISTS current_execution')
-            connection.execute('PRAGMA user_version=750')
+            connection.execute('DROP VIEW IF EXISTS violations')
+            connection.execute('PRAGMA user_version=752')
         connection.executescript(SCHEMA + cost.SCHEMA + rules.SCHEMA + nodes.SCHEMA)
         connection.execute('BEGIN IMMEDIATE')
         if rebuild:

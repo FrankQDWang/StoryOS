@@ -86,7 +86,8 @@ class QueryTests(unittest.TestCase):
             {'id': 'tests', 'type': 'check', 'selected': True},
             {'id': 'file', 'type': 'test-file', 'path': 'sample.py', 'selected': True}],
             'dependencies': [], 'relations': [{'from': 'tests', 'to': 'file', 'type': 'member'}]}
-        self.write('fixture-group', graph=graph)
+        self.write('fixture-group', graph=graph, attempt_started=True,
+            actual_started_at='2026-09-22T00:00:00Z', duration_seconds=2)
         steps = self.records / 'fixture-group/steps'
         steps.mkdir()
         (steps / 'group.json').write_text(json.dumps({'node_version': 1, 'id': 'group',
@@ -102,6 +103,9 @@ class QueryTests(unittest.TestCase):
         requests.mkdir()
         (requests / 'reuse.json').write_text(json.dumps({'version': 1, 'id': 'reuse',
             'outcome': 'reused', 'run_id': 'fixture-group'}))
+        (requests / 'prevented.json').write_text(json.dumps({'version': 1, 'id': 'prevented',
+            'outcome': 'refused', 'run_id': 'fixture-group', 'issue': 999,
+            'utc': '2026-09-23T01:00:00Z', 'profile': 'complete', 'requested_scope': 'daily'}))
         self.start()
         code, detail = self.get('/api/v1/runs/fixture-group')
         self.assertEqual((code, detail['has_graph'], detail['evidence']),
@@ -113,13 +117,22 @@ class QueryTests(unittest.TestCase):
         self.assertEqual([(a['node_id'], a['result'], a['duration_seconds']) for a in attempts['items']],
                          [('tests', 'passed', 2)])
         code, reuse = self.get('/api/v1/requests?run=fixture-group')
-        self.assertEqual([(r['outcome'], r['run_id']) for r in reuse['items']], [('reused', 'fixture-group')])
+        self.assertIn(('reused', 'fixture-group'), [(r['outcome'], r['run_id']) for r in reuse['items']])
+        self.assertEqual(self.get('/api/v1/runs/fixture-group/graph')[1]['graph']['nodes'][1]['path'], 'sample.py')
+        self.assertEqual(self.get('/api/v1/runs/fixture-group/cost')[1]['root']['seconds'], 2)
+        self.assertEqual(self.get('/api/v1/runs/fixture-cached/cost')[1]['issue']['id'], 773)
+        self.assertEqual(self.get('/api/v1/compare?left=fixture-group&right=fixture-cached')[0], 200)
+        findings = self.get('/api/v1/violations')[1]['items']
+        self.assertEqual(next((r['issue'], r['started_at']) for r in findings if r['evidence']=='requests/prevented.json'),
+                         (999, '2026-09-23T01:00:00Z'))
         code, legacy = self.get('/api/v1/runs/fixture-legacy')
         self.assertEqual((legacy['has_graph'], legacy['record']['issue']), (False, None))
         cached = self.get('/api/v1/runs/fixture-cached/files')[1]
         self.assertEqual([(f['state'], f['duration_seconds'], f['producer']) for f in cached['items']],
                          [('cached', None, 'fixture-group')])
         self.assertEqual(self.get('/api/v1/runs/fixture-cached/attempts')[1]['items'], [])
+        self.assertEqual([r['run'] for r in self.get('/api/v1/runs?activity=reused')[1]['items']], ['fixture-cached'])
+        self.assertEqual(self.get('/api/v1/runs?activity=invalid')[0], 400)
         states = self.get('/api/v1/runs')[1]['items']
         self.assertEqual({r['run']: r['status'] for r in states}, {
             'fixture-group': 'passed', 'fixture-legacy': 'passed', 'fixture-cached': 'passed',

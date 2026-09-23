@@ -53,8 +53,8 @@
 .supervision .body.history{padding-top:20px}
 .supervision .pagination{display:flex;gap:20px;align-items:center;margin-top:20px;color:#878792;font-size:12px}
 .supervision button:disabled{opacity:.45;cursor:default}
-.supervision a{color:#6c60a1;text-decoration:none}
-.supervision a:hover{text-decoration:underline}
+.supervision a,.supervision .text-link,.supervision .analysis-entry button,.supervision .finding button,.supervision .timeline-row button{color:#514a9e;text-decoration:underline;text-underline-offset:3px}
+.supervision a:hover,.supervision .text-link:hover,.supervision .analysis-entry button:hover,.supervision .finding button:hover,.supervision .timeline-row button:hover{color:#342b78;text-decoration-thickness:2px}
 .supervision .peek{position:absolute;right:0;top:0;bottom:0;width:min(620px,calc(100% - 410px));display:flex;flex-direction:column;border-left:1px solid #dedde8;background:#fff;z-index:20;overflow:hidden}
 .supervision .detail-bar{display:flex;justify-content:space-between;padding:6px 24px;flex:none}
 .supervision .detail-bar [data-close]{margin-left:auto}
@@ -98,3 +98,18 @@
 .supervision .health-facts{grid-template-columns:120px 1fr}
 .supervision .health p{font-size:13px;color:#7f788b;line-height:1.8}
 .supervision .health p.muted{font-size:12px;color:#878792}
+.supervision .text-link,.supervision .analysis-entry button,.supervision .finding button,.supervision .timeline-row button{border:0;background:none;padding:5px 0;text-align:left}
+.supervision .rule-strip{display:flex;flex-wrap:wrap;gap:8px 22px;color:#686675;font-size:12px}
+.supervision .rule-strip b{font-weight:600;color:#3c3850;margin-left:4px}
+.supervision .rule-group{margin:14px 0 27px}
+.supervision .rule-group>summary{font-size:15px;font-weight:600;color:#464052;min-height:34px}
+.supervision .finding,.supervision .difference{padding:10px 0;border-top:1px solid #eeedf2;font-size:12px;overflow-wrap:anywhere}
+.supervision .finding strong,.supervision .difference strong{display:block;color:#474352;font-weight:500}
+.supervision .finding small,.supervision .difference small{display:block;color:#7d7888;margin-top:2px}
+.supervision .finding details{margin-top:2px}
+.supervision .finding code{color:#6b6578;overflow-wrap:anywhere}
+.supervision .analysis-entry{display:flex;flex-wrap:wrap;gap:4px 20px;margin:14px 0}
+.supervision .fact-line{font-size:12px;color:#676173;margin:8px 0}
+.supervision .timeline-row{display:grid;grid-template-columns:minmax(110px,1fr) minmax(150px,1fr);gap:2px 12px;padding:8px 0;border-top:1px solid #eeedf2;font-size:12px}
+.supervision .timeline-row small{grid-column:1/-1;color:#827d8b}
+.supervision .detail-body .toolbar button{border:0;background:none;color:#514a9e;text-decoration:underline}

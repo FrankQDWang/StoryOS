@@ -43,12 +43,19 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/drawer-model.js','u
 (async()=>{
     const file={node_id:'file:a',graph_sha256:'g',path:'a.rs',selected:1,state:'unknown'};
     let files=[file], attempts=[{attempt_id:'stage',node_id:'check:a',graph_sha256:'g',result:'passed',duration_seconds:9}];
+    let graph={graph:{nodes:[{id:'a'}]},states:[]},cost={root:{seconds:2},stages:[],issue:null};
     const request=async path=>path.includes('/files?')?{items:files,next_offset:null}:
         path.includes('/attempts?')?{items:attempts,next_offset:null}:
-        path.includes('/requests?')?{items:[],next_offset:null}:{record:{run:'run',status:'running'},has_graph:true};
+        path.includes('/requests?')?{items:[],next_offset:null}:path.endsWith('/graph')?graph:path.endsWith('/cost')?cost:{record:{run:'run',status:'running'},has_graph:true};
     const model=new RunEvidence(request,'run');
     await model.refresh();
     assert.deepEqual(model.fileFact(file),{state:'unknown',seconds:null,attempts:[]});
+    const older=model.saved();delete older.graph;delete older.cost;
+    const migrated=new RunEvidence(request,'run',older);await migrated.refresh();assert.equal(migrated.graph.graph.nodes.length,1);
+    graph={graph:{nodes:[{id:'a'},{id:'b'}]},states:[]};cost={root:{seconds:3},stages:[],issue:null};
+    await model.refresh();assert.equal(model.pending,true);assert.equal(model.graph.graph.nodes.length,1);assert.equal(model.cost.root.seconds,3);
+    model.apply();assert.equal(model.graph.graph.nodes.length,2);assert.equal(model.cost.root.seconds,3);
+    cost={...cost,root:{seconds:4}};await model.refresh();assert.equal(model.pending,false);assert.equal(model.cost.root.seconds,4);
     attempts=[...attempts,{attempt_id:'file',node_id:'file:a',graph_sha256:'g',result:'passed',duration_seconds:2,ended_at:'2026-09-22T00:00:02Z'}];
     files=[{...file,state:'passed'},{...file,node_id:'file:b',path:'b.rs'}];
     await model.refresh();
@@ -56,6 +63,13 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/drawer-model.js','u
     assert.equal(model.fileFact(file).seconds,null);
     model.apply(); assert.equal(model.files.length,2);
     assert.equal(model.fileFact(model.files[0]).seconds,2);
+    let difference='common',seconds=0;model.request=async()=>({comparison:{comparison:'descriptive only',delta_seconds:seconds},runs:[{selected:seconds}],differences:{items:[{node_id:'a',difference,left_definition:difference}],next_offset:null}});
+    await model.loadComparison('other');difference='changed-definition';seconds=3;await model.loadComparison('other');
+    assert.equal(model.comparison.differences[0].difference,'common');
+    assert.equal(model.comparison.differences[0].visibleChanged,false);assert.equal(model.comparison.differences[0].left_definition,'common');assert.equal(model.comparison.comparison.delta_seconds,3);assert.equal(model.pending,true);
+    difference='common';await model.loadComparison('other');assert.equal(model.pending,false);
+    difference='changed-definition';await model.loadComparison('other');
+    model.apply();assert.equal(model.comparison.differences[0].difference,'changed-definition');model.request=request;
     attempts=[attempts[0],{...attempts[1],result:'running',ended_at:null,duration_seconds:null}];
     files=[file,files[1]];
     await model.refresh(); assert.equal(model.pending,true);
@@ -80,6 +94,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const fs = require('node:fs');
 vm.runInThisContext(fs.readFileSync('scripts/observation/app/model.js', 'utf8'));
+vm.runInThisContext(fs.readFileSync('scripts/observation/app/views.js', 'utf8'));
 (async () => {
     let rows = [{run:'a', status:'running'}, {run:'b', status:'passed'}];
     const calls = [];
@@ -109,6 +124,7 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/model.js', 'utf8'))
     model.request = async () => {throw Error('offline')};
     await assert.rejects(model.refresh(), /offline/);
     assert.equal(model.rows[0].run,'a');
+    assert.match(runTable([{run:'reused',status:'passed',cache_status:'hit',attempt_started:0,duration_seconds:10}],null,120),/结果复用 · 无新增执行/);
     model.request = request;
     await model.refresh();
     assert.equal(model.pending,true);
@@ -119,6 +135,20 @@ vm.runInThisContext(fs.readFileSync('scripts/observation/app/model.js', 'utf8'))
     await model.refresh();
     assert.equal(model.rows[1].status,'unknown');
     assert.equal(model.pending,true);
+    let findings=[{rule:'unassigned',run:'a',disposition:'executed',evidence:'a/report.json'}];
+    const review=new ReviewFindings(async()=>({items:findings,next_offset:null}));
+    await review.refresh();
+    review.rule='unassigned';review.scroll=90;review.openRules=['unassigned'];
+    findings=[{rule:'stale-heartbeat',run:'b',disposition:'unknown-liveness',evidence:'b/report.json'}];
+    await review.refresh();
+    assert.equal(review.pending,true);
+    assert.equal(review.rows[0].run,'a');
+    const reopened=new ReviewFindings(review.request,JSON.parse(JSON.stringify(review.saved())));
+    assert.deepEqual([reopened.rule,reopened.scroll,reopened.openRules],['unassigned',90,['unassigned']]);
+    reopened.apply();
+    assert.equal(reopened.rows[0].run,'a');
+    await reopened.refresh();reopened.apply();
+    assert.equal(reopened.rows[0].run,'b');
 })().catch(error => {console.error(error); process.exitCode=1});
 '''
         result = subprocess.run(['node', '-e', script], cwd=ROOT, capture_output=True, text=True, timeout=10)
