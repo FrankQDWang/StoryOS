@@ -187,6 +187,10 @@ path = sys.argv[2]
 if path.endswith('/pulls/1'):
     value = json.loads((target / 'pull.json').read_text())
 elif '/comments?' in path:
+    close = target / 'close_on_comments.json'
+    if close.exists():
+        (target / 'pull.json').write_text(close.read_text())
+        close.unlink()
     value = [[{'id': i, 'user': {'login': 'fixture'}, 'author_association': 'OWNER',
                'body': (target / name).read_text()} for i, name in enumerate(('original.txt', 'evidence.txt'))]]
 elif path.endswith('/permission'):
@@ -205,10 +209,31 @@ print(json.dumps(value))
         result = self.cli("gate")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((target / "statuses.txt").read_text().splitlines(), ["pending", "success"])
-        (target / "pull.json").write_text(json.dumps({"head": {"sha": head}, "base": {"sha": self.base},
-                                                     "state": "closed", "merged": True, "merge_commit_sha": merge}))
-        self.fixture.git("update-ref", "-d", "refs/pull/1/merge")
-        self.assertEqual(self.cli("gate").returncode, 0)
+
+        open_pull = {"head": {"sha": head}, "base": {"sha": self.base}, "state": "open"}
+        for merged in (False, True):
+            closed = {**open_pull, "state": "closed", "merged": merged, "merge_commit_sha": merge if merged else None}
+            (target / "pull.json").write_text(json.dumps(closed))
+            for event in ({"pull_request": {"number": 1}}, {"issue": {"number": 1}}):
+                (target / "event.json").write_text(json.dumps(event))
+                result = self.cli("gate")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual((target / "statuses.txt").read_text().splitlines(), ["pending", "success"])
+
+        (target / "pull.json").write_text(json.dumps(open_pull))
+        (target / "event.json").write_text(json.dumps({"issue": {"number": 1}}))
+        (target / "close_on_comments.json").write_text(json.dumps({**open_pull, "state": "closed", "merged": True, "merge_commit_sha": merge}))
+        result = self.cli("gate")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((target / "statuses.txt").read_text().splitlines(), ["pending", "success", "pending"])
+
         self.body.write_text(self.body.read_text().split("\n", 1)[0] + "\n{}")
+        (target / "pull.json").write_text(json.dumps(open_pull))
+        (target / "close_on_comments.json").write_text(json.dumps({**open_pull, "state": "closed"}))
+        result = self.cli("gate")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((target / "statuses.txt").read_text().splitlines(), ["pending", "success", "pending", "pending"])
+
+        (target / "pull.json").write_text(json.dumps(open_pull))
         self.assertNotEqual(self.cli("gate").returncode, 0)
         self.assertEqual((target / "statuses.txt").read_text().splitlines()[-2:], ["pending", "failure"])
