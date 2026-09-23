@@ -12,10 +12,9 @@ The App reads a disposable SQLite projection. Original reports in `target/verifi
 | Two-run differences and quality | Comparison search, scope summary, changed-node list, full comparison link | `/runs`, `/compare?left=&right=` | The same comparison SQL as the dashboard over retained run payloads, graphs, states, and attempts. |
 | Reading continuity | Hash route, session state, visible Back and new-tab links | No write API | Browser state only; polling keeps displayed membership until Update. |
 
-Current limits and omissions:
-
-- Remote CI and arbitrary shell work are outside managed local coverage.
-- Current executor reports do not measure user blocked wait or build state. Issue wait and comparable runtime claims normally remain unknown.
-- Grouped Cargo or shared tests do not prove member file execution or duration. Selection does not prove a minimal plan.
-- Old reports can lack graph, attribution, request, or timing facts. The App keeps those facts unknown.
-- The App does not send alerts, admit, change results, retry, or schedule an Agent. Grafana advisory rules remain provisioned.
+Limits and omissions: Remote CI and arbitrary shell work are outside coverage.
+Current executor reports omit user blocked wait and build state, so those claims
+remain unknown. Grouped tests do not prove file execution, duration, or minimal
+selection. Old reports can lack graph, attribution, request, or timing facts.
+The App does not alert, admit, change results, retry, or schedule an Agent;
+Grafana advisory rules remain provisioned.

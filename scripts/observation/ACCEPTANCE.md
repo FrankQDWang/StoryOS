@@ -57,13 +57,12 @@ acceptance matrix under `target/observation/`. Retain managed verification repor
 under `target/verification/`. Record exact candidate, independent reviews, complete
 report, merged-tree equality and tracker result in the ticket Resolution.
 
-For US41, inspect all six collapsed rule groups in Chrome and expand a real
-finding. Check a real run's direct graph entry, node detail, UTC timeline,
-exclusive cost, and two-run comparison. Confirm that quality and unknown build
-state appear before a duration interpretation. Use labelled disposable fixtures
-for prevented requests, reused results, missing graphs, and measured waits.
-Verify source filters, sorting, scroll, Back, keyboard focus, and the new-tab
-return. Check the provisioned Grafana dashboards and alert rules after restart.
+For US41, inspect six rule groups and one real finding in Chrome. Check a real
+run's direct graph, node, UTC timeline, exclusive cost, and comparison. Show
+quality and unknown build state before interpreting duration. Use labelled
+fixtures for prevented requests, reuse, missing graphs, and measured waits.
+Verify filters, order, scroll, Back, focus, new-tab return, and provisioned
+dashboards and alerts after restart.
 
 Natural intermittent SQLite lock failures can occur independently of a readable
 health response. Show the current observation and retain prior UI evidence; do

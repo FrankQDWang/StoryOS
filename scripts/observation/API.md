@@ -26,8 +26,7 @@ facts are null. HTTP success does not establish source freshness or process life
 | `/compare?left=<run>&right=<run>` | Existing comparison quality, run scope summaries, and paginated node differences. The two run IDs must differ. |
 
 All lists accept `limit` (1–100, default 50) and `offset` (0–1000000).
-The comparison difference list accepts `limit` up to 500. Its `next_offset`
-pages through all retained nodes. Each page recomputes the current comparison.
+The comparison difference list accepts `limit` up to 500; each page recomputes the comparison.
 `next_offset: null` ends the list. Each response uses one SQLite read transaction;
 separate pages are live reads, not one historical snapshot. A client must apply
 membership/order changes explicitly and restart paging when refreshing its list.
@@ -43,11 +42,7 @@ pending, blocked and cached are not actual file attempts. A grouped pass never
 establishes file success or duration. Missing attempts mean unknown execution.
 Request reuse is separate from a new root; daily cache hits retain their producer.
 No sum or minimal-selection claim is derived by this API.
-The `violations` view supplies all six existing rule categories. Its evidence
-path points to the retained report or request. The API does not serve that file.
-The comparison uses the same query definitions as the provisioned dashboard.
-It reports descriptive deltas when build state, scope, definitions, or other
-required facts do not establish comparable evidence.
+The `violations` view supplies six existing rules and retained source paths; the API does not serve source files. Comparison uses dashboard queries and reports descriptive deltas when required build, scope, or definition facts are missing.
 
 Only run IDs with 1–128 ASCII letters, digits, underscores or hyphens, starting
 with a letter or digit, are accepted. Evidence references are relative to
