@@ -112,17 +112,19 @@ async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
   });
 }
 
-async function settleHeld(extraEnv: Readonly<Record<string, string>>) {
+function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
   const env = { ...process.env, ...extraEnv };
   if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
     env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
   }
-  await execFileAsync(bin("storyos-worker"), ["--once"], {
+  const held = execFileAsync(bin("storyos-worker"), ["--once"], {
     cwd: repositoryRoot,
     env,
     timeout: 60_000,
     killSignal: "SIGKILL",
-  });
+  }).then(() => undefined);
+  void held.catch(() => undefined);
+  return held;
 }
 
 async function drainLeftoverWork() {
@@ -262,17 +264,16 @@ async function postPause(
   return { challenge, response };
 }
 
-async function postCancel(
+async function cancelChallenge(
   baseUrl: string,
   fetchImpl: typeof fetch,
   projectId: string,
-  runId: string,
   key: string,
   correlationId: string,
 ) {
   const request = cancelRequest(correlationId);
   const digest = await digestCancelAgentRun(request);
-  const challenge = await withChallengeRetry(() => createProjectCommandChallenge({
+  return withChallengeRetry(() => createProjectCommandChallenge({
     baseUrl,
     projectId,
     fetchImpl,
@@ -284,6 +285,19 @@ async function postCancel(
       idempotency_key: key,
     },
   }));
+}
+
+async function postCancel(
+  baseUrl: string,
+  fetchImpl: typeof fetch,
+  projectId: string,
+  runId: string,
+  key: string,
+  correlationId: string,
+  preissuedChallenge?: Awaited<ReturnType<typeof cancelChallenge>>,
+) {
+  const request = cancelRequest(correlationId);
+  const challenge = preissuedChallenge ?? await cancelChallenge(baseUrl, fetchImpl, projectId, key, correlationId);
   const response = await cancelAgentRun({
     baseUrl,
     projectId,
@@ -467,6 +481,49 @@ test("pauseAgentRun and cancelAgentRun stay distinct and keep a terminal Run imm
   }
 });
 
+test("a rate-limited cancellation Challenge completes before a Worker is held", async () => {
+  const dispatchHold = join(tmpdir(), "storyos-s3-17-rate-limit.hold");
+  const started = await startRealServer();
+  let worker: Promise<void> | undefined;
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("c311"), "Challenge Window Novel", "c4");
+    const run = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c321"));
+    let challengeAttempts = 0;
+    const rateLimitedFetch: typeof fetch = (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path.endsWith("/anti-forgery-challenges")) {
+        assert.equal(existsSync(dispatchHold), false, "Challenge retry must complete before the Worker hold");
+        challengeAttempts += 1;
+        if (challengeAttempts === 1) {
+          return Promise.resolve(Response.json({ code: "challenge_rate_limited" }, {
+            status: 429,
+            headers: { "retry-after": "1" },
+          }));
+        }
+      }
+      return prepared.fetchImpl(input, init);
+    };
+    const challenge = await cancelChallenge(started.baseUrl, rateLimitedFetch, prepared.projectId, id("c331"), id("c332"));
+    assert.equal(challengeAttempts, 2);
+    writeFileSync(dispatchHold, "hold");
+    worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
+    await waitFor(
+      () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
+      (current) => current.status === "claimed" && current.model_attempt.kind === "present",
+    );
+    const cancelled = await postCancel(started.baseUrl, rateLimitedFetch, prepared.projectId, run.effect.run_id, id("c331"), id("c332"), challenge);
+    assert.equal(cancelled.response.effect.kind, "applied");
+    unlinkSync(dispatchHold);
+    await worker;
+    assert.equal((await inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id)).status, "cancelled");
+  } finally {
+    if (existsSync(dispatchHold)) unlinkSync(dispatchHold);
+    if (worker !== undefined) await Promise.allSettled([worker]);
+    await stopRealServer(started.server);
+  }
+});
+
 test("cancellation fences late Worker output and does not hide a Proposal", async () => {
   const dispatchHold = join(tmpdir(), "storyos-s3-17-dispatch.hold");
   const decisionHold = join(tmpdir(), "storyos-s3-17-decision.hold");
@@ -475,8 +532,17 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c211"), "Fence Recover Novel", "c3");
-    writeFileSync(dispatchHold, "hold");
+    const cancelFetch: typeof fetch = (input, init) => {
+      const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (path.endsWith("/anti-forgery-challenges")) {
+        assert.ok(!existsSync(dispatchHold) && !existsSync(decisionHold),
+          "cancellation Challenge requested while a Worker is held");
+      }
+      return prepared.fetchImpl(input, init);
+    };
     const dispatchRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c221"));
+    const dispatchCancelChallenge = await cancelChallenge(started.baseUrl, cancelFetch, prepared.projectId, id("c231"), id("c232"));
+    writeFileSync(dispatchHold, "hold");
     const dispatchWorker = settleHeld({
       STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold,
       STORYOS_EXPORT_LEASE_TTL_SECS: "0",
@@ -486,7 +552,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
       () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
     );
-    const cancelledHold = await postCancel(started.baseUrl, prepared.fetchImpl, prepared.projectId, dispatchRun.effect.run_id, id("c231"), id("c232"));
+    const cancelledHold = await postCancel(started.baseUrl, cancelFetch, prepared.projectId, dispatchRun.effect.run_id, id("c231"), id("c232"), dispatchCancelChallenge);
     assert.equal(cancelledHold.response.effect.kind, "applied");
     unlinkSync(dispatchHold);
     await dispatchWorker;
@@ -553,8 +619,9 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     };
     await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "PUT", "/api/v1/projects/{project_id}/assistance", restore.command_schema, await digestUpdateProjectAssistance(restore), id("c255"), (antiForgery) => updateProjectAssistance({ baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, idempotencyKey: id("c255"), antiForgery, request: restore }));
 
-    writeFileSync(decisionHold, "hold");
     const proposalRun = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c261"), "Revise this passage: keep the voice.");
+    const proposalCancelChallenge = await cancelChallenge(started.baseUrl, cancelFetch, prepared.projectId, id("c271"), id("c272"));
+    writeFileSync(decisionHold, "hold");
     const decisionWorker = settleHeld({ STORYOS_TEST_FAKE_DECISION_HOLD_PATH: decisionHold });
     workers.push(decisionWorker);
     const beforeCancelProposal = await waitFor(
@@ -564,7 +631,7 @@ test("cancellation fences late Worker output and does not hide a Proposal", asyn
     if (beforeCancelProposal.decision.kind !== "prose_change") throw new Error("expected prose");
     if (beforeCancelProposal.decision.opened_proposal.kind !== "present") throw new Error("expected proposal");
     const proposalId = beforeCancelProposal.decision.opened_proposal.proposal_id;
-    const cancelledProposal = await postCancel(started.baseUrl, prepared.fetchImpl, prepared.projectId, proposalRun.effect.run_id, id("c271"), id("c272"));
+    const cancelledProposal = await postCancel(started.baseUrl, cancelFetch, prepared.projectId, proposalRun.effect.run_id, id("c271"), id("c272"), proposalCancelChallenge);
     assert.equal(cancelledProposal.response.effect.kind, "applied");
     unlinkSync(decisionHold);
     await decisionWorker;
