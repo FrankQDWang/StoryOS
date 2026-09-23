@@ -22,6 +22,7 @@ import verification_shared
 import verification_daily
 import verification_status
 import verification_graph
+import verification_rust_cache
 
 
 def git(root, *arguments):
@@ -354,6 +355,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
                 report["status"] = "source-changed"
         except (OSError, ValueError) as error:
             report.update(status="failed", error=str(error))
+    report["rust_cache_after"] = verification_rust_cache.finish(
+        root, complete_success=report["status"] == "passed" and report["profile"] == "complete")
     report.update(duration_seconds=time.monotonic() - started, exit_code=code)
     report.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic())
     if report["process"].get("launch_error"):
@@ -367,14 +370,17 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     return 128 + interrupted if interrupted else (code if code > 0 else 1)
 
 
-def run(root, command, *, plan=None, no_cache=False, context=None):
+def run(root, command, *, plan=None, no_cache=False, context=None, locked=False):
     try:
         if not plan and command == ["make", "verify-local-steps"]:
             import verification_candidate
             return verification_candidate.run(root, command, context or {"base": "origin/main"})
-        with verification_cache.budget(root):
+        from contextlib import nullcontext
+        with nullcontext() if locked else verification_cache.budget(root):
+            rust_cache = verification_rust_cache.prepare(root)
             import verification_candidate
             context = {**(context or {}), "run_id": uuid.uuid4().hex}
+            context["rust_cache"] = rust_cache
             verification_candidate.observe(root, "requested", emit=False, run_id=context["run_id"],
                                            issue=context.get("issue"), profile=context.get("profile", "daily"))
             return record_run(root, command, plan=plan, no_cache=no_cache, context=context)

@@ -11,6 +11,7 @@ import sys
 
 import verification_cache
 import verification_graph
+import verification_rust_cache
 
 
 def targeted_plan(root, check):
@@ -26,10 +27,10 @@ def targeted_plan(root, check):
             'test_files': sorted(f['path'] for f in files if f['kind'].endswith('-test') and (root / f['path']).is_file()),
             'checks': [{'group': check, 'status': 'pending' if entry['clean'] and
                        runner.source_identity(root)['dirty'] else 'ready'}],
-            'workers': 'existing-targeted-profile'}
+            'workers': 'existing-targeted-profile', 'rust_cache': verification_rust_cache.identity(root)}
     import verification_candidate
-    plan['execution_inputs_sha256'] = verification_cache.digest({k: v for k, v in verification_candidate.environment().items()
-        if k not in {'_', 'SHLVL', 'STORYOS_VERIFICATION_RUN', 'STORYOS_VERIFICATION_PARENT', 'PYTHONDONTWRITEBYTECODE'}})
+    plan['execution_inputs_sha256'] = verification_cache.digest(
+        verification_candidate.execution_inputs(plan['rust_cache']))
     verification_graph.attach(root, plan, json.loads(policy), files)
     plan['digest'] = verification_cache.digest(plan)
     return plan
@@ -37,16 +38,19 @@ def targeted_plan(root, check):
 
 def execute(root, check, context):
     import verification as runner
-    plan = targeted_plan(root, check)
     if os.environ.get('STORYOS_VERIFICATION_RUN'):
+        plan = targeted_plan(root, check)
         return runner.step(root, check, plan['command'], node_id="targeted:" + check)
-    if plan['checks'][0]['status'] == 'pending':
-        import verification_candidate
-        verification_candidate.observe(root, 'refused', issue=context.get('issue'),
-                                       reason='Release package requires clean sources', check=check)
-        return 2
-    command = [sys.executable, str(Path(runner.__file__).resolve()), 'step', check, '--', *plan['command']]
-    return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'})
+    with verification_cache.budget(root):
+        verification_rust_cache.prepare(root)
+        plan = targeted_plan(root, check)
+        if plan['checks'][0]['status'] == 'pending':
+            import verification_candidate
+            verification_candidate.observe(root, 'refused', issue=context.get('issue'),
+                                           reason='Release package requires clean sources', check=check)
+            return 2
+        command = [sys.executable, str(Path(runner.__file__).resolve()), 'step', check, '--', *plan['command']]
+        return runner.run(root, command, plan=plan, context={**context, 'profile': 'targeted'}, locked=True)
 
 
 def process_state(process):

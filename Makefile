@@ -55,7 +55,7 @@ project-scope: release-package
 	STORYOS_WEB_TYPECHECKED=1 $(VERIFY_STEP) project-scope -- scripts/verify-project-scope.sh
 endif
 generate-contracts:
-	cargo run --quiet -p storyos-contracts -- generate
+	python3 scripts/verification_rust_cache.py run -- cargo run --quiet -p storyos-contracts -- generate
 verify-local:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py run --base "$(BASE)" $(VERIFY_ARGS) -- make verify-local-steps
 
