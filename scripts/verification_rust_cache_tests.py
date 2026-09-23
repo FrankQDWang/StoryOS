@@ -467,8 +467,12 @@ class RustCacheTests(unittest.TestCase):
                        check=True, capture_output=True)
         with (debug / ".cargo-lock").open("a") as held:
             fcntl.flock(held, fcntl.LOCK_EX)
+            cargo_environment = os.environ.copy()
+            cargo_environment.pop("CARGO_TARGET_DIR", None)
+            cargo_environment.pop("STORYOS_RUST_CACHE_ROOT", None)
             cargo = subprocess.Popen(["cargo", "build", "--offline"], cwd=self.root,
-                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                                     env=cargo_environment, stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE, text=True)
             try:
                 line = cargo.stderr.readline()
                 self.assertIn("Blocking waiting for file lock", line)
@@ -485,6 +489,7 @@ class RustCacheTests(unittest.TestCase):
                 fcntl.flock(held, fcntl.LOCK_UN)
                 stdout, stderr = cargo.communicate(timeout=60)
                 self.assertEqual(cargo.returncode, 0, stderr + stdout)
+                self.assertTrue((debug / "storyos-probe").is_file())
         self.assertEqual(self.cli("status").returncode, 0)
         self.assertFalse(debug.exists())
 
