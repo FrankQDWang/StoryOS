@@ -55,6 +55,14 @@ def identity(path):
     return {"device": info.st_dev, "inode": info.st_ino, "uid": info.st_uid, "gid": info.st_gid}
 
 
+def owned_entry(path, owner):
+    info = path.lstat()
+    if (info.st_dev != owner.st_dev or info.st_uid != owner.st_uid
+            or info.st_gid != owner.st_gid):
+        raise ValueError(f"Historical Cargo cache ownership changed: {path}")
+    return info
+
+
 def nested_cache_artifact(top, parts, *, directory):
     depth = len(parts)
     name = parts[-1]
@@ -88,6 +96,7 @@ def nested_cache_artifact(top, parts, *, directory):
 
 
 def inspect_nested(path):
+    owner = path.stat()
     for top in ("deps", ".fingerprint", "incremental", "build", "examples"):
         start = path / top
         if not start.exists():
@@ -96,14 +105,14 @@ def inspect_nested(path):
             relative = Path(base).relative_to(start).parts
             for name in directories:
                 child = Path(base) / name
-                info = child.lstat()
-                if (not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid()
+                info = owned_entry(child, owner)
+                if (not stat.S_ISDIR(info.st_mode)
                         or not nested_cache_artifact(top, (*relative, name), directory=True)):
                     raise ValueError(f"Historical Cargo cache has unknown nested content: {child}")
             for name in files:
                 child = Path(base) / name
-                info = child.lstat()
-                if (not stat.S_ISREG(info.st_mode) or info.st_uid != os.geteuid()
+                info = owned_entry(child, owner)
+                if (not stat.S_ISREG(info.st_mode)
                         or not nested_cache_artifact(top, (*relative, name), directory=False)):
                     raise ValueError(f"Historical Cargo cache has unknown nested content: {child}")
 
@@ -113,6 +122,9 @@ def inspect(path):
 
     if path.is_symlink() or not path.is_dir():
         raise ValueError("The historical Cargo debug path is not an owned directory")
+    owner = path.stat()
+    for child in path.iterdir():
+        owned_entry(child, owner)
     tag = path.parent / "CACHEDIR.TAG"
     if tag.is_symlink() or not tag.is_file() or not tag.read_text().startswith(
             "Signature: 8a477f597d28d172789f06886806bc55\n"):
@@ -136,6 +148,9 @@ def inspect(path):
 def inspect_partial(path):
     from verification_rust_cache import measure
 
+    owner = path.stat()
+    for child in path.iterdir():
+        owned_entry(child, owner)
     unknown = {child.name for child in path.iterdir() if child.name not in TOP_LEVEL
                and not OUTPUT.fullmatch(child.name)}
     if unknown:
@@ -185,9 +200,11 @@ def migrate(root):
         return {"state": "unsupported", "reason": "Historical migration requires macOS open-file audit"}
     target = root / "target"
     cache_parent = target / "rust-cache"
+    verification = target / "verification"
     old = target / "debug"
     scratch = target / "issue-763-isolated"
-    if target.is_symlink() or cache_parent.is_symlink() or old.is_symlink() or scratch.is_symlink():
+    if (target.is_symlink() or cache_parent.is_symlink() or verification.is_symlink()
+            or old.is_symlink() or scratch.is_symlink()):
         raise ValueError("A Rust cache migration path is linked")
     path = record_path(root)
     if path.is_symlink():

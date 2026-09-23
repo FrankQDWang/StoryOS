@@ -280,6 +280,35 @@ class RustCacheTests(unittest.TestCase):
         self.assertEqual((scratch / "user-data").read_text(), "keep")
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
+    def test_changed_top_level_and_nested_ownership_blocks_retirement(self):
+        debug = self.legacy_debug()
+        group = next((gid for gid in os.getgroups() if gid != debug.stat().st_gid), None)
+        if group is None:
+            self.skipTest("No second group is available")
+        for path in (debug / ".cargo-lock", debug / CARGO_ARTIFACT):
+            with self.subTest(path=path):
+                original = path.stat().st_gid
+                try:
+                    os.chown(path, -1, group)
+                except PermissionError:
+                    self.skipTest("This host does not allow changing the file group")
+                try:
+                    self.assertNotEqual(self.cli("status").returncode, 0)
+                    self.assertTrue(path.exists())
+                finally:
+                    os.chown(path, -1, original)
+
+    def test_linked_verification_parent_is_not_used_by_cache_manager(self):
+        user = self.root / "user-data"
+        user.mkdir()
+        (user / "keep").write_text("keep")
+        (self.root / "target/verification").rmdir()
+        (self.root / "target/verification").symlink_to(user)
+        result = self.cli("status")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((user / "keep").read_text(), "keep")
+
+    @unittest.skipUnless(sys.platform == "darwin", "macOS historical migration")
     def test_unknown_or_linked_legacy_content_stops_whole_directory_retirement(self):
         debug = self.legacy_debug()
         (debug / "user-notes").write_text("keep")
