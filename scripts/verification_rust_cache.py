@@ -9,6 +9,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
 import uuid
 
 import verification_cache
@@ -37,9 +38,16 @@ def state_path(root):
 def write_state(root, state):
     path = state_path(root)
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, indent=2) + "\n")
-    temporary.replace(path)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, prefix=".rust-cache-",
+                                         delete=False) as output:
+            temporary = Path(output.name)
+            output.write(json.dumps(state, indent=2) + "\n")
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def load(root):

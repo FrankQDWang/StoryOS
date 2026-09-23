@@ -134,6 +134,16 @@ class RustCacheTests(unittest.TestCase):
         self.assertNotEqual(self.cli("status").returncode, 0)
         self.assertEqual((user / "gen-next/keep").read_text(), "keep")
 
+    def test_linked_old_state_temporary_does_not_overwrite_user_data(self):
+        user = self.root / "user-data"
+        user.write_text("keep")
+        legacy_temporary = self.root / "target/verification/rust-cache.tmp"
+        legacy_temporary.symlink_to(user)
+        result = self.cli("status")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(user.read_text(), "keep")
+        self.assertTrue(legacy_temporary.is_symlink())
+
     def test_changed_quarantine_marker_stops_recovery(self):
         self.assertEqual(self.cli("status").returncode, 0)
         state_path, old, _ = self.queue_retirement()
