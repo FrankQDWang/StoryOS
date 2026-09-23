@@ -61,8 +61,6 @@ For US41, inspect six rule groups and one real finding in Chrome. Check a real
 run's direct graph, node, UTC timeline, exclusive cost, and comparison. Show
 quality and unknown build state before interpreting duration. Use labelled
 fixtures for prevented requests, reuse, missing graphs, and measured waits.
-Verify filters, order, scroll, Back, focus, new-tab return, and provisioned
-dashboards and alerts after restart.
 
 Natural intermittent SQLite lock failures can occur independently of a readable
 health response. Show the current observation and retain prior UI evidence; do
