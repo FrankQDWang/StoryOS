@@ -39,6 +39,8 @@ def gate(root):
     repository = os.environ["GITHUB_REPOSITORY"]
     route = f"repos/{repository}"
     pull = api(f"{route}/pulls/{number}")
+    if pull["state"] == "closed":
+        return
     head, base = pull["head"]["sha"], pull["base"]["sha"]
 
     def status(state, description):
@@ -69,10 +71,17 @@ def gate(root):
             import verification_reviews
             verification_reviews.sentinel(route, head, base, verification.git(root, "rev-parse", f"{candidate}^{{tree}}"))
         latest = api(f"{route}/pulls/{number}")
+        if latest["state"] == "closed":
+            return
         if (latest["head"]["sha"], latest["base"]["sha"]) != (head, base):
             raise ValueError("The candidate changed during validation")
         status("success", "Current complete candidate evidence passed")
     except Exception as error:
+        latest = api(f"{route}/pulls/{number}")
+        if latest["state"] == "closed":
+            if isinstance(error, subprocess.CalledProcessError):
+                raise
+            return
         status("failure", f"Candidate evidence refused: {type(error).__name__}")
         raise
 
