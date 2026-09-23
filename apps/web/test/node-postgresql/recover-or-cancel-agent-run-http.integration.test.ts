@@ -112,7 +112,7 @@ async function settleOnce(extraEnv?: Readonly<Record<string, string>>) {
   });
 }
 
-function settleHeld(extraEnv: Readonly<Record<string, string>>, options: { timeoutMs?: number } = {}): Promise<void> {
+function settleHeld(extraEnv: Readonly<Record<string, string>>): Promise<void> {
   const env = { ...process.env, ...extraEnv };
   if (process.env.STORYOS_TEST_DATABASE_URL !== undefined) {
     env.STORYOS_DATABASE_URL = process.env.STORYOS_TEST_DATABASE_URL;
@@ -120,7 +120,7 @@ function settleHeld(extraEnv: Readonly<Record<string, string>>, options: { timeo
   const held = execFileAsync(bin("storyos-worker"), ["--once"], {
     cwd: repositoryRoot,
     env,
-    timeout: options.timeoutMs ?? 60_000,
+    timeout: 60_000,
     killSignal: "SIGKILL",
   }).then(() => undefined);
   void held.catch(() => undefined);
@@ -489,24 +489,25 @@ test("a rate-limited cancellation Challenge completes before a Worker is held", 
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("c311"), "Challenge Window Novel", "c4");
     const run = await admit(started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, id("c321"));
-    let limited = false;
+    let challengeAttempts = 0;
     const rateLimitedFetch: typeof fetch = (input, init) => {
       const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
-      if (!limited && path.endsWith("/anti-forgery-challenges")) {
-        limited = true;
-        return Promise.resolve(Response.json({ code: "challenge_rate_limited" }, {
-          status: 429,
-          headers: { "retry-after": "5" },
-        }));
+      if (path.endsWith("/anti-forgery-challenges")) {
+        assert.equal(existsSync(dispatchHold), false, "Challenge retry must complete before the Worker hold");
+        challengeAttempts += 1;
+        if (challengeAttempts === 1) {
+          return Promise.resolve(Response.json({ code: "challenge_rate_limited" }, {
+            status: 429,
+            headers: { "retry-after": "1" },
+          }));
+        }
       }
       return prepared.fetchImpl(input, init);
     };
-    const challengeStarted = Date.now();
     const challenge = await cancelChallenge(started.baseUrl, rateLimitedFetch, prepared.projectId, id("c331"), id("c332"));
-    assert.equal(limited, true);
-    assert.ok(Date.now() - challengeStarted > 4_000, "Challenge retry must outlast the short held Worker bound");
+    assert.equal(challengeAttempts, 2);
     writeFileSync(dispatchHold, "hold");
-    worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold }, { timeoutMs: 4_000 });
+    worker = settleHeld({ STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH: dispatchHold });
     await waitFor(
       () => inspectRun(started.baseUrl, prepared.fetchImpl, prepared.projectId, run.effect.run_id),
       (current) => current.status === "claimed" && current.model_attempt.kind === "present",
