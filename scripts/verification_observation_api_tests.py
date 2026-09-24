@@ -160,9 +160,7 @@ class QueryTests(unittest.TestCase):
                 'graph_sha256': hashlib.sha256(json.dumps(graph, sort_keys=True).encode()).hexdigest(),
                 'attempt_started': True, 'selection_reason': ['selected'], 'execution_scope': {},
                 'started_at': '2026-09-24T00:00:00Z', 'ended_at': '2026-09-24T00:00:10Z'}))
-        subprocess.run([sys.executable, str(ROOT / 'scripts/verification_observation.py'),
-            'collect', '--records', str(self.records), '--database', str(self.database)],
-            check=True, capture_output=True)
+        self.start()
         with sqlite3.connect(self.database) as connection:
             connection.row_factory = sqlite3.Row
             work = 0
