@@ -161,6 +161,8 @@ export function WritingAssistantPanel({
 
   const inspect = async (current: RequestReference): Promise<void> => {
     if (context === undefined) return;
+    const stillCurrent = () =>
+      readReference(current.scope)?.correlationId === current.correlationId;
     let runId = current.runId;
     if (runId === undefined) {
       const body = await activityStream({
@@ -168,6 +170,7 @@ export function WritingAssistantPanel({
         projectId: current.scope.project_id, snapshotId: current.snapshotId,
         protocolRelease: "storyos.public.release.1",
       });
+      if (!stillCurrent()) return;
       runId = runFromActivity(body, current);
       if (runId === undefined) {
         setStatus("请求结果仍待确认。请稍后检查。");
@@ -181,6 +184,7 @@ export function WritingAssistantPanel({
       baseUrl: context.baseUrl, fetchImpl: context.fetchImpl,
       projectId: current.scope.project_id, runId,
     });
+    if (!stillCurrent()) return;
     if (result.project_scope.owner_user_id !== current.scope.owner_user_id
       || result.project_scope.project_id !== current.scope.project_id
       || result.run_id !== runId) throw new Error("Run Scope mismatch");
