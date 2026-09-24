@@ -61,7 +61,7 @@ def attach(root, plan, policy, files, revision=None):
         if owner not in nodes:
             node(owner, 'aggregate', profile=group)
         name = node(f'file:{group}:{path}', 'test-file', profile=group, path=path,
-                    execution='member-only')
+                    execution='whole-file' if group == 'verification-tools' else 'member-only')
         file_ids[path] = name
         relations.add((owner, name, 'member'))
         for stage in groups.get(group.split(':')[0], []):

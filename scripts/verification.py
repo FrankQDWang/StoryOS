@@ -98,6 +98,14 @@ def inventory(root, revision=None):
         files.append({"path": path, "kind": rule["kind"], "group": group})
     if errors:
         raise ValueError("Unclassified inputs or unsupported test locations; update docs/agents/verification-policy.json:\n" + "\n".join(errors))
+    parallel = policy.get("verification_test_parallel_files", [])
+    workers = policy.get("verification_test_workers", 1)
+    eligible = {item["path"] for item in files if item["kind"] == "verification-test"
+                and item["group"] == "verification-tools"}
+    if (not isinstance(parallel, list) or any(not isinstance(path, str) for path in parallel)
+            or len(parallel) != len(set(parallel)) or not set(parallel) <= eligible
+            or type(workers) is not int or not 1 <= workers <= 4):
+        raise ValueError("Invalid verification-tool file budget or independence declaration")
     if "complete" in policy:
         stages, groups = policy["complete"]["stages"], policy["complete"]["groups"]
         if (not isinstance(stages, list) or not isinstance(groups, dict) or not stages or len(stages) != len(set(stages))
@@ -336,6 +344,18 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
+    if any(item["stage"] == "verification-tests" and item["command"] ==
+           ["python3", "scripts/verification_test_files.py"] for item in steps):
+        attempts = [json.loads(path.read_text()) for path in (directory / "nodes").glob("*.json")]
+        report["verification_test_file_attempts"] = sorted(
+            (item for item in attempts if item.get("node_id", "").startswith("file:verification-tools:")),
+            key=lambda item: item["node_id"])
+        expected = {"file:verification-tools:" + item["path"] for item in report["inventory"]["files"]
+                    if item["kind"] == "verification-test" and item["group"] == "verification-tools"}
+        actual = report["verification_test_file_attempts"]
+        if (len(actual) != len(expected) or {item["node_id"] for item in actual} != expected
+                or any(item["status"] != "passed" or not item["attempt_started"] for item in actual)):
+            report["status"] = "incomplete"
     if (plan and code == 2 and report["status"] == "failed" and steps
             and all(item["status"] == "passed" for item in steps)
             and any(c.get("status") == "pending" for c in plan["checks"])):
@@ -412,6 +432,8 @@ def main():
         command_parser = commands.add_parser(action)
         if action == "step":
             command_parser.add_argument("stage")
+            command_parser.add_argument("--node-id")
+            command_parser.add_argument("--node-only", action="store_true")
         else:
             command_parser.add_argument("--base", default="origin/main")
             for name in ("issue", "pr"):
@@ -450,8 +472,10 @@ def main():
             command = command[1:]
         if not command:
             raise ValueError("A verification command is required")
-        return run(root, command, context={key: getattr(arguments, key) for key in
-                   ("base", "issue", "pr", "purpose", "trigger", "review_request", "executor_context")}) if arguments.action == "run" else step(root, arguments.stage, command)
+        if arguments.action == "run":
+            return run(root, command, context={key: getattr(arguments, key) for key in
+                       ("base", "issue", "pr", "purpose", "trigger", "review_request", "executor_context")})
+        return step(root, arguments.stage, command, node_id=arguments.node_id, node_only=arguments.node_only)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"{error}\n")
 

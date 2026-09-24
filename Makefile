@@ -28,7 +28,7 @@ ifneq ($(STORYOS_VERIFICATION_RUN),)
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
-	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p '*_tests.py'
+	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
 
 contracts: verify-policy
 	$(MAKE) verify-contract-inputs

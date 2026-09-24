@@ -88,6 +88,37 @@ class CandidateEvidenceTests(unittest.TestCase):
         policy.write_text(json.dumps(data))
         self.assertNotEqual(self.fixture.cli("inventory", "--check").returncode, 0)
 
+    def test_whole_file_candidate_evidence_requires_each_real_node_attempt(self):
+        policy = self.root / "docs/agents/verification-policy.json"
+        data = json.loads(policy.read_text())
+        data["verification_test_workers"] = 1
+        data["verification_test_parallel_files"] = []
+        data["complete"] = {"stages": ["verification-tests"],
+                            "groups": {"verification-tools": ["verification-tests"]}}
+        data["workflow"] = {"version": 1, "operations": {}, "stage_types": {},
+                            "profiles": {"verification-tests": {"members": ["verification-tools"]},
+                                         "verification-tools": {}}, "targeted": {}}
+        policy.write_text(json.dumps(data))
+        source = Path(__file__).with_name("verification_test_files.py")
+        (self.root / "scripts/verification_test_files.py").write_text(
+            f"import runpy, sys\nsys.path.insert(0, {str(source.parent)!r})\n"
+            f"runpy.run_path({str(source)!r}, run_name='__main__')\n")
+        (self.root / "Makefile").write_text(
+            f"verify-local-steps:\n\t{sys.executable} {verification_tests.COMMAND} step verification-tests -- "
+            "python3 scripts/verification_test_files.py\n")
+        self.commit()
+        self.base = self.fixture.git("rev-parse", "HEAD")
+        self.fixture.git("update-ref", "refs/remotes/origin/main", self.base)
+        report = json.loads(self.prepare().read_text())
+        self.assertEqual(self.check().returncode, 0)
+        self.assertEqual(len(report["verification_test_file_attempts"]), 1)
+        for attempts in ([], report["verification_test_file_attempts"] * 2,
+                         [{**report["verification_test_file_attempts"][0], "status": "failed"}]):
+            changed = copy.deepcopy(report)
+            changed["verification_test_file_attempts"] = attempts
+            self.write_report(changed)
+            self.assertNotEqual(self.check().returncode, 0)
+
     def test_a_discovered_web_file_needs_a_recorded_group_execution(self):
         policy = self.root / "docs/agents/verification-policy.json"
         data = json.loads(policy.read_text())
