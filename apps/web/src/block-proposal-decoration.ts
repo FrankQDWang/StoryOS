@@ -10,11 +10,15 @@ export type BlockProposalProjection = {
   sourceRunId: string;
   sourceDecisionId: string;
   text: string;
+  eligible: boolean;
 };
 
 const projectionKey = new PluginKey<readonly BlockProposalProjection[]>("storyosBlockProposals");
 
 export function projectBlockProposals(editor: Editor, proposals: readonly BlockProposalProjection[]): void {
+  const current = projectionKey.getState(editor.state) ?? [];
+  if (current.length === proposals.length && current.every((item, index) =>
+    JSON.stringify(item) === JSON.stringify(proposals[index]))) return;
   editor.view.dispatch(editor.state.tr.setMeta(projectionKey, proposals));
 }
 
@@ -49,15 +53,16 @@ export const blockProposalDecoration = Extension.create({
                 surface.dataset.proposalSourceRunId = proposal.sourceRunId;
                 surface.dataset.proposalSourceDecisionId = proposal.sourceDecisionId;
                 surface.dataset.proposalTargetId = proposal.blockId;
-                surface.dataset.proposalEligibility = "eligible";
+                surface.dataset.proposalEligibility = proposal.eligible ? "eligible" : "ineligible";
                 const label = document.createElement("span");
                 label.className = "block-proposal-label";
-                label.textContent = "候选文字 · 尚未成为正文";
+                label.textContent = proposal.eligible
+                  ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可接受";
                 const text = document.createElement("p");
                 text.textContent = proposal.text;
                 surface.append(label, text);
                 return surface;
-              }, { key: `${proposal.proposalId}:${proposal.revisionId}`, side: -1 }));
+              }, { key: `${proposal.proposalId}:${proposal.revisionId}:${proposal.eligible}`, side: -1 }));
             }
           });
           return DecorationSet.create(state.doc, decorations);

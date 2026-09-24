@@ -120,6 +120,7 @@ function ProjectReadyView({
   const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>(
     () => readProposalLocators(state.project.project_scope),
   );
+  const [proposalRefresh, setProposalRefresh] = useState(0);
 
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
@@ -432,6 +433,7 @@ function ProjectReadyView({
       writer={writer}
       onOpenedProposal={(locator) => {
         setProposalLocators(rememberProposalLocator(state.project.project_scope, locator));
+        setProposalRefresh((current) => current + 1);
       }}
       assistant={{
         scope: state.project.project_scope,
@@ -522,6 +524,7 @@ function ProjectReadyView({
               && pending !== null ? pending.authoritative_revision_id
               : selectedChapter.chapter.current_revision.revision_id}
             locators={proposalLocators}
+            refreshKey={proposalRefresh}
             safeToProject={selectedChapter.chapter.chapter_id !== currentChapterId
               || saveState === "saved"}
             blocks={editorBlocks}

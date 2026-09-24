@@ -186,8 +186,8 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(await firstCandidate.getAttribute("data-proposal-source-decision-id"),
       completed.decision.decision_id);
     assert.equal(await firstCandidate.textContent(), `候选文字 · 尚未成为正文${firstProposal.candidate_text}`);
-    assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.id),
-      firstBlock.manuscript_block_id);
+    assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.textContent),
+      firstBlock.text);
     assert.equal(await editor.getAttribute("data-author-input-events"), "0");
     assert.equal(await page.locator("[data-assistant-result]").textContent(),
       completed.decision.kind === "prose_change" ? completed.decision.text : null);
@@ -233,7 +233,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator(`[data-proposal-id="${secondProposalId}"]`).waitFor();
     assert.equal(await page.locator("[data-proposal-id]").count(), 2);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).evaluate(
-      (element) => element.previousElementSibling?.id), secondBlock.manuscript_block_id);
+      (element) => element.previousElementSibling?.textContent), secondBlock.text);
     await page.reload();
     await page.locator("[data-proposal-id]").first().waitFor();
     assert.deepEqual((await page.locator("[data-proposal-id]").evaluateAll((elements) =>
@@ -243,18 +243,32 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       .getAttribute("data-proposal-revision-id"), secondProposal.revision_id);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`)
       .getAttribute("data-proposal-source-run-id"), secondRunId);
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-787-block-proposals.png"),
+      fullPage: true });
     const missingBlockId = uuidV7();
+    let readMode: "invalid" | "missing" = "invalid";
     await page.route((url) => url.pathname.endsWith(`/proposals/${firstProposalId}`),
       async (route) => {
         const response = await route.fetch();
         const body = await response.json() as Awaited<ReturnType<typeof getProposal>>;
-        body.proposal.manuscript_block_id = missingBlockId;
-        body.proposal.operations = body.proposal.operations.map((operation) => ({
-          ...operation, manuscript_block_id: missingBlockId,
-        }));
+        if (readMode === "invalid") {
+          body.proposal.validation = "invalid";
+        } else {
+          body.proposal.manuscript_block_id = missingBlockId;
+          body.proposal.operations = body.proposal.operations.map((operation) => ({
+            ...operation, manuscript_block_id: missingBlockId,
+          }));
+        }
         await route.fulfill({ response, body: JSON.stringify(body) });
       });
-    await page.reload();
+    await page.locator("[data-assistant-inspect]").click();
+    const ineligible = page.locator(`[data-proposal-id="${firstProposalId}"]`);
+    await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
+      .waitFor();
+    assert.ok((await ineligible.textContent())?.includes(firstProposal.candidate_text));
+    assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), firstProposal.revision_id);
+    readMode = "missing";
+    await page.locator("[data-assistant-inspect]").click();
     await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
     assert.equal(await page.locator(`[data-proposal-id="${firstProposalId}"]`).count(), 0);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).count(), 1);

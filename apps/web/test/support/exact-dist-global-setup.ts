@@ -13,8 +13,20 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       WITH production AS (
         SELECT owner_user_id, project_id, current_chapter_id FROM storyos.projects
         WHERE owner_user_id = '${USER_A}'::uuid AND title = 'Production host acceptance'
+      ), prose_request AS (
+        SELECT owner_user_id, project_id FROM storyos.projects
+        WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Prose request %'
       )
       SELECT json_build_object(
+        'prose_request', json_build_object(
+          'project_count', (SELECT count(*) FROM prose_request),
+          'receipts', (SELECT json_object_agg(command_kind, count) FROM (
+            SELECT command_kind, count(*) FROM storyos.domain_receipts
+            JOIN prose_request USING (owner_user_id, project_id)
+            WHERE command_kind IN ('updateProjectAssistance', 'createAgentRun')
+            GROUP BY command_kind
+          ) AS receipts)
+        ),
         'production_host', json_build_object(
           'project_count', (SELECT count(*) FROM production),
           'receipts', (SELECT json_object_agg(command_kind, count) FROM (
@@ -78,6 +90,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           WHERE owner_user_id = '${USER_A}'::uuid
             AND project_id <> '${PROJECT_A}'::uuid
             AND project_id NOT IN (SELECT project_id FROM production)
+            AND project_id NOT IN (SELECT project_id FROM prose_request)
             AND (command_kind, idempotency_key) NOT IN (
               ('updateProjectAssistance', '018f0000-0000-7001-8000-00000000f802'::uuid),
               ('createAgentRun', '018f0000-0000-7001-8000-00000000f804'::uuid))
@@ -98,6 +111,10 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       )::text`);
     const authority: unknown = JSON.parse(authorityJson);
     assert.deepEqual(authority, {
+      prose_request: {
+        project_count: 1,
+        receipts: { updateProjectAssistance: 1, createAgentRun: 2 },
+      },
       production_host: {
         project_count: 1,
         receipts: { createProject: 1, createVolume: 1, createChapter: 1,

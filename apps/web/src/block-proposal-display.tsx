@@ -42,16 +42,17 @@ export function rememberProposalLocator(scope: ProjectScope, locator: ProposalLo
 
 type ProposalRead = {
   locator: ProposalLocator;
-  proposal?: BlockProposalInspect;
+  proposal?: BlockProposalInspect | undefined;
 };
 
 export function BlockProposalDisplay({
-  scope, chapterId, authoritativeRevisionId, locators, safeToProject, ...editorProps
+  scope, chapterId, authoritativeRevisionId, locators, refreshKey, safeToProject, ...editorProps
 }: ManuscriptEditorProps & {
   scope: ProjectScope;
   chapterId: string;
   authoritativeRevisionId: string;
   locators: readonly ProposalLocator[];
+  refreshKey: number;
   safeToProject: boolean;
 }) {
   const [reads, setReads] = useState<ProposalRead[]>([]);
@@ -84,28 +85,33 @@ export function BlockProposalDisplay({
       if (active) setReads(result);
     });
     return () => { active = false; };
-  }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey,
+  }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
     editorProps.baseUrl, editorProps.fetchImpl]);
 
-  const blockIds = new Set(editorProps.blocks.map((block) => block.manuscript_block_id));
+  const blockCounts = new Map<string, number>();
+  for (const block of editorProps.blocks) {
+    blockCounts.set(block.manuscript_block_id,
+      (blockCounts.get(block.manuscript_block_id) ?? 0) + 1);
+  }
   const projections: BlockProposalProjection[] = [];
-  const unavailable: string[] = [];
+  const unavailable: ProposalRead[] = [];
   for (const { locator, proposal } of reads) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
     const operation = proposal?.operations.find((item) =>
       item.manuscript_block_id === proposal.manuscript_block_id);
     const safe = proposal !== undefined && proposal.kind === "block_edit"
-      && operation !== undefined && operation.resolution === "pending"
-      && operation.reservation_state === "unresolved"
-      && proposal.generation === "ready" && proposal.validation === "valid"
-      && proposal.closure === "open" && proposal.validation_receipt.kind === "present"
-      && proposal.validation_receipt.result === "valid"
+      && operation !== undefined
       && proposal.base_authoritative_revision_id === authoritativeRevisionId
-      && blockIds.has(proposal.manuscript_block_id) && safeToProject;
+      && blockCounts.get(proposal.manuscript_block_id) === 1 && safeToProject;
     if (!safe) {
-      unavailable.push(locator.proposalId);
+      unavailable.push({ locator, proposal });
       continue;
     }
+    const eligible = proposal.generation === "ready" && proposal.validation === "valid"
+      && proposal.closure === "open" && operation.resolution === "pending"
+      && operation.reservation_state === "unresolved"
+      && proposal.validation_receipt.kind === "present"
+      && proposal.validation_receipt.result === "valid";
     projections.push({
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
@@ -114,15 +120,21 @@ export function BlockProposalDisplay({
       sourceRunId: proposal.source.run_id,
       sourceDecisionId: proposal.source.decision_id,
       text: proposal.candidate_text,
+      eligible,
     });
   }
 
   return (
     <>
       <ManuscriptEditor {...editorProps} proposals={projections} />
-      {unavailable.map((proposalId) => (
-        <p className="block-proposal-unavailable" data-proposal-unavailable={proposalId}
-          key={proposalId}>候选文字暂不可用，请检查当前章节和正文。</p>
+      {unavailable.map(({ locator, proposal }) => (
+        <p className="block-proposal-unavailable" data-proposal-unavailable={locator.proposalId}
+          data-proposal-revision-id={proposal?.revision_id ?? ""}
+          data-proposal-operation-id={proposal?.operation_id ?? ""}
+          data-proposal-source-run-id={proposal?.source.run_id ?? locator.runId}
+          data-proposal-source-decision-id={proposal?.source.decision_id ?? locator.decisionId}
+          data-proposal-eligibility="unavailable"
+          key={locator.proposalId}>候选文字暂不可用，请检查当前章节和正文。</p>
       ))}
     </>
   );
