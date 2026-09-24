@@ -86,7 +86,7 @@ def admission(policy, graph, profile, comparison=False):
 
 
 def child_command(stage):
-    return ['make', '-o', 'release-package', STAGES[stage]]
+    return ['make', '--no-print-directory', '-o', 'release-package', STAGES[stage]]
 
 
 def child_environment(stage):

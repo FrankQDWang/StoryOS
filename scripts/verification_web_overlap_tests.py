@@ -153,7 +153,7 @@ release-package:
 
     def test_current_complete_graph_keeps_every_mandatory_stage_and_file(self):
         root = Path(__file__).resolve().parent.parent
-        plan = verification.complete_plan(root, with_graph=True)
+        plan = verification.complete_plan(root, base='HEAD^', with_graph=True)
         policy = json.loads((root / 'docs/agents/verification-policy.json').read_text())
         selected = {node['id'] for node in plan['graph']['nodes'] if node['selected']}
         self.assertLessEqual({'check:' + stage for stage in policy['complete']['stages']}, selected)
