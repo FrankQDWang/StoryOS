@@ -23,9 +23,10 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
           'receipts', (SELECT json_object_agg(command_kind, count) FROM (
             SELECT command_kind, count(*) FROM storyos.domain_receipts
             JOIN prose_request USING (owner_user_id, project_id)
-            WHERE command_kind IN ('updateProjectAssistance', 'createAgentRun')
             GROUP BY command_kind
-          ) AS receipts)
+          ) AS receipts),
+          'author_action_count', (SELECT count(*) FROM storyos.author_action_entries
+            JOIN prose_request USING (owner_user_id, project_id))
         ),
         'production_host', json_build_object(
           'project_count', (SELECT count(*) FROM production),
@@ -113,7 +114,9 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
     assert.deepEqual(authority, {
       prose_request: {
         project_count: 1,
-        receipts: { updateProjectAssistance: 1, createAgentRun: 2 },
+        receipts: { createProject: 1, createVolume: 1, createChapter: 1,
+          applyAuthorEdit: 3, updateProjectAssistance: 1, createAgentRun: 2 },
+        author_action_count: 5,
       },
       production_host: {
         project_count: 1,
