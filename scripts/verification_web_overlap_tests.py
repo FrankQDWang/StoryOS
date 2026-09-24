@@ -78,6 +78,7 @@ release-package:
         (self.root / 'docs/agents/verification-policy.json').write_text(json.dumps(self.policy))
         (self.run / 'report.json').write_text(json.dumps({'profile': profile, 'graph': self.graph}))
         environment = {**os.environ, 'STORYOS_VERIFICATION_RUN': str(self.run)}
+        environment.pop('STORYOS_VERIFICATION_COMPARE', None)
         if fail:
             environment['FAIL_STAGE'] = fail
         return subprocess.Popen([sys.executable, str(Path(verification_web_overlap.__file__))],
