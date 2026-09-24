@@ -358,6 +358,7 @@ export async function openEditorWorkspace({
         baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
       }), workspace, snapshotId);
       if (JSON.stringify(canonicalSnapshot) !== JSON.stringify(tree.snapshot)
+        || canonicalSnapshot.project_activity_position !== chapter.project_activity_position
         || BigInt(canonicalSnapshot.project_activity_position)
           < BigInt(base.project_activity_position)) {
         throw new Error("Takeover Snapshot binding mismatch");

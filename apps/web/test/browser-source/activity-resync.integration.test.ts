@@ -197,7 +197,7 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
 it.each([
   "valid", "valid_other_session", "valid_activity_advance", "scope", "locator_scope", "session",
   "generation", "binding", "reused_base", "digest", "snapshot", "position_before_base",
-  "position_invalid", "expired", "drift",
+  "position_after_chapter", "position_invalid", "expired", "drift",
 ])("resumes a Takeover winner without rebinding old journal evidence: %s", async (fault) => {
   const scenario = createBrowserScenario();
   const otherSession = "018f0000-0000-7001-8000-000000000414";
@@ -221,7 +221,8 @@ it.each([
   const canonical: SnapshotDescriptor = {
     snapshot_id: CANONICAL_SNAPSHOT, project_scope: scenario.project.project_scope,
     snapshot_kind: "canonical", project_activity_position:
-      fault === "valid_activity_advance" ? "6" : fault === "position_before_base" ? "4"
+      fault === "valid_activity_advance" || fault === "position_after_chapter" ? "6"
+        : fault === "position_before_base" ? "4"
         : fault === "position_invalid" ? "18446744073709551616" : "5",
     source_watermarks: {}, projection_generations: {}, redaction_profile: "storyos.author.v1",
     schema_profile: "storyos.public.release.1", replay_generation: "2",
