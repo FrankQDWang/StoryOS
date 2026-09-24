@@ -17,6 +17,7 @@ fn complete_input() -> CurrentPassageAssembly {
         author_message: "Help with this passage.".to_owned(),
         chapter_id: "ch-1".to_owned(),
         chapter_revision_id: Some("rev-1".to_owned()),
+        proposal_target_block_ids: Some(vec!["block-1".to_owned()]),
         chapter_body: "Once upon a time.".to_owned(),
         instruction: InstructionBindingInput::Absent,
         destination_identity: "dest-1".to_owned(),
@@ -34,6 +35,7 @@ fn requirement(input: &CurrentPassageAssembly) -> OperationRequirementRecord {
         cause: ContextCause::AuthorRequest,
         chapter_id: input.chapter_id.clone(),
         chapter_revision_id: input.chapter_revision_id.clone(),
+        proposal_target_block_ids: input.proposal_target_block_ids.clone(),
         instruction: input.instruction.clone(),
         destination_identity: input.destination_identity.clone(),
         item_token_limit: CONTEXT_ITEM_TOKEN_LIMIT,
@@ -324,4 +326,38 @@ fn persisted_assembly_record_roundtrips() {
         decode_assembly_record(&encode_assembly_record(&record)).expect("payload"),
         record
     );
+}
+
+#[test]
+fn historical_assembly_without_block_selection_remains_readable() {
+    let record = assemble_current_passage_context(&complete_input());
+    let mut payload = encode_assembly_record(&record);
+    payload["operation_requirement"]
+        .as_object_mut()
+        .expect("requirement")
+        .remove("proposal_target_block_ids");
+    let decoded = decode_assembly_record(&payload).expect("historical payload");
+    assert_eq!(
+        decoded.operation_requirement.proposal_target_block_ids,
+        None
+    );
+    assert_eq!(decoded.selected, record.selected);
+    assert_eq!(
+        decode_assembly_record(&encode_assembly_record(&decoded)),
+        Some(decoded)
+    );
+}
+
+#[test]
+fn present_invalid_block_selection_is_not_historical_absence() {
+    let record = assemble_current_passage_context(&complete_input());
+    for invalid in [
+        serde_json::Value::Null,
+        serde_json::json!({"block": "block-1"}),
+        serde_json::json!(["block-1", 2]),
+    ] {
+        let mut payload = encode_assembly_record(&record);
+        payload["operation_requirement"]["proposal_target_block_ids"] = invalid;
+        assert_eq!(decode_assembly_record(&payload), None);
+    }
 }

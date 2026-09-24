@@ -16,6 +16,31 @@ pub(super) async fn persist_current_passage_assembly(
 ) -> Result<AgentRunContext, CreateAgentRunError> {
     let (chapter_revision_id, chapter_body) =
         load_working_target(client, &command.project_scope, &command.chapter_id).await?;
+    let selected = client
+        .query(
+            "SELECT member.manuscript_block_id::text
+               FROM storyos.manuscript_revision_members AS member
+              WHERE member.owner_user_id = $1::text::uuid
+                AND member.project_id = $2::text::uuid
+                AND member.manuscript_object_id = $3::text::uuid
+                AND member.revision_id = $4::text::uuid
+                AND NOT EXISTS (
+                  SELECT 1 FROM storyos.proposal_operations AS reservation
+                   WHERE reservation.owner_user_id = member.owner_user_id
+                     AND reservation.project_id = member.project_id
+                     AND reservation.manuscript_block_id = member.manuscript_block_id
+                     AND reservation.reservation_state = 'unresolved'
+                )
+              ORDER BY member.block_order",
+            &[
+                &command.project_scope.owner_user_id.as_ref(),
+                &command.project_scope.project_id.as_ref(),
+                &command.chapter_id,
+                &chapter_revision_id,
+            ],
+        )
+        .await
+        .map_err(agent_run_database_error)?;
     let operation_requirement_id = uuid::Uuid::now_v7().to_string();
     let input_snapshot_id = uuid::Uuid::now_v7().to_string();
     let record = assemble_current_passage_context(&CurrentPassageAssembly {
@@ -27,6 +52,7 @@ pub(super) async fn persist_current_passage_assembly(
         author_message: command.author_message.clone(),
         chapter_id: command.chapter_id.clone(),
         chapter_revision_id: chapter_revision_id.clone(),
+        proposal_target_block_ids: Some(selected.into_iter().map(|row| row.get(0)).collect()),
         chapter_body,
         instruction: InstructionBindingInput::Absent,
         destination_identity: destination_identity.to_owned(),
