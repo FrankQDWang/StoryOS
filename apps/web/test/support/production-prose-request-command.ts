@@ -6,7 +6,7 @@ import type { BrowserContext } from "playwright";
 
 import {
   createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
-  getChapter, getProjectAssistance, updateProjectAssistance,
+  getChapter, getProjectAssistance, StoryOSProtocolError, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunResponse, UpdateProjectAssistanceRequest,
@@ -49,32 +49,17 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator("form[data-rename]").waitFor();
     const projectId = await page.locator("form[data-rename]").getAttribute("data-rename");
     assert.ok(projectId !== null && UUID.test(projectId), `Project id: ${projectId}`);
-    await page.locator('input[name="volume-title"]').fill("Request Volume");
-    await page.locator('input[name="volume-title"]').press("Enter");
-    await page.locator('input[name="chapter-title"]').fill("Request Chapter");
-    await page.locator('input[name="chapter-title"]').press("Enter");
-    const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
-    await editor.waitFor();
-    const chapterId = await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]')
-      .getAttribute("data-chapter-id");
-    assert.ok(chapterId !== null && UUID.test(chapterId));
     await page.locator('[data-assistant-availability="unavailable"]').waitFor();
     assert.equal(await page.locator(".composer button").isDisabled(), true);
-    await editor.click();
-    await page.keyboard.insertText("The lantern went dark.");
-    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
-
     const fetchImpl = sessionFetch(origin, "session-a");
     const options = { baseUrl: origin, projectId, fetchImpl };
-    const before = await getChapter({ ...options, chapterId });
-    assert.equal(before.project_scope.owner_user_id, USER);
-    const unavailable = await getProjectAssistance(options);
-    assert.equal(unavailable.assistance.availability, "unavailable");
+    await assert.rejects(() => getProjectAssistance(options), (error) =>
+      error instanceof StoryOSProtocolError && error.status === 404);
     const request: UpdateProjectAssistanceRequest = {
       command_schema: "storyos.command.update-project-assistance.request.v1",
       update_project_assistance_input: {
         availability: "available",
-        expected_assistance_revision: unavailable.assistance.revision,
+        expected_assistance_revision: "0",
         client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
         security_policy_revision: "storyos.web-security-policy.release-1.v1",
         correlation_id: uuidV7(),
@@ -95,9 +80,24 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       ...options, request, idempotencyKey, antiForgery: challenge.nonce,
     });
     assert.equal(enabled.assistance.availability, "available");
-    await page.reload();
+    await page.locator('input[name="volume-title"]').fill("Request Volume");
+    await page.locator('input[name="volume-title"]').press("Enter");
+    await page.locator('input[name="chapter-title"]').fill("Request Chapter");
+    await page.locator('input[name="chapter-title"]').press("Enter");
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    assert.equal((await page.goto(`${origin}/projects/${projectId}`))?.status(), 200);
+    const editor = page.locator('[data-manuscript-editor][contenteditable="true"]');
+    await editor.waitFor();
+    const chapterId = await page.locator('nav[aria-label="稿件目录"] button[data-chapter-id][aria-current="true"]')
+      .getAttribute("data-chapter-id");
+    assert.ok(chapterId !== null && UUID.test(chapterId));
     await page.locator('[data-assistant-availability="available"]').waitFor();
     await page.locator(".composer button:not([disabled])").waitFor();
+    await editor.click();
+    await page.keyboard.insertText("The lantern went dark.");
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    const before = await getChapter({ ...options, chapterId });
+    assert.equal(before.project_scope.owner_user_id, USER);
 
     let posted = 0;
     let admitted: CreateAgentRunResponse | undefined;
@@ -108,7 +108,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       }
       posted += 1;
       const response = await route.fetch();
-      assert.equal(response.status(), 200);
+      assert.equal(response.status(), 202);
       admitted = await response.json() as CreateAgentRunResponse;
       await route.abort("failed");
     });
@@ -159,7 +159,9 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(posted, 1);
     const after = await getChapter({ ...options, chapterId });
     assert.deepEqual(after.chapter, before.chapter);
-    assert.equal(await editor.textContent(), "The lantern went dark.");
+    assert.equal(await page.locator("[data-manuscript-editor]").textContent(),
+      "The lantern went dark.");
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
