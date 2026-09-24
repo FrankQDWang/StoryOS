@@ -58,12 +58,21 @@ def query(connection, path, parameters):
         def compare_sql(statement):
             return statement.replace(comparison.LEFT, '?').replace(comparison.RIGHT, '?')
         args = [left, right]
-        quality = connection.execute(compare_sql(comparison.COMPARISON), args).fetchone()
-        summary = [dict(row) for row in connection.execute(compare_sql(comparison.SUMMARY), args)]
-        differences_all = [dict(row) for row in connection.execute(compare_sql(comparison.DIFFERENCE), args)]
+        sections = {'comparison': None, 'summary': [], 'difference': []}
+        for row in connection.execute(compare_sql(comparison.API), args):
+            value = json.loads(row['payload'])
+            if row['section'] == 'comparison':
+                value['delta_seconds'] = row['numeric_value']
+                sections['comparison'] = value
+            elif row['section'] == 'summary':
+                value['seconds'] = row['numeric_value']
+                sections['summary'].append(value)
+            else:
+                sections[row['section']].append(value)
+        differences_all = sorted(sections['difference'], key=lambda row: (row['difference'], row['node_id']))
         differences = {'items': differences_all[offset:offset + limit], 'total': len(differences_all),
                        'offset': offset, 'next_offset': offset + limit if offset + limit < len(differences_all) else None}
-        return {'comparison': dict(quality), 'runs': summary, 'differences': differences}
+        return {'comparison': sections['comparison'], 'runs': sections['summary'], 'differences': differences}
     if path == '/api/v1/overview':
         if parameters:
             raise ValueError('unsupported_parameter')

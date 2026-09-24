@@ -5,6 +5,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
 import selectors
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,8 @@ import threading
 import unittest
 import urllib.error
 import urllib.request
+
+import verification_observation_api as query_api
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -138,6 +141,38 @@ class QueryTests(unittest.TestCase):
             'fixture-group': 'passed', 'fixture-legacy': 'passed', 'fixture-cached': 'passed',
             'fixture-interrupted': 'interrupted', 'fixture-failed': 'failed'})
         self.assertEqual(self.get('/api/v1/runs/missing')[0], 404)
+
+    def test_compare_large_graph_stays_within_query_work_budget(self):
+        nodes = [{'id': 'tests', 'type': 'check', 'selected': True}]
+        nodes.extend({'id': f'file:{index:03}', 'type': 'test-file',
+            'path': f'file-{index:03}.py', 'selected': True} for index in range(349))
+        graph = {'version': 1, 'nodes': nodes, 'dependencies': [], 'relations': [
+            {'from': 'tests', 'to': f'file:{index:03}', 'type': 'member'} for index in range(97)]}
+        candidate = {key: {'identity': key} for key in ('tools', 'inputs', 'host', 'runners')}
+        candidate['plan'] = {'policy_sha256': 'policy'}
+        for name in ('left', 'right'):
+            self.write(name, graph=graph, candidate=candidate, build_state='warm',
+                repository='/sample', duration_seconds=10, attempt_started=True)
+            steps = self.records / name / 'steps'
+            steps.mkdir()
+            (steps / 'tests.json').write_text(json.dumps({'node_version': 1, 'id': 'tests',
+                'run_id': name, 'node_id': 'tests', 'status': 'passed',
+                'graph_sha256': hashlib.sha256(json.dumps(graph, sort_keys=True).encode()).hexdigest(),
+                'attempt_started': True, 'selection_reason': ['selected'], 'execution_scope': {},
+                'started_at': '2026-09-24T00:00:00Z', 'ended_at': '2026-09-24T00:00:10Z'}))
+        self.start()
+        with sqlite3.connect(self.database) as connection:
+            connection.row_factory = sqlite3.Row
+            work = 0
+            def limit_work():
+                nonlocal work
+                work += 1000
+                return work > 2000000
+            connection.set_progress_handler(limit_work, 1000)
+            response = query_api.query(connection, '/api/v1/compare',
+                {'left': 'left', 'right': 'right', 'limit': '500'})
+        self.assertEqual((response['comparison']['comparison'], response['differences']['total']),
+                         ('descriptive only', 350))
 
     def test_empty_unavailable_and_invalid_queries_never_write(self):
         self.start()
