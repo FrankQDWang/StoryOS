@@ -8,12 +8,12 @@ For test lifecycle changes, run `make verify-policy` and inspect a new plan.
 1. Open the PR and wait for current `verify` success. On the clean candidate, run `python3 scripts/verification_reviews.py request --pr <pr> --executor-context <context>`.
 2. Give the printed request and scoped diff to separate Standards and Spec reviewers. Each returns JSON with `request_sha256` (the request digest), `axis` (`standards` or `spec`), `reviewer_context`, `result` (`PASS` or `FAIL`), and `evidence`. All three contexts must differ; IDs assert consistency, not authenticated identity.
 3. Import each record with `python3 scripts/verification_reviews.py import --request <path> --record <review-json>`. The newest retained import per axis governs admission. After review fixes or policy drift, commit and obtain a current request and independent imports.
-4. Run the policy-required targeted checks on current sources in the same environment. Run `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` once, then follow evidence publication below.
+4. Run the policy-required targeted checks on current sources. A ticket that requires a complete local run uses `make verify-local BASE=<base-sha> VERIFY_ARGS='--issue <issue> --pr <pr> --executor-context <context> --review-request <path>'` after review.
 
 For a failed complete run, use `python3 scripts/verification.py status --attempt <id> --json` and its recovery command. Recovery needs current reviews and targeted results.
 Source fixes return to targeted checks and a new candidate. Retain every attempt.
 
-Equal merged trees use `make verify-tracker` only. Different trees need a fresh request and `make verify` with `--purpose post-merge-different-tree` and the request's base.
+After merge, synchronize `main` and run `make verify-tracker`. A ticket that requires a post-merge complete run uses a fresh request and `make verify` with `--purpose post-merge-different-tree` and the request's base.
 Manual Linux uses `--purpose manual-linux` in request and execution. The workflow accepts
 JSON `{"request": <request>, "reviews": {"standards": <record>, "spec": <record>}}` for the selected Git tree.
 It imports actual independent reviews and runs fresh targeted checks on Linux. Local source stamps belong to admission; candidate-bound reviews remain portable.
@@ -83,14 +83,13 @@ AGENTS.md, include this document in its project instructions. The checked policy
 is the common owner; client instructions link here. Selected dirty-tree runs are
 daily feedback. Complete candidate verification needs a clean tree because release packaging binds
 Git identity. An empty change set or empty test discovery cannot report success.
-Complete candidate verification, PostgreSQL fixtures, ordered HTTP groups, exact-dist
-oracles and both recovery drills remain mandatory.
-The PR sentinel checks the policy and runner; a separate gate validates complete reports.
+When a complete run is requested, PostgreSQL fixtures, ordered HTTP groups, exact-dist
+oracles and both recovery drills remain mandatory. The PR `verify` sentinel checks the policy and runner.
 
 ## Retained workflow graphs
 
 Daily and targeted plans include a version 1 `graph`. Complete reports retain the
-same graph beside `plan` to preserve the protected evidence format. Use
+same graph beside `plan` for local diagnosis. Use
 `make verify-plan VERIFY_ARGS='--profile complete'` to read the committed HEAD
 workflow without execution. Daily exports read current working inputs.
 
@@ -100,9 +99,8 @@ Each graph binds source, policy, file membership, and plan identity. Stable file
 IDs contain the check profile and repository-relative path. A rename removes the
 old ID and adds a new ID; snapshots do not infer a rename from similar bytes.
 Missing historical graphs remain unknown. No old report is changed.
-Published evidence uses graph digests to fit the comment limit. The validator
-rebuilds the complete graph from candidate inputs and checks its digest. Local
-reports retain the full snapshots.
+Local reports retain full graph snapshots. They are diagnostic records, not a PR
+publication gate.
 
 `dependencies` run from prerequisite to consumer. Edges marked `both-selected`
 retain phase order without selecting an excluded phase. `relations` distinguish
@@ -137,6 +135,25 @@ dangling or cross-phase dependencies, cycles, and empty phases fail policy check
 before expensive children start. `make verify-policy` and the project input check
 validate this structure. Independent policy self-tests also precede Rust compilation.
 
+## Verification-tool self-tests
+
+`verify-policy` discovers each current `scripts/*_tests.py` file and runs the
+whole file once. The policy lists files approved for overlap and caps workers at
+two. A new or undeclared file runs serially. A missing file, invalid declaration,
+or empty selection fails. The public serial diagnostic command is
+`STORYOS_VERIFICATION_TEST_WORKERS=1 make verify-targeted CHECK=verification-tests`.
+Use an unset worker override for candidate targeted and complete verification so
+their execution input digests match.
+
+The approved files use disposable Git repositories or temporary databases and
+paths. Local HTTP fixtures bind port zero. Mock Docker and package commands write
+inside their fixture repository. The runner gives each file a separate temporary
+directory and process group, removes inherited `CARGO_TARGET_DIR` and cache root
+from file tests, and records one node attempt per file under the root run. A file
+with shared product database state or a fixed port stays serial. Interrupted
+workers are signalled and reaped before the root attempt ends. The serialized
+diagnostic command does not replace the normal targeted admission result.
+
 ## Daily result reuse and host budget
 
 The reviewed Node profile caches passed policy checks, Web preparation and type
@@ -155,7 +172,7 @@ source-changing runs cannot publish reusable results.
 
 Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution without
 reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
-need their referenced reports. A cache hit is daily feedback, not candidate evidence.
+need their referenced reports. A cache hit is daily feedback, not a PR check.
 
 The complete and daily run commands admit one run per checkout at a time. A busy
 budget fails with a retry reason. The lock covers process-group cleanup; overdue
@@ -187,32 +204,13 @@ cleaned in place. `cargo clean` is not used because it can remove Cargo lock-fil
 paths while another process still holds those file descriptors.
 
 Direct shell `cargo` commands are outside managed admission. Do not point an
-external `CARGO_TARGET_DIR` at an owned generation. The historical default
-`target/debug` cache has a one-time automatic migration. The manager validates
-its Cargo directory shape, owner path, links, and open references before it
-moves the whole directory to a persisted quarantine path. The old default path
-then no longer names that directory. The manager seals the quarantine, checks
-open files, directory descriptors, mapped files, and Cargo lock inodes again,
-and keeps the quarantine when a build still holds it. The next managed entry
-resumes cleanup. Ordinary direct Cargo may use a new default path, but it
-cannot make the quarantined directory eligible for deletion while it holds an
-old file or directory descriptor. This protocol does not claim protection from
-arbitrary same-user commands that deliberately access the quarantine path.
-This migration runs on the macOS operator host, where the full open-file audit
-is available. Other hosts leave a historical default cache untouched; their
-managed Rust generation still works.
-
-The migration record is `target/verification/legacy-rust-cache.json`. It keeps
-the old directory identity, original permissions, logical and allocated bytes,
-cleanup reason, and recovery state. The entry seal is restored only after the
-old path is detached and the open-reference audit passes. A stopped rename,
-seal, or partial deletion resumes from the record. Unknown content, links,
-changed ownership, or an incomplete open-file audit stop deletion. Only empty
-`target/issue-763-isolated` task scratch is removed with the historical cache.
-The byte counts deduplicate hard links by file identity; they do not prove
-physical space reclaimed on APFS. The explicit `target/web-release` build and
-all release packages, verification reports, observation data, and unrelated
-target output are protected.
+external `CARGO_TARGET_DIR` at an owned generation. The one-time historical
+`target/debug` migration completed in #791 and its automatic code is retired.
+Managed entries now leave any later default `target/debug` untouched. The local
+`target/verification/legacy-rust-cache.json` record remains historical evidence;
+managed entries do not rewrite or remove it. Managed generation cleanup still
+uses owned whole-directory boundaries and does not remove source, user data,
+release packages, verification reports, observation data, or unrelated target output.
 
 When tests or dependencies change, inspect the new plan and report. Extend a cache
 profile only after specifying its inputs, required outputs and resource ownership,
@@ -240,33 +238,18 @@ Local records under `target/verification/` retain requests, refusals, attempts,
 reuse, recovery reasons, process identity, and UTC/monotonic timing. Preflight
 refusal consumes no attempt. These are not product domain records. The readiness
 boundary checks clean source, input ownership, current targeted results, and independent review imports.
-Existing independent reviews and protected evidence publication remain required.
+Independent Standards and Spec reviews remain required before merging a PR.
 
-## Candidate evidence publication
+## PR verification and optional complete run
 
-1. Wait for the `verify` sentinel and independent Standards and Spec reviews. Resolve
-   findings with targeted checks. Fetch current main and the PR synthetic merge.
-2. Run `make verify-local` once on the clean candidate tree that equals that merge tree.
-3. Publish with `make verify-evidence PR=<number> REPORT=<report-path>`. The activated
-   contract requires current candidate review imports. Use `VERIFY_ARGS=--policy-reviewed`
-   only for the compatible installation against the earlier protected reader.
-4. Wait for `candidate-evidence` success, then merge. A changed head, base, tree, policy
-   revision or discovered membership requires fresh evidence. Preserve strict branch protection.
-
-The evidence workflow runs protected main code and reads candidate Git objects as data.
-It checks the newest authorized structured report; an invalid newer report cannot fall
-back to an older success. Publication through a PR comment triggers validation without
-a source commit. The report includes its command, clean source identity and a complete
-plan bound to the base, tree, policy digest and current test files. The policy declares
-mandatory stages and group ownership, not historical test names or counts. Web records
-must cover each current file through its whole project or explicit file selection.
-
-Extend the policy and runner together for a new framework or execution group. Changes
-to verification commands, selectors, manifests, workflows or guidance require the explicit
-policy-review declaration. The protected validator still checks the candidate report.
-Reports and review declarations remain Agent-writable: they establish consistency within
-the local trust boundary, not independent proof of execution or reviewer identity.
-Complete local verification and manual Linux verification retain all existing obligations.
+Wait for the required GitHub `verify` sentinel and independent Standards and Spec
+reviews. Resolve findings with targeted checks and push the corrected candidate.
+The `candidate-evidence` status and complete-report publication command are retired.
+Do not start a complete local run only to satisfy a PR status. When a ticket requires
+complete verification, keep its local report and use the recovery procedure above.
+Extend the policy and runner together for a new framework or execution group.
+Complete local verification and manual Linux verification retain their stage obligations
+when requested.
 
 ## Current status and targeted checks
 
@@ -282,7 +265,7 @@ registered in the policy. Query it with
 `python3 scripts/verification.py status --check verify-policy --json`.
 Source bytes and write stamps, policy, test membership, command, execution input
 digest, and plan identity bind targeted results. Only a current passed result
-can satisfy a current prerequisite. These results do not replace candidate evidence.
+can satisfy a current prerequisite. They do not satisfy a separately requested complete run.
 The Make test targets use this same entry when called outside a managed run.
 Public step, Rust, shared database, package, and recovery script entries create a
 root record or inherit the existing run. Direct Cargo, Vitest, or other shell
@@ -433,7 +416,7 @@ relative to `target/verification/`; they are local records, not served files.
 Run `make observe-dashboard` after edits. Observation tests reject generated drift.
 `make observe-smoke` also queries collapsed and expanded DAGs through Grafana for
 labelled synthetic partial, complete, running, failed, reused, and legacy examples.
-These examples prove display behavior, not product execution or candidate evidence.
+These examples prove display behavior, not product execution.
 The read-only collector has a 64 MiB temporary mount for SQLite sort files. The
 smoke check forces a sort spill and requires a container-collected change after
 the initial import; a stale database cannot satisfy that check.

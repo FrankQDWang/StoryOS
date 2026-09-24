@@ -52,6 +52,22 @@ class CandidateCommandTests(unittest.TestCase):
         self.assertIn('reused', second.stdout)
         self.assertEqual(self.repo.report()['status'], 'passed')
 
+    def test_missing_required_stage_cannot_pass_or_be_reused(self):
+        policy = self.root / 'docs/agents/verification-policy.json'
+        data = json.loads(policy.read_text())
+        data['complete']['stages'].append('unrun-stage')
+        policy.write_text(json.dumps(data))
+        self.repo.git('add', '.')
+        self.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                      'commit', '--quiet', '-m', 'Require another stage.')
+        self.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        result = self.run_complete()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.repo.report()['status'], 'incomplete')
+        self.assertIn('stages are missing', self.repo.report()['error'])
+        self.assertNotEqual(self.run_complete().returncode, 0)
+        self.assertEqual((self.root / 'target/launches').read_text(), 'x')
+
     def test_running_duplicate_returns_active_attempt_and_interruption_requires_recovery(self):
         child = "import signal; print('ready', flush=True); signal.pause()"
         self.install_child(child)

@@ -11,13 +11,6 @@ endif
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
 VERIFY_ARGS ?=
-PR ?=
-REPORT ?=
-
-.PHONY: verify-evidence
-verify-evidence:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_evidence.py publish --pr "$(PR)" --report "$(REPORT)" $(VERIFY_ARGS)
-
 verify-plan:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py plan --base "$(BASE)" $(VERIFY_ARGS)
 
@@ -28,7 +21,7 @@ ifneq ($(STORYOS_VERIFICATION_RUN),)
 verify-policy:
 	$(VERIFY_STEP) input-ownership -- python3 scripts/verification.py inventory --check
 	$(VERIFY_STEP) project-inputs -- scripts/verify-project-scope.sh --check-inputs
-	$(VERIFY_STEP) verification-tests -- python3 -m unittest discover -s scripts -p '*_tests.py'
+	$(VERIFY_STEP) verification-tests -- python3 scripts/verification_test_files.py
 
 contracts: verify-policy
 	$(MAKE) verify-contract-inputs

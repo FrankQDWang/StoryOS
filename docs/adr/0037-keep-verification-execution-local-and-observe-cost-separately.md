@@ -12,6 +12,11 @@ dashboard availability is not a verification prerequisite. This decision does no
 change the production topology in ADR 0022 or the domain Verification Evidence
 Bundle. The verification specification owns the staged delivery and acceptance.
 
+The 2026-09-24 decision retires the `candidate-evidence` PR status, report
+publication command, and protected complete-report gate. Keep the GitHub `verify`
+sentinel, ticket-appropriate tests, independent code reviews, and local execution
+records. A complete local run remains available when a ticket requires it.
+
 ## Repository-local storage
 
 Keep observation source and deterministic configuration in this repository and

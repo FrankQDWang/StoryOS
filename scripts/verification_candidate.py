@@ -3,8 +3,6 @@
 from contextlib import ExitStack
 from datetime import datetime, timezone
 import fcntl
-import base64
-import gzip
 import hashlib
 import json
 import os
@@ -80,16 +78,9 @@ def readiness(root, candidate, context):
     return verification_reviews.admission(root, context)
 
 
-def validate_success(root, report):
-    import verification_evidence
-    source, plan = report['source_start'], report['plan']
-    head = report['admission']['request']['candidate']['head'] if report.get('admission') else source['commit']
-    packet = {'head': head, 'pr': report.get('pr'), 'base': plan['base'], 'baseline': plan['base'],
-              'report': base64.b64encode(gzip.compress(json.dumps(report).encode())).decode()}
-    if report.get('admission'):
-        packet['admission_version'] = 1
-    verification_evidence.check(root, packet, source['commit'], plan['base'], head, plan['base'],
-                                policy_review_required=False)
+def validate_success(report):
+    if {step['stage'] for step in report['steps']} != set(report['plan']['stages']):
+        raise ValueError('Complete verification stages are missing or unexpected')
 
 
 def require_cleanup(active_path):
@@ -146,7 +137,7 @@ def run(root, command, context):
                     receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
                     valid = receipt.get('sha256') == hashlib.sha256(path.read_bytes()).hexdigest()
                     if valid and report['status'] == 'passed':
-                        validate_success(root, report)
+                        validate_success(report)
                         observe(root, 'reused', report=str(path), run_id=report['run_id'])
                         return 0
                     recovery_path = path.parent / 'recovery.json'
@@ -174,7 +165,7 @@ def run(root, command, context):
                 try:
                     if candidate != identity(root, command, context['base']):
                         raise ValueError('Candidate execution inputs changed')
-                    validate_success(root, report)
+                    validate_success(report)
                 except (ValueError, KeyError, TypeError) as error:
                     report.update(status='incomplete', error=str(error))
                     runner.write_json(path, report)
