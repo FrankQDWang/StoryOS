@@ -4,7 +4,7 @@ import json
 import unittest
 
 import verification_plan_tests
-import verification_evidence_tests
+import verification_candidate_tests
 
 
 class GraphPlanTests(unittest.TestCase):
@@ -148,8 +148,8 @@ class GraphPlanTests(unittest.TestCase):
         self.assertNotEqual(self.fixture.cli('plan').returncode, 0)
 
 
-    def test_complete_report_graph_is_retained_and_stale_graph_evidence_is_refused(self):
-        fixture = verification_evidence_tests.CandidateEvidenceTests()
+    def test_complete_report_retains_graph(self):
+        fixture = verification_candidate_tests.CandidateCommandTests()
         fixture.setUp()
         self.addCleanup(fixture.doCleanups)
         policy_path = fixture.root / 'docs/agents/verification-policy.json'
@@ -157,16 +157,14 @@ class GraphPlanTests(unittest.TestCase):
         policy['workflow'] = {'version': 1, 'operations': {}, 'profiles': {},
                               'stage_types': {'sample': 'aggregate'}, 'targeted': {}}
         policy_path.write_text(json.dumps(policy))
-        fixture.commit()
-        report = json.loads(fixture.prepare('--policy-reviewed').read_text())
-        self.assertEqual(fixture.check().returncode, 0)
+        fixture.repo.git('add', '.')
+        fixture.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                         'commit', '--quiet', '-m', 'Declare graph fixture.')
+        fixture.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        result = fixture.run_complete()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = fixture.repo.report()
         self.assertTrue(report['graph']['identity']['plan_sha256'])
-        report['graph'] = {'version': 1, 'sha256': '0' * 64}
-        fixture.write_report(report)
-        self.assertIn('graph', fixture.check().stderr)
-        report['graph'] = {'nodes': []}
-        fixture.write_report(report)
-        self.assertIn('graph', fixture.check().stderr)
 
 
 if __name__ == '__main__':

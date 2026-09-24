@@ -106,35 +106,6 @@ class ReviewAdmissionTests(unittest.TestCase):
         self.assertNotEqual(self.complete().returncode, 0)
         self.assertFalse((self.root / 'target/heavy').exists())
 
-    def test_publication_requires_records_and_rejects_stale_policy_after_review(self):
-        import subprocess
-        import sys
-        import verification_evidence_tests
-        self.prepare_reviews()
-        result = self.complete()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        path = next(p for p in self.root.glob('target/verification/*/report.json') if json.loads(p.read_text())['profile'] == 'complete')
-        args = [sys.executable, str(verification_evidence_tests.COMMAND), 'prepare', '--report', str(path),
-                '--head', self.head, '--base', self.base, '--baseline', self.base, '--pr', '745', '--policy-reviewed']
-        result = subprocess.run(args, cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        packet = self.root / 'target/evidence.txt'
-        packet.write_text(result.stdout)
-        check = [sys.executable, str(verification_evidence_tests.COMMAND), 'check', '--evidence', str(packet),
-                 '--head', self.head, '--base', self.base, '--baseline', self.base]
-        result = subprocess.run(check, cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        report = json.loads(path.read_text())
-        del report['admission']
-        path.write_text(json.dumps(report))
-        result = subprocess.run(args, cwd=self.root, env=self.repo.environment, capture_output=True, text=True)
-        self.assertNotEqual(result.returncode, 0)
-        policy = self.root / 'docs/agents/verification-policy.json'
-        policy.write_text(policy.read_text() + '\n')
-        self.fixture.install_child("from pathlib import Path; Path('target/heavy').touch()")
-        check[check.index('--head') + 1] = self.repo.git('rev-parse', 'HEAD')
-        self.assertNotEqual(subprocess.run(check, cwd=self.root, env=self.repo.environment, capture_output=True).returncode, 0)
-
     def test_recovery_requires_current_reviews_and_retains_failed_attempt(self):
         self.fixture.install_child("raise SystemExit(7)")
         self.prepare_reviews()

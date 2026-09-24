@@ -11,13 +11,6 @@ endif
 VERIFY_STEP = PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification.py step
 BASE ?= origin/main
 VERIFY_ARGS ?=
-PR ?=
-REPORT ?=
-
-.PHONY: verify-evidence
-verify-evidence:
-	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_evidence.py publish --pr "$(PR)" --report "$(REPORT)" $(VERIFY_ARGS)
-
 verify-plan:
 	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_plan.py plan --base "$(BASE)" $(VERIFY_ARGS)
 

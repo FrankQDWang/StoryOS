@@ -4,7 +4,6 @@
   "verification_test_parallel_files": [
     "scripts/verification_cache_tests.py",
     "scripts/verification_candidate_tests.py",
-    "scripts/verification_evidence_tests.py",
     "scripts/verification_graph_tests.py",
     "scripts/verification_node_tests.py",
     "scripts/verification_observation_api_tests.py",

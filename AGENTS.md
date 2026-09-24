@@ -24,9 +24,9 @@
 
 ### Verification evidence
 
-- The required GitHub `verify` check is a pull-request synthetic-merge sentinel. The separate `candidate-evidence` gate validates complete local reports; wait for it after publication, not before local verification. The initial installation follows the bootstrap in `docs/agents/issue-tracker.md`.
-- Before merging each PR, run `make verify-local` on a tree that matches the required `verify` synthetic-merge tree. Use `make verify-evidence` to publish its structured report after independent review, then require `candidate-evidence` success. Follow [Repository verification](docs/agents/verification.md) for publication and policy review. The required GitHub `verify` check and the post-merge `make verify-tracker` own the tracker check.
-- A new commit that changes the tree, or a changed base, invalidates that evidence. Obtain a fresh synthetic-merge tree and rerun local verification when the candidate tree changes. After the ticket merges, synchronize `main` and compare its tree SHA to the tree SHA in the PR evidence comment. When they are equal, run `make verify-tracker` only. Record the equality and link the PR evidence comment in the ticket Resolution. When they differ, run `make verify`. Record the final commit, tree, and evidence in the ticket Resolution.
+- The required GitHub `verify` check validates the pull-request synthetic merge. Require its success and independent read-only Standards and Spec reviews before merging. Run the ticket-appropriate targeted checks. The retired `candidate-evidence` report gate and comment publication are not merge requirements.
+- Run `make verify-local` only when the ticket contract or an explicit request calls for a complete local run. Follow [Repository verification](docs/agents/verification.md) for policy review and optional complete-run recovery. A changed candidate needs fresh applicable checks and reviews.
+- After the ticket merges, synchronize `main`, run `make verify-tracker`, and record the final commit, tree, command, and result in the ticket Resolution.
 
 ## Reference source policy
 

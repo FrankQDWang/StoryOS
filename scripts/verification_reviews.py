@@ -9,11 +9,14 @@ import time
 
 import verification
 import verification_cache
-import verification_evidence
 import verification_status
 
 
 POLICY = 'docs/agents/verification-policy.json'
+
+
+def api(path):
+    return json.loads(subprocess.check_output(['gh', 'api', path]))
 
 
 def binding(root, revision, base, head, pr, purpose):
@@ -24,7 +27,7 @@ def binding(root, revision, base, head, pr, purpose):
 
 
 def sentinel(route, head, base, tree):
-    checks = verification_evidence.api(f'{route}/commits/{head}/check-runs?per_page=100')['check_runs']
+    checks = api(f'{route}/commits/{head}/check-runs?per_page=100')['check_runs']
     checks = [c for c in checks if c['name'] == 'verify' and c['head_sha'] == head]
     check = max(checks, key=lambda c: c['id']) if checks else {}
     if check.get('status') != 'completed' or check.get('conclusion') != 'success':
@@ -46,7 +49,7 @@ def current(root, pr, purpose):
         raise ValueError('Use a PR and an explicit candidate, post-merge-different-tree, or manual-linux purpose')
     repository = json.loads(subprocess.check_output(['gh', 'repo', 'view', '--json', 'nameWithOwner'], cwd=root))['nameWithOwner']
     route = f'repos/{repository}'
-    pull = verification_evidence.api(f'{route}/pulls/{pr}')
+    pull = api(f'{route}/pulls/{pr}')
     ref = 'refs/storyos/review-candidate'
     verification.git(root, 'fetch', '--no-tags', 'origin', f'+{pull["merge_commit_sha"] if pull.get("merged") else f"refs/pull/{pr}/merge"}:{ref}')
     head, base = pull['head']['sha'], pull['base']['sha']
