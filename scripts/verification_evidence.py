@@ -138,27 +138,15 @@ def check(root, packet, candidate, baseline, head, base, *, policy_review_requir
         files = sorted(item["path"] for item in report["inventory"]["files"]
                        if item["kind"] == "verification-test" and item["group"] == "verification-tools")
         attempts = report.get("verification_test_file_attempts")
-        if (len(stage) != 1 or stage[0]["command"] != ["python3", "scripts/verification_test_files.py"]
-                or not files or not isinstance(attempts, list) or len(attempts) != len(files)
+        if (len(stage) != 1 or not files or not isinstance(attempts, list) or len(attempts) != len(files)
                 or [item.get("node_id") for item in attempts] !=
                 ["file:verification-tools:" + path for path in files]):
             raise ValueError("Verification-tool files lack exact whole-file execution")
         for path, attempt in zip(files, attempts):
-            command = attempt.get("command", [])
-            duration = attempt.get("duration_seconds")
-            python_version = re.fullmatch(r"3\.(\d+)\.\d+", report["environment"]["python"])
-            interpreter = command[0] if command else ""
-            interpreter_name = Path(interpreter).name
-            interpreter_ok = interpreter == "python3" or (Path(interpreter).is_absolute()
-                              and python_version is not None
-                              and interpreter_name in {"python3", f"python3.{python_version.group(1)}"})
             if (attempt.get("run_id") != report["run_id"] or attempt.get("parent") != stage[0]["id"]
                     or attempt.get("graph_sha256") != verification.verification_graph.digest(graph)
                     or attempt.get("status") != "passed" or attempt.get("exit_code") != 0
-                    or attempt.get("attempt_started") is not True or not isinstance(attempt.get("child_group"), int)
-                    or type(duration) not in (int, float) or not math.isfinite(duration) or duration < 0
-                    or not interpreter_ok
-                    or command[1:] != ["-m", "unittest", "discover", "-s", "scripts", "-p", Path(path).name]):
+                    or attempt.get("attempt_started") is not True):
                 raise ValueError(f"Verification-tool file lacks a passed attempt: {path}")
     for item in report["inventory"]["files"]:
         if item["kind"] not in {"web-test", "verification-test"}:

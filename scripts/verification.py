@@ -344,8 +344,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
-    if any(item["stage"] == "verification-tests" and item["command"] ==
-           ["python3", "scripts/verification_test_files.py"] for item in steps):
+    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+    if ("verification_test_workers" in policy
+            and any(item["stage"] == "verification-tests" for item in steps)):
         attempts = [json.loads(path.read_text()) for path in (directory / "nodes").glob("*.json")]
         report["verification_test_file_attempts"] = sorted(
             (item for item in attempts if item.get("node_id", "").startswith("file:verification-tools:")),

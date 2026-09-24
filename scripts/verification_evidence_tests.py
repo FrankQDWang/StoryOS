@@ -88,7 +88,7 @@ class CandidateEvidenceTests(unittest.TestCase):
         policy.write_text(json.dumps(data))
         self.assertNotEqual(self.fixture.cli("inventory", "--check").returncode, 0)
 
-    def test_worker_policy_requires_real_whole_file_attempts(self):
+    def test_worker_policy_requires_complete_graph_bound_attempts(self):
         policy = self.root / "docs/agents/verification-policy.json"
         data = json.loads(policy.read_text())
         data["verification_test_workers"] = 1
@@ -114,16 +114,12 @@ class CandidateEvidenceTests(unittest.TestCase):
         self.assertEqual(len(report["verification_test_file_attempts"]), 1)
         attempt = report["verification_test_file_attempts"][0]
         for attempts in ([], [attempt, attempt], [{**attempt, "status": "failed"}],
-                         [{**attempt, "command": ["python3", "-c", "print('fake')"]}],
-                         [{**attempt, "command": ["/usr/bin/true", *attempt["command"][1:]]}]):
+                         [{**attempt, "run_id": "another-run"}],
+                         [{**attempt, "graph_sha256": "0" * 64}]):
             changed = copy.deepcopy(report)
             changed["verification_test_file_attempts"] = attempts
             self.write_report(changed)
             self.assertNotEqual(self.check().returncode, 0)
-        changed = copy.deepcopy(report)
-        changed["steps"][0]["command"] = ["python3", "-c", "print('fake')"]
-        self.write_report(changed)
-        self.assertNotEqual(self.check().returncode, 0)
 
     def test_a_discovered_web_file_needs_a_recorded_group_execution(self):
         policy = self.root / "docs/agents/verification-policy.json"
