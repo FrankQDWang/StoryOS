@@ -53,7 +53,8 @@ export function ManuscriptSearchPanel({
   const [outcome, setOutcome] = useState<SearchOutcome | undefined>(undefined);
   const [selectedMatch, setSelectedMatch] = useState<BoundReplacementMatch | undefined>(undefined);
   const [replaceOutcome, setReplaceOutcome] = useState<
-    { kind: "applied" } | { kind: "refused" } | { kind: "stale" } | undefined
+    { kind: "applied" } | { kind: "unchanged" } | { kind: "refused" }
+    | { kind: "stale" } | undefined
   >(undefined);
 
   return (
@@ -255,6 +256,8 @@ export function ManuscriptSearchPanel({
                 >
                   {replaceOutcome.kind === "applied"
                     ? "已替换一处匹配。"
+                    : replaceOutcome.kind === "unchanged"
+                      ? "正文未变化，已保存。"
                     : replaceOutcome.kind === "stale"
                       ? "选中的匹配已失效，权威正文未改。"
                       : "已拒绝更广的替换，权威正文未改。"}

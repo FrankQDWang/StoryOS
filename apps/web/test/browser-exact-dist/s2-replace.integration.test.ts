@@ -243,7 +243,7 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
     frame.contentDocument?.querySelector("#app")?.getAttribute("data-boot-state")
   ).toBe("project-ready");
 
-  const root = appRoot(frame);
+  let root = appRoot(frame);
   await typeIntoCurrent(frame, SOURCE);
   const projectId = root.querySelector("form[data-rename]")?.getAttribute("data-rename");
   const chapterId = root.querySelector<HTMLButtonElement>(
@@ -256,13 +256,53 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
     throw new Error("the Project or Chapter identity is missing");
   }
 
+  const unchangedSearch = await search(frame, QUERY, "4");
+  expect(unchangedSearch.querySelector("[data-replace-one]")).toBeInstanceOf(
+    applicationWindow(frame).HTMLButtonElement,
+  );
+  expect(unchangedSearch.querySelector("[data-replace-all]")).toBeInstanceOf(
+    applicationWindow(frame).HTMLButtonElement,
+  );
+  const beforeUnchangedChapter = await getChapter({
+    baseUrl: applicationWindow(frame).location.origin,
+    projectId, chapterId,
+    fetchImpl: applicationWindow(frame).fetch.bind(applicationWindow(frame)),
+  });
+  const beforeUnchanged = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  const beforeUndoFrontier = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-author-undo-frontier") ?? "";
+  const unchangedControls = replaceControls(unchangedSearch);
+  unchangedControls.replacement.value = QUERY;
+  unchangedControls.replaceOne.click();
+  const unchanged = await waitReplaceOutcome(root, "unchanged");
+  expect(unchanged.textContent).toBe("正文未变化，已保存。");
+  await waitSaved(root);
+  expect(root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id")).toBe(beforeUnchanged);
+  expect(root.querySelector("[data-save-state]")
+    ?.getAttribute("data-author-undo-frontier")).toBe(beforeUndoFrontier);
+  expect(manuscriptBody(manuscriptEditor(root, applicationWindow(frame)))).toBe(SOURCE);
+  const afterUnchangedChapter = await getChapter({
+    baseUrl: applicationWindow(frame).location.origin,
+    projectId, chapterId,
+    fetchImpl: applicationWindow(frame).fetch.bind(applicationWindow(frame)),
+  });
+  expect(afterUnchangedChapter.chapter).toEqual(beforeUnchangedChapter.chapter);
+  expect(afterUnchangedChapter.project_activity_position)
+    .toBe(beforeUnchangedChapter.project_activity_position);
+
+  const reloaded = nextFrameLoad(frame);
+  frame.src = `/projects/${projectId}`;
+  await reloaded;
+  await expect.poll(() => appRoot(frame).getAttribute("data-boot-state"))
+    .toBe("project-ready");
+  root = appRoot(frame);
+  await waitSaved(root);
+  expect(manuscriptIsEditable(manuscriptEditor(root, applicationWindow(frame)))).toBe(true);
+  expect(manuscriptBody(manuscriptEditor(root, applicationWindow(frame)))).toBe(SOURCE);
   const firstSearch = await search(frame, QUERY, "4");
-  expect(firstSearch.querySelector("[data-replace-one]")).toBeInstanceOf(
-    applicationWindow(frame).HTMLButtonElement,
-  );
-  expect(firstSearch.querySelector("[data-replace-all]")).toBeInstanceOf(
-    applicationWindow(frame).HTMLButtonElement,
-  );
+
   await insertAtStart(frame, "new ", AFTER_SAVED_PREFIX, "saved");
   const beforeStaleSaved = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
@@ -303,6 +343,21 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
   await waitSaved(root, beforeOne);
   expect(manuscriptIsEditable(editor)).toBe(true);
   expect(manuscriptBody(editor)).toBe(AFTER_ONE);
+  expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_ONE);
+
+  const beforeNetZero = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  editor.focus();
+  focusManuscriptEnd(editor, applicationWindow(frame));
+  await applyTrustedInput({ operation: "insert_text", text: "x" });
+  expect(manuscriptBody(editor)).toBe(`${AFTER_ONE}x`);
+  await applyTrustedInput({ operation: "backspace" });
+  expect(manuscriptBody(editor)).toBe(AFTER_ONE);
+  await expect.poll(() => root.querySelector("[data-save-state]")
+    ?.getAttribute("data-save-state"), { timeout: 10_000 }).toBe("saving");
+  await waitSaved(root);
+  expect(root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id")).toBe(beforeNetZero);
   expect(await readBody(frame, projectId, chapterId)).toBe(AFTER_ONE);
 
   const retry = await search(frame, QUERY, "3");

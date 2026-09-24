@@ -1136,8 +1136,8 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         cryptoImpl: crypto,
       })).toMatchObject({
         body: localBody,
-        save_state: "needs_attention",
-        unsettled_intent_count: 1,
+        save_state: zeroCase.result === "no_effect" ? "saved" : "needs_attention",
+        unsettled_intent_count: zeroCase.result === "no_effect" ? 0 : 1,
         authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id,
       });
       expect(workspace.session).toEqual(baseBeforeZero);
@@ -1196,6 +1196,26 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
         },
         effect: expectedEffect,
       });
+      if (zeroCase.result === "no_effect") {
+        workspace.database.close();
+        workspace = await openCurrentWorkspace();
+        expect(workspace.pending).toMatchObject({
+          body: baseBody,
+          save_state: "saved",
+          unsettled_intent_count: 0,
+          authoritative_revision_id: baseBeforeZero.base_snapshot.authoritative_head_revision_id,
+        });
+        expect(await persistReplaceSelection(workspace, {
+          from: baseBody.length,
+          to: baseBody.length,
+          text: "!",
+          resultingBody: `${baseBody}!`,
+        })).toMatchObject({
+          body: `${baseBody}!`,
+          save_state: "saving",
+          unsettled_intent_count: 1,
+        });
+      }
       if (index < zeroCases.length - 1) await deleteWorkspace(workspace);
     }
 

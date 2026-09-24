@@ -304,8 +304,7 @@ export function ManuscriptEditor({
           }, "selection_replacement", createdAt);
           await idle.flush();
           const pending = persistWorkspaceRef.current?.pending;
-          if (pending?.save_state !== "saved"
-            || pending.authoritative_revision_id === beforeRevision) {
+          if (pending?.save_state !== "saved") {
             hydrateManuscriptBlocks(editor, observedBlocksRef.current);
             syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
             return "refused";
@@ -313,7 +312,7 @@ export function ManuscriptEditor({
           hydrateManuscriptBlocks(editor, resultingBlocks);
           observedBlocksRef.current = resultingBlocks.map((block) => ({ ...block }));
           syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
-          return "applied";
+          return pending.authoritative_revision_id === beforeRevision ? "unchanged" : "applied";
         }
         const currentMatches = matches.filter((item) => item.chapterId === chapterId);
         const first = current[0];
