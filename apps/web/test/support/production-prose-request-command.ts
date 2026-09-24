@@ -102,11 +102,14 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(before.project_scope.owner_user_id, USER);
     const [firstBlock, secondBlock] = before.chapter.current_revision.blocks;
     assert.ok(firstBlock && secondBlock);
-    await editor.evaluate((element) => {
-      element.dataset.authorInputEvents = "0";
-      element.addEventListener("beforeinput", () => {
-        element.dataset.authorInputEvents = String(Number(element.dataset.authorInputEvents) + 1);
-      });
+    await page.evaluate(() => {
+      document.body.dataset.authorInputEvents = "0";
+      document.addEventListener("beforeinput", (event) => {
+        if (!(event.target instanceof HTMLElement)
+          || event.target.closest("[data-manuscript-editor]") === null) return;
+        document.body.dataset.authorInputEvents = String(
+          Number(document.body.dataset.authorInputEvents) + 1);
+      }, { capture: true });
     });
 
     let posted = 0;
@@ -188,7 +191,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(await firstCandidate.textContent(), `候选文字 · 尚未成为正文${firstProposal.candidate_text}`);
     assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.textContent),
       firstBlock.text);
-    assert.equal(await editor.getAttribute("data-author-input-events"), "0");
+    assert.equal(await page.locator("body").getAttribute("data-author-input-events"), "0");
     assert.equal(await page.locator("[data-assistant-result]").textContent(),
       completed.decision.kind === "prose_change" ? completed.decision.text : null);
     assert.equal(await page.locator("[data-assistant-run-id]").getAttribute("data-assistant-run-id"), runId);
