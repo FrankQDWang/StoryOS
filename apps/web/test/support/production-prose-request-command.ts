@@ -100,6 +100,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(before.project_scope.owner_user_id, USER);
 
     let posted = 0;
+    let delivery: "lost" | "historical" = "lost";
     let admitted: CreateAgentRunResponse | undefined;
     await page.route((url) => url.pathname.endsWith("/agent-runs"), async (route) => {
       if (route.request().method() !== "POST") {
@@ -114,7 +115,12 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       const response = await route.fetch();
       assert.equal(response.status(), 202);
       admitted = await response.json() as CreateAgentRunResponse;
-      await route.abort("failed");
+      if (delivery === "lost") {
+        await route.abort("failed");
+      } else {
+        await route.fulfill({ status: 409, contentType: "application/problem+json",
+          body: JSON.stringify({ code: "historical_acknowledgement_unavailable" }) });
+      }
     });
     await page.locator('input[name="assistant-message"]').fill(MESSAGE);
     await page.locator(".composer button").click();
@@ -168,6 +174,16 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(await page.locator("[data-manuscript-editor]").textContent(),
       "The lantern went dark.");
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    delivery = "historical";
+    await page.locator('input[name="assistant-message"]').fill(MESSAGE);
+    await page.locator(".composer button").click();
+    await page.getByText("原始回复无法恢复。请刷新后查看当前结果。").waitFor();
+    assert.ok(admitted !== undefined && admitted.effect.kind === "admitted");
+    const secondRunId = admitted.effect.run_id;
+    assert.notEqual(secondRunId, runId);
+    await page.reload();
+    await page.locator('[data-assistant-run-id="' + secondRunId + '"]').waitFor();
+    assert.equal(posted, 2, "historical acknowledgement recovery must not resubmit");
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
