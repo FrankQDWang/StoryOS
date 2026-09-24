@@ -137,6 +137,25 @@ dangling or cross-phase dependencies, cycles, and empty phases fail policy check
 before expensive children start. `make verify-policy` and the project input check
 validate this structure. Independent policy self-tests also precede Rust compilation.
 
+## Verification-tool self-tests
+
+`verify-policy` discovers each current `scripts/*_tests.py` file and runs the
+whole file once. The policy lists files approved for overlap and caps workers at
+two. A new or undeclared file runs serially. A missing file, invalid declaration,
+or empty selection fails. The public serial diagnostic command is
+`STORYOS_VERIFICATION_TEST_WORKERS=1 make verify-targeted CHECK=verification-tests`.
+Use an unset worker override for candidate targeted and complete verification so
+their execution input digests match.
+
+The approved files use disposable Git repositories or temporary databases and
+paths. Local HTTP fixtures bind port zero. Mock Docker and package commands write
+inside their fixture repository. The runner gives each file a separate temporary
+directory and process group, removes inherited `CARGO_TARGET_DIR` and cache root
+from file tests, and records one node attempt per file under the root run. A file
+with shared product database state or a fixed port stays serial. Interrupted
+workers are signalled and reaped before the root attempt ends. The serialized
+diagnostic command does not replace the normal targeted admission result.
+
 ## Daily result reuse and host budget
 
 The reviewed Node profile caches passed policy checks, Web preparation and type
