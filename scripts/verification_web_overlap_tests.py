@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import select
+import shlex
 import signal
 import subprocess
 import sys
@@ -11,6 +12,8 @@ import tempfile
 import unittest
 
 import verification
+import verification_candidate_tests
+import verification_tests
 import verification_web_overlap
 
 
@@ -159,6 +162,33 @@ release-package:
                           if item['kind'].endswith('-test')
                           and item['kind'] not in {'historical-test', 'prototype-test'}},
                          {name for name in selected if name.startswith('file:')})
+        fixture = verification_candidate_tests.CandidateCommandTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        policy_path = fixture.root / 'docs/agents/verification-policy.json'
+        controlled = json.loads(policy_path.read_text())
+        controlled['complete']['stages'] = plan['stages']
+        policy_path.write_text(json.dumps(controlled))
+        runner = [sys.executable, str(verification_tests.COMMAND), 'step']
+        commands = [shlex.join([*runner, stage, '--', sys.executable, '-c', 'pass'])
+                    for stage in plan['stages']]
+        (fixture.root / 'Makefile').write_text('verify-local-steps:\n' + ''.join(
+            '\t@' + command + '\n' for command in commands))
+        fixture.repo.git('add', '.')
+        fixture.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                         'commit', '--quiet', '-m', 'Control every complete stage.')
+        fixture.repo.git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+        result = fixture.run_complete()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        report = fixture.repo.report()
+        self.assertEqual({step['stage'] for step in report['steps']}, set(plan['stages']))
+        self.assertEqual(len(report['steps']), len(plan['stages']))
+        self.assertTrue(all(step['status'] == 'passed' and step['attempt_started']
+                            and step['started_monotonic'] <= step['ended_monotonic']
+                            and step['duration_seconds'] >= 0 for step in report['steps']))
+        self.assertLessEqual(max(step['ended_monotonic'] for step in report['steps'])
+                             - min(step['started_monotonic'] for step in report['steps']),
+                             report['duration_seconds'])
 
 
 if __name__ == '__main__':
