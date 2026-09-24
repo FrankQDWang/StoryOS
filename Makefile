@@ -41,8 +41,8 @@ release-package: web-typecheck
 web-foundation: release-package
 	$(VERIFY_STEP) foundation-tests -- pnpm --dir apps/web exec vitest run --project node-contract --project browser-source
 
-web: web-foundation
-	STORYOS_WEB_TYPECHECKED=1 $(VERIFY_STEP) project-scope -- scripts/verify-project-scope.sh
+web: release-package
+	@PYTHONDONTWRITEBYTECODE=1 python3 scripts/verification_web_overlap.py
 
 project-scope: release-package
 	STORYOS_WEB_TYPECHECKED=1 $(VERIFY_STEP) project-scope -- scripts/verify-project-scope.sh

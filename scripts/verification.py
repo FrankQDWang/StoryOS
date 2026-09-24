@@ -23,6 +23,7 @@ import verification_daily
 import verification_status
 import verification_graph
 import verification_rust_cache
+import verification_web_overlap
 
 
 def git(root, *arguments):
@@ -63,6 +64,7 @@ def inventory(root, revision=None):
                         else (root / "docs/agents/verification-policy.json").read_text())
     paths = git(root, "ls-tree", "-rz", "--name-only", revision).split("\0")[:-1] if revision else input_paths(root)
     verification_daily.validate(policy)
+    verification_web_overlap.validate(policy)
     known = set(paths)
     if policy.get("version") != 1 or not policy.get("rules"):
         raise ValueError("Unsupported or empty verification policy")

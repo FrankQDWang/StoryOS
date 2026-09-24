@@ -28,6 +28,7 @@
     "release-package": {"command": ["make", "release-package"], "clean": true},
     "web-foundation": {"command": ["make", "web-foundation"], "clean": true},
     "web": {"command": ["make", "web"], "clean": true},
+    "web-overlap": {"command": ["env", "STORYOS_VERIFICATION_COMPARE=overlap", "make", "web"], "clean": true},
     "project-scope": {"command": ["make", "project-scope"], "clean": true},
     "verify-tracker": {"command": ["make", "verify-tracker"], "clean": false},
     "verify-pr": {"command": ["make", "verify-pr"], "clean": false},
@@ -37,6 +38,27 @@
   },
   "workflow": {
     "version": 1,
+    "complete_overlap": {
+      "prerequisite": "release-package",
+      "stages": ["foundation-tests", "project-scope"],
+      "max_workers": 2,
+      "cpu_budget": 8,
+      "memory_budget_bytes": 17179869184,
+      "resources": {
+        "foundation-tests": {
+          "reads": ["release-package", "web-source", "chrome-binary"],
+          "writes": ["foundation-vitest-session", "foundation-chrome-profile"],
+          "cpu": 2,
+          "memory_bytes": 4294967296
+        },
+        "project-scope": {
+          "reads": ["release-package", "web-source", "chrome-binary"],
+          "writes": ["controlled-postgres", "managed-cargo-target", "project-vitest-session", "project-chrome-profile", "recovery-copies"],
+          "cpu": 4,
+          "memory_bytes": 8589934592
+        }
+      }
+    },
     "stage_types": {
       "rust-tests": "aggregate",
       "rust-doc-tests": "aggregate",
@@ -106,6 +128,7 @@
       "verify-contract-inputs": ["check:protocol-self-test", "check:persistence-self-test", "check:author-edit-self-test", "check:tracker-self-test", "check:transaction-self-test", "check:generated-contracts"],
       "contracts": ["targeted:verify-policy", "targeted:verify-contract-inputs", "check:rust-format", "check:rust-clippy", "check:rust-tests", "check:rust-doc-tests", "targeted:web"],
       "web": ["targeted:web-foundation", "targeted:project-scope"],
+      "web-overlap": ["check:foundation-tests", "check:project-scope"],
       "web-foundation": ["check:release-package", "check:foundation-tests"],
       "project-scope": ["check:project-scope"],
       "verify-pr": ["targeted:verify-policy", "check:tracker-self-test", "check:verify-tracker"],
