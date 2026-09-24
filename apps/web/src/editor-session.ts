@@ -252,6 +252,8 @@ async function validateSession(
     ?? candidate?.writer?.observed_writer_generation;
   const binding = candidate?.editor_session;
   const base = candidate?.base_snapshot;
+  const basePosition = base?.project_activity_position;
+  const currentPosition = chapter.project_activity_position;
   if (candidate?.project_scope?.owner_user_id !== scope.owner_user_id
     || candidate?.project_scope?.project_id !== scope.project_id
     || !binding?.editor_session_id || !binding.client_session_binding_ref
@@ -272,7 +274,9 @@ async function validateSession(
     || base?.materialized_revision?.body !== chapter.chapter.current_revision.body
     || JSON.stringify(base?.materialized_revision?.blocks)
       !== JSON.stringify(chapter.chapter.current_revision.blocks)
-    || base?.project_activity_position !== chapter.project_activity_position
+    || !boundedU64(basePosition)
+    || !boundedU64(currentPosition)
+    || BigInt(basePosition) > BigInt(currentPosition)
     || base?.observed_ownership_partition !== "authoritative"
     || JSON.stringify(base?.target_refs)
       !== JSON.stringify([`manuscript:${base?.chapter_id as string}`])
@@ -354,7 +358,9 @@ export async function openEditorWorkspace({
         baseUrl, projectId: scope.project_id, snapshotId, fetchImpl,
       }), workspace, snapshotId);
       if (JSON.stringify(canonicalSnapshot) !== JSON.stringify(tree.snapshot)
-        || canonicalSnapshot.project_activity_position !== base.project_activity_position) {
+        || canonicalSnapshot.project_activity_position !== chapter.project_activity_position
+        || BigInt(canonicalSnapshot.project_activity_position)
+          < BigInt(base.project_activity_position)) {
         throw new Error("Takeover Snapshot binding mismatch");
       }
       const current = await validateSession(await getEditorSession({

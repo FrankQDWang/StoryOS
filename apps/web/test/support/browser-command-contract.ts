@@ -32,7 +32,9 @@ export type ImeCompositionResult = Readonly<{ kind: "ime_composition_applied" }>
 export type TrustedInputResult = Readonly<{ kind: "trusted_input_applied" }>;
 export type ClipboardPermissionResult = Readonly<{ kind: "clipboard_permission_updated" }>;
 export type ClientSessionCookieResult = Readonly<{ kind: "client_session_cookie_updated" }>;
-export type ProductionHostRequest = Readonly<{ scenario: "open_edit_reload_takeover" }>;
+export type ProductionHostRequest = Readonly<{
+  scenario: "open_edit_reload_takeover" | "prose_request";
+}>;
 export type ProductionHostResult = Readonly<{ kind: "production_host_verified" }>;
 export type CommandChallengeRateWindowsRequest = Readonly<{ action: "reset" }>;
 export type CommandChallengeRateWindowsResult = Readonly<{
@@ -188,10 +190,11 @@ export function parseClientSessionCookieResult(value: unknown): ClientSessionCoo
 
 export function parseProductionHostRequest(value: unknown): ProductionHostRequest {
   const request = exactObject(value, ["scenario"], "production host request");
-  if (property(request, "scenario") !== "open_edit_reload_takeover") {
+  const scenario = property(request, "scenario");
+  if (scenario !== "open_edit_reload_takeover" && scenario !== "prose_request") {
     throw new TypeError("production host scenario is unsupported");
   }
-  return { scenario: "open_edit_reload_takeover" };
+  return { scenario };
 }
 
 export function parseProductionHostResult(value: unknown): ProductionHostResult {

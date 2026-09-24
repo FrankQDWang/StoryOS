@@ -195,8 +195,9 @@ it("preserves local payload and resumes after a new Snapshot generation", async 
 });
 
 it.each([
-  "valid", "valid_other_session", "scope", "locator_scope", "session", "generation", "binding",
-  "reused_base", "digest", "snapshot", "position", "expired", "drift",
+  "valid", "valid_other_session", "valid_activity_advance", "scope", "locator_scope", "session",
+  "generation", "binding", "reused_base", "digest", "snapshot", "position_before_base",
+  "position_after_chapter", "position_invalid", "expired", "drift",
 ])("resumes a Takeover winner without rebinding old journal evidence: %s", async (fault) => {
   const scenario = createBrowserScenario();
   const otherSession = "018f0000-0000-7001-8000-000000000414";
@@ -215,10 +216,14 @@ it.each([
       snapshot_id: "018f0000-0000-7001-8000-000000000410",
       project_activity_position: "5", created_at: "2026-08-20T04:00:00.000Z" },
   };
-  const chapter = { ...structuredClone(scenario.chapter), project_activity_position: "5" };
+  const chapter = { ...structuredClone(scenario.chapter), project_activity_position:
+    fault === "valid_activity_advance" ? "6" : "5" };
   const canonical: SnapshotDescriptor = {
     snapshot_id: CANONICAL_SNAPSHOT, project_scope: scenario.project.project_scope,
-    snapshot_kind: "canonical", project_activity_position: fault === "position" ? "6" : "5",
+    snapshot_kind: "canonical", project_activity_position:
+      fault === "valid_activity_advance" || fault === "position_after_chapter" ? "6"
+        : fault === "position_before_base" ? "4"
+        : fault === "position_invalid" ? "18446744073709551616" : "5",
     source_watermarks: {}, projection_generations: {}, redaction_profile: "storyos.author.v1",
     schema_profile: "storyos.public.release.1", replay_generation: "2",
     created_at: "2026-08-20T04:00:00.000Z",
@@ -326,6 +331,15 @@ it.each([
     const winner = await openEditorWorkspace(options);
     if (winner.kind === "editor-ready") trackDatabase(winner.database, databases);
     expect(requests.every((request) => request.startsWith("GET "))).toBe(true);
+    if (fault === "valid_activity_advance") {
+      requireEditorReady(winner);
+      expect((await readProjectActivityIngest(winner)).processed_through_stream_sequence).toBe("6");
+      const reload = await openEditorWorkspace(options);
+      requireEditorReady(reload);
+      trackDatabase(reload.database, databases);
+      expect(reload.partition).toEqual(winner.partition);
+      return;
+    }
     if (!fault.startsWith("valid")) {
       expect(winner.kind).toBe("editor-read-only-recovery");
       expect(await readAll()).toEqual(before);

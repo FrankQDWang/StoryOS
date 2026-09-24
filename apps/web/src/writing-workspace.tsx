@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 
 import type { EditorWriterProjection } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { WritingAssistantPanel } from "./writing-assistant-panel.tsx";
+import { WritingAssistantPanel, type AssistantContext } from "./writing-assistant-panel.tsx";
 
 function writerGeneration(writer: EditorWriterProjection | undefined): string | undefined {
   if (writer === undefined) return undefined;
@@ -14,10 +14,12 @@ export function WritingWorkspace({
   tree,
   editor,
   writer,
+  assistant,
 }: {
   tree: ReactNode;
   editor: ReactNode;
   writer?: EditorWriterProjection | undefined;
+  assistant?: AssistantContext;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
@@ -29,7 +31,11 @@ export function WritingWorkspace({
     >
       <aside className="tree-panel">{tree}</aside>
       <section className="editor-panel">{editor}</section>
-      <WritingAssistantPanel collapsed={collapsed} />
+      <WritingAssistantPanel
+        key={assistant === undefined ? "unbound" : `${assistant.scope.owner_user_id}:${assistant.scope.project_id}`}
+        collapsed={collapsed}
+        context={assistant}
+      />
       <button
         type="button"
         className="assistant-toggle"

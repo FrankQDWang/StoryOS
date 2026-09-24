@@ -62,7 +62,7 @@ type ZeroAuthorityResult = Exclude<
 const FIRST_REVISION = "018f0000-0000-7001-8000-000000000034";
 const SECOND_REVISION = "018f0000-0000-7001-8000-000000000044";
 
-it("preserves the complete Journal when a retained Session Snapshot does not match the Chapter", async () => {
+it("preserves the complete Journal when a retained Session Head does not match the Chapter", async () => {
   const scenario = createBrowserScenario();
   const activeSessionKey = `active_session:${OWNER}:${PROJECT}`;
   const requests: string[] = [];
@@ -96,7 +96,9 @@ it("preserves the complete Journal when a retained Session Snapshot does not mat
     const before = await readCompleteJournal();
     requests.length = 0;
     const reopened = await openEditorWorkspace({ ...input,
-      chapter: { ...scenario.chapter, project_activity_position: "3" } });
+      chapter: { ...scenario.chapter, project_activity_position: "3",
+        chapter: { ...scenario.chapter.chapter,
+          current_revision: chapterRevision(FIRST_REVISION, "Changed") } } });
     if (reopened.kind === "editor-ready") reopened.database.close();
     expect(reopened).toMatchObject({ kind: "editor-read-only-recovery", code: "local_journal_unavailable" });
     expect(await readCompleteJournal()).toEqual(before);

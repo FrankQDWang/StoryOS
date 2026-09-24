@@ -424,6 +424,13 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      assistant={{
+        scope: state.project.project_scope,
+        chapterId: currentChapterId,
+        canSubmit: selectedChapter.chapter.chapter_id === currentChapterId
+          && saveState === "saved" && !readOnly && !archived,
+        baseUrl, fetchImpl, cryptoImpl,
+      }}
       tree={(
         <>
           <h1>{title}</h1>
@@ -747,6 +754,11 @@ function EmptyProjectReadyView({
   }, [baseUrl, fetchImpl, project.project.project_id]);
   return (
     <WritingWorkspace
+      assistant={{
+        scope: project.project_scope,
+        canSubmit: false,
+        baseUrl, fetchImpl, cryptoImpl,
+      }}
       tree={(
         <>
           <h1>{title}</h1>

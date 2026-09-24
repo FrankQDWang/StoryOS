@@ -272,6 +272,35 @@ input:focus-visible,
   line-height: 1.7;
 }
 
+.assistant-conversation {
+  min-height: 0;
+  overflow: auto;
+}
+
+.assistant-exchange {
+  padding: 16px 20px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.assistant-author-message {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--hover);
+  white-space: pre-wrap;
+}
+
+.assistant-exchange [data-assistant-result] {
+  white-space: pre-wrap;
+}
+
+.assistant-exchange button {
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 4px 0;
+}
+
 .composer { margin: 0; padding: 0 20px 14px; }
 
 .composer input {
@@ -279,6 +308,10 @@ input:focus-visible,
   border: 1px solid #dfdcd7;
   border-radius: 14px;
   padding: 10px 14px;
+}
+
+.composer button {
+  margin-top: 8px;
 }
 
 .assistant-toggle {
