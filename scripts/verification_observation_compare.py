@@ -62,6 +62,24 @@ SUMMARY = PAIR + """SELECT side,json_extract(payload,'$.profile') AS profile,
  AND json_extract(q.payload,'$.run_id')=roots.run_id AND json_extract(q.payload,'$.outcome')='reused') AS reuse_requests
  FROM roots"""
 
+API_COLUMNS = {
+    'comparison': ('comparison', 'limitation'),
+    'summary': ('side', 'profile', 'state', 'selected', 'executed', 'reused', 'graph',
+        'run_id', 'quality', 'build_state', 'recovery_of', 'reason', 'reuse_requests'),
+    'difference': ('node_id', 'difference', 'left_selected', 'right_selected',
+        'left_attempts', 'right_attempts', 'left_state', 'right_state', 'left_reuse',
+        'right_reuse', 'left_definition', 'right_definition', 'left_edges', 'right_edges'),
+}
+API_NUMERIC = {'comparison': 'delta_seconds', 'summary': 'seconds', 'difference': 'NULL'}
+API = (PAIR + ',\n' + ',\n'.join(
+    f'{name} AS ({statement.removeprefix(PAIR)})' for name, statement in
+    (('comparison', COMPARISON), ('summary', SUMMARY), ('difference', DIFFERENCE))) + '\n' +
+    ' UNION ALL '.join(
+        f"SELECT '{name}' AS section,json_object(" + ','.join(
+            f"'{column}',{column}" for column in columns) +
+        f') AS payload,{API_NUMERIC[name]} AS numeric_value FROM {name}'
+        for name, columns in API_COLUMNS.items()))
+
 
 INTERVALS = PAIR + """, attempts AS (
  SELECT p.side,a.*,ROW_NUMBER() OVER (PARTITION BY p.side,a.node_id ORDER BY a.started_at,a.attempt_id) AS attempt_number
