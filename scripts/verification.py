@@ -295,6 +295,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
     write_json(report_path, report)
     code, interrupted = 1, 0
     cache = None
+    has_verification_file_workers = False
     try:
         report["source_start"] = source_identity(root)
         if plan:
@@ -304,11 +305,12 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         if report["source_start"]["dirty"] and report["profile"] == "complete" and not plan:
             raise ValueError("Complete verification requires a clean tracked and untracked worktree")
         report["inventory"] = inventory(root)
+        policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
+        has_verification_file_workers = "verification_test_workers" in policy
         if not plan and command == ["make", "verify-local-steps"]:
             report["plan"] = complete_plan(root, base=context["base"] if context else "origin/main", with_graph=True)
             report["graph"] = report["plan"].pop("graph", None)
         if not plan and "graph" not in report:
-            policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
             snapshot = {"source": report["source_start"], "checks": [],
                         "test_files": [f["path"] for f in report["inventory"]["files"]
                                        if f["kind"].endswith("-test")]}
@@ -344,9 +346,7 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         print(str(error), file=sys.stderr)
     steps = [json.loads(path.read_text()) for path in (directory / "steps").glob("*.json")]
     report["steps"] = sorted(steps, key=lambda item: item["started_monotonic"])
-    policy = json.loads((root / "docs/agents/verification-policy.json").read_text())
-    if ("verification_test_workers" in policy
-            and any(item["stage"] == "verification-tests" for item in steps)):
+    if (has_verification_file_workers and any(item["stage"] == "verification-tests" for item in steps)):
         attempts = [json.loads(path.read_text()) for path in (directory / "nodes").glob("*.json")]
         report["verification_test_file_attempts"] = sorted(
             (item for item in attempts if item.get("node_id", "").startswith("file:verification-tools:")),
@@ -378,7 +378,8 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         except (OSError, ValueError) as error:
             report.update(status="failed", error=str(error))
     report["rust_cache_after"] = verification_rust_cache.finish(
-        root, complete_success=report["status"] == "passed" and report["profile"] == "complete")
+        root, prepared=context["rust_cache"],
+        complete_success=report["status"] == "passed" and report["profile"] == "complete")
     report.update(duration_seconds=time.monotonic() - started, exit_code=code)
     report.update(ended_at=datetime.now(timezone.utc).isoformat(), ended_monotonic=time.monotonic())
     if report["process"].get("launch_error"):

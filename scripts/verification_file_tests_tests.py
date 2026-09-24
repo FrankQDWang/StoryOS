@@ -187,6 +187,17 @@ class FileSelfTests(unittest.TestCase):
         report, _, _ = self.records()
         self.assertEqual(report["status"], "source-changed")
 
+    def test_malformed_policy_mid_run_retains_source_change_report(self):
+        self.add_file("a")
+        self.commit(parallel=("a",))
+        process = self.start_targeted()
+        self.ready(process, "a")
+        self.policy.write_text("{")
+        self.release("a")
+        self.assertNotEqual(self.complete(process).returncode, 0)
+        report, _, _ = self.records()
+        self.assertEqual(report["status"], "source-changed")
+
     @unittest.skipUnless(os.name == "posix", "Process-group interruption requires POSIX.")
     def test_interruption_cleans_file_process_group(self):
         path = self.root / "scripts/a_tests.py"

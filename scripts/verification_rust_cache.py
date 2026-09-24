@@ -236,8 +236,8 @@ def prepare(root):
             "state": "over-budget" if usage["allocated_bytes"] > high_water else "ready"}
 
 
-def finish(root, *, complete_success=False):
-    high_water, total_limit = limits(root)
+def finish(root, *, prepared, complete_success=False):
+    high_water, total_limit = prepared["high_water_bytes"], prepared["total_limit_bytes"]
     state = load(root)
     usage = validate(root, state["active"])
     if complete_success:
@@ -273,7 +273,7 @@ def main():
             if not command:
                 raise ValueError("A managed command is required")
             result = subprocess.run(command, cwd=root)
-            finish(root)
+            finish(root, prepared=before)
             return result.returncode
     except (OSError, ValueError, KeyError, TypeError) as error:
         print(str(error), file=sys.stderr)
