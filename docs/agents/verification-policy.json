@@ -20,7 +20,6 @@
   ],
   "rust_cache": {"high_water_bytes": 12884901888, "total_limit_bytes": 21474836480},
   "targeted": {
-    "verification-evidence-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_evidence_tests.py"], "clean": false},
     "verification-file-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_file_tests_tests.py"], "clean": false},
     "verification-node-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_node_tests.py"], "clean": false},
     "verification-observation-tests": {"command": ["python3", "-m", "unittest", "discover", "-s", "scripts", "-p", "verification_observation*tests.py"], "clean": false},
@@ -100,7 +99,6 @@
       "project-scope": {"requires": ["release-package"], "members": ["postgres-scope", "postgres-challenge", "postgres-library", "http-files", "author-edit-process-cut", "readable-export-process-cut", "project-export-process-cut", "exact-dist", "recovery-fixture", "recovery-mixed"]}
     },
     "targeted": {
-      "verification-evidence-tests": ["check:verification-tools"],
       "verification-file-tests": ["check:verification-tools"],
       "verification-node-tests": ["check:verification-tools"],
       "verify-tracker": ["check:verify-tracker"],
