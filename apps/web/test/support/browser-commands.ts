@@ -12,6 +12,7 @@ import {
 } from "./browser-command-contract";
 import { queryStoryOSPostgres } from "./node-integration";
 import { verifyProductionHostJourney } from "./production-host-command";
+import { verifyProductionProseRequest } from "./production-prose-request-command";
 
 const CLIENT_SESSION_COOKIE = "storyos_session";
 
@@ -37,8 +38,12 @@ export const storyOSBrowserCommands = {
   ),
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
-      parseProductionHostRequest(value);
-      await verifyProductionHostJourney(context.context);
+      const request = parseProductionHostRequest(value);
+      if (request.scenario === "prose_request") {
+        await verifyProductionProseRequest(context.context);
+      } else {
+        await verifyProductionHostJourney(context.context);
+      }
       return { kind: "production_host_verified" } as const;
     },
   ),

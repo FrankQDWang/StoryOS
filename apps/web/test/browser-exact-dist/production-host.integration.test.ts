@@ -6,3 +6,8 @@ it("opens, edits, reloads, and takes over through the real production host in Ch
   await expect(verifyProductionHost({ scenario: "open_edit_reload_takeover" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 });
+
+it("recovers one prose request through the production Web, Server, database, and Worker", async () => {
+  await expect(verifyProductionHost({ scenario: "prose_request" }))
+    .resolves.toEqual({ kind: "production_host_verified" });
+});
