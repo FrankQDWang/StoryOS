@@ -263,6 +263,18 @@ it("rejects a stale selected match, replaces one visible match, and refuses a br
   expect(firstSearch.querySelector("[data-replace-all]")).toBeInstanceOf(
     applicationWindow(frame).HTMLButtonElement,
   );
+  const beforeUnchanged = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  const unchangedControls = replaceControls(firstSearch);
+  unchangedControls.replacement.value = QUERY;
+  unchangedControls.replaceOne.click();
+  await waitReplaceOutcome(root, "unchanged");
+  await waitSaved(root);
+  expect(root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id")).toBe(beforeUnchanged);
+  expect(manuscriptBody(manuscriptEditor(root, applicationWindow(frame)))).toBe(SOURCE);
+  expect(await readBody(frame, projectId, chapterId)).toBe(SOURCE);
+
   await insertAtStart(frame, "new ", AFTER_SAVED_PREFIX, "saved");
   const beforeStaleSaved = root.querySelector("[data-save-state]")
     ?.getAttribute("data-authoritative-revision-id") ?? "";
