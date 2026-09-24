@@ -11,6 +11,7 @@ import { consumeOwnedProjectActivity } from "../../src/project-activity-sync.ts"
 import { readProjectActivityIngest } from "../../src/project-activity-ingest.ts";
 import {
   EDITOR_SNAPSHOT,
+  BLOCK,
   OWNER,
   PROJECT,
   REVISION,
@@ -310,6 +311,126 @@ it("refuses a Snapshot whose Scope does not match the Editor Session", async () 
       baseUrl: location.origin, fetchImpl,
     })).rejects.toThrow();
     expect(await readProjectActivityIngest(workspace)).toEqual(before);
+    workspace.database.close();
+  } finally {
+    closeTrackedDatabases(openDatabases);
+    sessionStorage.removeItem(`active_session:${OWNER}:${PROJECT}`);
+    await deleteJournal(scenario.journalName);
+  }
+});
+
+it("ingests assistance and Run Activity without disabling manual writing or skipping unknown Events", async () => {
+  const scenario = createBrowserScenario();
+  const assistancePayload = { kind: "project_assistance_updated", availability: "available", revision: "1" };
+  const runPayload = {
+    kind: "agent_run_created",
+    project_agent_id: "018f0000-0000-7001-8000-000000000451",
+    conversation_id: "018f0000-0000-7001-8000-000000000452",
+    memory_settings_revision: "018f0000-0000-7001-8000-000000000453",
+    run_id: "018f0000-0000-7001-8000-000000000454",
+  };
+  const digest = async (payload: Record<string, unknown>) => ({
+    algorithm: "sha256" as const,
+    profile: "storyos.event-payload.jcs.v1",
+    value_hex_lowercase: [...new Uint8Array(await crypto.subtle.digest(
+      "SHA-256", new TextEncoder().encode(JSON.stringify(payload)),
+    ))].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
+  });
+  const base = await createAppliedActivityEvent({
+    eventId: "018f0000-0000-7001-8000-000000000455",
+    commandId: "018f0000-0000-7001-8000-000000000456",
+    receiptId: "018f0000-0000-7001-8000-000000000457",
+    correlationId: "018f0000-0000-7001-8000-000000000458",
+    revisionId: REVISION,
+    commitId: "018f0000-0000-7001-8000-000000000459",
+    sequence: "1",
+    occurredAt: "2026-08-20T04:00:01.000Z",
+  });
+  const assistance = {
+    ...base,
+    event_schema: "storyos.event.project-assistance-updated.v1",
+    event_kind: "project_assistance_updated",
+    aggregate_ref: { kind: "project", id: PROJECT },
+    payload: assistancePayload,
+    payload_digest: await digest(assistancePayload),
+  };
+  const run = {
+    ...base,
+    event_id: "018f0000-0000-7001-8000-000000000460",
+    application_wire_record_ref: "018f0000-0000-7001-8000-000000000460",
+    event_schema: "storyos.event.agent-run-created.v1",
+    event_kind: "agent_run_created",
+    project_sequence: "2",
+    stream_sequence: "2",
+    aggregate_ref: { kind: "agent_run", id: runPayload.run_id },
+    payload: runPayload,
+    payload_digest: await digest(runPayload),
+  };
+  const unknown = {
+    ...run,
+    event_id: "018f0000-0000-7001-8000-000000000461",
+    application_wire_record_ref: "018f0000-0000-7001-8000-000000000461",
+    event_kind: "future_activity",
+    event_schema: "storyos.event.future-activity.v1",
+    project_sequence: "3",
+    stream_sequence: "3",
+  };
+  const cursors: Array<string | null> = [];
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const path = new URL(input instanceof Request ? input.url : input).pathname;
+    if (path.endsWith("/anti-forgery-challenges")) return jsonResponse({
+      nonce: "a".repeat(64), expires_at: "2026-08-13T08:05:00.000Z",
+      limit_profile_revision: "storyos.foundation.absolute.v1",
+    });
+    if (path.endsWith("/editor-sessions")) return jsonResponse(scenario.session);
+    if (path.endsWith(`/editor-sessions/${SESSION}`)) return jsonResponse({
+      ...scenario.session, schema_id: "storyos.query.editor-session.response.v1",
+    });
+    if (path.endsWith("/activity")) {
+      cursors.push(new Headers(init?.headers).get("last-event-id"));
+      const frame = [assistance, run, unknown, unknown][cursors.length - 1];
+      if (frame === undefined) throw new Error("unexpected Activity request");
+      return activitySse(`cursor-${cursors.length}`, frame);
+    }
+    throw new Error(`unexpected fetch ${init?.method ?? "GET"} ${path}`);
+  };
+  const openDatabases = new Set<IDBDatabase>();
+  await deleteJournal(scenario.journalName);
+  try {
+    const workspace = await openEditorWorkspace({
+      baseUrl: location.origin, project: scenario.project, chapter: scenario.chapter,
+      profile: scenario.profile, fetchImpl,
+    });
+    requireEditorReady(workspace);
+    trackDatabase(workspace.database, openDatabases);
+    const first = await consumeOwnedProjectActivity(workspace, { baseUrl: location.origin, fetchImpl });
+    const second = await consumeOwnedProjectActivity(workspace, { baseUrl: location.origin, fetchImpl });
+    expect(first.kind).toBe("replayed");
+    expect(second.kind).toBe("replayed");
+    expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run]);
+    await expect(consumeOwnedProjectActivity(workspace, {
+      baseUrl: location.origin, fetchImpl,
+    })).rejects.toThrow("Project Activity Event is invalid");
+    await expect(consumeOwnedProjectActivity(workspace, {
+      baseUrl: location.origin, fetchImpl,
+    })).rejects.toThrow("Project Activity Event is invalid");
+    expect(cursors).toEqual([null, "cursor-1", "cursor-2", "cursor-2"]);
+    expect((await readProjectActivityIngest(workspace)).events).toEqual([assistance, run]);
+    const before = await readJournalSnapshot(workspace);
+    const projected = await persistReplaceSelection(workspace, {
+      from: 4, to: 4, text: "!", resultingBody: "Base!",
+      inputOrigin: "paste", undoGroupId: "018f0000-0000-7001-8000-000000000040",
+      createdAt: "2026-08-20T04:00:02.000Z",
+    });
+    expect(projected.body).toBe("Base!");
+    const after = await readJournalSnapshot(workspace);
+    expect(after.records).toHaveLength(before.records.length + 1);
+    expect(after.records.at(-1)?.author_edit_unit).toEqual({
+      normalized_primitives: [{
+        kind: "replace_block_selection", manuscript_block_id: BLOCK, from: 4, to: 4, text: "!",
+      }],
+      selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 4, to: 4 },
+    });
     workspace.database.close();
   } finally {
     closeTrackedDatabases(openDatabases);

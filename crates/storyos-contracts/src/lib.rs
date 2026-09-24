@@ -36,6 +36,7 @@ mod release1_manuscript_statistics;
 mod release1_manuscript_statistics_artifacts;
 mod release1_manuscript_tree;
 mod release1_manuscript_tree_artifacts;
+mod release1_project_activity;
 mod release1_project_assistance;
 mod release1_project_assistance_artifacts;
 mod release1_project_export;
@@ -75,6 +76,7 @@ mod stage1_selection;
 mod stage2_crosswalk;
 mod web_assets;
 
+pub use release1_project_activity::ProjectActivityKind;
 pub use web_assets::{
     RELEASE_1_SECURITY_POLICY_REVISION, WEB_ASSET_MANIFEST, WEB_ASSET_SCHEMA, WebAssetManifest,
     WebResource, web_asset_digest, web_resource_paths, write_web_asset_manifest,
