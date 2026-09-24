@@ -13,7 +13,6 @@ import tempfile
 import uuid
 
 import verification_cache
-import verification_legacy_cache
 
 
 HIGH_WATER = 12 * 1024**3
@@ -209,7 +208,6 @@ def prepare(root):
         create(root, state["active"])
         state["pending_create"] = False
         write_state(root, state)
-    legacy = verification_legacy_cache.migrate(root)
     retire(root, state)
     usage = validate(root, state["active"])
     scratch = root / "target/issue-763-isolated"
@@ -235,8 +233,7 @@ def prepare(root):
     return {"generation": state["active"]["id"], "target_dir": str(target), "profile": "dev",
             "warmup": state["active"]["warmup"], "usage": usage, "scratch_usage": scratch_usage,
             "high_water_bytes": high_water, "total_limit_bytes": total_limit,
-            "state": "over-budget" if usage["allocated_bytes"] > high_water else "ready",
-            "legacy": legacy}
+            "state": "over-budget" if usage["allocated_bytes"] > high_water else "ready"}
 
 
 def finish(root, *, complete_success=False):
