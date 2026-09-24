@@ -54,6 +54,20 @@ class GraphPlanTests(unittest.TestCase):
         self.assertEqual(old_ids - {n['id'] for n in changed['nodes']}, {other})
         self.assertNotEqual(graph['identity'], changed['identity'])
 
+    def test_changed_rust_source_selects_the_cargo_workflow_without_a_test_file(self):
+        self.fixture.install_cargo_fixture()
+        self.policy = json.loads(self.fixture.policy_path.read_text())
+        self.policy['complete']['stages'].append('rust-tests')
+        self.policy['complete']['groups']['cargo'] = ['rust-tests']
+        self.policy['workflow']['profiles']['cargo'] = {}
+        self.save()
+        path = self.fixture.root / 'crates/core/src/lib.rs'
+        path.write_text(path.read_text() + 'pub fn changed() -> u8 { 2 }\n')
+        result = self.fixture.cli('plan')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        nodes = {node['id']: node for node in json.loads(result.stdout)['graph']['nodes']}
+        self.assertTrue(nodes['check:cargo']['selected'])
+
 
     def test_complete_and_targeted_plans_cover_obligations_without_execution(self):
         result = self.fixture.cli('plan', '--profile', 'complete')

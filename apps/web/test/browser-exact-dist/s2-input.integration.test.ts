@@ -1,6 +1,16 @@
 import { afterEach, expect, it } from "vitest";
 
-import { getChapter } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import {
+  activityStream,
+  createAgentRun,
+  createProjectCommandChallenge,
+  digestCreateAgentRun,
+  digestUpdateProjectAssistance,
+  getChapter,
+  getManuscriptTree,
+  updateProjectAssistance,
+} from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import {
   applyImeComposition,
   applyTrustedInput,
@@ -170,6 +180,102 @@ async function readRevision(frame: HTMLIFrameElement, projectId: string, chapter
   });
   return chapter.chapter.current_revision;
 }
+
+it("consumes real assistance and Run Activity before the author continues writing", async () => {
+  const { frame, projectId, chapterId } = await openChapterEditor();
+  const childWindow = applicationWindow(frame);
+  const baseUrl = childWindow.location.origin;
+  const fetchImpl = childWindow.fetch.bind(childWindow);
+  const key = (suffix: string) => `018f0000-0000-7001-8000-00000000f8${suffix}`;
+  const binding = {
+    client_contract_revision: RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+    security_policy_revision: "storyos.web-security-policy.release-1.v1",
+  };
+  const tree = await getManuscriptTree({ baseUrl, projectId, fetchImpl });
+  const assistance = {
+    command_schema: "storyos.command.update-project-assistance.request.v1" as const,
+    update_project_assistance_input: {
+      availability: "available" as const,
+      expected_assistance_revision: "0",
+      ...binding,
+      correlation_id: key("01"),
+    },
+  };
+  const assistanceChallenge = await createProjectCommandChallenge({
+    baseUrl, projectId, fetchImpl,
+    request: {
+      method: "PUT",
+      route_template: "/api/v1/projects/{project_id}/assistance",
+      command_schema: assistance.command_schema,
+      canonical_command_digest: await digestUpdateProjectAssistance(assistance),
+      idempotency_key: key("02"),
+    },
+  });
+  await updateProjectAssistance({
+    baseUrl, projectId, fetchImpl, idempotencyKey: key("02"),
+    antiForgery: assistanceChallenge.nonce, request: assistance,
+  });
+  const run = {
+    command_schema: "storyos.command.create-agent-run.request.v2" as const,
+    create_agent_run_input: {
+      conversation: { kind: "new" as const },
+      author_message: { text: "Help with this passage." },
+      working_target: { kind: "current_chapter" as const, chapter_id: chapterId },
+      instruction: { kind: "absent" as const },
+      cause: { kind: "author_request" as const },
+      ...binding,
+      correlation_id: key("03"),
+    },
+  };
+  const runChallenge = await createProjectCommandChallenge({
+    baseUrl, projectId, fetchImpl,
+    request: {
+      method: "POST",
+      route_template: "/api/v1/projects/{project_id}/agent-runs",
+      command_schema: run.command_schema,
+      canonical_command_digest: await digestCreateAgentRun(run),
+      idempotency_key: key("04"),
+    },
+  });
+  const admitted = await createAgentRun({
+    baseUrl, projectId, fetchImpl, idempotencyKey: key("04"),
+    antiForgery: runChallenge.nonce, request: run,
+  });
+  expect(admitted.effect.kind).toBe("admitted");
+  const root = appRoot(frame);
+  const editor = manuscriptEditor(root, childWindow);
+  const before = await readRevision(frame, projectId, chapterId);
+  editor.focus();
+  focusManuscriptEnd(editor, childWindow);
+  await applyTrustedInput({ operation: "insert_text", text: "Start. " });
+  await waitSaved(root, before.revision_id);
+  const firstSavedRevisionId = root.querySelector("[data-save-state]")
+    ?.getAttribute("data-authoritative-revision-id") ?? "";
+  const stream = await activityStream({
+    baseUrl, projectId, snapshotId: tree.snapshot.snapshot_id,
+    protocolRelease: "storyos.public.release.1", fetchImpl,
+  });
+  const frames = stream.split("\n\n").filter(Boolean).map((block: string) => {
+    const lines = block.split("\n");
+    return {
+      id: lines.find((line: string) => line.startsWith("id: "))?.slice(4) ?? "",
+      kind: JSON.parse(lines.find((line: string) => line.startsWith("data: "))!.slice(6))
+        .event_kind as string,
+    };
+  });
+  expect(frames.map((event) => event.kind)).toEqual([
+    "project_assistance_updated", "agent_run_created", "authoritative_author_edit_applied",
+  ]);
+  const lastEventId = frames.at(-1)?.id;
+  expect(lastEventId).toMatch(/^v1\./);
+  await expect.poll(() => root.querySelector("[data-activity-last-event-id]")
+    ?.getAttribute("data-activity-last-event-id"), { timeout: 10_000 }).toBe(lastEventId);
+  editor.focus();
+  focusManuscriptEnd(editor, childWindow);
+  await applyTrustedInput({ operation: "insert_text", text: "Still writing." });
+  await waitSaved(root, firstSavedRevisionId);
+  expect((await readRevision(frame, projectId, chapterId)).body).toBe("Start. Still writing.");
+});
 
 it("settles IME, clipboard, drop, and contiguous Block replacement without reusing identity", async () => {
   const { frame, projectId, chapterId } = await openChapterEditor();

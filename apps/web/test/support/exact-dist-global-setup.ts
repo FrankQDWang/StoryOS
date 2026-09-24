@@ -69,10 +69,18 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND head.manuscript_object_id = '${CHAPTER}'::uuid),
         'foreign_user_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
           WHERE owner_user_id <> '${USER_A}'::uuid),
+        'activity_consumer_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
+          WHERE owner_user_id = '${USER_A}'::uuid
+            AND (command_kind, idempotency_key) IN (
+              ('updateProjectAssistance', '018f0000-0000-7001-8000-00000000f802'::uuid),
+              ('createAgentRun', '018f0000-0000-7001-8000-00000000f804'::uuid))),
         'non_fixture_non_create_project_receipt_count', (SELECT count(*) FROM storyos.domain_receipts
           WHERE owner_user_id = '${USER_A}'::uuid
             AND project_id <> '${PROJECT_A}'::uuid
             AND project_id NOT IN (SELECT project_id FROM production)
+            AND (command_kind, idempotency_key) NOT IN (
+              ('updateProjectAssistance', '018f0000-0000-7001-8000-00000000f802'::uuid),
+              ('createAgentRun', '018f0000-0000-7001-8000-00000000f804'::uuid))
             AND command_kind <> 'createProject'
             AND command_kind <> 'updateProject'
             AND command_kind <> 'archiveProject'
@@ -105,6 +113,7 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
       project_activity_position: "4",
       manuscript_body: "Authoritative A Hello中文 EN!",
       foreign_user_receipt_count: 0,
+      activity_consumer_receipt_count: 2,
       non_fixture_non_create_project_receipt_count: 0,
     });
   };

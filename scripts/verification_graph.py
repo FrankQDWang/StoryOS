@@ -116,7 +116,7 @@ def attach(root, plan, policy, files, revision=None):
             selected = expanded
     else:
         for check in plan['checks']:
-            owner = 'check:' + check['group']
+            owner = 'check:cargo' if check['group'].startswith('cargo:') else 'check:' + check['group']
             if owner not in nodes:
                 raise ValueError(f'Missing workflow profile: {check["group"]}')
             selected.add(owner)

@@ -1,5 +1,7 @@
 import { getSnapshot }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { IMPLEMENTED_PROJECT_ACTIVITY_EVENTS }
+  from "../../../generated/typescript/storyos-public-release-1/project-activity.mjs";
 import type {
   GetSnapshotResponse,
   ProjectScope,
@@ -15,23 +17,6 @@ import { MAX_WORKING_JOURNAL_ITEMS } from "./journal-working-set.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
-const PROJECT_ACTIVITY_KINDS = new Set([
-  "authoritative_author_edit_applied",
-  "writer_takeover_applied",
-  "writer_takeover_compare_failed",
-  "project_created",
-  "project_updated",
-  "project_archival_changed",
-  "volume_created",
-  "volume_updated",
-  "chapter_created",
-  "chapter_updated",
-  "current_chapter_set",
-  "chapter_deleted",
-  "volume_deleted",
-  "human_readable_manuscript_export_settled",
-  "project_export_settled",
-]);
 const boundedU64 = (value: unknown): value is string => typeof value === "string" && U64.test(value)
   && BigInt(value) <= 18446744073709551615n;
 const isoInstant = (value: unknown): value is string => typeof value === "string"
@@ -72,13 +57,8 @@ function isJsonObject(value: unknown): value is Record<string, unknown> {
 }
 
 function activityEventSchemas(kind: string): readonly string[] {
-  if (kind === "volume_created") {
-    return ["storyos.event.volume-created.v1", "storyos.event.volume-created.v2"];
-  }
-  if (kind === "chapter_created") {
-    return ["storyos.event.chapter-created.v1", "storyos.event.chapter-created.v2"];
-  }
-  return [`storyos.event.${kind.replaceAll("_", "-")}.v1`];
+  return Object.hasOwn(IMPLEMENTED_PROJECT_ACTIVITY_EVENTS, kind)
+    ? (IMPLEMENTED_PROJECT_ACTIVITY_EVENTS[kind] ?? []) : [];
 }
 
 function stringField(value: unknown): string | undefined {
@@ -111,7 +91,7 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
     && boundedU64(stringField(payload?.author_action_sequence))
     && stringField(payload?.author_action_sequence) !== "0";
   const otherPersistedKind = kind !== "authoritative_author_edit_applied"
-    && PROJECT_ACTIVITY_KINDS.has(kind)
+    && activityEventSchemas(kind).length > 0
     && event != null
     && activityEventSchemas(kind).includes(event.event_schema)
     && typeof event.aggregate_ref?.kind === "string"
@@ -120,7 +100,7 @@ function validatedEvent(frameValue: unknown, workspace: EditorWorkspace): Projec
   if (event?.envelope_version !== 1
     || event.activity_profile !== "storyos.project-activity.v1"
     || !UUID.test(event.event_id ?? "")
-    || !PROJECT_ACTIVITY_KINDS.has(kind)
+    || activityEventSchemas(kind).length === 0
     || JSON.stringify(event.project_scope) !== JSON.stringify(scope)
     || event.requester_user_id !== scope.owner_user_id
     || event.actor?.kind !== "author"

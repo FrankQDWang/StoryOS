@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 storyos-core = { path = "../storyos-core" }
+storyos-contracts = { path = "../storyos-contracts" }
 sha2.workspace = true
 
 [dev-dependencies]

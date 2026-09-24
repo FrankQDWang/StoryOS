@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "vitest";
 
 import {
+  activityStream,
   createAgentRun,
   createChapter,
   createProject,
@@ -18,6 +19,7 @@ import {
   digestCreateVolume,
   digestUpdateProjectAssistance,
   getAgentRun,
+  getManuscriptTree,
   updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
@@ -315,6 +317,55 @@ async function postRun(
   });
   return { challenge, admitted };
 }
+
+test("implemented assistance and Run Events replay from a retained public cursor", async () => {
+  const started = await startRealServer();
+  try {
+    const first = await createEmpty(
+      started.baseUrl, "session-a", id("f730"), "Activity Novel", id("f731"),
+    );
+    const tree = await getManuscriptTree({
+      baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl,
+    });
+    const chapterId = await prepareProject(started.baseUrl, first.fetchImpl, first.projectId, "f7");
+    const run = await postRun(
+      started.baseUrl, first.fetchImpl, first.projectId, id("f732"),
+      runRequest({ kind: "new" }, chapterId, id("f733")),
+    );
+    if (run.admitted.effect.kind !== "admitted") throw new Error("Run admission did not apply");
+    const options = {
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      snapshotId: tree.snapshot.snapshot_id,
+      protocolRelease: "storyos.public.release.1",
+      fetchImpl: first.fetchImpl,
+    };
+    const body = await activityStream(options);
+    const frames = body.split("\n\n").filter(Boolean).map((block) => {
+      const lines = block.split("\n");
+      return {
+        id: lines.find((line) => line.startsWith("id: "))?.slice(4),
+        data: JSON.parse(lines.find((line) => line.startsWith("data: "))!.slice(6)) as {
+          event_kind: string; event_schema: string; aggregate_ref: { kind: string; id: string };
+        },
+      };
+    });
+    assert.deepEqual(frames.map((frame) => frame.data.event_kind), [
+      "project_assistance_updated", "volume_created", "chapter_created", "agent_run_created",
+    ]);
+    assert.equal(frames[0]?.data.event_schema, "storyos.event.project-assistance-updated.v1");
+    assert.deepEqual(frames[0]?.data.aggregate_ref, { kind: "project", id: first.projectId });
+    assert.equal(frames[3]?.data.event_schema, "storyos.event.agent-run-created.v1");
+    assert.deepEqual(frames[3]?.data.aggregate_ref, {
+      kind: "agent_run", id: run.admitted.effect.run_id,
+    });
+    const afterAssistance = await activityStream({ ...options, lastEventId: frames[0]!.id! });
+    assert.equal((afterAssistance.match(/event: storyos.project-activity/g) ?? []).length, 3);
+    assert.equal(await activityStream({ ...options, lastEventId: frames[3]!.id! }), "");
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
 
 test("createAgentRun admits one conversation and keeps query scope closed", async () => {
   const started = await startRealServer();
