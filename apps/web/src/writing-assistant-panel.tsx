@@ -128,7 +128,7 @@ export function WritingAssistantPanel({
   collapsed: boolean;
   context?: AssistantContext | undefined;
 }) {
-  const [availability, setAvailability] = useState<"loading" | "available" | "unavailable">("loading");
+  const [availability, setAvailability] = useState<"available" | "unavailable">("unavailable");
   const [reference, setReference] = useState<RequestReference | undefined>(
     () => context === undefined ? undefined : readReference(context.scope),
   );

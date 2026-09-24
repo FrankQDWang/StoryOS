@@ -48,7 +48,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
     await page.locator("form[data-rename]").waitFor();
     const projectId = await page.locator("form[data-rename]").getAttribute("data-rename");
-    assert.ok(projectId !== null && UUID.test(projectId));
+    assert.ok(projectId !== null && UUID.test(projectId), `Project id: ${projectId}`);
     await page.locator('input[name="volume-title"]').fill("Request Volume");
     await page.locator('input[name="volume-title"]').press("Enter");
     await page.locator('input[name="chapter-title"]').fill("Request Chapter");
