@@ -9,7 +9,7 @@ import {
   getChapter, getProjectAssistance, StoryOSProtocolError, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunResponse, UpdateProjectAssistanceRequest,
+  CreateAgentRunRequest, CreateAgentRunResponse, UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { runStoryOSWorker, sessionFetch } from "./node-integration";
@@ -107,6 +107,10 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
         return;
       }
       posted += 1;
+      const submitted = route.request().postDataJSON() as CreateAgentRunRequest;
+      assert.deepEqual(submitted.create_agent_run_input.working_target,
+        { kind: "current_chapter", chapter_id: chapterId });
+      assert.deepEqual(submitted.create_agent_run_input.author_message, { text: MESSAGE });
       const response = await route.fetch();
       assert.equal(response.status(), 202);
       admitted = await response.json() as CreateAgentRunResponse;
@@ -133,6 +137,8 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.deepEqual(queued.project_scope, admitted.project_scope);
     assert.equal(queued.context.selected.find((item) =>
       item.source_class === "author_instruction")?.content, MESSAGE);
+    assert.equal(queued.context.selected.find((item) =>
+      item.source_class === "working_target")?.content, before.chapter.current_revision.body);
     assert.equal(queued.context.current_availability.working_target.kind, "current");
 
     for (let attempt = 0; attempt < 8; attempt += 1) {

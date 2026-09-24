@@ -207,6 +207,7 @@ export function WritingAssistantPanel({
     const message = input.value.trim();
     if (message.length === 0) return;
     const previous = reference;
+    const previousRun = run;
     let storedNew = false;
     let commandSent = false;
     const restorePrevious = () => {
@@ -216,7 +217,7 @@ export function WritingAssistantPanel({
         saveReference(previous);
       }
       setReference(previous);
-      setRun(undefined);
+      setRun(previousRun);
     };
     setSending(true);
     setRefused(false);
