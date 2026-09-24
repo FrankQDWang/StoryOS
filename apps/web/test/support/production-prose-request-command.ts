@@ -102,16 +102,6 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(before.project_scope.owner_user_id, USER);
     const [firstBlock, secondBlock] = before.chapter.current_revision.blocks;
     assert.ok(firstBlock && secondBlock);
-    await page.evaluate(() => {
-      document.body.dataset.authorInputEvents = "0";
-      document.addEventListener("beforeinput", (event) => {
-        if (!(event.target instanceof HTMLElement)
-          || event.target.closest("[data-manuscript-editor]") === null) return;
-        document.body.dataset.authorInputEvents = String(
-          Number(document.body.dataset.authorInputEvents) + 1);
-      }, { capture: true });
-    });
-
     let posted = 0;
     let delivery: "lost" | "historical" = "lost";
     let admitted: CreateAgentRunResponse | undefined;
@@ -159,6 +149,15 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(queued.context.selected.find((item) =>
       item.source_class === "working_target")?.content, before.chapter.current_revision.body);
     assert.equal(queued.context.current_availability.working_target.kind, "current");
+    await page.evaluate(() => {
+      document.body.dataset.authorInputEvents = "0";
+      document.addEventListener("beforeinput", (event) => {
+        if (!(event.target instanceof HTMLElement)
+          || event.target.closest("[data-manuscript-editor]") === null) return;
+        document.body.dataset.authorInputEvents = String(
+          Number(document.body.dataset.authorInputEvents) + 1);
+      }, { capture: true });
+    });
 
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const current = await getAgentRun({ ...options, runId });
