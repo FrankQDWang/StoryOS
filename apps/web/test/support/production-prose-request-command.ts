@@ -6,7 +6,7 @@ import type { BrowserContext } from "playwright";
 
 import {
   createProjectCommandChallenge, digestUpdateProjectAssistance, getAgentRun,
-  getChapter, getProjectAssistance, StoryOSProtocolError, updateProjectAssistance,
+  getChapter, getProjectAssistance, getProposal, StoryOSProtocolError, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   CreateAgentRunRequest, CreateAgentRunResponse, UpdateProjectAssistanceRequest,
@@ -95,10 +95,22 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator(".composer button:not([disabled])").waitFor();
     await editor.click();
     await page.keyboard.insertText("The lantern went dark.");
+    await page.keyboard.press("Enter");
+    await page.keyboard.insertText("The second door opened.");
+    await page.waitForFunction(async ({ projectId, chapterId }) => {
+      const response = await fetch(`/api/v1/projects/${projectId}/chapters/${chapterId}`);
+      if (!response.ok) return false;
+      const chapter = await response.json() as {
+        chapter: { current_revision: { blocks: { text: string }[] } };
+      };
+      return chapter.chapter.current_revision.blocks.map((block) => block.text).join("\n")
+        === "The lantern went dark.\nThe second door opened.";
+    }, { projectId, chapterId }, { polling: 100 });
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const before = await getChapter({ ...options, chapterId });
     assert.equal(before.project_scope.owner_user_id, USER);
-
+    const [firstBlock, secondBlock] = before.chapter.current_revision.blocks;
+    assert.ok(firstBlock && secondBlock);
     let posted = 0;
     let delivery: "lost" | "historical" = "lost";
     let admitted: CreateAgentRunResponse | undefined;
@@ -146,6 +158,15 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(queued.context.selected.find((item) =>
       item.source_class === "working_target")?.content, before.chapter.current_revision.body);
     assert.equal(queued.context.current_availability.working_target.kind, "current");
+    await page.evaluate(() => {
+      document.body.dataset.authorInputEvents = "0";
+      document.addEventListener("beforeinput", (event) => {
+        if (!(event.target instanceof HTMLElement)
+          || event.target.closest("[data-manuscript-editor]") === null) return;
+        document.body.dataset.authorInputEvents = String(
+          Number(document.body.dataset.authorInputEvents) + 1);
+      }, { capture: true });
+    });
 
     for (let attempt = 0; attempt < 8; attempt += 1) {
       const current = await getAgentRun({ ...options, runId });
@@ -159,20 +180,39 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     const completed = await getAgentRun({ ...options, runId });
     assert.equal(completed.status, "completed");
     assert.equal(completed.decision.kind, "prose_change");
+    if (completed.decision.kind !== "prose_change"
+      || completed.decision.opened_proposal.kind !== "present") throw new Error("Proposal not opened");
+    const firstProposalId = completed.decision.opened_proposal.proposal_id;
+    const firstProposal = (await getProposal({ ...options, proposalId: firstProposalId })).proposal;
+    assert.equal(firstProposal.manuscript_block_id, firstBlock.manuscript_block_id);
     await page.locator("[data-assistant-inspect]").click();
     await page.locator('[data-assistant-dispatch="completed"]').waitFor();
+    const firstCandidate = page.locator(`[data-proposal-id="${firstProposalId}"]`);
+    await firstCandidate.waitFor();
+    assert.equal(await firstCandidate.getAttribute("data-proposal-operation-id"),
+      firstProposal.operations.find((operation) =>
+        operation.manuscript_block_id === firstBlock.manuscript_block_id)?.operation_id);
+    assert.equal(await firstCandidate.getAttribute("data-proposal-revision-id"), firstProposal.revision_id);
+    assert.equal(await firstCandidate.getAttribute("data-proposal-source-run-id"), runId);
+    assert.equal(await firstCandidate.getAttribute("data-proposal-source-decision-id"),
+      completed.decision.decision_id);
+    assert.equal(await firstCandidate.textContent(), `候选文字 · 尚未成为正文${firstProposal.candidate_text}`);
+    assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.textContent),
+      firstBlock.text);
+    assert.equal(await page.locator("body").getAttribute("data-author-input-events"), "0");
     assert.equal(await page.locator("[data-assistant-result]").textContent(),
       completed.decision.kind === "prose_change" ? completed.decision.text : null);
     assert.equal(await page.locator("[data-assistant-run-id]").getAttribute("data-assistant-run-id"), runId);
     await page.reload();
     await page.locator('[data-assistant-dispatch="completed"]').waitFor();
+    await page.locator(`[data-proposal-id="${firstProposalId}"]`).waitFor();
     assert.equal(await page.locator("[data-assistant-result]").textContent(),
       completed.decision.kind === "prose_change" ? completed.decision.text : null);
     assert.equal(posted, 1);
     const after = await getChapter({ ...options, chapterId });
     assert.deepEqual(after.chapter, before.chapter);
-    assert.equal(await page.locator("[data-manuscript-editor]").textContent(),
-      "The lantern went dark.");
+    assert.deepEqual(await page.locator("[data-manuscript-editor] > p").allTextContents(),
+      ["The lantern went dark.", "The second door opened."]);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
     delivery = "historical";
     await page.locator('input[name="assistant-message"]').fill(MESSAGE);
@@ -184,6 +224,66 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.reload();
     await page.locator('[data-assistant-run-id="' + secondRunId + '"]').waitFor();
     assert.equal(posted, 2, "historical acknowledgement recovery must not resubmit");
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const current = await getAgentRun({ ...options, runId: secondRunId });
+      if (current.status === "completed") break;
+      await runStoryOSWorker({
+        repositoryRoot,
+        workerBinary: join(repositoryRoot, "target", "release-package", "storyos-worker"),
+        args: ["--once"],
+      });
+    }
+    const second = await getAgentRun({ ...options, runId: secondRunId });
+    if (second.decision.kind !== "prose_change"
+      || second.decision.opened_proposal.kind !== "present") throw new Error("Second Proposal not opened");
+    const secondProposalId = second.decision.opened_proposal.proposal_id;
+    const secondProposal = (await getProposal({ ...options, proposalId: secondProposalId })).proposal;
+    assert.notEqual(secondProposalId, firstProposalId);
+    assert.equal(secondProposal.manuscript_block_id, secondBlock.manuscript_block_id);
+    await page.locator("[data-assistant-inspect]").click();
+    await page.locator(`[data-proposal-id="${secondProposalId}"]`).waitFor();
+    assert.equal(await page.locator("[data-proposal-id]").count(), 2);
+    assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).evaluate(
+      (element) => element.previousElementSibling?.textContent), secondBlock.text);
+    await page.reload();
+    await page.locator("[data-proposal-id]").first().waitFor();
+    assert.deepEqual((await page.locator("[data-proposal-id]").evaluateAll((elements) =>
+      elements.map((element) => element.getAttribute("data-proposal-id")))).sort(),
+    [firstProposalId, secondProposalId].sort());
+    assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`)
+      .getAttribute("data-proposal-revision-id"), secondProposal.revision_id);
+    assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`)
+      .getAttribute("data-proposal-source-run-id"), secondRunId);
+    await page.screenshot({ path: join(repositoryRoot, "target", "issue-787-block-proposals.png"),
+      fullPage: true });
+    const missingBlockId = uuidV7();
+    let readMode: "invalid" | "missing" = "invalid";
+    await page.route((url) => url.pathname.endsWith(`/proposals/${firstProposalId}`),
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.json() as Awaited<ReturnType<typeof getProposal>>;
+        if (readMode === "invalid") {
+          body.proposal.validation = "invalid";
+        } else {
+          body.proposal.manuscript_block_id = missingBlockId;
+          body.proposal.operations = body.proposal.operations.map((operation) => ({
+            ...operation, manuscript_block_id: missingBlockId,
+          }));
+        }
+        await route.fulfill({ response, body: JSON.stringify(body) });
+      });
+    await page.locator("[data-assistant-inspect]").click();
+    const ineligible = page.locator(`[data-proposal-id="${firstProposalId}"]`);
+    await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
+      .waitFor();
+    assert.ok((await ineligible.textContent())?.includes(firstProposal.candidate_text));
+    assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), firstProposal.revision_id);
+    readMode = "missing";
+    await page.locator("[data-assistant-inspect]").click();
+    await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
+    assert.equal(await page.locator(`[data-proposal-id="${firstProposalId}"]`).count(), 0);
+    assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).count(), 1);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();
