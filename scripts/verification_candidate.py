@@ -78,6 +78,11 @@ def readiness(root, candidate, context):
     return verification_reviews.admission(root, context)
 
 
+def validate_success(report):
+    if {step['stage'] for step in report['steps']} != set(report['plan']['stages']):
+        raise ValueError('Complete verification stages are missing or unexpected')
+
+
 def require_cleanup(active_path):
     if active_path.exists():
         active = json.loads(active_path.read_text())
@@ -132,6 +137,7 @@ def run(root, command, context):
                     receipt = json.loads(receipt_path.read_text()) if receipt_path.exists() else {}
                     valid = receipt.get('sha256') == hashlib.sha256(path.read_bytes()).hexdigest()
                     if valid and report['status'] == 'passed':
+                        validate_success(report)
                         observe(root, 'reused', report=str(path), run_id=report['run_id'])
                         return 0
                     recovery_path = path.parent / 'recovery.json'
@@ -159,6 +165,7 @@ def run(root, command, context):
                 try:
                     if candidate != identity(root, command, context['base']):
                         raise ValueError('Candidate execution inputs changed')
+                    validate_success(report)
                 except (ValueError, KeyError, TypeError) as error:
                     report.update(status='incomplete', error=str(error))
                     runner.write_json(path, report)

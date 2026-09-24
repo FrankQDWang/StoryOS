@@ -172,7 +172,7 @@ source-changing runs cannot publish reusable results.
 
 Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution without
 reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
-need their referenced reports. A cache hit is daily feedback, not candidate evidence.
+need their referenced reports. A cache hit is daily feedback, not a PR check.
 
 The complete and daily run commands admit one run per checkout at a time. A busy
 budget fails with a retry reason. The lock covers process-group cleanup; overdue
@@ -265,7 +265,7 @@ registered in the policy. Query it with
 `python3 scripts/verification.py status --check verify-policy --json`.
 Source bytes and write stamps, policy, test membership, command, execution input
 digest, and plan identity bind targeted results. Only a current passed result
-can satisfy a current prerequisite. These results do not replace candidate evidence.
+can satisfy a current prerequisite. They do not satisfy a separately requested complete run.
 The Make test targets use this same entry when called outside a managed run.
 Public step, Rust, shared database, package, and recovery script entries create a
 root record or inherit the existing run. Direct Cargo, Vitest, or other shell
@@ -416,7 +416,7 @@ relative to `target/verification/`; they are local records, not served files.
 Run `make observe-dashboard` after edits. Observation tests reject generated drift.
 `make observe-smoke` also queries collapsed and expanded DAGs through Grafana for
 labelled synthetic partial, complete, running, failed, reused, and legacy examples.
-These examples prove display behavior, not product execution or candidate evidence.
+These examples prove display behavior, not product execution.
 The read-only collector has a 64 MiB temporary mount for SQLite sort files. The
 smoke check forces a sort spill and requires a container-collected change after
 the initial import; a stale database cannot satisfy that check.
