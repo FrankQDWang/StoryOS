@@ -36,7 +36,7 @@ test("make web packages the production graph before Web tests", async () => {
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
   const viteIndex = commands.findIndex((line) => line.includes("python3 scripts/package-release.py"));
-  const testIndex = commands.findIndex((line) => line.includes("vitest run"));
+  const testIndex = commands.findIndex((line) => line.includes("scripts/verification_web_overlap.py"));
   assert.ok(viteIndex >= 0, `make web must build the paired release package\n${stdout}`);
   assert.ok(testIndex >= 0, `make web must run Vitest\n${stdout}`);
   assert.ok(viteIndex < testIndex, "vite build must fail closed before Web tests");

@@ -174,11 +174,26 @@ Use `make verify-changed BASE=HEAD VERIFY_ARGS=--no-cache` to force execution wi
 reading or publishing a result-cache entry. Local entries in `target/verification-cache/`
 need their referenced reports. A cache hit is daily feedback, not a PR check.
 
-The complete and daily run commands admit one run per checkout at a time. A busy
+The complete and daily run commands admit one root run per checkout at a time. A busy
 budget fails with a retry reason. The lock covers process-group cleanup; overdue
 descendants are terminated and fail the run. The input policy caps daily Cargo build
 jobs, Rust test threads and Vitest workers. Use `VERIFY_ARGS='--workers 1'` to lower
-that cap. Groups stay serial. Complete runs retain their existing worker configuration.
+that cap. Daily groups stay serial. A requested complete run admits one bounded pair:
+`foundation-tests` and `project-scope` after `release-package`. The policy declares
+their read and write resources, two-worker limit, six of eight allowed CPU slots, and
+12 of 16 GiB allowed memory. The host needs at least eight CPUs and 16 GiB physical
+memory. A dependency between the pair, resource conflict, or insufficient host
+budget restores the serial order. An unhandled prerequisite refuses the pair before
+either stage starts. The release package is read only during both stages. Foundation
+Vitest uses its own Chrome profile and scratch state; Project Scope owns PostgreSQL,
+Cargo output, exact-dist Chrome, and recovery copies. Project Scope retains its
+internal PostgreSQL phase order, fixture resets, migration, exact-dist, and both
+recovery proofs. Failure lets an already-started independent stage finish and record
+its cleanup; cancellation signals both owned process groups. Reports retain stage
+attempt intervals, so concurrent cost must use their union rather than their sum.
+`make verify-targeted CHECK=web-overlap` runs the same pair with overlap for a
+scope-matched diagnostic comparison; it does not start a complete run. The scheduler
+calls the existing Make stage targets and skips their already-passed package prerequisite.
 
 ## Rust build-cache generations
 
