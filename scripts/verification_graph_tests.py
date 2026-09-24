@@ -74,6 +74,32 @@ class GraphPlanTests(unittest.TestCase):
         self.assertNotIn(str(self.other.relative_to(self.fixture.root)), json.loads(result.stdout)['plan']['test_files'])
         self.assertFalse(list(self.fixture.root.glob('target/verification/*/report.json')))
 
+    def test_verification_file_execution_changes_with_worker_policy(self):
+        self.policy['rules'].insert(0, {'pattern': 'scripts/*_tests.py', 'kind': 'verification-test',
+                                        'group': 'verification-tools'})
+        self.policy['complete']['groups']['verification-tools'] = ['foundation-tests']
+        path = self.fixture.root / 'scripts/sample_tests.py'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text('import unittest\n')
+        self.save()
+        self.fixture.repo.git('add', '.')
+        self.fixture.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                              'commit', '--quiet', '-m', 'Add verification test file.')
+        result = self.fixture.cli('plan', '--profile', 'complete')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        node_id = 'file:verification-tools:scripts/sample_tests.py'
+        nodes = {item['id']: item for item in json.loads(result.stdout)['graph']['nodes']}
+        self.assertEqual(nodes[node_id]['execution'], 'member-only')
+        self.policy['verification_test_workers'] = 2
+        self.save()
+        self.fixture.repo.git('add', '.')
+        self.fixture.repo.git('-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                              'commit', '--quiet', '-m', 'Declare verification workers.')
+        result = self.fixture.cli('plan', '--profile', 'complete')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        nodes = {item['id']: item for item in json.loads(result.stdout)['graph']['nodes']}
+        self.assertEqual(nodes[node_id]['execution'], 'whole-file')
+
     def test_invalid_workflow_fails_at_the_public_plan_boundary(self):
         original = json.loads(json.dumps(self.policy))
         mutations = [
