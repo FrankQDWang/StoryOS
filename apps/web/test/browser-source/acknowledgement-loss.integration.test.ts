@@ -11,6 +11,7 @@ import { commitStrongerGroup } from "../../src/author-edit-outcome-reconciliatio
 import {
   openEditorWorkspace,
   persistReplaceSelection,
+  rebuildPendingProjection,
   submitOnePendingAuthorEdit,
 } from "../../src/editor-session.ts";
 import type {
@@ -49,6 +50,7 @@ type OutcomeMode =
   | "committed"
   | "malformed"
   | "mismatch"
+  | "no_effect"
   | "rejected"
   | "unavailable";
 
@@ -169,6 +171,21 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
         project_scope: scope,
         receipt: { ...baseResponse.receipt, project_scope: scope },
       };
+      const noEffectResponse: ApplyAuthorEditResponse = {
+        ...baseResponse,
+        project_scope: scope,
+        receipt: {
+          ...baseResponse.receipt,
+          project_scope: scope,
+          prior_heads: [REVISION],
+          resulting_heads: [REVISION],
+          authoritative_revision_ids: [],
+          authoritative_commit_ids: [],
+          author_action_sequence: null,
+          result: "no_effect",
+        },
+        effect: { kind: "no_effect", reason: "content_unchanged" },
+      };
       let response: GetApplyAuthorEditOutcomeResponse;
       if (outcomeMode === "rejected") {
         response = {
@@ -207,7 +224,8 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
           schema_id: "storyos.query.apply-author-edit-outcome.response.v1",
           correlation_id: "018f0000-0000-7001-8000-000000000081",
           project_scope: scope,
-          outcome: { outcome_kind: "committed", response: committedResponse },
+          outcome: { outcome_kind: "committed",
+            response: outcomeMode === "no_effect" ? noEffectResponse : committedResponse },
         };
       }
       if (outcomeMode === "committed" || outcomeMode === "mismatch") {
@@ -256,6 +274,18 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
       inputOrigin: "paste",
       undoGroupId: "018f0000-0000-7001-8000-000000000040",
       createdAt: "2026-08-15T08:00:00.000Z",
+    });
+  }
+
+  async function persistNetZero(workspace: EditorReadyState): Promise<void> {
+    const undoGroupId = "018f0000-0000-7001-8000-000000000040";
+    await persistReplaceSelection(workspace, {
+      from: 4, to: 4, text: "x", resultingBody: "Basex",
+      inputOrigin: "typing", undoGroupId, createdAt: "2026-08-15T08:00:00.000Z",
+    });
+    await persistReplaceSelection(workspace, {
+      from: 4, to: 5, text: "", resultingBody: "Base",
+      inputOrigin: "deletion", undoGroupId, createdAt: "2026-08-15T08:00:00.001Z",
     });
   }
 
@@ -360,6 +390,43 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     await expect(commitStrongerGroup(workspace, weaker))
       .rejects.toThrow(/acknowledgement does not converge/);
     expect(requireGroup(await snapshot(workspace))).toEqual(committedGroup);
+    await closeScenario(workspace);
+
+    outcomeMode = "no_effect";
+    counts.authorEdits = 0;
+    counts.outcomes = 0;
+    workspace = await openReady();
+    await persistNetZero(workspace);
+    expect(await submitOnePendingAuthorEdit({
+      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    })).toMatchObject({
+      body: "Base", save_state: "saved", unsettled_intent_count: 0,
+      authoritative_revision_id: REVISION,
+    });
+    expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
+      .toEqual({ authorEdits: 1, outcomes: 1 });
+    const noEffectSnapshot = await snapshot(workspace);
+    expect(noEffectSnapshot.records).toHaveLength(2);
+    expect(requireGroup(noEffectSnapshot).settlement).toMatchObject({
+      kind: "zero_authority_receipt_settled",
+      receipt: { result: "no_effect", authoritative_revision_ids: [],
+        authoritative_commit_ids: [], author_action_sequence: null },
+      effect: { kind: "no_effect", reason: "content_unchanged" },
+    });
+    workspace.database.close();
+    workspace = await openReady();
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({
+      body: "Base", save_state: "saved", unsettled_intent_count: 0,
+      authoritative_revision_id: REVISION,
+    });
+    await expect(submitOnePendingAuthorEdit({
+      workspace, baseUrl: location.origin, fetchImpl, cryptoImpl: crypto,
+    })).rejects.toThrow(/One pending Author Edit is required/);
+    expect({ authorEdits: counts.authorEdits, outcomes: counts.outcomes })
+      .toEqual({ authorEdits: 1, outcomes: 1 });
+    expect(await persistReplaceSelection(workspace, {
+      from: 4, to: 4, text: "!", resultingBody: "Base!",
+    })).toMatchObject({ body: "Base!", save_state: "saving", unsettled_intent_count: 1 });
     await closeScenario(workspace);
 
     outcomeMode = "rejected";
@@ -475,7 +542,7 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
 
     outcomeMode = "mismatch";
     workspace = await openReady();
-    await persistPending(workspace);
+    await persistNetZero(workspace);
     await expect(submitOnePendingAuthorEdit({
       workspace,
       baseUrl: location.origin,
@@ -485,6 +552,9 @@ it("converges lost ApplyAuthorEdit acknowledgement from persistent outcome evide
     assertGroup(await snapshot(workspace), { kind: "unsettled" }, {
       kind: "outcome_query_unresolved",
       strongest: { kind: "no_outcome_observed" },
+    });
+    expect(await rebuildPendingProjection(workspace)).toMatchObject({
+      body: "Base", save_state: "saving", unsettled_intent_count: 2,
     });
     await closeScenario(workspace);
   } finally {

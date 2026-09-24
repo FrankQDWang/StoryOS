@@ -46,7 +46,7 @@ export interface ManualInputController {
     kind: "one" | "broader";
     matches: BoundReplacementMatch[];
     text: string;
-  }): Promise<"applied" | "refused" | "stale">;
+  }): Promise<"applied" | "unchanged" | "refused" | "stale">;
 }
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;

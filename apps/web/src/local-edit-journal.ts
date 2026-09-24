@@ -181,6 +181,19 @@ function blocksFromCheckpoint(
   }];
 }
 
+function checkpointBlocksForChain(chain: JournalPayloadChain): ManuscriptBlock[] {
+  const firstPrimitive = chain.ordered_patch_refs[0]?.normalized_primitives?.[0];
+  const checkpointBlockId = firstPrimitive?.kind === "replace_block_selection"
+    || firstPrimitive?.kind === "split_block"
+    || firstPrimitive?.kind === "move_block"
+    || firstPrimitive?.kind === "retype_block"
+    ? firstPrimitive.manuscript_block_id
+    : firstPrimitive?.kind === "join_blocks"
+      ? firstPrimitive.left_manuscript_block_id
+      : "journal-checkpoint";
+  return blocksFromCheckpoint(chain.checkpoint_ref.materialized_payload ?? "", checkpointBlockId);
+}
+
 function manuscriptBlocksEqual(
   left: readonly ManuscriptBlock[],
   right: readonly ManuscriptBlock[],
@@ -396,16 +409,7 @@ async function validatePayloadChains(
       || new TextEncoder().encode(checkpoint).byteLength > workspace.maxJsonStringUtf8Bytes) {
       throw new Error("Local Edit Journal is corrupt");
     }
-    const firstPrimitive = patches[0]?.normalized_primitives?.[0];
-    const checkpointBlockId = firstPrimitive?.kind === "replace_block_selection"
-      || firstPrimitive?.kind === "split_block"
-      || firstPrimitive?.kind === "move_block"
-      || firstPrimitive?.kind === "retype_block"
-      ? firstPrimitive.manuscript_block_id
-      : firstPrimitive?.kind === "join_blocks"
-        ? firstPrimitive.left_manuscript_block_id
-        : "journal-checkpoint";
-    const checkpointBlocks = blocksFromCheckpoint(checkpoint, checkpointBlockId);
+    const checkpointBlocks = checkpointBlocksForChain(chain);
     let blocks: ManuscriptBlock[];
     if (chain.checkpoint_ref.source_snapshot_id
       === workspace.session.base_snapshot.snapshot_id) {
@@ -604,24 +608,92 @@ export async function validateJournalSnapshot(
   return { ...snapshot, bodyBySequence, blocksBySequence, covered };
 }
 
+function provenNoEffectAgainstDurableBase(
+  group: JournalSubmissionGroup,
+  snapshot: ValidatedJournalSnapshot,
+  base: EditorBaseSnapshot,
+): boolean {
+  const settlement = group.settlement;
+  if (settlement.kind !== "zero_authority_receipt_settled"
+    || settlement.effect?.kind !== "no_effect"
+    || settlement.effect.reason !== "content_unchanged"
+    || snapshot.activeBase === undefined
+    || JSON.stringify(snapshot.activeBase) !== JSON.stringify(base)) return false;
+
+  const request = group.frozen_request_body;
+  const receipt = settlement.receipt;
+  const head = request.expected_authoritative_revision_id;
+  const lastSequence = group.covered_sequence_range.last;
+  const lastRecord = snapshot.records.find((record) =>
+    record.local_intent_sequence === lastSequence);
+  const chain = snapshot.payloadChains.find((item) =>
+    item.payload_chain_id === lastRecord?.payload_chain_ref);
+  const finalBlocks = snapshot.blocksBySequence.get(lastSequence);
+  const finalBody = snapshot.bodyBySequence.get(lastSequence);
+  if (!UUID.test(settlement.command_id)
+    || !UUID.test(settlement.author_command_admission_id)
+    || !UUID.test(receipt.receipt_id)
+    || receipt.result !== "no_effect"
+    || receipt.command_kind !== "applyAuthorEdit"
+    || receipt.producer_cause !== "author_command_admission"
+    || receipt.author_command_admission_id !== settlement.author_command_admission_id
+    || receipt.idempotency_key !== group.idempotency_key
+    || JSON.stringify(receipt.project_scope) !== JSON.stringify(group.project_scope)
+    || JSON.stringify(receipt.command_digest) !== JSON.stringify(group.frozen_request_digest)
+    || JSON.stringify(receipt.expected_heads) !== JSON.stringify([head])
+    || JSON.stringify(receipt.prior_heads) !== JSON.stringify([head])
+    || JSON.stringify(receipt.resulting_heads) !== JSON.stringify([head])
+    || receipt.authoritative_revision_ids.length !== 0
+    || receipt.authoritative_commit_ids.length !== 0
+    || receipt.proposal_revision_ids.length !== 0
+    || receipt.author_action_sequence !== null
+    || !lastRecord || !chain || !finalBlocks || finalBody === undefined
+    || lastRecord.base_snapshot_id !== chain.checkpoint_ref.source_snapshot_id
+    || chain.checkpoint_ref.chapter_object_id !== request.chapter_id
+    || JSON.stringify(chain.checkpoint_ref.source_heads) !== JSON.stringify([head])) {
+    return false;
+  }
+
+  if (head === base.authoritative_head_revision_id
+    && request.chapter_id === base.chapter_id) {
+    return finalBody === base.materialized_revision.body
+      && manuscriptBlocksEqual(finalBlocks, base.materialized_revision.blocks);
+  }
+
+  const appliedSuccessor = snapshot.groups.some((later) =>
+    later.covered_sequence_range.first > lastSequence
+    && later.frozen_request_body.chapter_id === request.chapter_id
+    && later.frozen_request_body.expected_authoritative_revision_id === head
+    && later.settlement.kind === "applied_receipt_settled"
+    && JSON.stringify(later.settlement.receipt.prior_heads) === JSON.stringify([head]));
+  if (!appliedSuccessor) return false;
+  const checkpointBlocks = checkpointBlocksForChain(chain);
+  return finalBody === flattenChapterBody(checkpointBlocks)
+    && manuscriptBlocksEqual(finalBlocks, checkpointBlocks);
+}
+
 function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
-  const appliedSequences = new Set<number>();
+  const resolvedSequences = new Set<number>();
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
   for (const group of snapshot.groups) {
     const groupTargetsCurrentChapter = group.frozen_request_body.chapter_id === base.chapter_id;
     if (isAppliedSettlement(group)) {
-      for (const item of group.ordered_coverage) appliedSequences.add(item.local_intent_sequence);
+      for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
     } else if (isZeroAuthoritySettlement(group) && groupTargetsCurrentChapter) {
-      hasZeroAuthoritySettlement = true;
+      if (provenNoEffectAgainstDurableBase(group, snapshot, base)) {
+        for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
+      } else {
+        hasZeroAuthoritySettlement = true;
+      }
     }
   }
   const activeRecords = snapshot.records.filter((record) =>
     recordTargetsCurrentBase(record, base)
-    && !appliedSequences.has(record.local_intent_sequence));
+    && !resolvedSequences.has(record.local_intent_sequence));
   const blocks = (activeRecords.length === 0
     ? cloneBlocks(base.materialized_revision.blocks)
     : snapshot.blocksBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
