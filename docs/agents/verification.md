@@ -194,6 +194,9 @@ attempt intervals, so concurrent cost must use their union rather than their sum
 `make verify-targeted CHECK=web-overlap` runs the same pair with overlap for a
 scope-matched diagnostic comparison; it does not start a complete run. The scheduler
 calls the existing Make stage targets and skips their already-passed package prerequisite.
+For an explicitly requested complete serial comparison on the same source tree,
+set `STORYOS_VERIFICATION_COMPARE=serial` on `make verify-local`; the default
+complete entry still uses bounded overlap when the resource budget allows it.
 
 ## Rust build-cache generations
 

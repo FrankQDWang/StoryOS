@@ -57,7 +57,7 @@ def validate(policy):
             raise ValueError(f'Invalid complete overlap resources: {stage}')
 
 
-def admission(policy, graph, profile, comparison=False):
+def admission(policy, graph, profile, comparison_mode=None):
     validate(policy)
     overlap = policy['workflow']['complete_overlap']
     stages = overlap['stages']
@@ -82,7 +82,9 @@ def admission(policy, graph, profile, comparison=False):
     memory = sum(item['memory_bytes'] for item in resources.values())
     budget = (cpu <= overlap['cpu_budget'] <= (os.cpu_count() or 0)
               and memory <= overlap['memory_budget_bytes'] <= physical_memory())
-    return stage_order, (profile == 'complete' or profile == 'targeted' and comparison) and independent and not conflict and budget
+    selected_mode = (profile == 'complete' and comparison_mode != 'serial'
+                     or profile == 'targeted' and comparison_mode == 'overlap')
+    return stage_order, selected_mode and independent and not conflict and budget
 
 
 def child_command(stage):
@@ -172,7 +174,7 @@ def main():
     if not graph:
         raise ValueError('The retained verification graph is required')
     stages, concurrent = admission(policy, graph, report['profile'],
-                                   os.environ.get('STORYOS_VERIFICATION_COMPARE') == 'overlap')
+                                   os.environ.get('STORYOS_VERIFICATION_COMPARE'))
     prerequisite = policy['workflow']['complete_overlap']['prerequisite']
     steps = [json.loads(path.read_text()) for path in (directory / 'steps').glob('*.json')]
     if not any(item['stage'] == prerequisite and item['status'] == 'passed' for item in steps):
