@@ -6,6 +6,8 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
+use crate::admitted_proposal_target::{load_admitted_targets, load_current_target};
+
 pub(crate) async fn open_selected_inline_change(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -13,13 +15,16 @@ pub(crate) async fn open_selected_inline_change(
     decision_id: &str,
     candidate_text: &str,
 ) -> Result<Option<String>, CompleteAgentRunError> {
-    let target = select_inline_target(client, claim, chapter_id).await?;
-    let Some(block_id) = target.block_id.as_deref() else {
+    let Some(target) = load_admitted_targets(client, claim, chapter_id)
+        .await?
+        .into_iter()
+        .next()
+    else {
         return Ok(None);
     };
-    let Some(revision_id) = target.revision_id.as_deref() else {
-        return Ok(None);
-    };
+    let block_id = target.block_id.as_str();
+    let revision_id = target.revision_id.as_str();
+    let current = load_current_target(client, claim, chapter_id, block_id).await?;
     let Some((from, to)) = utf16_range_of(&target.block_text, INLINE_PROSE_CHANGE_SOURCE) else {
         return Ok(None);
     };
@@ -34,10 +39,10 @@ pub(crate) async fn open_selected_inline_change(
     );
     let classification = open_inline_proposal(&OpenInlineProposal {
         scope_matches: true,
-        target_block_present: true,
+        target_block_present: current.revision_id.is_some(),
         expected_base_revision_id: revision_id.to_owned(),
-        current_base_revision_id: Some(revision_id.to_owned()),
-        conflicting_reservation: target.conflicting_reservation,
+        current_base_revision_id: current.revision_id,
+        conflicting_reservation: current.reserved,
         current_schema_version: 1,
         current_coordinate_profile: PROSEMIRROR_TOKEN_UTF16_V1.to_owned(),
         blocks: vec![InlineTargetBlock {
@@ -73,96 +78,6 @@ pub(crate) async fn open_selected_inline_change(
         validation_result,
     )
     .await
-}
-
-struct InlineTarget {
-    block_id: Option<String>,
-    revision_id: Option<String>,
-    block_text: String,
-    conflicting_reservation: bool,
-}
-
-async fn select_inline_target(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    chapter_id: &str,
-) -> Result<InlineTarget, CompleteAgentRunError> {
-    let rows = client
-        .query(
-            "SELECT member.manuscript_block_id::text, member.revision_id::text,
-                    convert_from(payload.canonical_bytes, 'UTF8'),
-                    reservation.proposal_id IS NOT NULL
-               FROM storyos.authoritative_heads AS head
-               JOIN storyos.authoritative_revisions AS revision
-                 ON (revision.owner_user_id, revision.project_id,
-                     revision.manuscript_object_id, revision.revision_id) =
-                    (head.owner_user_id, head.project_id, head.manuscript_object_id,
-                     head.current_revision_id)
-               JOIN storyos.authoritative_payloads AS payload
-                 ON (payload.owner_user_id, payload.project_id, payload.payload_id) =
-                    (revision.owner_user_id, revision.project_id, revision.payload_id)
-               JOIN storyos.manuscript_revision_members AS member
-                 ON (member.owner_user_id, member.project_id, member.manuscript_object_id,
-                     member.revision_id) =
-                    (head.owner_user_id, head.project_id, head.manuscript_object_id,
-                     head.current_revision_id)
-               LEFT JOIN storyos.proposal_operations AS reservation
-                 ON (reservation.owner_user_id, reservation.project_id,
-                     reservation.manuscript_block_id) =
-                    (member.owner_user_id, member.project_id, member.manuscript_block_id)
-                AND reservation.reservation_state = 'unresolved'
-              WHERE head.owner_user_id = $1::text::uuid
-                AND head.project_id = $2::text::uuid
-                AND head.manuscript_object_id = $3::text::uuid
-              ORDER BY member.block_order",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &chapter_id,
-            ],
-        )
-        .await
-        .map_err(database_error)?;
-    let mut first_live = None;
-    for row in rows {
-        let block_id: String = row.get(0);
-        let revision_id: String = row.get(1);
-        let stored: String = row.get(2);
-        let reserved: bool = row.get(3);
-        let block_text = crate::manuscript_block::blocks_from_stored_payload(
-            &stored,
-            std::slice::from_ref(&block_id),
-        )
-        .into_iter()
-        .next()
-        .map(|block| block.text)
-        .unwrap_or_default();
-        if first_live.is_none() {
-            first_live = Some((block_id.clone(), revision_id.clone(), block_text.clone()));
-        }
-        if !reserved {
-            return Ok(InlineTarget {
-                block_id: Some(block_id),
-                revision_id: Some(revision_id),
-                block_text,
-                conflicting_reservation: false,
-            });
-        }
-    }
-    Ok(match first_live {
-        Some((block_id, revision_id, block_text)) => InlineTarget {
-            block_id: Some(block_id),
-            revision_id: Some(revision_id),
-            block_text,
-            conflicting_reservation: true,
-        },
-        None => InlineTarget {
-            block_id: None,
-            revision_id: None,
-            block_text: String::new(),
-            conflicting_reservation: false,
-        },
-    })
 }
 
 #[allow(clippy::too_many_arguments)]

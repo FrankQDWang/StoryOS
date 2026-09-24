@@ -6,7 +6,7 @@ use storyos_core::{
 use tokio_postgres::Client;
 use uuid::Uuid;
 
-use super::open_block_proposal::{OpenTarget, select_open_targets};
+use super::admitted_proposal_target::{AdmittedTarget, load_admitted_targets, load_current_target};
 
 pub(crate) enum StreamWork {
     Hold,
@@ -38,15 +38,19 @@ pub(crate) async fn apply_streamed_proposal(
     let loaded = match load_generation(client, claim).await? {
         Some(current) => current,
         None => {
-            let Some(first) = select_open_targets(client, claim, chapter_id)
+            let Some(first) = load_admitted_targets(client, claim, chapter_id)
                 .await?
-                .unreserved
                 .into_iter()
                 .next()
             else {
                 return Ok((None, StreamWork::Continue));
             };
-            open_generating(client, claim, chapter_id, decision_id, &first).await?
+            let Some(opened) =
+                open_generating(client, claim, chapter_id, decision_id, &first).await?
+            else {
+                return Ok((None, StreamWork::Continue));
+            };
+            opened
         }
     };
     if loaded.generation_state != "generating" || loaded.existing_fence {
@@ -115,19 +119,20 @@ async fn open_generating(
     claim: &ClaimedAgentRun,
     chapter_id: &str,
     decision_id: &str,
-    first: &OpenTarget,
-) -> Result<LoadedGeneration, CompleteAgentRunError> {
+    first: &AdmittedTarget,
+) -> Result<Option<LoadedGeneration>, CompleteAgentRunError> {
+    let current = load_current_target(client, claim, chapter_id, &first.block_id).await?;
     if open_block_proposal(&OpenBlockProposal {
         scope_matches: true,
-        target_block_present: true,
+        target_block_present: current.revision_id.is_some(),
         expected_base_revision_id: first.revision_id.clone(),
-        current_base_revision_id: Some(first.revision_id.clone()),
-        conflicting_reservation: false,
+        current_base_revision_id: current.revision_id,
+        conflicting_reservation: current.reserved,
     })
     .validation_receipt_result()
     .is_none()
     {
-        return Err(unavailable("Streamed Proposal open was refused"));
+        return Ok(None);
     }
     let owner = claim.project_scope.owner_user_id.as_ref();
     let project = claim.project_scope.project_id.as_ref();
@@ -205,7 +210,7 @@ async fn open_generating(
         )
         .await
         .map_err(stream_err)?;
-    Ok(LoadedGeneration {
+    Ok(Some(LoadedGeneration {
         proposal_id,
         generation_id,
         revision_id,
@@ -215,7 +220,7 @@ async fn open_generating(
         existing_fence: false,
         block_id: first.block_id.clone(),
         base_revision_id: first.revision_id.clone(),
-    })
+    }))
 }
 
 async fn persist_batch(

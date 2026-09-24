@@ -2,6 +2,8 @@ use storyos_application::{ClaimedAgentRun, CompleteAgentRunError};
 use storyos_core::{OpenBlockProposal, SECOND_PROSE_CHANGE_TEXT, open_block_proposal};
 use uuid::Uuid;
 
+use crate::admitted_proposal_target::{load_admitted_targets, load_current_target};
+
 pub(crate) async fn open_selected_prose_change(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -10,38 +12,31 @@ pub(crate) async fn open_selected_prose_change(
     candidate_text: &str,
     author_message: &str,
 ) -> Result<Option<String>, CompleteAgentRunError> {
-    let targets = select_open_targets(client, claim, chapter_id).await?;
+    let targets = load_admitted_targets(client, claim, chapter_id).await?;
     let selected = if author_message.starts_with("Revise these passages") {
-        targets.unreserved
+        targets
     } else {
-        targets.unreserved.into_iter().take(1).collect()
+        targets.into_iter().take(1).collect()
     };
-    let Some(first) = selected.first() else {
-        let classification = open_block_proposal(&OpenBlockProposal {
-            scope_matches: true,
-            target_block_present: targets.conflicting.is_some(),
-            expected_base_revision_id: targets
-                .conflicting
-                .as_ref()
-                .map(|target| target.revision_id.clone())
-                .unwrap_or_default(),
-            current_base_revision_id: targets
-                .conflicting
-                .as_ref()
-                .map(|target| target.revision_id.clone()),
-            conflicting_reservation: targets.conflicting.is_some(),
-        });
-        let _ = classification.validation_receipt_result();
+    if selected.is_empty() {
         return Ok(None);
-    };
-    let classification = open_block_proposal(&OpenBlockProposal {
-        scope_matches: true,
-        target_block_present: true,
-        expected_base_revision_id: first.revision_id.clone(),
-        current_base_revision_id: Some(first.revision_id.clone()),
-        conflicting_reservation: false,
-    });
-    let Some(validation_result) = classification.validation_receipt_result() else {
+    }
+    let mut validation_result = None;
+    for target in &selected {
+        let current = load_current_target(client, claim, chapter_id, &target.block_id).await?;
+        let Some(result) = open_block_proposal(&OpenBlockProposal {
+            scope_matches: true,
+            target_block_present: current.revision_id.is_some(),
+            expected_base_revision_id: target.revision_id.clone(),
+            current_base_revision_id: current.revision_id,
+            conflicting_reservation: current.reserved,
+        })
+        .validation_receipt_result() else {
+            return Ok(None);
+        };
+        validation_result = Some(result);
+    }
+    let Some(validation_result) = validation_result else {
         return Ok(None);
     };
     persist_applied_proposal(
@@ -64,73 +59,8 @@ struct PersistAppliedProposal<'a> {
     decision_id: &'a str,
     candidate_text: &'a str,
     author_message: &'a str,
-    targets: &'a [OpenTarget],
+    targets: &'a [crate::admitted_proposal_target::AdmittedTarget],
     validation_result: &'a str,
-}
-
-pub(crate) struct OpenTarget {
-    pub block_id: String,
-    pub revision_id: String,
-}
-
-pub(crate) struct OpenTargets {
-    pub unreserved: Vec<OpenTarget>,
-    pub conflicting: Option<OpenTarget>,
-}
-
-pub(crate) async fn select_open_targets(
-    client: &tokio_postgres::Client,
-    claim: &ClaimedAgentRun,
-    chapter_id: &str,
-) -> Result<OpenTargets, CompleteAgentRunError> {
-    let rows = client
-        .query(
-            "SELECT member.manuscript_block_id::text, member.revision_id::text,
-                    reservation.proposal_id IS NOT NULL
-               FROM storyos.authoritative_heads AS head
-               JOIN storyos.manuscript_revision_members AS member
-                 ON (member.owner_user_id, member.project_id, member.manuscript_object_id,
-                     member.revision_id) =
-                    (head.owner_user_id, head.project_id, head.manuscript_object_id,
-                     head.current_revision_id)
-               LEFT JOIN storyos.proposal_operations AS reservation
-                 ON (reservation.owner_user_id, reservation.project_id,
-                     reservation.manuscript_block_id) =
-                    (member.owner_user_id, member.project_id, member.manuscript_block_id)
-                AND reservation.reservation_state = 'unresolved'
-              WHERE head.owner_user_id = $1::text::uuid
-                AND head.project_id = $2::text::uuid
-                AND head.manuscript_object_id = $3::text::uuid
-              ORDER BY member.block_order",
-            &[
-                &claim.project_scope.owner_user_id.as_ref(),
-                &claim.project_scope.project_id.as_ref(),
-                &chapter_id,
-            ],
-        )
-        .await
-        .map_err(database_error)?;
-    let mut unreserved = Vec::new();
-    let mut first_live = None;
-    for row in rows {
-        let target = OpenTarget {
-            block_id: row.get(0),
-            revision_id: row.get(1),
-        };
-        if first_live.is_none() {
-            first_live = Some(OpenTarget {
-                block_id: target.block_id.clone(),
-                revision_id: target.revision_id.clone(),
-            });
-        }
-        if !row.get::<_, bool>(2) {
-            unreserved.push(target);
-        }
-    }
-    Ok(OpenTargets {
-        unreserved,
-        conflicting: first_live,
-    })
 }
 
 async fn persist_applied_proposal(

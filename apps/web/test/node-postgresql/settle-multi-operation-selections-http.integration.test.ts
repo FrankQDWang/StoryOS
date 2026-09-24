@@ -1,5 +1,6 @@
 // Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/accept-proposal-http.integration.test.ts"]}
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { test } from "vitest";
 import {
   acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession,
@@ -10,8 +11,8 @@ import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, GetProposalResponse,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
-import { BINDING, PROSE, challenged, drainLeftoverWork, id, prepare, settleOnce,
+import { queryStoryOSPostgres as queryPostgres, stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+import { BINDING, PROSE, USER_A, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer } from "../support/acceptance.ts";
 
 const SECOND_PROSE = "Keep the second block voice in this passage.";
@@ -109,6 +110,7 @@ async function seedTwoBlocks(
   return {
     session,
     revisionId: split.effect.authoritative_revision.revision_id,
+    secondBlockId: split.effect.authoritative_revision.blocks[1]!.manuscript_block_id,
   };
 }
 
@@ -119,6 +121,8 @@ async function admitPassages(
   chapterId: string,
   text: string,
   key: string,
+  beforeSettle?: () => Promise<void>,
+  settle = true,
 ) {
   const request: CreateAgentRunRequest = {
     command_schema: "storyos.command.create-agent-run.request.v2",
@@ -141,9 +145,55 @@ async function admitPassages(
     }),
   );
   if (created.effect.kind !== "admitted") throw new Error("expected admitted");
-  await settleOnce();
+  await beforeSettle?.();
+  if (settle) await settleOnce();
   return getAgentRun({ baseUrl, projectId, runId: created.effect.run_id, fetchImpl });
 }
+
+test("a later reservation on the second Block refuses the whole admitted set", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const ns = randomBytes(3).toString("hex");
+    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Reserved Multi Target Novel", `${ns}2`);
+    const seeded = await seedTwoBlocks(started.baseUrl, prepared.fetchImpl, prepared.projectId, `${ns}3`);
+    const queried = await admitPassages(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
+      "Revise these passages: keep the voice.", id(`${ns}41`), async () => {
+        const other = await admitPassages(
+          started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId,
+          "Revise this passage: keep the voice.", id(`${ns}51`), undefined, false,
+        );
+        const proposalId = id(`${ns}61`);
+        await queryPostgres(`
+          INSERT INTO storyos.proposals
+            (owner_user_id, project_id, proposal_id, kind, chapter_id,
+             manuscript_block_id, source_run_id, source_decision_id)
+          VALUES ('${USER_A}'::uuid, '${prepared.projectId}'::uuid, '${proposalId}'::uuid,
+            'block_edit', '${prepared.chapterId}'::uuid, '${seeded.secondBlockId}'::uuid,
+            '${other.run_id}'::uuid, '${id(`${ns}62`)}'::uuid);
+          INSERT INTO storyos.proposal_operations
+            (owner_user_id, project_id, proposal_id, operation_id, manuscript_block_id,
+             resolution, reservation_state, candidate_text)
+          VALUES ('${USER_A}'::uuid, '${prepared.projectId}'::uuid, '${proposalId}'::uuid,
+            '${id(`${ns}63`)}'::uuid, '${seeded.secondBlockId}'::uuid, 'pending', 'unresolved', 'reserved');
+        `);
+      },
+    );
+    assert.equal(queried.decision.kind, "prose_change");
+    if (queried.decision.kind !== "prose_change") throw new Error("expected prose decision");
+    assert.deepEqual(queried.decision.opened_proposal, { kind: "absent" });
+    assert.equal(queried.context.current_availability.working_target.kind, "current");
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.proposals
+      WHERE source_run_id = '${queried.run_id}'::uuid;`), "0");
+    const chapter = await getChapter({ baseUrl: started.baseUrl,
+      projectId: prepared.projectId, chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    assert.equal(chapter.chapter.current_revision.revision_id, seeded.revisionId);
+    await settleOnce();
+  } finally {
+    await stopRealServer(started.server);
+  }
+});
 
 function openedProposal(queried: Awaited<ReturnType<typeof getAgentRun>>): string {
   if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present") {

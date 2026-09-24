@@ -7,7 +7,7 @@ use super::{
 };
 
 pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_json::Value {
-    serde_json::json!({
+    let mut payload = serde_json::json!({
         "operation_requirement": {
             "operation_requirement_id": record.operation_requirement.operation_requirement_id,
             "input_snapshot_id": record.operation_requirement.input_snapshot_id,
@@ -16,6 +16,7 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
             "project_id": record.operation_requirement.project_id,
             "chapter_id": record.operation_requirement.chapter_id,
             "chapter_revision_id": record.operation_requirement.chapter_revision_id,
+            "proposal_target_block_ids": record.operation_requirement.proposal_target_block_ids,
             "instruction": encode_instruction(&record.operation_requirement.instruction),
             "destination_identity": record.operation_requirement.destination_identity,
         },
@@ -26,7 +27,18 @@ pub fn encode_assembly_record(record: &CurrentPassageAssemblyRecord) -> serde_js
         "token_counting_profile_revision": record.token_counting_profile_revision,
         "token_counting_algorithm_revision": record.token_counting_algorithm_revision,
         "destination_and_outbound": record.manifests.destination_and_outbound,
-    })
+    });
+    if record
+        .operation_requirement
+        .proposal_target_block_ids
+        .is_none()
+    {
+        payload["operation_requirement"]
+            .as_object_mut()
+            .expect("encoded requirement object")
+            .remove("proposal_target_block_ids");
+    }
+    payload
 }
 
 pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassageAssemblyRecord> {
@@ -67,6 +79,15 @@ pub fn decode_assembly_record(value: &serde_json::Value) -> Option<CurrentPassag
             chapter_revision_id: match requirement.get("chapter_revision_id")? {
                 serde_json::Value::Null => None,
                 value => Some(value.as_str()?.to_owned()),
+            },
+            proposal_target_block_ids: match requirement.get("proposal_target_block_ids") {
+                None => None,
+                Some(serde_json::Value::Array(ids)) => Some(
+                    ids.iter()
+                        .map(|id| id.as_str().map(str::to_owned))
+                        .collect::<Option<Vec<_>>>()?,
+                ),
+                Some(_) => return None,
             },
             instruction,
             destination_identity: requirement
