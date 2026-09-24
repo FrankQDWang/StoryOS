@@ -185,6 +185,7 @@ The current `ApplyAuthorEdit` mapping is closed:
 | Typed Receipt result | Admission Activity relation |
 | --- | --- |
 | `AuthoritativeApplied` | `ActivityBacked { project_activity_position }`; exactly one Receipt-backed Project Activity relation |
+| `ProposalRevised` | `ReceiptOnly`; one typed Receipt, one Proposal Revision, one Forward Author Action, no Authoritative Commit, and zero Project Activity |
 | `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; one typed Receipt and zero Project Activity |
 
 `RequiresReconfirmation` proves that this admission will create no Core effect.

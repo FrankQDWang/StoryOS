@@ -426,7 +426,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         )
         require_union_variant_shape(
             errors, settlement, "ZeroAuthorityReceiptSettled", "OtherEditorReceiptSettled",
-            ("receipt_ref: DomainReceiptRef", "result: NoEffect | Conflicted | Refused"),
+            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -454,7 +454,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         require_union_variant_shape(
             errors, convergence_union, "ZeroAuthorityReceiptVisible",
             "OtherEditorReceiptConverged",
-            ("receipt_ref: DomainReceiptRef", "result: NoEffect | Conflicted | Refused"),
+            ("receipt_ref: DomainReceiptRef", "result: ProposalRevised | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -493,8 +493,8 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
         require_union_variant_shape(
             errors, observation_union, "ApplyAuthorEditZeroAuthorityObservation",
             "OtherEditorCommittedObservation",
-            ("receipt: DomainReceipt { result: NoEffect | Conflicted | Refused }",
-             "effect: NoEffect | Conflicted | Refused"),
+            ("receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }",
+             "effect: ProposalRevised | NoEffect | Conflicted | Refused"),
             ("project_activity_position",),
         )
         require_union_variant_shape(
@@ -502,6 +502,13 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
             "RequiresReconfirmationObservation",
             ("receipt_ref: ReceiptRef", "project_activity_position"),
         )
+    for required in (
+        "| HTTP `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` |",
+        "| outcome Query returns `applyAuthorEdit` v2 `ProposalRevised`, `NoEffect`, `Conflicted`, or `Refused` |",
+        "| `ProposalRevised` | `ZeroAuthorityReceiptVisible`",
+    ):
+        if required not in visible_web:
+            errors.append(f"Web ProposalRevised result mapping missing {required}")
     return errors
 
 
@@ -866,6 +873,11 @@ def author_admission_errors(admission_projection: str) -> list[str]:
         visible_admission,
         flags=re.MULTILINE,
     )
+    proposal_row = re.findall(
+        r"^\|\s*`ProposalRevised`\s*\|.*$",
+        visible_admission,
+        flags=re.MULTILINE,
+    )
     zero_row = re.findall(
         r"^\|\s*`NoEffect`, `Conflicted`, or `Refused`\s*\|.*$",
         visible_admission,
@@ -875,6 +887,12 @@ def author_admission_errors(admission_projection: str) -> list[str]:
             or "`ActivityBacked { project_activity_position }`" not in applied_row[0]
             or "exactly one" not in applied_row[0]):
         errors.append("Admission AuthoritativeApplied Activity mapping drifted")
+    if (len(proposal_row) != 1 or "`ReceiptOnly`" not in proposal_row[0]
+            or "one Proposal Revision" not in proposal_row[0]
+            or "one Forward Author Action" not in proposal_row[0]
+            or "no Authoritative Commit" not in proposal_row[0]
+            or "zero Project Activity" not in proposal_row[0]):
+        errors.append("Admission ProposalRevised Receipt-only mapping drifted")
     if (len(zero_row) != 1 or "`ReceiptOnly`" not in zero_row[0]
             or "one typed Receipt" not in zero_row[0]
             or "zero Project Activity" not in zero_row[0]):
@@ -1201,16 +1219,22 @@ def self_test() -> None:
     assert "outcome Query bootstrap drifted" in "\n".join(policy_errors(
         policy, evidence, candidate_metrics, response_schema, changed_projections))
     for old, new, expected_error in (
-        ("receipt_ref: DomainReceiptRef\n      result: NoEffect | Conflicted | Refused",
+        ("receipt_ref: DomainReceiptRef\n      result: ProposalRevised | NoEffect | Conflicted | Refused",
          "receipt_ref: DomainReceiptRef\n      project_activity_position\n"
-         "      result: NoEffect | Conflicted | Refused",
+         "      result: ProposalRevised | NoEffect | Conflicted | Refused",
          "ZeroAuthorityReceiptSettled shape drifted"),
         ("  | AppliedReceiptConverged {", "  | LostAppliedReceiptConverged {",
          "AppliedReceiptConverged shape drifted"),
         ("      receipt_ref: DomainReceiptRef\n      project_activity_position",
          "      project_activity_position", "AppliedReceiptSettled shape drifted"),
-        ("      result: NoEffect | Conflicted | Refused\n      committed_at",
+        ("      result: ProposalRevised | NoEffect | Conflicted | Refused\n      committed_at",
          "      committed_at", "ZeroAuthorityReceiptSettled shape drifted"),
+        ("      result: ProposalRevised | NoEffect | Conflicted | Refused\n      committed_at",
+         "      result: NoEffect | Conflicted | Refused\n      committed_at",
+         "ZeroAuthorityReceiptSettled shape drifted"),
+        ("      receipt: DomainReceipt { result: ProposalRevised | NoEffect | Conflicted | Refused }",
+         "      receipt: DomainReceipt { result: NoEffect | Conflicted | Refused }",
+         "ApplyAuthorEditZeroAuthorityObservation shape drifted"),
         ("  | ZeroAuthorityReceiptSettled {",
          "  | ReceiptSettled {\n      receipt_ref: ReceiptRef\n"
          "      project_activity_position\n    }\n  | ZeroAuthorityReceiptSettled {",
@@ -1232,6 +1256,12 @@ def self_test() -> None:
         ("| `AuthoritativeApplied` | `ActivityBacked { project_activity_position }`; exactly one",
          "| `AuthoritativeApplied` | `ReceiptOnly`; exactly one",
          "Admission AuthoritativeApplied Activity mapping drifted"),
+        ("| `ProposalRevised` | `ReceiptOnly`; one typed Receipt",
+         "| `ProposalRevised` | `ActivityBacked { project_activity_position }`; one typed Receipt",
+         "Admission ProposalRevised Receipt-only mapping drifted"),
+        ("| `ProposalRevised` | `ReceiptOnly`; one typed Receipt",
+         "| `NoEffect` | `ReceiptOnly`; one typed Receipt",
+         "Admission ProposalRevised Receipt-only mapping drifted"),
         ("| `NoEffect`, `Conflicted`, or `Refused` | `ReceiptOnly`; one typed Receipt and zero Project Activity",
          "| `NoEffect`, `Conflicted`, or `Refused` | `ActivityBacked { project_activity_position }`; one typed Receipt and zero Project Activity",
          "Admission zero-authority Receipt-only mapping drifted"),
