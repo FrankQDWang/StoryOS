@@ -226,6 +226,37 @@ input:focus-visible,
   margin: 0;
 }
 
+.manuscript-editor .block-proposal {
+  margin: 19px 0 23px;
+  padding: 15px 20px 17px;
+  border-left: 2px solid #8e8a83;
+  background: #f2f0ed;
+  color: #34322e;
+  cursor: default;
+  user-select: text;
+}
+
+.manuscript-editor .block-proposal-label {
+  display: block;
+  margin-bottom: 7px;
+  color: #77736c;
+  font-family: "Noto Sans SC", "PingFang SC", sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.manuscript-editor .block-proposal p {
+  white-space: pre-wrap;
+}
+
+.block-proposal-unavailable {
+  width: min(100%, 850px);
+  margin: 0 auto 20px;
+  padding: 0 66px 0 84px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .editor-panel [data-save-state] {
   display: block;
   margin-bottom: 8px;

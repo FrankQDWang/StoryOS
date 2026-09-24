@@ -27,10 +27,14 @@ import {
   closeProposalAgentWriteGate,
   createProposalAgentWriteGate,
 } from "./proposal-agent-write-gate.ts";
+import {
+  blockProposalDecoration, projectBlockProposals, type BlockProposalProjection,
+} from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
 export interface ManuscriptEditorProps {
   blocks: readonly ManuscriptParagraph[];
+  proposals?: readonly BlockProposalProjection[];
   editable: boolean;
   persistWorkspace: EditorReadyState | undefined;
   baseUrl: string;
@@ -92,6 +96,7 @@ function projectLocalPending(
 
 export function ManuscriptEditor({
   blocks,
+  proposals = [],
   editable,
   persistWorkspace,
   baseUrl,
@@ -113,7 +118,10 @@ export function ManuscriptEditor({
   onFailureRef.current = onFailure;
   persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
-    extensions: storyosManuscriptExtensions(firstBlockId, () => onAuthorUndoRef.current()),
+    extensions: [
+      ...storyosManuscriptExtensions(firstBlockId, () => onAuthorUndoRef.current()),
+      blockProposalDecoration,
+    ],
     content: manuscriptBlocksJson(blocks),
     editable,
     injectCSS: false,
@@ -208,6 +216,10 @@ export function ManuscriptEditor({
   useEffect(() => {
     editor?.setEditable(editable);
   }, [editable, editor]);
+
+  useEffect(() => {
+    if (editor !== null) projectBlockProposals(editor, proposals);
+  }, [editor, proposals]);
 
   useEffect(() => {
     if (editor === null) return;

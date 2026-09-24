@@ -12,6 +12,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import {
   HISTORICAL_ACKNOWLEDGEMENT_MESSAGE, historicalAcknowledgementUnavailable,
 } from "./historical-acknowledgement.ts";
+import type { ProposalLocator } from "./block-proposal-display.tsx";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -126,10 +127,11 @@ const runLabels: Record<GetAgentRunResponse["status"], string> = {
 };
 
 export function WritingAssistantPanel({
-  collapsed, context,
+  collapsed, context, onOpenedProposal,
 }: {
   collapsed: boolean;
   context?: AssistantContext | undefined;
+  onOpenedProposal?: ((locator: ProposalLocator) => void) | undefined;
 }) {
   const [availability, setAvailability] = useState<"available" | "unavailable">("unavailable");
   const [reference, setReference] = useState<RequestReference | undefined>(
@@ -192,6 +194,14 @@ export function WritingAssistantPanel({
       || result.project_scope.project_id !== current.scope.project_id
       || result.run_id !== runId) throw new Error("Run Scope mismatch");
     setRun(result);
+    if (result.decision.kind === "prose_change"
+      && result.decision.opened_proposal.kind === "present") {
+      onOpenedProposal?.({
+        proposalId: result.decision.opened_proposal.proposal_id,
+        runId: result.run_id,
+        decisionId: result.decision.decision_id,
+      });
+    }
     setStatus("");
   };
 

@@ -33,7 +33,10 @@ import type {
 import { rebuildPendingProjection, reconfirmLegacyReplaceSelection } from "./editor-session.ts";
 import { archiveOwnedProject } from "./archive-project.ts";
 import type { ManualInputController } from "./manual-input.ts";
-import { ManuscriptEditor } from "./manuscript-editor.tsx";
+import {
+  BlockProposalDisplay, readProposalLocators, rememberProposalLocator,
+} from "./block-proposal-display.tsx";
+import type { ProposalLocator } from "./block-proposal-display.tsx";
 import { ManuscriptSearchPanel } from "./manuscript-search.tsx";
 import { ManuscriptStatisticsPanel } from "./manuscript-statistics.tsx";
 import { ManuscriptReadableExportPanel } from "./manuscript-readable-export.tsx";
@@ -114,6 +117,9 @@ function ProjectReadyView({
   const [tree, setTree] = useState<GetManuscriptTreeResponse>();
   const [selectedChapter, setSelectedChapter] = useState<GetChapterResponse>(state.chapter);
   const [switchRecovery, setSwitchRecovery] = useState<string>();
+  const [proposalLocators, setProposalLocators] = useState<ProposalLocator[]>(
+    () => readProposalLocators(state.project.project_scope),
+  );
 
   useEffect(() => {
     void listProjects({ baseUrl, fetchImpl }).then((response) => {
@@ -424,6 +430,9 @@ function ProjectReadyView({
   return (
     <WritingWorkspace
       writer={writer}
+      onOpenedProposal={(locator) => {
+        setProposalLocators(rememberProposalLocator(state.project.project_scope, locator));
+      }}
       assistant={{
         scope: state.project.project_scope,
         chapterId: currentChapterId,
@@ -505,8 +514,16 @@ function ProjectReadyView({
             currentChapterId={currentChapterId}
             controllerRef={inputRef}
           />
-          <ManuscriptEditor
+          <BlockProposalDisplay
             key={selectedChapter.chapter.chapter_id}
+            scope={state.project.project_scope}
+            chapterId={selectedChapter.chapter.chapter_id}
+            authoritativeRevisionId={selectedChapter.chapter.chapter_id === currentChapterId
+              && pending !== null ? pending.authoritative_revision_id
+              : selectedChapter.chapter.current_revision.revision_id}
+            locators={proposalLocators}
+            safeToProject={selectedChapter.chapter.chapter_id !== currentChapterId
+              || saveState === "saved"}
             blocks={editorBlocks}
             editable={!readOnly && !archived}
             persistWorkspace={
