@@ -27,7 +27,7 @@ class FileSelfTests(unittest.TestCase):
                                  "group": "verification-tools"})
         data["complete"] = {"stages": ["verification-tests"],
                             "groups": {"verification-tools": ["verification-tests"]}}
-        data["targeted"] = {"verification-tests": {"command": [sys.executable, str(RUNNER)],
+        data["targeted"] = {"verification-tests": {"command": ["python3", "scripts/verification_test_files.py"],
                                                     "clean": False}}
         data["workflow"] = {"version": 1, "operations": {}, "stage_types": {},
                             "profiles": {"verification-tests": {"members": ["verification-tools"]},
@@ -36,8 +36,11 @@ class FileSelfTests(unittest.TestCase):
         data["verification_test_workers"] = 2
         data["verification_test_parallel_files"] = []
         self.policy.write_text(json.dumps(data))
+        (self.root / "scripts/verification_test_files.py").write_text(
+            f"import runpy, sys\nsys.path.insert(0, {str(RUNNER.parent)!r})\n"
+            f"runpy.run_path({str(RUNNER)!r}, run_name='__main__')\n")
 
-    def add_file(self, name, *, failure=False):
+    def add_file(self, name, *, failure=False, mutate=False):
         path = self.root / "scripts" / f"{name}_tests.py"
         (self.root / "target").mkdir(exist_ok=True)
         os.mkfifo(self.root / "target" / f"release-{name}")
@@ -52,6 +55,7 @@ class FileSelfTests(unittest.TestCase):
                         f"        with open('target/release-{name}') as gate: gate.read()\n"
                         "        with path.open('a') as output:\n"
                         f"            output.write(json.dumps(['end', '{name}', time.monotonic()]) + '\\n')\n"
+                        + ("        pathlib.Path('AGENTS.md').write_text('changed source')\n" if mutate else "")
                         + ("        self.fail('fixture failure')\n" if failure else ""))
         return path
 
@@ -172,6 +176,16 @@ class FileSelfTests(unittest.TestCase):
         self.assertNotEqual(subprocess.run([sys.executable, str(verification_tests.COMMAND), "targeted", "--check",
                                            "verification-tests"], cwd=self.root, env=self.fixture.environment,
                                           capture_output=True).returncode, 0)
+
+    def test_source_change_retains_its_status_after_file_failure(self):
+        self.add_file("a", failure=True, mutate=True)
+        self.commit(parallel=("a",))
+        process = self.start_targeted()
+        self.ready(process, "a")
+        self.release("a")
+        self.assertNotEqual(self.complete(process).returncode, 0)
+        report, _, _ = self.records()
+        self.assertEqual(report["status"], "source-changed")
 
     @unittest.skipUnless(os.name == "posix", "Process-group interruption requires POSIX.")
     def test_interruption_cleans_file_process_group(self):

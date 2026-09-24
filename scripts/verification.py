@@ -353,8 +353,9 @@ def record_run(root, command, *, plan=None, no_cache=False, context=None):
         expected = {"file:verification-tools:" + item["path"] for item in report["inventory"]["files"]
                     if item["kind"] == "verification-test" and item["group"] == "verification-tools"}
         actual = report["verification_test_file_attempts"]
-        if (len(actual) != len(expected) or {item["node_id"] for item in actual} != expected
-                or any(item["status"] != "passed" or not item["attempt_started"] for item in actual)):
+        if (report["status"] == "passed" and (len(actual) != len(expected)
+                or {item["node_id"] for item in actual} != expected
+                or any(item["status"] != "passed" or not item["attempt_started"] for item in actual))):
             report["status"] = "incomplete"
     if (plan and code == 2 and report["status"] == "failed" and steps
             and all(item["status"] == "passed" for item in steps)
