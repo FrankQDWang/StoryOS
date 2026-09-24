@@ -46,6 +46,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator('input[name="title"]').fill(`Prose request ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
+    await page.locator("form[data-rename]").waitFor();
     const projectId = await page.locator("form[data-rename]").getAttribute("data-rename");
     assert.ok(projectId !== null && UUID.test(projectId));
     await page.locator('input[name="volume-title"]').fill("Request Volume");

@@ -135,6 +135,7 @@ export function WritingAssistantPanel({
   const [run, setRun] = useState<GetAgentRunResponse>();
   const [status, setStatus] = useState("");
   const [sending, setSending] = useState(false);
+  const [refused, setRefused] = useState(false);
 
   useEffect(() => {
     if (context === undefined) {
@@ -194,6 +195,10 @@ export function WritingAssistantPanel({
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (availability === "unavailable") {
+      setRefused(true);
+      return;
+    }
     if (context === undefined || context.chapterId === undefined
       || !context.canSubmit || availability !== "available" || sending
       || (reference !== undefined && reference.runId === undefined)) return;
@@ -214,6 +219,7 @@ export function WritingAssistantPanel({
       setRun(undefined);
     };
     setSending(true);
+    setRefused(false);
     setStatus("");
     void (async () => {
       const assistance = await getProjectAssistance({
@@ -314,7 +320,7 @@ export function WritingAssistantPanel({
     <aside id="writing-assistant-panel" className="agent-panel" data-writing-assistant=""
       data-assistant-availability={availability}
       data-assistant-dispatch={sending ? "sending" : reference?.runId === undefined
-        && reference !== undefined ? "uncertain" : run?.status ?? "idle"}
+        && reference !== undefined ? "uncertain" : refused ? "refused" : run?.status ?? "idle"}
       data-assistant-run-id={reference?.runId ?? ""}
       data-assistant-request-id={reference?.correlationId ?? ""}
       aria-label={collapsed ? "写作助手已收起" : "写作助手对话"}>
