@@ -6,6 +6,7 @@ import type {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
+import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,6 +57,8 @@ export function BlockProposalDisplay({
   safeToProject: boolean;
 }) {
   const [reads, setReads] = useState<ProposalRead[]>([]);
+  const [candidateTexts, setCandidateTexts] = useState<Record<string, string>>({});
+  const [settlementRefresh, setSettlementRefresh] = useState(0);
   const locatorKey = locators.map((item) =>
     `${item.proposalId}:${item.runId}:${item.decisionId}`).join("|");
 
@@ -86,7 +89,34 @@ export function BlockProposalDisplay({
     });
     return () => { active = false; };
   }, [scope.owner_user_id, scope.project_id, chapterId, locatorKey, refreshKey,
+    settlementRefresh,
     editorProps.baseUrl, editorProps.fetchImpl]);
+
+  useEffect(() => {
+    let active = true;
+    const workspace = editorProps.persistWorkspace;
+    if (workspace === undefined) {
+      setCandidateTexts({});
+      return () => { active = false; };
+    }
+    void Promise.all(reads.map(async ({ proposal }) => {
+      if (proposal === undefined || proposal.chapter_id !== chapterId) return undefined;
+      const operation = proposal.operations.find((item) =>
+        item.manuscript_block_id === proposal.manuscript_block_id);
+      if (operation === undefined) return undefined;
+      const text = await candidateProjectionFromJournal(workspace, {
+        proposal_id: proposal.proposal_id,
+        operation_id: operation.operation_id,
+        revision_id: proposal.revision_id,
+        manuscript_block_id: proposal.manuscript_block_id,
+      });
+      return text === undefined ? undefined
+        : [`${proposal.proposal_id}:${proposal.revision_id}`, text] as const;
+    })).then((values) => {
+      if (active) setCandidateTexts(Object.fromEntries(values.filter((item) => item !== undefined)));
+    }).catch(editorProps.onFailure);
+    return () => { active = false; };
+  }, [reads, chapterId, editorProps.persistWorkspace, editorProps.onFailure]);
 
   const blockCounts = new Map<string, number>();
   for (const block of editorProps.blocks) {
@@ -95,6 +125,10 @@ export function BlockProposalDisplay({
   }
   const projections: BlockProposalProjection[] = [];
   const unavailable: ProposalRead[] = [];
+  const allHeadsKnown = reads.length === locators.length
+    && reads.every((item) => item.proposal !== undefined);
+  const expectedHeads = reads.flatMap(({ proposal }) => proposal?.chapter_id === chapterId
+    ? [proposal.revision_id] : []).sort();
   for (const { locator, proposal } of reads) {
     if (proposal !== undefined && proposal.chapter_id !== chapterId) continue;
     const operation = proposal?.operations.find((item) =>
@@ -107,7 +141,8 @@ export function BlockProposalDisplay({
       unavailable.push({ locator, proposal });
       continue;
     }
-    const eligible = proposal.generation === "ready" && proposal.validation === "valid"
+    const eligible = allHeadsKnown && editorProps.editable
+      && proposal.generation === "ready" && proposal.validation === "valid"
       && proposal.closure === "open" && operation.resolution === "pending"
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
@@ -119,14 +154,19 @@ export function BlockProposalDisplay({
       blockId: proposal.manuscript_block_id,
       sourceRunId: proposal.source.run_id,
       sourceDecisionId: proposal.source.decision_id,
-      text: proposal.candidate_text,
+      text: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
+        ?? proposal.candidate_text,
       eligible,
+      expectedHeads,
+      localPending: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
+        !== undefined,
     });
   }
 
   return (
     <>
-      <ManuscriptEditor {...editorProps} proposals={projections} />
+      <ManuscriptEditor {...editorProps} proposals={projections}
+        onCandidateSettled={() => setSettlementRefresh((value) => value + 1)} />
       {unavailable.map(({ locator, proposal }) => (
         <p className="block-proposal-unavailable" data-proposal-unavailable={locator.proposalId}
           data-proposal-revision-id={proposal?.revision_id ?? ""}

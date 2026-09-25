@@ -2,6 +2,7 @@ import type { JournalWorkingBoundary } from "./journal-working-set.ts";
 import type {
   ApplyAuthorEditRequest,
   ApplyAuthorEditEffect,
+  AuthorEditProposalTarget,
   AuthorEditUnit,
   DigestValue,
   DomainReceipt,
@@ -67,6 +68,7 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   target_refs: string[];
   expected_authoritative_heads: string[];
   expected_proposal_heads: string[];
+  proposal_target?: AuthorEditProposalTarget;
   proposal_anchors: ProposalJournalAnchor[];
   observed_ownership_partition: string;
   author_edit_unit?: AuthorEditUnit;
@@ -96,6 +98,8 @@ export interface JournalPayloadChain extends Record<string, unknown> {
     materialized_payload_digest: DigestValue;
     source_snapshot_id: string;
     source_heads: string[];
+    proposal_target?: AuthorEditProposalTarget;
+    proposal_head_revision_ids?: string[];
   };
   ordered_patch_refs: JournalPatchReference[];
   payload_collection?: { kind: "collected"; collection_fence_id: string };

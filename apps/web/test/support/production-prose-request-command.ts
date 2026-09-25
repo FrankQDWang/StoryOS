@@ -9,7 +9,8 @@ import {
   getChapter, getProjectAssistance, getProposal, StoryOSProtocolError, updateProjectAssistance,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  CreateAgentRunRequest, CreateAgentRunResponse, UpdateProjectAssistanceRequest,
+  ApplyAuthorEditRequest, CreateAgentRunRequest, CreateAgentRunResponse,
+  UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { runStoryOSWorker, sessionFetch } from "./node-integration";
@@ -254,6 +255,49 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       .getAttribute("data-proposal-revision-id"), secondProposal.revision_id);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`)
       .getAttribute("data-proposal-source-run-id"), secondRunId);
+    let candidatePosts = 0;
+    let candidateRequest: ApplyAuthorEditRequest | undefined;
+    await page.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      candidatePosts += 1;
+      candidateRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
+      const response = await route.fetch();
+      assert.equal(response.status(), 200);
+      await route.abort("failed");
+    });
+    const revisedText = `${firstProposal.candidate_text} Keep this line.`;
+    const candidateText = page.locator(`[data-proposal-id="${firstProposalId}"] .block-proposal-text`);
+    await candidateText.click();
+    await candidateText.press("End");
+    await page.keyboard.insertText(" Keep this line.");
+    await page.locator('[data-save-state="saving"]').waitFor();
+    await page.reload();
+    await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
+    assert.equal(candidatePosts, 1, "candidate recovery must reuse the frozen command");
+    assert.deepEqual(candidateRequest?.proposal_target, {
+      proposal_id: firstProposalId,
+      operation_id: firstProposal.operations.find((operation) =>
+        operation.manuscript_block_id === firstBlock.manuscript_block_id)?.operation_id,
+      revision_id: firstProposal.revision_id,
+      manuscript_block_id: firstBlock.manuscript_block_id,
+    });
+    assert.deepEqual(candidateRequest?.expected_proposal_head_revision_ids,
+      [firstProposal.revision_id, secondProposal.revision_id].sort());
+    assert.equal(candidateRequest?.observed_ownership_partition, "mixed");
+    assert.equal(candidateRequest?.author_edit_units[0]?.normalized_primitives[0]?.kind,
+      "replace_selection");
+    const revised = (await getProposal({ ...options, proposalId: firstProposalId })).proposal;
+    assert.equal(revised.candidate_text, revisedText);
+    assert.notEqual(revised.revision_id, firstProposal.revision_id);
+    await page.locator(`[data-proposal-id="${firstProposalId}"]`)
+      .getAttribute("data-proposal-revision-id").then((revisionId) =>
+        assert.equal(revisionId, revised.revision_id));
+    assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
+      .revision_id, secondProposal.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-787-block-proposals.png"),
       fullPage: true });
     const missingBlockId = uuidV7();
@@ -276,8 +320,8 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     const ineligible = page.locator(`[data-proposal-id="${firstProposalId}"]`);
     await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
       .waitFor();
-    assert.ok((await ineligible.textContent())?.includes(firstProposal.candidate_text));
-    assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), firstProposal.revision_id);
+    assert.ok((await ineligible.textContent())?.includes(revisedText));
+    assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), revised.revision_id);
     readMode = "missing";
     await page.locator("[data-assistant-inspect]").click();
     await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();

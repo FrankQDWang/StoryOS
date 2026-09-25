@@ -17,6 +17,7 @@ import {
 } from "./manuscript-doc.ts";
 import {
   capturedManuscriptEditFromTransaction,
+  capturedCandidateEditFromTransaction,
   hydrateManuscriptBlocks,
   isStoryosHydrateTransaction,
   originFromTransaction,
@@ -43,6 +44,7 @@ export interface ManuscriptEditorProps {
   controllerRef: { current: ManualInputController | null };
   onProjection: (projection: PendingEditProjection, source?: "local") => void;
   onFailure: (error: unknown) => void;
+  onCandidateSettled?: () => void;
 }
 
 function syncManuscriptSurface(
@@ -105,17 +107,20 @@ export function ManuscriptEditor({
   controllerRef,
   onProjection,
   onFailure,
+  onCandidateSettled,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
   const idleRef = useRef<AuthorEditIdleController | null>(null);
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
+  const onCandidateSettledRef = useRef(onCandidateSettled);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
+  onCandidateSettledRef.current = onCandidateSettled;
   persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
     extensions: [
@@ -145,6 +150,23 @@ export function ManuscriptEditor({
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
         observedBlocksRef.current = nextBlocks;
+        return;
+      }
+      const candidate = capturedCandidateEditFromTransaction(transaction);
+      if (candidate !== undefined) {
+        const { proposal, priorText, from, to, text, resultingBody } = candidate;
+        const origin = originFromTransaction(transaction, { from, to, text });
+        void idleRef.current?.persist({
+          kind: "candidate_selection",
+          target: {
+            proposal_id: proposal.proposalId,
+            operation_id: proposal.operationId,
+            revision_id: proposal.revisionId,
+            manuscript_block_id: proposal.blockId,
+          },
+          expectedProposalHeads: proposal.expectedHeads,
+          priorText, from, to, text, resultingBody,
+        }, origin, new Date().toISOString());
         return;
       }
       if (current.view.composing || composingRef.current) {
@@ -256,7 +278,10 @@ export function ManuscriptEditor({
       baseUrl,
       fetchImpl,
       cryptoImpl,
-      afterAppliedSettlement: collectEligibleJournalPayload,
+      afterAppliedSettlement: async (workspace) => {
+        await collectEligibleJournalPayload(workspace);
+        onCandidateSettledRef.current?.();
+      },
       onProjection: (projection) => { onProjectionRef.current(projection); },
       onFailure: (error) => { onFailureRef.current(error); },
     });

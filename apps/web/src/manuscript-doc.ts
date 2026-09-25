@@ -134,6 +134,7 @@ export function readManuscriptParagraphs(doc: Node): ManuscriptParagraph[] | und
   const seen = new Set<string>();
   for (let index = 0; index < doc.childCount; index += 1) {
     const paragraph = doc.child(index);
+    if (paragraph.type.name === "blockProposal") continue;
     if (paragraph.type.name !== "paragraph" && paragraph.type.name !== "heading") {
       return undefined;
     }

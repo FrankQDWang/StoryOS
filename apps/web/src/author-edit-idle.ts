@@ -3,6 +3,7 @@ import {
   AUTHOR_EDIT_BATCH_IDLE_MS,
   AUTHOR_EDIT_MAX_UNITS,
   createJournalUuid,
+  persistCandidateSelection,
   persistJoinBlocks,
   persistMoveBlock,
   persistReplaceSelection,
@@ -10,6 +11,7 @@ import {
   persistSplitBlock,
   persistContiguousReplacement,
 } from "./local-edit-journal.ts";
+import type { CandidateSelectionEdit } from "./local-edit-journal.ts";
 import type {
   EditorReadyState,
   EditorWorkspace,
@@ -21,7 +23,8 @@ import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
 
-export type IdlePersistEdit = ReplaceSelectionEdit | CapturedManuscriptEdit;
+export type IdlePersistEdit = ReplaceSelectionEdit | CapturedManuscriptEdit
+  | CandidateSelectionEdit;
 
 export interface AuthorEditIdleController {
   persist(
@@ -72,6 +75,7 @@ export function createAuthorEditIdleController({
   clearTimeoutImpl?: (timer: TimerHandle) => void;
 }): AuthorEditIdleController {
   let pendingIntentCount = workspace.pending.unsettled_intent_count;
+  let pendingTarget = pendingIntentCount > 0 ? "recovered" : undefined;
   let undoGroupId: string | undefined;
   let lastCompletedAt: number | undefined;
   let idleTimer: TimerHandle | undefined;
@@ -114,6 +118,7 @@ export function createAuthorEditIdleController({
     });
     workspace.pending = projection;
     pendingIntentCount = projection.unsettled_intent_count;
+    if (pendingIntentCount === 0) pendingTarget = undefined;
     undoGroupId = undefined;
     if (projection.save_state === "saved" && afterAppliedSettlement) {
       await afterAppliedSettlement(workspace);
@@ -147,13 +152,18 @@ export function createAuthorEditIdleController({
           || origin === "split_block" || origin === "join_blocks"
           || origin === "move_block" || origin === "retype_block";
         const completedAt = Date.parse(createdAt);
+        const target = "kind" in edit && edit.kind === "candidate_selection"
+          ? JSON.stringify(edit.target) : "authoritative";
         const idleBoundary = lastCompletedAt !== undefined
           && completedAt - lastCompletedAt > AUTHOR_EDIT_BATCH_IDLE_MS;
-        if (hardBoundary || idleBoundary) await submitPending();
+        if (hardBoundary || idleBoundary || pendingTarget !== undefined
+          && pendingTarget !== target) await submitPending();
         if (!undoGroupId) undoGroupId = createJournalUuid(cryptoImpl);
         const persistFields = { inputOrigin: origin, undoGroupId, createdAt };
         const projection = !("kind" in edit)
           ? await persistIntent(workspace, { ...edit, ...persistFields }, cryptoImpl)
+          : edit.kind === "candidate_selection"
+            ? await persistCandidateSelection(workspace, { ...edit, ...persistFields }, cryptoImpl)
           : edit.kind === "split_block"
             ? await persistSplitBlock(workspace, {
               manuscript_block_id: edit.manuscript_block_id,
@@ -207,6 +217,7 @@ export function createAuthorEditIdleController({
               }, cryptoImpl);
         workspace.pending = projection;
         pendingIntentCount = projection.unsettled_intent_count;
+        pendingTarget = target;
         lastCompletedAt = completedAt;
         onProjection(projection);
         if (hardBoundary || pendingIntentCount >= AUTHOR_EDIT_MAX_UNITS) await submitPending();

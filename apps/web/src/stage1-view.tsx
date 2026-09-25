@@ -526,7 +526,11 @@ function ProjectReadyView({
             locators={proposalLocators}
             refreshKey={proposalRefresh}
             safeToProject={selectedChapter.chapter.chapter_id !== currentChapterId
-              || saveState === "saved"}
+              || saveState === "saved"
+              || (pending !== null
+                && pending.body === selectedChapter.chapter.current_revision.body
+                && JSON.stringify(pending.blocks)
+                  === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
             blocks={editorBlocks}
             editable={!readOnly && !archived}
             persistWorkspace={

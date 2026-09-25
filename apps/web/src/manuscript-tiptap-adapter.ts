@@ -1,4 +1,5 @@
 import { Extension, type Editor } from "@tiptap/core";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
 import Document from "@tiptap/extension-document";
 import Heading from "@tiptap/extension-heading";
 import Paragraph from "@tiptap/extension-paragraph";
@@ -8,6 +9,7 @@ import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } 
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
+import { capturedCandidateEdit } from "./block-proposal-decoration.ts";
 import { createJournalUuid } from "./local-edit-journal.ts";
 import {
   captureManuscriptChange,
@@ -23,6 +25,14 @@ import {
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
 const STORYOS_CAPTURED_EDIT = "storyos.capturedEdit";
+const STORYOS_CANDIDATE_EDIT = "storyos.candidateEdit";
+
+export function capturedCandidateEditFromTransaction(
+  transaction: { getMeta: (key: string) => unknown },
+) {
+  return transaction.getMeta(STORYOS_CANDIDATE_EDIT) as
+    | ReturnType<typeof capturedCandidateEdit>["edit"] | undefined;
+}
 
 export function capturedManuscriptEditFromTransaction(
   transaction: { getMeta: (key: string) => unknown },
@@ -78,6 +88,37 @@ function isBlockNode(name: string): boolean {
   return name === "paragraph" || name === "heading";
 }
 
+function manuscriptIndex(doc: ProseMirrorNode, childIndex: number): number {
+  let index = 0;
+  for (let child = 0; child < childIndex; child += 1) {
+    if (doc.child(child).type.name !== "blockProposal") index += 1;
+  }
+  return index;
+}
+
+function manuscriptContentWithCandidates(
+  doc: ProseMirrorNode,
+  blocks: readonly ManuscriptParagraph[],
+): Fragment {
+  const manuscript = doc.type.schema.nodeFromJSON(manuscriptBlocksJson(blocks));
+  const attached = new Map<string, ProseMirrorNode[]>();
+  let anchor = "";
+  doc.forEach((node) => {
+    if (node.type.name !== "blockProposal") {
+      anchor = node.attrs.id as string;
+    } else {
+      const nodes = attached.get(anchor) ?? [];
+      nodes.push(node);
+      attached.set(anchor, nodes);
+    }
+  });
+  const nodes: ProseMirrorNode[] = [];
+  manuscript.forEach((node) => {
+    nodes.push(node, ...(attached.get(node.attrs.id as string) ?? []));
+  });
+  return Fragment.fromArray(nodes);
+}
+
 function insertNewline(view: EditorView): boolean {
   const { from, to } = view.state.selection;
   view.dispatch(view.state.tr.insertText("\n", from, to));
@@ -106,15 +147,15 @@ function moveCurrentBlock(view: EditorView, delta: -1 | 1): boolean {
   if (blocks === undefined) return true;
   const $from = view.state.selection.$from;
   if (!isBlockNode($from.parent.type.name)) return true;
-  const fromIndex = $from.index(0);
+  const fromIndex = manuscriptIndex(view.state.doc, $from.index(0));
   const toIndex = fromIndex + delta;
   if (toIndex < 0 || toIndex >= blocks.length) return true;
   const next = blocks.map((block) => ({ ...block }));
   const [block] = next.splice(fromIndex, 1);
   if (block === undefined) return true;
   next.splice(toIndex, 0, block);
-  const node = view.state.schema.nodeFromJSON(manuscriptBlocksJson(next));
-  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, node.content);
+  const content = manuscriptContentWithCandidates(view.state.doc, next);
+  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, content);
   transaction.setMeta(STORYOS_ORIGIN, "move_block");
   view.dispatch(transaction);
   return true;
@@ -141,7 +182,7 @@ export function storyosManuscriptExtensions(
   onAuthorUndo?: () => boolean,
 ) {
   return [
-    Document.extend({ content: "(paragraph | heading)+" }),
+    Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
     Paragraph,
     Heading.configure({ levels: [1] }),
     Text,
@@ -156,6 +197,9 @@ export function storyosManuscriptExtensions(
       addKeyboardShortcuts() {
         return {
           Enter: () => {
+            if (this.editor.state.selection.$from.parent.type.name === "blockProposal") {
+              return insertNewline(this.editor.view);
+            }
             if (!this.editor.state.selection.empty) {
               this.editor.commands.command(({ tr, dispatch }) => {
                 dispatch?.(tr.deleteSelection());
@@ -197,6 +241,13 @@ export function storyosManuscriptExtensions(
                 return state.doc.childCount === 0
                   && next.length === 1
                   && next[0]?.manuscript_block_id === blockId;
+              }
+              const candidate = capturedCandidateEdit(state.doc, transaction.doc);
+              if (!candidate.valid) return false;
+              if (candidate.edit !== undefined) {
+                if (!paragraphsEqual(previous, next)) return false;
+                transaction.setMeta(STORYOS_CANDIDATE_EDIT, candidate.edit);
+                return true;
               }
               const edit = captureManuscriptChange(previous, next);
               if (edit !== undefined) {
@@ -273,22 +324,30 @@ function dispatchPlainTextReplacement(
   const { from, to } = view.state.selection;
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
+  if ($from.parent.type.name === "blockProposal"
+    && $to.parent.type.name === "blockProposal"
+    && $from.before($from.depth) === $to.before($to.depth)) {
+    const transaction = view.state.tr.insertText(text, from, to);
+    transaction.setMeta(STORYOS_ORIGIN, origin);
+    view.dispatch(transaction);
+    return;
+  }
   if ($from.parent.type.name !== "paragraph" && $from.parent.type.name !== "heading"
     || $to.parent.type.name !== "paragraph" && $to.parent.type.name !== "heading") {
     return;
   }
   const next = paragraphsFromPlainTextReplacement(
     previous,
-    $from.index(0),
+    manuscriptIndex(view.state.doc, $from.index(0)),
     $from.parentOffset,
-    $to.index(0),
+    manuscriptIndex(view.state.doc, $to.index(0)),
     $to.parentOffset,
     text,
     createJournalUuid,
   );
   if (next === undefined) return;
-  const node = view.state.schema.nodeFromJSON(manuscriptBlocksJson(next));
-  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, node.content);
+  const content = manuscriptContentWithCandidates(view.state.doc, next);
+  const transaction = view.state.tr.replaceWith(0, view.state.doc.content.size, content);
   transaction.setMeta(STORYOS_ORIGIN, origin);
   view.dispatch(transaction);
 }
