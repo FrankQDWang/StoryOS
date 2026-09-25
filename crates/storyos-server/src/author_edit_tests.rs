@@ -15,6 +15,7 @@ fn request() -> contracts::ApplyAuthorEditRequest {
         chapter_id: "018f0000-0000-7001-8000-000000000003".to_owned(),
         expected_authoritative_revision_id: "018f0000-0000-7001-8000-000000000004".to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
+        proposal_target: None,
         target_refs: vec!["manuscript:018f0000-0000-7001-8000-000000000003".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
         editor_contract_revision: contracts::EDITOR_CONTRACT_REVISION.to_owned(),

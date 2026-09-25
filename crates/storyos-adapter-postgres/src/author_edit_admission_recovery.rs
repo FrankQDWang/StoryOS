@@ -1,7 +1,7 @@
 use storyos_application::{
     ApplyAuthorEditCommand, ApplyAuthorEditOutcome, ApplyAuthorEditOutcomeResolveError,
     ApplyAuthorEditReconfirmationReason, AuthorCommandAdmissionIds, AuthorEditError,
-    AuthorEditSettlement, CommittedApplyAuthorEdit, EditorSessionId,
+    AuthorEditProposalTarget, AuthorEditSettlement, CommittedApplyAuthorEdit, EditorSessionId,
     ProjectCommandChallengeBinding, RequiresReconfirmationApplyAuthorEdit,
     ResolveApplyAuthorEditOutcome,
 };
@@ -278,6 +278,15 @@ fn reconstruct_command(
         expected_proposal_head_revision_ids: string_array(
             payload.get("expected_proposal_head_revision_ids")?,
         )?,
+        proposal_target: match payload.get("proposal_target") {
+            Some(target) => Some(AuthorEditProposalTarget {
+                proposal_id: required_string(target, "proposal_id")?,
+                operation_id: required_string(target, "operation_id")?,
+                revision_id: required_string(target, "revision_id")?,
+                manuscript_block_id: required_string(target, "manuscript_block_id")?,
+            }),
+            None => None,
+        },
         target_refs: string_array(payload.get("target_refs")?)?,
         observed_ownership_partition: required_string(&payload, "observed_ownership_partition")?,
         editor_contract_revision: required_string(&payload, "editor_contract_revision")?,

@@ -77,6 +77,7 @@ fn command() -> ApplyAuthorEditCommand {
         chapter_id: "chapter".to_owned(),
         expected_authoritative_revision_id: "revision-1".to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
+        proposal_target: None,
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
         editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),

@@ -1090,6 +1090,13 @@ Project Activity. It is neither `NoEffect` nor Acceptance. Settlement, result
 visibility, applied convergence, attention, and payload retention remain
 separate axes and never override one another.
 
+For Block Proposal candidate input, the frozen Journal group retains the exact
+Proposal, Operation, current Proposal Revision, and manuscript Block target.
+Its `ApplyAuthorEdit` request includes that target and the complete observed
+chapter Proposal Head set. An ordinary Block edit has no Proposal target.
+The journal, protected outcome query, and reload path must keep that distinction
+through settlement; a stale candidate target never becomes an ordinary edit.
+
 This correction is a contract-only hard cut, not an IndexedDB migration. At the
 locked baseline, the Web journal writes `receipt_settled` only after it validates
 `AuthoritativeApplied` and its Activity position; it cannot persist zero authority

@@ -20,6 +20,15 @@ pub struct AuthoritativeAppliedIds {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// Binds an edit to one current Proposal, pending Operation, Revision, and Block.
+pub struct AuthorEditProposalTarget {
+    pub proposal_id: String,
+    pub operation_id: String,
+    pub revision_id: String,
+    pub manuscript_block_id: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ApplyAuthorEditCommand {
     pub project_scope: ProjectScope,
     pub client_binding: EditorClientBinding,
@@ -33,6 +42,7 @@ pub struct ApplyAuthorEditCommand {
     pub chapter_id: String,
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
+    pub proposal_target: Option<AuthorEditProposalTarget>,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub editor_contract_revision: String,

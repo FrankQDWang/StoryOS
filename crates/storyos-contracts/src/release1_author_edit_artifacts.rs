@@ -5,9 +5,9 @@ use ts_rs::{Config, TS};
 use crate::release1::{APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID, APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_ID};
 use crate::release1_author_edit::{
     APPLY_AUTHOR_EDIT, ApplyAuthorEditEffect, ApplyAuthorEditRequest, ApplyAuthorEditResponse,
-    AuthorEditConflictReason, AuthorEditPrimitive, AuthorEditRefusalReason, AuthorEditUnit,
-    DomainReceipt, DomainReceiptCommandKind, DomainReceiptProducerCause, DomainReceiptResult,
-    NoEffectReason, SelectionSnapshot,
+    AuthorEditConflictReason, AuthorEditPrimitive, AuthorEditProposalTarget,
+    AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt, DomainReceiptCommandKind,
+    DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -40,10 +40,11 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
         AuthorEditPrimitive::decl(&config),
         SelectionSnapshot::decl(&config),
         AuthorEditUnit::decl(&config),
+        AuthorEditProposalTarget::decl(&config),
         ApplyAuthorEditRequest::decl(&config),
         DomainReceiptCommandKind::decl(&config),
         DomainReceiptProducerCause::decl(&config),

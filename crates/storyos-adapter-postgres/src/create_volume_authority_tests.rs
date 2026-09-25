@@ -596,6 +596,7 @@ async fn apply_named_edit(
         chapter_id: chapter_id.to_owned(),
         expected_authoritative_revision_id: expected_revision_id.to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
+        proposal_target: None,
         target_refs: vec![format!("manuscript:{chapter_id}")],
         observed_ownership_partition: "authoritative".to_owned(),
         editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),

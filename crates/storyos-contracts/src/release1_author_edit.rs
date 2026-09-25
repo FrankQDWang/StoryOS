@@ -51,6 +51,8 @@ pub struct ApplyAuthorEditRequest {
     pub chapter_id: String,
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_target: Option<AuthorEditProposalTarget>,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub editor_contract_revision: String,
@@ -58,6 +60,16 @@ pub struct ApplyAuthorEditRequest {
     pub completed_intent_record_id: String,
     pub local_intent_sequence: String,
     pub author_edit_units: Vec<AuthorEditUnit>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+/// Binds an edit to one current Proposal, pending Operation, Revision, and Block.
+pub struct AuthorEditProposalTarget {
+    pub proposal_id: String,
+    pub operation_id: String,
+    pub revision_id: String,
+    pub manuscript_block_id: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
