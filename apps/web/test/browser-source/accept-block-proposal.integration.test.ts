@@ -67,7 +67,11 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     const options = { baseUrl: location.origin, fetchImpl, cryptoImpl: crypto, workspace,
       proposalId, operationId, proposalRevisionId, validationReceiptId,
       authoritativeRevisionId };
-    await expect(acceptDisplayedBlockProposal(options)).rejects.toThrow("Connection lost");
+    const first = acceptDisplayedBlockProposal(options);
+    const competing = expect(acceptDisplayedBlockProposal({ ...options,
+      operationId: "018f0000-0000-7001-8000-000000000109" }))
+      .rejects.toThrow(/prior Acceptance decision is unresolved/);
+    await expect(first).rejects.toThrow("Connection lost");
     expect(sent).toHaveLength(2);
     expect(sent[0]).toEqual(sent[1]);
     const pending = await readAcceptanceJournal(workspace);
@@ -84,9 +88,7 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       crash.oncomplete = () => resolve();
       crash.onabort = () => reject(crash.error);
     });
-    await expect(acceptDisplayedBlockProposal({ ...options,
-      operationId: "018f0000-0000-7001-8000-000000000109" }))
-      .rejects.toThrow(/prior Acceptance decision is unresolved/);
+    await competing;
 
     const response = await retryPendingDisplayedAcceptance({ baseUrl: location.origin,
       fetchImpl, cryptoImpl: crypto, workspace, proposalId });
@@ -95,12 +97,18 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     expect(sent[2]).toEqual(sent[0]);
     const settled = await readAcceptanceJournal(workspace);
     expect(settled.groups[0]?.settlement).toEqual({ kind: "settled", response });
+    expect(await acceptDisplayedBlockProposal(options)).toEqual(response);
+    await expect(acceptDisplayedBlockProposal({ ...options,
+      validationReceiptId: "018f0000-0000-7001-8000-000000000108" }))
+      .rejects.toThrow(/prior Acceptance decision is unresolved/);
+    expect(sent).toHaveLength(3);
     denyNext = true;
     await expect(acceptDisplayedBlockProposal({ ...options,
       proposalId: "018f0000-0000-7001-8000-000000000110" }))
       .rejects.toThrow(/HTTP 403/);
     expect((await readAcceptanceJournal(workspace)).groups[1]?.acceptance_delivery)
-      .toEqual({ kind: "known_problem", status: 403, code: "command_http_error" });
+      .toEqual({ kind: "known_problem", status: 403, code: "command_http_error",
+        responseBody: '{"code":"forbidden"}' });
     await expect(acceptDisplayedBlockProposal({ ...options,
       proposalId: "018f0000-0000-7001-8000-000000000110" }))
       .rejects.toThrow(/requires review/);

@@ -16,7 +16,8 @@ export type AcceptanceFlight = {
   author_visible_decision_ref: { proposal_id: string; operation_id: string; revision_id: string };
   frozen_request_digest: DigestValue;
   settlement: "frozen" | "delivery_unknown" | "known_problem";
-  problem?: { status: number; code: string };
+  problem?: { status: number; code: string; responseBody: string;
+    retryAfterSeconds?: number };
   proposalId: string;
   idempotencyKey: string;
   nonce?: string;
