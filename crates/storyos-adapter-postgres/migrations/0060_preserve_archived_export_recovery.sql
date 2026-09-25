@@ -1,4 +1,4 @@
-SET LOCAL ROLE storyos_owner;
+RESET ROLE;
 
 CREATE OR REPLACE FUNCTION storyos.pass_recovery_visibility_proof(
   p_recovery_copy_id uuid,
