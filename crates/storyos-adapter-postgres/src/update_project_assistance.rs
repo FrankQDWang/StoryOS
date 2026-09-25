@@ -12,6 +12,10 @@ use storyos_core::{
 };
 use uuid::Uuid;
 
+use crate::command_response_assistance::{
+    COMMAND_RESPONSE_ASSISTANCE_FORMAT, CommandResponseAssistanceEvidence,
+    encode_command_response_assistance, read_command_response_assistance,
+};
 use crate::command_response_project::{
     COMMAND_RESPONSE_PROJECT_FORMAT, CommandResponseProjectEvidence,
     encode_command_response_project, read_command_response_project,
@@ -291,13 +295,15 @@ async fn persist_update_project_assistance(
         current_chapter_id,
     };
     let encoded_project = encode_command_response_project(&response_project);
+    let encoded_assistance = encode_command_response_assistance(assistance.as_ref());
     client
         .execute(
             "UPDATE storyos.command_idempotency
                 SET outcome_kind = 'settled',
                     result_reference = $3,
                     acknowledgement_format = $5,
-                    response_project = $6::text::jsonb
+                    response_project = $6::text::jsonb,
+                    response_assistance = $7::text::jsonb
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND command_kind = 'updateProjectAssistance' AND idempotency_key = $4::text::uuid",
             &[
@@ -305,8 +311,9 @@ async fn persist_update_project_assistance(
                 &command.project_scope.project_id.as_ref(),
                 &command.ids.receipt_id,
                 &command.challenge_binding.idempotency_key,
-                &COMMAND_RESPONSE_PROJECT_FORMAT,
+                &COMMAND_RESPONSE_ASSISTANCE_FORMAT,
                 &encoded_project,
+                &encoded_assistance,
             ],
         )
         .await
@@ -594,7 +601,8 @@ async fn read_update_project_assistance_settlement(
                         payload.project_activity_position::text,
                         payload.project_activity_event_id::text,
                         idempotency.acknowledgement_format,
-                        idempotency.response_project::text
+                        idempotency.response_project::text,
+                        idempotency.response_assistance::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -668,8 +676,13 @@ async fn read_update_project_assistance_settlement(
             }
             _ => return Err(UpdateProjectAssistanceError::BindingConflict),
         };
+        let format = row.get::<_, Option<String>>(10);
+        let project_format = match format.as_deref() {
+            Some(COMMAND_RESPONSE_ASSISTANCE_FORMAT) => Some(COMMAND_RESPONSE_PROJECT_FORMAT),
+            other => other,
+        };
         let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(10).as_deref(),
+            project_format,
             row.get::<_, Option<String>>(11).as_deref(),
         ) {
             Ok(CommandResponseProjectEvidence::Captured(project)) => project,
@@ -684,9 +697,22 @@ async fn read_update_project_assistance_settlement(
                 )));
             }
         };
-        let assistance = read_assistance_record(&client, &command.project_scope)
-            .await
-            .map_err(|error| UpdateProjectAssistanceError::Unavailable(Box::new(error)))?;
+        let assistance = match read_command_response_assistance(
+            format.as_deref(),
+            row.get::<_, Option<String>>(12).as_deref(),
+        ) {
+            Ok(CommandResponseAssistanceEvidence::Captured(assistance)) => assistance,
+            Ok(CommandResponseAssistanceEvidence::HistoricalUnavailable) => {
+                return Err(UpdateProjectAssistanceError::HistoricalAcknowledgementUnavailable);
+            }
+            Err(()) => {
+                return Err(UpdateProjectAssistanceError::Unavailable(Box::new(
+                    std::io::Error::other(
+                        "Update Project Assistance acknowledgement evidence is damaged",
+                    ),
+                )));
+            }
+        };
         Ok(UpdateProjectAssistanceSettlement {
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
@@ -718,14 +744,14 @@ async fn read_update_project_assistance_settlement(
     result
 }
 
-fn availability_text(availability: AssistanceAvailability) -> &'static str {
+pub(crate) fn availability_text(availability: AssistanceAvailability) -> &'static str {
     match availability {
         AssistanceAvailability::Available => "available",
         AssistanceAvailability::Unavailable => "unavailable",
     }
 }
 
-fn parse_availability(value: &str) -> Result<AssistanceAvailability, std::io::Error> {
+pub(crate) fn parse_availability(value: &str) -> Result<AssistanceAvailability, std::io::Error> {
     match value {
         "available" => Ok(AssistanceAvailability::Available),
         "unavailable" => Ok(AssistanceAvailability::Unavailable),
@@ -735,7 +761,7 @@ fn parse_availability(value: &str) -> Result<AssistanceAvailability, std::io::Er
     }
 }
 
-fn parse_u64(value: String) -> Result<u64, std::io::Error> {
+pub(crate) fn parse_u64(value: String) -> Result<u64, std::io::Error> {
     value
         .parse()
         .map_err(|_| std::io::Error::other("Project assistance revision is damaged"))

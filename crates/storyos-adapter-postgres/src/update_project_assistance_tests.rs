@@ -3,8 +3,8 @@ use crate::update_project_assistance::HOST_FAKE_MODEL_REGISTRATION_REVISION;
 use storyos_application::{
     AuthorCommandAdmissionIds, EditorClientBinding, IssueProjectCommandChallenge,
     ProjectCommandChallengeBinding, ProjectId, ProjectScope, UpdateProjectAssistanceCommand,
-    UpdateProjectAssistanceSettlementEffect, UserId, issue_project_command_challenge,
-    open_project_assistance, update_project_assistance,
+    UpdateProjectAssistanceError, UpdateProjectAssistanceSettlementEffect, UserId,
+    issue_project_command_challenge, open_project_assistance, update_project_assistance,
 };
 use storyos_core::AssistanceAvailability;
 use tokio_postgres::NoTls;
@@ -116,6 +116,25 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
     let store = PostgresProjectReader::new(runtime_url.clone());
     let scope = ProjectScope::new(UserId::new(USER_A), ProjectId::new(PROJECT));
     assert_eq!(open_project_assistance(&store, &scope).await.unwrap(), None);
+
+    let absent_issue = issue_request("0a0b", UNAVAILABLE_BYTES);
+    issue_project_command_challenge(&store, &absent_issue)
+        .await
+        .unwrap();
+    let absent = update_project_assistance(
+        &store,
+        &command(
+            absent_issue.binding.clone(),
+            &absent_issue.nonce_digest,
+            "0a0c",
+            1,
+            AssistanceAvailability::Unavailable,
+            UNAVAILABLE_BYTES,
+        ),
+    )
+    .await
+    .unwrap();
+    assert_eq!(absent.assistance, None);
 
     let first_issue = issue_request("0a01", AVAILABLE_BYTES);
     issue_project_command_challenge(&store, &first_issue)
@@ -262,6 +281,52 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
         )
     );
 
+    for (original, issued, expected_revision, availability, bytes) in [
+        (
+            &absent,
+            &absent_issue,
+            1,
+            AssistanceAvailability::Unavailable,
+            UNAVAILABLE_BYTES,
+        ),
+        (
+            &first,
+            &first_issue,
+            0,
+            AssistanceAvailability::Available,
+            AVAILABLE_BYTES,
+        ),
+        (
+            &same,
+            &same_issue,
+            1,
+            AssistanceAvailability::Available,
+            AVAILABLE_BYTES,
+        ),
+        (
+            &stale,
+            &stale_issue,
+            0,
+            AssistanceAvailability::Unavailable,
+            UNAVAILABLE_BYTES,
+        ),
+    ] {
+        let replay = update_project_assistance(
+            &store,
+            &command(
+                issued.binding.clone(),
+                &issued.nonce_digest,
+                "0a99",
+                expected_revision,
+                availability,
+                bytes,
+            ),
+        )
+        .await
+        .unwrap();
+        assert_eq!(&replay, original);
+    }
+
     let other_scope = ProjectScope::new(UserId::new(USER_A), ProjectId::new(OTHER_PROJECT));
     assert_eq!(
         open_project_assistance(&store, &other_scope).await.unwrap(),
@@ -292,6 +357,50 @@ async fn update_project_assistance_initializes_toggles_and_stays_scope_safe() {
         ),
         (1, 1, 1, 2)
     );
+
+    admin
+        .execute(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = 'command_response_project.v1',
+                    response_assistance = NULL
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND command_kind = 'updateProjectAssistance'
+                AND idempotency_key = $3::text::uuid",
+            &[&USER_A, &PROJECT, &same_issue.binding.idempotency_key],
+        )
+        .await
+        .unwrap();
+    let historical_retry = || async {
+        let command = command(
+            same_issue.binding.clone(),
+            &same_issue.nonce_digest,
+            "0a99",
+            1,
+            AssistanceAvailability::Available,
+            AVAILABLE_BYTES,
+        );
+        update_project_assistance(&store, &command).await
+    };
+    assert!(matches!(
+        historical_retry().await,
+        Err(UpdateProjectAssistanceError::HistoricalAcknowledgementUnavailable)
+    ));
+    admin
+        .execute(
+            "UPDATE storyos.command_idempotency
+                SET acknowledgement_format = 'command_response_project_assistance.v1',
+                    response_assistance = '{}'::jsonb
+              WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
+                AND command_kind = 'updateProjectAssistance'
+                AND idempotency_key = $3::text::uuid",
+            &[&USER_A, &PROJECT, &same_issue.binding.idempotency_key],
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        historical_retry().await,
+        Err(UpdateProjectAssistanceError::Unavailable(_))
+    ));
 
     let (mut runtime, connection) = tokio_postgres::connect(&runtime_url, NoTls).await.unwrap();
     tokio::spawn(async move {
