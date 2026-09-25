@@ -201,7 +201,7 @@ async function acceptDisplayedBlockProposalLocked(
         request: frozen.request,
       });
     } catch (error) {
-      if (error instanceof StoryOSProtocolError) {
+      if (error instanceof StoryOSProtocolError && error.code === "command_http_error") {
         const refusal = await recordedRefusal(options, frozen, error);
         if (refusal !== undefined) {
           await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
@@ -212,10 +212,15 @@ async function acceptDisplayedBlockProposalLocked(
               ...(error.retryAfterSeconds === undefined ? {}
                 : { retryAfterSeconds: error.retryAfterSeconds }) } });
         }
-        await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
+        await finishAcceptanceAttempt(workspace.database, attemptId,
+          { kind: "response_observed" });
         throw error;
       }
-      await finishAcceptanceAttempt(workspace.database, attemptId, "delivery_unknown");
+      await finishAcceptanceAttempt(workspace.database, attemptId, {
+        kind: "delivery_unknown",
+        evidence: error instanceof StoryOSProtocolError && error.code === "command_invalid_json"
+          ? "response_unreadable" : "connection_lost",
+      });
       throw new AcceptanceDeliveryUnknown(error);
     }
     if (accepted.schema_id !== "storyos.command.accept-proposal.response.v1"
@@ -242,11 +247,13 @@ async function acceptDisplayedBlockProposalLocked(
       || accepted.receipt.idempotency_key !== frozen.idempotencyKey
       || JSON.stringify(accepted.receipt.command_digest)
         !== JSON.stringify(frozen.frozen_request_digest)) {
-      await finishAcceptanceAttempt(workspace.database, attemptId, "delivery_unknown");
+      await finishAcceptanceAttempt(workspace.database, attemptId,
+        { kind: "delivery_unknown", evidence: "response_unreadable" });
       throw new Error("Acceptance acknowledgement does not match the frozen command");
     }
     await writeFlight(workspace.database, frozen, { kind: "settled", response: accepted });
-    await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
+    await finishAcceptanceAttempt(workspace.database, attemptId,
+      { kind: "response_observed" });
     return accepted;
   };
   try { return await submit(); }

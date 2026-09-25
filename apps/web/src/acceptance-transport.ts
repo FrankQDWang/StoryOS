@@ -96,7 +96,7 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
   if (abandoned?.outcome.kind === "in_flight") {
     transaction.objectStore("transport_attempts").put({ ...abandoned,
       outcome: { kind: "delivery_unknown", observed_at: new Date().toISOString(),
-        evidence: "response_unreadable" } });
+        evidence: "process_crashed" } });
   }
   transaction.objectStore("transport_attempts").add({
     transport_attempt_id: attemptId,
@@ -116,7 +116,8 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
 }
 
 export async function finishAcceptanceAttempt(database: IDBDatabase, attemptId: string,
-  outcome: "delivery_unknown" | "response_observed"): Promise<void> {
+  outcome: { kind: "response_observed" } | { kind: "delivery_unknown";
+    evidence: "connection_lost" | "response_unreadable" }): Promise<void> {
   const transaction = database.transaction("transport_attempts", "readwrite",
     { durability: "strict" });
   const store = transaction.objectStore("transport_attempts");
@@ -124,7 +125,7 @@ export async function finishAcceptanceAttempt(database: IDBDatabase, attemptId: 
   request.onsuccess = () => {
     const attempt = request.result as Record<string, unknown> | undefined;
     if (attempt === undefined) { transaction.abort(); return; }
-    store.put({ ...attempt, outcome: { kind: outcome, observed_at: new Date().toISOString() } });
+    store.put({ ...attempt, outcome: { ...outcome, observed_at: new Date().toISOString() } });
   };
   await new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();

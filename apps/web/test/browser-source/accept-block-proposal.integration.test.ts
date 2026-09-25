@@ -19,6 +19,7 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     const authoritativeRevisionId = workspace.session.base_snapshot.authoritative_head_revision_id;
     const sent: { body: string; key: string; nonce: string }[] = [];
     let denyNext = false;
+    let corruptNext = false;
     const fetchImpl: typeof fetch = async (input, init) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       if (path.endsWith("/anti-forgery-challenges")) {
@@ -32,6 +33,10 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       const nonce = headers.get("x-storyos-anti-forgery") ?? "";
       sent.push({ body, key, nonce });
       if (denyNext) return jsonResponse({ code: "forbidden" }, 403);
+      if (corruptNext) {
+        corruptNext = false;
+        return new Response("invalid JSON", { status: 200 });
+      }
       if (sent.length <= 2) throw new TypeError("Connection lost");
       const request = JSON.parse(body) as AcceptProposalRequest;
       const digest = await digestAcceptProposal(request, crypto);
@@ -47,7 +52,7 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
           command_digest: digest,
           idempotency_key: key,
           author_command_admission_id: "018f0000-0000-7001-8000-000000000106",
-          proposal_id: proposalId,
+          proposal_id: path.split("/").at(-2) ?? "",
           proposal_revision_id: proposalRevisionId,
           validation_receipt_id: validationReceiptId,
           selected_operation_ids: [operationId],
@@ -113,6 +118,29 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       proposalId: "018f0000-0000-7001-8000-000000000110" }))
       .rejects.toThrow(/requires review/);
     expect(sent).toHaveLength(4);
+    denyNext = false;
+    corruptNext = true;
+    const unreadableProposalId = "018f0000-0000-7001-8000-000000000111";
+    const unreadable = await acceptDisplayedBlockProposal({ ...options,
+      proposalId: unreadableProposalId });
+    expect(unreadable.receipt.proposal_id).toBe(unreadableProposalId);
+    expect(sent).toHaveLength(6);
+    expect(sent[5]).toEqual(sent[4]);
+    const recovered = await readAcceptanceJournal(workspace);
+    const recoveredGroup = recovered.groups.find((group) =>
+      group.proposal_id === unreadableProposalId);
+    expect(recoveredGroup?.settlement).toEqual({ kind: "settled", response: unreadable });
+    const recoveredGroupId = recoveredGroup?.journal_submission_group_id;
+    if (typeof recoveredGroupId !== "string") throw new Error("Acceptance group is missing");
+    const attemptRequest = workspace.database.transaction("transport_attempts", "readonly")
+      .objectStore("transport_attempts").index("group")
+      .getAll(recoveredGroupId);
+    const recoveredAttempts = await new Promise<Record<string, unknown>[]>((resolve, reject) => {
+      attemptRequest.onsuccess = () => resolve(attemptRequest.result as Record<string, unknown>[]);
+      attemptRequest.onerror = () => reject(attemptRequest.error);
+    });
+    expect(recoveredAttempts[0]?.outcome).toMatchObject({ kind: "delivery_unknown",
+      evidence: "response_unreadable" });
   } finally {
     await test.close();
   }
