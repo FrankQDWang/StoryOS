@@ -80,7 +80,8 @@ export function BlockProposalDisplay({
   const [recoveredProposalIds, setRecoveredProposalIds] = useState<string[]>([]);
   const [journalPendingIds, setJournalPendingIds] = useState<string[]>([]);
   const [pendingRejections, setPendingRejections] = useState<string[]>([]);
-  const [settledRejections, setSettledRejections] = useState<string[]>([]);
+  const [settledRejections, setSettledRejections] = useState<Record<string,
+    "resolved" | "conflicted" | "refused">>({});
   const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [recoveryChecked, setRecoveryChecked] = useState(false);
   const refreshedAcceptance = useRef(new Set<string>());
@@ -107,7 +108,7 @@ export function BlockProposalDisplay({
       setJournalPendingIds([...new Set([...acceptance.unresolvedIds,
         ...rejection.pendingIds])]);
       setPendingRejections(rejection.pendingIds);
-      setSettledRejections(rejection.settledIds);
+      setSettledRejections(rejection.settledResults);
       setRecoveryUnavailable(false);
     }).catch(() => {
       if (active) setRecoveryUnavailable(true);
@@ -552,12 +553,17 @@ export function BlockProposalDisplay({
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
         const problem = knownProblems[locator.proposalId];
+        const rejectionResult = settledRejections[locator.proposalId];
         const message = pendingRejections.includes(locator.proposalId)
             ? "拒绝结果尚未确认。请重试同一操作。"
           : proposal?.operation_resolution === "rejected"
             ? "已拒绝，正文保持不变。"
-          : settledRejections.includes(locator.proposalId)
-            ? decisionMessages[locator.proposalId] ?? "拒绝结果已记录。"
+          : rejectionResult !== undefined
+            ? {
+              resolved: "已拒绝，正文保持不变。",
+              conflicted: "正文已变化，拒绝结果请检查。",
+              refused: "此次拒绝未生效，请检查当前候选文字。",
+            }[rejectionResult]
           : problem !== undefined
             ? `Acceptance ${problem.code} (HTTP ${problem.status}): ${problem.message}`
           : pendingAcceptances.includes(locator.proposalId)

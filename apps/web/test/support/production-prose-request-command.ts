@@ -10,7 +10,7 @@ import {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   ApplyAuthorEditRequest, CreateAgentRunRequest, CreateAgentRunResponse,
-  UpdateProjectAssistanceRequest,
+  RejectProposalOperationsResponse, UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration";
@@ -424,7 +424,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     let rejectionRequest: string | undefined;
     let rejectionKey: string | undefined;
     let rejectionNonce: string | undefined;
-    let rejectionResult: unknown;
+    let rejectionResult: RejectProposalOperationsResponse | undefined;
     await page.route((url) => url.pathname.endsWith(`/proposals/${secondProposalId}/rejections`),
       async (route) => {
         rejectionPosts += 1;
@@ -441,7 +441,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
         }
         const response = await route.fetch();
         assert.equal(response.status(), 200);
-        const result = await response.json();
+        const result = await response.json() as RejectProposalOperationsResponse;
         if (rejectionResult === undefined) rejectionResult = result;
         else assert.deepEqual(result, rejectionResult);
         if (rejectionPosts <= 2) await route.abort("failed");
@@ -452,10 +452,25 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator(`[data-proposal-decision="${secondProposalId}"]`)
       .getByText("拒绝结果尚未确认。请重试同一操作。").waitFor();
     assert.equal(rejectionPosts, 2);
+    assert.ok(rejectionResult !== undefined);
+    assert.equal(rejectionResult.effect.kind, "resolved");
+    if (rejectionResult.effect.kind !== "resolved") throw new Error("Rejection did not resolve");
+    assert.deepEqual(rejectionResult.receipt.selected_pending_operation_ids,
+      [secondProposal.operation_id]);
+    assert.deepEqual(rejectionResult.receipt.prior_authoritative_revision_ids,
+      [before.chapter.current_revision.revision_id]);
+    assert.deepEqual(rejectionResult.receipt.resulting_authoritative_revision_ids,
+      [before.chapter.current_revision.revision_id]);
+    assert.deepEqual(rejectionResult.receipt.authoritative_commit_ids, []);
+    assert.equal(rejectionResult.effect.resulting_resolution, "rejected");
+    assert.ok(rejectionResult.effect.author_action_sequence);
+    assert.equal(rejectionResult.effect.resolution_event_refs.length, 1);
     const rejected = (await getProposal({ ...options, proposalId: secondProposalId })).proposal;
     assert.equal(rejected.operation_resolution, "rejected");
     assert.equal(rejected.revision_id, secondProposal.revision_id);
     assert.equal(rejected.candidate_text, secondProposal.candidate_text);
+    assert.equal((await getProposal({ ...options, proposalId: firstProposalId })).proposal
+      .operation_resolution, "pending");
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.reload();
     await page.locator(`[data-proposal-decision="${secondProposalId}"] button`)

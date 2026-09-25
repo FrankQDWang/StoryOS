@@ -31,13 +31,14 @@ function rejectionKey(options: RejectionOptions): string {
 export async function rejectionJournalState(workspace: EditorWorkspace): Promise<{
   proposalIds: string[];
   pendingIds: string[];
-  settledIds: string[];
+  settledResults: Record<string, RejectProposalOperationsResponse["effect"]["kind"]>;
 }> {
   const journal = await readAcceptanceJournal(workspace);
   const proposalIds = new Set<string>();
   const pendingIds = new Set<string>();
-  const settledIds = new Set<string>();
-  for (const record of journal.records) {
+  const settledResults: Record<string, RejectProposalOperationsResponse["effect"]["kind"]> = {};
+  for (const record of [...journal.records].sort((left, right) =>
+    (left.local_intent_sequence as number) - (right.local_intent_sequence as number))) {
     if (record.command_kind !== "rejectProposalOperations") continue;
     const id = (record.author_visible_decision_ref as { proposal_id: string }).proposal_id;
     const group = journal.groups.find((item) =>
@@ -45,10 +46,11 @@ export async function rejectionJournalState(workspace: EditorWorkspace): Promise
         === record.explicit_command_record_id);
     proposalIds.add(id);
     if ((group?.settlement as { kind?: string })?.kind === "unsettled") pendingIds.add(id);
-    if ((group?.settlement as { kind?: string })?.kind === "settled") settledIds.add(id);
+    const settlement = group?.settlement as RejectionSettlement | undefined;
+    if (settlement?.kind === "settled") settledResults[id] = settlement.response.effect.kind;
   }
   return { proposalIds: [...proposalIds], pendingIds: [...pendingIds],
-    settledIds: [...settledIds] };
+    settledResults };
 }
 
 export async function rejectDisplayedBlockProposal(options: RejectionOptions):
@@ -88,7 +90,7 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
   if (flight !== undefined && flight.command_kind !== "rejectProposalOperations") {
     throw new Error("A prior Rejection decision is unresolved");
   }
-  const journal = await readAcceptanceJournal(workspace);
+  let journal = await readAcceptanceJournal(workspace);
   if (flight === undefined) {
     const prior = journal.records.find((record) => record.command_kind === "rejectProposalOperations"
       && JSON.stringify(record.author_visible_decision_ref) === JSON.stringify({
@@ -136,6 +138,7 @@ async function rejectLocked(options: RejectionOptions): Promise<RejectProposalOp
       settlement: "frozen", proposalId: options.proposalId,
       idempotencyKey: uuidV7(options.cryptoImpl), request,
     });
+    journal = await readAcceptanceJournal(workspace);
   }
   const input = decisionInput(flight);
   const group = journal.groups.find((item) => item.journal_submission_group_id
