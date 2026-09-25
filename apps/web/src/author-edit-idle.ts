@@ -35,6 +35,7 @@ export interface AuthorEditIdleController {
   flush(): Promise<void>;
   whenIdle(): Promise<void>;
   fail(error: unknown): void;
+  canAcceptCandidateInput(hardBoundary?: boolean): boolean;
   setHoldSubmission(hold: boolean): void;
   close(): void;
 }
@@ -76,6 +77,8 @@ export function createAuthorEditIdleController({
 }): AuthorEditIdleController {
   let pendingIntentCount = workspace.pending.unsettled_intent_count;
   let pendingTarget = pendingIntentCount > 0 ? "recovered" : undefined;
+  let submissionClosed = pendingIntentCount > 0;
+  let queuedWrites = 0;
   let undoGroupId: string | undefined;
   let lastCompletedAt: number | undefined;
   let idleTimer: TimerHandle | undefined;
@@ -88,6 +91,7 @@ export function createAuthorEditIdleController({
   const fail = (error: unknown): void => {
     if (!failed) onFailure(error);
     failed = true;
+    submissionClosed = true;
   };
 
   const enqueue = (operation: () => Promise<void>): Promise<void> => {
@@ -112,6 +116,7 @@ export function createAuthorEditIdleController({
   const submitPending = async (): Promise<void> => {
     clearIdle();
     if (pendingIntentCount === 0 || holdSubmission) return;
+    submissionClosed = true;
     const projection = await submitGroup({
       workspace, baseUrl, fetchImpl, cryptoImpl,
       onWriterFenced: () => fail(new Error("Editor Session is read only")),
@@ -119,6 +124,9 @@ export function createAuthorEditIdleController({
     workspace.pending = projection;
     pendingIntentCount = projection.unsettled_intent_count;
     if (pendingIntentCount === 0) pendingTarget = undefined;
+    if (projection.save_state === "saved" && pendingIntentCount === 0) {
+      submissionClosed = false;
+    }
     undoGroupId = undefined;
     if (projection.save_state === "saved" && afterAppliedSettlement) {
       await afterAppliedSettlement(workspace);
@@ -138,6 +146,7 @@ export function createAuthorEditIdleController({
     clearIdle();
     idleTimer = setTimeoutImpl(() => {
       idleTimer = undefined;
+      submissionClosed = true;
       enqueue(submitPending);
     }, AUTHOR_EDIT_BATCH_IDLE_MS);
   };
@@ -146,6 +155,10 @@ export function createAuthorEditIdleController({
 
   return {
     persist(edit, origin, createdAt) {
+      queuedWrites += 1;
+      const hardInput = origin === "composition_confirmation"
+        || origin === "paste" || origin === "cut" || origin === "drop";
+      if (hardInput) submissionClosed = true;
       return enqueue(async () => {
         const hardBoundary = origin === "composition_confirmation"
           || origin === "paste" || origin === "cut" || origin === "drop"
@@ -222,11 +235,16 @@ export function createAuthorEditIdleController({
         onProjection(projection);
         if (hardBoundary || pendingIntentCount >= AUTHOR_EDIT_MAX_UNITS) await submitPending();
         else scheduleIdle();
-      });
+      }).finally(() => { queuedWrites -= 1; });
     },
     flush() {
       clearIdle();
+      if (pendingIntentCount > 0 || queuedWrites > 0) submissionClosed = true;
       return enqueue(submitPending);
+    },
+    canAcceptCandidateInput(hardBoundary = false) {
+      return !stopped && !failed && !submissionClosed
+        && (!hardBoundary || pendingIntentCount === 0 && queuedWrites === 0);
     },
     async whenIdle() {
       await Promise.resolve();

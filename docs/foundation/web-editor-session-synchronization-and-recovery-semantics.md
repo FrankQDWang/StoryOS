@@ -248,6 +248,7 @@ CompletedIntentRecord {
   target_refs
   expected_authoritative_heads
   expected_proposal_heads
+  proposal_target (optional: exact Proposal, Operation, Revision, and Block)
   proposal_anchors
   observed_ownership_partition
 
@@ -309,6 +310,8 @@ JournalPayloadChain {
     materialized_payload_digest
     source_snapshot_id
     source_heads
+    proposal_target (optional)
+    proposal_head_revision_ids (required with proposal_target)
   }
   ordered_patch_refs {
     patch_id
@@ -319,6 +322,18 @@ JournalPayloadChain {
   }
 }
 ```
+
+An authoritative chain uses the materialized Chapter checkpoint and has no
+Proposal target. A candidate chain uses the candidate text checkpoint, binds
+the exact Proposal target, and retains the complete observed Proposal Head set.
+Its patches contain one `ReplaceSelection` primitive per intent. Candidate
+patches never change the authoritative Chapter projection.
+
+These optional fields extend the existing IndexedDB version 4 record shape.
+Existing records without them retain their authoritative checkpoint behavior;
+they are not assigned a candidate target during recovery. A candidate record
+with a missing target, missing head set, or inconsistent checkpoint fails
+closed. No IndexedDB version change or rewrite of old records is required.
 
 Every retained direct-edit record must be reconstructable to its exact
 `AuthorEditUnit` and complete structured author-edit payload without a network,

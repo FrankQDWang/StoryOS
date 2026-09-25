@@ -257,6 +257,16 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       .getAttribute("data-proposal-source-run-id"), secondRunId);
     let candidatePosts = 0;
     let candidateRequest: ApplyAuthorEditRequest | undefined;
+    let noteCandidatePosted = (): void => {};
+    const candidatePosted = new Promise<void>((resolve) => { noteCandidatePosted = resolve; });
+    let releaseCandidateResponse = (): void => {};
+    const heldCandidateResponse = new Promise<void>((resolve) => {
+      releaseCandidateResponse = resolve;
+    });
+    let noteCandidateResponseDone = (): void => {};
+    const candidateResponseDone = new Promise<void>((resolve) => {
+      noteCandidateResponseDone = resolve;
+    });
     await page.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
       if (route.request().method() !== "POST") {
         await route.continue();
@@ -266,7 +276,10 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       candidateRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
       const response = await route.fetch();
       assert.equal(response.status(), 200);
+      noteCandidatePosted();
+      await heldCandidateResponse;
       await route.abort("failed");
+      noteCandidateResponseDone();
     });
     const revisedText = `${firstProposal.candidate_text} Keep this line.`;
     const candidateText = page.locator(`[data-proposal-id="${firstProposalId}"] .block-proposal-text`);
@@ -281,6 +294,22 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     });
     await page.keyboard.insertText(" Keep this line.");
     await page.locator('[data-save-state="saving"]').waitFor();
+    await candidatePosted;
+    try {
+      await candidateText.evaluate((element) => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        range.collapse(false);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      });
+      await page.keyboard.insertText(" This must wait.");
+      assert.equal(await candidateText.textContent(), revisedText);
+    } finally {
+      releaseCandidateResponse();
+    }
+    await candidateResponseDone;
     await page.reload();
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     assert.equal(candidatePosts, 1, "candidate recovery must reuse the frozen command");

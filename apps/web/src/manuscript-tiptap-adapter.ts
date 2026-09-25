@@ -180,6 +180,7 @@ function retypeCurrentBlock(view: EditorView): boolean {
 export function storyosManuscriptExtensions(
   blockId: string,
   onAuthorUndo?: () => boolean,
+  canAcceptCandidateInput?: (hardBoundary: boolean) => boolean,
 ) {
   return [
     Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
@@ -246,6 +247,10 @@ export function storyosManuscriptExtensions(
               if (!candidate.valid) return false;
               if (candidate.edit !== undefined) {
                 if (!paragraphsEqual(previous, next)) return false;
+                const origin = transaction.getMeta(STORYOS_ORIGIN);
+                const hardBoundary = origin === "paste" || origin === "cut"
+                  || origin === "drop";
+                if (canAcceptCandidateInput?.(hardBoundary) !== true) return false;
                 transaction.setMeta(STORYOS_CANDIDATE_EDIT, candidate.edit);
                 return true;
               }
@@ -284,7 +289,8 @@ export function storyosEditorProps(blockId: string) {
       const dropPos = view.posAtCoords({ left: event.clientX, top: event.clientY });
       if (dropPos !== null) {
         const $pos = view.state.doc.resolve(dropPos.pos);
-        if ($pos.parent.type.name === "paragraph" || $pos.parent.type.name === "heading") {
+        if ($pos.parent.type.name === "paragraph" || $pos.parent.type.name === "heading"
+          || $pos.parent.type.name === "blockProposal") {
           view.dispatch(view.state.tr.setSelection(
             TextSelection.create(view.state.doc, dropPos.pos),
           ));
