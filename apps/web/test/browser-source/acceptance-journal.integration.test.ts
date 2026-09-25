@@ -46,8 +46,11 @@ it("rejects a foreign Acceptance flight before it can disappear from Journal rec
       idempotencyKey: "018f0000-0000-7001-8000-000000000108",
       request,
     };
+    await expect(createFlight(workspace, { ...flight, key: "hidden-flight" }))
+      .rejects.toThrow(/frozen command/);
     await expect(createFlight(workspace, { ...flight,
       journal_partition_id: "018f0000-0000-7001-8000-000000000109",
+      key: `acceptance:018f0000-0000-7001-8000-000000000109:${proposalId}:${revisionId}:${operationId}`,
     })).rejects.toThrow(/partition changed/);
     expect((await readJournalSnapshot(workspace)).explicitAcceptance)
       .toEqual({ records: [], groups: [] });

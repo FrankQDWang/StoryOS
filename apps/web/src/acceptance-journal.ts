@@ -245,6 +245,7 @@ export async function createFlight(workspace: EditorReadyState,
   const database = workspace.database;
   const requestDigest = await digestAcceptProposal(flight.request, workspace.cryptoImpl);
   if (JSON.stringify(requestDigest) !== JSON.stringify(flight.frozen_request_digest)
+    || flight.key !== `acceptance:${flight.journal_partition_id}:${flight.proposalId}:${flight.author_visible_decision_ref.revision_id}:${flight.author_visible_decision_ref.operation_id}`
     || flight.request.command_schema !== "storyos.command.accept-proposal.request.v1"
     || flight.request.accept_proposal_input.selected_operation_ids.length !== 1
     || flight.author_visible_decision_ref.proposal_id !== flight.proposalId
