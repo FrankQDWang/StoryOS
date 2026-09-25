@@ -9,6 +9,7 @@ import type {
   ManuscriptBlock,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
+import { readAcceptanceJournal } from "./acceptance-journal.ts";
 import type {
   EditorWorkspace,
   InputOrigin,
@@ -329,9 +330,12 @@ function closedReconciliation(group: JournalSubmissionGroup) {
 
 export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<JournalSnapshot> {
   const transaction = workspace.database.transaction(
-    ["metadata", "payload_chains", "intents", "submission_groups"],
+    ["metadata", "payload_chains", "intents", "submission_groups",
+      "transport_capsules", "transport_attempts"],
     "readonly",
   );
+  const explicitAcceptancePromise = readAcceptanceJournal(workspace, transaction);
+  void explicitAcceptancePromise.catch(() => {});
   const partitionId = workspace.partition.journal_partition_id;
   const [schemaValue, watermarkValue, activeBaseValue, recordsValue, payloadChainsValue,
     groupsValue, storedFencesValue] =
@@ -349,6 +353,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
       requestResult(transaction.objectStore("metadata").get(`collection_fences:${partitionId}`)),
     ]);
   const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
+  const explicitAcceptance = await explicitAcceptancePromise;
   const schema = schemaValue as { version?: unknown } | undefined;
   const watermark = watermarkValue as JournalSnapshot["watermark"];
   const activeBaseRecord = activeBaseValue as { value?: EditorBaseSnapshot } | undefined;
@@ -368,7 +373,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
   return {
-    watermark, activeBase, records, payloadChains, groups, fences,
+    watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance,
     ...(workingBoundary ? { workingBoundary } : {}),
   };
 }
@@ -708,6 +713,8 @@ function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
+  const pendingAcceptanceCount = snapshot.explicitAcceptance?.groups.filter((group) =>
+    (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0;
   const resolvedSequences = new Set<number>();
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;
@@ -746,12 +753,12 @@ function pendingProjectionFromSnapshot(
   return {
     body,
     blocks: cloneBlocks(blocks),
-    save_state: hasZeroAuthoritySettlement || hasLegacyReplaceSelection
+    save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection
       ? "needs_attention"
       : activeRecords.length
         ? "saving"
         : "saved",
-    unsettled_intent_count: activeRecords.length,
+    unsettled_intent_count: activeRecords.length + pendingAcceptanceCount,
     authoritative_revision_id: base.authoritative_head_revision_id,
     ...(workspace.session.author_undo_frontier_sequence
       ? { author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence }

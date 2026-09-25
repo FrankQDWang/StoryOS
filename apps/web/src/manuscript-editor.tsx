@@ -30,7 +30,7 @@ import {
   createProposalAgentWriteGate,
 } from "./proposal-agent-write-gate.ts";
 import {
-  blockProposalDecoration, capturedCandidateEdit, projectBlockProposals,
+  capturedCandidateEdit, projectBlockProposals,
   type BlockProposalProjection,
 } from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
@@ -133,7 +133,6 @@ export function ManuscriptEditor({
         () => onAuthorUndoRef.current(),
         (hardBoundary) => !candidateCompositionBlockedRef.current
           && idleRef.current?.canAcceptCandidateInput(hardBoundary) === true),
-      blockProposalDecoration,
     ],
     content: manuscriptBlocksJson(blocks),
     editable,

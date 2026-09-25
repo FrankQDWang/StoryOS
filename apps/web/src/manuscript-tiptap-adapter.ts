@@ -9,7 +9,7 @@ import { Plugin, PluginKey, TextSelection, type EditorState, type Transaction } 
 import type { EditorView } from "@tiptap/pm/view";
 
 import type { InputOrigin } from "./editor-types.ts";
-import { capturedCandidateEdit } from "./block-proposal-decoration.ts";
+import { blockProposalDecoration, capturedCandidateEdit } from "./block-proposal-decoration.ts";
 import { createJournalUuid } from "./local-edit-journal.ts";
 import {
   captureManuscriptChange,
@@ -187,6 +187,7 @@ export function storyosManuscriptExtensions(
     Paragraph,
     Heading.configure({ levels: [1] }),
     Text,
+    blockProposalDecoration,
     UniqueID.configure({
       attributeName: "id",
       types: ["paragraph", "heading"],
