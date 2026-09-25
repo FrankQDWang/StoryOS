@@ -491,6 +491,9 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       "正文已变化；此次接受结果尚未确认。请重试同一操作。",
     ).waitFor();
     assert.equal(acceptancePosts, 4);
+    await page.waitForFunction((expected) =>
+      document.querySelector(".tiptap > p")?.textContent === expected,
+    restored.candidate_text, { polling: 100 });
     assert.equal(await page.locator(".tiptap > p").first().textContent(), restored.candidate_text);
     await page.reload();
     await page.locator(`[data-proposal-decision="${firstProposalId}"] button`).getByText("重试接受")
@@ -504,6 +507,9 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     const acceptedChapter = await getChapter({ ...options, chapterId });
     assert.equal(acceptedChapter.chapter.current_revision.blocks[0]?.text, restored.candidate_text);
     assert.equal(acceptedChapter.chapter.current_revision.blocks[1]?.text, secondBlock.text);
+    await page.waitForFunction((expected) =>
+      document.querySelector(".tiptap > p")?.textContent === expected,
+    restored.candidate_text, { polling: 100 });
     assert.equal(await page.locator(".tiptap > p").first().textContent(), restored.candidate_text);
     assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
       .operation_resolution, "pending");
