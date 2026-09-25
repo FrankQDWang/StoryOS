@@ -474,7 +474,13 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
         body.proposal.base_authoritative_revision_id = uuidV7();
         await route.fulfill({ response, body: JSON.stringify(body) });
       });
-    await page.evaluate(() => sessionStorage.clear());
+    const locatorCache = await page.evaluate(({ userId, id }) => {
+      const key = `block_proposals:${userId}:${id}`;
+      const value = sessionStorage.getItem(key);
+      sessionStorage.removeItem(key);
+      return value;
+    }, { userId: USER, id: projectId });
+    assert.ok(locatorCache);
     await page.reload();
     await page.locator('[data-unsettled-intent-count="1"]').waitFor();
     const retry = page.locator(`[data-proposal-unavailable="${firstProposalId}"]`);
