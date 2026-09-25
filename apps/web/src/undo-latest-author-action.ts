@@ -10,7 +10,7 @@ import type {
   UndoLatestAuthorActionResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import type { EditorWorkspace } from "./editor-types.ts";
+import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -70,13 +70,38 @@ export async function installAuthoritativeBaseSnapshot(
 }
 
 export async function undoOwnedLatestAuthorAction(options: {
-  workspace: EditorWorkspace;
+  workspace: EditorReadyState;
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
 }): Promise<UndoLatestAuthorActionResponse | undefined> {
-  const frontier = options.workspace.session.author_undo_frontier_sequence;
-  const expectedHead = options.workspace.session.base_snapshot.authoritative_head_revision_id;
+  if (options.workspace.partition.disposition !== "current_writer_open"
+    || options.workspace.pending.save_state !== "saved") {
+    throw new Error("Author Undo requires a settled current writer");
+  }
+  const canonical = await getEditorSession({
+    baseUrl: options.baseUrl,
+    projectId: options.workspace.partition.project_scope.project_id,
+    editorSessionId: options.workspace.partition.editor_session_id,
+    fetchImpl: options.fetchImpl,
+  });
+  if (canonical.project_scope.owner_user_id
+      !== options.workspace.partition.project_scope.owner_user_id
+    || canonical.project_scope.project_id
+      !== options.workspace.partition.project_scope.project_id
+    || canonical.editor_session.editor_session_id
+      !== options.workspace.partition.editor_session_id
+    || canonical.writer.kind !== "current_writer"
+    || canonical.writer.writer_generation !== options.workspace.partition.writer_generation
+    || canonical.base_snapshot.chapter_id
+      !== options.workspace.session.base_snapshot.chapter_id
+    || canonical.base_snapshot.authoritative_head_revision_id
+      !== options.workspace.session.base_snapshot.authoritative_head_revision_id) {
+    throw new Error("Author Undo requires the current Editor Session");
+  }
+  options.workspace.session = canonical;
+  const frontier = canonical.author_undo_frontier_sequence;
+  const expectedHead = canonical.base_snapshot.authoritative_head_revision_id;
   if (!positiveU64(frontier)) return undefined;
   const identity = undoIdentity({
     projectId: options.workspace.partition.project_scope.project_id,
