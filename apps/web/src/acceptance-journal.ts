@@ -48,8 +48,11 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
   const [allRecords, allGroups, allCapsules, allAttempts] = await Promise.all([
     read(intentsRequest), read(groupsRequest), read(capsulesRequest), read(attemptsRequest),
   ]);
-  const records = allRecords.filter((record) => record.command_kind === "acceptProposal");
-  const groups = allGroups.filter((group) => group.command_kind === "acceptProposal");
+  const records = allRecords.filter((record) => record.completed_intent_record_id === undefined);
+  const explicitIds = new Set(records.map((record) => record.explicit_command_record_id));
+  const groups = allGroups.filter((group) => group.action_class !== "direct_editor_action"
+    || explicitIds.has((group.ordered_coverage as { intent_record_ref?: string }[] | undefined)?.[
+      0]?.intent_record_ref));
   if (records.length !== groups.length || records.length > 2400) {
     throw new Error("Acceptance Journal is corrupt");
   }
@@ -79,7 +82,9 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
     const settlement = group.settlement as AcceptanceSettlement | { kind: "unsettled" };
     if (record === undefined || coverage?.length !== 1
       || record.journal_partition_id !== partitionId
+      || record.command_kind !== "acceptProposal"
       || group.journal_partition_id !== partitionId
+      || group.command_kind !== "acceptProposal"
       || JSON.stringify(record.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || JSON.stringify(group.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || record.editor_session_id !== workspace.partition.editor_session_id
@@ -238,6 +243,17 @@ export async function writeFlight(database: IDBDatabase, flight: AcceptanceFligh
 export async function createFlight(workspace: EditorReadyState,
   flight: Omit<AcceptanceFlight, "local_intent_sequence">): Promise<AcceptanceFlight> {
   const database = workspace.database;
+  const requestDigest = await digestAcceptProposal(flight.request, workspace.cryptoImpl);
+  if (JSON.stringify(requestDigest) !== JSON.stringify(flight.frozen_request_digest)
+    || flight.request.command_schema !== "storyos.command.accept-proposal.request.v1"
+    || flight.request.accept_proposal_input.selected_operation_ids.length !== 1
+    || flight.author_visible_decision_ref.proposal_id !== flight.proposalId
+    || flight.author_visible_decision_ref.operation_id
+      !== flight.request.accept_proposal_input.selected_operation_ids[0]
+    || flight.author_visible_decision_ref.revision_id
+      !== flight.request.accept_proposal_input.proposal_revision_id) {
+    throw new Error("Acceptance decision does not match the frozen command");
+  }
   for (let retry = 0; retry < 3; retry += 1) {
     const read = database.transaction("metadata", "readonly").objectStore("metadata")
       .get("local_intent_sequence");
@@ -297,7 +313,17 @@ async function commitFlight(workspace: EditorReadyState,
   }
   if (schema?.version !== 4
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
-    || workspace.partition.disposition !== "current_writer_open") {
+    || workspace.partition.disposition !== "current_writer_open"
+    || flight.journal_partition_id !== workspace.partition.journal_partition_id
+    || JSON.stringify(flight.project_scope) !== JSON.stringify(workspace.partition.project_scope)
+    || flight.editor_session_id !== workspace.partition.editor_session_id
+    || flight.writer_generation !== workspace.partition.writer_generation
+    || flight.request.accept_proposal_input.editor_session_id
+      !== workspace.partition.editor_session_id
+    || flight.request.accept_proposal_input.client_contract_revision
+      !== workspace.partition.client_contract_revision
+    || flight.request.accept_proposal_input.security_policy_revision
+      !== workspace.partition.security_policy_revision) {
     transaction.abort();
     throw new Error("Acceptance Journal partition changed");
   }
