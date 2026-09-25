@@ -13,7 +13,7 @@ import type {
   UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { runStoryOSWorker, sessionFetch } from "./node-integration";
+import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -334,11 +334,17 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
       .revision_id, secondProposal.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
+    // Earlier commands consume the fixture challenge budget before Undo.
+    await queryStoryOSPostgres(`
+      UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+      WHERE owner_user_id = '${USER}'::uuid AND project_id = '${projectId}'::uuid
+    `);
+    await candidateText.click();
+    assert.equal(await editor.evaluate((element) => document.activeElement === element), true);
     const undoResponse = page.waitForResponse((response) =>
       response.url().endsWith("/author-actions/undo")
         && response.request().method() === "POST");
-    await candidateText.click();
-    await candidateText.press("ControlOrMeta+Z");
+    await page.keyboard.press("ControlOrMeta+Z");
     assert.equal((await undoResponse).status(), 200);
     const restored = (await getProposal({ ...options, proposalId: firstProposalId })).proposal;
     assert.equal(restored.candidate_text, firstProposal.candidate_text);
