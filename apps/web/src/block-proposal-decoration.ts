@@ -12,13 +12,14 @@ export type BlockProposalProjection = {
   sourceDecisionId: string;
   text: string;
   eligible: boolean;
+  retryPending?: boolean;
   expectedHeads: string[];
   localPending?: boolean;
 };
 
 const ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
-  "sourceDecisionId", "eligible", "expectedHeads",
+  "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -72,6 +73,7 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
         sourceDecisionId: node.attrs.sourceDecisionId as string,
         text: current.textContent,
         eligible: node.attrs.eligible as boolean,
+        retryPending: node.attrs.retryPending as boolean,
         expectedHeads: node.attrs.expectedHeads as string[],
       },
       priorText: node.textContent,
@@ -110,6 +112,7 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sourceRunId: proposal.sourceRunId,
         sourceDecisionId: proposal.sourceDecisionId,
         eligible: proposal.eligible,
+        retryPending: proposal.retryPending ?? false,
         expectedHeads: proposal.expectedHeads,
       }, text.length ? schema.text(text) : undefined));
     }
@@ -137,6 +140,7 @@ export const blockProposalDecoration = TiptapNode.create({
   },
   renderHTML({ node }) {
     const eligible = node.attrs.eligible === true;
+    const retryPending = node.attrs.retryPending === true;
     return ["div", {
       class: "block-proposal",
       "data-proposal-id": node.attrs.proposalId,
@@ -151,6 +155,12 @@ export const blockProposalDecoration = TiptapNode.create({
       ...(eligible ? {} : { contenteditable: "false" }),
     }, ["span", { class: "block-proposal-label", contenteditable: "false" },
       eligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可接受"],
-    ["p", { class: "block-proposal-text" }, 0]];
+    ["p", { class: "block-proposal-text" }, 0],
+    ...(eligible || retryPending ? [["button", {
+      type: "button",
+      class: "block-proposal-accept",
+      "data-proposal-accept": node.attrs.proposalId,
+      contenteditable: "false",
+    }, retryPending ? "重试接受" : "接受"]] : [])];
   },
 });

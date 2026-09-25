@@ -3,7 +3,8 @@ import type { AcceptProposalRequest, AcceptProposalResponse } from "../../../gen
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { EditorReadyState } from "./editor-types.ts";
 import { beginAcceptanceAttempt, finishAcceptanceAttempt } from "./acceptance-transport.ts";
-import { createFlight, readAcceptanceJournal, readFlight, uuidV7, writeFlight,
+import { createFlight, parsePreAdmissionAcceptanceProblem, readAcceptanceJournal,
+  readFlight, uuidV7, writeFlight,
   type AcceptanceFlight, type AcceptanceRefusal } from "./acceptance-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
@@ -188,7 +189,7 @@ async function acceptDisplayedBlockProposalLocked(
   }
   const frozen = flight;
   const submit = async () => {
-    const attemptId = await beginAcceptanceAttempt(workspace, frozen);
+    const attempt = await beginAcceptanceAttempt(workspace, frozen);
     let accepted: AcceptProposalResponse;
     try {
       accepted = await acceptProposal({
@@ -206,17 +207,25 @@ async function acceptDisplayedBlockProposalLocked(
         if (refusal !== undefined) {
           await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
         } else {
-          await writeFlight(workspace.database, { ...frozen, settlement: "known_problem",
-            problem: { status: error.status ?? 0, code: error.code,
-              responseBody: error.responseBody ?? "",
-              ...(error.retryAfterSeconds === undefined ? {}
-                : { retryAfterSeconds: error.retryAfterSeconds }) } });
+          const terminal = attempt.ordinal === 1
+            ? parsePreAdmissionAcceptanceProblem(error.status ?? 0, error.responseBody ?? "")
+            : undefined;
+          if (terminal !== undefined) {
+            await writeFlight(workspace.database, frozen,
+              { kind: "pre_admission_problem", problem: terminal });
+          } else {
+            await writeFlight(workspace.database, { ...frozen, settlement: "known_problem",
+              problem: { status: error.status ?? 0, code: error.code,
+                responseBody: error.responseBody ?? "",
+                ...(error.retryAfterSeconds === undefined ? {}
+                  : { retryAfterSeconds: error.retryAfterSeconds }) } });
+          }
         }
-        await finishAcceptanceAttempt(workspace.database, attemptId,
+        await finishAcceptanceAttempt(workspace.database, attempt.id,
           { kind: "response_observed" });
         throw error;
       }
-      await finishAcceptanceAttempt(workspace.database, attemptId, {
+      await finishAcceptanceAttempt(workspace.database, attempt.id, {
         kind: "delivery_unknown",
         evidence: error instanceof StoryOSProtocolError && error.code === "command_invalid_json"
           ? "response_unreadable" : "connection_lost",
@@ -247,12 +256,12 @@ async function acceptDisplayedBlockProposalLocked(
       || accepted.receipt.idempotency_key !== frozen.idempotencyKey
       || JSON.stringify(accepted.receipt.command_digest)
         !== JSON.stringify(frozen.frozen_request_digest)) {
-      await finishAcceptanceAttempt(workspace.database, attemptId,
+      await finishAcceptanceAttempt(workspace.database, attempt.id,
         { kind: "delivery_unknown", evidence: "response_unreadable" });
       throw new Error("Acceptance acknowledgement does not match the frozen command");
     }
     await writeFlight(workspace.database, frozen, { kind: "settled", response: accepted });
-    await finishAcceptanceAttempt(workspace.database, attemptId,
+    await finishAcceptanceAttempt(workspace.database, attempt.id,
       { kind: "response_observed" });
     return accepted;
   };
