@@ -401,6 +401,21 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator("[data-assistant-inspect]").click();
     const ready = page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="eligible"]`);
     await ready.waitFor();
+    const secondReady = page.locator(`[data-proposal-id="${secondProposalId}"][data-proposal-eligibility="eligible"]`);
+    await secondReady.waitFor();
+    await page.route((url) => url.pathname.endsWith(`/proposals/${secondProposalId}/acceptances`),
+      async (route) => {
+        await route.fulfill({ status: 422, contentType: "application/json", body: JSON.stringify({
+          schema_id: "storyos.problem.v1", code: "challenge_invalid",
+          message: "The Acceptance challenge is invalid.",
+        }) });
+      });
+    await secondReady.locator("button[data-proposal-accept]").click();
+    await page.locator(`[data-proposal-decision="${secondProposalId}"]`).getByText(
+      "Acceptance challenge_invalid (HTTP 422): The Acceptance challenge is invalid.",
+    ).waitFor();
+    await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    await page.unrouteAll();
     let acceptancePosts = 0;
     let firstAcceptanceRequest: string | undefined;
     let firstAcceptanceKey: string | undefined;

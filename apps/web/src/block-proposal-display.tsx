@@ -69,7 +69,9 @@ export function BlockProposalDisplay({
   const [candidateTexts, setCandidateTexts] = useState<Record<string, string>>({});
   const [settlementRefresh, setSettlementRefresh] = useState(0);
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
-  const [knownProblems, setKnownProblems] = useState<Record<string, number>>({});
+  const [knownProblems, setKnownProblems] = useState<Record<string, {
+    status: number; code: string; message: string; terminal: boolean;
+  }>>({});
   const [accepting, setAccepting] = useState<string>();
   const [pendingAcceptances, setPendingAcceptances] = useState<string[]>([]);
   const [acceptanceChecked, setAcceptanceChecked] = useState(false);
@@ -185,7 +187,7 @@ export function BlockProposalDisplay({
         setKnownProblems((current) => {
           const next = { ...current };
           if (problem === undefined) delete next[locator.proposalId];
-          else next[locator.proposalId] = problem.status;
+          else next[locator.proposalId] = problem;
           return next;
         });
       }
@@ -251,6 +253,7 @@ export function BlockProposalDisplay({
       && operation.reservation_state === "unresolved"
       && proposal.validation_receipt.kind === "present"
       && proposal.validation_receipt.result === "valid"
+      && knownProblems[proposal.proposal_id] === undefined
       && candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`] === undefined
       && accepting !== proposal.proposal_id && !pendingAcceptance;
     projections.push({
@@ -415,8 +418,9 @@ export function BlockProposalDisplay({
         onAcceptProposal={acceptDisplayed} />
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
-        const message = knownProblems[locator.proposalId] !== undefined
-          ? `接受请求返回 HTTP ${knownProblems[locator.proposalId]}；候选文字仍保留。请检查当前结果。`
+        const problem = knownProblems[locator.proposalId];
+        const message = problem !== undefined
+          ? `Acceptance ${problem.code} (HTTP ${problem.status}): ${problem.message}`
           : pendingAcceptances.includes(locator.proposalId)
             ? proposal?.operation_resolution === "applied"
               ? "正文已变化；此次接受结果尚未确认。请重试同一操作。"
@@ -439,7 +443,7 @@ export function BlockProposalDisplay({
           <p data-proposal-decision={locator.proposalId} role="status" key={locator.proposalId}>
             {message}
             {pendingAcceptances.includes(locator.proposalId)
-              && knownProblems[locator.proposalId] === undefined ? (
+              && problem === undefined ? (
                 <button type="button" disabled={accepting !== undefined}
                   onClick={() => retryPending(locator.proposalId)}>重试接受</button>
               ) : null}

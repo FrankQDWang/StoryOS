@@ -26,9 +26,32 @@ export type AcceptanceFlight = {
 };
 export type AcceptanceRefusal = Extract<BlockProposalInspect["latest_acceptance_refusal"],
   { kind: "present" }>;
-export type AcceptanceSettlement =
+export type AcceptancePreAdmissionProblem = {
+  status: number;
+  code: string;
+  message: string;
+  responseBody: string;
+};
+export type AcceptanceReceiptSettlement =
   | { kind: "settled"; response: AcceptProposalResponse }
   | { kind: "refused"; refusal: AcceptanceRefusal };
+export type AcceptanceSettlement = AcceptanceReceiptSettlement
+  | { kind: "pre_admission_problem"; problem: AcceptancePreAdmissionProblem };
+
+export function parsePreAdmissionAcceptanceProblem(status: number,
+  responseBody: string): AcceptancePreAdmissionProblem | undefined {
+  let parsed: unknown;
+  try { parsed = JSON.parse(responseBody); } catch { return undefined; }
+  if (parsed === null || typeof parsed !== "object") return undefined;
+  const problem = parsed as { schema_id?: unknown; code?: unknown; message?: unknown };
+  if (problem.schema_id !== "storyos.problem.v1"
+    || typeof problem.message !== "string" || problem.message.length === 0
+    || !((status === 422 && problem.code === "challenge_invalid")
+      || (status === 409 && problem.code === "acceptance_session_ineligible")
+      || (status === 401 && problem.code === "authentication_required")
+      || (status === 403 && problem.code === "request_site_refused"))) return undefined;
+  return { status, code: problem.code, message: problem.message, responseBody };
+}
 
 export async function readAcceptanceJournal(workspace: EditorWorkspace,
   snapshotTransaction?: IDBTransaction): Promise<{
@@ -123,7 +146,8 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       || JSON.stringify(coverage[0]?.payload_digest) !== JSON.stringify(digest)
       || JSON.stringify(group.frozen_payload_coverage_digest)
         !== JSON.stringify(coverageDigest)
-      || !["unsettled", "settled", "refused"].includes(settlement?.kind ?? "")
+      || !["unsettled", "settled", "refused", "pre_admission_problem"]
+        .includes(settlement?.kind ?? "")
       || capsule.length > 1 || (attempts.length > 0 && capsule.length !== 1)
       || attempts.some((attempt, index) => attempt.attempt_ordinal !== index + 1
         || attempt.exact_transport_retry_capsule_id
@@ -148,7 +172,11 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
             !== request?.accept_proposal_input.correlation_id))
       || (settlement.kind === "refused"
         && settlement.refusal.correlation_id
-          !== request?.accept_proposal_input.correlation_id)) {
+          !== request?.accept_proposal_input.correlation_id)
+      || (settlement.kind === "pre_admission_problem"
+        && JSON.stringify(settlement.problem) !== JSON.stringify(
+          parsePreAdmissionAcceptanceProblem(settlement.problem.status,
+            settlement.problem.responseBody)))) {
       throw new Error("Acceptance Journal is corrupt");
     }
   }
@@ -156,7 +184,7 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
 }
 
 export async function settledDisplayedAcceptance(workspace: EditorWorkspace,
-  proposalId: string): Promise<AcceptanceSettlement | undefined> {
+  proposalId: string): Promise<AcceptanceReceiptSettlement | undefined> {
   const journal = await readAcceptanceJournal(workspace);
   const records = journal.records.filter((record) =>
     (record.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId);
@@ -171,7 +199,7 @@ export async function settledDisplayedAcceptance(workspace: EditorWorkspace,
 }
 
 export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace,
-  proposalId: string): Promise<{ status: number; responseBody: string } | undefined> {
+  proposalId: string): Promise<(AcceptancePreAdmissionProblem & { terminal: boolean }) | undefined> {
   const journal = await readAcceptanceJournal(workspace);
   const record = journal.records.filter((item) =>
     (item.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
@@ -180,12 +208,20 @@ export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace
   const group = journal.groups.find((item) =>
     (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
       === record?.explicit_command_record_id);
-  const delivery = group?.acceptance_delivery as { kind?: string; status?: number;
+  const delivery = group?.acceptance_delivery as { kind?: string; status?: number; code?: string;
     responseBody?: string } | undefined;
-  return group?.settlement && (group.settlement as { kind: string }).kind === "unsettled"
-    && delivery?.kind === "known_problem" && typeof delivery.status === "number"
-    && typeof delivery.responseBody === "string"
-    ? { status: delivery.status, responseBody: delivery.responseBody } : undefined;
+  const settlement = group?.settlement as AcceptanceSettlement | { kind: "unsettled" } | undefined;
+  if (settlement?.kind === "pre_admission_problem") {
+    return { ...settlement.problem, terminal: true };
+  }
+  if (settlement?.kind !== "unsettled" || delivery?.kind !== "known_problem"
+    || typeof delivery.status !== "number" || typeof delivery.responseBody !== "string") {
+    return undefined;
+  }
+  const parsed = parsePreAdmissionAcceptanceProblem(delivery.status, delivery.responseBody);
+  return { status: delivery.status, code: String(delivery.code ?? "unknown"),
+    message: parsed?.message ?? "The Acceptance result needs review.",
+    responseBody: delivery.responseBody, terminal: false };
 }
 
 export async function acceptanceJournalProposals(workspace: EditorWorkspace): Promise<{

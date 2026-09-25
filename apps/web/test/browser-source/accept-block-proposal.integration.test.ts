@@ -4,7 +4,8 @@ import { digestAcceptProposal } from "../../../../generated/typescript/storyos-p
 import type { AcceptProposalRequest } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance }
   from "../../src/accept-block-proposal.ts";
-import { readAcceptanceJournal } from "../../src/acceptance-journal.ts";
+import { acceptanceJournalProposals, readAcceptanceJournal }
+  from "../../src/acceptance-journal.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { jsonResponse } from "./scenario.ts";
 
@@ -20,6 +21,7 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     const sent: { body: string; key: string; nonce: string }[] = [];
     let denyNext = false;
     let corruptNext = false;
+    let terminalNext = false;
     const fetchImpl: typeof fetch = async (input, init) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       if (path.endsWith("/anti-forgery-challenges")) {
@@ -33,6 +35,8 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       const nonce = headers.get("x-storyos-anti-forgery") ?? "";
       sent.push({ body, key, nonce });
       if (denyNext) return jsonResponse({ code: "forbidden" }, 403);
+      if (terminalNext) return jsonResponse({ schema_id: "storyos.problem.v1",
+        code: "challenge_invalid", message: "The Acceptance challenge is invalid." }, 422);
       if (corruptNext) {
         corruptNext = false;
         return new Response("invalid JSON", { status: 200 });
@@ -141,6 +145,19 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     });
     expect(recoveredAttempts[0]?.outcome).toMatchObject({ kind: "delivery_unknown",
       evidence: "response_unreadable" });
+    terminalNext = true;
+    const refusedProposalId = "018f0000-0000-7001-8000-000000000112";
+    await expect(acceptDisplayedBlockProposal({ ...options, proposalId: refusedProposalId }))
+      .rejects.toThrow(/HTTP 422/);
+    const refusedJournal = await readAcceptanceJournal(workspace);
+    expect(refusedJournal.groups.find((group) => group.proposal_id === refusedProposalId)?.settlement)
+      .toEqual({ kind: "pre_admission_problem", problem: {
+        status: 422, code: "challenge_invalid",
+        message: "The Acceptance challenge is invalid.",
+        responseBody: '{"schema_id":"storyos.problem.v1","code":"challenge_invalid","message":"The Acceptance challenge is invalid."}',
+      } });
+    expect((await acceptanceJournalProposals(workspace)).unresolvedIds)
+      .not.toContain(refusedProposalId);
   } finally {
     await test.close();
   }

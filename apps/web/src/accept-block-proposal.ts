@@ -3,7 +3,8 @@ import type { AcceptProposalRequest, AcceptProposalResponse } from "../../../gen
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { EditorReadyState } from "./editor-types.ts";
 import { beginAcceptanceAttempt, finishAcceptanceAttempt } from "./acceptance-transport.ts";
-import { createFlight, readAcceptanceJournal, readFlight, uuidV7, writeFlight,
+import { createFlight, parsePreAdmissionAcceptanceProblem, readAcceptanceJournal,
+  readFlight, uuidV7, writeFlight,
   type AcceptanceFlight, type AcceptanceRefusal } from "./acceptance-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
@@ -206,11 +207,18 @@ async function acceptDisplayedBlockProposalLocked(
         if (refusal !== undefined) {
           await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
         } else {
-          await writeFlight(workspace.database, { ...frozen, settlement: "known_problem",
-            problem: { status: error.status ?? 0, code: error.code,
-              responseBody: error.responseBody ?? "",
-              ...(error.retryAfterSeconds === undefined ? {}
-                : { retryAfterSeconds: error.retryAfterSeconds }) } });
+          const terminal = parsePreAdmissionAcceptanceProblem(error.status ?? 0,
+            error.responseBody ?? "");
+          if (terminal !== undefined) {
+            await writeFlight(workspace.database, frozen,
+              { kind: "pre_admission_problem", problem: terminal });
+          } else {
+            await writeFlight(workspace.database, { ...frozen, settlement: "known_problem",
+              problem: { status: error.status ?? 0, code: error.code,
+                responseBody: error.responseBody ?? "",
+                ...(error.retryAfterSeconds === undefined ? {}
+                  : { retryAfterSeconds: error.retryAfterSeconds }) } });
+          }
         }
         await finishAcceptanceAttempt(workspace.database, attemptId,
           { kind: "response_observed" });
