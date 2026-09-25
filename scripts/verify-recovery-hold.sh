@@ -167,6 +167,19 @@ if [ "$recovery_drill" = "mixed" ]; then
   fi
   assert_mixed_empty_projects "$primary"
   echo "Created two empty Projects through public createProject before backup"
+
+  STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
+  STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
+  STORYOS_VITEST_FILE_ORDER=test/node-postgresql/recovery-archived-exports-http.integration.test.ts: \
+  pnpm --dir apps/web exec vitest run --project node-postgresql \
+    test/node-postgresql/recovery-archived-exports-http.integration.test.ts
+  archived_before=$(archived_export_facts "$primary")
+  if [ "$(printf '%s\n' "$archived_before" | wc -l | tr -d ' ')" != "2" ] \
+    || ! printf '%s\n' "$archived_before" | grep -Eq '^Recovery Archive Archived\|[0-9a-f-]+\|archived\|1\|\|[0-9a-f-]+:sha256:[0-9a-f]{64}:[0-9a-f]+$' \
+    || ! printf '%s\n' "$archived_before" | grep -Eq '^Recovery Readable Archived\|[0-9a-f-]+\|archived\|1\|[0-9a-f-]+:[0-9a-f]{64}:[0-9a-f]+\|$'; then
+    echo "Public export and archive paths did not retain both archived export families: $archived_before" >&2
+    exit 1
+  fi
 fi
 
 docker exec "$primary" psql -X -v ON_ERROR_STOP=1 -U postgres \
@@ -365,6 +378,11 @@ if [ "$restored_title" != "$wal_marker" ]; then
   exit 1
 fi
 assert_mixed_empty_projects "$hold"
+if [ "$recovery_drill" = "mixed" ] \
+  && [ "$(archived_export_facts "$hold")" != "$archived_before" ]; then
+  echo "Isolated Recovery Copy changed the archived export history" >&2
+  exit 1
+fi
 
 if ! docker exec "$hold" env PGPASSWORD=restore \
   psql -X -v ON_ERROR_STOP=1 -U storyos_restore -d postgres -c "SELECT 1" >/dev/null; then
@@ -622,6 +640,11 @@ case "$rebuilt" in
 esac
 assert_mixed_empty_projects "$hold"
 assert_mixed_populated_stays_separate "$hold"
+if [ "$recovery_drill" = "mixed" ] \
+  && [ "$(archived_export_facts "$hold")" != "$archived_before" ]; then
+  echo "Recovery Visibility changed archived export history" >&2
+  exit 1
+fi
 
 echo "Isolated restore passed Recovery Visibility Proof"
 
@@ -656,6 +679,24 @@ fi
 
 start_recovery_drill_server \
   "postgres://storyos_runtime:runtime@127.0.0.1:$hold_port/postgres"
+if [ "$recovery_drill" = "mixed" ]; then
+  readable_pair=$(docker exec "$hold" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT project.project_id || '/' || export.export_id
+       FROM storyos.projects AS project
+       JOIN storyos.human_readable_manuscript_exports AS export
+         ON (export.owner_user_id, export.project_id) =
+            (project.owner_user_id, project.project_id)
+      WHERE project.title = 'Recovery Readable Archived'")
+  archive_pair=$(docker exec "$hold" psql -X -v ON_ERROR_STOP=1 -U postgres -Atc \
+    "SELECT project.project_id || '/' || archive.export_id
+       FROM storyos.projects AS project
+       JOIN storyos.project_export_manifests AS archive
+         ON (archive.owner_user_id, archive.project_id) =
+            (project.owner_user_id, project.project_id)
+      WHERE project.title = 'Recovery Archive Archived'")
+  node scripts/inspect-recovered-archived-exports.mjs \
+    "$STORYOS_DEV_SERVER" "$readable_pair" "$archive_pair"
+fi
 acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER")
 if [ "$acceptance_before" != "$acceptance_after" ]; then
   echo "Restored Acceptance conditions or immutable evidence changed" >&2
