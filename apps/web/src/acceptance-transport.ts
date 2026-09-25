@@ -2,7 +2,7 @@ import type { EditorReadyState, TransportCapsule } from "./editor-types.ts";
 import { uuidV7, type AcceptanceFlight } from "./acceptance-journal.ts";
 
 export async function beginAcceptanceAttempt(workspace: EditorReadyState,
-  flight: AcceptanceFlight): Promise<string> {
+  flight: AcceptanceFlight): Promise<{ id: string; ordinal: number }> {
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "submission_groups", "transport_capsules", "transport_attempts"],
     "readwrite", { durability: "strict" });
@@ -112,7 +112,7 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
     transaction.onabort = () => reject(transaction.error ?? new Error("Acceptance send was not saved"));
     transaction.onerror = () => reject(transaction.error ?? new Error("Acceptance send was not saved"));
   });
-  return attemptId;
+  return { id: attemptId, ordinal: attempts.length + 1 };
 }
 
 export async function finishAcceptanceAttempt(database: IDBDatabase, attemptId: string,

@@ -189,7 +189,7 @@ async function acceptDisplayedBlockProposalLocked(
   }
   const frozen = flight;
   const submit = async () => {
-    const attemptId = await beginAcceptanceAttempt(workspace, frozen);
+    const attempt = await beginAcceptanceAttempt(workspace, frozen);
     let accepted: AcceptProposalResponse;
     try {
       accepted = await acceptProposal({
@@ -207,8 +207,9 @@ async function acceptDisplayedBlockProposalLocked(
         if (refusal !== undefined) {
           await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
         } else {
-          const terminal = parsePreAdmissionAcceptanceProblem(error.status ?? 0,
-            error.responseBody ?? "");
+          const terminal = attempt.ordinal === 1
+            ? parsePreAdmissionAcceptanceProblem(error.status ?? 0, error.responseBody ?? "")
+            : undefined;
           if (terminal !== undefined) {
             await writeFlight(workspace.database, frozen,
               { kind: "pre_admission_problem", problem: terminal });
@@ -220,11 +221,11 @@ async function acceptDisplayedBlockProposalLocked(
                   : { retryAfterSeconds: error.retryAfterSeconds }) } });
           }
         }
-        await finishAcceptanceAttempt(workspace.database, attemptId,
+        await finishAcceptanceAttempt(workspace.database, attempt.id,
           { kind: "response_observed" });
         throw error;
       }
-      await finishAcceptanceAttempt(workspace.database, attemptId, {
+      await finishAcceptanceAttempt(workspace.database, attempt.id, {
         kind: "delivery_unknown",
         evidence: error instanceof StoryOSProtocolError && error.code === "command_invalid_json"
           ? "response_unreadable" : "connection_lost",
@@ -255,12 +256,12 @@ async function acceptDisplayedBlockProposalLocked(
       || accepted.receipt.idempotency_key !== frozen.idempotencyKey
       || JSON.stringify(accepted.receipt.command_digest)
         !== JSON.stringify(frozen.frozen_request_digest)) {
-      await finishAcceptanceAttempt(workspace.database, attemptId,
+      await finishAcceptanceAttempt(workspace.database, attempt.id,
         { kind: "delivery_unknown", evidence: "response_unreadable" });
       throw new Error("Acceptance acknowledgement does not match the frozen command");
     }
     await writeFlight(workspace.database, frozen, { kind: "settled", response: accepted });
-    await finishAcceptanceAttempt(workspace.database, attemptId,
+    await finishAcceptanceAttempt(workspace.database, attempt.id,
       { kind: "response_observed" });
     return accepted;
   };

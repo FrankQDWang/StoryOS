@@ -22,6 +22,8 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     let denyNext = false;
     let corruptNext = false;
     let terminalNext = false;
+    const ambiguousProposalId = "018f0000-0000-7001-8000-000000000113";
+    let ambiguousPosts = 0;
     const fetchImpl: typeof fetch = async (input, init) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       if (path.endsWith("/anti-forgery-challenges")) {
@@ -34,6 +36,12 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       const key = headers.get("idempotency-key") ?? "";
       const nonce = headers.get("x-storyos-anti-forgery") ?? "";
       sent.push({ body, key, nonce });
+      if (path.split("/").at(-2) === ambiguousProposalId) {
+        ambiguousPosts += 1;
+        if (ambiguousPosts === 1) throw new TypeError("Connection lost");
+        return jsonResponse({ schema_id: "storyos.problem.v1",
+          code: "authentication_required", message: "Authentication is required." }, 401);
+      }
       if (denyNext) return jsonResponse({ code: "forbidden" }, 403);
       if (terminalNext) return jsonResponse({ schema_id: "storyos.problem.v1",
         code: "challenge_invalid", message: "The Acceptance challenge is invalid." }, 422);
@@ -143,7 +151,8 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       attemptRequest.onsuccess = () => resolve(attemptRequest.result as Record<string, unknown>[]);
       attemptRequest.onerror = () => reject(attemptRequest.error);
     });
-    expect(recoveredAttempts[0]?.outcome).toMatchObject({ kind: "delivery_unknown",
+    const initialAttempt = recoveredAttempts.find((attempt) => attempt.attempt_ordinal === 1);
+    expect(initialAttempt?.outcome).toMatchObject({ kind: "delivery_unknown",
       evidence: "response_unreadable" });
     terminalNext = true;
     const refusedProposalId = "018f0000-0000-7001-8000-000000000112";
@@ -158,6 +167,19 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       } });
     expect((await acceptanceJournalProposals(workspace)).unresolvedIds)
       .not.toContain(refusedProposalId);
+    await expect(acceptDisplayedBlockProposal({ ...options, proposalId: ambiguousProposalId }))
+      .rejects.toThrow(/HTTP 401/);
+    expect(ambiguousPosts).toBe(2);
+    const ambiguousJournal = await readAcceptanceJournal(workspace);
+    const ambiguousGroup = ambiguousJournal.groups.find((group) =>
+      group.proposal_id === ambiguousProposalId);
+    expect(ambiguousGroup?.settlement).toEqual({ kind: "unsettled" });
+    expect(ambiguousGroup?.acceptance_delivery).toEqual({
+      kind: "known_problem", status: 401, code: "command_http_error",
+      responseBody: '{"schema_id":"storyos.problem.v1","code":"authentication_required","message":"Authentication is required."}',
+    });
+    expect((await acceptanceJournalProposals(workspace)).unresolvedIds)
+      .toContain(ambiguousProposalId);
   } finally {
     await test.close();
   }
