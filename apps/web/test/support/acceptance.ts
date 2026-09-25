@@ -196,6 +196,12 @@ export async function reviseCandidate(
     chapter_id: session.base_snapshot.chapter_id,
     expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
     expected_proposal_head_revision_ids: [opened.proposal.revision_id],
+    proposal_target: {
+      proposal_id: opened.proposal.proposal_id,
+      operation_id: opened.proposal.operation_id,
+      revision_id: opened.proposal.revision_id,
+      manuscript_block_id: opened.proposal.manuscript_block_id,
+    },
     target_refs: session.base_snapshot.target_refs,
     observed_ownership_partition: "mixed",
     editor_contract_revision: "storyos.editor-contract.release-1.v2",

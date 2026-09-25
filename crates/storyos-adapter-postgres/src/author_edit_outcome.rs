@@ -305,7 +305,16 @@ async fn load_outcome_relation(
                       AND admission.challenge_consumed_at = challenge.consumed_at
                       AND admission.challenge_expires_at = challenge.expires_at,
                     (SELECT count(*)
-                       FROM jsonb_object_keys(admission.command_payload)) = 16
+                       FROM jsonb_object_keys(admission.command_payload)) =
+                      16 + CASE WHEN admission.command_payload ? 'proposal_target'
+                                THEN 1 ELSE 0 END
+                      AND (NOT admission.command_payload ? 'proposal_target'
+                        OR (jsonb_typeof(admission.command_payload->'proposal_target') = 'object'
+                          AND (SELECT count(*) FROM jsonb_object_keys(
+                            admission.command_payload->'proposal_target')) = 4
+                          AND admission.command_payload->'proposal_target' ?&
+                            ARRAY['proposal_id', 'operation_id', 'revision_id',
+                                  'manuscript_block_id']))
                       AND admission.command_payload->>'command_schema' =
                         admission.command_schema
                       AND admission.command_payload->>'client_contract_revision' =

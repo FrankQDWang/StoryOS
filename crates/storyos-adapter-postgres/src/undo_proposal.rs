@@ -18,6 +18,7 @@ pub(super) async fn persist_proposal_compensation(
 ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
     let context = ProposalEditContext {
         proposal_id: frontier.proposal_id.clone(),
+        operation_id: None,
         prior_revision_id: frontier.current_revision_id.clone(),
         manuscript_block_id: frontier.manuscript_block_id.clone(),
         base_authoritative_revision_id: frontier.base_authoritative_revision_id.clone(),

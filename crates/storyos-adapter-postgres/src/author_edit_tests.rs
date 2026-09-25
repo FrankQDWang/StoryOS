@@ -92,6 +92,7 @@ pub(crate) fn author_command(
         chapter_id: CHAPTER.to_owned(),
         expected_authoritative_revision_id: REVISION.to_owned(),
         expected_proposal_head_revision_ids: Vec::new(),
+        proposal_target: None,
         target_refs: vec![format!("manuscript:{CHAPTER}")],
         observed_ownership_partition: "authoritative".to_owned(),
         editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),

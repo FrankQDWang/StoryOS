@@ -485,6 +485,27 @@ async fn classify_author_edit(
     )
     .await?;
     let current_ownership = loaded.ownership.clone();
+    if !uses_versioned_payload
+        && loaded.context.is_none()
+        && !current_ownership.proposal_head_revision_ids.is_empty()
+    {
+        let result = if command.expected_proposal_head_revision_ids
+            != current_ownership.proposal_head_revision_ids
+        {
+            ApplyAuthorEditResult::Conflicted {
+                reason: storyos_core::AuthorEditConflict::ProposalHeadPresent,
+            }
+        } else {
+            ApplyAuthorEditResult::Refused {
+                reason: storyos_core::AuthorEditRefusal::TargetMismatch,
+            }
+        };
+        return Ok(ClassifiedAuthorEdit {
+            result,
+            successor_blocks: None,
+            proposal_context: None,
+        });
+    }
     if !uses_versioned_payload {
         let routed = match super::author_edit_proposal::route_inline_author_edit(
             &loaded,

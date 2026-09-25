@@ -471,6 +471,12 @@ ApplyAuthorEdit {
   writer_generation
   chapter_object_id
   author_edit_units
+  proposal_target: absent | {
+    proposal_id
+    operation_id
+    revision_id
+    manuscript_block_id
+  }
   submission_bindings {
     target_refs
     observed_ownership_partition
@@ -498,6 +504,20 @@ AuthorEditUnit {
   selection_snapshot
 }
 ```
+
+A Block Proposal candidate edit sets `proposal_target` to the exact current
+Proposal, pending Operation for the projected primary candidate, Proposal
+Revision, and manuscript Block. New editing behavior for secondary Operations
+is outside this surface. Its
+`expected_proposal_heads` contains the complete observed chapter Head set,
+including the selected Revision. Each unit has one `ReplaceSelection` with
+candidate-relative UTF-16 coordinates. Core revises only that Proposal and
+Operation; the Authoritative Head does not advance. A stale or mismatched
+target cannot fall back to Authoritative input. Ordinary Block input leaves
+`proposal_target` absent and uses the versioned Block primitives. The same
+manuscript Block ID alone does not select a Proposal. The command digest and
+persisted Admission payload include the optional target so exact retry and
+recovery retain its identity.
 
 `author_edit_units` is an ordered nonempty list of completed semantic editor
 intents. Each unit's `normalized_primitives` is an ordered nonempty list of:

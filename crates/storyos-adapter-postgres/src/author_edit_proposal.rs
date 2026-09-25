@@ -12,6 +12,7 @@ use super::author_edit::author_edit_database_error;
 #[derive(Clone, Debug)]
 pub(super) struct ProposalEditContext {
     pub proposal_id: String,
+    pub operation_id: Option<String>,
     pub prior_revision_id: String,
     pub manuscript_block_id: String,
     pub base_authoritative_revision_id: String,
@@ -52,7 +53,9 @@ pub(super) async fn load_chapter_proposal_heads(
         .query(
             "SELECT head.current_revision_id::text, proposal.proposal_id::text,
                     revision.candidate_text, proposal.manuscript_block_id::text,
-                    revision.base_authoritative_revision_id::text, proposal.kind
+                    revision.base_authoritative_revision_id::text, proposal.kind,
+                    operation.operation_id::text, operation.resolution,
+                    operation.reservation_state
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -62,6 +65,11 @@ pub(super) async fn load_chapter_proposal_heads(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
+              LEFT JOIN storyos.proposal_operations AS operation
+                ON (operation.owner_user_id, operation.project_id, operation.proposal_id,
+                    operation.operation_id, operation.manuscript_block_id) =
+                   (proposal.owner_user_id, proposal.project_id, proposal.proposal_id,
+                    $4::text::uuid, proposal.manuscript_block_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.chapter_id = $3::text::uuid
@@ -70,6 +78,10 @@ pub(super) async fn load_chapter_proposal_heads(
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
                 &command.chapter_id,
+                &command
+                    .proposal_target
+                    .as_ref()
+                    .map(|target| target.operation_id.as_str()),
             ],
         )
         .await
@@ -78,15 +90,34 @@ pub(super) async fn load_chapter_proposal_heads(
     let mut selected = None;
     for row in rows {
         let revision_id: String = row.get(0);
-        if command.expected_proposal_head_revision_ids == [revision_id.clone()] {
+        let proposal_id: String = row.get(1);
+        let manuscript_block_id: String = row.get(3);
+        let kind: String = row.get(5);
+        let explicit_target = command.proposal_target.as_ref().is_some_and(|target| {
+            target.proposal_id == proposal_id
+                && target.revision_id == revision_id
+                && target.manuscript_block_id == manuscript_block_id
+                && row.get::<_, Option<String>>(6).as_deref() == Some(target.operation_id.as_str())
+                && row.get::<_, Option<String>>(7).as_deref() == Some("pending")
+                && row.get::<_, Option<String>>(8).as_deref() == Some("unresolved")
+                && kind == "block_edit"
+        });
+        let inline_target = command.proposal_target.is_none()
+            && kind == "inline_edit"
+            && command.expected_proposal_head_revision_ids == [revision_id.clone()];
+        if explicit_target || inline_target {
             let candidate_text: String = row.get(2);
             selected = Some((
                 ProposalEditContext {
-                    proposal_id: row.get(1),
+                    proposal_id,
+                    operation_id: command
+                        .proposal_target
+                        .as_ref()
+                        .map(|target| target.operation_id.clone()),
                     prior_revision_id: revision_id.clone(),
-                    manuscript_block_id: row.get(3),
+                    manuscript_block_id,
                     base_authoritative_revision_id: row.get(4),
-                    kind: row.get(5),
+                    kind,
                     ranges: Vec::new(),
                     candidate_text: candidate_text.clone(),
                 },
@@ -376,13 +407,14 @@ pub(super) async fn append_proposal_revision(
         )
         .await
         .map_err(author_edit_database_error)?;
-    client
+    let operation_updates = client
         .execute(
             "UPDATE storyos.proposal_operations
                 SET candidate_text = $4
               WHERE owner_user_id = $1::text::uuid AND project_id = $2::text::uuid
                 AND proposal_id = $3::text::uuid
                 AND manuscript_block_id = $5::text::uuid
+                AND ($6::text IS NULL OR operation_id = $6::text::uuid)
                 AND resolution = 'pending'",
             &[
                 &owner,
@@ -390,10 +422,14 @@ pub(super) async fn append_proposal_revision(
                 &context.proposal_id,
                 &candidate_text,
                 &context.manuscript_block_id,
+                &context.operation_id,
             ],
         )
         .await
         .map_err(author_edit_database_error)?;
+    if context.operation_id.is_some() && operation_updates != 1 {
+        return Err(AuthorEditError::BindingConflict);
+    }
     Ok(revision_id)
 }
 

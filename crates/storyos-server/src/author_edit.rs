@@ -189,6 +189,14 @@ pub(super) async fn apply_author_edit(
         chapter_id: body.chapter_id.clone(),
         expected_authoritative_revision_id: body.expected_authoritative_revision_id.clone(),
         expected_proposal_head_revision_ids: body.expected_proposal_head_revision_ids.clone(),
+        proposal_target: body.proposal_target.as_ref().map(|target| {
+            storyos_application::AuthorEditProposalTarget {
+                proposal_id: target.proposal_id.clone(),
+                operation_id: target.operation_id.clone(),
+                revision_id: target.revision_id.clone(),
+                manuscript_block_id: target.manuscript_block_id.clone(),
+            }
+        }),
         target_refs: body.target_refs.clone(),
         observed_ownership_partition: body.observed_ownership_partition.clone(),
         editor_contract_revision: body.editor_contract_revision.clone(),
@@ -420,6 +428,29 @@ fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiE
     }
     if body.target_refs != [format!("manuscript:{}", body.chapter_id)] {
         return Err(command_target_refused());
+    }
+    if let Some(target) = &body.proposal_target {
+        for value in [
+            &target.proposal_id,
+            &target.operation_id,
+            &target.revision_id,
+            &target.manuscript_block_id,
+        ] {
+            valid_uuid(value)?;
+        }
+        if body.observed_ownership_partition != "mixed"
+            || !body
+                .expected_proposal_head_revision_ids
+                .contains(&target.revision_id)
+            || body.author_edit_units.iter().any(|unit| {
+                !matches!(
+                    unit.normalized_primitives.as_slice(),
+                    [contracts::AuthorEditPrimitive::ReplaceSelection { .. }]
+                )
+            })
+        {
+            return Err(command_target_refused());
+        }
     }
     Ok(())
 }

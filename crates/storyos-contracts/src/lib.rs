@@ -143,8 +143,9 @@ pub use release1_artifacts::{
 pub use release1_author_edit::{
     APPLY_AUTHOR_EDIT_METHOD, APPLY_AUTHOR_EDIT_PATH, ApplyAuthorEditEffect,
     ApplyAuthorEditRequest, ApplyAuthorEditResponse, AuthorEditConflictReason, AuthorEditPrimitive,
-    AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt, DomainReceiptCommandKind,
-    DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
+    AuthorEditProposalTarget, AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt,
+    DomainReceiptCommandKind, DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason,
+    SelectionSnapshot,
 };
 pub use release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,

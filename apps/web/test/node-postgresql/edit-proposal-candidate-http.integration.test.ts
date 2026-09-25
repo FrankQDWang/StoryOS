@@ -253,6 +253,12 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       chapter_id: session.base_snapshot.chapter_id,
       expected_authoritative_revision_id: session.base_snapshot.authoritative_head_revision_id,
       expected_proposal_head_revision_ids: [opened.proposal.revision_id],
+      proposal_target: {
+        proposal_id: opened.proposal.proposal_id,
+        operation_id: opened.proposal.operation_id,
+        revision_id: opened.proposal.revision_id,
+        manuscript_block_id: opened.proposal.manuscript_block_id,
+      },
       target_refs: session.base_snapshot.target_refs,
       observed_ownership_partition: "mixed",
       editor_contract_revision: "storyos.editor-contract.release-1.v2",
@@ -327,6 +333,80 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
     assert.match(revised.proposal.validation_receipt.validation_receipt_id, UUID_V7);
     assert.notEqual(revised.proposal.validation_receipt.validation_receipt_id, openedReceiptId);
     assert.equal(revised.proposal.validation_receipt.result, "valid");
+    const ambiguousRequest: ApplyAuthorEditRequest = {
+      ...editRequest,
+      correlation_id: id("c849"),
+      expected_proposal_head_revision_ids: [revised.proposal.revision_id],
+      undo_group_id: id("c850"),
+      completed_intent_record_id: id("c851"),
+      local_intent_sequence: "2",
+    };
+    delete ambiguousRequest.proposal_target;
+    const ambiguous = await challenged(
+      started.baseUrl,
+      prepared.fetchImpl,
+      prepared.projectId,
+      "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits",
+      ambiguousRequest.command_schema,
+      await digestApplyAuthorEdit(ambiguousRequest),
+      id("c852"),
+      (antiForgery) => applyAuthorEdit({
+        baseUrl: started.baseUrl,
+        projectId: prepared.projectId,
+        fetchImpl: prepared.fetchImpl,
+        idempotencyKey: id("c852"),
+        antiForgery,
+        request: ambiguousRequest,
+      }),
+    );
+    assert.equal(ambiguous.effect.kind, "refused");
+    const ordinaryRequest: ApplyAuthorEditRequest = {
+      ...ambiguousRequest,
+      correlation_id: id("c853"),
+      undo_group_id: id("c854"),
+      completed_intent_record_id: id("c855"),
+      local_intent_sequence: "3",
+      author_edit_units: [{
+        normalized_primitives: [{
+          kind: "replace_block_selection",
+          manuscript_block_id: opened.proposal.manuscript_block_id,
+          from: 0,
+          to: 0,
+          text: "Ordinary input",
+        }],
+        selection_snapshot: {
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0,
+        },
+      }],
+    };
+    const ordinary = await challenged(
+      started.baseUrl,
+      prepared.fetchImpl,
+      prepared.projectId,
+      "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits",
+      ordinaryRequest.command_schema,
+      await digestApplyAuthorEdit(ordinaryRequest),
+      id("c856"),
+      (antiForgery) => applyAuthorEdit({
+        baseUrl: started.baseUrl,
+        projectId: prepared.projectId,
+        fetchImpl: prepared.fetchImpl,
+        idempotencyKey: id("c856"),
+        antiForgery,
+        request: ordinaryRequest,
+      }),
+    );
+    assert.equal(ordinary.effect.kind, "conflicted");
+    const unchangedCandidate = await getProposal({
+      baseUrl: started.baseUrl,
+      projectId: prepared.projectId,
+      proposalId,
+      fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(unchangedCandidate.proposal.revision_id, revised.proposal.revision_id);
+    assert.equal(unchangedCandidate.proposal.candidate_text, REVISED);
     const afterEdit = await getChapter({
       baseUrl: started.baseUrl,
       projectId: prepared.projectId,

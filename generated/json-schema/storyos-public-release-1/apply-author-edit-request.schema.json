@@ -152,6 +152,31 @@
         }
       ]
     },
+    "AuthorEditProposalTarget": {
+      "additionalProperties": false,
+      "description": "Binds an edit to one current Proposal, pending Operation, Revision, and Block.",
+      "properties": {
+        "manuscript_block_id": {
+          "type": "string"
+        },
+        "operation_id": {
+          "type": "string"
+        },
+        "proposal_id": {
+          "type": "string"
+        },
+        "revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_id",
+        "operation_id",
+        "revision_id",
+        "manuscript_block_id"
+      ],
+      "type": "object"
+    },
     "AuthorEditUnit": {
       "additionalProperties": false,
       "properties": {
@@ -249,6 +274,16 @@
     },
     "observed_ownership_partition": {
       "type": "string"
+    },
+    "proposal_target": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AuthorEditProposalTarget"
+        },
+        {
+          "type": "null"
+        }
+      ]
     },
     "security_policy_revision": {
       "type": "string"
