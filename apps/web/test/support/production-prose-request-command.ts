@@ -199,6 +199,10 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       completed.decision.decision_id);
     assert.equal(await firstCandidate.locator(".block-proposal-text").textContent(),
       firstProposal.candidate_text);
+    await page.waitForFunction(({ proposalId, expected }) =>
+      document.querySelector(`[data-proposal-id="${proposalId}"]`)
+        ?.previousElementSibling?.textContent === expected,
+    { proposalId: firstProposalId, expected: firstBlock.text }, { polling: 100 });
     assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.textContent),
       firstBlock.text);
     assert.equal(await page.locator("body").getAttribute("data-author-input-events"), "0");
