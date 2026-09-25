@@ -2,6 +2,7 @@ import { digestApplyAuthorEdit }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AuthorEditPrimitive,
+  AuthorEditProposalTarget,
   AuthorEditUnit,
   DigestValue,
   EditorBaseSnapshot,
@@ -116,6 +117,7 @@ export function mayAppendJournalSubmissionRecord(
       === JSON.stringify(next.expected_authoritative_heads)
     && JSON.stringify(first.expected_proposal_heads)
       === JSON.stringify(next.expected_proposal_heads)
+    && JSON.stringify(first.proposal_target) === JSON.stringify(next.proposal_target)
     && JSON.stringify(first.proposal_anchors) === JSON.stringify(next.proposal_anchors)
     && JSON.stringify(first.retry_source) === JSON.stringify(next.retry_source);
 }
@@ -130,9 +132,13 @@ export function recordTargetsCurrentBase(
         === JSON.stringify([base.authoritative_head_revision_id]));
 }
 
-function isOpenPayloadChainForBase(chain: JournalPayloadChain, snapshotId: string) {
+function isOpenPayloadChainForBase(
+  chain: JournalPayloadChain, snapshotId: string,
+  target?: AuthorEditProposalTarget,
+) {
   return chain.payload_collection?.kind !== "collected"
-    && chain.checkpoint_ref?.source_snapshot_id === snapshotId;
+    && chain.checkpoint_ref?.source_snapshot_id === snapshotId
+    && JSON.stringify(chain.checkpoint_ref?.proposal_target) === JSON.stringify(target);
 }
 
 function checkpointMaterialization(base: EditorBaseSnapshot): string {
@@ -282,6 +288,7 @@ export function journalHasIncompatiblePendingReplaceSelection(
 ) {
   return records.some((record) =>
     recordTargetsCurrentBase(record, base)
+    && record.proposal_target === undefined
     && !coveredSequences.has(record.local_intent_sequence)
     && (record.author_edit_unit?.normalized_primitives ?? [])
       .some(isLegacyReplaceSelectionPrimitive));
@@ -409,9 +416,25 @@ async function validatePayloadChains(
       || new TextEncoder().encode(checkpoint).byteLength > workspace.maxJsonStringUtf8Bytes) {
       throw new Error("Local Edit Journal is corrupt");
     }
-    const checkpointBlocks = checkpointBlocksForChain(chain);
+    const proposalTarget = chain.checkpoint_ref.proposal_target;
+    const checkpointBlocks = proposalTarget === undefined
+      ? checkpointBlocksForChain(chain)
+      : [{ manuscript_block_id: proposalTarget.manuscript_block_id,
+        block_kind: "paragraph" as const, text: checkpoint }];
     let blocks: ManuscriptBlock[];
-    if (chain.checkpoint_ref.source_snapshot_id
+    if (proposalTarget !== undefined) {
+      if (!UUID.test(proposalTarget.proposal_id)
+        || !UUID.test(proposalTarget.operation_id)
+        || !UUID.test(proposalTarget.revision_id)
+        || !UUID.test(proposalTarget.manuscript_block_id)
+        || !Array.isArray(chain.checkpoint_ref.proposal_head_revision_ids)
+        || !chain.checkpoint_ref.proposal_head_revision_ids.includes(proposalTarget.revision_id)
+        || JSON.stringify(chain.checkpoint_ref.materialized_payload_digest)
+          !== JSON.stringify(await digestJournalValue(checkpoint, workspace.cryptoImpl))) {
+        throw new Error("Local Edit Journal is corrupt");
+      }
+      blocks = checkpointBlocks;
+    } else if (chain.checkpoint_ref.source_snapshot_id
       === workspace.session.base_snapshot.snapshot_id) {
       if (!manuscriptBlocksEqual(baseBlocks, checkpointBlocks)
         && flattenChapterBody(baseBlocks) !== checkpoint) {
@@ -430,6 +453,13 @@ async function validatePayloadChains(
         || record.chapter_object_id !== chain.checkpoint_ref.chapter_object_id
         || JSON.stringify(record.expected_authoritative_heads)
           !== JSON.stringify(chain.checkpoint_ref.source_heads)
+        || JSON.stringify(record.proposal_target) !== JSON.stringify(proposalTarget)
+        || (proposalTarget !== undefined
+          && (record.observed_ownership_partition !== "mixed"
+            || JSON.stringify(record.expected_proposal_heads)
+              !== JSON.stringify(chain.checkpoint_ref.proposal_head_revision_ids)
+            || primitives.length !== 1
+            || primitives[0]?.kind !== "replace_selection"))
         || patchRef?.completed_intent_record_id !== record.completed_intent_record_id
         || patchRef?.local_intent_sequence !== record.local_intent_sequence
         || JSON.stringify(patchRef?.normalized_primitives)
@@ -517,6 +547,8 @@ async function validateCoverage(
         !== firstRecord?.expected_authoritative_heads[0]
       || JSON.stringify(request?.expected_proposal_head_revision_ids)
         !== JSON.stringify(firstRecord?.expected_proposal_heads)
+      || JSON.stringify(request?.proposal_target)
+        !== JSON.stringify(firstRecord?.proposal_target)
       || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord?.target_refs)
       || request?.observed_ownership_partition !== firstRecord?.observed_ownership_partition
       || request?.undo_group_id !== firstRecord?.undo_group_binding.undo_group_id
@@ -684,7 +716,10 @@ function pendingProjectionFromSnapshot(
     if (isAppliedSettlement(group)) {
       for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
     } else if (isZeroAuthoritySettlement(group) && groupTargetsCurrentChapter) {
-      if (provenNoEffectAgainstDurableBase(group, snapshot, base)) {
+      if ((group.frozen_request_body.proposal_target !== undefined
+          && group.settlement.kind === "zero_authority_receipt_settled"
+          && group.settlement.effect.kind === "proposal_revised")
+        || provenNoEffectAgainstDurableBase(group, snapshot, base)) {
         for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
       } else {
         hasZeroAuthoritySettlement = true;
@@ -694,12 +729,13 @@ function pendingProjectionFromSnapshot(
   const activeRecords = snapshot.records.filter((record) =>
     recordTargetsCurrentBase(record, base)
     && !resolvedSequences.has(record.local_intent_sequence));
-  const blocks = (activeRecords.length === 0
+  const authoritativeRecords = activeRecords.filter((record) => record.proposal_target === undefined);
+  const blocks = (authoritativeRecords.length === 0
     ? cloneBlocks(base.materialized_revision.blocks)
-    : snapshot.blocksBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
-  const body = (activeRecords.length === 0
+    : snapshot.blocksBySequence.get(authoritativeRecords.at(-1)!.local_intent_sequence))!;
+  const body = (authoritativeRecords.length === 0
     ? base.materialized_revision.body
-    : snapshot.bodyBySequence.get(activeRecords.at(-1)!.local_intent_sequence))!;
+    : snapshot.bodyBySequence.get(authoritativeRecords.at(-1)!.local_intent_sequence))!;
   const coveredSequences = new Set(snapshot.groups.flatMap((group) =>
     (group.ordered_coverage ?? []).map((item) => item.local_intent_sequence)));
   const hasLegacyReplaceSelection = journalHasIncompatiblePendingReplaceSelection(
@@ -777,6 +813,88 @@ export async function persistReplaceSelection(
     undoGroupId: edit.undoGroupId,
     createdAt: edit.createdAt,
   }, cryptoImpl);
+}
+
+export interface CandidateSelectionEdit {
+  kind: "candidate_selection";
+  target: AuthorEditProposalTarget;
+  expectedProposalHeads: string[];
+  priorText: string;
+  from: number;
+  to: number;
+  text: string;
+  resultingBody: string;
+  inputOrigin?: InputOrigin;
+  undoGroupId?: string;
+  createdAt?: string;
+}
+
+export async function persistCandidateSelection(
+  workspace: EditorWorkspace,
+  edit: CandidateSelectionEdit,
+  cryptoImpl: Crypto = globalThis.crypto,
+): Promise<PendingEditProjection> {
+  const snapshot = await prepareJournalAppend(workspace);
+  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
+  const matchingRecords = snapshot.records.filter((record) =>
+    JSON.stringify(record.proposal_target) === JSON.stringify(edit.target)
+    && !snapshot.covered.has(record.local_intent_sequence));
+  const latest = matchingRecords.at(-1);
+  const priorText = latest === undefined ? edit.priorText
+    : snapshot.bodyBySequence.get(latest.local_intent_sequence);
+  if (priorText === undefined || priorText !== edit.priorText
+    || !edit.expectedProposalHeads.includes(edit.target.revision_id)
+    || edit.expectedProposalHeads.some((head) => !UUID.test(head))
+    || edit.expectedProposalHeads.length !== new Set(edit.expectedProposalHeads).size) {
+    throw new Error("Candidate input is stale");
+  }
+  const primitive: AuthorEditPrimitive = {
+    kind: "replace_selection", from: edit.from, to: edit.to, text: edit.text,
+  };
+  const expectedBlocks = applyAuthorEditPrimitiveOnCopy([{
+    manuscript_block_id: edit.target.manuscript_block_id,
+    block_kind: "paragraph", text: priorText,
+  }], primitive);
+  return persistAuthorEditUnit(workspace, {
+    snapshot, projection,
+    authorEditUnit: {
+      normalized_primitives: [primitive],
+      selection_snapshot: {
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1",
+        from: edit.from, to: edit.to,
+      },
+    },
+    expectedBody: expectedBlocks[0]!.text,
+    expectedBlocks,
+    extraUtf8: edit.text,
+    resultingBody: edit.resultingBody,
+    inputOrigin: edit.inputOrigin ?? "typing",
+    undoGroupId: edit.undoGroupId,
+    createdAt: edit.createdAt,
+    candidate: {
+      target: edit.target,
+      expectedProposalHeads: edit.expectedProposalHeads,
+      checkpointText: latest === undefined ? edit.priorText
+        : snapshot.payloadChains.find((chain) => chain.payload_chain_id
+          === latest.payload_chain_ref)?.checkpoint_ref.materialized_payload ?? "",
+    },
+  }, cryptoImpl);
+}
+
+export async function candidateProjectionFromJournal(
+  workspace: EditorWorkspace,
+  target: AuthorEditProposalTarget,
+): Promise<string | undefined> {
+  const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+  const unresolved = snapshot.records.filter((record) =>
+    JSON.stringify(record.proposal_target) === JSON.stringify(target)
+    && !snapshot.groups.some((group) => group.settlement.kind
+      === "zero_authority_receipt_settled"
+      && group.settlement.effect.kind === "proposal_revised"
+      && group.ordered_coverage.some((item) => item.local_intent_sequence
+        === record.local_intent_sequence)));
+  const latest = unresolved.at(-1);
+  return latest === undefined ? undefined : snapshot.bodyBySequence.get(latest.local_intent_sequence);
 }
 
 export async function persistSplitBlock(
@@ -1070,6 +1188,11 @@ async function persistAuthorEditUnit(
     inputOrigin: InputOrigin;
     undoGroupId?: string | undefined;
     createdAt?: string | undefined;
+    candidate?: {
+      target: AuthorEditProposalTarget;
+      expectedProposalHeads: string[];
+      checkpointText: string;
+    };
   },
   cryptoImpl: Crypto,
 ): Promise<PendingEditProjection> {
@@ -1111,9 +1234,11 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal limit failed");
   }
   const expectedBody = edit.expectedBody;
-  const [payloadDigest, resultingPayloadDigest] = await Promise.all([
+  const [payloadDigest, resultingPayloadDigest, candidateCheckpointDigest] = await Promise.all([
     digestJournalValue(authorEditUnit, cryptoImpl),
     digestJournalValue(edit.resultingBody, cryptoImpl),
+    edit.candidate === undefined ? Promise.resolve(undefined)
+      : digestJournalValue(edit.candidate.checkpointText, cryptoImpl),
   ]);
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "payload_chains", "intents", "submission_groups"],
@@ -1199,8 +1324,10 @@ async function persistAuthorEditUnit(
     throw new Error("Local Edit Journal schema or partition is incompatible");
   }
   const existingPayloadChain = chains.find((chain) =>
-    isOpenPayloadChainForBase(chain, base.snapshot_id));
-  if (chains.filter((chain) => isOpenPayloadChainForBase(chain, base.snapshot_id)).length > 1
+    isOpenPayloadChainForBase(chain, base.snapshot_id, edit.candidate?.target));
+  if (chains.filter((chain) => isOpenPayloadChainForBase(
+    chain, base.snapshot_id, edit.candidate?.target,
+  )).length > 1
     || (existingPayloadChain?.ordered_patch_refs.length ?? 0) >= AUTHOR_EDIT_MAX_UNITS) {
     transaction.abort();
     throw new Error("Local Edit Journal limit failed");
@@ -1212,10 +1339,16 @@ async function persistAuthorEditUnit(
       journal_partition_id: partitionId,
       checkpoint_ref: {
         chapter_object_id: base.chapter_id,
-        materialized_payload: checkpointMaterialization(base),
-        materialized_payload_digest: base.materialized_payload_digest,
+        materialized_payload: edit.candidate?.checkpointText ?? checkpointMaterialization(base),
+        materialized_payload_digest: edit.candidate === undefined
+          ? base.materialized_payload_digest
+          : candidateCheckpointDigest!,
         source_snapshot_id: base.snapshot_id,
         source_heads: [base.authoritative_head_revision_id],
+        ...(edit.candidate === undefined ? {} : {
+          proposal_target: edit.candidate.target,
+          proposal_head_revision_ids: edit.candidate.expectedProposalHeads,
+        }),
       },
       ordered_patch_refs: [],
     };
@@ -1242,9 +1375,12 @@ async function persistAuthorEditUnit(
     base_activity_position: base.project_activity_position,
     target_refs: base.target_refs,
     expected_authoritative_heads: [base.authoritative_head_revision_id],
-    expected_proposal_heads: base.proposal_head_revision_ids,
+    expected_proposal_heads: edit.candidate?.expectedProposalHeads
+      ?? base.proposal_head_revision_ids,
+    ...(edit.candidate === undefined ? {} : { proposal_target: edit.candidate.target }),
     proposal_anchors: workspace.inlineProposalAnchors ?? [],
-    observed_ownership_partition: base.observed_ownership_partition,
+    observed_ownership_partition: edit.candidate === undefined
+      ? base.observed_ownership_partition : "mixed",
     author_edit_unit: authorEditUnit,
     retry_source: { kind: "fresh_editor_intent" },
     editor_contract_revision: EDITOR_CONTRACT_REVISION,
@@ -1261,8 +1397,8 @@ async function persistAuthorEditUnit(
   intents.add(record);
   await transactionResult(transaction);
   return {
-    body: expectedBody,
-    blocks: cloneBlocks(edit.expectedBlocks),
+    body: edit.candidate === undefined ? expectedBody : projection.body,
+    blocks: edit.candidate === undefined ? cloneBlocks(edit.expectedBlocks) : projection.blocks,
     save_state: "saving",
     unsettled_intent_count: projection.unsettled_intent_count + 1,
     authoritative_revision_id: projection.authoritative_revision_id,

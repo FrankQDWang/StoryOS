@@ -165,6 +165,8 @@ async function validateFrozenGroup(
     || request?.expected_authoritative_revision_id !== firstRecord.expected_authoritative_heads[0]
     || JSON.stringify(request?.expected_proposal_head_revision_ids)
       !== JSON.stringify(firstRecord.expected_proposal_heads)
+    || JSON.stringify(request?.proposal_target)
+      !== JSON.stringify(firstRecord.proposal_target)
     || JSON.stringify(request?.target_refs) !== JSON.stringify(firstRecord.target_refs)
     || request?.observed_ownership_partition !== firstRecord.observed_ownership_partition
     || request?.undo_group_id !== firstRecord.undo_group_binding.undo_group_id
@@ -258,6 +260,8 @@ export async function freezeOneIntentSubmission(
     chapter_id: firstRecord.chapter_object_id,
     expected_authoritative_revision_id: firstRecord.expected_authoritative_heads[0]!,
     expected_proposal_head_revision_ids: firstRecord.expected_proposal_heads,
+    ...(firstRecord.proposal_target === undefined
+      ? {} : { proposal_target: firstRecord.proposal_target }),
     target_refs: firstRecord.target_refs,
     observed_ownership_partition: firstRecord.observed_ownership_partition,
     editor_contract_revision: firstRecord.editor_contract_revision,

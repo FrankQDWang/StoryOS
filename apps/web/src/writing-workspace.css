@@ -249,6 +249,16 @@ input:focus-visible,
   white-space: pre-wrap;
 }
 
+.manuscript-editor .block-proposal-text {
+  min-height: 1.6em;
+  outline: none;
+  cursor: text;
+}
+
+.manuscript-editor .block-proposal:focus-within .block-proposal-text {
+  box-shadow: 0 2px #746b60;
+}
+
 .block-proposal-unavailable {
   width: min(100%, 850px);
   margin: 0 auto 20px;

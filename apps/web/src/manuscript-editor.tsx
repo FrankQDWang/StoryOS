@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import { createAuthorEditIdleController, type AuthorEditIdleController }
@@ -17,6 +18,7 @@ import {
 } from "./manuscript-doc.ts";
 import {
   capturedManuscriptEditFromTransaction,
+  capturedCandidateEditFromTransaction,
   hydrateManuscriptBlocks,
   isStoryosHydrateTransaction,
   originFromTransaction,
@@ -28,7 +30,8 @@ import {
   createProposalAgentWriteGate,
 } from "./proposal-agent-write-gate.ts";
 import {
-  blockProposalDecoration, projectBlockProposals, type BlockProposalProjection,
+  blockProposalDecoration, capturedCandidateEdit, projectBlockProposals,
+  type BlockProposalProjection,
 } from "./block-proposal-decoration.ts";
 import { undoOwnedLatestAuthorAction } from "./undo-latest-author-action.ts";
 
@@ -43,6 +46,7 @@ export interface ManuscriptEditorProps {
   controllerRef: { current: ManualInputController | null };
   onProjection: (projection: PendingEditProjection, source?: "local") => void;
   onFailure: (error: unknown) => void;
+  onCandidateSettled?: () => void;
 }
 
 function syncManuscriptSurface(
@@ -105,21 +109,30 @@ export function ManuscriptEditor({
   controllerRef,
   onProjection,
   onFailure,
+  onCandidateSettled,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
+  const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
+  const candidateCompositionBlockedRef = useRef(false);
+  const candidateCompositionDirtyRef = useRef(false);
   const idleRef = useRef<AuthorEditIdleController | null>(null);
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
+  const onCandidateSettledRef = useRef(onCandidateSettled);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
+  onCandidateSettledRef.current = onCandidateSettled;
   persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
     extensions: [
-      ...storyosManuscriptExtensions(firstBlockId, () => onAuthorUndoRef.current()),
+      ...storyosManuscriptExtensions(firstBlockId,
+        () => onAuthorUndoRef.current(),
+        (hardBoundary) => !candidateCompositionBlockedRef.current
+          && idleRef.current?.canAcceptCandidateInput(hardBoundary) === true),
       blockProposalDecoration,
     ],
     content: manuscriptBlocksJson(blocks),
@@ -145,6 +158,35 @@ export function ManuscriptEditor({
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
         observedBlocksRef.current = nextBlocks;
+        return;
+      }
+      const candidate = capturedCandidateEditFromTransaction(transaction);
+      if (candidate !== undefined) {
+        const { proposal, priorText, from, to, text, resultingBody } = candidate;
+        const origin = originFromTransaction(transaction, { from, to, text });
+        const composing = current.view.composing || composingRef.current;
+        if (composing && candidateCompositionDirtyRef.current) return;
+        if (composing) candidateCompositionDirtyRef.current = true;
+        const workspace = persistWorkspaceRef.current;
+        if (workspace !== undefined && workspace.pending.save_state !== "needs_attention") {
+          onProjectionRef.current({
+            ...workspace.pending,
+            save_state: "saving",
+            unsettled_intent_count: workspace.pending.unsettled_intent_count + 1,
+          }, "local");
+        }
+        if (composing) return;
+        void idleRef.current?.persist({
+          kind: "candidate_selection",
+          target: {
+            proposal_id: proposal.proposalId,
+            operation_id: proposal.operationId,
+            revision_id: proposal.revisionId,
+            manuscript_block_id: proposal.blockId,
+          },
+          expectedProposalHeads: proposal.expectedHeads,
+          priorText, from, to, text, resultingBody,
+        }, origin, new Date().toISOString());
         return;
       }
       if (current.view.composing || composingRef.current) {
@@ -256,7 +298,10 @@ export function ManuscriptEditor({
       baseUrl,
       fetchImpl,
       cryptoImpl,
-      afterAppliedSettlement: collectEligibleJournalPayload,
+      afterAppliedSettlement: async (workspace) => {
+        await collectEligibleJournalPayload(workspace);
+        onCandidateSettledRef.current?.();
+      },
       onProjection: (projection) => { onProjectionRef.current(projection); },
       onFailure: (error) => { onFailureRef.current(error); },
     });
@@ -369,11 +414,43 @@ export function ManuscriptEditor({
     const onCompositionStart = (): void => {
       onFirstAuthorInput();
       composingRef.current = true;
+      const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal";
+      candidateCompositionBlockedRef.current = candidateSelected
+        && !idle.canAcceptCandidateInput(true);
+      candidateCompositionStartRef.current = candidateSelected
+        && !candidateCompositionBlockedRef.current ? editor.state.doc : null;
+      candidateCompositionDirtyRef.current = false;
       idle.setHoldSubmission(true);
     };
     const onCompositionEnd = (): void => {
       composingRef.current = false;
       idle.setHoldSubmission(false);
+      const candidateStart = candidateCompositionStartRef.current;
+      candidateCompositionStartRef.current = null;
+      candidateCompositionBlockedRef.current = false;
+      candidateCompositionDirtyRef.current = false;
+      if (candidateStart !== null) {
+        const captured = capturedCandidateEdit(candidateStart, editor.state.doc);
+        if (!captured.valid) {
+          idle.fail(new Error("Candidate composition is not a supported edit"));
+          return;
+        }
+        if (captured.edit !== undefined) {
+          const { proposal, priorText, from, to, text, resultingBody } = captured.edit;
+          void idle.persist({
+            kind: "candidate_selection",
+            target: {
+              proposal_id: proposal.proposalId,
+              operation_id: proposal.operationId,
+              revision_id: proposal.revisionId,
+              manuscript_block_id: proposal.blockId,
+            },
+            expectedProposalHeads: proposal.expectedHeads,
+            priorText, from, to, text, resultingBody,
+          }, "composition_confirmation", new Date().toISOString());
+        }
+        return;
+      }
       const nextBlocks = readManuscriptParagraphs(editor.state.doc);
       if (nextBlocks === undefined || paragraphsEqual(nextBlocks, observedBlocksRef.current)) {
         return;

@@ -1,6 +1,7 @@
-import { Extension, type Editor } from "@tiptap/core";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Node as TiptapNode, type Editor } from "@tiptap/core";
+import { Fragment, type Node as ProseMirrorNode } from "@tiptap/pm/model";
+
+import { contiguousUtf16Replace } from "./manuscript-doc.ts";
 
 export type BlockProposalProjection = {
   proposalId: string;
@@ -11,63 +12,145 @@ export type BlockProposalProjection = {
   sourceDecisionId: string;
   text: string;
   eligible: boolean;
+  expectedHeads: string[];
+  localPending?: boolean;
 };
 
-const projectionKey = new PluginKey<readonly BlockProposalProjection[]>("storyosBlockProposals");
+const ATTRIBUTES = [
+  "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
+  "sourceDecisionId", "eligible", "expectedHeads",
+] as const;
 
-export function projectBlockProposals(editor: Editor, proposals: readonly BlockProposalProjection[]): void {
-  const current = projectionKey.getState(editor.state) ?? [];
-  if (current.length === proposals.length && current.every((item, index) =>
-    JSON.stringify(item) === JSON.stringify(proposals[index]))) return;
-  editor.view.dispatch(editor.state.tr.setMeta(projectionKey, proposals));
+function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
+  const nodes: ProseMirrorNode[] = [];
+  doc.forEach((node) => {
+    if (node.type.name === "blockProposal") nodes.push(node);
+  });
+  return nodes;
 }
 
-export const blockProposalDecoration = Extension.create({
-  name: "storyosBlockProposalDecoration",
-  addProseMirrorPlugins() {
-    return [new Plugin<readonly BlockProposalProjection[]>({
-      key: projectionKey,
-      state: {
-        init: () => [],
-        apply(transaction, previous) {
-          return transaction.getMeta(projectionKey) ?? previous;
-        },
+function candidateAnchorsValid(doc: ProseMirrorNode): boolean {
+  let blockId = "";
+  let valid = true;
+  doc.forEach((node) => {
+    if (node.type.name === "paragraph" || node.type.name === "heading") {
+      blockId = node.attrs.id as string;
+    } else if (node.type.name === "blockProposal"
+      && (blockId === "" || node.attrs.blockId !== blockId)) {
+      valid = false;
+    }
+  });
+  return valid;
+}
+
+export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirrorNode) {
+  const before = candidateNodes(previous);
+  const after = candidateNodes(next);
+  if (before.length !== after.length || !candidateAnchorsValid(previous)
+    || !candidateAnchorsValid(next)) return { valid: false as const };
+  const currentById = new Map(after.map((node) => [node.attrs.proposalId as string, node]));
+  if (currentById.size !== after.length) return { valid: false as const };
+  let changed: { proposal: BlockProposalProjection; priorText: string;
+    from: number; to: number; text: string; resultingBody: string } | undefined;
+  for (const node of before) {
+    const current = currentById.get(node.attrs.proposalId as string);
+    if (current === undefined || ATTRIBUTES.some((key) =>
+      JSON.stringify(node.attrs[key]) !== JSON.stringify(current.attrs[key]))) {
+      return { valid: false as const };
+    }
+    if (node.textContent === current.textContent) continue;
+    if (changed !== undefined) return { valid: false as const };
+    const replacement = contiguousUtf16Replace(node.textContent, current.textContent);
+    if (replacement === undefined) return { valid: false as const };
+    changed = {
+      proposal: {
+        proposalId: node.attrs.proposalId as string,
+        operationId: node.attrs.operationId as string,
+        revisionId: node.attrs.revisionId as string,
+        blockId: node.attrs.blockId as string,
+        sourceRunId: node.attrs.sourceRunId as string,
+        sourceDecisionId: node.attrs.sourceDecisionId as string,
+        text: current.textContent,
+        eligible: node.attrs.eligible as boolean,
+        expectedHeads: node.attrs.expectedHeads as string[],
       },
-      props: {
-        decorations(state) {
-          const proposals = projectionKey.getState(state) ?? [];
-          const decorations: Decoration[] = [];
-          state.doc.descendants((node, position) => {
-            if (node.type.name !== "paragraph" && node.type.name !== "heading") return;
-            for (const proposal of proposals) {
-              if (node.attrs.id !== proposal.blockId) continue;
-              decorations.push(Decoration.widget(position + node.nodeSize, () => {
-                const surface = document.createElement("div");
-                surface.className = "block-proposal";
-                surface.contentEditable = "false";
-                surface.setAttribute("role", "note");
-                surface.setAttribute("aria-label", "候选文字，尚未成为正文");
-                surface.dataset.proposalId = proposal.proposalId;
-                surface.dataset.proposalOperationId = proposal.operationId;
-                surface.dataset.proposalRevisionId = proposal.revisionId;
-                surface.dataset.proposalSourceRunId = proposal.sourceRunId;
-                surface.dataset.proposalSourceDecisionId = proposal.sourceDecisionId;
-                surface.dataset.proposalTargetId = proposal.blockId;
-                surface.dataset.proposalEligibility = proposal.eligible ? "eligible" : "ineligible";
-                const label = document.createElement("span");
-                label.className = "block-proposal-label";
-                label.textContent = proposal.eligible
-                  ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可接受";
-                const text = document.createElement("p");
-                text.textContent = proposal.text;
-                surface.append(label, text);
-                return surface;
-              }, { key: `${proposal.proposalId}:${proposal.revisionId}:${proposal.eligible}`, side: -1 }));
-            }
-          });
-          return DecorationSet.create(state.doc, decorations);
-        },
-      },
-    })];
+      priorText: node.textContent,
+      ...replacement,
+    };
+    if (!changed.proposal.eligible) return { valid: false as const };
+  }
+  return { valid: true as const, edit: changed };
+}
+
+export function projectBlockProposals(editor: Editor, proposals: readonly BlockProposalProjection[]): void {
+  const schema = editor.state.schema;
+  const candidateType = schema.nodes.blockProposal;
+  if (candidateType === undefined) return;
+  const existing = new Map(candidateNodes(editor.state.doc).map((node) =>
+    [node.attrs.proposalId as string, node]));
+  const byBlock = new Map<string, BlockProposalProjection[]>();
+  for (const proposal of proposals) {
+    const items = byBlock.get(proposal.blockId) ?? [];
+    items.push(proposal);
+    byBlock.set(proposal.blockId, items);
+  }
+  const next: ProseMirrorNode[] = [];
+  editor.state.doc.forEach((node) => {
+    if (node.type.name === "blockProposal") return;
+    next.push(node);
+    for (const proposal of byBlock.get(node.attrs.id as string) ?? []) {
+      const current = existing.get(proposal.proposalId);
+      const text = !proposal.localPending && current?.attrs.revisionId === proposal.revisionId
+        ? current.textContent : proposal.text;
+      next.push(candidateType.create({
+        proposalId: proposal.proposalId,
+        operationId: proposal.operationId,
+        revisionId: proposal.revisionId,
+        blockId: proposal.blockId,
+        sourceRunId: proposal.sourceRunId,
+        sourceDecisionId: proposal.sourceDecisionId,
+        eligible: proposal.eligible,
+        expectedHeads: proposal.expectedHeads,
+      }, text.length ? schema.text(text) : undefined));
+    }
+  });
+  if (next.length === editor.state.doc.childCount
+    && next.every((node, index) => node.eq(editor.state.doc.child(index)))) return;
+  const transaction = editor.state.tr.replaceWith(0, editor.state.doc.content.size,
+    Fragment.fromArray(next));
+  transaction.setMeta("storyos.hydrate", true);
+  transaction.setMeta("addToHistory", false);
+  editor.view.dispatch(transaction);
+}
+
+export const blockProposalDecoration = TiptapNode.create({
+  name: "blockProposal",
+  group: "block",
+  content: "text*",
+  selectable: false,
+  isolating: true,
+  addAttributes() {
+    return Object.fromEntries(ATTRIBUTES.map((key) => [key, { default: null }]));
+  },
+  parseHTML() {
+    return [{ tag: "div[data-proposal-id]" }];
+  },
+  renderHTML({ node }) {
+    const eligible = node.attrs.eligible === true;
+    return ["div", {
+      class: "block-proposal",
+      "data-proposal-id": node.attrs.proposalId,
+      "data-proposal-operation-id": node.attrs.operationId,
+      "data-proposal-revision-id": node.attrs.revisionId,
+      "data-proposal-source-run-id": node.attrs.sourceRunId,
+      "data-proposal-source-decision-id": node.attrs.sourceDecisionId,
+      "data-proposal-target-id": node.attrs.blockId,
+      "data-proposal-eligibility": eligible ? "eligible" : "ineligible",
+      role: "group",
+      "aria-label": eligible ? "候选文字，尚未成为正文" : "候选文字，暂不可接受",
+      ...(eligible ? {} : { contenteditable: "false" }),
+    }, ["span", { class: "block-proposal-label", contenteditable: "false" },
+      eligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可接受"],
+    ["p", { class: "block-proposal-text" }, 0]];
   },
 });
