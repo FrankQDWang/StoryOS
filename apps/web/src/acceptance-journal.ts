@@ -60,6 +60,15 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace): Promise
     const request = group.frozen_request_body as AcceptProposalRequest | undefined;
     const digest = request === undefined ? undefined
       : await digestAcceptProposal(request, workspace.cryptoImpl);
+    const coverageBytes = new TextEncoder().encode(JSON.stringify({
+      ordered_coverage: coverage, covered_sequence_range: group.covered_sequence_range,
+    }));
+    const coverageHash = new Uint8Array(await workspace.cryptoImpl.subtle.digest(
+      "SHA-256", coverageBytes));
+    const coverageDigest: DigestValue = { algorithm: "sha256",
+      profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
+      value_hex_lowercase: [...coverageHash]
+        .map((byte) => byte.toString(16).padStart(2, "0")).join("") };
     const capsule = allCapsules.filter((item) => item.journal_submission_group_id
       === group.journal_submission_group_id);
     const attempts = allAttempts.filter((item) => item.journal_submission_group_id
@@ -76,17 +85,23 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace): Promise
       || record.writer_generation !== workspace.partition.writer_generation
       || group.writer_generation !== workspace.partition.writer_generation
       || group.action_class !== "explicit_editor_command"
+      || group.batch_policy_revision !== "storyos.explicit-command-batch.release-1.v1"
       || group.command_schema !== "storyos.command.accept-proposal.request.v1"
       || group.method !== "POST"
       || group.route_template !== "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances"
       || !Number.isSafeInteger(record.local_intent_sequence)
       || record.local_intent_sequence !== coverage[0]?.local_intent_sequence
+      || record.editor_contract_revision !== "storyos.editor-contract.release-1.v2"
+      || record.exact_semantic_payload_ref !== group.journal_submission_group_id
+      || group.frozen_request_body_ref !== group.journal_submission_group_id
       || JSON.stringify(group.covered_sequence_range) !== JSON.stringify({
         first: record.local_intent_sequence, last: record.local_intent_sequence,
       })
       || JSON.stringify(record.semantic_payload_digest) !== JSON.stringify(digest)
       || JSON.stringify(group.frozen_request_digest) !== JSON.stringify(digest)
       || JSON.stringify(coverage[0]?.payload_digest) !== JSON.stringify(digest)
+      || JSON.stringify(group.frozen_payload_coverage_digest)
+        !== JSON.stringify(coverageDigest)
       || !["unsettled", "settled", "refused"].includes(settlement?.kind ?? "")
       || capsule.length > 1 || (attempts.length > 0 && capsule.length !== 1)
       || attempts.some((attempt, index) => attempt.attempt_ordinal !== index + 1
@@ -196,7 +211,39 @@ export async function writeFlight(database: IDBDatabase, flight: AcceptanceFligh
   });
 }
 
-export async function createFlight(database: IDBDatabase, flight: Omit<AcceptanceFlight, "local_intent_sequence">): Promise<AcceptanceFlight> {
+export async function createFlight(database: IDBDatabase,
+  flight: Omit<AcceptanceFlight, "local_intent_sequence">,
+  cryptoImpl: Crypto): Promise<AcceptanceFlight> {
+  for (let retry = 0; retry < 3; retry += 1) {
+    const read = database.transaction("metadata", "readonly").objectStore("metadata")
+      .get("local_intent_sequence");
+    const previous = await new Promise<{ value?: number } | undefined>((resolve, reject) => {
+      read.onsuccess = () => resolve(read.result as { value?: number } | undefined);
+      read.onerror = () => reject(read.error ?? new Error("Journal sequence read failed"));
+    });
+    const priorSequence = previous?.value ?? 0;
+    const sequence = priorSequence + 1;
+    if (!Number.isSafeInteger(sequence)) throw new Error("Local Edit Journal sequence is invalid");
+    const coverage = { ordered_coverage: [{ local_intent_sequence: sequence,
+      intent_record_ref: flight.explicit_command_record_id,
+      payload_digest: flight.frozen_request_digest }],
+    covered_sequence_range: { first: sequence, last: sequence } };
+    const bytes = new TextEncoder().encode(JSON.stringify(coverage));
+    const hash = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+    const coverageDigest: DigestValue = { algorithm: "sha256",
+      profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
+      value_hex_lowercase: [...hash].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
+    try { return await commitFlight(database, flight, sequence, priorSequence, coverageDigest); }
+    catch (error) {
+      if (!(error instanceof Error) || error.message !== "Journal sequence changed") throw error;
+    }
+  }
+  throw new Error("Journal sequence changed");
+}
+
+async function commitFlight(database: IDBDatabase,
+  flight: Omit<AcceptanceFlight, "local_intent_sequence">,
+  sequence: number, priorSequence: number, coverageDigest: DigestValue): Promise<AcceptanceFlight> {
   const transaction = database.transaction(["metadata", "intents", "submission_groups"],
     "readwrite", { durability: "strict" });
   const metadata = transaction.objectStore("metadata");
@@ -205,10 +252,9 @@ export async function createFlight(database: IDBDatabase, flight: Omit<Acceptanc
     sequenceRequest.onsuccess = () => resolve(sequenceRequest.result as { value?: number } | undefined);
     sequenceRequest.onerror = () => reject(sequenceRequest.error ?? new Error("Journal sequence read failed"));
   });
-  const sequence = (previous?.value ?? 0) + 1;
-  if (!Number.isSafeInteger(sequence)) {
+  if ((previous?.value ?? 0) !== priorSequence) {
     transaction.abort();
-    throw new Error("Local Edit Journal sequence is invalid");
+    throw new Error("Journal sequence changed");
   }
   const created = { ...flight, local_intent_sequence: sequence };
   const createdAt = new Date().toISOString();
@@ -220,7 +266,7 @@ export async function createFlight(database: IDBDatabase, flight: Omit<Acceptanc
     editor_session_id: flight.editor_session_id,
     writer_generation: flight.writer_generation,
     command_kind: flight.command_kind,
-    exact_semantic_payload_ref: flight.explicit_command_record_id,
+    exact_semantic_payload_ref: flight.journal_submission_group_id,
     semantic_payload_digest: flight.frozen_request_digest,
     exact_target_head_anchor_bindings: {
       proposal_revision_id: flight.request.accept_proposal_input.proposal_revision_id,
@@ -242,6 +288,7 @@ export async function createFlight(database: IDBDatabase, flight: Omit<Acceptanc
       payload_digest: flight.frozen_request_digest }],
     covered_sequence_range: { first: sequence, last: sequence },
     action_class: "explicit_editor_command",
+    batch_policy_revision: "storyos.explicit-command-batch.release-1.v1",
     api_major: 1,
     method: "POST",
     route_template: "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
@@ -249,11 +296,11 @@ export async function createFlight(database: IDBDatabase, flight: Omit<Acceptanc
     command_kind: flight.command_kind,
     digest_profile: "storyos.command.acceptProposal.jcs.v1",
     idempotency_key: flight.idempotencyKey,
-    frozen_request_body_ref: flight.explicit_command_record_id,
+    frozen_request_body_ref: flight.journal_submission_group_id,
     frozen_request_body: flight.request,
-    frozen_request_digest_input_ref: flight.explicit_command_record_id,
+    frozen_request_digest_input_ref: flight.journal_submission_group_id,
     frozen_request_digest: flight.frozen_request_digest,
-    frozen_payload_coverage_digest: flight.frozen_request_digest,
+    frozen_payload_coverage_digest: coverageDigest,
     settlement: { kind: "unsettled" },
     acceptance_delivery: "frozen",
     frozen_at: createdAt,
@@ -281,4 +328,3 @@ export function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
   const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
-
