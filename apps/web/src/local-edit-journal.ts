@@ -329,11 +329,13 @@ function closedReconciliation(group: JournalSubmissionGroup) {
 }
 
 export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<JournalSnapshot> {
-  const explicitAcceptance = await readAcceptanceJournal(workspace);
   const transaction = workspace.database.transaction(
-    ["metadata", "payload_chains", "intents", "submission_groups"],
+    ["metadata", "payload_chains", "intents", "submission_groups",
+      "transport_capsules", "transport_attempts"],
     "readonly",
   );
+  const explicitAcceptancePromise = readAcceptanceJournal(workspace, transaction);
+  void explicitAcceptancePromise.catch(() => {});
   const partitionId = workspace.partition.journal_partition_id;
   const [schemaValue, watermarkValue, activeBaseValue, recordsValue, payloadChainsValue,
     groupsValue, storedFencesValue] =
@@ -351,6 +353,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
       requestResult(transaction.objectStore("metadata").get(`collection_fences:${partitionId}`)),
     ]);
   const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
+  const explicitAcceptance = await explicitAcceptancePromise;
   const schema = schemaValue as { version?: unknown } | undefined;
   const watermark = watermarkValue as JournalSnapshot["watermark"];
   const activeBaseRecord = activeBaseValue as { value?: EditorBaseSnapshot } | undefined;

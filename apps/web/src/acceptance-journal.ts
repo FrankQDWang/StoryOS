@@ -28,12 +28,13 @@ export type AcceptanceSettlement =
   | { kind: "settled"; response: AcceptProposalResponse }
   | { kind: "refused"; refusal: AcceptanceRefusal };
 
-export async function readAcceptanceJournal(workspace: EditorWorkspace): Promise<{
+export async function readAcceptanceJournal(workspace: EditorWorkspace,
+  snapshotTransaction?: IDBTransaction): Promise<{
   records: Record<string, unknown>[];
   groups: Record<string, unknown>[];
 }> {
   const partitionId = workspace.partition.journal_partition_id;
-  const transaction = workspace.database.transaction(
+  const transaction = snapshotTransaction ?? workspace.database.transaction(
     ["intents", "submission_groups", "transport_capsules", "transport_attempts"], "readonly");
   const intentsRequest = transaction.objectStore("intents").index("partition").getAll(partitionId);
   const groupsRequest = transaction.objectStore("submission_groups").index("partition")
@@ -60,6 +61,7 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace): Promise
     const request = group.frozen_request_body as AcceptProposalRequest | undefined;
     const digest = request === undefined ? undefined
       : await digestAcceptProposal(request, workspace.cryptoImpl);
+    const input = request?.accept_proposal_input;
     const coverageBytes = new TextEncoder().encode(JSON.stringify({
       ordered_coverage: coverage, covered_sequence_range: group.covered_sequence_range,
     }));
@@ -94,6 +96,18 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace): Promise
       || record.editor_contract_revision !== "storyos.editor-contract.release-1.v2"
       || record.exact_semantic_payload_ref !== group.journal_submission_group_id
       || group.frozen_request_body_ref !== group.journal_submission_group_id
+      || JSON.stringify(record.author_visible_decision_ref) !== JSON.stringify({
+        proposal_id: group.proposal_id,
+        operation_id: input?.selected_operation_ids?.[0],
+        revision_id: input?.proposal_revision_id,
+      })
+      || input?.selected_operation_ids?.length !== 1
+      || record.proposal_id !== group.proposal_id
+      || JSON.stringify(record.exact_target_head_anchor_bindings) !== JSON.stringify({
+        proposal_revision_id: input?.proposal_revision_id,
+        validation_receipt_id: input?.validation_receipt_id,
+        authoritative_revision_id: input?.expected_authoritative_revision_id,
+      })
       || JSON.stringify(group.covered_sequence_range) !== JSON.stringify({
         first: record.local_intent_sequence, last: record.local_intent_sequence,
       })
@@ -112,6 +126,16 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace): Promise
           "Idempotency-Key"] !== group.idempotency_key)
       || (settlement.kind === "settled"
         && (settlement.response.receipt.idempotency_key !== group.idempotency_key
+          || settlement.response.receipt.proposal_id !== group.proposal_id
+          || JSON.stringify(settlement.response.project_scope)
+            !== JSON.stringify(workspace.partition.project_scope)
+          || JSON.stringify(settlement.response.receipt.project_scope)
+            !== JSON.stringify(workspace.partition.project_scope)
+          || settlement.response.receipt.proposal_revision_id !== input?.proposal_revision_id
+          || settlement.response.receipt.validation_receipt_id !== input?.validation_receipt_id
+          || JSON.stringify(settlement.response.receipt.selected_operation_ids)
+            !== JSON.stringify(input?.selected_operation_ids)
+          || settlement.response.receipt.result !== settlement.response.effect.kind
           || JSON.stringify(settlement.response.receipt.command_digest) !== JSON.stringify(digest)
           || settlement.response.correlation_id
             !== request?.accept_proposal_input.correlation_id))
@@ -211,9 +235,9 @@ export async function writeFlight(database: IDBDatabase, flight: AcceptanceFligh
   });
 }
 
-export async function createFlight(database: IDBDatabase,
-  flight: Omit<AcceptanceFlight, "local_intent_sequence">,
-  cryptoImpl: Crypto): Promise<AcceptanceFlight> {
+export async function createFlight(workspace: EditorReadyState,
+  flight: Omit<AcceptanceFlight, "local_intent_sequence">): Promise<AcceptanceFlight> {
+  const database = workspace.database;
   for (let retry = 0; retry < 3; retry += 1) {
     const read = database.transaction("metadata", "readonly").objectStore("metadata")
       .get("local_intent_sequence");
@@ -229,11 +253,11 @@ export async function createFlight(database: IDBDatabase,
       payload_digest: flight.frozen_request_digest }],
     covered_sequence_range: { first: sequence, last: sequence } };
     const bytes = new TextEncoder().encode(JSON.stringify(coverage));
-    const hash = new Uint8Array(await cryptoImpl.subtle.digest("SHA-256", bytes));
+    const hash = new Uint8Array(await workspace.cryptoImpl.subtle.digest("SHA-256", bytes));
     const coverageDigest: DigestValue = { algorithm: "sha256",
       profile: "storyos.local-edit-journal.submission-coverage.sha256.v1",
       value_hex_lowercase: [...hash].map((byte) => byte.toString(16).padStart(2, "0")).join("") };
-    try { return await commitFlight(database, flight, sequence, priorSequence, coverageDigest); }
+    try { return await commitFlight(workspace, flight, sequence, priorSequence, coverageDigest); }
     catch (error) {
       if (!(error instanceof Error) || error.message !== "Journal sequence changed") throw error;
     }
@@ -241,20 +265,41 @@ export async function createFlight(database: IDBDatabase,
   throw new Error("Journal sequence changed");
 }
 
-async function commitFlight(database: IDBDatabase,
+async function commitFlight(workspace: EditorReadyState,
   flight: Omit<AcceptanceFlight, "local_intent_sequence">,
   sequence: number, priorSequence: number, coverageDigest: DigestValue): Promise<AcceptanceFlight> {
-  const transaction = database.transaction(["metadata", "intents", "submission_groups"],
+  const transaction = workspace.database.transaction(
+    ["metadata", "partitions", "intents", "submission_groups"],
     "readwrite", { durability: "strict" });
   const metadata = transaction.objectStore("metadata");
   const sequenceRequest = metadata.get("local_intent_sequence");
+  const schemaRequest = metadata.get("schema");
+  const partitionRequest = transaction.objectStore("partitions")
+    .get(workspace.partition.journal_partition_id);
   const previous = await new Promise<{ value?: number } | undefined>((resolve, reject) => {
     sequenceRequest.onsuccess = () => resolve(sequenceRequest.result as { value?: number } | undefined);
     sequenceRequest.onerror = () => reject(sequenceRequest.error ?? new Error("Journal sequence read failed"));
   });
+  const [schema, partition] = await Promise.all([
+    new Promise<{ version?: number } | undefined>((resolve, reject) => {
+      schemaRequest.onsuccess = () => resolve(schemaRequest.result as { version?: number } | undefined);
+      schemaRequest.onerror = () => reject(schemaRequest.error ?? new Error("Journal schema read failed"));
+    }),
+    new Promise<unknown>((resolve, reject) => {
+      partitionRequest.onsuccess = () => resolve(partitionRequest.result);
+      partitionRequest.onerror = () => reject(partitionRequest.error
+        ?? new Error("Journal partition read failed"));
+    }),
+  ]);
   if ((previous?.value ?? 0) !== priorSequence) {
     transaction.abort();
     throw new Error("Journal sequence changed");
+  }
+  if (schema?.version !== 4
+    || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
+    || workspace.partition.disposition !== "current_writer_open") {
+    transaction.abort();
+    throw new Error("Acceptance Journal partition changed");
   }
   const created = { ...flight, local_intent_sequence: sequence };
   const createdAt = new Date().toISOString();
@@ -263,6 +308,7 @@ async function commitFlight(database: IDBDatabase,
     local_intent_sequence: sequence,
     journal_partition_id: flight.journal_partition_id,
     project_scope: flight.project_scope,
+    proposal_id: flight.proposalId,
     editor_session_id: flight.editor_session_id,
     writer_generation: flight.writer_generation,
     command_kind: flight.command_kind,
@@ -281,6 +327,7 @@ async function commitFlight(database: IDBDatabase,
     journal_submission_group_id: flight.journal_submission_group_id,
     journal_partition_id: flight.journal_partition_id,
     project_scope: flight.project_scope,
+    proposal_id: flight.proposalId,
     editor_session_id: flight.editor_session_id,
     writer_generation: flight.writer_generation,
     ordered_coverage: [{ local_intent_sequence: sequence,
