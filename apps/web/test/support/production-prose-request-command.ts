@@ -199,12 +199,12 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       completed.decision.decision_id);
     assert.equal(await firstCandidate.locator(".block-proposal-text").textContent(),
       firstProposal.candidate_text);
-    await page.waitForFunction(({ proposalId, expected }) =>
-      document.querySelector(`[data-proposal-id="${proposalId}"]`)
-        ?.previousElementSibling?.textContent === expected,
+    await page.waitForFunction(({ proposalId, expected }) => {
+      const candidate = document.querySelector(`[data-proposal-id="${proposalId}"]`);
+      return candidate?.parentElement?.matches(".tiptap") === true
+        && candidate.previousElementSibling?.textContent === expected;
+    },
     { proposalId: firstProposalId, expected: firstBlock.text }, { polling: 100 });
-    assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.textContent),
-      firstBlock.text);
     assert.equal(await page.locator("body").getAttribute("data-author-input-events"), "0");
     assert.equal(await page.locator("[data-assistant-result]").textContent(),
       completed.decision.kind === "prose_change" ? completed.decision.text : null);
@@ -515,6 +515,8 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
       .operation_resolution, "pending");
     await page.reload();
     await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"]`)
+      .getByText("已接受，正文已更新。").waitFor();
     assert.equal(await page.locator(`[data-proposal-decision="${firstProposalId}"]`).textContent(),
       "已接受，正文已更新。");
     assert.equal(acceptancePosts, 5);
