@@ -188,6 +188,7 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
 }
 
 export interface JournalSnapshot {
+  explicitAcceptance?: { records: Record<string, unknown>[]; groups: Record<string, unknown>[] };
   workingBoundary?: JournalWorkingBoundary;
   watermark: { key: string; value: number } | undefined;
   activeBase: EditorBaseSnapshot | undefined;
