@@ -366,7 +366,8 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor {...editorProps}
-        editable={editorProps.editable && acceptanceChecked && accepting === undefined
+        editable={editorProps.editable && (acceptanceChecked || locators.length === 0)
+          && accepting === undefined
           && pendingAcceptances.length === 0}
         proposals={projections}
         onCandidateSettled={() => setSettlementRefresh((value) => value + 1)}
