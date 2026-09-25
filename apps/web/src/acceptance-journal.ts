@@ -1,5 +1,5 @@
-import { digestAcceptProposal } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import type { AcceptProposalRequest, AcceptProposalResponse, BlockProposalInspect, DigestValue, ProjectScope } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import { digestAcceptProposal, digestRejectProposalOperations } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { AcceptProposalRequest, AcceptProposalResponse, BlockProposalInspect, DigestValue, ProjectScope, RejectProposalOperationsRequest, RejectProposalOperationsResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
 
 export type AcceptanceFlight = {
@@ -24,6 +24,52 @@ export type AcceptanceFlight = {
   challengeExpiresAt?: string;
   request: AcceptProposalRequest;
 };
+export type RejectionFlight = Omit<AcceptanceFlight, "command_kind" | "request"> & {
+  command_kind: "rejectProposalOperations";
+  request: RejectProposalOperationsRequest;
+};
+export type DecisionFlight = AcceptanceFlight | RejectionFlight;
+type DecisionInput = {
+  proposal_revision_id: string;
+  selected_operation_ids: string[];
+  target_revisions: string[];
+  validation_receipt_id?: string;
+  authoritative_revision_id?: string;
+  editor_session_id: string;
+  client_contract_revision: string;
+  security_policy_revision: string;
+  correlation_id: string;
+};
+export function decisionInput(flight: DecisionFlight): DecisionInput {
+  if (flight.command_kind === "acceptProposal") {
+    const input = flight.request.accept_proposal_input;
+    return { ...input, target_revisions: [input.expected_authoritative_revision_id],
+      authoritative_revision_id: input.expected_authoritative_revision_id };
+  }
+  const input = flight.request.reject_proposal_operations_input;
+  return { ...input, selected_operation_ids: input.selected_pending_operation_ids,
+    target_revisions: input.expected_target_revisions };
+}
+export function decisionRoute(kind: DecisionFlight["command_kind"]): string {
+  return `/api/v1/projects/{project_id}/proposals/{proposal_id}/${kind === "acceptProposal"
+    ? "acceptances" : "rejections"}`;
+}
+export function decisionSchema(kind: DecisionFlight["command_kind"]): string {
+  return kind === "acceptProposal" ? "storyos.command.accept-proposal.request.v1"
+    : "storyos.command.reject-proposal-operations.request.v1";
+}
+export function decisionDigestProfile(kind: DecisionFlight["command_kind"]): string {
+  return kind === "acceptProposal" ? "storyos.command.acceptProposal.jcs.v1"
+    : "storyos.command.rejectProposalOperations.jcs.v1";
+}
+export function decisionPrefix(flight: DecisionFlight): string {
+  return flight.command_kind === "acceptProposal" ? "acceptance" : "rejection";
+}
+export function digestDecision(flight: DecisionFlight, cryptoImpl: Crypto): Promise<DigestValue> {
+  return flight.command_kind === "acceptProposal"
+    ? digestAcceptProposal(flight.request, cryptoImpl)
+    : digestRejectProposalOperations(flight.request, cryptoImpl);
+}
 export type AcceptanceRefusal = Extract<BlockProposalInspect["latest_acceptance_refusal"],
   { kind: "present" }>;
 export type AcceptancePreAdmissionProblem = {
@@ -36,6 +82,9 @@ export type AcceptanceReceiptSettlement =
   | { kind: "settled"; response: AcceptProposalResponse }
   | { kind: "refused"; refusal: AcceptanceRefusal };
 export type AcceptanceSettlement = AcceptanceReceiptSettlement
+  | { kind: "pre_admission_problem"; problem: AcceptancePreAdmissionProblem };
+export type RejectionSettlement =
+  | { kind: "settled"; response: RejectProposalOperationsResponse }
   | { kind: "pre_admission_problem"; problem: AcceptancePreAdmissionProblem };
 
 export function parsePreAdmissionAcceptanceProblem(status: number,
@@ -86,10 +135,14 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       intent_record_ref?: string; payload_digest?: DigestValue }[] | undefined;
     const record = records.find((item) => item.explicit_command_record_id
       === coverage?.[0]?.intent_record_ref);
-    const request = group.frozen_request_body as AcceptProposalRequest | undefined;
-    const digest = request === undefined ? undefined
-      : await digestAcceptProposal(request, workspace.cryptoImpl);
-    const input = request?.accept_proposal_input;
+    const kind = record?.command_kind;
+    const request = group.frozen_request_body as DecisionFlight["request"] | undefined;
+    const flight = request === undefined || (kind !== "acceptProposal"
+      && kind !== "rejectProposalOperations") ? undefined
+      : { command_kind: kind, request } as DecisionFlight;
+    const digest = flight === undefined ? undefined
+      : await digestDecision(flight, workspace.cryptoImpl);
+    const input = flight === undefined ? undefined : decisionInput(flight);
     const coverageBytes = new TextEncoder().encode(JSON.stringify({
       ordered_coverage: coverage, covered_sequence_range: group.covered_sequence_range,
     }));
@@ -104,12 +157,13 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
     const attempts = allAttempts.filter((item) => item.journal_submission_group_id
       === group.journal_submission_group_id).sort((left, right) =>
         (left.attempt_ordinal as number) - (right.attempt_ordinal as number));
-    const settlement = group.settlement as AcceptanceSettlement | { kind: "unsettled" };
+    const settlement = group.settlement as AcceptanceSettlement | RejectionSettlement
+      | { kind: "unsettled" };
     if (record === undefined || coverage?.length !== 1
       || record.journal_partition_id !== partitionId
-      || record.command_kind !== "acceptProposal"
+      || flight === undefined
       || group.journal_partition_id !== partitionId
-      || group.command_kind !== "acceptProposal"
+      || group.command_kind !== kind
       || JSON.stringify(record.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || JSON.stringify(group.project_scope) !== JSON.stringify(workspace.partition.project_scope)
       || record.editor_session_id !== workspace.partition.editor_session_id
@@ -118,9 +172,10 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       || group.writer_generation !== workspace.partition.writer_generation
       || group.action_class !== "explicit_editor_command"
       || group.batch_policy_revision !== "storyos.explicit-command-batch.release-1.v1"
-      || group.command_schema !== "storyos.command.accept-proposal.request.v1"
+      || group.command_schema !== decisionSchema(flight.command_kind)
       || group.method !== "POST"
-      || group.route_template !== "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances"
+      || group.route_template !== decisionRoute(flight.command_kind)
+      || group.digest_profile !== decisionDigestProfile(flight.command_kind)
       || !Number.isSafeInteger(record.local_intent_sequence)
       || record.local_intent_sequence !== coverage[0]?.local_intent_sequence
       || record.editor_contract_revision !== "storyos.editor-contract.release-1.v2"
@@ -133,11 +188,15 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       })
       || input?.selected_operation_ids?.length !== 1
       || record.proposal_id !== group.proposal_id
-      || JSON.stringify(record.exact_target_head_anchor_bindings) !== JSON.stringify({
-        proposal_revision_id: input?.proposal_revision_id,
-        validation_receipt_id: input?.validation_receipt_id,
-        authoritative_revision_id: input?.expected_authoritative_revision_id,
-      })
+      || JSON.stringify(record.exact_target_head_anchor_bindings) !== JSON.stringify(
+        kind === "acceptProposal" ? {
+          proposal_revision_id: input?.proposal_revision_id,
+          validation_receipt_id: input?.validation_receipt_id,
+          authoritative_revision_id: input?.authoritative_revision_id,
+        } : {
+          proposal_revision_id: input?.proposal_revision_id,
+          target_revisions: input?.target_revisions,
+        })
       || JSON.stringify(group.covered_sequence_range) !== JSON.stringify({
         first: record.local_intent_sequence, last: record.local_intent_sequence,
       })
@@ -163,16 +222,24 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
           || JSON.stringify(settlement.response.receipt.project_scope)
             !== JSON.stringify(workspace.partition.project_scope)
           || settlement.response.receipt.proposal_revision_id !== input?.proposal_revision_id
-          || settlement.response.receipt.validation_receipt_id !== input?.validation_receipt_id
-          || JSON.stringify(settlement.response.receipt.selected_operation_ids)
+          || (kind === "acceptProposal" && (settlement.response as AcceptProposalResponse)
+            .receipt.validation_receipt_id !== input?.validation_receipt_id)
+          || JSON.stringify(kind === "acceptProposal"
+            ? (settlement.response as AcceptProposalResponse).receipt.selected_operation_ids
+            : (settlement.response as RejectProposalOperationsResponse).receipt
+              .selected_pending_operation_ids)
             !== JSON.stringify(input?.selected_operation_ids)
+          || (kind === "rejectProposalOperations" && JSON.stringify(
+            (settlement.response as RejectProposalOperationsResponse).receipt
+              .expected_target_revisions) !== JSON.stringify(input?.target_revisions))
           || settlement.response.receipt.result !== settlement.response.effect.kind
           || JSON.stringify(settlement.response.receipt.command_digest) !== JSON.stringify(digest)
-          || settlement.response.correlation_id
-            !== request?.accept_proposal_input.correlation_id))
+          || settlement.response.correlation_id !== input?.correlation_id))
+      || (settlement.kind === "refused"
+        && kind !== "acceptProposal")
       || (settlement.kind === "refused"
         && settlement.refusal.correlation_id
-          !== request?.accept_proposal_input.correlation_id)
+          !== input?.correlation_id)
       || (settlement.kind === "pre_admission_problem"
         && JSON.stringify(settlement.problem) !== JSON.stringify(
           parsePreAdmissionAcceptanceProblem(settlement.problem.status,
@@ -187,7 +254,8 @@ export async function settledDisplayedAcceptance(workspace: EditorWorkspace,
   proposalId: string): Promise<AcceptanceReceiptSettlement | undefined> {
   const journal = await readAcceptanceJournal(workspace);
   const records = journal.records.filter((record) =>
-    (record.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId);
+    record.command_kind === "acceptProposal"
+    && (record.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId);
   const latest = records.sort((left, right) =>
     (right.local_intent_sequence as number) - (left.local_intent_sequence as number))[0];
   const group = journal.groups.find((item) =>
@@ -202,7 +270,8 @@ export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace
   proposalId: string): Promise<(AcceptancePreAdmissionProblem & { terminal: boolean }) | undefined> {
   const journal = await readAcceptanceJournal(workspace);
   const record = journal.records.filter((item) =>
-    (item.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
+    item.command_kind === "acceptProposal"
+    && (item.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
     .sort((left, right) =>
       (right.local_intent_sequence as number) - (left.local_intent_sequence as number))[0];
   const group = journal.groups.find((item) =>
@@ -232,6 +301,7 @@ export async function acceptanceJournalProposals(workspace: EditorWorkspace): Pr
   const proposalIds = new Set<string>();
   const unresolvedIds = new Set<string>();
   for (const record of journal.records) {
+    if (record.command_kind !== "acceptProposal") continue;
     const proposalId = (record.author_visible_decision_ref as { proposal_id: string }).proposal_id;
     const group = journal.groups.find((item) =>
       (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
@@ -244,10 +314,10 @@ export async function acceptanceJournalProposals(workspace: EditorWorkspace): Pr
   return { proposalIds: [...proposalIds].sort(), unresolvedIds: [...unresolvedIds].sort() };
 }
 
-export async function readFlight(database: IDBDatabase, key: string): Promise<AcceptanceFlight | undefined> {
+export async function readFlight(database: IDBDatabase, key: string): Promise<DecisionFlight | undefined> {
   const request = database.transaction("metadata", "readonly").objectStore("metadata").get(key);
   return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve((request.result as AcceptanceFlight | undefined));
+    request.onsuccess = () => resolve((request.result as DecisionFlight | undefined));
     request.onerror = () => reject(request.error ?? new Error("Acceptance record read failed"));
   });
 }
@@ -291,8 +361,8 @@ export async function reconcileDisplayedAcceptance(workspace: EditorReadyState,
   return "pending";
 }
 
-export async function writeFlight(database: IDBDatabase, flight: AcceptanceFlight,
-  settlement?: AcceptanceSettlement): Promise<void> {
+export async function writeFlight(database: IDBDatabase, flight: DecisionFlight,
+  settlement?: AcceptanceSettlement | RejectionSettlement): Promise<void> {
   const transaction = database.transaction(["metadata", "submission_groups"], "readwrite",
     { durability: "strict" });
   const metadata = transaction.objectStore("metadata");
@@ -318,18 +388,23 @@ export async function writeFlight(database: IDBDatabase, flight: AcceptanceFligh
 }
 
 export async function createFlight(workspace: EditorReadyState,
-  flight: Omit<AcceptanceFlight, "local_intent_sequence">): Promise<AcceptanceFlight> {
+  flight: Omit<AcceptanceFlight, "local_intent_sequence">): Promise<AcceptanceFlight>;
+export async function createFlight(workspace: EditorReadyState,
+  flight: Omit<RejectionFlight, "local_intent_sequence">): Promise<RejectionFlight>;
+export async function createFlight(workspace: EditorReadyState,
+  flight: Omit<DecisionFlight, "local_intent_sequence">): Promise<DecisionFlight> {
   const database = workspace.database;
-  const requestDigest = await digestAcceptProposal(flight.request, workspace.cryptoImpl);
+  const requestDigest = await digestDecision(flight as DecisionFlight, workspace.cryptoImpl);
+  const input = decisionInput(flight as DecisionFlight);
   if (JSON.stringify(requestDigest) !== JSON.stringify(flight.frozen_request_digest)
-    || flight.key !== `acceptance:${flight.journal_partition_id}:${flight.proposalId}:${flight.author_visible_decision_ref.revision_id}:${flight.author_visible_decision_ref.operation_id}`
-    || flight.request.command_schema !== "storyos.command.accept-proposal.request.v1"
-    || flight.request.accept_proposal_input.selected_operation_ids.length !== 1
+    || flight.key !== `${decisionPrefix(flight as DecisionFlight)}:${flight.journal_partition_id}:${flight.proposalId}:${flight.author_visible_decision_ref.revision_id}:${flight.author_visible_decision_ref.operation_id}`
+    || flight.request.command_schema !== decisionSchema(flight.command_kind)
+    || input.selected_operation_ids.length !== 1
     || flight.author_visible_decision_ref.proposal_id !== flight.proposalId
     || flight.author_visible_decision_ref.operation_id
-      !== flight.request.accept_proposal_input.selected_operation_ids[0]
+      !== input.selected_operation_ids[0]
     || flight.author_visible_decision_ref.revision_id
-      !== flight.request.accept_proposal_input.proposal_revision_id) {
+      !== input.proposal_revision_id) {
     throw new Error("Acceptance decision does not match the frozen command");
   }
   for (let retry = 0; retry < 3; retry += 1) {
@@ -360,23 +435,26 @@ export async function createFlight(workspace: EditorReadyState,
 }
 
 async function commitFlight(workspace: EditorReadyState,
-  flight: Omit<AcceptanceFlight, "local_intent_sequence">,
-  sequence: number, priorSequence: number, coverageDigest: DigestValue): Promise<AcceptanceFlight> {
+  flight: Omit<DecisionFlight, "local_intent_sequence">,
+  sequence: number, priorSequence: number, coverageDigest: DigestValue): Promise<DecisionFlight> {
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "intents", "submission_groups"],
     "readwrite", { durability: "strict" });
   const metadata = transaction.objectStore("metadata");
   const sequenceRequest = metadata.get("local_intent_sequence");
   const schemaRequest = metadata.get("schema");
-  const prefix = `acceptance:${flight.journal_partition_id}:${flight.proposalId}:`;
+  const prefix = `${decisionPrefix(flight as DecisionFlight)}:${flight.journal_partition_id}:${flight.proposalId}:`;
   const pendingRequest = metadata.getAllKeys(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
+  const otherPrefix = `${flight.command_kind === "acceptProposal" ? "rejection" : "acceptance"}:${flight.journal_partition_id}:${flight.proposalId}:`;
+  const otherPendingRequest = metadata.getAllKeys(IDBKeyRange.bound(otherPrefix,
+    `${otherPrefix}\uffff`));
   const partitionRequest = transaction.objectStore("partitions")
     .get(workspace.partition.journal_partition_id);
   const previous = await new Promise<{ value?: number } | undefined>((resolve, reject) => {
     sequenceRequest.onsuccess = () => resolve(sequenceRequest.result as { value?: number } | undefined);
     sequenceRequest.onerror = () => reject(sequenceRequest.error ?? new Error("Journal sequence read failed"));
   });
-  const [schema, partition, pendingKeys] = await Promise.all([
+  const [schema, partition, pendingKeys, otherPendingKeys] = await Promise.all([
     new Promise<{ version?: number } | undefined>((resolve, reject) => {
       schemaRequest.onsuccess = () => resolve(schemaRequest.result as { version?: number } | undefined);
       schemaRequest.onerror = () => reject(schemaRequest.error ?? new Error("Journal schema read failed"));
@@ -391,11 +469,17 @@ async function commitFlight(workspace: EditorReadyState,
       pendingRequest.onerror = () => reject(pendingRequest.error
         ?? new Error("Pending Acceptance read failed"));
     }),
+    new Promise<IDBValidKey[]>((resolve, reject) => {
+      otherPendingRequest.onsuccess = () => resolve(otherPendingRequest.result);
+      otherPendingRequest.onerror = () => reject(otherPendingRequest.error
+        ?? new Error("Pending decision read failed"));
+    }),
   ]);
   if ((previous?.value ?? 0) !== priorSequence) {
     transaction.abort();
     throw new Error("Journal sequence changed");
   }
+  const input = decisionInput(flight as DecisionFlight);
   if (schema?.version !== 4
     || JSON.stringify(partition) !== JSON.stringify(workspace.partition)
     || workspace.partition.disposition !== "current_writer_open"
@@ -403,16 +487,13 @@ async function commitFlight(workspace: EditorReadyState,
     || JSON.stringify(flight.project_scope) !== JSON.stringify(workspace.partition.project_scope)
     || flight.editor_session_id !== workspace.partition.editor_session_id
     || flight.writer_generation !== workspace.partition.writer_generation
-    || flight.request.accept_proposal_input.editor_session_id
-      !== workspace.partition.editor_session_id
-    || flight.request.accept_proposal_input.client_contract_revision
-      !== workspace.partition.client_contract_revision
-    || flight.request.accept_proposal_input.security_policy_revision
-      !== workspace.partition.security_policy_revision) {
+    || input.editor_session_id !== workspace.partition.editor_session_id
+    || input.client_contract_revision !== workspace.partition.client_contract_revision
+    || input.security_policy_revision !== workspace.partition.security_policy_revision) {
     transaction.abort();
     throw new Error("Acceptance Journal partition changed");
   }
-  if (pendingKeys.length > 0) {
+  if (pendingKeys.length > 0 || otherPendingKeys.length > 0) {
     transaction.abort();
     throw new Error("A prior Acceptance decision is unresolved");
   }
@@ -430,9 +511,11 @@ async function commitFlight(workspace: EditorReadyState,
     exact_semantic_payload_ref: flight.journal_submission_group_id,
     semantic_payload_digest: flight.frozen_request_digest,
     exact_target_head_anchor_bindings: {
-      proposal_revision_id: flight.request.accept_proposal_input.proposal_revision_id,
-      validation_receipt_id: flight.request.accept_proposal_input.validation_receipt_id,
-      authoritative_revision_id: flight.request.accept_proposal_input.expected_authoritative_revision_id,
+      proposal_revision_id: input.proposal_revision_id,
+      ...(flight.command_kind === "acceptProposal" ? {
+        validation_receipt_id: input.validation_receipt_id,
+        authoritative_revision_id: input.authoritative_revision_id,
+      } : { target_revisions: input.target_revisions }),
     },
     editor_contract_revision: "storyos.editor-contract.release-1.v2",
     author_visible_decision_ref: flight.author_visible_decision_ref,
@@ -453,10 +536,10 @@ async function commitFlight(workspace: EditorReadyState,
     batch_policy_revision: "storyos.explicit-command-batch.release-1.v1",
     api_major: 1,
     method: "POST",
-    route_template: "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
+    route_template: decisionRoute(flight.command_kind),
     command_schema: flight.request.command_schema,
     command_kind: flight.command_kind,
-    digest_profile: "storyos.command.acceptProposal.jcs.v1",
+    digest_profile: decisionDigestProfile(flight.command_kind),
     idempotency_key: flight.idempotencyKey,
     frozen_request_body_ref: flight.journal_submission_group_id,
     frozen_request_body: flight.request,
@@ -476,7 +559,7 @@ async function commitFlight(workspace: EditorReadyState,
     transaction.onabort = () => reject(transaction.error ?? new Error("Acceptance record write failed"));
     transaction.onerror = () => reject(transaction.error ?? new Error("Acceptance record write failed"));
   });
-  return created;
+  return created as DecisionFlight;
 }
 
 export function uuidV7(cryptoImpl: Crypto, now = Date.now()): string {
