@@ -72,6 +72,18 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     expect(sent[0]).toEqual(sent[1]);
     const pending = await readAcceptanceJournal(workspace);
     expect(pending.groups[0]?.settlement).toEqual({ kind: "unsettled" });
+    const crash = workspace.database.transaction("transport_attempts", "readwrite");
+    const attempts = crash.objectStore("transport_attempts");
+    const lastRequest = attempts.getAll();
+    lastRequest.onsuccess = () => {
+      const last = lastRequest.result.sort((left, right) =>
+        left.attempt_ordinal - right.attempt_ordinal).at(-1) as Record<string, unknown>;
+      attempts.put({ ...last, outcome: { kind: "in_flight" } });
+    };
+    await new Promise<void>((resolve, reject) => {
+      crash.oncomplete = () => resolve();
+      crash.onabort = () => reject(crash.error);
+    });
     await expect(acceptDisplayedBlockProposal({ ...options,
       operationId: "018f0000-0000-7001-8000-000000000109" }))
       .rejects.toThrow(/prior Acceptance decision is unresolved/);
@@ -87,6 +99,11 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     await expect(acceptDisplayedBlockProposal({ ...options,
       proposalId: "018f0000-0000-7001-8000-000000000110" }))
       .rejects.toThrow(/HTTP 403/);
+    expect((await readAcceptanceJournal(workspace)).groups[1]?.acceptance_delivery)
+      .toEqual({ kind: "known_problem", status: 403, code: "command_http_error" });
+    await expect(acceptDisplayedBlockProposal({ ...options,
+      proposalId: "018f0000-0000-7001-8000-000000000110" }))
+      .rejects.toThrow(/requires review/);
     expect(sent).toHaveLength(4);
   } finally {
     await test.close();

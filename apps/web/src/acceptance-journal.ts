@@ -15,7 +15,8 @@ export type AcceptanceFlight = {
   command_kind: "acceptProposal";
   author_visible_decision_ref: { proposal_id: string; operation_id: string; revision_id: string };
   frozen_request_digest: DigestValue;
-  settlement: "frozen" | "delivery_unknown";
+  settlement: "frozen" | "delivery_unknown" | "known_problem";
+  problem?: { status: number; code: string };
   proposalId: string;
   idempotencyKey: string;
   nonce?: string;
@@ -227,7 +228,8 @@ export async function writeFlight(database: IDBDatabase, flight: AcceptanceFligh
     if (group === undefined) { transaction.abort(); return; }
     if (settlement === undefined) {
       metadata.put(flight);
-      groups.put({ ...group, acceptance_delivery: flight.settlement });
+      groups.put({ ...group, acceptance_delivery: flight.problem === undefined
+        ? flight.settlement : { kind: "known_problem", ...flight.problem } });
     } else {
       metadata.delete(flight.key);
       groups.put({ ...group, settlement });

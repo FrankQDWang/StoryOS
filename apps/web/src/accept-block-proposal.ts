@@ -1,7 +1,6 @@
 import { acceptProposal, createProjectCommandChallenge, digestAcceptProposal, getProposal, StoryOSProtocolError } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { AcceptProposalRequest, AcceptProposalResponse } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 import type { EditorReadyState } from "./editor-types.ts";
 import { beginAcceptanceAttempt, finishAcceptanceAttempt } from "./acceptance-transport.ts";
 import { createFlight, readAcceptanceJournal, readFlight, uuidV7, writeFlight,
@@ -92,6 +91,9 @@ export async function acceptDisplayedBlockProposal(options: {
     });
   }
   const input = flight.request?.accept_proposal_input;
+  if (flight.problem !== undefined) {
+    throw new Error(`Acceptance response requires review (HTTP ${flight.problem.status})`);
+  }
   const journal = await readAcceptanceJournal(workspace);
   const group = journal.groups.find((item) => item.journal_submission_group_id
     === flight.journal_submission_group_id);
@@ -143,80 +145,82 @@ export async function acceptDisplayedBlockProposal(options: {
   }
   const frozen = flight;
   const submit = async () => {
-    const attemptId = await beginAcceptanceAttempt(workspace, frozen);
-    let accepted: AcceptProposalResponse;
-    try {
-      accepted = await acceptProposal({
-        baseUrl: options.baseUrl,
-        projectId,
-        proposalId: frozen.proposalId,
-        fetchImpl: options.fetchImpl,
-        idempotencyKey: frozen.idempotencyKey,
-        antiForgery: frozen.nonce ?? "",
-        request: frozen.request,
+    if (globalThis.navigator?.locks === undefined) {
+      throw new Error("Protected Acceptance transport lock is unavailable");
+    }
+    return navigator.locks.request(`storyos-acceptance:${flight.journal_submission_group_id}`,
+      async () => {
+        const attemptId = await beginAcceptanceAttempt(workspace, frozen);
+        let accepted: AcceptProposalResponse;
+        try {
+          accepted = await acceptProposal({
+            baseUrl: options.baseUrl,
+            projectId,
+            proposalId: frozen.proposalId,
+            fetchImpl: options.fetchImpl,
+            idempotencyKey: frozen.idempotencyKey,
+            antiForgery: frozen.nonce ?? "",
+            request: frozen.request,
+          });
+        } catch (error) {
+          if (error instanceof StoryOSProtocolError) {
+            const refusal = await recordedRefusal(options, frozen, error);
+            if (refusal !== undefined) {
+              await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
+            } else {
+              await writeFlight(workspace.database, { ...frozen, settlement: "known_problem",
+                problem: { status: error.status ?? 0, code: error.code } });
+            }
+            await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
+            throw error;
+          }
+          await finishAcceptanceAttempt(workspace.database, attemptId, "delivery_unknown");
+          throw new AcceptanceDeliveryUnknown(error);
+        }
+        if (accepted.schema_id !== "storyos.command.accept-proposal.response.v1"
+          || typeof accepted.command_id !== "string" || accepted.command_id.length === 0
+          || typeof accepted.author_command_admission_id !== "string"
+          || accepted.author_command_admission_id.length === 0
+          || typeof accepted.receipt.receipt_id !== "string"
+          || accepted.receipt.receipt_id.length === 0
+          || accepted.correlation_id !== frozen.request.accept_proposal_input.correlation_id
+          || accepted.project_scope.owner_user_id !== frozen.project_scope.owner_user_id
+          || accepted.project_scope.project_id !== frozen.project_scope.project_id
+          || accepted.receipt.project_scope.owner_user_id !== frozen.project_scope.owner_user_id
+          || accepted.receipt.project_scope.project_id !== frozen.project_scope.project_id
+          || accepted.author_command_admission_id
+            !== accepted.receipt.author_command_admission_id
+          || accepted.receipt.result !== accepted.effect.kind
+          || accepted.receipt.proposal_id !== frozen.proposalId
+          || accepted.receipt.proposal_revision_id
+            !== frozen.request.accept_proposal_input.proposal_revision_id
+          || accepted.receipt.validation_receipt_id
+            !== frozen.request.accept_proposal_input.validation_receipt_id
+          || JSON.stringify(accepted.receipt.selected_operation_ids)
+            !== JSON.stringify(frozen.request.accept_proposal_input.selected_operation_ids)
+          || accepted.receipt.idempotency_key !== frozen.idempotencyKey
+          || JSON.stringify(accepted.receipt.command_digest)
+            !== JSON.stringify(frozen.frozen_request_digest)) {
+          await finishAcceptanceAttempt(workspace.database, attemptId, "delivery_unknown");
+          throw new Error("Acceptance acknowledgement does not match the frozen command");
+        }
+        await writeFlight(workspace.database, frozen, { kind: "settled", response: accepted });
+        await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
+        return accepted;
       });
-    } catch (error) {
-      const observed = error instanceof StoryOSProtocolError;
-      await finishAcceptanceAttempt(workspace.database, attemptId,
-        observed ? "response_observed" : "delivery_unknown");
-      throw observed ? error : new AcceptanceDeliveryUnknown(error);
-    }
-    await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
-    return accepted;
   };
-  let response: AcceptProposalResponse;
-  try {
-    response = await submit();
-  } catch (error) {
-    if (historicalAcknowledgementUnavailable(error)) throw error;
-    const refusal = await recordedRefusal(options, frozen, error);
-    if (refusal !== undefined) {
-      await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
-      throw error;
-    }
+  try { return await submit(); }
+  catch (error) {
     if (!(error instanceof AcceptanceDeliveryUnknown)) throw error;
-    try {
-      response = await submit();
-    } catch (retryError) {
-      const retryRefusal = await recordedRefusal(options, frozen, retryError);
-      if (retryRefusal !== undefined) {
-        await writeFlight(workspace.database, frozen, { kind: "refused", refusal: retryRefusal });
-      } else if (retryError instanceof AcceptanceDeliveryUnknown) {
+    try { return await submit(); }
+    catch (retryError) {
+      if (retryError instanceof AcceptanceDeliveryUnknown) {
         try { await writeFlight(workspace.database, { ...frozen, settlement: "delivery_unknown" }); }
         catch { /* The frozen record remains available. */ }
       }
       throw retryError;
     }
   }
-  if (response.schema_id !== "storyos.command.accept-proposal.response.v1"
-    || typeof response.command_id !== "string" || response.command_id.length === 0
-    || typeof response.author_command_admission_id !== "string"
-    || response.author_command_admission_id.length === 0
-    || typeof response.receipt.receipt_id !== "string"
-    || response.receipt.receipt_id.length === 0
-    || response.correlation_id !== frozen.request.accept_proposal_input.correlation_id
-    || response.project_scope.owner_user_id !== frozen.project_scope.owner_user_id
-    || response.project_scope.project_id !== frozen.project_scope.project_id
-    || response.receipt.project_scope.owner_user_id !== frozen.project_scope.owner_user_id
-    || response.receipt.project_scope.project_id !== frozen.project_scope.project_id
-    || response.author_command_admission_id
-      !== response.receipt.author_command_admission_id
-    || response.receipt.result !== response.effect.kind
-    || response.receipt.proposal_id !== frozen.proposalId
-    || response.receipt.proposal_revision_id
-      !== frozen.request.accept_proposal_input.proposal_revision_id
-    || response.receipt.validation_receipt_id
-      !== frozen.request.accept_proposal_input.validation_receipt_id
-    || JSON.stringify(response.receipt.selected_operation_ids)
-      !== JSON.stringify(frozen.request.accept_proposal_input.selected_operation_ids)
-    || response.receipt.idempotency_key !== frozen.idempotencyKey
-    || JSON.stringify(response.receipt.command_digest)
-      !== JSON.stringify(frozen.frozen_request_digest)) {
-    throw new Error("Acceptance acknowledgement does not match the frozen command");
-  }
-  try { await writeFlight(workspace.database, frozen, { kind: "settled", response }); }
-  catch { /* Exact replay remains safe. */ }
-  return response;
 }
 
 async function recordedRefusal(

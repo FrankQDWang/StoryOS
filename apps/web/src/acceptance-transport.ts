@@ -39,7 +39,8 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
     || attempts.some((attempt, index) => attempt.attempt_ordinal !== index + 1
       || attempt.exact_transport_retry_capsule_id
         !== capsule?.exact_transport_retry_capsule_id
-      || attempt.outcome?.kind !== "delivery_unknown")
+      || (attempt.outcome?.kind !== "delivery_unknown"
+        && (index !== attempts.length - 1 || attempt.outcome?.kind !== "in_flight")))
     || (capsule !== undefined
       && (capsule.disposition.kind !== "available"
         || JSON.stringify(capsule.project_scope) !== JSON.stringify(flight.project_scope)
@@ -91,6 +92,12 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
     transaction.objectStore("transport_capsules").add(capsule);
   }
   const attemptId = uuidV7(workspace.cryptoImpl);
+  const abandoned = attempts.at(-1);
+  if (abandoned?.outcome.kind === "in_flight") {
+    transaction.objectStore("transport_attempts").put({ ...abandoned,
+      outcome: { kind: "delivery_unknown", observed_at: new Date().toISOString(),
+        evidence: "response_unreadable" } });
+  }
   transaction.objectStore("transport_attempts").add({
     transport_attempt_id: attemptId,
     journal_submission_group_id: flight.journal_submission_group_id,
