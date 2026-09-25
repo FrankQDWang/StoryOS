@@ -249,13 +249,13 @@ input:focus-visible,
   white-space: pre-wrap;
 }
 
-.manuscript-editor .block-proposal [role="textbox"] {
+.manuscript-editor .block-proposal-text {
   min-height: 1.6em;
   outline: none;
   cursor: text;
 }
 
-.manuscript-editor .block-proposal [role="textbox"]:focus-visible {
+.manuscript-editor .block-proposal:focus-within .block-proposal-text {
   box-shadow: 0 2px #746b60;
 }
 

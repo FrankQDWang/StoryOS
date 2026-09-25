@@ -156,6 +156,14 @@ export function ManuscriptEditor({
       if (candidate !== undefined) {
         const { proposal, priorText, from, to, text, resultingBody } = candidate;
         const origin = originFromTransaction(transaction, { from, to, text });
+        const workspace = persistWorkspaceRef.current;
+        if (workspace !== undefined && workspace.pending.save_state !== "needs_attention") {
+          onProjectionRef.current({
+            ...workspace.pending,
+            save_state: "saving",
+            unsettled_intent_count: workspace.pending.unsettled_intent_count + 1,
+          }, "local");
+        }
         void idleRef.current?.persist({
           kind: "candidate_selection",
           target: {

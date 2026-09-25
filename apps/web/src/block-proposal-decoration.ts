@@ -29,10 +29,25 @@ function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
   return nodes;
 }
 
+function candidateAnchorsValid(doc: ProseMirrorNode): boolean {
+  let blockId = "";
+  let valid = true;
+  doc.forEach((node) => {
+    if (node.type.name === "paragraph" || node.type.name === "heading") {
+      blockId = node.attrs.id as string;
+    } else if (node.type.name === "blockProposal"
+      && (blockId === "" || node.attrs.blockId !== blockId)) {
+      valid = false;
+    }
+  });
+  return valid;
+}
+
 export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirrorNode) {
   const before = candidateNodes(previous);
   const after = candidateNodes(next);
-  if (before.length !== after.length) return { valid: false as const };
+  if (before.length !== after.length || !candidateAnchorsValid(previous)
+    || !candidateAnchorsValid(next)) return { valid: false as const };
   const currentById = new Map(after.map((node) => [node.attrs.proposalId as string, node]));
   if (currentById.size !== after.length) return { valid: false as const };
   let changed: { proposal: BlockProposalProjection; priorText: string;

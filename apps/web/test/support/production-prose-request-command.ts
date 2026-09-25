@@ -271,7 +271,14 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     const revisedText = `${firstProposal.candidate_text} Keep this line.`;
     const candidateText = page.locator(`[data-proposal-id="${firstProposalId}"] .block-proposal-text`);
     await candidateText.click();
-    await candidateText.press("End");
+    await candidateText.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      range.collapse(false);
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    });
     await page.keyboard.insertText(" Keep this line.");
     await page.locator('[data-save-state="saving"]').waitFor();
     await page.reload();
