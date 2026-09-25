@@ -578,7 +578,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     restored.candidate_text, { polling: 100 });
     assert.equal(await page.locator(".tiptap > p").first().textContent(), restored.candidate_text);
     assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
-      .operation_resolution, "pending");
+      .operation_resolution, "rejected");
     await page.reload();
     await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
     await page.locator(`[data-proposal-decision="${firstProposalId}"]`)

@@ -116,8 +116,9 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
         project_count: 1,
         receipts: { createProject: 1, createVolume: 1, createChapter: 1,
           applyAuthorEdit: 4, undoLatestAuthorAction: 1,
-          updateProjectAssistance: 1, createAgentRun: 2, acceptProposal: 1 },
-        author_action_count: 8,
+          updateProjectAssistance: 1, createAgentRun: 2, acceptProposal: 1,
+          rejectProposalOperations: 1 },
+        author_action_count: 9,
       },
       production_host: {
         project_count: 1,
