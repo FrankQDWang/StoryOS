@@ -188,6 +188,26 @@ export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace
     ? { status: delivery.status, responseBody: delivery.responseBody } : undefined;
 }
 
+export async function acceptanceJournalProposals(workspace: EditorWorkspace): Promise<{
+  proposalIds: string[];
+  unresolvedIds: string[];
+}> {
+  const journal = await readAcceptanceJournal(workspace);
+  const proposalIds = new Set<string>();
+  const unresolvedIds = new Set<string>();
+  for (const record of journal.records) {
+    const proposalId = (record.author_visible_decision_ref as { proposal_id: string }).proposal_id;
+    const group = journal.groups.find((item) =>
+      (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
+        === record.explicit_command_record_id);
+    proposalIds.add(proposalId);
+    if ((group?.settlement as { kind?: string } | undefined)?.kind === "unsettled") {
+      unresolvedIds.add(proposalId);
+    }
+  }
+  return { proposalIds: [...proposalIds].sort(), unresolvedIds: [...unresolvedIds].sort() };
+}
+
 export async function readFlight(database: IDBDatabase, key: string): Promise<AcceptanceFlight | undefined> {
   const request = database.transaction("metadata", "readonly").objectStore("metadata").get(key);
   return new Promise((resolve, reject) => {

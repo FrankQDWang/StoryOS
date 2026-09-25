@@ -448,12 +448,20 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
       .getByText("重试接受").waitFor();
     assert.equal(await page.locator(".tiptap").getAttribute("contenteditable"), "false");
+    await page.route((url) => url.pathname.endsWith(`/proposals/${firstProposalId}`),
+      async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        body.proposal.base_authoritative_revision_id = uuidV7();
+        await route.fulfill({ response, body: JSON.stringify(body) });
+      });
+    await page.evaluate(() => sessionStorage.clear());
     await page.reload();
     await page.locator('[data-unsettled-intent-count="1"]').waitFor();
-    const retry = page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`);
+    const retry = page.locator(`[data-proposal-unavailable="${firstProposalId}"]`);
     await retry.waitFor();
     assert.equal(await page.locator(".tiptap").getAttribute("contenteditable"), "false");
-    await retry.locator("button[data-proposal-accept]").click();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"] button`).click();
     await page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByText(
       "正文已变化；此次接受结果尚未确认。请重试同一操作。",
     ).waitFor();
