@@ -132,34 +132,59 @@ async function prepare(
 }
 
 test("project assistance prepares the host fake binding without a run", async () => {
-  const started = await startRealServer();
+  let started = await startRealServer();
   try {
     const first = await createEmpty(started.baseUrl, "session-a", "018f0000-0000-7001-8000-000000000a21", "Assistance Novel");
+    const responses: Buffer[] = [];
+    const captureFetch: typeof fetch = async (input, init) => {
+      const response = await first.fetchImpl(input, init);
+      if (init?.method === "PUT") responses.push(Buffer.from(await response.clone().arrayBuffer()));
+      return response;
+    };
     await assert.rejects(
       () => getProjectAssistance({ baseUrl: started.baseUrl, projectId: first.projectId, fetchImpl: first.fetchImpl }),
       (error) => requireStoryOSProtocolError(error).status === 404,
     );
+    const absentRequest = assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f");
+    const absentKey = "018f0000-0000-7001-8000-000000000a20";
+    const absentDigest = await digestUpdateProjectAssistance(absentRequest);
+    const absentChallenge = await withChallengeRetry(() => createProjectCommandChallenge({
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      fetchImpl: captureFetch,
+      request: {
+        method: "PUT",
+        route_template: "/api/v1/projects/{project_id}/assistance",
+        command_schema: absentRequest.command_schema,
+        canonical_command_digest: absentDigest,
+        idempotency_key: absentKey,
+      },
+    }));
+    const retryAbsent = () => updateProjectAssistance({
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      fetchImpl: captureFetch,
+      idempotencyKey: absentKey,
+      antiForgery: absentChallenge.nonce,
+      request: absentRequest,
+    });
     await assert.rejects(
-      () => prepare(
-        started.baseUrl,
-        first.fetchImpl,
-        first.projectId,
-        "018f0000-0000-7001-8000-000000000a20",
-        assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a2f"),
-      ),
+      retryAbsent,
       (error) => {
         const protocol = requireStoryOSProtocolError(error);
         return protocol.status === 409 && problemCode(error) === "stale_assistance_revision";
       },
     );
+    const absentBytes = responses.at(-1);
 
     const initialized = await prepare(
       started.baseUrl,
-      first.fetchImpl,
+      captureFetch,
       first.projectId,
       "018f0000-0000-7001-8000-000000000a22",
       assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23"),
     );
+    const initializedBytes = responses.at(-1);
     assert.equal(initialized.updated.effect.kind, "initialized");
     if (initialized.updated.effect.kind !== "initialized") throw new Error("expected initialized");
     assert.equal(initialized.updated.effect.availability, "available");
@@ -188,27 +213,29 @@ test("project assistance prepares the host fake binding without a run", async ()
 
     const unchanged = await prepare(
       started.baseUrl,
-      first.fetchImpl,
+      captureFetch,
       first.projectId,
       "018f0000-0000-7001-8000-000000000a24",
       assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a25"),
     );
+    const unchangedBytes = responses.at(-1);
     assert.equal(unchanged.updated.effect.kind, "no_effect");
     assert.deepEqual(unchanged.updated.assistance, firstBinding);
 
     const stale = await prepare(
       started.baseUrl,
-      first.fetchImpl,
+      captureFetch,
       first.projectId,
       "018f0000-0000-7001-8000-000000000a26",
       assistanceRequest("unavailable", "0", "018f0000-0000-7001-8000-000000000a27"),
     );
+    const staleBytes = responses.at(-1);
     assert.equal(stale.updated.effect.kind, "conflicted");
     assert.deepEqual(stale.updated.assistance, firstBinding);
 
     const toggled = await prepare(
       started.baseUrl,
-      first.fetchImpl,
+      captureFetch,
       first.projectId,
       "018f0000-0000-7001-8000-000000000a28",
       assistanceRequest("unavailable", "1", "018f0000-0000-7001-8000-000000000a29"),
@@ -229,10 +256,64 @@ test("project assistance prepares the host fake binding without a run", async ()
     assert.equal(afterToggle.assistance.availability, "unavailable");
     assert.deepEqual(afterToggle.assistance, toggled.updated.assistance);
 
+    await assert.rejects(retryAbsent, (error) => problemCode(error) === "stale_assistance_revision");
+    assert.deepEqual(responses.at(-1), absentBytes);
+
+    const counts = () => queryPostgres(`
+      SELECT json_build_object(
+        'commands', (SELECT count(*) FROM storyos.command_idempotency WHERE project_id = '${first.projectId}'::uuid),
+        'receipts', (SELECT count(*) FROM storyos.domain_receipts WHERE project_id = '${first.projectId}'::uuid),
+        'activities', (SELECT count(*) FROM storyos.project_activity_events WHERE project_id = '${first.projectId}'::uuid),
+        'policies', (SELECT count(*) FROM storyos.project_policy_revisions WHERE project_id = '${first.projectId}'::uuid)
+      )::text;
+    `);
+    const beforeRetries = await counts();
+    for (const [original, originalBytes, challenge, key, request] of [
+      [initialized.updated, initializedBytes, initialized.challenge, "018f0000-0000-7001-8000-000000000a22", assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23")],
+      [unchanged.updated, unchangedBytes, unchanged.challenge, "018f0000-0000-7001-8000-000000000a24", assistanceRequest("available", "1", "018f0000-0000-7001-8000-000000000a25")],
+      [stale.updated, staleBytes, stale.challenge, "018f0000-0000-7001-8000-000000000a26", assistanceRequest("unavailable", "0", "018f0000-0000-7001-8000-000000000a27")],
+    ] as const) {
+      const replay = await updateProjectAssistance({
+        baseUrl: started.baseUrl,
+        projectId: first.projectId,
+        fetchImpl: captureFetch,
+        idempotencyKey: key,
+        antiForgery: challenge.nonce,
+        request,
+      });
+      assert.deepEqual(replay, original);
+      assert.deepEqual(responses.at(-1), originalBytes);
+    }
+    assert.equal(await counts(), beforeRetries);
+
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const restartedFetch = browserFetch(started.baseUrl, "session-a");
+    const restartedResponse = await updateProjectAssistance({
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      fetchImpl: async (input, init) => {
+        const response = await restartedFetch(input, init);
+        if (init?.method === "PUT") responses.push(Buffer.from(await response.clone().arrayBuffer()));
+        return response;
+      },
+      idempotencyKey: "018f0000-0000-7001-8000-000000000a22",
+      antiForgery: initialized.challenge.nonce,
+      request: assistanceRequest("available", "0", "018f0000-0000-7001-8000-000000000a23"),
+    });
+    assert.deepEqual(restartedResponse, initialized.updated);
+    assert.deepEqual(responses.at(-1), initializedBytes);
+    assert.equal(await counts(), beforeRetries);
+    assert.deepEqual((await getProjectAssistance({
+      baseUrl: started.baseUrl,
+      projectId: first.projectId,
+      fetchImpl: restartedFetch,
+    })).assistance, toggled.updated.assistance);
+
     const stillOpen = await getProject({
       baseUrl: started.baseUrl,
       projectId: first.projectId,
-      fetchImpl: first.fetchImpl,
+      fetchImpl: restartedFetch,
     });
     assert.equal(stillOpen.project.title, "Assistance Novel");
 

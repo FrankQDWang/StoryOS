@@ -720,6 +720,20 @@ Project to complete its acknowledgement. Independent Project queries keep
 current-state meaning. A known pre-capture settled row returns HTTP 409
 `historical_acknowledgement_unavailable`. Damaged new-format evidence follows
 the storage-error path.
+
+`updateProjectAssistance` also captures the complete non-secret Assistance
+record, including an explicit absent value, in `response_assistance` beside
+`response_project` in the same settlement transaction. Its
+`command_response_project_assistance.v1` marker requires both captures. First
+delivery and exact retry use that record. Independent GET and new Run admission
+read current policy. Earlier `command_response_project.v1` Assistance rows do
+not prove every original Assistance field, especially for NoEffect and
+Conflicted results. Their exact retries use the historical-unavailable result
+under ADR 0032. A missing or invalid Assistance capture under the new marker
+is damaged evidence, not a historical exception. The added column remains in
+the existing scoped idempotency table and its backup, export, and restore
+family. The public response schema and generated client do not change.
+
 It validates Scope, command digest, Admission, `ReceiptSettled`, and idempotency
 linkage. It also validates the Admission target and expected Head, and proves
 that every Receipt Head belongs to that target. It then branches on the Receipt
