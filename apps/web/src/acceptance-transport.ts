@@ -1,8 +1,9 @@
 import type { EditorReadyState, TransportCapsule } from "./editor-types.ts";
-import { uuidV7, type AcceptanceFlight } from "./acceptance-journal.ts";
+import { decisionDigestProfile, decisionRoute, uuidV7,
+  type DecisionFlight } from "./acceptance-journal.ts";
 
 export async function beginAcceptanceAttempt(workspace: EditorReadyState,
-  flight: AcceptanceFlight): Promise<{ id: string; ordinal: number }> {
+  flight: DecisionFlight): Promise<{ id: string; ordinal: number }> {
   const transaction = workspace.database.transaction(
     ["metadata", "partitions", "submission_groups", "transport_capsules", "transport_attempts"],
     "readwrite", { durability: "strict" });
@@ -51,12 +52,11 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
         || capsule.journal_submission_group_id !== flight.journal_submission_group_id
         || capsule.request_identity.api_major !== 1
         || capsule.request_identity.method !== "POST"
-        || capsule.request_identity.route_template
-          !== "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances"
+        || capsule.request_identity.route_template !== decisionRoute(flight.command_kind)
         || capsule.request_identity.command_schema !== flight.request.command_schema
-        || capsule.request_identity.command_kind !== "acceptProposal"
+        || capsule.request_identity.command_kind !== flight.command_kind
         || capsule.exact_request_body_ref !== flight.journal_submission_group_id
-        || capsule.digest_profile !== "storyos.command.acceptProposal.jcs.v1"
+        || capsule.digest_profile !== decisionDigestProfile(flight.command_kind)
         || capsule.exact_client_controlled_headers["Idempotency-Key"]
           !== flight.idempotencyKey
         || capsule.exact_client_controlled_headers["X-StoryOS-Anti-Forgery"]
@@ -78,11 +78,11 @@ export async function beginAcceptanceAttempt(workspace: EditorReadyState,
       client_session_binding_ref: workspace.partition.client_session_binding_ref,
       client_session_generation: workspace.partition.client_session_generation,
       request_identity: { api_major: 1, method: "POST",
-        route_template: "/api/v1/projects/{project_id}/proposals/{proposal_id}/acceptances",
-        command_schema: flight.request.command_schema, command_kind: "acceptProposal" },
+        route_template: decisionRoute(flight.command_kind),
+        command_schema: flight.request.command_schema, command_kind: flight.command_kind },
       exact_request_body_ref: flight.journal_submission_group_id,
       canonical_command_digest: flight.frozen_request_digest,
-      digest_profile: "storyos.command.acceptProposal.jcs.v1",
+      digest_profile: decisionDigestProfile(flight.command_kind),
       exact_client_controlled_headers: { "Idempotency-Key": flight.idempotencyKey,
         "X-StoryOS-Anti-Forgery": flight.nonce, "Content-Type": "application/json" },
       challenge_expires_at: flight.challengeExpiresAt,

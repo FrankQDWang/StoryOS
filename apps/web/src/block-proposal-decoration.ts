@@ -13,6 +13,8 @@ export type BlockProposalProjection = {
   text: string;
   eligible: boolean;
   retryPending?: boolean;
+  rejectEligible?: boolean;
+  retryRejection?: boolean;
   expectedHeads: string[];
   localPending?: boolean;
 };
@@ -20,6 +22,7 @@ export type BlockProposalProjection = {
 const ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
+  "rejectEligible", "retryRejection",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -74,6 +77,8 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
         text: current.textContent,
         eligible: node.attrs.eligible as boolean,
         retryPending: node.attrs.retryPending as boolean,
+        rejectEligible: node.attrs.rejectEligible as boolean,
+        retryRejection: node.attrs.retryRejection as boolean,
         expectedHeads: node.attrs.expectedHeads as string[],
       },
       priorText: node.textContent,
@@ -113,6 +118,8 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         sourceDecisionId: proposal.sourceDecisionId,
         eligible: proposal.eligible,
         retryPending: proposal.retryPending ?? false,
+        rejectEligible: proposal.rejectEligible ?? false,
+        retryRejection: proposal.retryRejection ?? false,
         expectedHeads: proposal.expectedHeads,
       }, text.length ? schema.text(text) : undefined));
     }
@@ -141,6 +148,8 @@ export const blockProposalDecoration = TiptapNode.create({
   renderHTML({ node }) {
     const eligible = node.attrs.eligible === true;
     const retryPending = node.attrs.retryPending === true;
+    const rejectEligible = node.attrs.rejectEligible === true;
+    const retryRejection = node.attrs.retryRejection === true;
     return ["div", {
       class: "block-proposal",
       "data-proposal-id": node.attrs.proposalId,
@@ -151,16 +160,21 @@ export const blockProposalDecoration = TiptapNode.create({
       "data-proposal-target-id": node.attrs.blockId,
       "data-proposal-eligibility": eligible ? "eligible" : "ineligible",
       role: "group",
-      "aria-label": eligible ? "候选文字，尚未成为正文" : "候选文字，暂不可接受",
+      "aria-label": eligible || rejectEligible ? "候选文字，尚未成为正文"
+        : "候选文字，暂不可操作",
       ...(eligible ? {} : { contenteditable: "false" }),
     }, ["span", { class: "block-proposal-label", contenteditable: "false" },
-      eligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可接受"],
+      eligible || rejectEligible ? "候选文字 · 尚未成为正文" : "候选文字 · 暂不可操作"],
     ["p", { class: "block-proposal-text" }, 0],
     ...(eligible || retryPending ? [["button", {
       type: "button",
       class: "block-proposal-accept",
       "data-proposal-accept": node.attrs.proposalId,
       contenteditable: "false",
-    }, retryPending ? "重试接受" : "接受"]] : [])];
+    }, retryPending ? "重试接受" : "接受"]] : []),
+    ...(rejectEligible || retryRejection ? [["button", {
+      type: "button", class: "block-proposal-reject",
+      "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
+    }, retryRejection ? "重试拒绝" : "拒绝"]] : [])];
   },
 });

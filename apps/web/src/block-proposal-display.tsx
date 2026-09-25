@@ -8,6 +8,8 @@ import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-edito
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
+import { rejectDisplayedBlockProposal, rejectionJournalState,
+  retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
 import { acceptanceJournalProposals, hasPendingDisplayedAcceptance,
   knownProblemDisplayedAcceptance, reconcileDisplayedAcceptance,
   settledDisplayedAcceptance } from "./acceptance-journal.ts";
@@ -77,6 +79,9 @@ export function BlockProposalDisplay({
   const [acceptanceChecked, setAcceptanceChecked] = useState(false);
   const [recoveredProposalIds, setRecoveredProposalIds] = useState<string[]>([]);
   const [journalPendingIds, setJournalPendingIds] = useState<string[]>([]);
+  const [pendingRejections, setPendingRejections] = useState<string[]>([]);
+  const [settledRejections, setSettledRejections] = useState<Record<string,
+    "resolved" | "conflicted" | "refused">>({});
   const [recoveryUnavailable, setRecoveryUnavailable] = useState(false);
   const [recoveryChecked, setRecoveryChecked] = useState(false);
   const refreshedAcceptance = useRef(new Set<string>());
@@ -95,10 +100,15 @@ export function BlockProposalDisplay({
       return () => { active = false; };
     }
     setRecoveryChecked(false);
-    void acceptanceJournalProposals(workspace).then(({ proposalIds, unresolvedIds }) => {
+    void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace)])
+      .then(([acceptance, rejection]) => {
       if (!active) return;
-      setRecoveredProposalIds(proposalIds);
-      setJournalPendingIds(unresolvedIds);
+      setRecoveredProposalIds([...new Set([...acceptance.proposalIds,
+        ...rejection.proposalIds])]);
+      setJournalPendingIds([...new Set([...acceptance.unresolvedIds,
+        ...rejection.pendingIds])]);
+      setPendingRejections(rejection.pendingIds);
+      setSettledRejections(rejection.settledResults);
       setRecoveryUnavailable(false);
     }).catch(() => {
       if (active) setRecoveryUnavailable(true);
@@ -212,7 +222,8 @@ export function BlockProposalDisplay({
       }
       return result === "pending" || result === "applied" ? proposal.proposal_id : undefined;
     })).then((values) => {
-      if (active) setPendingAcceptances([...new Set([...journalPendingIds,
+      if (active) setPendingAcceptances([...new Set([...journalPendingIds.filter((id) =>
+        !pendingRejections.includes(id)),
         ...values.filter((value) => value !== undefined)])]);
     }).catch(() => {
       if (active) setPendingAcceptances(reads.map(({ locator }) => locator.proposalId));
@@ -220,7 +231,8 @@ export function BlockProposalDisplay({
       if (active) setAcceptanceChecked(true);
     });
     return () => { active = false; };
-  }, [reads, editorProps.persistWorkspace, recoveryChecked, journalPendingIds.join("|")]);
+  }, [reads, editorProps.persistWorkspace, recoveryChecked, journalPendingIds.join("|"),
+    pendingRejections.join("|")]);
 
   const blockCounts = new Map<string, number>();
   for (const block of editorProps.blocks) {
@@ -256,6 +268,11 @@ export function BlockProposalDisplay({
       && knownProblems[proposal.proposal_id] === undefined
       && candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`] === undefined
       && accepting !== proposal.proposal_id && !pendingAcceptance;
+    const rejectEligible = allHeadsKnown && acceptanceChecked && !recoveryUnavailable
+      && journalPendingIds.length === 0 && editorProps.editable
+      && proposal.closure === "open" && operation.resolution === "pending"
+      && candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`] === undefined
+      && accepting !== proposal.proposal_id;
     projections.push({
       proposalId: proposal.proposal_id,
       operationId: operation.operation_id,
@@ -267,6 +284,9 @@ export function BlockProposalDisplay({
         ?? proposal.candidate_text,
       eligible,
       retryPending: pendingAcceptance && knownProblems[proposal.proposal_id] === undefined
+        && accepting !== proposal.proposal_id,
+      rejectEligible,
+      retryRejection: pendingRejections.includes(proposal.proposal_id)
         && accepting !== proposal.proposal_id,
       expectedHeads,
       localPending: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
@@ -404,6 +424,120 @@ export function BlockProposalDisplay({
     })();
   };
 
+  const rejectDisplayed = (target: {
+    proposalId: string; operationId: string; revisionId: string; text: string;
+  }) => {
+    if (acceptingRef.current) return;
+    if (pendingRejections.includes(target.proposalId)) {
+      retryRejection(target.proposalId);
+      return;
+    }
+    const displayed = reads.find(({ proposal }) => proposal?.proposal_id === target.proposalId)?.proposal;
+    const projection = projections.find((item) => item.proposalId === target.proposalId);
+    const workspace = editorProps.persistWorkspace;
+    if (displayed === undefined || workspace === undefined
+      || projection?.rejectEligible !== true
+      || displayed.revision_id !== target.revisionId
+      || displayed.candidate_text !== target.text
+      || displayed.operations.find((item) => item.operation_id === target.operationId
+        && item.manuscript_block_id === projection.blockId) === undefined) {
+      setDecisionMessages((current) => ({ ...current,
+        [target.proposalId]: "候选文字已变化。请检查当前版本。" }));
+      setSettlementRefresh((value) => value + 1);
+      return;
+    }
+    acceptingRef.current = true;
+    setAccepting(target.proposalId);
+    void (async () => {
+      try {
+        if (editorProps.controllerRef.current?.hasIncompleteSemanticIntent()) {
+          throw new Error("请先完成当前输入。");
+        }
+        await editorProps.controllerRef.current?.flush();
+        if (workspace.partition.disposition !== "current_writer_open"
+          || workspace.pending.save_state !== "saved"
+          || workspace.pending.unsettled_intent_count !== 0) {
+          throw new Error("请先保存候选文字。");
+        }
+        const current = await getProposal({ baseUrl: editorProps.baseUrl,
+          fetchImpl: editorProps.fetchImpl, projectId: scope.project_id,
+          proposalId: target.proposalId });
+        if (current.project_scope.owner_user_id !== scope.owner_user_id
+          || current.project_scope.project_id !== scope.project_id
+          || current.proposal.revision_id !== target.revisionId
+          || current.proposal.source.run_id !== displayed.source.run_id
+          || current.proposal.source.decision_id !== displayed.source.decision_id
+          || current.proposal.operations.find((item) => item.operation_id === target.operationId
+            && item.resolution === "pending") === undefined) {
+          throw new Error("候选文字的身份已变化。");
+        }
+        const response = await rejectDisplayedBlockProposal({ baseUrl: editorProps.baseUrl,
+            fetchImpl: editorProps.fetchImpl, cryptoImpl: editorProps.cryptoImpl,
+            workspace, proposalId: target.proposalId, operationId: target.operationId,
+            proposalRevisionId: target.revisionId, targetRevisionId: authoritativeRevisionId });
+        if (response.project_scope.owner_user_id !== scope.owner_user_id
+          || response.project_scope.project_id !== scope.project_id
+          || response.receipt.proposal_id !== target.proposalId
+          || response.receipt.proposal_revision_id !== target.revisionId
+          || JSON.stringify(response.receipt.selected_pending_operation_ids)
+            !== JSON.stringify([target.operationId])) {
+          throw new Error("拒绝结果的身份不匹配。");
+        }
+        const message = { resolved: "已拒绝，正文保持不变。",
+          conflicted: "正文已变化，拒绝结果请检查。",
+          refused: "此次拒绝未生效，请检查当前候选文字。" }[response.effect.kind];
+        setDecisionMessages((current) => ({ ...current, [target.proposalId]: message }));
+        setSettlementRefresh((value) => value + 1);
+        await onAccepted();
+      } catch (error) {
+        setDecisionMessages((current) => ({ ...current,
+          [target.proposalId]: historicalAcknowledgementUnavailable(error)
+            ? HISTORICAL_ACKNOWLEDGEMENT_MESSAGE
+            : error instanceof Error && error.message.startsWith("请先")
+              ? error.message : "拒绝结果暂不可确认。请刷新检查，或重试同一操作。" }));
+        setSettlementRefresh((value) => value + 1);
+        try { await onAccepted(); } catch { /* The frozen command remains available. */ }
+      } finally {
+        acceptingRef.current = false;
+        setAccepting(undefined);
+      }
+    })();
+  };
+
+  const retryRejection = (proposalId: string) => {
+    const workspace = editorProps.persistWorkspace;
+    if (acceptingRef.current || workspace === undefined) return;
+    acceptingRef.current = true;
+    setAccepting(proposalId);
+    void (async () => {
+      try {
+        const response = await retryPendingDisplayedRejection({
+          baseUrl: editorProps.baseUrl, fetchImpl: editorProps.fetchImpl,
+          cryptoImpl: editorProps.cryptoImpl, workspace, proposalId,
+        });
+        if (response.project_scope.owner_user_id !== scope.owner_user_id
+          || response.project_scope.project_id !== scope.project_id
+          || response.receipt.proposal_id !== proposalId) {
+          throw new Error("Rejection result identity changed");
+        }
+        setDecisionMessages((current) => ({ ...current, [proposalId]: {
+          resolved: "已拒绝，正文保持不变。",
+          conflicted: "正文已变化，拒绝结果请检查。",
+          refused: "此次拒绝未生效，请检查当前候选文字。",
+        }[response.effect.kind] }));
+        setSettlementRefresh((value) => value + 1);
+        await onAccepted();
+      } catch {
+        setDecisionMessages((current) => ({ ...current,
+          [proposalId]: "拒绝结果暂不可确认。请重试同一操作。" }));
+        setSettlementRefresh((value) => value + 1);
+      } finally {
+        acceptingRef.current = false;
+        setAccepting(undefined);
+      }
+    })();
+  };
+
   return (
     <>
       <ManuscriptEditor {...editorProps}
@@ -415,12 +549,23 @@ export function BlockProposalDisplay({
           && pendingAcceptances.length === 0}
         proposals={projections}
         onCandidateSettled={() => setSettlementRefresh((value) => value + 1)}
-        onAcceptProposal={acceptDisplayed} />
+        onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed} />
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
         const problem = knownProblems[locator.proposalId];
-        const message = problem !== undefined
-          ? `Acceptance ${problem.code} (HTTP ${problem.status}): ${problem.message}`
+        const rejectionResult = settledRejections[locator.proposalId];
+        const message = pendingRejections.includes(locator.proposalId)
+            ? "拒绝结果尚未确认。请重试同一操作。"
+          : proposal?.operation_resolution === "rejected"
+            ? "已拒绝，正文保持不变。"
+          : rejectionResult !== undefined
+            ? {
+              resolved: "已拒绝，正文保持不变。",
+              conflicted: "正文已变化，拒绝结果请检查。",
+              refused: "此次拒绝未生效，请检查当前候选文字。",
+            }[rejectionResult]
+          : problem !== undefined
+            ? `Acceptance ${problem.code} (HTTP ${problem.status}): ${problem.message}`
           : pendingAcceptances.includes(locator.proposalId)
             ? proposal?.operation_resolution === "applied"
               ? "正文已变化；此次接受结果尚未确认。请重试同一操作。"
@@ -447,6 +592,10 @@ export function BlockProposalDisplay({
                 <button type="button" disabled={accepting !== undefined}
                   onClick={() => retryPending(locator.proposalId)}>重试接受</button>
               ) : null}
+            {pendingRejections.includes(locator.proposalId) ? (
+              <button type="button" disabled={accepting !== undefined}
+                onClick={() => retryRejection(locator.proposalId)}>重试拒绝</button>
+            ) : null}
           </p>
         );
       })}

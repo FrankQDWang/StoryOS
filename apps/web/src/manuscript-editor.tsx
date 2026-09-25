@@ -53,6 +53,12 @@ export interface ManuscriptEditorProps {
     revisionId: string;
     text: string;
   }) => void;
+  onRejectProposal?: (target: {
+    proposalId: string;
+    operationId: string;
+    revisionId: string;
+    text: string;
+  }) => void;
 }
 
 function syncManuscriptSurface(
@@ -117,6 +123,7 @@ export function ManuscriptEditor({
   onFailure,
   onCandidateSettled,
   onAcceptProposal,
+  onRejectProposal,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
@@ -128,6 +135,7 @@ export function ManuscriptEditor({
   const onFailureRef = useRef(onFailure);
   const onCandidateSettledRef = useRef(onCandidateSettled);
   const onAcceptProposalRef = useRef(onAcceptProposal);
+  const onRejectProposalRef = useRef(onRejectProposal);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
@@ -135,6 +143,7 @@ export function ManuscriptEditor({
   onFailureRef.current = onFailure;
   onCandidateSettledRef.current = onCandidateSettled;
   onAcceptProposalRef.current = onAcceptProposal;
+  onRejectProposalRef.current = onRejectProposal;
   persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
     extensions: [
@@ -278,17 +287,21 @@ export function ManuscriptEditor({
     const onClick = (event: MouseEvent) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      const button = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
+      const acceptButton = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
+      const rejectButton = target.closest<HTMLButtonElement>("button[data-proposal-reject]");
+      const button = acceptButton ?? rejectButton;
       const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
       const text = proposal?.querySelector(".block-proposal-text")?.textContent;
       if (button === null || button === undefined || proposal === null
         || proposal === undefined || text === null || text === undefined) return;
-      onAcceptProposalRef.current?.({
+      const decision = {
         proposalId: proposal.dataset.proposalId ?? "",
         operationId: proposal.dataset.proposalOperationId ?? "",
         revisionId: proposal.dataset.proposalRevisionId ?? "",
         text,
-      });
+      };
+      if (acceptButton !== null) onAcceptProposalRef.current?.(decision);
+      else onRejectProposalRef.current?.(decision);
     };
     editor.view.dom.addEventListener("click", onClick);
     return () => { editor.view.dom.removeEventListener("click", onClick); };

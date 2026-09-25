@@ -16,7 +16,7 @@ class AcceptanceDeliveryUnknown extends Error {
 }
 
 function acceptanceLockName(workspace: EditorReadyState, proposalId: string): string {
-  return `storyos-acceptance:${workspace.partition.journal_partition_id}:${proposalId}`;
+  return `storyos-decision:${workspace.partition.journal_partition_id}:${proposalId}`;
 }
 
 export async function retryPendingDisplayedAcceptance(options: {
@@ -75,6 +75,9 @@ async function acceptDisplayedBlockProposalLocked(
   const projectId = workspace.partition.project_scope.project_id;
   const key = `acceptance:${workspace.partition.journal_partition_id}:${options.proposalId}:${options.proposalRevisionId}:${options.operationId}`;
   let flight = await readFlight(workspace.database, key);
+  if (flight !== undefined && flight.command_kind !== "acceptProposal") {
+    throw new Error("A prior Acceptance decision is unresolved. Reload and inspect its result.");
+  }
   let journal = await readAcceptanceJournal(workspace);
   if (flight === undefined) {
     const prior = journal.records.find((record) => {
