@@ -230,6 +230,7 @@ export function ManuscriptEditor({
       const workspace = persistWorkspaceRef.current;
       if (editor === null || workspace === undefined) return;
       await idleRef.current?.flush();
+      if (workspace.pending.save_state !== "saved") return;
       try {
         const settled = await undoOwnedLatestAuthorAction({
           workspace,
@@ -248,6 +249,7 @@ export function ManuscriptEditor({
         observedBlocksRef.current = restored.map((block) => ({ ...block }));
         syncManuscriptSurface(editor.view.dom, observedBlocksRef.current);
         onProjectionRef.current(await rebuildPendingProjection(workspace));
+        onCandidateSettledRef.current?.();
       } catch (error) {
         onFailureRef.current(error);
       }

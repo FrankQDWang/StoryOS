@@ -334,6 +334,32 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
       .revision_id, secondProposal.revision_id);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
+    const undoResponse = page.waitForResponse((response) =>
+      response.url().endsWith("/author-actions/undo")
+        && response.request().method() === "POST");
+    await candidateText.click();
+    await candidateText.press("ControlOrMeta+Z");
+    assert.equal((await undoResponse).status(), 200);
+    const restored = (await getProposal({ ...options, proposalId: firstProposalId })).proposal;
+    assert.equal(restored.candidate_text, firstProposal.candidate_text);
+    assert.notEqual(restored.revision_id, revised.revision_id);
+    assert.notEqual(restored.revision_id, firstProposal.revision_id);
+    assert.equal(restored.validation, "valid");
+    assert.equal(restored.validation_receipt.kind, "present");
+    assert.equal(revised.validation_receipt.kind, "present");
+    if (restored.validation_receipt.kind !== "present"
+      || revised.validation_receipt.kind !== "present") {
+      throw new Error("Candidate Undo requires fresh validation");
+    }
+    assert.notEqual(restored.validation_receipt.validation_receipt_id,
+      revised.validation_receipt.validation_receipt_id);
+    await page.waitForFunction(({ proposalId, revisionId }) =>
+      document.querySelector(`[data-proposal-id="${proposalId}"]`)
+        ?.getAttribute("data-proposal-revision-id") === revisionId,
+    { proposalId: firstProposalId, revisionId: restored.revision_id });
+    assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
+      .revision_id, secondProposal.revision_id);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
     await page.screenshot({ path: join(repositoryRoot, "target", "issue-787-block-proposals.png"),
       fullPage: true });
     const missingBlockId = uuidV7();
@@ -356,8 +382,8 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     const ineligible = page.locator(`[data-proposal-id="${firstProposalId}"]`);
     await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
       .waitFor();
-    assert.ok((await ineligible.textContent())?.includes(revisedText));
-    assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), revised.revision_id);
+    assert.ok((await ineligible.textContent())?.includes(firstProposal.candidate_text));
+    assert.equal(await ineligible.getAttribute("data-proposal-revision-id"), restored.revision_id);
     readMode = "missing";
     await page.locator("[data-assistant-inspect]").click();
     await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
