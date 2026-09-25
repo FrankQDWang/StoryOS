@@ -291,13 +291,15 @@ async function commitFlight(workspace: EditorReadyState,
   const metadata = transaction.objectStore("metadata");
   const sequenceRequest = metadata.get("local_intent_sequence");
   const schemaRequest = metadata.get("schema");
+  const prefix = `acceptance:${flight.journal_partition_id}:${flight.proposalId}:`;
+  const pendingRequest = metadata.getAllKeys(IDBKeyRange.bound(prefix, `${prefix}\uffff`));
   const partitionRequest = transaction.objectStore("partitions")
     .get(workspace.partition.journal_partition_id);
   const previous = await new Promise<{ value?: number } | undefined>((resolve, reject) => {
     sequenceRequest.onsuccess = () => resolve(sequenceRequest.result as { value?: number } | undefined);
     sequenceRequest.onerror = () => reject(sequenceRequest.error ?? new Error("Journal sequence read failed"));
   });
-  const [schema, partition] = await Promise.all([
+  const [schema, partition, pendingKeys] = await Promise.all([
     new Promise<{ version?: number } | undefined>((resolve, reject) => {
       schemaRequest.onsuccess = () => resolve(schemaRequest.result as { version?: number } | undefined);
       schemaRequest.onerror = () => reject(schemaRequest.error ?? new Error("Journal schema read failed"));
@@ -306,6 +308,11 @@ async function commitFlight(workspace: EditorReadyState,
       partitionRequest.onsuccess = () => resolve(partitionRequest.result);
       partitionRequest.onerror = () => reject(partitionRequest.error
         ?? new Error("Journal partition read failed"));
+    }),
+    new Promise<IDBValidKey[]>((resolve, reject) => {
+      pendingRequest.onsuccess = () => resolve(pendingRequest.result);
+      pendingRequest.onerror = () => reject(pendingRequest.error
+        ?? new Error("Pending Acceptance read failed"));
     }),
   ]);
   if ((previous?.value ?? 0) !== priorSequence) {
@@ -327,6 +334,10 @@ async function commitFlight(workspace: EditorReadyState,
       !== workspace.partition.security_policy_revision) {
     transaction.abort();
     throw new Error("Acceptance Journal partition changed");
+  }
+  if (pendingKeys.length > 0) {
+    transaction.abort();
+    throw new Error("A prior Acceptance decision is unresolved");
   }
   const created = { ...flight, local_intent_sequence: sequence };
   const createdAt = new Date().toISOString();
