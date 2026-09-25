@@ -170,6 +170,24 @@ export async function settledDisplayedAcceptance(workspace: EditorWorkspace,
     ? settlement : undefined;
 }
 
+export async function knownProblemDisplayedAcceptance(workspace: EditorWorkspace,
+  proposalId: string): Promise<{ status: number; responseBody: string } | undefined> {
+  const journal = await readAcceptanceJournal(workspace);
+  const record = journal.records.filter((item) =>
+    (item.author_visible_decision_ref as { proposal_id?: string })?.proposal_id === proposalId)
+    .sort((left, right) =>
+      (right.local_intent_sequence as number) - (left.local_intent_sequence as number))[0];
+  const group = journal.groups.find((item) =>
+    (item.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
+      === record?.explicit_command_record_id);
+  const delivery = group?.acceptance_delivery as { kind?: string; status?: number;
+    responseBody?: string } | undefined;
+  return group?.settlement && (group.settlement as { kind: string }).kind === "unsettled"
+    && delivery?.kind === "known_problem" && typeof delivery.status === "number"
+    && typeof delivery.responseBody === "string"
+    ? { status: delivery.status, responseBody: delivery.responseBody } : undefined;
+}
+
 export async function readFlight(database: IDBDatabase, key: string): Promise<AcceptanceFlight | undefined> {
   const request = database.transaction("metadata", "readonly").objectStore("metadata").get(key);
   return new Promise((resolve, reject) => {

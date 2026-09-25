@@ -531,6 +531,15 @@ function ProjectReadyView({
                 && pending.body === selectedChapter.chapter.current_revision.body
                 && JSON.stringify(pending.blocks)
                   === JSON.stringify(selectedChapter.chapter.current_revision.blocks))}
+            onAccepted={async () => {
+              const next = await openControlledProject({
+                baseUrl,
+                projectId: state.project.project.project_id,
+                fetchImpl,
+                cryptoImpl,
+              });
+              onReopened(next);
+            }}
             blocks={editorBlocks}
             editable={!readOnly && !archived}
             persistWorkspace={

@@ -197,7 +197,8 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(await firstCandidate.getAttribute("data-proposal-source-run-id"), runId);
     assert.equal(await firstCandidate.getAttribute("data-proposal-source-decision-id"),
       completed.decision.decision_id);
-    assert.equal(await firstCandidate.textContent(), `候选文字 · 尚未成为正文${firstProposal.candidate_text}`);
+    assert.equal(await firstCandidate.locator(".block-proposal-text").textContent(),
+      firstProposal.candidate_text);
     assert.equal(await firstCandidate.evaluate((element) => element.previousElementSibling?.textContent),
       firstBlock.text);
     assert.equal(await page.locator("body").getAttribute("data-author-input-events"), "0");
@@ -396,6 +397,89 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.equal(await page.locator(`[data-proposal-id="${firstProposalId}"]`).count(), 0);
     assert.equal(await page.locator(`[data-proposal-id="${secondProposalId}"]`).count(), 1);
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, before.chapter);
+    await page.unrouteAll();
+    await page.locator("[data-assistant-inspect]").click();
+    const ready = page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="eligible"]`);
+    await ready.waitFor();
+    let acceptancePosts = 0;
+    let firstAcceptanceRequest: string | undefined;
+    let firstAcceptanceKey: string | undefined;
+    let firstAcceptanceNonce: string | undefined;
+    let appliedResponse: unknown;
+    await page.route((url) => url.pathname.endsWith(`/proposals/${firstProposalId}/acceptances`),
+      async (route) => {
+        acceptancePosts += 1;
+        const request = route.request();
+        const headers = await request.allHeaders();
+        if (acceptancePosts === 1) {
+          firstAcceptanceRequest = request.postData() ?? undefined;
+          firstAcceptanceKey = headers["idempotency-key"];
+          firstAcceptanceNonce = headers["x-storyos-anti-forgery"];
+        } else {
+          assert.equal(request.postData(), firstAcceptanceRequest);
+          assert.equal(headers["idempotency-key"], firstAcceptanceKey);
+          assert.equal(headers["x-storyos-anti-forgery"], firstAcceptanceNonce);
+        }
+        if (acceptancePosts <= 2) {
+          await route.abort("failed");
+          return;
+        }
+        const response = await route.fetch();
+        assert.equal(response.status(), 200);
+        const body = await response.json();
+        if (acceptancePosts === 3) {
+          appliedResponse = body;
+          await route.abort("failed");
+        } else if (acceptancePosts === 4) {
+          assert.deepEqual(body, appliedResponse);
+          await route.abort("failed");
+        } else {
+          assert.deepEqual(body, appliedResponse);
+          await route.fulfill({ response });
+        }
+      });
+    await ready.locator("button[data-proposal-accept]").click();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByText(
+      "接受结果暂不可确认。请刷新检查，或重试同一操作。",
+    ).waitFor();
+    assert.equal(acceptancePosts, 2);
+    assert.equal((await getProposal({ ...options, proposalId: firstProposalId })).proposal
+      .operation_resolution, "pending");
+    await page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`)
+      .getByText("重试接受").waitFor();
+    assert.equal(await page.locator(".tiptap").getAttribute("contenteditable"), "false");
+    await page.reload();
+    await page.locator('[data-unsettled-intent-count="1"]').waitFor();
+    const retry = page.locator(`[data-proposal-id="${firstProposalId}"][data-proposal-eligibility="ineligible"]`);
+    await retry.waitFor();
+    assert.equal(await page.locator(".tiptap").getAttribute("contenteditable"), "false");
+    await retry.locator("button[data-proposal-accept]").click();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByText(
+      "正文已变化；此次接受结果尚未确认。请重试同一操作。",
+    ).waitFor();
+    assert.equal(acceptancePosts, 4);
+    assert.equal(await page.locator(".tiptap > p").first().textContent(), restored.candidate_text);
+    await page.reload();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"] button`).getByText("重试接受")
+      .waitFor();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"] button`).click();
+    await page.locator(`[data-proposal-decision="${firstProposalId}"]`).getByText("已接受，正文已更新。")
+      .waitFor();
+    assert.equal(acceptancePosts, 5);
+    const applied = (await getProposal({ ...options, proposalId: firstProposalId })).proposal;
+    assert.equal(applied.operation_resolution, "applied");
+    const acceptedChapter = await getChapter({ ...options, chapterId });
+    assert.equal(acceptedChapter.chapter.current_revision.blocks[0]?.text, restored.candidate_text);
+    assert.equal(acceptedChapter.chapter.current_revision.blocks[1]?.text, secondBlock.text);
+    assert.equal(await page.locator(".tiptap > p").first().textContent(), restored.candidate_text);
+    assert.equal((await getProposal({ ...options, proposalId: secondProposalId })).proposal
+      .operation_resolution, "pending");
+    await page.reload();
+    await page.locator(`[data-proposal-unavailable="${firstProposalId}"]`).waitFor();
+    assert.equal(await page.locator(`[data-proposal-decision="${firstProposalId}"]`).textContent(),
+      "已接受，正文已更新。");
+    assert.equal(acceptancePosts, 5);
+    assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, acceptedChapter.chapter);
     assert.deepEqual(errors, []);
   } finally {
     await page.close();

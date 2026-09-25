@@ -47,6 +47,12 @@ export interface ManuscriptEditorProps {
   onProjection: (projection: PendingEditProjection, source?: "local") => void;
   onFailure: (error: unknown) => void;
   onCandidateSettled?: () => void;
+  onAcceptProposal?: (target: {
+    proposalId: string;
+    operationId: string;
+    revisionId: string;
+    text: string;
+  }) => void;
 }
 
 function syncManuscriptSurface(
@@ -110,6 +116,7 @@ export function ManuscriptEditor({
   onProjection,
   onFailure,
   onCandidateSettled,
+  onAcceptProposal,
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
@@ -120,12 +127,14 @@ export function ManuscriptEditor({
   const onProjectionRef = useRef(onProjection);
   const onFailureRef = useRef(onFailure);
   const onCandidateSettledRef = useRef(onCandidateSettled);
+  const onAcceptProposalRef = useRef(onAcceptProposal);
   const persistWorkspaceRef = useRef(persistWorkspace);
   const onAuthorUndoRef = useRef<() => boolean>(() => true);
   const firstBlockId = blocks[0]?.manuscript_block_id ?? "";
   onProjectionRef.current = onProjection;
   onFailureRef.current = onFailure;
   onCandidateSettledRef.current = onCandidateSettled;
+  onAcceptProposalRef.current = onAcceptProposal;
   persistWorkspaceRef.current = persistWorkspace;
   const editor = useEditor({
     extensions: [
@@ -263,6 +272,27 @@ export function ManuscriptEditor({
   useEffect(() => {
     if (editor !== null) projectBlockProposals(editor, proposals);
   }, [editor, proposals]);
+
+  useEffect(() => {
+    if (editor === null) return;
+    const onClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const button = target.closest<HTMLButtonElement>("button[data-proposal-accept]");
+      const proposal = button?.closest<HTMLElement>("[data-proposal-id]");
+      const text = proposal?.querySelector(".block-proposal-text")?.textContent;
+      if (button === null || button === undefined || proposal === null
+        || proposal === undefined || text === null || text === undefined) return;
+      onAcceptProposalRef.current?.({
+        proposalId: proposal.dataset.proposalId ?? "",
+        operationId: proposal.dataset.proposalOperationId ?? "",
+        revisionId: proposal.dataset.proposalRevisionId ?? "",
+        text,
+      });
+    };
+    editor.view.dom.addEventListener("click", onClick);
+    return () => { editor.view.dom.removeEventListener("click", onClick); };
+  }, [editor]);
 
   useEffect(() => {
     if (editor === null) return;
