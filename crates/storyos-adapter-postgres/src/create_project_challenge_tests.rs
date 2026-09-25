@@ -79,11 +79,13 @@ async fn create_project_challenge_replays_conflicts_and_stays_user_isolated() {
     let hidden = foreign
         .query_one(
             "SELECT
-               (SELECT count(*) FROM storyos.create_project_challenges),
-               (SELECT count(*) FROM storyos.create_project_idempotency),
+               (SELECT count(*) FROM storyos.create_project_challenges
+                 WHERE user_id = $1::text::uuid AND idempotency_key = $2::text::uuid),
+               (SELECT count(*) FROM storyos.create_project_idempotency
+                 WHERE user_id = $1::text::uuid AND idempotency_key = $2::text::uuid),
                (SELECT count(*) FROM storyos.projects),
                (SELECT count(*) FROM storyos.users)",
-            &[],
+            &[&USER_A, &first_request.binding.idempotency_key],
         )
         .await
         .unwrap();
