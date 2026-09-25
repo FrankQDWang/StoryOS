@@ -9,6 +9,12 @@ import { createFlight, readAcceptanceJournal, readFlight, uuidV7, writeFlight,
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 
+class AcceptanceDeliveryUnknown extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : "Acceptance delivery is unknown");
+  }
+}
+
 export async function retryPendingDisplayedAcceptance(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
@@ -138,8 +144,9 @@ export async function acceptDisplayedBlockProposal(options: {
   const frozen = flight;
   const submit = async () => {
     const attemptId = await beginAcceptanceAttempt(workspace, frozen);
+    let accepted: AcceptProposalResponse;
     try {
-      const accepted = await acceptProposal({
+      accepted = await acceptProposal({
         baseUrl: options.baseUrl,
         projectId,
         proposalId: frozen.proposalId,
@@ -148,12 +155,14 @@ export async function acceptDisplayedBlockProposal(options: {
         antiForgery: frozen.nonce ?? "",
         request: frozen.request,
       });
-      await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
-      return accepted;
     } catch (error) {
-      await finishAcceptanceAttempt(workspace.database, attemptId, "delivery_unknown");
-      throw error;
+      const observed = error instanceof StoryOSProtocolError;
+      await finishAcceptanceAttempt(workspace.database, attemptId,
+        observed ? "response_observed" : "delivery_unknown");
+      throw observed ? error : new AcceptanceDeliveryUnknown(error);
     }
+    await finishAcceptanceAttempt(workspace.database, attemptId, "response_observed");
+    return accepted;
   };
   let response: AcceptProposalResponse;
   try {
@@ -165,22 +174,34 @@ export async function acceptDisplayedBlockProposal(options: {
       await writeFlight(workspace.database, frozen, { kind: "refused", refusal });
       throw error;
     }
+    if (!(error instanceof AcceptanceDeliveryUnknown)) throw error;
     try {
       response = await submit();
     } catch (retryError) {
       const retryRefusal = await recordedRefusal(options, frozen, retryError);
       if (retryRefusal !== undefined) {
         await writeFlight(workspace.database, frozen, { kind: "refused", refusal: retryRefusal });
-      } else {
+      } else if (retryError instanceof AcceptanceDeliveryUnknown) {
         try { await writeFlight(workspace.database, { ...frozen, settlement: "delivery_unknown" }); }
         catch { /* The frozen record remains available. */ }
       }
       throw retryError;
     }
   }
-  if (response.correlation_id !== frozen.request.accept_proposal_input.correlation_id
+  if (response.schema_id !== "storyos.command.accept-proposal.response.v1"
+    || typeof response.command_id !== "string" || response.command_id.length === 0
+    || typeof response.author_command_admission_id !== "string"
+    || response.author_command_admission_id.length === 0
+    || typeof response.receipt.receipt_id !== "string"
+    || response.receipt.receipt_id.length === 0
+    || response.correlation_id !== frozen.request.accept_proposal_input.correlation_id
     || response.project_scope.owner_user_id !== frozen.project_scope.owner_user_id
     || response.project_scope.project_id !== frozen.project_scope.project_id
+    || response.receipt.project_scope.owner_user_id !== frozen.project_scope.owner_user_id
+    || response.receipt.project_scope.project_id !== frozen.project_scope.project_id
+    || response.author_command_admission_id
+      !== response.receipt.author_command_admission_id
+    || response.receipt.result !== response.effect.kind
     || response.receipt.proposal_id !== frozen.proposalId
     || response.receipt.proposal_revision_id
       !== frozen.request.accept_proposal_input.proposal_revision_id
@@ -217,6 +238,11 @@ async function recordedRefusal(
       && inspected.project_scope.project_id === flight.project_scope.project_id
       && refusal.kind === "present"
       && refusal.correlation_id === flight.request.accept_proposal_input.correlation_id
+      && refusal.command_schema === flight.request.command_schema
+      && refusal.client_contract_revision
+        === flight.request.accept_proposal_input.client_contract_revision
+      && refusal.security_policy_revision
+        === flight.request.accept_proposal_input.security_policy_revision
       ? refusal : undefined;
   } catch { return undefined; }
 }

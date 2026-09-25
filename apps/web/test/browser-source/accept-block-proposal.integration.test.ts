@@ -18,6 +18,7 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     const validationReceiptId = "018f0000-0000-7001-8000-000000000104";
     const authoritativeRevisionId = workspace.session.base_snapshot.authoritative_head_revision_id;
     const sent: { body: string; key: string; nonce: string }[] = [];
+    let denyNext = false;
     const fetchImpl: typeof fetch = async (input, init) => {
       const path = new URL(input instanceof Request ? input.url : input).pathname;
       if (path.endsWith("/anti-forgery-challenges")) {
@@ -30,6 +31,7 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
       const key = headers.get("idempotency-key") ?? "";
       const nonce = headers.get("x-storyos-anti-forgery") ?? "";
       sent.push({ body, key, nonce });
+      if (denyNext) return jsonResponse({ code: "forbidden" }, 403);
       if (sent.length <= 2) throw new TypeError("Connection lost");
       const request = JSON.parse(body) as AcceptProposalRequest;
       const digest = await digestAcceptProposal(request, crypto);
@@ -81,6 +83,11 @@ it("retries the same protected Acceptance after an unknown delivery", async () =
     expect(sent[2]).toEqual(sent[0]);
     const settled = await readAcceptanceJournal(workspace);
     expect(settled.groups[0]?.settlement).toEqual({ kind: "settled", response });
+    denyNext = true;
+    await expect(acceptDisplayedBlockProposal({ ...options,
+      proposalId: "018f0000-0000-7001-8000-000000000110" }))
+      .rejects.toThrow(/HTTP 403/);
+    expect(sent).toHaveLength(4);
   } finally {
     await test.close();
   }
