@@ -22,7 +22,8 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     nonce = route.request().headers()["x-storyos-anti-forgery"]!;
     frozen = (await readProductionJournal(page, projectId)).metadata!.find((row) => String(row.key).startsWith("draft-undo:"));
     if (frozen === undefined) { await route.abort("failed"); release(); return; }
-    assert.deepEqual(frozen.request, request); assert.equal(frozen.idempotency_key, key);
+    const group = frozen.group as { frozen_request_body: unknown; idempotency_key: string };
+    assert.deepEqual(group.frozen_request_body, request); assert.equal(group.idempotency_key, key);
     const reply = await route.fetch(); assert.equal(reply.status(), 200, await reply.text());
     response = await reply.json(); await route.abort("failed"); release();
   });

@@ -4,6 +4,7 @@ import type { DigestValue, EditorFlowDraftClosed, EditorFlowDraftReopened, Proje
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { canonicalDraftValue, MAX_DISCARD_RECORDS } from "./refused-edit-discard.ts";
+import { digestJournalValue } from "./local-edit-journal.ts";
 import { uuidV7 } from "./acceptance-journal.ts";
 
 const keys = (value: unknown, required: string[], optional: string[] = []) => value !== null && typeof value === "object"
@@ -15,8 +16,17 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12
 export type DraftUndoRecord = {
   key: string; schema_id: string; project_scope: ProjectScope; journal_partition_id: string;
   explicit_command_record_id: string; local_intent_sequence: number; created_at: string;
-  source_close: EditorFlowDraftClosed; request: UndoLatestAuthorActionRequest;
-  idempotency_key: string; digest: DigestValue;
+  source_close: EditorFlowDraftClosed; editor_session_id: string; writer_generation: string;
+  command_kind: "undoLatestAuthorAction"; editor_contract_revision: string;
+  exact_semantic_payload_ref: string; semantic_payload_digest: DigestValue;
+  exact_target_head_anchor_bindings: { expected_author_undo_frontier_sequence: string; expected_authoritative_revision_id: string; source_close_event_id: string };
+  author_visible_decision_ref: { source_close_event_id: string; draft_id: string };
+  group: { journal_submission_group_id: string; action_class: "explicit_editor_command"; api_major: 1;
+    method: "POST"; route_template: string; command_kind: "undoLatestAuthorAction"; command_schema: string;
+    idempotency_key: string; frozen_request_body: UndoLatestAuthorActionRequest; frozen_request_digest: DigestValue;
+    frozen_request_body_ref: string; frozen_request_digest_input_ref: string; frozen_at: string; digest_profile: string;
+    ordered_coverage: { local_intent_sequence: number; intent_record_ref: string; payload_digest: DigestValue }[];
+    covered_sequence_range: { first: number; last: number }; frozen_payload_coverage_digest: DigestValue };
 };
 type Observation = { key: string; record_key: string; event?: EditorFlowDraftReopened;
   response?: UndoLatestAuthorActionResponse };
@@ -55,7 +65,7 @@ function matches(record: DraftUndoRecord, event: EditorFlowDraftReopened): boole
   return validDraftReopen({ draft_id: record.source_close.draft_id,
     draft_revision_id: record.source_close.draft_revision_id, payload_digest: record.source_close.payload_digest,
     closure: "open", closure_event: record.source_close, reopen_event: event }, record.project_scope)
-    && event.source.idempotency_key === record.idempotency_key && same(event.source.command_digest, record.digest);
+    && event.source.idempotency_key === record.group.idempotency_key && same(event.source.command_digest, record.group.frozen_request_digest);
 }
 
 function validSource(source: EditorFlowDraftClosed["source"], profile: string): boolean {
@@ -78,12 +88,12 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
     "authoritative_commit_ids", "draft_artifact_refs", "artifact_lifecycle_event_refs", "condition_refs", "result", "created_at"], ["author_action_sequence"])
     && response.schema_id === "storyos.command.undo-latest-author-action.response.v1"
     && same(response.project_scope, record.project_scope) && same(receipt.project_scope, record.project_scope)
-    && response.correlation_id === record.request.undo_latest_author_action_input.correlation_id
+    && response.correlation_id === record.group.frozen_request_body.undo_latest_author_action_input.correlation_id
     && UUID.test(response.command_id) && UUID.test(response.author_command_admission_id) && UUID.test(receipt.receipt_id)
     && receipt.author_command_admission_id === response.author_command_admission_id && receipt.command_kind === "undoLatestAuthorAction"
-    && receipt.producer_cause === "author_command_admission" && receipt.idempotency_key === record.idempotency_key
-    && same(receipt.command_digest, record.digest) && Number.isFinite(Date.parse(receipt.created_at))
-    && [receipt.expected_heads, receipt.prior_heads, receipt.resulting_heads].every((heads) => same(heads, [record.request.undo_latest_author_action_input.expected_authoritative_revision_id]))
+    && receipt.producer_cause === "author_command_admission" && receipt.idempotency_key === record.group.idempotency_key
+    && same(receipt.command_digest, record.group.frozen_request_digest) && Number.isFinite(Date.parse(receipt.created_at))
+    && [receipt.expected_heads, receipt.prior_heads, receipt.resulting_heads].every((heads) => same(heads, [record.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id]))
     && [receipt.authoritative_revision_ids, receipt.proposal_revision_ids, receipt.authoritative_commit_ids, receipt.condition_refs].every((refs) => same(refs, []))
     && keys(response.project, ["project_id", "title", "open"]) && response.project.project_id === record.project_scope.project_id
     && typeof response.project.title === "string" && keys(response.project.open, response.project.open.kind === "empty" ? ["kind"] : ["kind", "current_chapter_id"])
@@ -92,7 +102,7 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
     && (success ? keys(effect, ["kind", "event", "author_undo_frontier_sequence"]) && matches(record, effect.event)
       && (effect.author_undo_frontier_sequence === null || positive(effect.author_undo_frontier_sequence))
       && same(effect.event.source, { command_id: response.command_id, author_command_admission_id: response.author_command_admission_id,
-        receipt_id: receipt.receipt_id, idempotency_key: record.idempotency_key, command_digest: record.digest })
+        receipt_id: receipt.receipt_id, idempotency_key: record.group.idempotency_key, command_digest: record.group.frozen_request_digest })
       && receipt.result === "draft_closure_changed" && receipt.created_at === effect.event.created_at
       && receipt.author_action_sequence === effect.event.author_action_sequence
       && same(receipt.draft_artifact_refs, [record.source_close.draft_id]) && same(receipt.artifact_lifecycle_event_refs, [effect.event.event_id])
@@ -111,14 +121,30 @@ export async function readDraftUndoJournal(workspace: EditorWorkspace) {
   if (records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Undo Journal limit");
   for (const record of records) {
     const partition = await read(workspace.database.transaction("partitions").objectStore("partitions").get(record.journal_partition_id)) as EditorWorkspace["partition"] | undefined;
-    const input = record.request?.undo_latest_author_action_input;
-    if (!keys(record, ["key", "schema_id", "project_scope", "journal_partition_id", "explicit_command_record_id", "local_intent_sequence", "created_at", "source_close", "request", "idempotency_key", "digest"])
-      || !keys(record.request, ["command_schema", "undo_latest_author_action_input"])
+    const group = record.group, input = group?.frozen_request_body?.undo_latest_author_action_input;
+    const coverage = [{ local_intent_sequence: record.local_intent_sequence, intent_record_ref: record.explicit_command_record_id, payload_digest: group?.frozen_request_digest }];
+    const coverageDigest = { ...await digestJournalValue(coverage, workspace.cryptoImpl), profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
+    if (!keys(record, ["key", "schema_id", "project_scope", "journal_partition_id", "explicit_command_record_id", "local_intent_sequence", "created_at", "source_close", "editor_session_id", "writer_generation", "command_kind", "editor_contract_revision", "exact_semantic_payload_ref", "semantic_payload_digest", "exact_target_head_anchor_bindings", "author_visible_decision_ref", "group"])
+      || !keys(group, ["journal_submission_group_id", "action_class", "api_major", "method", "route_template", "command_kind", "command_schema", "idempotency_key", "frozen_request_body", "frozen_request_digest", "frozen_request_body_ref", "frozen_request_digest_input_ref", "frozen_at", "digest_profile", "ordered_coverage", "covered_sequence_range", "frozen_payload_coverage_digest"])
+      || !keys(record.group.frozen_request_body, ["command_schema", "undo_latest_author_action_input"])
       || !keys(input, ["expected_author_undo_frontier_sequence", "expected_authoritative_revision_id", "editor_session_id", "client_contract_revision", "security_policy_revision", "correlation_id"])
+      || record.editor_session_id !== input.editor_session_id || record.writer_generation !== partition?.writer_generation
+      || record.command_kind !== "undoLatestAuthorAction" || record.editor_contract_revision !== "storyos.editor-contract.release-1.v3"
+      || !UUID.test(group.journal_submission_group_id) || record.exact_semantic_payload_ref !== group.journal_submission_group_id
+      || !same(record.semantic_payload_digest, group.frozen_request_digest)
+      || group.frozen_request_body_ref !== group.journal_submission_group_id || group.frozen_request_digest_input_ref !== group.journal_submission_group_id
+      || group.action_class !== "explicit_editor_command" || group.api_major !== 1 || group.method !== "POST"
+      || group.route_template !== "/api/v1/projects/{project_id}/author-actions/undo" || group.command_kind !== record.command_kind
+      || group.command_schema !== group.frozen_request_body.command_schema || group.digest_profile !== group.frozen_request_digest.profile || group.frozen_at !== record.created_at
+      || !same(group.ordered_coverage, coverage) || !same(group.covered_sequence_range, { first: record.local_intent_sequence, last: record.local_intent_sequence })
+      || !same(group.frozen_payload_coverage_digest, coverageDigest)
+      || !same(record.exact_target_head_anchor_bindings, { expected_author_undo_frontier_sequence: input.expected_author_undo_frontier_sequence,
+        expected_authoritative_revision_id: input.expected_authoritative_revision_id, source_close_event_id: record.source_close.event_id })
+      || !same(record.author_visible_decision_ref, { source_close_event_id: record.source_close.event_id, draft_id: record.source_close.draft_id })
       || partition === undefined || !same(partition.project_scope, record.project_scope)
       || input.editor_session_id !== partition.editor_session_id || input.client_contract_revision !== partition.client_contract_revision
       || input.security_policy_revision !== partition.security_policy_revision
-      || record.request.command_schema !== "storyos.command.undo-latest-author-action.request.v1"
+      || record.group.frozen_request_body.command_schema !== "storyos.command.undo-latest-author-action.request.v1"
       || ![input.editor_session_id, input.correlation_id, input.expected_authoritative_revision_id].every((id) => UUID.test(id))
       || !keys(record.source_close, ["schema_id", "event_kind", "event_id", "project_scope", "draft_id", "draft_revision_id", "payload_digest", "prior_closure", "closure", "close_reason", "source", "author_action_sequence", "created_at"])
       || !validSource(record.source_close.source, "storyos.command.closeEditorFlowDraft.jcs.v1")
@@ -128,14 +154,14 @@ export async function readDraftUndoJournal(workspace: EditorWorkspace) {
       || !/^[0-9a-f]{64}$/.test(record.source_close.payload_digest) || !positive(record.source_close.author_action_sequence)
       || !Number.isFinite(Date.parse(record.source_close.created_at))
       || record.schema_id !== "storyos.local-edit-journal.draft-undo.v1" || input === undefined
-      || record.key !== `draft-undo:${record.source_close?.event_id}` || !UUID.test(record.idempotency_key)
+      || record.key !== `draft-undo:${record.source_close?.event_id}` || !UUID.test(record.group.idempotency_key)
       || !UUID.test(record.explicit_command_record_id) || !same(record.project_scope, workspace.partition.project_scope)
       || !same(record.source_close.project_scope, record.project_scope)
       || input.expected_author_undo_frontier_sequence !== record.source_close.author_action_sequence
       || !record.journal_partition_id.startsWith(`${record.project_scope.owner_user_id}:${record.project_scope.project_id}:${input.editor_session_id}:`)
       || !Number.isSafeInteger(record.local_intent_sequence) || record.local_intent_sequence <= 0
       || !Number.isFinite(Date.parse(record.created_at))
-      || !same(record.digest, await digestUndoLatestAuthorAction(record.request, workspace.cryptoImpl))) throw new Error("Undo Journal unavailable");
+      || !same(record.group.frozen_request_digest, await digestUndoLatestAuthorAction(record.group.frozen_request_body, workspace.cryptoImpl))) throw new Error("Undo Journal unavailable");
   }
   for (const observation of observations) {
     const record = records.find((record) => record.key === observation.record_key);
@@ -151,19 +177,35 @@ export async function freezeDraftUndo(workspace: EditorWorkspace, source_close: 
   if (existing) return existing.record;
   if (records.length >= MAX_DISCARD_RECORDS || records.some(({ observation }) => observation === undefined)) throw new Error("Undo unresolved");
   const digest = await digestUndoLatestAuthorAction(request, workspace.cryptoImpl);
+  const groupId = uuidV7(workspace.cryptoImpl), recordId = uuidV7(workspace.cryptoImpl);
+  const previous = await read(workspace.database.transaction("metadata").objectStore("metadata").get("local_intent_sequence")) as { value: number } | undefined;
+  const nextSequence = (previous?.value ?? 0) + 1;
+  const coverage = [{ local_intent_sequence: nextSequence, intent_record_ref: recordId, payload_digest: digest }];
+  const coverageDigest = { ...await digestJournalValue(coverage, workspace.cryptoImpl), profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
+  const created_at = new Date().toISOString();
   const transaction = workspace.database.transaction(["metadata", "partitions"], "readwrite", { durability: "strict" });
   const done = committed(transaction), metadata = transaction.objectStore("metadata");
   const sequence = await read(metadata.get("local_intent_sequence")) as { value: number } | undefined;
   const partition = await read(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id));
   const retained = await read(metadata.getAll(IDBKeyRange.bound("draft-undo:", "draft-undo:\uffff"), MAX_DISCARD_RECORDS + 1));
   const local_intent_sequence = (sequence?.value ?? 0) + 1;
-  if (!same(partition, workspace.partition) || !isCurrent() || retained.length >= MAX_DISCARD_RECORDS || !Number.isSafeInteger(local_intent_sequence)) {
+  if ((sequence?.value ?? 0) !== (previous?.value ?? 0) || !same(partition, workspace.partition) || !isCurrent() || retained.length >= MAX_DISCARD_RECORDS || !Number.isSafeInteger(local_intent_sequence)) {
     transaction.abort(); await done; throw new Error("Undo partition changed");
   }
   const record: DraftUndoRecord = { key: `draft-undo:${source_close.event_id}`, schema_id: "storyos.local-edit-journal.draft-undo.v1",
     project_scope: workspace.partition.project_scope, journal_partition_id: workspace.partition.journal_partition_id,
-    explicit_command_record_id: uuidV7(workspace.cryptoImpl), local_intent_sequence, created_at: new Date().toISOString(),
-    source_close, request, idempotency_key, digest };
+    explicit_command_record_id: recordId, local_intent_sequence, created_at, source_close,
+    editor_session_id: workspace.partition.editor_session_id, writer_generation: workspace.partition.writer_generation,
+    command_kind: "undoLatestAuthorAction", editor_contract_revision: "storyos.editor-contract.release-1.v3",
+    exact_semantic_payload_ref: groupId, semantic_payload_digest: digest,
+    exact_target_head_anchor_bindings: { expected_author_undo_frontier_sequence: request.undo_latest_author_action_input.expected_author_undo_frontier_sequence,
+      expected_authoritative_revision_id: request.undo_latest_author_action_input.expected_authoritative_revision_id, source_close_event_id: source_close.event_id },
+    author_visible_decision_ref: { source_close_event_id: source_close.event_id, draft_id: source_close.draft_id },
+    group: { journal_submission_group_id: groupId, action_class: "explicit_editor_command", api_major: 1, method: "POST",
+      route_template: "/api/v1/projects/{project_id}/author-actions/undo", command_kind: "undoLatestAuthorAction", command_schema: request.command_schema,
+      idempotency_key, frozen_request_body: request, frozen_request_digest: digest, frozen_request_body_ref: groupId, frozen_request_digest_input_ref: groupId,
+      frozen_at: created_at, digest_profile: digest.profile, ordered_coverage: coverage,
+      covered_sequence_range: { first: local_intent_sequence, last: local_intent_sequence }, frozen_payload_coverage_digest: coverageDigest } };
   metadata.add(record); metadata.put({ key: "local_intent_sequence", value: local_intent_sequence });
   await done; return record;
 }

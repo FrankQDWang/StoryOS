@@ -281,7 +281,9 @@ export function ManuscriptEditor({
         });
         if (!isCurrent()) return;
         if (settled?.effect.kind === "draft_compensated" || settled?.effect.kind === "draft_reconciled") {
-          onProjectionRef.current(await rebuildPendingProjection(workspace));
+          const projection = await rebuildPendingProjection(workspace);
+          if (!isCurrent()) return;
+          onProjectionRef.current(projection);
           onCandidateSettledRef.current?.(); return;
         }
         if (settled === undefined || settled.effect.kind !== "compensated") {

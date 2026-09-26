@@ -116,9 +116,9 @@ export async function undoOwnedLatestAuthorAction(options: {
   if (durable !== undefined && durable.journal_partition_id !== options.workspace.partition.journal_partition_id) {
     throw new Error("Original Undo belongs to another writer");
   }
-  const frontier = durable?.request.undo_latest_author_action_input.expected_author_undo_frontier_sequence
+  const frontier = durable?.group.frozen_request_body.undo_latest_author_action_input.expected_author_undo_frontier_sequence
     ?? canonical.author_undo_frontier_sequence;
-  const expectedHead = durable?.request.undo_latest_author_action_input.expected_authoritative_revision_id
+  const expectedHead = durable?.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id
     ?? canonical.base_snapshot.authoritative_head_revision_id;
   if (!positiveU64(frontier)) return undefined;
   const identity = undoIdentity({
@@ -149,15 +149,15 @@ export async function undoOwnedLatestAuthorAction(options: {
     }
   }
   if (durable !== undefined) {
-    flight.idempotencyKey = durable.idempotency_key;
-    flight.correlationId = durable.request.undo_latest_author_action_input.correlation_id;
+    flight.idempotencyKey = durable.group.idempotency_key;
+    flight.correlationId = durable.group.frozen_request_body.undo_latest_author_action_input.correlation_id;
   }
   const guarded = { ...options, fetchImpl: ((input, init) => {
     if (!options.isCurrent()) throw new Error("Undo view changed");
     return options.fetchImpl(input, init);
   }) as typeof fetch };
   try {
-    const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.request);
+    const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.group.frozen_request_body);
     if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled }, options.isCurrent);
     inFlight.delete(identity);
     if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated") {
@@ -200,6 +200,7 @@ async function refreshSessionAfterCompensation(options: {
   });
   if (!options.isCurrent()) throw new Error("Undo view changed");
   await installAuthoritativeBaseSnapshot(options.workspace, canonical.base_snapshot);
+  if (!options.isCurrent()) throw new Error("Undo view changed");
   options.workspace.session = canonical;
 }
 
