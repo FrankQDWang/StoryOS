@@ -554,7 +554,8 @@ export function BlockProposalDisplay({
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
-        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection} />
+        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection}
+        onResult={() => setSettlementRefresh((value) => value + 1)} />
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
         const problem = knownProblems[locator.proposalId];

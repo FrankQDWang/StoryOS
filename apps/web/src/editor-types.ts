@@ -1,6 +1,8 @@
 import type { JournalWorkingBoundary } from "./journal-working-set.ts";
 import type {
   ApplyAuthorEditRequest,
+  DraftRetry,
+  SourceDraftDisposition,
   ApplyAuthorEditEffect,
   AuthorEditProposalTarget,
   AuthorEditUnit,
@@ -72,7 +74,7 @@ export interface JournalIntentRecord extends Record<string, unknown> {
   proposal_anchors: ProposalJournalAnchor[];
   observed_ownership_partition: string;
   author_edit_unit?: AuthorEditUnit;
-  retry_source: { kind: "fresh_editor_intent" };
+  retry_source: { kind: "fresh_editor_intent" } | DraftRetry;
   editor_contract_revision: string;
   undo_group_binding: { kind: "direct_author_input"; undo_group_id: string };
   payload_chain_ref: string;
@@ -133,6 +135,7 @@ export type SubmissionSettlement =
       command_id: string;
       author_command_admission_id: string;
       receipt: DomainReceipt;
+      source_draft_disposition?: SourceDraftDisposition;
       authoritative_revision: { revision_id: string; body: string };
       authoritative_commit_id: string;
       author_action_sequence: string;
@@ -144,6 +147,7 @@ export type SubmissionSettlement =
       command_id: string;
       author_command_admission_id: string;
       receipt: DomainReceipt;
+      source_draft_disposition?: SourceDraftDisposition;
       effect: Exclude<ApplyAuthorEditEffect, { kind: "authoritative_applied" }>;
     })
   | (Record<string, unknown> & {

@@ -16,7 +16,8 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   let key = "";
   let reached!: () => void;
   const committed = new Promise<void>((resolve) => { reached = resolve; });
-  await page.route((url) => url.pathname.endsWith("/manuscript/author-edits"), async (route) => {
+  const originalEditRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
+  await page.route(originalEditRoute, async (route) => {
     posts += 1;
     request = route.request().postDataJSON() as ApplyAuthorEditRequest;
     key = route.request().headers()["idempotency-key"]!;
@@ -102,7 +103,8 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   page.off("request", track);
   assert.deepEqual(mutations, []);
-  assert.equal(await draft.locator("button").count(), 2);
+  await draft.locator("button[data-draft-retry]").waitFor();
+  assert.equal(await draft.locator("button").count(), 3);
   const wrong = await page.evaluate(async (draftId) => {
     const response = await fetch(`/api/v1/projects/018f0000-0000-7001-8000-000000000005/refused-edit-drafts/${draftId}`);
     return { status: response.status, text: await response.text() };
@@ -135,6 +137,55 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.equal(await page.locator("button[data-draft-copy]").count(), 0);
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   await page.unroute(draftRoute);
+  await page.reload();
+  await draft.locator("button[data-draft-retry]").waitFor();
+  await page.unroute(originalEditRoute);
+  let retryRequest: ApplyAuthorEditRequest | undefined, retryResponse: ApplyAuthorEditResponse | undefined;
+  let retryKey = "", retryPosts = 0;
+  let releaseRetry!: () => void;
+  const committedRetry = new Promise<void>((resolve) => { releaseRetry = resolve; });
+  const retryRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
+  await page.route(retryRoute, async (route) => {
+    retryPosts += 1; retryRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
+    retryKey = route.request().headers()["idempotency-key"]!;
+    const settled = await route.fetch(); assert.equal(settled.status(), 200);
+    retryResponse = await settled.json() as ApplyAuthorEditResponse;
+    await route.abort("failed"); releaseRetry();
+  });
+  await draft.locator("button[data-draft-retry]").click();
+  await draft.locator('input[name="draft-from-offset"]').fill("9");
+  await draft.locator('input[name="draft-to-offset"]').fill("14");
+  assert.equal(await draft.locator("[data-retry-preview]").textContent(), "mixed");
+  await draft.locator("button[data-draft-retry-submit]").click();
+  await committedRetry;
+  assert.ok(retryRequest?.retry_source && retryResponse?.effect.kind === "refused_to_draft");
+  assert.notEqual(retryKey, key);
+  assert.notEqual(retryRequest.completed_intent_record_id, request.completed_intent_record_id);
+  assert.deepEqual(retryRequest.author_edit_units, [{ ...unit,
+    normalized_primitives: [{ kind: "replace_structured_selection", replacement: [{ block_kind: "paragraph", text: "mixed" }] }] }]);
+  assert.deepEqual(retryRequest.retry_source, { kind: "draft_retry", source_draft_kind: "refused_edit",
+    source_draft_id: retained.draft.draft_id, source_current_draft_revision_id: retained.draft.draft_revision_id,
+    source_draft_payload_digest: retained.draft.payload_digest, expected_source_draft_closure: "open",
+    selected_payload_range: { kind: "exact_structured_range", coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
+      from: { block_index: 0, offset: 9 }, to: { block_index: 0, offset: 14 },
+      slice_digest: createHash("sha256").update('[{"block_kind":"paragraph","text":"mixed"}]').digest("hex") } });
+  await restart(); await page.reload();
+  const next = page.locator(`[data-refused-edit-draft="${retryResponse.effect.draft_id}"]`);
+  await next.locator("button[data-draft-retry]").waitFor();
+  await draft.locator("[data-draft-closed]").waitFor();
+  assert.equal(await draft.locator("button[data-draft-retry], button[data-draft-discard]").count(), 0);
+  assert.equal(retryPosts, 1, "retry response loss and restart must not create another authority command");
+  const replacement = await page.evaluate(async ({ projectId, draftId }) => {
+    const result = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draftId}`);
+    if (!result.ok) throw new Error(`Replacement read ${result.status}`); return result.json();
+  }, { projectId, draftId: retryResponse.effect.draft_id }) as GetRefusedEditDraftResponse;
+  assert.deepEqual(replacement.draft.payload.author_edit_units, retryRequest.author_edit_units);
+  assert.deepEqual(replacement.draft.replacement_provenance, retryResponse.effect.replacement_provenance);
+  assert.equal(replacement.draft.closure, "open");
+  assert.deepEqual((await read()).draft.payload, retained.draft.payload);
+  await next.locator("button[data-draft-copy]").click(); await next.getByText("Copied").waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "mixed");
+  await page.unroute(retryRoute);
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
-    proposalId: proposal.proposal_id, draft: retained.draft, restart });
+    proposalId: proposal.proposal_id, draft: replacement.draft, restart });
 }
