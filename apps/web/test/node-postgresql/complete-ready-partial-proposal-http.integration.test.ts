@@ -80,6 +80,9 @@ async function generationFacts(proposalId: string): Promise<{
       WHERE p.proposal_id = '${proposalId}'`,
   );
   const [generationId, streamSeq, runStatus, revisionCount] = row.split("|");
+  if (!generationId || !streamSeq || !runStatus || !revisionCount) {
+    throw new Error(`generation facts were incomplete: ${row}`);
+  }
   return { generationId, streamSeq, runStatus, revisionCount };
 }
 

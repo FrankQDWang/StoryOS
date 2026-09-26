@@ -4,8 +4,7 @@ use crate::command_response_project::{
     CommandResponseProjectEvidence, read_command_response_project,
 };
 use storyos_application::{
-    CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect,
-    ContinueProposalGenerationCommand, ContinueProposalGenerationEffect, Project,
+    CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect, Project,
     ProposalGenerationDecisionError, ProposalGenerationSettlement,
 };
 
@@ -54,58 +53,6 @@ pub(super) async fn read_complete_settlement(
     Ok(settlement_from_row(row, effect))
 }
 
-pub(super) async fn read_continue_settlement(
-    store: &PostgresProjectReader,
-    command: &ContinueProposalGenerationCommand,
-    receipt_id: &str,
-) -> Result<
-    ProposalGenerationSettlement<ContinueProposalGenerationEffect>,
-    ProposalGenerationDecisionError,
-> {
-    let row = read_settlement_row(
-        store,
-        &command.project_scope,
-        receipt_id,
-        "continueProposalGeneration",
-        &command.challenge_binding,
-    )
-    .await?;
-    let effect = match (
-        row.result_kind.as_str(),
-        row.transition.as_deref(),
-        row.reason.as_deref(),
-    ) {
-        ("proposal_generation_started", Some("generation_started"), _) => {
-            ContinueProposalGenerationEffect::Started {
-                author_action_sequence: row.sequence.ok_or_else(historical)?,
-                prior_generation_id: row.prior_generation_id.clone().ok_or_else(historical)?,
-                new_generation_id: row.resulting_generation_id.clone().ok_or_else(historical)?,
-                prior_generation_state: row
-                    .prior_generation_state
-                    .clone()
-                    .ok_or_else(historical)?,
-                prior_run_id: row.prior_run_id.clone().ok_or_else(historical)?,
-                resulting_run_id: row.resulting_run_id.clone().ok_or_else(historical)?,
-                preserved_validation: row.preserved_validation.clone().ok_or_else(historical)?,
-                preserved_closure: row.preserved_closure.clone().ok_or_else(historical)?,
-                preserved_operation_resolution: row
-                    .preserved_operation_resolution
-                    .clone()
-                    .ok_or_else(historical)?,
-                generation_event_id: row.transition_id.clone().ok_or_else(historical)?,
-            }
-        }
-        ("conflicted", _, Some("changed_head")) => ContinueProposalGenerationEffect::Conflicted {
-            reason: storyos_core::ProposalGenerationConflict::ChangedHead,
-        },
-        ("refused", _, Some(reason)) => ContinueProposalGenerationEffect::Refused {
-            reason: parse_continue_reason(reason)?,
-        },
-        _ => return Err(historical()),
-    };
-    Ok(settlement_from_row(row, effect))
-}
-
 struct SettlementRow {
     ids: storyos_application::AuthorCommandAdmissionIds,
     result_kind: String,
@@ -114,11 +61,7 @@ struct SettlementRow {
     created_at: String,
     sequence: Option<u64>,
     transition_id: Option<String>,
-    prior_generation_id: Option<String>,
     resulting_generation_id: Option<String>,
-    prior_generation_state: Option<String>,
-    prior_run_id: Option<String>,
-    resulting_run_id: Option<String>,
     preserved_validation: Option<String>,
     preserved_closure: Option<String>,
     preserved_operation_resolution: Option<String>,
@@ -162,9 +105,7 @@ async fn read_settlement_row(
                         to_char(receipt.created_at AT TIME ZONE 'UTC',
                                 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
                         action.author_action_sequence::text, transition.transition_id::text,
-                        transition.prior_generation_id::text, transition.resulting_generation_id::text,
-                        transition.prior_generation_state, transition.prior_run_id::text,
-                        transition.resulting_run_id::text, transition.preserved_validation,
+                        transition.resulting_generation_id::text, transition.preserved_validation,
                         transition.preserved_closure, transition.preserved_operation_resolution,
                         idempotency.acknowledgement_format, idempotency.response_project::text
                    FROM storyos.domain_receipts AS receipt
@@ -208,8 +149,8 @@ async fn read_settlement_row(
             return Err(historical());
         };
         let response_project = match read_command_response_project(
-            row.get::<_, Option<String>>(17).as_deref(),
-            row.get::<_, Option<String>>(18).as_deref(),
+            row.get::<_, Option<String>>(13).as_deref(),
+            row.get::<_, Option<String>>(14).as_deref(),
         ) {
             Ok(CommandResponseProjectEvidence::Captured(project)) => project,
             Ok(CommandResponseProjectEvidence::HistoricalUnavailable) => return Err(historical()),
@@ -236,14 +177,10 @@ async fn read_settlement_row(
             created_at: row.get(6),
             sequence,
             transition_id: row.get(8),
-            prior_generation_id: row.get(9),
-            resulting_generation_id: row.get(10),
-            prior_generation_state: row.get(11),
-            prior_run_id: row.get(12),
-            resulting_run_id: row.get(13),
-            preserved_validation: row.get(14),
-            preserved_closure: row.get(15),
-            preserved_operation_resolution: row.get(16),
+            resulting_generation_id: row.get(9),
+            preserved_validation: row.get(10),
+            preserved_closure: row.get(11),
+            preserved_operation_resolution: row.get(12),
             response_project,
         })
     }
@@ -277,27 +214,6 @@ fn parse_complete_reason(
             Ok(storyos_core::CompleteReadyPartialProposalRefusal::StaleGeneration)
         }
         "stale_candidate" => Ok(storyos_core::CompleteReadyPartialProposalRefusal::StaleCandidate),
-        _ => Err(historical()),
-    }
-}
-
-fn parse_continue_reason(
-    reason: &str,
-) -> Result<storyos_core::ContinueProposalGenerationRefusal, ProposalGenerationDecisionError> {
-    match reason {
-        "stale_proposal_revision" => {
-            Ok(storyos_core::ContinueProposalGenerationRefusal::StaleProposalRevision)
-        }
-        "not_eligible" => Ok(storyos_core::ContinueProposalGenerationRefusal::NotEligible),
-        "not_continuable" => Ok(storyos_core::ContinueProposalGenerationRefusal::NotContinuable),
-        "stale_generation" => Ok(storyos_core::ContinueProposalGenerationRefusal::StaleGeneration),
-        "stale_candidate" => Ok(storyos_core::ContinueProposalGenerationRefusal::StaleCandidate),
-        "operation_not_pending" => {
-            Ok(storyos_core::ContinueProposalGenerationRefusal::OperationNotPending)
-        }
-        "duplicate_identities" => {
-            Ok(storyos_core::ContinueProposalGenerationRefusal::DuplicateIdentities)
-        }
         _ => Err(historical()),
     }
 }
