@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { expect } from "playwright/test";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { createProjectCommandChallenge, digestExportProjectArchive, exportProjectArchive, getExportOperation }
@@ -127,9 +128,27 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
     canonical_command_digest: await digestExportProjectArchive(request), idempotency_key: key } });
   const admitted = await exportProjectArchive({ ...options, request, idempotencyKey: key, antiForgery: challenge.nonce });
   assert.ok(admitted.effect.kind === "admitted", "Production Draft export not admitted");
+  const exportId = admitted.effect.export_id;
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-  await runStoryOSWorker({ repositoryRoot, workerBinary: `${repositoryRoot}/target/release-package/storyos-worker`, args: ["--once"] });
-  const exported = await getExportOperation({ ...options, exportId: admitted.effect.export_id });
+  let exported = await getExportOperation({ ...options, exportId });
+  for (let attempt = 0; attempt < 8 && exported.status === "in_progress"; attempt += 1) {
+    await runStoryOSWorker({ repositoryRoot, workerBinary: `${repositoryRoot}/target/release-package/storyos-worker`, args: ["--once"] });
+    exported = await getExportOperation({ ...options, exportId });
+  }
+  if (exported.status === "in_progress") {
+    let readFailure: { cause: unknown } | undefined;
+    await expect.poll(async () => {
+      try {
+        exported = await getExportOperation({ ...options, exportId });
+        return exported.status !== "in_progress";
+      } catch (cause: unknown) { readFailure = { cause }; return true; }
+    }, { timeout: 10_000, intervals: [100] }).toBe(true).catch((cause: unknown) => {
+      throw new Error(`Export did not settle: ${JSON.stringify(exported)}`, { cause });
+    });
+    if (readFailure !== undefined) {
+      throw new Error(`Export read failed: ${JSON.stringify(exported)}`, readFailure);
+    }
+  }
   assert.ok(exported.status === "ready", `Production Draft export not ready: ${JSON.stringify(exported)}`);
   const download = await fetchImpl(`${origin}/api/v1/projects/${projectId}/exports/${exported.export_id}`,
     { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });

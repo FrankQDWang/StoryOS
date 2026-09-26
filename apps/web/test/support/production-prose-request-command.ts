@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { expect } from "playwright/test";
 import { webcrypto } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -103,15 +104,15 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.keyboard.insertText("The lantern went dark.");
     await page.keyboard.press("Enter");
     await page.keyboard.insertText("The second door opened.");
-    await page.waitForFunction(async ({ projectId, chapterId }) => {
-      const response = await fetch(`/api/v1/projects/${projectId}/chapters/${chapterId}`);
-      if (!response.ok) return false;
-      const chapter = await response.json() as {
-        chapter: { current_revision: { blocks: { text: string }[] } };
-      };
-      return chapter.chapter.current_revision.blocks.map((block) => block.text).join("\n")
-        === "The lantern went dark.\nThe second door opened.";
-    }, { projectId, chapterId }, { polling: 100 });
+    let chapterReadFailure: { cause: unknown } | undefined;
+    await expect.poll(async () => {
+      try {
+        const chapter = await getChapter({ ...options, chapterId });
+        return chapter.chapter.current_revision.blocks.map((block) => block.text).join("\n")
+          === "The lantern went dark.\nThe second door opened.";
+      } catch (cause: unknown) { chapterReadFailure = { cause }; return true; }
+    }, { timeout: 10_000, intervals: [100] }).toBe(true);
+    if (chapterReadFailure !== undefined) throw new Error("Chapter read failed", chapterReadFailure);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const before = await getChapter({ ...options, chapterId });
     assert.equal(before.project_scope.owner_user_id, USER);
