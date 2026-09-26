@@ -11,7 +11,7 @@ import { discardRefusedEdit } from "../../src/refused-edit-discard.ts";
 import { createBrowserScenario, jsonResponse, requestResult } from "./scenario.ts";
 import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 
-it.each(["unmount", "replace", "secret"] as const)("Draft Undo respects the editor %s boundary", async (boundary) => {
+it.each(["unmount", "replace", "secret", "schema"] as const)("Draft Undo respects the editor %s boundary", async (boundary) => {
   const test = await openJournalAppendTestWorkspace();
   const host = document.createElement("div"); document.body.append(host);
   const root = createRoot(host);
@@ -85,9 +85,14 @@ it.each(["unmount", "replace", "secret"] as const)("Draft Undo respects the edit
     await sourceReached;
     await act(async () => { if (boundary === "unmount") root.unmount();
       else if (boundary === "replace") root.render(createElement(ManuscriptEditor, { ...props, persistWorkspace: replacement })); });
+    if (boundary === "schema") {
+      const transaction = database.transaction("metadata", "readwrite");
+      const done = new Promise<void>((resolve) => { transaction.oncomplete = () => resolve(); });
+      transaction.objectStore("metadata").put({ key: "schema", version: 0 }); await done;
+    }
     const pending = structuredClone(replacement.pending);
     callbacks.length = 0;
-    await act(async () => { release(); await oldTransaction; });
+    await act(async () => { release(); await (boundary === "schema" ? failure : oldTransaction); });
     const rows = await requestResult(database.transaction("metadata").objectStore("metadata").getAll());
     if (boundary === "secret") {
       await failure;
@@ -105,7 +110,7 @@ it.each(["unmount", "replace", "secret"] as const)("Draft Undo respects the edit
       return;
     }
     expect((rows as { key: string }[]).filter((row) => row.key.startsWith("draft-undo:"))).toEqual([]);
-    expect(mutations).toEqual([]); expect(callbacks).toEqual([]); expect(replacement.pending).toEqual(pending);
+    expect(mutations).toEqual([]); expect(callbacks).toEqual(boundary === "schema" ? ["failure"] : []); expect(replacement.pending).toEqual(pending);
   } finally {
     release(); if (boundary !== "unmount") await act(async () => { root.unmount(); });
     host.remove(); await test.close(); Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct });

@@ -4,7 +4,7 @@ import type { DigestValue, EditorFlowDraftClosed, EditorFlowDraftReopened, Proje
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { EditorWorkspace } from "./editor-types.ts";
 import { canonicalDraftValue, MAX_DISCARD_RECORDS } from "./refused-edit-discard.ts";
-import { digestJournalValue } from "./local-edit-journal.ts";
+import { digestJournalValue, JOURNAL_DATABASE_VERSION } from "./local-edit-journal.ts";
 import { uuidV7 } from "./acceptance-journal.ts";
 
 const keys = (value: unknown, required: string[], optional: string[] = []) => value !== null && typeof value === "object"
@@ -114,16 +114,17 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
 
 export async function readDraftUndoJournal(workspace: EditorWorkspace) {
   const metadata = workspace.database.transaction("metadata").objectStore("metadata");
-  const [records, observations] = await Promise.all([
+  const [records, observations, schema] = await Promise.all([
     read(metadata.getAll(IDBKeyRange.bound("draft-undo:", "draft-undo:\uffff"), MAX_DISCARD_RECORDS + 1)) as Promise<DraftUndoRecord[]>,
     read(metadata.getAll(IDBKeyRange.bound("draft-undo-observation:", "draft-undo-observation:\uffff"), MAX_DISCARD_RECORDS + 1)) as Promise<Observation[]>,
+    read(metadata.get("schema")) as Promise<{ version: number } | undefined>,
   ]);
-  if (records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Undo Journal limit");
+  if (schema?.version !== JOURNAL_DATABASE_VERSION || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_DISCARD_RECORDS) throw new Error("Undo Journal unavailable");
   for (const record of records) {
     const partition = await read(workspace.database.transaction("partitions").objectStore("partitions").get(record.journal_partition_id)) as EditorWorkspace["partition"] | undefined;
     const group = record.group, input = group?.frozen_request_body?.undo_latest_author_action_input;
     const coverage = [{ local_intent_sequence: record.local_intent_sequence, intent_record_ref: record.explicit_command_record_id, payload_digest: group?.frozen_request_digest }];
-    const coverageDigest = { ...await digestJournalValue(coverage, workspace.cryptoImpl), profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
+    const coverageDigest = { ...await digestJournalValue({ ordered_coverage: coverage, covered_sequence_range: group?.covered_sequence_range }, workspace.cryptoImpl), profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
     if (!keys(record, ["key", "schema_id", "project_scope", "journal_partition_id", "explicit_command_record_id", "local_intent_sequence", "created_at", "source_close", "editor_session_id", "writer_generation", "command_kind", "editor_contract_revision", "exact_semantic_payload_ref", "semantic_payload_digest", "exact_target_head_anchor_bindings", "author_visible_decision_ref", "group"])
       || !keys(group, ["journal_submission_group_id", "action_class", "api_major", "method", "route_template", "command_kind", "command_schema", "idempotency_key", "frozen_request_body", "frozen_request_digest", "frozen_request_body_ref", "frozen_request_digest_input_ref", "frozen_at", "digest_profile", "ordered_coverage", "covered_sequence_range", "frozen_payload_coverage_digest"])
       || !keys(record.group.frozen_request_body, ["command_schema", "undo_latest_author_action_input"])
@@ -181,15 +182,16 @@ export async function freezeDraftUndo(workspace: EditorWorkspace, source_close: 
   const previous = await read(workspace.database.transaction("metadata").objectStore("metadata").get("local_intent_sequence")) as { value: number } | undefined;
   const nextSequence = (previous?.value ?? 0) + 1;
   const coverage = [{ local_intent_sequence: nextSequence, intent_record_ref: recordId, payload_digest: digest }];
-  const coverageDigest = { ...await digestJournalValue(coverage, workspace.cryptoImpl), profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
+  const coverageDigest = { ...await digestJournalValue({ ordered_coverage: coverage, covered_sequence_range: { first: nextSequence, last: nextSequence } }, workspace.cryptoImpl), profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
   const created_at = new Date().toISOString();
   const transaction = workspace.database.transaction(["metadata", "partitions"], "readwrite", { durability: "strict" });
   const done = committed(transaction), metadata = transaction.objectStore("metadata");
   const sequence = await read(metadata.get("local_intent_sequence")) as { value: number } | undefined;
+  const schema = await read(metadata.get("schema")) as { version: number } | undefined;
   const partition = await read(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id));
   const retained = await read(metadata.getAll(IDBKeyRange.bound("draft-undo:", "draft-undo:\uffff"), MAX_DISCARD_RECORDS + 1));
   const local_intent_sequence = (sequence?.value ?? 0) + 1;
-  if ((sequence?.value ?? 0) !== (previous?.value ?? 0) || !same(partition, workspace.partition) || !isCurrent() || retained.length >= MAX_DISCARD_RECORDS || !Number.isSafeInteger(local_intent_sequence)) {
+  if (schema?.version !== JOURNAL_DATABASE_VERSION || (sequence?.value ?? 0) !== (previous?.value ?? 0) || !same(partition, workspace.partition) || !isCurrent() || retained.length >= MAX_DISCARD_RECORDS || !Number.isSafeInteger(local_intent_sequence)) {
     transaction.abort(); await done; throw new Error("Undo partition changed");
   }
   const record: DraftUndoRecord = { key: `draft-undo:${source_close.event_id}`, schema_id: "storyos.local-edit-journal.draft-undo.v1",

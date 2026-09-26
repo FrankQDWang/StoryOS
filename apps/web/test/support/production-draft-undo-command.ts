@@ -74,7 +74,12 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     await route.fulfill({ response: reply, json: { ...second, receipt: { ...second.receipt, draft_artifact_refs: [] } } });
   });
   await page.locator("[data-manuscript-editor]").focus(); await page.keyboard.press("ControlOrMeta+Z");
-  await surface.locator("[data-draft-reopened]").waitFor();
+  await surface.locator("[data-draft-reopened]").waitFor().catch(async (cause: unknown) => {
+    const journal = await readProductionJournal(page, projectId), current = await read() as RefusedEditDraftInspect;
+    const bindings = journal.metadata!.filter((row) => row.key === "schema" || String(row.key).startsWith("draft-undo"))
+      .map(({ key, version, local_intent_sequence, record_key, event }) => ({ key, version, local_intent_sequence, record_key, event }));
+    throw new Error(`Second Draft Undo failed (${await page.locator("[data-editor-failure]").getAttribute("data-editor-failure")}): ${JSON.stringify({ bindings, closure: current.closure, close_event_id: current.closure_event?.event_id, reopen_event: current.reopen_event })}; ${await page.locator("body").innerText()}`, { cause });
+  });
   await surface.locator("button[data-draft-discard]").waitFor(); await page.unroute(undoRoute);
   assert.ok(second.effect.kind === "draft_compensated");
   const final = await read() as RefusedEditDraftInspect;
