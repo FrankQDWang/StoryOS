@@ -24,7 +24,8 @@ export function captureStructuredSelection(state: EditorState, transaction: Tran
     }
     const start = position + 1;
     const end = start + node.textContent.length;
-    if (step.from > end || step.to < start) return;
+    if (step.from > end || step.to < start
+      || node.textContent.length > 0 && (step.from === end || step.to === start)) return;
     const candidate = node.type.name === "blockProposal";
     if (candidate && node.attrs.eligible !== true
       || !candidate && node.type.name !== "paragraph" && node.type.name !== "heading") valid = false;

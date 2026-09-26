@@ -1,4 +1,5 @@
 import { Editor } from "@tiptap/core";
+import { applyTrustedInput } from "../support/browser-command-client.ts";
 import { Fragment, Slice } from "@tiptap/pm/model";
 import { afterEach, expect, it } from "vitest";
 
@@ -152,7 +153,7 @@ it("carries the validated replacement on an accepted document transaction", () =
   }
 });
 
-it("captures a complete backward mixed selection without changing either durable projection", () => {
+it("captures a complete backward mixed selection without changing either durable projection", async () => {
   const host = document.createElement("div");
   document.body.append(host);
   let captured: unknown;
@@ -189,6 +190,12 @@ it("captures a complete backward mixed selection without changing either durable
             coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: 2,
             block_kind: "heading", source_text: "World" },
         ] } } } });
+  expect(editor.state.doc.eq(before)).toBe(true);
+  const expected = captured;
+  captured = undefined;
+  editor.view.focus();
+  await applyTrustedInput({ operation: "insert_text", text: "New" });
+  expect(captured).toEqual(expected);
   expect(editor.state.doc.eq(before)).toBe(true);
 });
 

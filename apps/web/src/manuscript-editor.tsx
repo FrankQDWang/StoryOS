@@ -188,8 +188,11 @@ export function ManuscriptEditor({
           mixedCompositionRef.current ??= mixed;
           return;
         }
+        const primitive = mixed.authorEditUnit.normalized_primitives[0];
+        const text = primitive?.kind === "replace_structured_selection"
+          ? primitive.replacement.map((block) => block.text).join("\n") : "";
         void idleRef.current?.persist(mixed, originFromTransaction(transaction,
-          { from: 0, to: 1, text: "" }), new Date().toISOString());
+          { from: 0, to: 1, text }), new Date().toISOString());
         return;
       }
       const candidate = capturedCandidateEditFromTransaction(transaction);

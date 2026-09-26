@@ -32,8 +32,12 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
     window.getSelection()?.setBaseAndExtent(candidate, 5, right, 7);
     document.dispatchEvent(new Event("selectionchange"));
   }, { proposalId: proposal.proposal_id });
+  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus();
   await select();
+  const submitted = page.waitForRequest((request) => request.method() === "POST"
+    && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
   await page.keyboard.insertText("Complete mixed replacement");
+  await submitted;
   await committed;
   assert.ok(request && response && response.effect.kind === "refused_to_draft");
   const effect = response.effect;

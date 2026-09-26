@@ -322,6 +322,15 @@ export function storyosEditorProps(blockId: string) {
       return true;
     },
     handleDOMEvents: {
+      beforeinput: (view: EditorView, event: Event) => {
+        if (!(event instanceof InputEvent) || event.isComposing
+          || event.inputType !== "insertText" || event.data === null) return false;
+        const transaction = view.state.tr.insertText(event.data);
+        if (captureStructuredSelection(view.state, transaction) === undefined) return false;
+        event.preventDefault();
+        view.dispatch(transaction);
+        return true;
+      },
       dragover: (_view: EditorView, event: Event) => {
         event.preventDefault();
         return true;
