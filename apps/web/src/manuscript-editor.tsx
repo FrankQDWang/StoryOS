@@ -2,6 +2,8 @@ import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
+import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
+
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import { createAuthorEditIdleController, type AuthorEditIdleController }
   from "./author-edit-idle.ts";
@@ -127,6 +129,7 @@ export function ManuscriptEditor({
 }: ManuscriptEditorProps) {
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
+  const mixedCompositionRef = useRef<StructuredSelectionEdit | undefined>(undefined);
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionBlockedRef = useRef(false);
   const candidateCompositionDirtyRef = useRef(false);
@@ -175,6 +178,16 @@ export function ManuscriptEditor({
       syncManuscriptSurface(current.view.dom, nextBlocks);
       if (isStoryosHydrateTransaction(transaction) || !transaction.docChanged) {
         observedBlocksRef.current = nextBlocks;
+        return;
+      }
+      const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
+      if (mixed !== undefined) {
+        if (current.view.composing || composingRef.current) {
+          mixedCompositionRef.current = mixed;
+          return;
+        }
+        void idleRef.current?.persist(mixed, originFromTransaction(transaction,
+          { from: 0, to: 1, text: "" }), new Date().toISOString());
         return;
       }
       const candidate = capturedCandidateEditFromTransaction(transaction);
@@ -458,6 +471,7 @@ export function ManuscriptEditor({
     const onCompositionStart = (): void => {
       onFirstAuthorInput();
       composingRef.current = true;
+      mixedCompositionRef.current = undefined;
       const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal";
       candidateCompositionBlockedRef.current = candidateSelected
         && !idle.canAcceptCandidateInput(true);
@@ -466,13 +480,25 @@ export function ManuscriptEditor({
       candidateCompositionDirtyRef.current = false;
       idle.setHoldSubmission(true);
     };
-    const onCompositionEnd = (): void => {
+    const onCompositionEnd = (event: CompositionEvent): void => {
       composingRef.current = false;
       idle.setHoldSubmission(false);
       const candidateStart = candidateCompositionStartRef.current;
       candidateCompositionStartRef.current = null;
       candidateCompositionBlockedRef.current = false;
       candidateCompositionDirtyRef.current = false;
+      const mixed = mixedCompositionRef.current;
+      mixedCompositionRef.current = undefined;
+      if (mixed !== undefined) {
+        if (event.data !== "") {
+          const primitive = mixed.authorEditUnit.normalized_primitives[0];
+          if (primitive?.kind === "replace_structured_selection") {
+            primitive.replacement = [{ block_kind: primitive.replacement[0]!.block_kind, text: event.data }];
+            void idle.persist(mixed, "composition_confirmation", new Date().toISOString());
+          }
+        }
+        return;
+      }
       if (candidateStart !== null) {
         const captured = capturedCandidateEdit(candidateStart, editor.state.doc);
         if (!captured.valid) {

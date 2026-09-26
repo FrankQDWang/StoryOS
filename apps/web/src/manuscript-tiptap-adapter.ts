@@ -22,6 +22,8 @@ import {
   readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 
+import { captureStructuredSelection } from "./structured-edit-capture.ts";
+
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
 const STORYOS_CAPTURED_EDIT = "storyos.capturedEdit";
@@ -236,6 +238,14 @@ export function storyosManuscriptExtensions(
               if (transaction.getMeta(STORYOS_HYDRATE) === true || !transaction.docChanged) {
                 return true;
               }
+              const mixed = captureStructuredSelection(state, transaction);
+              if (mixed !== undefined) {
+                if (canAcceptCandidateInput?.(true) !== true) return false;
+                transaction.setMeta("storyos.structuredEdit", mixed);
+                transaction.replaceWith(0, transaction.doc.content.size, state.doc.content);
+                transaction.setSelection(TextSelection.create(transaction.doc, state.selection.anchor, state.selection.head));
+                return true;
+              }
               const next = readManuscriptParagraphs(transaction.doc);
               if (next === undefined) return false;
               const previous = readManuscriptParagraphs(state.doc);
@@ -329,6 +339,12 @@ function dispatchPlainTextReplacement(
   const previous = readManuscriptParagraphs(view.state.doc);
   if (previous === undefined) return;
   const { from, to } = view.state.selection;
+  const replacement = view.state.tr.insertText(text, from, to);
+  if (captureStructuredSelection(view.state, replacement) !== undefined) {
+    replacement.setMeta(STORYOS_ORIGIN, origin);
+    view.dispatch(replacement);
+    return;
+  }
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
   if ($from.parent.type.name === "blockProposal"

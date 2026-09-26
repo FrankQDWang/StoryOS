@@ -13,7 +13,8 @@ import type {
   RejectProposalOperationsResponse, UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
-import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch } from "./node-integration";
+import { verifyProductionRefusedEdit } from "./production-refused-edit-command.ts";
+import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
 const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const USER = "018f0000-0000-7001-8000-000000000001";
@@ -33,10 +34,12 @@ function uuidV7(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export async function verifyProductionProseRequest(context: BrowserContext): Promise<void> {
+export async function verifyProductionProseRequest(context: BrowserContext, scenario = "prose_request"): Promise<void> {
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "the packaged Server origin is required");
-  const origin = new URL(configured).origin;
+  let owned = scenario === "refused_edit" ? await startStoryOSServer({ repositoryRoot,
+    serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server") }) : undefined;
+  const origin = owned?.baseUrl ?? new URL(configured).origin;
   const page = await context.newPage();
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -44,7 +47,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
   try {
     assert.equal((await page.goto(origin))?.status(), 200);
     await page.locator('#app[data-boot-state="protected-ready"]').waitFor();
-    await page.locator('input[name="title"]').fill(`Prose request ${uuidV7()}`);
+    await page.locator('input[name="title"]').fill(`${scenario === "refused_edit" ? "Refused edit" : "Prose request"} ${uuidV7()}`);
     await page.locator('input[name="title"]').press("Enter");
     await page.locator('#app[data-boot-state="empty-project-ready"]').waitFor();
     await page.locator("form[data-rename]").waitFor();
@@ -220,6 +223,14 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.deepEqual(await page.locator("[data-manuscript-editor] > p").allTextContents(),
       ["The lantern went dark.", "The second door opened."]);
     await page.locator('[data-manuscript-editor][contenteditable="true"]').waitFor();
+    if (scenario === "refused_edit") {
+      await verifyProductionRefusedEdit({ page, context, origin, projectId, chapter: before, proposal: firstProposal,
+        restart: async () => { await stopStoryOSServer(owned!.server);
+          owned = await startStoryOSServer({ repositoryRoot, bind: new URL(origin).host,
+            serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server") }); } });
+      assert.deepEqual(errors, []);
+      return;
+    }
     delivery = "historical";
     await page.locator('input[name="assistant-message"]').fill(MESSAGE);
     await page.locator(".composer button").click();
@@ -589,6 +600,7 @@ export async function verifyProductionProseRequest(context: BrowserContext): Pro
     assert.deepEqual((await getChapter({ ...options, chapterId })).chapter, acceptedChapter.chapter);
     assert.deepEqual(errors, []);
   } finally {
+    if (owned !== undefined) await stopStoryOSServer(owned.server);
     await page.close();
     await context.clearCookies({ name: "storyos_session" });
   }

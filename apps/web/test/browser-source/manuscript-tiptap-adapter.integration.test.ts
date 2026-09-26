@@ -1,4 +1,5 @@
 import { Editor } from "@tiptap/core";
+import { Fragment, Slice } from "@tiptap/pm/model";
 import { afterEach, expect, it } from "vitest";
 
 import {
@@ -11,6 +12,7 @@ import {
   capturedManuscriptEditFromTransaction,
   isStoryosHydrateTransaction,
   storyosManuscriptExtensions,
+  storyosEditorProps,
 } from "../../src/manuscript-tiptap-adapter.ts";
 
 const BLOCK_ID = "11111111-1111-4111-8111-111111111111";
@@ -148,4 +150,87 @@ it("carries the validated replacement on an accepted document transaction", () =
     expect(carried.to).toBe(5);
     expect(carried.text).toBe("!");
   }
+});
+
+it("captures a complete backward mixed selection without changing either durable projection", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  let captured: unknown;
+  editor = new Editor({ element: host, injectCSS: false,
+    extensions: storyosManuscriptExtensions(BLOCK_ID, undefined, () => true),
+    editorProps: storyosEditorProps(BLOCK_ID),
+    content: { type: "doc", content: [
+      { type: "paragraph", attrs: { id: BLOCK_ID }, content: [{ type: "text", text: "Hello" }] },
+      { type: "blockProposal", attrs: { proposalId: BLOCK_ID, operationId: RIGHT_ID,
+        revisionId: RIGHT_ID, blockId: BLOCK_ID, eligible: true, expectedHeads: [RIGHT_ID] },
+        content: [{ type: "text", text: "Candidate" }] },
+      { type: "heading", attrs: { id: RIGHT_ID, level: 1 }, content: [{ type: "text", text: "World" }] },
+    ] },
+    onTransaction({ transaction }) { captured = transaction.getMeta("storyos.structuredEdit"); },
+  });
+  editor.commands.setTextSelection({ from: 21, to: 2 });
+  const before = editor.state.doc;
+  const transaction = editor.state.tr.insertText("New");
+  editor.view.dispatch(transaction);
+  expect(captured).toEqual({ kind: "structured_selection", expectedProposalHeads: [RIGHT_ID],
+    authorEditUnit: { normalized_primitives: [{ kind: "replace_structured_selection",
+      replacement: [{ block_kind: "paragraph", text: "New" }] }],
+    selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 2, to: 1,
+      ordered_selection: { anchor: { source_index: 2, source_offset: 2 },
+        head: { source_index: 0, source_offset: 1 }, sources: [
+          { owner: { kind: "manuscript", manuscript_block_id: BLOCK_ID },
+            coordinate_profile: "prosemirror-token-utf16.v1", from: 1, to: 5,
+            block_kind: "paragraph", source_text: "Hello" },
+          { owner: { kind: "proposal", proposal_id: BLOCK_ID, operation_id: RIGHT_ID,
+            revision_id: RIGHT_ID, manuscript_block_id: BLOCK_ID },
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 9,
+            block_kind: "paragraph", source_text: "Candidate" },
+          { owner: { kind: "manuscript", manuscript_block_id: RIGHT_ID },
+            coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: 2,
+            block_kind: "heading", source_text: "World" },
+        ] } } } });
+  expect(editor.state.doc.eq(before)).toBe(true);
+});
+
+it("retains paragraph boundaries from a real multi-line mixed paste", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  let captured: unknown;
+  editor = new Editor({ element: host, injectCSS: false,
+    extensions: storyosManuscriptExtensions(BLOCK_ID, undefined, () => true),
+    editorProps: storyosEditorProps(BLOCK_ID),
+    content: { type: "doc", content: [
+      { type: "paragraph", attrs: { id: BLOCK_ID }, content: [{ type: "text", text: "Hello" }] },
+      { type: "blockProposal", attrs: { proposalId: BLOCK_ID, operationId: RIGHT_ID,
+        revisionId: RIGHT_ID, blockId: BLOCK_ID, eligible: true, expectedHeads: [RIGHT_ID] },
+        content: [{ type: "text", text: "Candidate" }] },
+    ] }, onTransaction({ transaction }) { captured = transaction.getMeta("storyos.structuredEdit"); },
+  });
+  editor.commands.setTextSelection({ from: 2, to: 10 });
+  const before = editor.state.doc;
+  const clipboardData = new DataTransfer();
+  clipboardData.setData("text/plain", "First\r\nSecond");
+  editor.view.dom.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData }));
+  expect(captured).toMatchObject({ authorEditUnit: { normalized_primitives: [
+    { kind: "replace_structured_selection", replacement: [
+      { block_kind: "paragraph", text: "First" }, { block_kind: "paragraph", text: "Second" },
+    ] },
+  ] } });
+  expect(editor.state.doc.eq(before)).toBe(true);
+  const structured = new Slice(Fragment.fromArray([
+    editor.schema.nodes.heading!.create({ level: 1 }, editor.schema.text("Heading")),
+    editor.schema.nodes.paragraph!.create(null, editor.schema.text("Tail")),
+  ]), 1, 1);
+  editor.view.dispatch(editor.state.tr.replaceSelection(structured));
+  expect(captured).toMatchObject({ authorEditUnit: { normalized_primitives: [
+    { kind: "replace_structured_selection", replacement: [
+      { block_kind: "paragraph", text: "Heading" }, { block_kind: "paragraph", text: "Tail" },
+    ] },
+  ] } });
+  expect(editor.state.doc.eq(before)).toBe(true);
+  editor.view.dispatch(editor.state.tr.deleteSelection().setMeta("storyos.origin", "cut"));
+  expect(captured).toMatchObject({ authorEditUnit: { normalized_primitives: [
+    { kind: "replace_structured_selection", replacement: [{ block_kind: "paragraph", text: "" }] },
+  ] } });
+  expect(editor.state.doc.eq(before)).toBe(true);
 });

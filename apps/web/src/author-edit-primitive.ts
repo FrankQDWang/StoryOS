@@ -25,6 +25,7 @@ export function applyAuthorEditPrimitive(
   blocks: ManuscriptBlock[],
   primitive: AuthorEditPrimitive,
 ): void {
+  if (primitive.kind === "replace_structured_selection") return;
   if (primitive.kind === "replace_selection") {
     if (blocks.length !== 1 || blocks[0] === undefined) {
       throw new Error("Local Edit Journal reconstruction failed");

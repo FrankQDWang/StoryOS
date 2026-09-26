@@ -8,6 +8,7 @@ import type {
   EditorBaseSnapshot,
   ManuscriptBlock,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
+import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
 import { readAcceptanceJournal } from "./acceptance-journal.ts";
 import type {
@@ -726,6 +727,9 @@ function pendingProjectionFromSnapshot(
       if ((group.frozen_request_body.proposal_target !== undefined
           && group.settlement.kind === "zero_authority_receipt_settled"
           && group.settlement.effect.kind === "proposal_revised")
+        || (group.settlement.kind === "zero_authority_receipt_settled"
+          && group.settlement.effect.kind === "refused_to_draft"
+          && group.settlement.receipt.result === "refused_to_draft")
         || provenNoEffectAgainstDurableBase(group, snapshot, base)) {
         for (const item of group.ordered_coverage) resolvedSequences.add(item.local_intent_sequence);
       } else {
@@ -819,6 +823,27 @@ export async function persistReplaceSelection(
     inputOrigin: edit.inputOrigin ?? "typing",
     undoGroupId: edit.undoGroupId,
     createdAt: edit.createdAt,
+  }, cryptoImpl);
+}
+
+export async function persistStructuredSelection(
+  workspace: EditorWorkspace,
+  edit: StructuredSelectionEdit & { inputOrigin: InputOrigin; undoGroupId?: string; createdAt: string },
+  cryptoImpl: Crypto,
+): Promise<PendingEditProjection> {
+  const snapshot = await prepareJournalAppend(workspace);
+  const projection = pendingProjectionFromSnapshot(workspace, snapshot);
+  if (projection.unsettled_intent_count !== 0
+    || edit.expectedProposalHeads.some((head) => !UUID.test(head))
+    || edit.expectedProposalHeads.length !== new Set(edit.expectedProposalHeads).size) {
+    throw new Error("Mixed input is stale");
+  }
+  return persistAuthorEditUnit(workspace, { snapshot, projection,
+    authorEditUnit: edit.authorEditUnit,
+    expectedBody: projection.body, expectedBlocks: projection.blocks,
+    resultingBody: projection.body, extraUtf8: JSON.stringify(edit.authorEditUnit),
+    inputOrigin: edit.inputOrigin, undoGroupId: edit.undoGroupId, createdAt: edit.createdAt,
+    expectedProposalHeads: edit.expectedProposalHeads,
   }, cryptoImpl);
 }
 
@@ -1195,6 +1220,7 @@ async function persistAuthorEditUnit(
     inputOrigin: InputOrigin;
     undoGroupId?: string | undefined;
     createdAt?: string | undefined;
+    expectedProposalHeads?: string[];
     candidate?: {
       target: AuthorEditProposalTarget;
       expectedProposalHeads: string[];
@@ -1382,11 +1408,11 @@ async function persistAuthorEditUnit(
     base_activity_position: base.project_activity_position,
     target_refs: base.target_refs,
     expected_authoritative_heads: [base.authoritative_head_revision_id],
-    expected_proposal_heads: edit.candidate?.expectedProposalHeads
+    expected_proposal_heads: edit.expectedProposalHeads ?? edit.candidate?.expectedProposalHeads
       ?? base.proposal_head_revision_ids,
     ...(edit.candidate === undefined ? {} : { proposal_target: edit.candidate.target }),
     proposal_anchors: workspace.inlineProposalAnchors ?? [],
-    observed_ownership_partition: edit.candidate === undefined
+    observed_ownership_partition: edit.expectedProposalHeads !== undefined ? "mixed" : edit.candidate === undefined
       ? base.observed_ownership_partition : "mixed",
     author_edit_unit: authorEditUnit,
     retry_source: { kind: "fresh_editor_intent" },

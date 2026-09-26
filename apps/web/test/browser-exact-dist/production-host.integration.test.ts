@@ -11,3 +11,7 @@ it("recovers one prose request through the production Web, Server, database, and
   await expect(verifyProductionHost({ scenario: "prose_request" }))
     .resolves.toEqual({ kind: "production_host_verified" });
 });
+
+it("preserves and copies a complete mixed edit through response loss, reload and Server restart", async () => {
+  await expect(verifyProductionHost({ scenario: "refused_edit" })).resolves.toEqual({ kind: "production_host_verified" });
+});
