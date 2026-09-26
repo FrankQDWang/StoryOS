@@ -31,7 +31,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
   await page.locator("[data-manuscript-editor]").focus();
   await page.keyboard.press("ControlOrMeta+Z");
   await expect.poll(() => posts, { timeout: 5000 }).toBe(1).catch(async (cause: unknown) => {
-    throw new Error(`Root Undo did not submit: ${await page.locator("body").innerText()}`, { cause });
+    throw new Error(`Root Undo did not submit (${await page.locator("[data-editor-failure]").getAttribute("data-editor-failure")}): ${await page.locator("body").innerText()}`, { cause });
   });
   await committed;
   assert.ok(frozen, "Original Undo identity must be durable before the first POST");
