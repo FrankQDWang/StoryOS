@@ -162,7 +162,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getRefusedEditDraft,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -524,6 +524,7 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         ]);
     }
     expected_references.push(crate::release1_author_edit_outcome_artifacts::RESPONSE_SCHEMA_PATH);
+    expected_references.push(crate::release1_refused_edit_draft_artifacts::RESPONSE_SCHEMA_PATH);
     expected_references.push(crate::release1_snapshot_artifacts::SNAPSHOT_RESPONSE_SCHEMA_PATH);
     expected_references.push(crate::release1_manuscript_tree_artifacts::RESPONSE_SCHEMA_PATH);
     expected_references.push(crate::release1_manuscript_search_artifacts::REQUEST_SCHEMA_PATH);
@@ -581,7 +582,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let profile = release1_protocol_profile();
     assert_eq!(
         profile.contract_revision,
-        "release1-wire-catalog-2026-09-14-responses-memory"
+        "release1-wire-catalog-2026-09-26-refused-edit-draft"
     );
     assert_eq!(
         profile.release_identity.web_client_contract_revision,
@@ -634,17 +635,19 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let outcomes = schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
         .as_array()
         .expect("Author Edit outcomes are a union");
+    let authoritative = outcomes
+        .iter()
+        .find(|outcome| outcome["properties"]["kind"]["const"] == "authoritative_applied")
+        .expect("authoritative outcome exists");
     assert!(
-        outcomes[0]["required"]
+        authoritative["required"]
             .as_array()
             .expect("applied required fields are an array")
             .contains(&serde_json::json!("project_activity_position"))
     );
-    for outcome in schema["$defs"]["ApplyAuthorEditEffect"]["oneOf"]
-        .as_array()
-        .expect("Author Edit outcomes are a union")
+    for outcome in outcomes
         .iter()
-        .skip(1)
+        .filter(|outcome| outcome["properties"]["kind"]["const"] != "authoritative_applied")
     {
         assert!(
             !outcome["required"]
@@ -689,6 +692,12 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         },
         ApplyAuthorEditEffect::Refused {
             reason: AuthorEditRefusalReason::InvalidSelection,
+        },
+        ApplyAuthorEditEffect::RefusedToDraft {
+            refusal_origin: crate::RefusedEditOrigin::FreshEditorIntent,
+            draft_id: "draft-1".to_owned(),
+            draft_revision_id: "draft-revision-1".to_owned(),
+            creation_event_id: "creation-1".to_owned(),
         },
     ];
     for effect in zero_authority {

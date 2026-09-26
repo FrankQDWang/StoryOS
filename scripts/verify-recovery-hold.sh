@@ -173,6 +173,14 @@ if [ "$recovery_drill" = "mixed" ]; then
   STORYOS_VITEST_FILE_ORDER=test/node-postgresql/recovery-archived-exports-http.integration.test.ts: \
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/recovery-archived-exports-http.integration.test.ts
+  refused_edit_expected="$STORYOS_VERIFICATION_RUN/refused-edit-recovery.jsonl"
+  : > "$refused_edit_expected"
+  STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
+  STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
+  STORYOS_REFUSED_EDIT_RECOVERY_EXPECTED="$refused_edit_expected" \
+  STORYOS_VITEST_FILE_ORDER=test/node-postgresql/edit-inline-proposal-http.integration.test.ts: \
+  pnpm --dir apps/web exec vitest run --project node-postgresql \
+    test/node-postgresql/edit-inline-proposal-http.integration.test.ts
   archived_before=$(archived_export_facts "$primary")
   if [ "$(printf '%s\n' "$archived_before" | wc -l | tr -d ' ')" != "2" ] \
     || ! printf '%s\n' "$archived_before" | grep -Eq '^Recovery Archive Archived\|[0-9a-f-]+\|archived\|1\|\|[0-9a-f-]+:sha256:[0-9a-f]{64}:[0-9a-f]+$' \
@@ -696,6 +704,8 @@ if [ "$recovery_drill" = "mixed" ]; then
       WHERE project.title = 'Recovery Archive Archived'")
   node scripts/inspect-recovered-archived-exports.mjs \
     "$STORYOS_DEV_SERVER" "$readable_pair" "$archive_pair"
+  node scripts/inspect-recovered-refused-edit-drafts.mjs \
+    "$hold" "$STORYOS_DEV_SERVER" "$refused_edit_expected"
 fi
 acceptance_after=$(node scripts/inspect-acceptance-conditions.mjs "$hold" "$STORYOS_DEV_SERVER")
 if [ "$acceptance_before" != "$acceptance_after" ]; then

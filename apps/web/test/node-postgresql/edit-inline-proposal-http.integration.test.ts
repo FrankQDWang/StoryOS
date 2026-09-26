@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
 import {
-  acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession,
-  digestAcceptProposal, digestApplyAuthorEdit, digestCreateAgentRun,
+  acceptProposal, applyAuthorEdit, archiveProject, createAgentRun, createEditorSession,
+  digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestRejectProposalOperations,
   exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, getRefusedEditDraft, getApplyAuthorEditOutcome,
   rejectProposalOperations,
@@ -15,6 +15,7 @@ import type {
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
+import { retainRefusedEditRecoveryExpectation } from "../support/refused-edit-recovery.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
   prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
@@ -407,6 +408,15 @@ test("a protected mixed replacement retains complete content after response loss
       author_command_admission_id: result.author_command_admission_id, command_id: result.command_id,
       receipt_result_kind: "refused_to_draft", created_at: revisionCreatedAt }]);
     for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes(originalNonce));
+    const readyExport = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      exportId: archive.effect.export_id, fetchImpl: prepared.fetchImpl });
+    if (readyExport.status !== "ready") throw new Error("expected ready recovery archive");
+    const recoveryDownload = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${readyExport.export_id}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    assert.equal(recoveryDownload.status, 200);
+    await retainRefusedEditRecoveryExpectation(prepared.projectId, [{ draft: queried.draft, available: true }],
+      [{ exportId: readyExport.export_id, root: readyExport.immutable_root, status: 200,
+        bytesSha256: createHash("sha256").update(new Uint8Array(await recoveryDownload.arrayBuffer())).digest("hex") }]);
   } finally { await stopRealServer(started.server); }
 });
 
@@ -807,6 +817,7 @@ test("243 ordered sources and two distinct Proposal owners retain a near-1-MiB s
     await assert.rejects(() => sendMixed(started.baseUrl, prepared, oversized, id("e0c93")),
       (error) => requireStoryOSProtocolError(error).status === 413);
     assert.deepEqual(await retainedState(prepared.projectId), stateAfter);
+    await retainRefusedEditRecoveryExpectation(prepared.projectId, [{ draft: queried.draft, available: true }]);
   } finally { await stopRealServer(started.server); }
 });
 
@@ -947,5 +958,135 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const after = await retainedState(prepared.projectId);
     assert.deepEqual(after, { ...before, scope_counters: before.scope_counters.map((row: Record<string, number>) =>
       ({ ...row, project_activity_position: row.project_activity_position! + 1 })) });
+    const restoredExports = priorExports.map((prior) => ({ ...prior, status: 422 }));
+    const newReady = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      exportId: admitted.effect.export_id, fetchImpl: prepared.fetchImpl });
+    if (newReady.status !== "ready") throw new Error("expected ready lifecycle archive");
+    const newDownload = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${newReady.export_id}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    assert.equal(newDownload.status, 200);
+    const archiveExpectation = { exportId: newReady.export_id, root: newReady.immutable_root, status: 200,
+      bytesSha256: createHash("sha256").update(new Uint8Array(await newDownload.arrayBuffer())).digest("hex") };
+    const archivalRequest = { command_schema: "storyos.command.archive-project.request.v1" as const,
+      archive_project_input: { ...BINDING, correlation_id: id("e0d71"), expected_project_revision: "1" } };
+    const archivedProject = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "PUT",
+      "/api/v1/projects/{project_id}/archival", archivalRequest.command_schema,
+      await digestArchiveProject(archivalRequest), id("e0d72"), (antiForgery) => archiveProject({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+        request: archivalRequest, antiForgery, idempotencyKey: id("e0d72") }));
+    assert.equal(archivedProject.effect.kind, "authoritative_applied");
+    await assert.rejects(() => read(closed.draft.draft_id), (error) => requireStoryOSProtocolError(error).status === 404);
+    await retainRefusedEditRecoveryExpectation(prepared.projectId,
+      [{ draft: { ...closed.draft, closure: "closed" }, available: false },
+        { draft: { ...archived.draft, retention_state: "archived" }, available: false },
+        { draft: { ...tombstoned.draft, retention_state: "tombstoned" }, available: false }],
+      [...restoredExports, archiveExpectation]);
+  } finally { await stopRealServer(started.server); }
+});
+
+test("a distant generating Proposal does not block a proven span, while a selected generating source stays unchanged", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0e111"), "Generating Source Boundary", "e0e2");
+    const writer = await writePassage(started.baseUrl, prepared.fetchImpl, prepared.projectId, "e0e3");
+    const chapter = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    const split = replaceUnit(0, 0, "", writer, "e0e4", id("e0eff1"));
+    split.expected_proposal_head_revision_ids = [];
+    split.observed_ownership_partition = "authoritative";
+    split.author_edit_units = [{ normalized_primitives: [{ kind: "split_block",
+      manuscript_block_id: chapter.chapter.current_revision.blocks[0]!.manuscript_block_id,
+      offset: PROSE.length, new_manuscript_block_id: id("e0e41") }],
+      selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: PROSE.length, to: PROSE.length } }];
+    const divided = await sendMixed(started.baseUrl, prepared, split, id("e0e42"));
+    assert.equal(divided.effect.kind, "authoritative_applied", JSON.stringify(divided));
+    if (divided.effect.kind !== "authoritative_applied") throw new Error("expected lawful split");
+    writer.authoritativeRevisionId = divided.effect.authoritative_revision.revision_id;
+    writer.nextSequence = "3";
+    const completed = await admitPhrase(started.baseUrl, prepared.fetchImpl, prepared.projectId,
+      prepared.chapterId, id("e0e51"));
+    if (completed.decision.kind !== "prose_change" || completed.decision.opened_proposal.kind !== "present")
+      throw new Error("expected ready inline Proposal");
+    const ready = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: completed.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+    const stream = phraseRequest(prepared.chapterId, id("e0e61"));
+    stream.create_agent_run_input.author_message.text = "Stream this passage: keep the voice.";
+    const admitted = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/agent-runs", stream.command_schema, await digestCreateAgentRun(stream),
+      id("e0e62"), (antiForgery) => createAgentRun({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        fetchImpl: prepared.fetchImpl, request: stream, idempotencyKey: id("e0e62"), antiForgery }));
+    if (admitted.effect.kind !== "admitted") throw new Error("expected streamed admission");
+    await settleOnce();
+    const run = await getAgentRun({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      runId: admitted.effect.run_id, fetchImpl: prepared.fetchImpl });
+    if (run.decision.kind !== "prose_change" || run.decision.opened_proposal.kind !== "present")
+      throw new Error("expected generating Proposal");
+    const generating = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: run.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+    assert.equal(generating.proposal.generation, "generating");
+    assert.equal(generating.proposal.candidate_text, "Guard");
+    assert.notEqual(generating.proposal.manuscript_block_id, ready.proposal.manuscript_block_id);
+    const request = mixedRequest(ready, writer, "e0e7");
+    request.expected_proposal_head_revision_ids = [ready.proposal.revision_id, generating.proposal.revision_id].sort();
+    const before = await retainedState(prepared.projectId);
+    const accepted = await sendMixed(started.baseUrl, prepared, request, id("e0e76"));
+    if (accepted.effect.kind !== "refused_to_draft") throw new Error("expected proven distant-source Draft");
+    const after = await retainedState(prepared.projectId);
+    assert.deepEqual({ ...after, draft_artifacts: [], draft_artifact_revisions: [], draft_lifecycle_events: [] }, before);
+    const selected = structuredClone(request);
+    selected.correlation_id = id("e0e81");
+    selected.completed_intent_record_id = id("e0e82");
+    selected.local_intent_sequence = "4";
+    const selection = selected.author_edit_units[0]!.selection_snapshot;
+    if (selection.ordered_selection == null) throw new Error("expected ordered selection");
+    selection.from = 0;
+    selection.to = 5;
+    const sources = selection.ordered_selection.sources;
+    sources.shift();
+    sources[1]!.to = PROSE.length;
+    sources.push({ owner: { kind: "proposal", proposal_id: generating.proposal.proposal_id,
+      operation_id: generating.proposal.operation_id, revision_id: generating.proposal.revision_id,
+      manuscript_block_id: generating.proposal.manuscript_block_id },
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 5,
+      block_kind: "paragraph", source_text: "Guard" });
+    selection.ordered_selection.anchor = { source_index: 0, source_offset: 0 };
+    selection.ordered_selection.head = { source_index: 2, source_offset: 5 };
+    const refused = await sendMixed(started.baseUrl, prepared, selected, id("e0e83"));
+    assert.equal(refused.effect.kind, "conflicted");
+    assert.deepEqual(await retainedState(prepared.projectId), after);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: generating.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, generating.proposal);
+  } finally { await drainLeftoverWork(); await stopRealServer(started.server); }
+});
+
+test("a complete source cannot prove a selection inside a UTF-16 surrogate pair", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0f111"), "Scalar Selection Boundary", "e0f2");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0f3");
+    const revision = await sendMixed(started.baseUrl, prepared,
+      replaceUnit(14, 17, "🙂", writer, "e0f4", opened.proposal.revision_id), id("e0f46"));
+    if (revision.effect.kind !== "proposal_revised") throw new Error("expected lawful candidate edit");
+    writer.nextSequence = "3";
+    const current = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+    assert.equal(current.proposal.candidate_text, "narr🙂r tone");
+    const request = mixedRequest(current, writer, "e0f5");
+    const selection = request.author_edit_units[0]!.selection_snapshot;
+    if (selection.ordered_selection == null) throw new Error("expected ordered selection");
+    selection.from = 5;
+    selection.ordered_selection.sources.shift();
+    selection.ordered_selection.sources[0]!.from = 5;
+    selection.ordered_selection.sources[0]!.to = current.proposal.candidate_text.length;
+    selection.ordered_selection.sources[0]!.source_text = current.proposal.candidate_text;
+    selection.ordered_selection.anchor = { source_index: 0, source_offset: 5 };
+    selection.ordered_selection.head = { source_index: 1, source_offset: 26 };
+    const before = await retainedState(prepared.projectId);
+    const result = await sendMixed(started.baseUrl, prepared, request, id("e0f56"));
+    assert.equal(result.effect.kind, "conflicted");
+    assert.deepEqual(await retainedState(prepared.projectId), before);
   } finally { await stopRealServer(started.server); }
 });
