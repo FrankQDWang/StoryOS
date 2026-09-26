@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "CloseEditorFlowDraftInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "close_reason": {
+          "const": "abandoned",
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "draft_kind": {
+          "const": "refused_edit",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_closure": {
+          "const": "open",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "source_current_draft_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "source_draft_payload_digest": {
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "draft_kind",
+        "source_current_draft_revision_id",
+        "source_draft_payload_digest",
+        "expected_closure",
+        "close_reason",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.close-editor-flow-draft.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "close_editor_flow_draft_input": {
+      "$ref": "#/$defs/CloseEditorFlowDraftInput"
+    },
+    "command_schema": {
+      "const": "storyos.command.close-editor-flow-draft.request.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "command_schema",
+    "close_editor_flow_draft_input"
+  ],
+  "title": "StoryOS Reject Proposal Operations Request",
+  "type": "object"
+}

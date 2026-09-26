@@ -23,6 +23,7 @@ mod archive_project;
 mod author_edit;
 mod author_edit_outcome;
 mod chapter;
+mod close_editor_flow_draft;
 mod create_agent_run;
 mod create_chapter;
 mod create_project;
@@ -319,6 +320,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
+            ),
+        )
+        .route(
+            contracts::CLOSE_EDITOR_FLOW_DRAFT_PATH,
+            routing::on(
+                method_filter("POST"),
+                close_editor_flow_draft::close_editor_flow_draft,
             ),
         )
         .route(

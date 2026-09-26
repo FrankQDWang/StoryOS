@@ -12,14 +12,13 @@ export async function retainRefusedEditRecoveryExpectation(
   if (path === undefined) return;
   const tables = ["projects", "authoritative_heads", "authoritative_revisions", "authoritative_commits",
     "author_action_entries", "project_activity_events", "scope_counters", "proposals", "proposal_heads",
-    "proposal_revisions", "proposal_operations", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events"];
+    "proposal_revisions", "proposal_operations", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"];
   const state = JSON.parse(await queryStoryOSPostgres(`SELECT jsonb_build_object(${tables.map((table) =>
     `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
       FROM storyos.${table} AS record WHERE record.owner_user_id = '${USER_A}'::uuid
       AND record.project_id = '${projectId}'::uuid)`).join(",")},
     'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
-      FROM storyos.domain_receipts AS receipt JOIN storyos.draft_lifecycle_events AS event
-      USING (owner_user_id,project_id,receipt_id) WHERE event.owner_user_id='${USER_A}'::uuid
-      AND event.project_id='${projectId}'::uuid))::text`));
+      FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${USER_A}'::uuid
+      AND receipt.project_id='${projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft') AND cardinality(receipt.draft_artifact_refs)>0))::text`));
   await appendFile(path, `${JSON.stringify({ projectId, ownerUserId: USER_A, drafts, exports, state })}\n`);
 }

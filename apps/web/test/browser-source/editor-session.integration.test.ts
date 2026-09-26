@@ -56,7 +56,7 @@ import {
 
 type ZeroAuthorityResult = Exclude<
   DomainReceiptResult,
-  "authoritative_applied" | "proposal_revised" | "refused_to_draft"
+  "authoritative_applied" | "proposal_revised" | "refused_to_draft" | "draft_closure_changed"
 >;
 
 const FIRST_REVISION = "018f0000-0000-7001-8000-000000000034";

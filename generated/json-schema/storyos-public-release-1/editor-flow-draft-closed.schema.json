@@ -1,0 +1,140 @@
+{
+  "$defs": {
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "RefusedEditDraftSource": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "command_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "author_command_admission_id",
+        "receipt_id",
+        "idempotency_key",
+        "command_digest"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.event.editor-flow-draft-closed.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_action_sequence": {
+      "type": "string"
+    },
+    "close_reason": {
+      "const": "abandoned",
+      "type": "string"
+    },
+    "closure": {
+      "const": "closed",
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "draft_id": {
+      "type": "string"
+    },
+    "draft_revision_id": {
+      "type": "string"
+    },
+    "event_id": {
+      "type": "string"
+    },
+    "event_kind": {
+      "const": "editor_flow_draft_closed",
+      "type": "string"
+    },
+    "payload_digest": {
+      "type": "string"
+    },
+    "prior_closure": {
+      "const": "open",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "const": "storyos.event.editor-flow-draft-closed.v1",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/RefusedEditDraftSource"
+    }
+  },
+  "required": [
+    "schema_id",
+    "event_kind",
+    "event_id",
+    "project_scope",
+    "draft_id",
+    "draft_revision_id",
+    "payload_digest",
+    "prior_closure",
+    "closure",
+    "close_reason",
+    "source",
+    "author_action_sequence",
+    "created_at"
+  ],
+  "title": "StoryOS Draft Closed Event",
+  "type": "object"
+}

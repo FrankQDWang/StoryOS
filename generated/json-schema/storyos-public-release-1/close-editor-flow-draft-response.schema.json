@@ -1,24 +1,71 @@
 {
   "$defs": {
-    "ControlledProject": {
-      "additionalProperties": false,
-      "properties": {
-        "open": {
-          "$ref": "#/$defs/ProjectOpenState"
+    "CloseEditorFlowDraftEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "event": {
+              "$ref": "#/$defs/EditorFlowDraftClosed"
+            },
+            "kind": {
+              "const": "draft_closure_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "event"
+          ],
+          "type": "object"
         },
-        "project_id": {
-          "type": "string"
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_closure": {
+              "type": "string"
+            },
+            "current_digest": {
+              "type": "string"
+            },
+            "current_revision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_revision_id",
+            "current_digest",
+            "current_closure"
+          ],
+          "type": "object"
         },
-        "title": {
-          "type": "string"
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_closure": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/DraftCloseRefusal"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "current_closure"
+          ],
+          "type": "object"
         }
-      },
-      "required": [
-        "project_id",
-        "title",
-        "open"
-      ],
-      "type": "object"
+      ]
     },
     "DigestAlgorithm": {
       "enum": [
@@ -200,39 +247,72 @@
       ],
       "type": "string"
     },
-    "ProjectOpenState": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "empty",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind"
-          ],
-          "type": "object"
+    "DraftCloseRefusal": {
+      "enum": [
+        "source_draft_not_open",
+        "source_unavailable"
+      ],
+      "type": "string"
+    },
+    "EditorFlowDraftClosed": {
+      "additionalProperties": false,
+      "properties": {
+        "author_action_sequence": {
+          "type": "string"
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "current_chapter_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "current_chapter",
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "current_chapter_id"
-          ],
-          "type": "object"
+        "close_reason": {
+          "type": "string"
+        },
+        "closure": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "draft_id": {
+          "type": "string"
+        },
+        "draft_revision_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "event_kind": {
+          "type": "string"
+        },
+        "payload_digest": {
+          "type": "string"
+        },
+        "prior_closure": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/RefusedEditDraftSource"
         }
-      ]
+      },
+      "required": [
+        "schema_id",
+        "event_kind",
+        "event_id",
+        "project_scope",
+        "draft_id",
+        "draft_revision_id",
+        "payload_digest",
+        "prior_closure",
+        "closure",
+        "close_reason",
+        "source",
+        "author_action_sequence",
+        "created_at"
+      ],
+      "type": "object"
     },
     "ProjectScope": {
       "additionalProperties": false,
@@ -250,117 +330,36 @@
       ],
       "type": "object"
     },
-    "UpdateChapterConflictReason": {
-      "enum": [
-        "stale_tree_revision"
-      ],
-      "type": "string"
-    },
-    "UpdateChapterEffect": {
-      "oneOf": [
-        {
-          "additionalProperties": false,
-          "properties": {
-            "chapter_id": {
-              "type": "string"
-            },
-            "kind": {
-              "const": "authoritative_applied",
-              "type": "string"
-            },
-            "order": {
-              "type": "string"
-            },
-            "project_activity_position": {
-              "type": "string"
-            },
-            "title": {
-              "type": "string"
-            },
-            "tree_revision": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "kind",
-            "chapter_id",
-            "title",
-            "tree_revision",
-            "order",
-            "project_activity_position"
-          ],
-          "type": "object"
+    "RefusedEditDraftSource": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "no_effect",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateChapterNoEffectReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "conflicted",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateChapterConflictReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
+        "command_id": {
+          "type": "string"
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "kind": {
-              "const": "refused",
-              "type": "string"
-            },
-            "reason": {
-              "$ref": "#/$defs/UpdateChapterRefusalReason"
-            }
-          },
-          "required": [
-            "kind",
-            "reason"
-          ],
-          "type": "object"
+        "idempotency_key": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
         }
-      ]
-    },
-    "UpdateChapterNoEffectReason": {
-      "enum": [
-        "unchanged"
+      },
+      "required": [
+        "command_id",
+        "author_command_admission_id",
+        "receipt_id",
+        "idempotency_key",
+        "command_digest"
       ],
-      "type": "string"
-    },
-    "UpdateChapterRefusalReason": {
-      "enum": [
-        "archived_project",
-        "invalid_title",
-        "invalid_order",
-        "invalid_chapter_join"
-      ],
-      "type": "string"
+      "type": "object"
     }
   },
-  "$id": "storyos.command.update-chapter.response.v1",
+  "$id": "storyos.command.close-editor-flow-draft.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -377,10 +376,7 @@
       "type": "string"
     },
     "effect": {
-      "$ref": "#/$defs/UpdateChapterEffect"
-    },
-    "project": {
-      "$ref": "#/$defs/ControlledProject"
+      "$ref": "#/$defs/CloseEditorFlowDraftEffect"
     },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
@@ -389,7 +385,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.update-chapter.response.v1",
+      "const": "storyos.command.close-editor-flow-draft.response.v1",
       "type": "string"
     }
   },
@@ -400,9 +396,8 @@
     "command_id",
     "author_command_admission_id",
     "receipt",
-    "project",
     "effect"
   ],
-  "title": "StoryOS Update Chapter Response",
+  "title": "StoryOS Reject Proposal Operations Response",
   "type": "object"
 }

@@ -1,0 +1,28 @@
+{
+  "author_action_sequence": "3",
+  "close_reason": "abandoned",
+  "closure": "closed",
+  "created_at": "2026-09-26T00:00:00.000Z",
+  "draft_id": "018f0000-0000-7001-8000-000000000d10",
+  "draft_revision_id": "018f0000-0000-7001-8000-000000000d10",
+  "event_id": "018f0000-0000-7001-8000-000000000d10",
+  "event_kind": "editor_flow_draft_closed",
+  "payload_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "prior_closure": "open",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000d10",
+    "project_id": "018f0000-0000-7001-8000-000000000d10"
+  },
+  "schema_id": "storyos.event.editor-flow-draft-closed.v1",
+  "source": {
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000d10",
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.closeEditorFlowDraft.jcs.v1",
+      "value_hex_lowercase": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "command_id": "018f0000-0000-7001-8000-000000000d10",
+    "idempotency_key": "018f0000-0000-7001-8000-000000000d10",
+    "receipt_id": "018f0000-0000-7001-8000-000000000d10"
+  }
+}

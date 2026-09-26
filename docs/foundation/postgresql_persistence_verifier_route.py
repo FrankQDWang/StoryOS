@@ -71,6 +71,9 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
             for event_id in activity_event_ids:
                 if event_id not in event_by_id:
                     fail(errors, f"{operation_id}: Activity mapping names unknown Event {event_id}")
+                elif event_id == "storyos.event.editor-flow-draft-closed.v1":
+                    if "artifact-proposal-draft" not in event_owners.get(event_id, set()) or event_by_id[event_id].get("wire_profile") != "storyos.artifact-lifecycle.v1":
+                        fail(errors, "Draft Discard lacks exact Artifact lifecycle coverage")
                 elif coverage.get("activity_owner_family_id") not in event_owners.get(event_id, set()):
                     fail(errors, f"{operation_id}: Event {event_id} is not physically owned by the activity family")
                 elif event_by_id[event_id].get("wire_profile") != "storyos.project-activity.v1":
@@ -81,7 +84,7 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
     if activity_mapping != "activity_owner":
         fail(errors, "route coverage activity owner is not an activity_owner family")
     for event_id in required_events:
-        if event_id == "storyos.event.refused-edit-draft-created.v1":
+        if event_id in {"storyos.event.refused-edit-draft-created.v1", "storyos.event.editor-flow-draft-closed.v1"}:
             if "artifact-proposal-draft" not in event_owners.get(event_id, set()) or event_by_id[event_id].get("wire_profile") != "storyos.artifact-lifecycle.v1":
                 fail(errors, "Refused Edit creation lacks exact Artifact lifecycle coverage")
             if activity_family in event_owners.get(event_id, set()):

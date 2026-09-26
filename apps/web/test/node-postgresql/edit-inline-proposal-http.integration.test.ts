@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
 import {
+  closeEditorFlowDraft, digestCloseEditorFlowDraft, undoLatestAuthorAction, digestUndoLatestAuthorAction,
   acceptProposal, applyAuthorEdit, archiveProject, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestRejectProposalOperations,
@@ -10,7 +11,7 @@ import {
   rejectProposalOperations,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
-  AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
+  CloseEditorFlowDraftRequest, CloseEditorFlowDraftResponse, AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, RejectProposalOperationsRequest, SelectedEditSource,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
@@ -238,7 +239,7 @@ async function retainedState(projectId: string) {
   const tables = ["authoritative_heads", "authoritative_revisions", "authoritative_commits",
     "author_action_entries", "project_activity_events", "scope_counters", "proposals",
     "proposal_heads", "proposal_revisions", "proposal_operations", "draft_artifacts",
-    "draft_artifact_revisions", "draft_lifecycle_events"];
+    "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"];
   return JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${tables.map((table) =>
     `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
       FROM storyos.${table} AS record WHERE record.owner_user_id = '${USER_A}'::uuid
@@ -839,7 +840,9 @@ test("243 ordered sources and two distinct Proposal owners retain a near-1-MiB s
 });
 
 test("closed and archived Drafts keep their lifecycle, while tombstoned content fences old packages and leaves exact archive gaps", async () => {
-  const started = await startRealServer();
+  let started = await startRealServer();
+  const faultName = "draft_close_test_precommit_fault";
+  let faultInstalled = false;
   try {
     await drainLeftoverWork();
     const prepared = await prepare(started.baseUrl, id("e0d111"), "Draft Lifecycle Export", "e0d2");
@@ -863,6 +866,141 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     }
     const [closed, archived, tombstoned] = drafts;
     if (!closed || !archived || !tombstoned) throw new Error("expected three retained Drafts");
+    const beforeClose = await retainedState(prepared.projectId);
+    const closeRequest: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
+      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1"),
+        editor_session_id: writer.session.editor_session.editor_session_id, draft_kind: "refused_edit",
+        source_current_draft_revision_id: closed.draft.draft_revision_id,
+        source_draft_payload_digest: closed.draft.payload_digest, expected_closure: "open", close_reason: "abandoned" } };
+    const key = id("e0db2");
+    const digest = await digestCloseEditorFlowDraft(closeRequest);
+    let nonce = "";
+    const sendClose = (request = closeRequest, antiForgery = nonce, idempotencyKey = key,
+      draftId = closed.draft.draft_id, fetchImpl = prepared.fetchImpl) => closeEditorFlowDraft({
+      baseUrl: started.baseUrl, projectId: prepared.projectId, draftId, fetchImpl, request, idempotencyKey, antiForgery });
+    await queryPostgres(`CREATE FUNCTION storyos.${faultName}() RETURNS trigger LANGUAGE plpgsql AS $fault$
+      BEGIN IF NEW.project_id='${prepared.projectId}'::uuid THEN RAISE EXCEPTION 'Controlled Draft close precommit failure';
+      END IF; RETURN NULL; END $fault$;
+      CREATE CONSTRAINT TRIGGER ${faultName} AFTER INSERT ON storyos.draft_close_events
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.${faultName}();`);
+    faultInstalled = true;
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", closeRequest.command_schema, digest, key,
+      (antiForgery) => { nonce = antiForgery; return sendClose(); }),
+      (error) => requireStoryOSProtocolError(error).status === 503);
+    assert.deepEqual(await retainedState(prepared.projectId), beforeClose);
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.domain_receipts
+      WHERE project_id='${prepared.projectId}'::uuid AND idempotency_key='${key}'::uuid`), "0");
+    await queryPostgres(`DROP TRIGGER ${faultName} ON storyos.draft_close_events; DROP FUNCTION storyos.${faultName}();`);
+    faultInstalled = false;
+    let lost: CloseEditorFlowDraftResponse | undefined;
+    const lossyFetch: typeof fetch = async (input, init) => {
+      const response = await prepared.fetchImpl(input, init);
+      assert.equal(response.status, 200, await response.clone().text());
+      lost = await response.clone().json() as CloseEditorFlowDraftResponse;
+      await stopRealServer(started.server);
+      throw new Error("Controlled Discard response loss after durable settlement");
+    };
+    await assert.rejects(() => sendClose(closeRequest, nonce, key, closed.draft.draft_id, lossyFetch), /Controlled Discard response loss/);
+    const origin = new URL(started.baseUrl);
+    started = await startRealServer(`${origin.hostname}:${origin.port}`);
+    prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const [closeResponse, concurrentReplay] = await Promise.all([sendClose(), sendClose()]);
+    assert.deepEqual(closeResponse, lost);
+    assert.deepEqual(concurrentReplay, closeResponse);
+    if (closeResponse.effect.kind !== "draft_closure_changed") throw new Error("expected complete Discard");
+    const closeEvent = closeResponse.effect.event;
+    const scope = { owner_user_id: USER_A, project_id: prepared.projectId };
+    for (const value of [closeResponse.command_id, closeResponse.author_command_admission_id,
+      closeResponse.receipt.receipt_id, closeEvent.event_id]) assert.match(value, UUID_V7);
+    assert.deepEqual(closeEvent, { schema_id: "storyos.event.editor-flow-draft-closed.v1", event_kind: "editor_flow_draft_closed",
+      event_id: closeEvent.event_id, project_scope: scope, draft_id: closed.draft.draft_id,
+      draft_revision_id: closed.draft.draft_revision_id, payload_digest: closed.draft.payload_digest,
+      prior_closure: "open", closure: "closed", close_reason: "abandoned",
+      source: { command_id: closeResponse.command_id, author_command_admission_id: closeResponse.author_command_admission_id,
+        receipt_id: closeResponse.receipt.receipt_id, idempotency_key: key, command_digest: digest },
+      author_action_sequence: String(Number(beforeClose.scope_counters[0].author_action_sequence) + 1),
+      created_at: closeResponse.receipt.created_at });
+    assert.deepEqual(closeResponse.receipt, { receipt_id: closeResponse.receipt.receipt_id, project_scope: scope,
+      command_kind: "closeEditorFlowDraft", command_digest: digest, idempotency_key: key,
+      producer_cause: "author_command_admission", author_command_admission_id: closeResponse.author_command_admission_id,
+      expected_heads: [], prior_heads: [], resulting_heads: [], authoritative_revision_ids: [], proposal_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: closeEvent.author_action_sequence,
+      draft_artifact_refs: [closed.draft.draft_id], artifact_lifecycle_event_refs: [closeEvent.event_id], condition_refs: [],
+      result: "draft_closure_changed", created_at: closeEvent.created_at });
+    const closedDraft = { ...closed.draft, closure: "closed", closure_event: closeEvent };
+    assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: closed.draft.draft_id, fetchImpl: prepared.fetchImpl })).draft, closedDraft);
+    const afterClose = await retainedState(prepared.projectId);
+    for (const table of ["authoritative_heads", "authoritative_revisions", "authoritative_commits", "project_activity_events",
+      "proposals", "proposal_heads", "proposal_revisions", "proposal_operations", "draft_artifact_revisions", "draft_lifecycle_events"])
+      assert.deepEqual(afterClose[table], beforeClose[table]);
+    assert.equal(afterClose.draft_close_events.length, 1);
+    assert.equal(afterClose.author_action_entries.length, beforeClose.author_action_entries.length + 1);
+    assert.deepEqual(await sendClose(), closeResponse);
+    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    const settleFresh = async (request: CloseEditorFlowDraftRequest, keySuffix: string, draftId = closed.draft.draft_id) =>
+      challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", request.command_schema,
+        await digestCloseEditorFlowDraft(request), id(keySuffix), (antiForgery) => sendClose(request, antiForgery, id(keySuffix), draftId));
+    for (const [suffix, input, expected] of [
+      ["e0db3", { ...closeRequest.close_editor_flow_draft_input, source_current_draft_revision_id: id("e0dff4"), source_draft_payload_digest: "0".repeat(64) },
+        { kind: "conflicted", current_revision_id: closed.draft.draft_revision_id, current_digest: closed.draft.payload_digest, current_closure: "closed" }],
+      ["e0db4", closeRequest.close_editor_flow_draft_input,
+        { kind: "refused", reason: "source_draft_not_open", current_closure: "closed" }],
+    ] as const) {
+      const refused = await settleFresh({ ...closeRequest, close_editor_flow_draft_input: input }, suffix);
+      assert.deepEqual(refused.effect, expected);
+      assert.deepEqual(refused.receipt.authoritative_commit_ids, []);
+      assert.deepEqual(refused.receipt.artifact_lifecycle_event_refs, []);
+      assert.equal(refused.receipt.author_action_sequence, null);
+      assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    }
+    await assert.rejects(() => settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, editor_session_id: id("e0dff5") } }, "e0db5"),
+      (error) => requireStoryOSProtocolError(error).status === 422);
+    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    const secondaryRequest: CreateEditorSessionRequest = { command_schema: "storyos.command.create-editor-session.request.v1",
+      ...BINDING, correlation_id: id("e0db91") };
+    const secondary = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/editor-sessions", secondaryRequest.command_schema,
+      await digestCreateEditorSession(secondaryRequest), id("e0db92"), (antiForgery) => createEditorSession({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, request: secondaryRequest,
+        idempotencyKey: id("e0db92"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session", observed_writer_generation: writer.writerGeneration });
+    await assert.rejects(() => settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, editor_session_id: secondary.editor_session.editor_session_id } }, "e0db93"),
+      (error) => requireStoryOSProtocolError(error).status === 422);
+    await assert.rejects(() => sendClose(closeRequest, nonce, key, closed.draft.draft_id, browserFetch(started.baseUrl, "session-b")),
+      (error) => [404, 422].includes(requireStoryOSProtocolError(error).status ?? 0));
+    await assert.rejects(() => getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: closed.draft.draft_id, fetchImpl: browserFetch(started.baseUrl, "session-b") }),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    const undoRequest = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+      undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0db6"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        expected_author_undo_frontier_sequence: closeEvent.author_action_sequence,
+        expected_authoritative_revision_id: writer.authoritativeRevisionId } };
+    const undo = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", undoRequest.command_schema,
+      await digestUndoLatestAuthorAction(undoRequest), id("e0db7"), (antiForgery) => undoLatestAuthorAction({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+        request: undoRequest, idempotencyKey: id("e0db7"), antiForgery }));
+    assert.deepEqual(undo.effect, { kind: "unavailable", reason: "barrier" });
+    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    await assert.rejects(() => queryPostgres(`UPDATE storyos.draft_artifacts SET closure='closed'
+      WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid`), /Incomplete Draft Discard settlement/);
+    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    for (const mutation of [
+      `UPDATE storyos.draft_artifacts SET closure='open',close_event_id=NULL
+        WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${closed.draft.draft_id}'::uuid`,
+      `UPDATE storyos.draft_artifacts SET closure='closed',close_event_id='${closeEvent.event_id}'::uuid
+        WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid`,
+    ]) {
+      await assert.rejects(() => queryPostgres(mutation), /Draft Discard/);
+      assert.deepEqual(await retainedState(prepared.projectId), afterClose);
+    }
     const priorExports: { exportId: string; root: string }[] = [];
     for (const index of [0, 1]) {
       const request = { command_schema: "storyos.command.export-project-archive.request.v1" as const,
@@ -887,15 +1025,17 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     }
     const pinnedSources = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(source) ORDER BY source.export_id)
       FROM storyos.pinned_export_sources AS source WHERE project_id='${prepared.projectId}'::uuid`));
-    await queryPostgres(`UPDATE storyos.draft_artifacts SET closure='closed'
-      WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${closed.draft.draft_id}'::uuid;
-      UPDATE storyos.draft_artifacts SET retention_state='archived'
+    await queryPostgres(`UPDATE storyos.draft_artifacts SET retention_state='archived'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid;
       UPDATE storyos.draft_artifacts SET retention_state='tombstoned'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${tombstoned.draft.draft_id}'::uuid;`);
+    const unavailable = await settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, source_current_draft_revision_id: tombstoned.draft.draft_revision_id,
+      source_draft_payload_digest: tombstoned.draft.payload_digest } }, "e0db8", tombstoned.draft.draft_id);
+    assert.deepEqual(unavailable.effect, { kind: "refused", reason: "source_unavailable", current_closure: "open" });
     const read = (draftId: string, projectId = prepared.projectId) => getRefusedEditDraft({ baseUrl: started.baseUrl,
       projectId, draftId, fetchImpl: prepared.fetchImpl });
-    assert.deepEqual((await read(closed.draft.draft_id)).draft, { ...closed.draft, closure: "closed" });
+    assert.deepEqual((await read(closed.draft.draft_id)).draft, closedDraft);
     for (const draft of [archived, tombstoned]) await assert.rejects(() => read(draft.draft.draft_id),
       (error) => requireStoryOSProtocolError(error).status === 404);
     await assert.rejects(() => read(closed.draft.draft_id, id("e0dff1")),
@@ -912,7 +1052,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       assert.equal(ready.immutable_root, prior.root);
     }
     const before = await retainedState(prepared.projectId);
-    for (const table of ["draft_artifact_revisions", "draft_lifecycle_events"]) {
+    for (const table of ["draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"]) {
       await assert.rejects(() => queryPostgres(`DELETE FROM storyos.${table}
         WHERE project_id='${prepared.projectId}'::uuid`), /immutable/);
     }
@@ -960,6 +1100,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     });
     assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifacts.json"))), before.draft_artifacts);
     assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json"))), before.draft_lifecycle_events);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_close_events.json"))), before.draft_close_events);
     assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifact_revisions.json"))), expectedRevisions);
     const exportedAdmissions = JSON.parse(new TextDecoder().decode(files.get("canonical/author_command_admissions.json")));
     assert.deepEqual(exportedAdmissions.filter((row: Record<string, unknown>) => row.command_kind === "applyAuthorEdit"), expectedAdmissions);
@@ -994,7 +1135,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     assert.equal(archivedProject.effect.kind, "authoritative_applied");
     await assert.rejects(() => read(closed.draft.draft_id), (error) => requireStoryOSProtocolError(error).status === 404);
     await retainRefusedEditRecoveryExpectation(prepared.projectId,
-      [{ draft: { ...closed.draft, closure: "closed" }, available: false },
+      [{ draft: closedDraft, available: false },
         { draft: { ...archived.draft, retention_state: "archived" }, available: false },
         { draft: { ...tombstoned.draft, retention_state: "tombstoned" }, available: false }],
       [...restoredExports, archiveExpectation]);

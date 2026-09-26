@@ -41,8 +41,8 @@ mod author_edit_wire;
 pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
 mod refused_edit_draft;
 pub use refused_edit_draft::{
-    AUTHOR_EDIT_INLINE_SOURCE_MAX_BYTES, RefusedEditDraftIdentity, RefusedEditDraftReader,
-    RefusedEditDraftRecord,
+    AUTHOR_EDIT_INLINE_SOURCE_MAX_BYTES, RefusedEditDraftClosure, RefusedEditDraftIdentity,
+    RefusedEditDraftReader, RefusedEditDraftRecord,
 };
 mod author_edit_outcome;
 mod chapter_query;
@@ -543,3 +543,9 @@ pub async fn open_current_chapter(
 #[cfg(test)]
 #[path = "project_read_tests.rs"]
 mod tests;
+
+mod close_editor_flow_draft;
+pub use close_editor_flow_draft::{
+    CloseEditorFlowDraftCommand, CloseEditorFlowDraftStore, DraftCloseError, DraftCloseSettlement,
+    close_editor_flow_draft,
+};

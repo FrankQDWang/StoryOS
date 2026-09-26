@@ -98,3 +98,36 @@ or collect it. It cannot cause automatic replay, fresh challenge issuance, or
 base convergence. Recovery of that retained intent needs an explicit compatible
 inspection and author action. Issue 824 owns new production mixed capture and
 Draft recovery controls.
+
+## Public Discard service
+
+Issue 825 adds only the abandoned Discard of one exact open retained Refused
+Edit Draft. The command uses the existing 1 MiB complete JSON body ceiling.
+It carries finite identifiers, the exact Revision and SHA-256 digest, and
+accepted Editor Session, client and security identities. It carries no source
+text. The store reads one current Revision only when the Draft is retained.
+The existing Draft payload bound limits that integrity check. An unavailable
+source returns a settled refusal without loading or returning its payload.
+
+One serializable transaction consumes the exact challenge and commits one
+Admission, Receipt, immutable close event, Forward Author Action and closed
+projection. No Manuscript or Proposal Head, content Revision, Authoritative
+Commit or Project Activity changes. Exact replay returns the original result
+and identities. A new command against a closed source is refused; stale exact
+Revision or digest conflicts. Response loss is reconciled by an exact replay
+with the original key, command bytes and nonce after reload or Server restart.
+No new command identity is required for reconciliation.
+
+The close event belongs to `artifact-proposal-draft` and uses
+`storyos.artifact-lifecycle.v1`. It binds the source Revision/digest, exact
+close Admission/command/Receipt, and Forward sequence. Its bounded metadata
+has no source content or authentication secret. The authenticated retained
+query adds optional `closure_event` and preserves immutable creation/content.
+Eligible exports include close events, Receipts and actions. Tombstone gaps
+still withhold source bytes; close metadata never revives them. The existing
+physical isolated restore retains the same closed projection and identities.
+No new capacity, latency or retention-duration claim is made.
+
+Until Issue 831 registers the exact Root Undo handler, this Forward action
+is a non-skippable Barrier. Issue 832 owns the production controls and explicit
+local Discard record. This service exposes neither control nor compensation.

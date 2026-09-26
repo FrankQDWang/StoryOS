@@ -1,6 +1,7 @@
 use storyos_application::{
     ApplyAuthorEditCommand, AuthorCommandAdmissionIds, AuthorEditError, ProjectReadError,
-    ProjectScope, RefusedEditDraftIdentity, RefusedEditDraftReader, RefusedEditDraftRecord,
+    ProjectScope, RefusedEditDraftClosure, RefusedEditDraftIdentity, RefusedEditDraftReader,
+    RefusedEditDraftRecord,
 };
 use storyos_core::{RefusedEditPayload, canonical_json, hex_sha256};
 use tokio_postgres::Client;
@@ -116,7 +117,12 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                     event.author_command_admission_id::text, event.receipt_id::text,
                     receipt.command_digest, receipt.idempotency_key::text,
                     to_char(revision.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'),
-                    draft.closure, draft.retention_state
+                    draft.closure, draft.retention_state,
+                    closed.event_id::text, closed_receipt.command_id::text,
+                    closed_receipt.author_command_admission_id::text, closed.receipt_id::text,
+                    closed_receipt.command_digest, closed_receipt.idempotency_key::text,
+                    closed.author_action_sequence::text,
+                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
                FROM storyos.draft_artifacts AS draft
                JOIN storyos.projects AS project USING (owner_user_id, project_id)
                JOIN storyos.draft_artifact_revisions AS revision
@@ -128,6 +134,12 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                JOIN storyos.domain_receipts AS receipt
                  ON (receipt.owner_user_id, receipt.project_id, receipt.receipt_id) =
                     (event.owner_user_id, event.project_id, event.receipt_id)
+               LEFT JOIN storyos.draft_close_events AS closed
+                 ON (closed.owner_user_id,closed.project_id,closed.event_id,closed.draft_id,closed.revision_id)=
+                    (draft.owner_user_id,draft.project_id,draft.close_event_id,draft.draft_id,draft.current_revision_id)
+               LEFT JOIN storyos.domain_receipts AS closed_receipt
+                 ON (closed_receipt.owner_user_id,closed_receipt.project_id,closed_receipt.receipt_id)=
+                    (closed.owner_user_id,closed.project_id,closed.receipt_id)
               WHERE draft.owner_user_id = $1::text::uuid AND draft.project_id = $2::text::uuid
                 AND draft.draft_id = $3::text::uuid AND project.lifecycle_state = 'active'
                 AND draft.retention_state = 'retained'",
@@ -164,6 +176,20 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                     created_at: row.get(10),
                     closure: row.get(11),
                     retention: row.get(12),
+                    closure_event: row.get::<_, Option<String>>(13).map(|event_id| {
+                        RefusedEditDraftClosure {
+                            event_id,
+                            source: AuthorCommandAdmissionIds {
+                                command_id: row.get(14),
+                                author_command_admission_id: row.get(15),
+                                receipt_id: row.get(16),
+                            },
+                            command_digest: row.get(17),
+                            idempotency_key: row.get(18),
+                            author_action_sequence: row.get(19),
+                            created_at: row.get(20),
+                        }
+                    }),
                 })
             })
             .transpose()?;

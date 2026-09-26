@@ -19,6 +19,8 @@ use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_author_edit_outcome::GET_APPLY_AUTHOR_EDIT_OUTCOME;
 use crate::release1_author_edit_outcome_artifacts as author_edit_outcome_artifacts;
+use crate::release1_close_editor_flow_draft::CLOSE_EDITOR_FLOW_DRAFT;
+use crate::release1_close_editor_flow_draft_artifacts as close_draft_artifacts;
 use crate::release1_create_chapter::CREATE_CHAPTER;
 use crate::release1_create_chapter_artifacts as create_chapter_artifacts;
 use crate::release1_create_project::{CREATE_PROJECT, CREATE_PROJECT_CHALLENGE};
@@ -171,6 +173,29 @@ fn fixture_triple(
 
 fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
     let mut membership = Vec::with_capacity(98);
+    membership.extend(fixture_triple(
+        close_draft_artifacts::FIXTURE_PATHS,
+        &CLOSE_EDITOR_FLOW_DRAFT,
+        [
+            |_| close_draft_artifacts::fixture_bytes(),
+            |_| close_draft_artifacts::invalid_fixture_bytes(),
+            |_| close_draft_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.push(FixtureMembership {
+        path: close_draft_artifacts::EVENT_FIXTURE_PATHS[0],
+        fixture_id: "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
+        classification: "positive",
+        operation_id: "closeEditorFlowDraft",
+        bytes: |_| close_draft_artifacts::event_fixture_bytes(),
+    });
+    membership.push(FixtureMembership {
+        path: close_draft_artifacts::EVENT_FIXTURE_PATHS[1],
+        fixture_id: "storyos.golden.storyos.event.editor-flow-draft-closed.v1.negative.v1",
+        classification: "invalid",
+        operation_id: "closeEditorFlowDraft",
+        bytes: |_| close_draft_artifacts::event_invalid_fixture_bytes(),
+    });
     membership.push(FixtureMembership {
         path: refused_draft_artifacts::EVENT_FIXTURE_PATHS[0],
         fixture_id: "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",

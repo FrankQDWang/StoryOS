@@ -21,6 +21,7 @@ pub struct RefusedEditDraftRecord {
     pub created_at: String,
     pub closure: String,
     pub retention: String,
+    pub closure_event: Option<RefusedEditDraftClosure>,
 }
 
 /// Reads one retained Draft and its immutable source under the exact Scope.
@@ -35,3 +36,13 @@ pub trait RefusedEditDraftReader: Sync {
 /// A complete source string must fit inside the existing public JSON body ceiling.
 pub const AUTHOR_EDIT_INLINE_SOURCE_MAX_BYTES: usize =
     storyos_contracts::AUTHOR_EDIT_MAX_WIRE_BODY_BYTES;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RefusedEditDraftClosure {
+    pub event_id: String,
+    pub source: AuthorCommandAdmissionIds,
+    pub command_digest: String,
+    pub idempotency_key: String,
+    pub author_action_sequence: String,
+    pub created_at: String,
+}

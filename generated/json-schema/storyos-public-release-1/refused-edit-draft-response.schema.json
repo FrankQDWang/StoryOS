@@ -273,6 +273,66 @@
         }
       ]
     },
+    "EditorFlowDraftClosed": {
+      "additionalProperties": false,
+      "properties": {
+        "author_action_sequence": {
+          "type": "string"
+        },
+        "close_reason": {
+          "type": "string"
+        },
+        "closure": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "draft_id": {
+          "type": "string"
+        },
+        "draft_revision_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "event_kind": {
+          "type": "string"
+        },
+        "payload_digest": {
+          "type": "string"
+        },
+        "prior_closure": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/RefusedEditDraftSource"
+        }
+      },
+      "required": [
+        "schema_id",
+        "event_kind",
+        "event_id",
+        "project_scope",
+        "draft_id",
+        "draft_revision_id",
+        "payload_digest",
+        "prior_closure",
+        "closure",
+        "close_reason",
+        "source",
+        "author_action_sequence",
+        "created_at"
+      ],
+      "type": "object"
+    },
     "ManuscriptBlockKind": {
       "enum": [
         "paragraph",
@@ -400,6 +460,16 @@
             "closed"
           ],
           "type": "string"
+        },
+        "closure_event": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EditorFlowDraftClosed"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "creation": {
           "$ref": "#/$defs/RefusedEditDraftCreated"
