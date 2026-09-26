@@ -809,3 +809,98 @@ test("243 ordered sources and two distinct Proposal owners retain a near-1-MiB s
     assert.deepEqual(await retainedState(prepared.projectId), stateAfter);
   } finally { await stopRealServer(started.server); }
 });
+
+test("closed and archived Drafts keep their lifecycle, while tombstoned content leaves two explicit archive gaps", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0d111"), "Draft Lifecycle Export", "e0d2");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0d3");
+    const drafts: Awaited<ReturnType<typeof getRefusedEditDraft>>[] = [];
+    const results: Awaited<ReturnType<typeof applyAuthorEdit>>[] = [];
+    for (const [index, text] of ["Closed alternate", "Archived alternate ✨", "Restricted erased alternative 🌘"].entries()) {
+      const request = mixedRequest(opened, writer, `e0d4${index}`);
+      request.local_intent_sequence = String(index + 2);
+      const primitive = request.author_edit_units[0]!.normalized_primitives[0]!;
+      if (primitive.kind !== "replace_structured_selection") throw new Error("expected structured replacement");
+      primitive.replacement[0]!.text = text;
+      const result = await sendMixed(started.baseUrl, prepared, request, id(`e0d5${index}`));
+      if (result.effect.kind !== "refused_to_draft") throw new Error("expected fresh lifecycle Draft");
+      const queried = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
+      assert.deepEqual(queried.draft.payload.author_edit_units, request.author_edit_units);
+      drafts.push(queried);
+      results.push(result);
+    }
+    const [closed, archived, tombstoned] = drafts;
+    if (!closed || !archived || !tombstoned) throw new Error("expected three retained Drafts");
+    await queryPostgres(`UPDATE storyos.draft_artifacts SET closure='closed'
+      WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${closed.draft.draft_id}'::uuid;
+      UPDATE storyos.draft_artifacts SET retention_state='archived'
+      WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid;
+      UPDATE storyos.draft_artifacts SET retention_state='tombstoned'
+      WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${tombstoned.draft.draft_id}'::uuid;`);
+    const read = (draftId: string, projectId = prepared.projectId) => getRefusedEditDraft({ baseUrl: started.baseUrl,
+      projectId, draftId, fetchImpl: prepared.fetchImpl });
+    assert.deepEqual((await read(closed.draft.draft_id)).draft, { ...closed.draft, closure: "closed" });
+    for (const draft of [archived, tombstoned]) await assert.rejects(() => read(draft.draft.draft_id),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+    await assert.rejects(() => read(closed.draft.draft_id, id("e0dff1")),
+      (error) => requireStoryOSProtocolError(error).status === 404);
+    const before = await retainedState(prepared.projectId);
+    for (const table of ["draft_artifact_revisions", "draft_lifecycle_events"]) {
+      await assert.rejects(() => queryPostgres(`DELETE FROM storyos.${table}
+        WHERE project_id='${prepared.projectId}'::uuid`), /immutable/);
+    }
+    await assert.rejects(() => queryPostgres(`BEGIN;
+      INSERT INTO storyos.draft_artifacts(owner_user_id,project_id,draft_id,current_revision_id)
+      VALUES('${USER_A}','${prepared.projectId}','${id("e0dff2")}','${id("e0dff3")}');
+      INSERT INTO storyos.draft_artifact_revisions(owner_user_id,project_id,draft_id,revision_id,payload,payload_digest)
+      SELECT owner_user_id,project_id,'${id("e0dff2")}'::uuid,'${id("e0dff3")}'::uuid,payload,payload_digest
+      FROM storyos.draft_artifact_revisions WHERE draft_id='${closed.draft.draft_id}'::uuid; COMMIT;`),
+      /Incomplete Refused Edit Draft settlement/);
+    assert.deepEqual(await retainedState(prepared.projectId), before);
+    const admissionRows = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(admission) ORDER BY to_jsonb(admission)::text)
+      FROM storyos.author_command_admissions AS admission WHERE command_kind='applyAuthorEdit' AND project_id='${prepared.projectId}'::uuid`));
+    const request = { command_schema: "storyos.command.export-project-archive.request.v1" as const,
+      export_project_archive_input: { ...BINDING, correlation_id: id("e0d61"), archive_profile: "storyos.project-export.v1",
+        archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" } };
+    const admitted = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/exports", request.command_schema, await digestExportProjectArchive(request),
+      id("e0d62"), (antiForgery) => exportProjectArchive({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        fetchImpl: prepared.fetchImpl, request, idempotencyKey: id("e0d62"), antiForgery }));
+    if (admitted.effect.kind !== "admitted") throw new Error("expected authorized lifecycle archive");
+    await settleOnce();
+    const download = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${admitted.effect.export_id}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    assert.equal(download.status, 200);
+    const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    const revisionGap = { kind: "refused_edit_revision_payload", reason: "withheld_due_to_tombstone",
+      entry_path: "canonical/draft_artifact_revisions.json", record_id: tombstoned.draft.draft_revision_id,
+      payload_field: "payload", draft_id: tombstoned.draft.draft_id, retention_state: "tombstoned",
+      payload_digest: tombstoned.draft.payload_digest, payload_digest_profile: "storyos.refused-edit-payload.jcs.v1" };
+    const admissionGap = { kind: "refused_edit_admission_payload", reason: "withheld_due_to_tombstone",
+      entry_path: "canonical/author_command_admissions.json", record_id: results[2]!.author_command_admission_id,
+      payload_field: "command_payload", draft_id: tombstoned.draft.draft_id, retention_state: "tombstoned",
+      command_id: results[2]!.command_id,
+      canonical_command_digest: `sha256:${results[2]!.receipt.command_digest.profile}:${results[2]!.receipt.command_digest.value_hex_lowercase}` };
+    const expectedRevisions = before.draft_artifact_revisions.map((row: Record<string, unknown>) => {
+      if (row.draft_id !== tombstoned.draft.draft_id) return row;
+      const { payload: _withheld, ...metadata } = row;
+      return { ...metadata, payload_availability: revisionGap };
+    });
+    const expectedAdmissions = admissionRows.map((row: Record<string, unknown>) => {
+      if (row.author_command_admission_id !== results[2]!.author_command_admission_id) return row;
+      const { command_payload: _withheld, ...metadata } = row;
+      return { ...metadata, payload_availability: admissionGap };
+    });
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifacts.json"))), before.draft_artifacts);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json"))), before.draft_lifecycle_events);
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifact_revisions.json"))), expectedRevisions);
+    const exportedAdmissions = JSON.parse(new TextDecoder().decode(files.get("canonical/author_command_admissions.json")));
+    assert.deepEqual(exportedAdmissions.filter((row: Record<string, unknown>) => row.command_kind === "applyAuthorEdit"), expectedAdmissions);
+    for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes("Restricted erased alternative"));
+    assert.deepEqual(await retainedState(prepared.projectId), before);
+  } finally { await stopRealServer(started.server); }
+});

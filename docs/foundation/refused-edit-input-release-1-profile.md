@@ -57,7 +57,17 @@ closure and retention. An archived Project or non-retained Draft is unavailable.
 The query has the existing 4 MiB page ceiling. The separate 64 MiB referenced
 payload ceiling does not enlarge the inline request or claim a larger supported
 Draft. The three Draft tables belong to `artifact-proposal-draft`; Project Export
-Archive and the existing physical isolated-restore path retain their exact rows.
+Archive retains complete eligible and authorized archived rows. A tombstoned
+Draft exports its safe Revision metadata and creation/source/lifecycle facts;
+it withholds both Revision `payload` and the exact Admission `command_payload`
+copy. Each affected entry row has `payload_availability` with the exact entry,
+record, field, Draft identity, digest, and `withheld_due_to_tombstone` reason.
+The same two gaps enter the existing root `known_purged_gaps` slot. That slot
+name does not claim physical deletion. Creation verifies the original digests
+and exact association before withholding. Persist and download derive gaps from
+the same pinned entry bytes. Download does not rebuild a historical root from
+current lifecycle. Missing association or digest proof causes a typed failure.
+The existing physical isolated-restore path retains exact storage rows.
 Restoration does not reopen or revive a closed, archived, or tombstoned record.
 
 The batch policy `storyos.author-edit-batch.release-1.preview.v1` keeps its legacy
