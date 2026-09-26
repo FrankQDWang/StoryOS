@@ -6,11 +6,12 @@ import type { CloseEditorFlowDraftRequest, EditorFlowDraftClosed, RefusedEditDra
 import { createPausedDigestCrypto, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
 import { MAX_WORKING_JOURNAL_ITEMS } from "../../src/journal-working-set.ts";
 
+const id = "018f0000-0000-7001-8000-000000000090";
+const draft = { draft_id: id, draft_revision_id: id, payload_digest: "a".repeat(64),
+  closure: "open", retention_state: "retained", kind: "refused_edit" } as RefusedEditDraftInspect;
+
 it("persists the complete immutable explicit Discard before Admission and only reconciles its exact public event", async () => {
   const test = await openJournalAppendTestWorkspace();
-  const id = "018f0000-0000-7001-8000-000000000090";
-  const draft = { draft_id: id, draft_revision_id: id, payload_digest: "a".repeat(64),
-    closure: "open", retention_state: "retained", kind: "refused_edit" } as RefusedEditDraftInspect;
   let request: CloseEditorFlowDraftRequest | undefined;
   const routes: string[] = [];
   const fetchImpl: typeof fetch = async (input, init) => {
@@ -88,9 +89,6 @@ it("persists the complete immutable explicit Discard before Admission and only r
 it("keeps exact Receipt-backed refusal and conflict distinct from an infrastructure outcome", async () => {
   for (const kind of ["refused", "conflicted"] as const) {
     const test = await openJournalAppendTestWorkspace();
-    const id = "018f0000-0000-7001-8000-000000000090";
-    const draft = { draft_id: id, draft_revision_id: id, payload_digest: "a".repeat(64),
-      closure: "open", retention_state: "retained", kind: "refused_edit" } as RefusedEditDraftInspect;
     let expected: import("../../../../generated/typescript/storyos-public-release-1/client.mjs").CloseEditorFlowDraftResponse | undefined;
     const fetchImpl: typeof fetch = async (input, init) => {
       if (String(input).includes("/editor-sessions/")) return Response.json(test.workspace.session);

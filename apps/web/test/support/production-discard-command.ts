@@ -67,6 +67,10 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   await page.unroute(queryRoute);
   await page.reload();
   await surface.locator("button[data-draft-discard]").waitFor();
+  await queryStoryOSPostgres(`
+    UPDATE storyos.project_command_challenge_rate_windows SET issued_count = 0
+    WHERE owner_user_id = '${USER}'::uuid AND project_id = '${projectId}'::uuid
+  `);
   let posts = 0;
   let frozen: DiscardRecord | undefined;
   let reply: CloseEditorFlowDraftResponse | undefined;
@@ -93,10 +97,10 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
     await route.abort("failed"); release();
   });
   await surface.locator("button[data-draft-discard]").click();
+  await surface.locator("[data-draft-closed]").waitFor();
   await completed;
   assert.ok(frozen && reply && reply.effect.kind === "draft_closure_changed");
   const closed = { ...draft, closure: "closed", closure_event: reply.effect.event };
-  await surface.locator("[data-draft-closed]").waitFor();
   assert.equal(await surface.locator("[data-draft-closed]").textContent(),
     `Closed: abandoned. Event: ${reply.effect.event.event_id}. Undo unavailable: non-skippable Barrier.`);
   await restart(); await page.reload();
@@ -122,13 +126,11 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
     route_template: "/api/v1/projects/{project_id}/exports", command_schema: request.command_schema,
     canonical_command_digest: await digestExportProjectArchive(request), idempotency_key: key } });
   const admitted = await exportProjectArchive({ ...options, request, idempotencyKey: key, antiForgery: challenge.nonce });
-  assert.equal(admitted.effect.kind, "admitted");
-  if (admitted.effect.kind !== "admitted") throw new Error("Production Draft export not admitted");
+  assert.ok(admitted.effect.kind === "admitted", "Production Draft export not admitted");
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
   await runStoryOSWorker({ repositoryRoot, workerBinary: `${repositoryRoot}/target/release-package/storyos-worker`, args: ["--once"] });
   const exported = await getExportOperation({ ...options, exportId: admitted.effect.export_id });
-  assert.equal(exported.status, "ready");
-  if (exported.status !== "ready") throw new Error("Production Draft export not ready");
+  assert.ok(exported.status === "ready", "Production Draft export not ready");
   const download = await fetchImpl(`${origin}/api/v1/projects/${projectId}/exports/${exported.export_id}`,
     { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
   assert.equal(download.status, 200);
