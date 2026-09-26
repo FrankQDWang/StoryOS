@@ -89,7 +89,9 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
     open.onsuccess = () => { const db = open.result; const read = db.transaction("intents").objectStore("intents").getAll();
       read.onsuccess = () => { db.close(); resolve(read.result as unknown[]); }; };
   }), projectId);
-  assert.ok(journal.some((record) => JSON.stringify((record as { author_edit_unit?: unknown }).author_edit_unit) === JSON.stringify(unit)));
+  const intent = journal.find((record) => (record as Record<string, unknown>).completed_intent_record_id
+    === request!.completed_intent_record_id) as Record<string, unknown> | undefined;
+  assert.deepEqual(intent?.author_edit_unit, unit);
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
   const mutations: string[] = [];
   const track = (request: import("playwright").Request) => { if (request.method() !== "GET") mutations.push(request.url()); };
@@ -125,7 +127,7 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.locator("button[data-draft-copy]").waitFor();
   assert.deepEqual((await read()).draft, retained.draft);
   await page.route(draftRoute, (route) => route.fulfill({ status: 404, contentType: "application/problem+json",
-    body: JSON.stringify({ code: "draft_unavailable" }) }));
+    body: wrong.text }));
   await page.locator("button[data-draft-copy]").click();
   await page.locator(`[data-draft-unavailable="${effect.draft_id}"]`).waitFor();
   assert.equal(await page.locator("[data-draft-replacement]").count(), 0);
