@@ -208,7 +208,9 @@ function discardRecordKey(draft: RefusedEditDraftInspect): string {
   return draft.reopen_event ? `discard:${draft.draft_id}:${draft.reopen_event.event_id}` : `discard:${draft.draft_id}`;
 }
 export async function reconcileDiscard(workspace: EditorWorkspace, draft: RefusedEditDraftInspect): Promise<DiscardObservation | undefined> {
-  const found = (await readDiscardJournal(workspace)).find(({ record }) => record.key === discardRecordKey(draft));
+  const found = (await readDiscardJournal(workspace)).find(({ record }) => draft.closure === "closed"
+    ? draft.closure_event != null && matchesEvent(record, draft.closure_event)
+    : record.key === discardRecordKey(draft));
   if (found === undefined) return undefined;
   if (draft.closure === "closed" && draft.closure_event && matchesEvent(found.record, draft.closure_event)) {
     if (found.observation?.kind !== "settled_closed") {
