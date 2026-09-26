@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { getRefusedEditDraft } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ProjectScope, RefusedEditDraftInspect }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { canonicalDraftValue as canonical, discardRefusedEdit, reconcileDiscard, type DiscardObservation } from "./refused-edit-discard.ts";
+import { canonicalDraftValue as canonical, discardRefusedEdit, MAX_DISCARD_RECORDS, reconcileDiscard, type DiscardObservation } from "./refused-edit-discard.ts";
 import { rebuildPendingProjection, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import type { EditorWorkspace, JournalSubmissionGroup, PendingEditProjection } from "./editor-types.ts";
 
@@ -70,11 +70,11 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
     onHoldChange?.(false);
     if (workspace !== undefined) void (async () => {
       const projection = await rebuildPendingProjection(workspace);
+      const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
       if (!active) return;
       setSettledWriter(workspace.partition.disposition === "current_writer_open"
         && workspace.session.writer.kind === "current_writer" && projection.save_state === "saved"
-        && projection.unsettled_intent_count === 0);
-      const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
+        && projection.unsettled_intent_count === 0 && (snapshot.explicitDiscard?.length ?? MAX_DISCARD_RECORDS) < MAX_DISCARD_RECORDS);
       const groups = snapshot.groups.filter((group) => group.settlement.kind === "zero_authority_receipt_settled"
         && group.settlement.effect.kind === "refused_to_draft");
       const next = await Promise.all(groups.map(async (group) => {

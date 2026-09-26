@@ -3,7 +3,8 @@ import { discardRefusedEdit, observeDiscard, readDiscardJournal, reconcileDiscar
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import type { CloseEditorFlowDraftRequest, EditorFlowDraftClosed, RefusedEditDraftInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
+import { createPausedDigestCrypto, openJournalAppendTestWorkspace } from "./local-edit-journal-append-fixture.ts";
+import { MAX_WORKING_JOURNAL_ITEMS } from "../../src/journal-working-set.ts";
 
 it("persists the complete immutable explicit Discard before Admission and only reconciles its exact public event", async () => {
   const test = await openJournalAppendTestWorkspace();
@@ -31,6 +32,18 @@ it("persists the complete immutable explicit Discard before Admission and only r
     throw new TypeError("Controlled response loss");
   };
   try {
+    const originalCrypto = test.workspace.cryptoImpl;
+    const paused = createPausedDigestCrypto(originalCrypto);
+    test.workspace.cryptoImpl = paused.cryptoImpl;
+    let current = true;
+    const expired = expect(discardRefusedEdit({ workspace: test.workspace, draft, baseUrl: location.origin,
+      fetchImpl, isCurrent: () => current })).rejects.toThrow();
+    await paused.reached;
+    current = false;
+    paused.release();
+    await expired;
+    test.workspace.cryptoImpl = originalCrypto;
+    expect(await readDiscardJournal(test.workspace)).toEqual([]);
     await expect(discardRefusedEdit({ workspace: test.workspace, draft, baseUrl: location.origin, fetchImpl }))
       .rejects.toThrow("Controlled response loss");
     const [original] = await readDiscardJournal(test.workspace);
@@ -52,7 +65,11 @@ it("persists the complete immutable explicit Discard before Admission and only r
       .toMatchObject({ kind: "settled_closed", event });
     expect(await rebuildPendingProjection(test.workspace)).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
     const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-01T00:00:00.000Z"));
-    try { await observeDiscard(test.workspace, original!.record, { kind: "unresolved" }); }
+    try {
+      for (let index = 0; index < MAX_WORKING_JOURNAL_ITEMS; index += 1) {
+        await observeDiscard(test.workspace, original!.record, { kind: "unresolved" });
+      }
+    }
     finally { clock.mockRestore(); }
     expect(await rebuildPendingProjection(test.workspace)).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
     expect((await readDiscardJournal(test.workspace))[0]!.record).toEqual(original!.record);

@@ -19,6 +19,7 @@ function exactKeys(value: object, keys: string[]): boolean {
 }
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const RECORD_SCHEMA = "storyos.local-edit-journal.refused-edit-discard.v1";
+export const MAX_DISCARD_RECORDS = Math.floor(MAX_WORKING_JOURNAL_ITEMS / 3);
 export type DiscardRecord = {
   key: string; schema_id: string; explicit_command_record_id: string; local_intent_sequence: number;
   journal_partition_id: string; project_scope: ProjectScope; editor_session_id: string;
@@ -107,7 +108,7 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
     result(metadata.getAll(IDBKeyRange.bound("discard-observation:", "discard-observation:\uffff"), MAX_WORKING_JOURNAL_ITEMS + 1)) as Promise<DiscardObservation[]>,
     result(metadata.get("schema")) as Promise<{ version: number }>,
   ]);
-  if (schema?.version !== 4 || records.length > MAX_WORKING_JOURNAL_ITEMS || observations.length > MAX_WORKING_JOURNAL_ITEMS) throw new Error("Discard Journal unavailable");
+  if (schema?.version !== 4 || records.length > MAX_DISCARD_RECORDS || observations.length > MAX_WORKING_JOURNAL_ITEMS) throw new Error("Discard Journal unavailable");
   for (const record of records) {
     const input = record.group?.frozen_request_body?.close_editor_flow_draft_input;
     const partition = workspace.partition;
@@ -161,7 +162,7 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
     if (record === undefined || observation.schema_id !== `${RECORD_SCHEMA}.observation`
       || !exactKeys(observation, ["key", "record_key", "schema_id", "kind",
         ...(observation.kind === "settled" ? ["response"] : observation.kind === "settled_closed" ? ["event"] : [])])
-      || !observation.key.startsWith(`discard-observation:${record.explicit_command_record_id}:`)
+      || observation.key !== `discard-observation:${record.explicit_command_record_id}:${observation.kind}`
       || (observation.kind === "settled_closed" ? !matchesEvent(record, observation.event)
         : observation.kind === "settled" ? !matchesResponse(record, observation.response)
           : observation.kind !== "unresolved")) throw new Error("Discard Journal unavailable");
@@ -192,8 +193,11 @@ export async function observeDiscard(workspace: EditorWorkspace, record: Discard
   if (!same(await result(metadata.get(record.key)), record)) {
     transaction.abort(); await done; return;
   }
-  metadata.add({ key: `discard-observation:${record.explicit_command_record_id}:${uuidV7(workspace.cryptoImpl)}`,
-    record_key: record.key, schema_id: `${RECORD_SCHEMA}.observation`, ...value });
+  const observation = { key: `discard-observation:${record.explicit_command_record_id}:${value.kind}`,
+    record_key: record.key, schema_id: `${RECORD_SCHEMA}.observation`, ...value };
+  const previous = await result(metadata.get(observation.key));
+  if (previous !== undefined && !same(previous, observation)) throw new Error("Discard evidence changed");
+  if (previous === undefined) metadata.add(observation);
   await done;
 }
 
@@ -221,7 +225,7 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
     const scope = workspace.partition.project_scope;
     const canonical = await getEditorSession({ baseUrl, projectId: scope.project_id,
       editorSessionId: workspace.partition.editor_session_id, fetchImpl });
-    if (!isCurrent() || journal.length >= MAX_WORKING_JOURNAL_ITEMS || workspace.partition.disposition !== "current_writer_open" || pending.save_state !== "saved"
+    if (!isCurrent() || journal.length >= MAX_DISCARD_RECORDS || workspace.partition.disposition !== "current_writer_open" || pending.save_state !== "saved"
       || pending.unsettled_intent_count !== 0 || journal.some(({ observation }) => observation === undefined || observation.kind === "unresolved")
       || journal.some(({ record }) => record.key === `discard:${draft.draft_id}`)
       || !same(canonical.project_scope, scope) || canonical.writer.kind !== "current_writer"
@@ -253,7 +257,7 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
     const metadata = transaction.objectStore("metadata");
     const [previous, partition, existing, schema] = await Promise.all([result(metadata.get("local_intent_sequence")) as Promise<{ value: number } | undefined>,
       result(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id)), result(metadata.get(`discard:${draft.draft_id}`)), result(metadata.get("schema")) as Promise<{ version: number }>]);
-    if (schema?.version !== 4 || !same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
+    if (!isCurrent() || schema?.version !== 4 || !same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
       transaction.abort(); await done; return;
     }
     const createdAt = new Date().toISOString();

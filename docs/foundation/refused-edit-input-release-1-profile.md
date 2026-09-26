@@ -141,7 +141,9 @@ and partition bind the record. The record schema is
 `.observation` schema. Database version 4 stays current. No old record is
 rewritten. The existing working-item ceiling bounds record and observation
 reads; unknown schema, incomplete coverage, extra fields or digest drift stop
-Discard. No throughput or retention-duration claim is added.
+Discard. Each record reserves three observation slots before Admission. Its
+kind-specific keys retain each observation once; changed evidence stops Discard.
+No throughput or retention-duration claim is added.
 
 The record commits before one fresh bounded Admission. It stores complete
 nonsecret command bytes, source bindings, coverage, digest and original key.
