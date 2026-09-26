@@ -58,6 +58,15 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "chapter_removal_decisions",
         "canonical/chapter_removal_decisions.json",
     ),
+    ("draft_artifacts", "canonical/draft_artifacts.json"),
+    (
+        "draft_artifact_revisions",
+        "canonical/draft_artifact_revisions.json",
+    ),
+    (
+        "draft_lifecycle_events",
+        "canonical/draft_lifecycle_events.json",
+    ),
     ("command_idempotency", "canonical/command_idempotency.json"),
     (
         "context_assembly_manifests",
@@ -204,6 +213,7 @@ pub(super) async fn collect_exportable_families(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
 ) -> Result<Vec<PinnedArchiveFamily>, ExportProjectArchiveError> {
+    super::project_archive_draft::validate_withheld_payloads(client, scope).await?;
     let mut families = Vec::with_capacity(EXPORT_TABLES.len());
     for (table, path) in EXPORT_TABLES {
         let rows = load_table_json(client, table, scope).await?;
@@ -274,7 +284,8 @@ pub(super) async fn persist_export_archive(
     let required_refs: Vec<&str> = required.iter().map(String::as_str).collect();
     require_delivered_families(&present, &required_refs).map_err(archive_build_error)?;
     let built = build_project_archive(
-        &archive_root_facts(export_id, scope, snapshot, counts, created_at),
+        &archive_root_facts(export_id, scope, snapshot, counts, created_at, &sources)
+            .map_err(archive_build_error)?,
         &sources,
     )
     .map_err(archive_build_error)?;
@@ -408,18 +419,30 @@ pub(super) async fn package_stored_export(
             bytes,
         });
     }
-    match package_verified_project_archive_zip(
-        &archive_root_facts(
-            page.export_id.as_str(),
-            scope,
-            &page.source_snapshot,
-            counts,
-            &created_at,
-        ),
+    let root_facts = match archive_root_facts(
+        page.export_id.as_str(),
+        scope,
+        &page.source_snapshot,
+        counts,
+        &created_at,
         &sources,
-        immutable_root,
     ) {
-        Ok(bytes) => Ok(VerifiedExportArchive::Ready(bytes)),
+        Ok(facts) => facts,
+        Err(reason) => return Ok(VerifiedExportArchive::Refused(reason)),
+    };
+    match package_verified_project_archive_zip(&root_facts, &sources, immutable_root) {
+        Ok(bytes) => {
+            if super::project_archive_draft_copies::stored_payload_is_ineligible(
+                client, scope, &sources,
+            )
+            .await?
+            {
+                return Ok(VerifiedExportArchive::Refused(
+                    ProjectArchiveBuildRefusal::IneligibleLifecycle,
+                ));
+            }
+            Ok(VerifiedExportArchive::Ready(bytes))
+        }
         Err(reason) => Ok(VerifiedExportArchive::Refused(reason)),
     }
 }
@@ -430,8 +453,10 @@ fn archive_root_facts(
     snapshot: &CanonicalSnapshot,
     table_family_counts: Vec<(String, String)>,
     created_at: &str,
-) -> ProjectArchiveRootFacts {
-    ProjectArchiveRootFacts {
+    sources: &[ArchiveEntrySource],
+) -> Result<ProjectArchiveRootFacts, ProjectArchiveBuildRefusal> {
+    let known_purged_gaps = super::project_archive_draft::withheld_payload_gaps(sources)?;
+    Ok(ProjectArchiveRootFacts {
         archive_profile: PROJECT_EXPORT_ARCHIVE_PROFILE.to_owned(),
         export_id: export_id.to_owned(),
         owner_user_id: scope.owner_user_id.as_ref().to_owned(),
@@ -448,9 +473,9 @@ fn archive_root_facts(
         limit_profile_revision: "storyos.foundation.absolute.v1".to_owned(),
         provenance_status: "complete".to_owned(),
         provenance_edge_count: "0".to_owned(),
-        known_purged_gaps: Vec::new(),
+        known_purged_gaps,
         created_at: created_at.to_owned(),
-    }
+    })
 }
 
 async fn load_table_json(
@@ -458,8 +483,9 @@ async fn load_table_json(
     table: &str,
     scope: &ProjectScope,
 ) -> Result<Vec<serde_json::Value>, ExportProjectArchiveError> {
+    let expression = super::project_archive_draft::export_row_expression(table);
     let sql = format!(
-        "SELECT to_jsonb(source)::text
+        "SELECT ({expression})::text
            FROM storyos.{table} AS source
           WHERE source.owner_user_id = $1::text::uuid
             AND source.project_id = $2::text::uuid"
@@ -477,6 +503,14 @@ async fn load_table_json(
         let value: serde_json::Value = serde_json::from_str(&raw)
             .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
         values.push(value);
+    }
+    if table == "pinned_export_sources" {
+        super::project_archive_draft_copies::withhold_pinned_source_copies(
+            client,
+            scope,
+            &mut values,
+        )
+        .await?;
     }
     values.sort_by_cached_key(canonical_json);
     Ok(values)

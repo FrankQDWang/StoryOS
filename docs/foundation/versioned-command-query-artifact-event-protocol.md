@@ -1074,6 +1074,18 @@ filter only after authorization. Internal Worker queues, lease traffic,
 Mailbox messages, Adapter frames, Provider tokens, and progress noise are not
 public Project Activity Events.
 
+Issue 827 implements one narrow exception to the subscription representation:
+`storyos.event.refused-edit-draft-created.v1` is an immutable CoreTransition
+Artifact creation record under `storyos.artifact-lifecycle.v1`. The authenticated
+exact-Scope `getRefusedEditDraft` query returns it with the retained Revision,
+payload digest, exact command/Admission/Receipt source, and current lifecycle.
+It creates no Project Activity row or cursor and has no SSE representation.
+Its standalone schema and golden fixtures define the exact creation shape.
+Other public Events keep the existing Project Activity profile. This exception
+does not implement other Draft events or a second event stream. The
+[Refused Edit Input profile](refused-edit-input-release-1-profile.md) defines the
+first service input and qualification boundary.
+
 ### 10.2 Durable Event envelope
 
 ```text

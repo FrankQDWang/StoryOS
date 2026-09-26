@@ -23,7 +23,8 @@ pub struct ManuscriptBlock {
     pub text: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ManuscriptBlockKind {
     Paragraph,
     Heading,
@@ -255,7 +256,8 @@ fn apply_primitive(
             manuscript_block_id,
             block_kind,
         } => retype_block(payload, manuscript_block_id, block_kind),
-        AuthorEditPrimitive::ReplaceSelection { .. } => {
+        AuthorEditPrimitive::ReplaceSelection { .. }
+        | AuthorEditPrimitive::ReplaceStructuredSelection { .. } => {
             Err(AuthorEditRefusal::UnsupportedIntentShape)
         }
     }

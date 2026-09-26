@@ -171,7 +171,7 @@ async fn execute_counter_takeover(
             },
             editor_session_id: EditorSessionId::new(case.editor_session_id),
             observed_writer_generation: case.observed_writer_generation,
-            editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+            editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         },
     )
     .await
@@ -318,7 +318,7 @@ async fn observer_takeover_settles_no_effect_activity_without_manuscript_authori
                    command_kind, canonical_command_digest, idempotency_key,
                    consumed_at, expires_at, '018f0000-0000-7001-8000-000000000916',
                    NULL, NULL, '{}', '{}', NULL,
-                   'storyos.editor-contract.release-1.v2', NULL, NULL, NULL,
+                   'storyos.editor-contract.release-1.v3', NULL, NULL, NULL,
                    jsonb_build_object(
                      'command_schema', command_schema,
                      'editor_session_id', '018f0000-0000-7001-8000-000000000907',

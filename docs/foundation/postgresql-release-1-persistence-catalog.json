@@ -19,15 +19,15 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:4dc411450ad3a7a9e89f31f72d4a0a9a1835948ff84b9b6f26772e226b23eab3",
+    "migration_chain_digest": "sha256:a2941df806d62c3c94f4a2a3cb68f4e1d289fcd040a1c46c0e1a4e3fa758f595",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-14-responses-memory",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-26-refused-edit-draft",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19",
+      "route_catalog_sha256": "sha256:5cb21822148cf1de4c3a1c28ff3816eff9408721d89bd7d16d88f699a3ab9648",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:4eac2b58d6fa5c6e62d59c5f641a992d71028f5707e717e7d549bf58670f688f",
+      "manifest_sha256": "sha256:6e3db677f0eaf208711e0c1680711da189ba7a0164793a1d16c8b1e14021f12a",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -483,6 +483,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0062_complete_or_continue_proposal_generation.sql",
           "lf_sha256": "sha256:0b062769f1b7badde6be08f279f2c2b69a70bfbdcb09aee2c693e891f82e4f99"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0063_preserve_refused_edit_draft.sql",
+          "lf_sha256": "sha256:72b3841a6e30afa503633bdce58e15189b3fe081a0c43e3fcd8bae9bc0492cf4"
         }
       ]
     },
@@ -624,7 +628,7 @@
       "head": "scoped_head",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "artifact_lifecycle_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "getArtifact", "getConversationMemory"], "operation_selector": null, "event_selector": null, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "getRefusedEditDraft", "getArtifact", "getConversationMemory"], "operation_selector": null, "event_selector": {"mode": "refused_edit_creation"}, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-receipts-actions",
@@ -720,7 +724,7 @@
       "head": "replay_generation_and_position",
       "projection": {"kind": "historical_projection", "source_family_ids": ["project-canonical", "artifact-proposal-draft", "operational-receipts-actions", "operational-run-mailbox"], "dependency_closure": ["event_id", "project_activity_position", "replay_generation", "event_schema", "redaction_profile"], "generation_field": "replay_generation", "watermark_field": "project_activity_position", "invalidation_families": ["operational-lifecycle"], "rebuild": "rebuild_from_retained_events_and_receipts_without_guessing_cursor_translation", "visibility_gate": "snapshot_or_replay_generation_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "activity_owner", "operation_ids": ["getApplyAuthorEditOutcome", "getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": {"mode": "all"}, "settlement_modes": ["read", "stream"], "activity_profile": "storyos.project-activity.v1", "wire_history": "event_representation_referenced", "internal_only": false}
+      "public_contract": {"mapping_role": "activity_owner", "operation_ids": ["getApplyAuthorEditOutcome", "getSnapshot", "queryHistory", "activityStream"], "operation_selector": null, "event_selector": {"mode": "project_activity"}, "settlement_modes": ["read", "stream"], "activity_profile": "storyos.project-activity.v1", "wire_history": "event_representation_referenced", "internal_only": false}
     },
     {
       "family_id": "operational-snapshot-replay",

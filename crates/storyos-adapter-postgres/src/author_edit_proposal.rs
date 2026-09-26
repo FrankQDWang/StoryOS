@@ -49,10 +49,16 @@ pub(super) async fn load_chapter_proposal_heads(
     command: &ApplyAuthorEditCommand,
     manuscript_body: String,
 ) -> Result<LoadedProposalHeads, AuthorEditError> {
+    let structured = command
+        .author_edit_units
+        .iter()
+        .any(|unit| unit.selection_snapshot.ordered_selection.is_some());
+    let row_limit =
+        structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1);
     let rows = client
         .query(
             "SELECT head.current_revision_id::text, proposal.proposal_id::text,
-                    revision.candidate_text, proposal.manuscript_block_id::text,
+                    CASE WHEN $5 THEN '' ELSE revision.candidate_text END, proposal.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text, proposal.kind,
                     operation.operation_id::text, operation.resolution,
                     operation.reservation_state
@@ -73,7 +79,7 @@ pub(super) async fn load_chapter_proposal_heads(
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
                 AND proposal.chapter_id = $3::text::uuid
-              ORDER BY head.current_revision_id",
+              ORDER BY head.current_revision_id LIMIT $6",
             &[
                 &command.project_scope.owner_user_id.as_ref(),
                 &command.project_scope.project_id.as_ref(),
@@ -82,6 +88,8 @@ pub(super) async fn load_chapter_proposal_heads(
                     .proposal_target
                     .as_ref()
                     .map(|target| target.operation_id.as_str()),
+                &structured,
+                &row_limit,
             ],
         )
         .await
@@ -102,7 +110,8 @@ pub(super) async fn load_chapter_proposal_heads(
                 && row.get::<_, Option<String>>(8).as_deref() == Some("unresolved")
                 && kind == "block_edit"
         });
-        let inline_target = command.proposal_target.is_none()
+        let inline_target = !structured
+            && command.proposal_target.is_none()
             && kind == "inline_edit"
             && command.expected_proposal_head_revision_ids == [revision_id.clone()];
         if explicit_target || inline_target {
@@ -280,6 +289,7 @@ fn remap_units(
             Ok(AuthorEditUnit {
                 normalized_primitives: remapped,
                 selection_snapshot: storyos_core::SelectionSnapshot {
+                    ordered_selection: None,
                     coordinate_profile: unit.selection_snapshot.coordinate_profile.clone(),
                     from,
                     to,

@@ -30,7 +30,7 @@ test("Acceptance retains a stale-writer refusal without changing Proposal validi
       (antiForgery) => createEditorSession({ ...base, request: openRequest, idempotencyKey: id("e142"), antiForgery }));
     const takeoverRequest = { command_schema: "storyos.command.take-over-project-writer.request.v1", ...BINDING,
       correlation_id: id("e143"), editor_session_id: observer.editor_session.editor_session_id,
-      observed_writer_generation: session.writer.writer_generation, editor_contract_revision: "storyos.editor-contract.release-1.v2" };
+      observed_writer_generation: session.writer.writer_generation, editor_contract_revision: "storyos.editor-contract.release-1.v3" };
     const takeover = await challenged(started.baseUrl, project.fetchImpl, project.projectId, "POST",
       "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers", takeoverRequest.command_schema,
       await digestTakeOverProjectWriter(takeoverRequest), id("e144"),

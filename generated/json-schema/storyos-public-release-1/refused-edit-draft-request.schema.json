@@ -1,0 +1,21 @@
+{
+  "$id": "storyos.query.refused-edit-draft.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "draft_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "project_id": {
+      "format": "uuid",
+      "type": "string"
+    }
+  },
+  "required": [
+    "project_id",
+    "draft_id"
+  ],
+  "title": "StoryOS Refused Edit Draft Request",
+  "type": "object"
+}

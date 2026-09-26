@@ -95,78 +95,8 @@ pub(super) async fn apply_author_edit(
         author_command_admission_id: Uuid::now_v7().to_string(),
         receipt_id: Uuid::now_v7().to_string(),
     };
-    let author_edit_units = body
-        .author_edit_units
-        .iter()
-        .map(|unit| storyos_core::AuthorEditUnit {
-            normalized_primitives: unit
-                .normalized_primitives
-                .iter()
-                .map(|primitive| match primitive {
-                    contracts::AuthorEditPrimitive::ReplaceSelection { from, to, text } => {
-                        storyos_core::AuthorEditPrimitive::ReplaceSelection {
-                            from: *from,
-                            to: *to,
-                            text: text.clone(),
-                        }
-                    }
-                    contracts::AuthorEditPrimitive::ReplaceBlockSelection {
-                        manuscript_block_id,
-                        from,
-                        to,
-                        text,
-                    } => storyos_core::AuthorEditPrimitive::ReplaceBlockSelection {
-                        manuscript_block_id: manuscript_block_id.clone(),
-                        from: *from,
-                        to: *to,
-                        text: text.clone(),
-                    },
-                    contracts::AuthorEditPrimitive::SplitBlock {
-                        manuscript_block_id,
-                        offset,
-                        new_manuscript_block_id,
-                    } => storyos_core::AuthorEditPrimitive::SplitBlock {
-                        manuscript_block_id: manuscript_block_id.clone(),
-                        offset: *offset,
-                        new_manuscript_block_id: new_manuscript_block_id.clone(),
-                    },
-                    contracts::AuthorEditPrimitive::JoinBlocks {
-                        left_manuscript_block_id,
-                        right_manuscript_block_id,
-                    } => storyos_core::AuthorEditPrimitive::JoinBlocks {
-                        left_manuscript_block_id: left_manuscript_block_id.clone(),
-                        right_manuscript_block_id: right_manuscript_block_id.clone(),
-                    },
-                    contracts::AuthorEditPrimitive::MoveBlock {
-                        manuscript_block_id,
-                        to_index,
-                    } => storyos_core::AuthorEditPrimitive::MoveBlock {
-                        manuscript_block_id: manuscript_block_id.clone(),
-                        to_index: *to_index,
-                    },
-                    contracts::AuthorEditPrimitive::RetypeBlock {
-                        manuscript_block_id,
-                        block_kind,
-                    } => storyos_core::AuthorEditPrimitive::RetypeBlock {
-                        manuscript_block_id: manuscript_block_id.clone(),
-                        block_kind: match block_kind {
-                            contracts::ManuscriptBlockKind::Paragraph => {
-                                storyos_core::ManuscriptBlockKind::Paragraph
-                            }
-                            contracts::ManuscriptBlockKind::Heading => {
-                                storyos_core::ManuscriptBlockKind::Heading
-                            }
-                        },
-                    },
-                })
-                .collect(),
-            selection_snapshot: storyos_core::SelectionSnapshot {
-                coordinate_profile: unit.selection_snapshot.coordinate_profile.clone(),
-                from: unit.selection_snapshot.from,
-                to: unit.selection_snapshot.to,
-            },
-        })
-        .collect();
+    let author_edit_units =
+        storyos_application::author_edit_units_from_wire(&body.author_edit_units);
     let store = project_reader(&state).await?;
     let command = ApplyAuthorEditCommand {
         project_scope: scope.clone(),
@@ -289,6 +219,20 @@ pub(super) fn author_edit_response(
                 author_action_sequence: author_action_sequence.to_string(),
             },
         ),
+        AuthorEditSettlementEffect::RefusedToDraft { identity: draft } => (
+            contracts::DomainReceiptResult::RefusedToDraft,
+            vec![identity.expected_authoritative_revision_id.clone()],
+            vec![identity.expected_authoritative_revision_id.clone()],
+            Vec::new(),
+            Vec::new(),
+            None,
+            contracts::ApplyAuthorEditEffect::RefusedToDraft {
+                refusal_origin: contracts::RefusedEditOrigin::FreshEditorIntent,
+                draft_id: draft.draft_id,
+                draft_revision_id: draft.draft_revision_id,
+                creation_event_id: draft.creation_event_id,
+            },
+        ),
         AuthorEditSettlementEffect::NoEffect { reason } => (
             contracts::DomainReceiptResult::NoEffect,
             vec![identity.expected_authoritative_revision_id.clone()],
@@ -382,8 +326,18 @@ pub(super) fn author_edit_response(
             },
             authoritative_commit_ids,
             author_action_sequence,
-            draft_artifact_refs: Vec::new(),
-            artifact_lifecycle_event_refs: Vec::new(),
+            draft_artifact_refs: match &effect {
+                contracts::ApplyAuthorEditEffect::RefusedToDraft { draft_id, .. } => {
+                    vec![draft_id.clone()]
+                }
+                _ => Vec::new(),
+            },
+            artifact_lifecycle_event_refs: match &effect {
+                contracts::ApplyAuthorEditEffect::RefusedToDraft {
+                    creation_event_id, ..
+                } => vec![creation_event_id.clone()],
+                _ => Vec::new(),
+            },
             condition_refs: Vec::new(),
             result: receipt_result,
             created_at: settlement.receipt_created_at,
@@ -428,6 +382,30 @@ fn validate_request(body: &contracts::ApplyAuthorEditRequest) -> Result<(), ApiE
     }
     if body.target_refs != [format!("manuscript:{}", body.chapter_id)] {
         return Err(command_target_refused());
+    }
+    for unit in &body.author_edit_units {
+        if let Some(selection) = &unit.selection_snapshot.ordered_selection {
+            if body.proposal_target.is_some() {
+                return Err(command_target_refused());
+            }
+            for source in &selection.sources {
+                match &source.owner {
+                    contracts::EditSourceOwner::Manuscript {
+                        manuscript_block_id,
+                    } => valid_uuid(manuscript_block_id)?,
+                    contracts::EditSourceOwner::Proposal {
+                        proposal_id,
+                        operation_id,
+                        revision_id,
+                        manuscript_block_id,
+                    } => {
+                        for value in [proposal_id, operation_id, revision_id, manuscript_block_id] {
+                            valid_uuid(value)?;
+                        }
+                    }
+                }
+            }
+        }
     }
     if let Some(target) = &body.proposal_target {
         for value in [

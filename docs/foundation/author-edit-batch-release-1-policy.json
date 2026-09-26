@@ -9,10 +9,17 @@
     "gate_issue": "https://github.com/FrankQDWang/StoryOS/issues/60"
   },
   "identity_binding": {
-    "editor_contract_revision": "storyos.editor-contract.release-1.v2",
+    "editor_contract_revision": "storyos.editor-contract.release-1.v3",
     "request_digest_field": "editor_contract_revision",
     "wire_change": false,
     "core_local_coverage_claim": false
+  },
+  "input_coverage": {
+    "retained_synthetic_evidence": "legacy_single_owner_primitives_only",
+    "legacy_evidence_policy_source": "docs/research/author-edit-batch-prerelease-policy-source.v1.json",
+    "structured_source_profile": "docs/foundation/refused-edit-input-release-1-profile.md",
+    "structured_source_evidence_owner": "https://github.com/FrankQDWang/StoryOS/issues/827",
+    "new_workload_qualified_by_legacy_measurements": false
   },
   "selected": {
     "adjacent_completed_intent_idle_ms": 250,

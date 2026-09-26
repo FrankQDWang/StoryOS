@@ -7,7 +7,9 @@ use crate::release1_author_edit::{
     APPLY_AUTHOR_EDIT, ApplyAuthorEditEffect, ApplyAuthorEditRequest, ApplyAuthorEditResponse,
     AuthorEditConflictReason, AuthorEditPrimitive, AuthorEditProposalTarget,
     AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt, DomainReceiptCommandKind,
-    DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason, SelectionSnapshot,
+    DomainReceiptProducerCause, DomainReceiptResult, EditSourceOwner, NoEffectReason,
+    OrderedSourceSelection, RefusedEditOrigin, RefusedEditPayload, ReplacementBlock,
+    SelectedEditSource, SelectionSnapshot, SourceSelectionEndpoint,
 };
 
 pub(super) const REQUEST_SCHEMA_PATH: &str =
@@ -39,23 +41,36 @@ pub(super) fn response_schema_bytes() -> Vec<u8> {
 
 pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
-    format!(
-        "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
-        AuthorEditPrimitive::decl(&config),
-        SelectionSnapshot::decl(&config),
-        AuthorEditUnit::decl(&config),
-        AuthorEditProposalTarget::decl(&config),
-        ApplyAuthorEditRequest::decl(&config),
-        DomainReceiptCommandKind::decl(&config),
-        DomainReceiptProducerCause::decl(&config),
-        DomainReceiptResult::decl(&config),
-        DomainReceipt::decl(&config),
-        NoEffectReason::decl(&config),
-        AuthorEditConflictReason::decl(&config),
-        AuthorEditRefusalReason::decl(&config),
-        ApplyAuthorEditEffect::decl(&config),
-        ApplyAuthorEditResponse::decl(&config),
-    )
+    let source_types = [
+        RefusedEditPayload::decl(&config),
+        RefusedEditOrigin::decl(&config),
+        ReplacementBlock::decl(&config),
+        OrderedSourceSelection::decl(&config),
+        SelectedEditSource::decl(&config),
+        SourceSelectionEndpoint::decl(&config),
+        EditSourceOwner::decl(&config),
+    ]
+    .into_iter()
+    .map(|value| format!("export {value}\n\n"))
+    .collect::<String>();
+    source_types
+        + &format!(
+            "export {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}\n\nexport {}",
+            AuthorEditPrimitive::decl(&config),
+            SelectionSnapshot::decl(&config),
+            AuthorEditUnit::decl(&config),
+            AuthorEditProposalTarget::decl(&config),
+            ApplyAuthorEditRequest::decl(&config),
+            DomainReceiptCommandKind::decl(&config),
+            DomainReceiptProducerCause::decl(&config),
+            DomainReceiptResult::decl(&config),
+            DomainReceipt::decl(&config),
+            NoEffectReason::decl(&config),
+            AuthorEditConflictReason::decl(&config),
+            AuthorEditRefusalReason::decl(&config),
+            ApplyAuthorEditEffect::decl(&config),
+            ApplyAuthorEditResponse::decl(&config),
+        )
 }
 
 pub(super) fn openapi() -> String {
@@ -93,7 +108,10 @@ pub(super) fn apply_u64_wire_constraints(schema: &mut Value, canonical_u64: &Val
         for variant in variants.iter_mut() {
             variant["additionalProperties"] = Value::Bool(false);
         }
-        let applied = &mut variants[0];
+        let applied = variants
+            .iter_mut()
+            .find(|variant| variant["properties"]["kind"]["const"] == "authoritative_applied")
+            .expect("authoritative effect exists");
         applied["properties"]["author_action_sequence"] = canonical_u64.clone();
         applied["properties"]["project_activity_position"] = canonical_u64.clone();
         if let Some(revised) = variants

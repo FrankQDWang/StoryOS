@@ -80,7 +80,7 @@ fn command() -> ApplyAuthorEditCommand {
         proposal_target: None,
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         undo_group_id: "undo".to_owned(),
         completed_intent_record_id: "intent".to_owned(),
         local_intent_sequence: 1,
@@ -91,6 +91,7 @@ fn command() -> ApplyAuthorEditCommand {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 4,
                 to: 4,
@@ -110,6 +111,7 @@ async fn matching_bindings_reach_the_atomic_store_once() {
             text: "?".to_owned(),
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
             from: 5,
             to: 5,

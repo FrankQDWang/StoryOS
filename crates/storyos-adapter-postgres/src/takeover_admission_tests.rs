@@ -269,7 +269,7 @@ async fn prepare_takeover(
         },
         editor_session_id: EditorSessionId::new(editor_session_id),
         observed_writer_generation,
-        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
     }
 }
 

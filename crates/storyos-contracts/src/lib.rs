@@ -51,6 +51,8 @@ mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
 mod release1_readable_export_query_artifacts;
+mod release1_refused_edit_draft;
+mod release1_refused_edit_draft_artifacts;
 mod release1_reject_proposal_operations;
 mod release1_reject_proposal_operations_artifacts;
 mod release1_reopen_rejected_operations;
@@ -146,8 +148,9 @@ pub use release1_author_edit::{
     APPLY_AUTHOR_EDIT_METHOD, APPLY_AUTHOR_EDIT_PATH, ApplyAuthorEditEffect,
     ApplyAuthorEditRequest, ApplyAuthorEditResponse, AuthorEditConflictReason, AuthorEditPrimitive,
     AuthorEditProposalTarget, AuthorEditRefusalReason, AuthorEditUnit, DomainReceipt,
-    DomainReceiptCommandKind, DomainReceiptProducerCause, DomainReceiptResult, NoEffectReason,
-    SelectionSnapshot,
+    DomainReceiptCommandKind, DomainReceiptProducerCause, DomainReceiptResult, EditSourceOwner,
+    NoEffectReason, OrderedSourceSelection, RefusedEditOrigin, RefusedEditPayload,
+    ReplacementBlock, SelectedEditSource, SelectionSnapshot, SourceSelectionEndpoint,
 };
 pub use release1_author_edit_outcome::{
     ApplyAuthorEditOutcome, ApplyAuthorEditReconfirmationReason, ApplyAuthorEditRejectionReason,
@@ -334,4 +337,11 @@ pub use stage1_crosswalk::{
 pub use stage2_crosswalk::{
     GENERATED_STAGE2_CROSSWALK_PATH, check_stage2_crosswalk, generate_stage2_crosswalk,
     write_stage2_crosswalk,
+};
+
+pub use release1_refused_edit_draft::{
+    GET_REFUSED_EDIT_DRAFT_METHOD, GET_REFUSED_EDIT_DRAFT_PATH,
+    GET_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID, GET_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
+    GetRefusedEditDraftResponse, REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID, RefusedEditDraftCreated,
+    RefusedEditDraftCreator, RefusedEditDraftInspect, RefusedEditDraftSource,
 };

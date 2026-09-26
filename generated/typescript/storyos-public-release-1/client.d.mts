@@ -189,9 +189,23 @@ export type UndoLatestAuthorActionEffect = { "kind": "compensated", source_seque
 
 export type UndoLatestAuthorActionResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UndoLatestAuthorActionEffect, };
 
-export type AuthorEditPrimitive = { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, } | { "kind": "split_block", manuscript_block_id: string, offset: number, new_manuscript_block_id: string, } | { "kind": "join_blocks", left_manuscript_block_id: string, right_manuscript_block_id: string, } | { "kind": "move_block", manuscript_block_id: string, to_index: number, } | { "kind": "retype_block", manuscript_block_id: string, block_kind: ManuscriptBlockKind, };
+export type RefusedEditPayload = { schema_revision: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, author_edit_units: Array<AuthorEditUnit>, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, };
 
-export type SelectionSnapshot = { coordinate_profile: string, from: number, to: number, };
+export type RefusedEditOrigin = "fresh_editor_intent";
+
+export type ReplacementBlock = { block_kind: ManuscriptBlockKind, text: string, };
+
+export type OrderedSourceSelection = { sources: Array<SelectedEditSource>, anchor: SourceSelectionEndpoint, head: SourceSelectionEndpoint, };
+
+export type SelectedEditSource = { owner: EditSourceOwner, coordinate_profile: string, from: number, to: number, block_kind: ManuscriptBlockKind, source_text: string, };
+
+export type SourceSelectionEndpoint = { source_index: number, source_offset: number, };
+
+export type EditSourceOwner = { "kind": "manuscript", manuscript_block_id: string, } | { "kind": "proposal", proposal_id: string, operation_id: string, revision_id: string, manuscript_block_id: string, };
+
+export type AuthorEditPrimitive = { "kind": "replace_structured_selection", replacement: Array<ReplacementBlock>, } | { "kind": "replace_selection", from: number, to: number, text: string, } | { "kind": "replace_block_selection", manuscript_block_id: string, from: number, to: number, text: string, } | { "kind": "split_block", manuscript_block_id: string, offset: number, new_manuscript_block_id: string, } | { "kind": "join_blocks", left_manuscript_block_id: string, right_manuscript_block_id: string, } | { "kind": "move_block", manuscript_block_id: string, to_index: number, } | { "kind": "retype_block", manuscript_block_id: string, block_kind: ManuscriptBlockKind, };
+
+export type SelectionSnapshot = { ordered_selection?: OrderedSourceSelection | null, coordinate_profile: string, from: number, to: number, };
 
 export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>, selection_snapshot: SelectionSnapshot, };
 
@@ -203,7 +217,7 @@ export type DomainReceiptCommandKind = "applyAuthorEdit" | "takeOverProjectWrite
 
 export type DomainReceiptProducerCause = "author_command_admission";
 
-export type DomainReceiptResult = "authoritative_applied" | "proposal_revised" | "no_effect" | "conflicted" | "refused";
+export type DomainReceiptResult = "refused_to_draft" | "authoritative_applied" | "proposal_revised" | "no_effect" | "conflicted" | "refused";
 
 export type DomainReceipt = { receipt_id: string, project_scope: ProjectScope, command_kind: DomainReceiptCommandKind, command_digest: DigestValue, idempotency_key: string, producer_cause: DomainReceiptProducerCause, author_command_admission_id: string, expected_heads: Array<string>, prior_heads: Array<string>, resulting_heads: Array<string>, authoritative_revision_ids: Array<string>, proposal_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, author_action_sequence: string | null, draft_artifact_refs: Array<string>, artifact_lifecycle_event_refs: Array<string>, condition_refs: Array<string>, result: DomainReceiptResult, created_at: string, };
 
@@ -213,7 +227,7 @@ export type AuthorEditConflictReason = "stale_authoritative_head" | "proposal_he
 
 export type AuthorEditRefusalReason = "unsupported_intent_shape" | "invalid_selection" | "target_mismatch";
 
-export type ApplyAuthorEditEffect = { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
+export type ApplyAuthorEditEffect = { "kind": "refused_to_draft", refusal_origin: RefusedEditOrigin, draft_id: string, draft_revision_id: string, creation_event_id: string, } | { "kind": "authoritative_applied", authoritative_revision: AuthoritativeChapterRevision, authoritative_commit_id: string, author_action_sequence: string, project_activity_position: string, } | { "kind": "proposal_revised", proposal_revision_id: string, author_action_sequence: string, } | { "kind": "no_effect", reason: NoEffectReason, } | { "kind": "conflicted", reason: AuthorEditConflictReason, current_authoritative_revision_id: string, } | { "kind": "refused", reason: AuthorEditRefusalReason, };
 
 export type ApplyAuthorEditResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ApplyAuthorEditEffect, completed_intent_record_id: string, local_intent_sequence: string, };
 
@@ -423,6 +437,11 @@ export type CancelAgentRunEffect = { "kind": "applied", run_id: string, status: 
 
 export type CancelAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: CancelAgentRunEffect, };
 
+export type RefusedEditDraftSource = { command_id: string, author_command_admission_id: string, receipt_id: string, idempotency_key: string, command_digest: DigestValue, };
+export type RefusedEditDraftCreated = { event_kind: string, project_scope: ProjectScope, creator: RefusedEditDraftCreator, schema_id: string, creation_event_id: string, draft_id: string, draft_revision_id: string, created_at: string, source: RefusedEditDraftSource, };
+export type RefusedEditDraftCreator = { "kind": "core_transition", receipt_id: string, };
+export type RefusedEditDraftInspect = { draft_id: string, draft_revision_id: string, kind: string, closure: string, retention_state: string, payload: RefusedEditPayload, payload_digest: string, payload_digest_profile: string, creation: RefusedEditDraftCreated, };
+export type GetRefusedEditDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, draft: RefusedEditDraftInspect, };
 export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: string, decision_id: string, };
 
 export type OptionalValidationReceiptInspect = { "kind": "absent" } | { "kind": "present", validation_receipt_id: string, result: string, };
@@ -561,6 +580,7 @@ export declare function digestPauseAgentRun(request: PauseAgentRunRequest, crypt
 export declare function pauseAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: PauseAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<PauseAgentRunResponse>;
 export declare function digestCancelAgentRun(request: CancelAgentRunRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function cancelAgentRun(options: StoryOSQueryOptions & { projectId: string; runId: string; request: CancelAgentRunRequest; idempotencyKey: string; antiForgery: string }): Promise<CancelAgentRunResponse>;
+export declare function getRefusedEditDraft(options: StoryOSQueryOptions & { projectId: string; draftId: string }): Promise<GetRefusedEditDraftResponse>;
 export declare function getProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string }): Promise<GetProposalResponse>;
 export declare function digestAcceptProposal(request: AcceptProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function acceptProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: AcceptProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<AcceptProposalResponse>;

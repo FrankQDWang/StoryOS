@@ -151,7 +151,7 @@ test("activityStream replays a complete applied Event and Last-Event-ID resumes 
       expected_proposal_head_revision_ids: writer.base_snapshot.proposal_head_revision_ids,
       target_refs: writer.base_snapshot.target_refs,
       observed_ownership_partition: writer.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_id: "018f0000-0000-7001-8000-000000000363",
       completed_intent_record_id: "018f0000-0000-7001-8000-000000000364",
       local_intent_sequence: "1",

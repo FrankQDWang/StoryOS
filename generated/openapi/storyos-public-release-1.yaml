@@ -2,8 +2,8 @@ openapi: 3.1.0
 info:
   title: StoryOS Public Release 1
   version: storyos.public.release.1
-  x-storyos-contract-revision: release1-wire-catalog-2026-09-14-responses-memory
-  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction
+  x-storyos-contract-revision: release1-wire-catalog-2026-09-26-refused-edit-draft
+  x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getRefusedEditDraft,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction
 paths:
   /api/v1/protocol:
     get:
@@ -773,6 +773,52 @@ paths:
                 type: integer
                 minimum: 1
                 maximum: 60
+        '503':
+          description: Service unavailable
+  /api/v1/projects/{project_id}/refused-edit-drafts/{draft_id}:
+    get:
+      operationId: getRefusedEditDraft
+      summary: Inspect one retained Refused Edit Draft
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: draft_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Retained Refused Edit Draft
+          content:
+            application/json:
+              schema:
+                $ref: '../json-schema/storyos-public-release-1/refused-edit-draft-response.schema.json'
+        '400':
+          description: Invalid request
+        '401':
+          description: Authentication required
+        '403':
+          description: Request origin refused
+        '404':
+          description: Resource unavailable
+        '405':
+          description: Method not allowed
+        '409':
+          description: Active release conflict
+        '413':
+          description: Request too large
+        '415':
+          description: Unsupported content type
+        '422':
+          description: Request refused
+        '429':
+          description: Rate limited
         '503':
           description: Service unavailable
   /api/v1/projects/{project_id}/proposals/{proposal_id}:

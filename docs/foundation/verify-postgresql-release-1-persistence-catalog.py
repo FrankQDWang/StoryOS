@@ -119,6 +119,20 @@ def validate_catalog(catalog: dict[str, Any], route_catalog: dict[str, Any], err
 
 
 def run_negative_self_tests(catalog: dict[str, Any], route_catalog: dict[str, Any], errors: list[str]) -> None:
+    for fault in ["activity_profile", "activity_owner"]:
+        route_probe = copy.deepcopy(route_catalog)
+        catalog_probe = copy.deepcopy(catalog)
+        creation_id = "storyos.event.refused-edit-draft-created.v1"
+        if fault == "activity_profile":
+            next(event for event in route_probe["events"] if event["schema_id"] == creation_id)["wire_profile"] = "storyos.project-activity.v1"
+        else:
+            activity = next(family for family in catalog_probe["families"] if family["family_id"] == catalog_probe["route_coverage"]["activity_owner_family_id"])
+            activity["public_contract"]["event_selector"] = {"mode": "all"}
+        probe_errors: list[str] = []
+        validate_catalog(catalog_probe, route_probe, probe_errors, check_digests=False)
+        if not any("Refused Edit creation" in error for error in probe_errors):
+            errors.append(f"negative self-test accepted Refused Edit {fault} corruption")
+
     catalog_identity_probe = copy.deepcopy(catalog)
     catalog_identity_probe["catalog_id"] = "storyos.persistence.catalog.release-1.v4"
     catalog_identity_probe["schema_identity"]["persisted_format_catalog_id"] = (

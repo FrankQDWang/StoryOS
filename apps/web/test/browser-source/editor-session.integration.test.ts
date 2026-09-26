@@ -56,13 +56,13 @@ import {
 
 type ZeroAuthorityResult = Exclude<
   DomainReceiptResult,
-  "authoritative_applied" | "proposal_revised"
+  "authoritative_applied" | "proposal_revised" | "refused_to_draft"
 >;
 
 const FIRST_REVISION = "018f0000-0000-7001-8000-000000000034";
 const SECOND_REVISION = "018f0000-0000-7001-8000-000000000044";
 
-it("preserves the complete Journal when a retained Session Head does not match the Chapter", async () => {
+it.each(["changed_head", "legacy_editor_contract"] as const)("preserves the complete Journal during %s recovery", async (boundary) => {
   const scenario = createBrowserScenario();
   const activeSessionKey = `active_session:${OWNER}:${PROJECT}`;
   const requests: string[] = [];
@@ -88,6 +88,13 @@ it("preserves the complete Journal when a retained Session Head does not match t
     expect(workspace.session.base_snapshot.project_activity_position).toBe("0");
     await persistReplaceSelection(workspace,
       { from: 4, to: 4, text: " retained", resultingBody: "Base retained" });
+    if (boundary === "legacy_editor_contract") {
+      const transaction = journal.transaction("intents", "readwrite");
+      const records = await requestResult(transaction.objectStore("intents").getAll()) as JournalIntentRecord[];
+      for (const record of records) transaction.objectStore("intents").put({ ...record,
+        editor_contract_revision: "storyos.editor-contract.release-1.v2" });
+      await transactionResult(transaction);
+    }
     const stores = Array.from(journal.objectStoreNames);
     async function readCompleteJournal() {
       const transaction = journal.transaction(stores, "readonly");
@@ -96,7 +103,7 @@ it("preserves the complete Journal when a retained Session Head does not match t
     const before = await readCompleteJournal();
     requests.length = 0;
     const reopened = await openEditorWorkspace({ ...input,
-      chapter: { ...scenario.chapter, project_activity_position: "3",
+      chapter: boundary === "legacy_editor_contract" ? scenario.chapter : { ...scenario.chapter, project_activity_position: "3",
         chapter: { ...scenario.chapter.chapter,
           current_revision: chapterRevision(FIRST_REVISION, "Changed") } } });
     if (reopened.kind === "editor-ready") reopened.database.close();
@@ -720,7 +727,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
       observed_ownership_partition: "authoritative",
       author_edit_unit: options.unit,
       retry_source: { kind: "fresh_editor_intent" },
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_binding: {
         kind: "direct_author_input",
         undo_group_id: options.undoGroupId,
@@ -888,7 +895,7 @@ it("keeps the bounded IndexedDB Journal valid through batching and settlement", 
           expected_proposal_head_revision_ids: [],
           target_refs: first.target_refs,
           observed_ownership_partition: "authoritative",
-          editor_contract_revision: "storyos.editor-contract.release-1.v2",
+          editor_contract_revision: "storyos.editor-contract.release-1.v3",
           undo_group_id: first.undo_group_binding.undo_group_id,
           completed_intent_record_id: first.completed_intent_record_id,
           local_intent_sequence: String(first.local_intent_sequence),

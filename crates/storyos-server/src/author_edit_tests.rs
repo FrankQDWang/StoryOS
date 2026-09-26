@@ -29,6 +29,7 @@ fn request() -> contracts::ApplyAuthorEditRequest {
                 text: "!".to_owned(),
             }],
             selection_snapshot: contracts::SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 4,
                 to: 4,
@@ -54,6 +55,7 @@ fn request_validation_accepts_a_bounded_ordered_batch() {
             text: "?".to_owned(),
         }],
         selection_snapshot: contracts::SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
             from: 5,
             to: 5,

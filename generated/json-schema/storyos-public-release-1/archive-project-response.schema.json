@@ -260,6 +260,7 @@
     },
     "DomainReceiptResult": {
       "enum": [
+        "refused_to_draft",
         "authoritative_applied",
         "proposal_revised",
         "no_effect",

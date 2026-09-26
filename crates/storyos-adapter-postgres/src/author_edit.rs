@@ -59,7 +59,13 @@ impl PostgresProjectReader {
         command: &ApplyAuthorEditCommand,
         fault: AuthorEditFault,
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
-        self.pause_generating_proposals_for_input(command).await?;
+        if !command
+            .author_edit_units
+            .iter()
+            .any(|unit| unit.selection_snapshot.ordered_selection.is_some())
+        {
+            self.pause_generating_proposals_for_input(command).await?;
+        }
         match self.create_author_command_admission(command).await? {
             AdmissionUse::ExistingSettlement(receipt_id) => {
                 return self.read_author_edit_settlement(command, &receipt_id).await;
@@ -485,6 +491,40 @@ async fn classify_author_edit(
     )
     .await?;
     let current_ownership = loaded.ownership.clone();
+    if command
+        .author_edit_units
+        .iter()
+        .any(|unit| unit.selection_snapshot.ordered_selection.is_some())
+    {
+        let facts = super::refused_edit_source::load_sources(
+            client,
+            command,
+            current_revision_id,
+            &current_body,
+        )
+        .await?;
+        return Ok(ClassifiedAuthorEdit {
+            result: apply_core_author_edit(&ApplyAuthorEdit {
+                chapter_id: command.chapter_id.clone(),
+                current_authoritative_revision_id: current_revision_id.to_owned(),
+                current_body,
+                expected_authoritative_revision_id: command
+                    .expected_authoritative_revision_id
+                    .clone(),
+                expected_proposal_head_revision_ids: command
+                    .expected_proposal_head_revision_ids
+                    .clone(),
+                current_ownership,
+                ordered_source_facts: Some(facts),
+                target_refs: command.target_refs.clone(),
+                observed_ownership_partition: command.observed_ownership_partition.clone(),
+                inline_edit_disposition: storyos_core::InlineEditDisposition::Unspecified,
+                author_edit_units: command.author_edit_units.clone(),
+            }),
+            successor_blocks: None,
+            proposal_context: None,
+        });
+    }
     if !uses_versioned_payload
         && loaded.context.is_none()
         && !current_ownership.proposal_head_revision_ids.is_empty()
@@ -533,6 +573,7 @@ async fn classify_author_edit(
                     .expected_proposal_head_revision_ids
                     .clone(),
                 current_ownership,
+                ordered_source_facts: None,
                 target_refs: command.target_refs.clone(),
                 observed_ownership_partition: command.observed_ownership_partition.clone(),
                 inline_edit_disposition: routed.disposition,

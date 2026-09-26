@@ -75,6 +75,8 @@ use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
 use crate::release1_readable_export_query_artifacts as readable_export_query_artifacts;
+use crate::release1_refused_edit_draft::GET_REFUSED_EDIT_DRAFT;
+use crate::release1_refused_edit_draft_artifacts as refused_draft_artifacts;
 use crate::release1_reject_proposal_operations::REJECT_PROPOSAL_OPERATIONS;
 use crate::release1_reject_proposal_operations_artifacts as reject_proposal_operations_artifacts;
 use crate::release1_reopen_rejected_operations::REOPEN_REJECTED_OPERATIONS;
@@ -166,9 +168,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19";
+    "sha256:5cb21822148cf1de4c3a1c28ff3816eff9408721d89bd7d16d88f699a3ab9648";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:58a1bbcc378300fe2c4ad6e40f9a312e3df7f5cb108d97a0552d48ee90366139";
+    "sha256:f67167faec4d98aeb6b521e64f479a9fd4157cb90369e5d16e0f0ebfedb1382b";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -290,6 +292,9 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
         agent_run_control_artifacts::cancel_request_schema_bytes();
     let cancel_agent_run_response_schema =
         agent_run_control_artifacts::cancel_response_schema_bytes();
+    let refused_draft_event_schema = refused_draft_artifacts::event_schema_bytes();
+    let get_refused_draft_request_schema = refused_draft_artifacts::request_schema_bytes();
+    let get_refused_draft_response_schema = refused_draft_artifacts::response_schema_bytes();
     let get_proposal_request_schema = proposal_artifacts::request_schema_bytes();
     let get_proposal_response_schema = proposal_artifacts::response_schema_bytes();
     let accept_proposal_request_schema = accept_proposal_artifacts::request_schema_bytes();
@@ -324,6 +329,11 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let undo_latest_author_action_response_schema =
         undo_latest_author_action_artifacts::response_schema_bytes();
     let schemas = vec![
+        (
+            crate::REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID,
+            refused_draft_artifacts::EVENT_SCHEMA_PATH,
+            refused_draft_event_schema,
+        ),
         (
             PROTOCOL_PROFILE_REQUEST_SCHEMA_ID,
             REQUEST_SCHEMA_PATH,
@@ -533,6 +543,16 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::CANCEL_AGENT_RUN_RESPONSE_SCHEMA_ID,
             agent_run_control_artifacts::CANCEL_RESPONSE_SCHEMA_PATH,
             cancel_agent_run_response_schema,
+        ),
+        (
+            crate::GET_REFUSED_EDIT_DRAFT_REQUEST_SCHEMA_ID,
+            refused_draft_artifacts::REQUEST_SCHEMA_PATH,
+            get_refused_draft_request_schema,
+        ),
+        (
+            crate::GET_REFUSED_EDIT_DRAFT_RESPONSE_SCHEMA_ID,
+            refused_draft_artifacts::RESPONSE_SCHEMA_PATH,
+            get_refused_draft_response_schema,
         ),
         (
             crate::GET_PROPOSAL_REQUEST_SCHEMA_ID,
@@ -931,6 +951,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&PAUSE_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_pauseable", "current_fence_generation"]),
             command_operation_graph(&CANCEL_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_cancellable", "current_fence_generation"]),
             operation_graph(&GET_AGENT_RUN, &["run_scope_join", "run_projection_watermark_or_snapshot"]),
+            operation_graph(&GET_REFUSED_EDIT_DRAFT, &["exact_scope", "retained_revision_digest", "immutable_creation_source"]),
             operation_graph(&GET_PROPOSAL, &["proposal_scope_join", "exact_revision_or_current_projection", "redaction_profile"]),
             command_operation_graph(&ACCEPT_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "valid_validation_receipt", "selected_pending_operations", "expected_target_revisions", "acceptance_admission"]),
             command_operation_graph(&REJECT_PROPOSAL_OPERATIONS, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "selected_pending_operations", "expected_target_revisions", "explicit_editor_control"]),
@@ -1062,6 +1083,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&project_assistance_artifacts::openapi());
     paths.push_str(&agent_run_artifacts::openapi());
     paths.push_str(&agent_run_control_artifacts::openapi());
+    paths.push_str(&refused_draft_artifacts::openapi());
     paths.push_str(&proposal_artifacts::openapi());
     paths.push_str(&accept_proposal_artifacts::openapi());
     paths.push_str(&reject_proposal_operations_artifacts::openapi());
@@ -1260,6 +1282,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         PAUSE_AGENT_RUN.operation_id,
         CANCEL_AGENT_RUN.operation_id,
         GET_AGENT_RUN.operation_id,
+        GET_REFUSED_EDIT_DRAFT.operation_id,
         GET_PROPOSAL.operation_id,
         ACCEPT_PROPOSAL.operation_id,
         REJECT_PROPOSAL_OPERATIONS.operation_id,
@@ -1413,7 +1436,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         project_assistance_artifacts::typescript_client_source(),
         agent_run_artifacts::typescript_client_source(),
         agent_run_control_artifacts::typescript_client_source(),
-        proposal_artifacts::typescript_client_source(),
+        proposal_artifacts::typescript_client_source() + &refused_draft_artifacts::typescript_client_source(),
         accept_proposal_client,
         reject_proposal_operations_client,
         reopen_rejected_operations_client,
@@ -1498,6 +1521,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str("\n\n");
     declaration.push_str(&agent_run_control_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
+    declaration.push_str(&refused_draft_artifacts::typescript_type_declarations());
     declaration.push_str(&proposal_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
     declaration.push_str(&accept_proposal_artifacts::typescript_type_declarations());
@@ -1528,6 +1552,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(project_assistance_artifacts::typescript_declarations());
     declaration.push_str(agent_run_artifacts::typescript_declarations());
     declaration.push_str(agent_run_control_artifacts::typescript_declarations());
+    declaration.push_str(refused_draft_artifacts::typescript_declarations());
     declaration.push_str(proposal_artifacts::typescript_declarations());
     declaration.push_str(accept_proposal_artifacts::typescript_declarations());
     declaration.push_str(reject_proposal_operations_artifacts::typescript_declarations());
@@ -1837,3 +1862,7 @@ mod fixture_corpus_tests;
 #[cfg(test)]
 #[path = "release1_artifacts_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "release1_refused_edit_draft_artifacts_tests.rs"]
+mod refused_edit_draft_artifacts_tests;

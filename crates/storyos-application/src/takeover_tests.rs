@@ -67,7 +67,7 @@ fn command() -> TakeOverProjectWriterCommand {
         },
         editor_session_id: EditorSessionId::new("observer"),
         observed_writer_generation: 1,
-        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
     }
 }
 

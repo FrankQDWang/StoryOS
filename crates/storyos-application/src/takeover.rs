@@ -104,7 +104,7 @@ pub async fn take_over_project_writer(
         || challenge.route_template
             != "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers"
         || challenge.command_schema != "storyos.command.take-over-project-writer.request.v1"
-        || command.editor_contract_revision != "storyos.editor-contract.release-1.v2"
+        || command.editor_contract_revision != "storyos.editor-contract.release-1.v3"
     {
         return Err(TakeOverProjectWriterError::BindingConflict);
     }

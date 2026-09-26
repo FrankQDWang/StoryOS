@@ -190,7 +190,7 @@ test("Worker claims a Continue successor and writes the next batch into the new 
       expected_proposal_head_revision_ids: [opened.proposal.revision_id],
       target_refs: session.base_snapshot.target_refs,
       observed_ownership_partition: "mixed",
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_id: id(`${ns}64`),
       completed_intent_record_id: id(`${ns}65`),
       local_intent_sequence: "1",

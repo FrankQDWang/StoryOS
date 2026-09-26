@@ -167,7 +167,7 @@ export async function queryStoryOSPostgres(query: string): Promise<string> {
   assert.ok(container, "run through scripts/verify-project-scope.sh");
   const { stdout } = await execFileAsync("docker", [
     "exec", container, "psql", "-XAt", "-U", "postgres", "-c", query,
-  ]);
+  ], { maxBuffer: 4 * 1024 * 1024 });
   return stdout.trim();
 }
 

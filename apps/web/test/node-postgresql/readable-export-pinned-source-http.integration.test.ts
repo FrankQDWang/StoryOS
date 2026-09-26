@@ -339,7 +339,7 @@ test("an admitted human-readable export settles the pinned manuscript after late
       expected_proposal_head_revision_ids: session.result.base_snapshot.proposal_head_revision_ids,
       target_refs: session.result.base_snapshot.target_refs,
       observed_ownership_partition: session.result.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_id: "018f0000-0000-7001-8000-00000000d1a1",
       completed_intent_record_id: "018f0000-0000-7001-8000-00000000d1a2",
       local_intent_sequence: "1",

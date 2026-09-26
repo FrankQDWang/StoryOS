@@ -80,8 +80,11 @@ pub struct AuthorEditUnit {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthorEditPrimitive {
+    ReplaceStructuredSelection {
+        replacement: Vec<ReplacementBlock>,
+    },
     ReplaceSelection {
         from: u32,
         to: u32,
@@ -115,9 +118,72 @@ pub enum AuthorEditPrimitive {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct SelectionSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordered_selection: Option<OrderedSourceSelection>,
     pub coordinate_profile: String,
     pub from: u32,
     pub to: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct ReplacementBlock {
+    pub block_kind: crate::ManuscriptBlockKind,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct OrderedSourceSelection {
+    pub sources: Vec<SelectedEditSource>,
+    pub anchor: SourceSelectionEndpoint,
+    pub head: SourceSelectionEndpoint,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SourceSelectionEndpoint {
+    pub source_index: u32,
+    pub source_offset: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedEditSource {
+    pub owner: EditSourceOwner,
+    pub coordinate_profile: String,
+    pub from: u32,
+    pub to: u32,
+    pub block_kind: crate::ManuscriptBlockKind,
+    pub source_text: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EditSourceOwner {
+    Manuscript {
+        manuscript_block_id: String,
+    },
+    Proposal {
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        manuscript_block_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[serde(deny_unknown_fields)]
+pub struct RefusedEditPayload {
+    pub schema_revision: String,
+    pub chapter_id: String,
+    pub expected_authoritative_revision_id: String,
+    pub expected_proposal_head_revision_ids: Vec<String>,
+    pub target_refs: Vec<String>,
+    pub author_edit_units: Vec<AuthorEditUnit>,
+    pub undo_group_id: String,
+    pub completed_intent_record_id: String,
+    pub local_intent_sequence: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -190,6 +256,7 @@ pub enum DomainReceiptCommandKind {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DomainReceiptResult {
+    RefusedToDraft,
     AuthoritativeApplied,
     ProposalRevised,
     NoEffect,
@@ -247,6 +314,12 @@ pub enum AuthorEditRefusalReason {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ApplyAuthorEditEffect {
+    RefusedToDraft {
+        refusal_origin: RefusedEditOrigin,
+        draft_id: String,
+        draft_revision_id: String,
+        creation_event_id: String,
+    },
     AuthoritativeApplied {
         authoritative_revision: AuthoritativeChapterRevision,
         authoritative_commit_id: String,
@@ -281,4 +354,10 @@ pub struct ApplyAuthorEditResponse {
     pub effect: ApplyAuthorEditEffect,
     pub completed_intent_record_id: String,
     pub local_intent_sequence: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum RefusedEditOrigin {
+    FreshEditorIntent,
 }

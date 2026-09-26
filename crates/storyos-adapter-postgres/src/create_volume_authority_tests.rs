@@ -599,7 +599,7 @@ async fn apply_named_edit(
         proposal_target: None,
         target_refs: vec![format!("manuscript:{chapter_id}")],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         undo_group_id: format!("018f0000-0000-7001-8000-00000004{suffix}"),
         completed_intent_record_id: format!("018f0000-0000-7001-8000-00000005{suffix}"),
         local_intent_sequence,
@@ -610,6 +610,7 @@ async fn apply_named_edit(
                 text: text.to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 0,
                 to: 0,

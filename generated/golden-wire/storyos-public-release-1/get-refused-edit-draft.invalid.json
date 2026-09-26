@@ -1,0 +1,8 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000b02",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000b02",
+    "project_id": "018f0000-0000-7001-8000-000000000b02"
+  },
+  "schema_id": "storyos.query.refused-edit-draft.response.v1"
+}

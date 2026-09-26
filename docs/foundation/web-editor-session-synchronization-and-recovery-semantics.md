@@ -1162,9 +1162,12 @@ or applies to `explicit_editor_command`.
 
 The #70-owned [structured prerelease policy](author-edit-batch-release-1-policy.json)
 selects the replaceable Release 1 window and ceilings and records the candidate
-set, evidence, and future anonymous calibration gate. Its revision maps exactly
-to `storyos.editor-contract.release-1.v2`, which the existing request digest
-already binds. The selection is conservative prerelease policy, not a permanent
+set, evidence, and future anonymous calibration gate. The current
+`storyos.editor-contract.release-1.v3` retains that legacy policy and the request
+digest binding. Its new structured-source input, separate qualification, and
+retained v2 Journal read-only recovery boundary are specified in the
+[Refused Edit Input profile](refused-edit-input-release-1-profile.md). The old
+synthetic measurements do not qualify the nested mixed-source workload. The selection is conservative prerelease policy, not a permanent
 or real-user-validated product default.
 
 The positive long-session case is therefore reachable: 240 consecutive typing
