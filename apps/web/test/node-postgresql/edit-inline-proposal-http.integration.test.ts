@@ -521,6 +521,78 @@ test("a cross-block Unicode Draft retry rolls back atomically and recovers one e
     assert.deepEqual(replacement.replacement_provenance, retried.effect.replacement_provenance);
     assert.equal(replacement.closure, "open");
     assert.deepEqual(await retainedState(prepared.projectId), after);
+    const archive = async (suffix: string) => {
+      const request = { command_schema: "storyos.command.export-project-archive.request.v1",
+        export_project_archive_input: { ...BINDING, correlation_id: id(`${suffix}1`), archive_profile: "storyos.project-export.v1",
+          archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" } };
+      const admitted = await challenged(started.baseUrl, resumed.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/exports", request.command_schema, await digestExportProjectArchive(request), id(`${suffix}2`),
+        (antiForgery) => exportProjectArchive({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          fetchImpl: resumed.fetchImpl, request, idempotencyKey: id(`${suffix}2`), antiForgery }));
+      if (admitted.effect.kind !== "admitted") throw new Error("expected retry Archive admission");
+      await settleOnce();
+      const ready = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        exportId: admitted.effect.export_id, fetchImpl: resumed.fetchImpl });
+      assert.equal(ready.status, "ready", JSON.stringify(ready));
+      if (ready.status !== "ready") throw new Error("expected complete retry Archive");
+      return ready;
+    };
+    const download = (exportId: string) => resumed.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${exportId}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    const prior = await archive("e0c986");
+    assert.equal((await download(prior.export_id)).status, 200);
+    await queryPostgres(`UPDATE storyos.draft_artifacts SET retention_state='tombstoned'
+      WHERE owner_user_id='${USER_A}'::uuid AND project_id='${prepared.projectId}'::uuid AND draft_id='${replacementId}'::uuid;`);
+    await assert.rejects(() => getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: replacementId, fetchImpl: resumed.fetchImpl }), (error) => requireStoryOSProtocolError(error).status === 404);
+    const closedSource = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: resumed.fetchImpl })).draft;
+    assert.deepEqual(closedSource.payload, source.payload);
+    assert.equal((await download(prior.export_id)).status, 422);
+    const priorRead = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      exportId: prior.export_id, fetchImpl: resumed.fetchImpl });
+    assert.deepEqual({ ...priorRead, correlation_id: prior.correlation_id, query_id: prior.query_id }, prior);
+    const current = await archive("e0c987");
+    const exported = await download(current.export_id); assert.equal(exported.status, 200);
+    const bytes = new Uint8Array(await exported.arrayBuffer()), files = zipStoreFiles(bytes);
+    const rows = (table: string) => JSON.parse(new TextDecoder().decode(files.get(`canonical/${table}.json`))) as Record<string, unknown>[];
+    const revisionGap = { kind: "refused_edit_revision_payload", reason: "withheld_due_to_tombstone",
+      entry_path: "canonical/draft_artifact_revisions.json", record_id: replacement.draft_revision_id,
+      payload_field: "payload", draft_id: replacementId, retention_state: "tombstoned",
+      payload_digest: replacement.payload_digest, payload_digest_profile: "storyos.refused-edit-payload.jcs.v1" };
+    const admissionGap = { kind: "refused_edit_admission_payload", reason: "withheld_due_to_tombstone",
+      entry_path: "canonical/author_command_admissions.json", record_id: retried.author_command_admission_id,
+      payload_field: "command_payload", draft_id: replacementId, retention_state: "tombstoned", command_id: retried.command_id,
+      canonical_command_digest: `sha256:${retried.receipt.command_digest.profile}:${retried.receipt.command_digest.value_hex_lowercase}` };
+    assert.deepEqual(rows("draft_artifact_revisions"), after.draft_artifact_revisions.map((row: Record<string, unknown>) => {
+      if (row.draft_id !== replacementId) return row;
+      const { payload: _withheld, ...metadata } = row; return { ...metadata, payload_availability: revisionGap };
+    }));
+    const admissions = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text)
+      FROM storyos.author_command_admissions AS record WHERE owner_user_id='${USER_A}'::uuid
+        AND project_id='${prepared.projectId}'::uuid AND command_kind='applyAuthorEdit'`));
+    assert.deepEqual(rows("author_command_admissions").filter((row) => row.command_kind === "applyAuthorEdit"),
+      admissions.map((row: Record<string, unknown>) => {
+        if (row.author_command_admission_id !== retried.author_command_admission_id) return row;
+        const { command_payload: _withheld, ...metadata } = row;
+        return { ...metadata, payload_availability: admissionGap, draft_retry_source: request.retry_source };
+      }));
+    for (const table of ["draft_lifecycle_events", "draft_close_events", "domain_receipts", "author_action_entries"]) {
+      const expected = JSON.parse(await queryPostgres(`SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]')
+        FROM storyos.${table} AS record WHERE owner_user_id='${USER_A}'::uuid AND project_id='${prepared.projectId}'::uuid`));
+      assert.deepEqual(rows(table), expected);
+    }
+    const pin = rows("pinned_export_sources").find((row) => row.export_id === prior.export_id)!;
+    assert.equal(Object.hasOwn(pin, "facts"), false);
+    assert.deepEqual(pin.payload_availability, { kind: "refused_edit_pinned_export_source_facts", reason: "withheld_due_to_tombstone",
+      entry_path: "canonical/pinned_export_sources.json", record_id: prior.export_id, payload_field: "facts",
+      restricted_draft_ids: [replacementId], facts_sha256: pin.facts_sha256 });
+    for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes(retryNonce));
+    await retainRefusedEditRecoveryExpectation(prepared.projectId,
+      [{ draft: closedSource, available: true }, { draft: { ...replacement, retention_state: "tombstoned" }, available: false }],
+      [{ exportId: prior.export_id, root: prior.immutable_root, status: 422 },
+        { exportId: current.export_id, root: current.immutable_root, status: 200,
+          bytesSha256: createHash("sha256").update(bytes).digest("hex") }]);
   } finally { await stopRealServer(started.server); }
 });
 

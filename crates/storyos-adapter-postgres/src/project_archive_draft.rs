@@ -29,7 +29,9 @@ pub(super) fn export_row_expression(table: &str) -> String {
               WHERE (event.owner_user_id, event.project_id, event.author_command_admission_id, event.command_id) =
                     (source.owner_user_id, source.project_id, source.author_command_admission_id, source.command_id)),
             'retention_state', 'tombstoned', 'command_id', source.command_id,
-            'canonical_command_digest', source.canonical_command_digest))
+            'canonical_command_digest', source.canonical_command_digest)) ||
+            CASE WHEN source.command_payload ? 'retry_source' THEN
+              jsonb_build_object('draft_retry_source', source.command_payload->'retry_source') ELSE '{}'::jsonb END
           ELSE to_jsonb(source) END".to_owned(),
         _ => "to_jsonb(source)".to_owned(),
     }
@@ -70,6 +72,7 @@ pub(super) fn withheld_payload_gaps(
     let events = rows("draft_lifecycle_events")?;
     let admissions = rows("author_command_admissions")?;
     let receipts = rows("domain_receipts")?;
+    let close_events = rows("draft_close_events")?;
     let mut gaps = Vec::new();
     let mut withheld_revisions = 0;
     let mut withheld_admissions = 0;
@@ -129,12 +132,103 @@ pub(super) fn withheld_payload_gaps(
         let [receipt] = selected_receipts.as_slice() else {
             return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
         };
+        let creation_id = text(event, "creation_event_id")?;
+        let (draft_refs, event_refs) = if receipt["source_draft_disposition"].is_null() {
+            if admission.get("draft_retry_source").is_some() {
+                return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+            }
+            (json!([draft_id]), json!([creation_id]))
+        } else {
+            let invalid = || ProjectArchiveBuildRefusal::InvalidProvenance;
+            let retry: storyos_contracts::DraftRetry = serde_json::from_value(
+                admission
+                    .get("draft_retry_source")
+                    .ok_or_else(invalid)?
+                    .clone(),
+            )
+            .map_err(|_| invalid())?;
+            let same_scope = |row: &Value| {
+                row["owner_user_id"] == draft["owner_user_id"]
+                    && row["project_id"] == draft["project_id"]
+            };
+            let source_revisions = revisions
+                .iter()
+                .filter(|row| {
+                    same_scope(row)
+                        && row["draft_id"] == retry.source_draft_id
+                        && row["revision_id"] == retry.source_current_draft_revision_id
+                        && row["payload_digest"] == retry.source_draft_payload_digest
+                })
+                .collect::<Vec<_>>();
+            let [source_revision] = source_revisions.as_slice() else {
+                return Err(invalid());
+            };
+            let source_closes = close_events
+                .iter()
+                .filter(|row| {
+                    same_scope(row)
+                        && row["draft_id"] == retry.source_draft_id
+                        && row["revision_id"] == retry.source_current_draft_revision_id
+                        && row["payload_digest"] == retry.source_draft_payload_digest
+                        && row["receipt_id"] == receipt_id
+                        && row["receipt_result_kind"] == "refused_to_draft"
+                        && row["close_reason"] == "superseded"
+                        && row["author_action_sequence"].is_null()
+                        && row["created_at"] == receipt["created_at"]
+                })
+                .collect::<Vec<_>>();
+            let [closed] = source_closes.as_slice() else {
+                return Err(invalid());
+            };
+            let close_id = text(closed, "event_id")?;
+            let range = &retry.selected_payload_range;
+            if ![event, admission, receipt]
+                .iter()
+                .all(|row| same_scope(row))
+                || retry.source_draft_id == draft_id
+                || range.coordinate_profile != "storyos.draft-replacement.block-utf16.v1"
+                || (range.from.block_index, range.from.offset)
+                    > (range.to.block_index, range.to.offset)
+                || range.slice_digest.len() != 64
+                || !range
+                    .slice_digest
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                || receipt["source_draft_disposition"]
+                    != json!({"kind":"closed_superseded","source_draft_kind":"refused_edit",
+                    "source_draft_id":retry.source_draft_id,"source_draft_revision_id":retry.source_current_draft_revision_id,
+                    "source_draft_payload_digest":retry.source_draft_payload_digest,"prior_closure":"open",
+                    "resulting_closure":"closed","close_reason":"superseded","closure_event_ref":close_id})
+            {
+                return Err(invalid());
+            }
+            if let Some(payload) = source_revision.get("payload") {
+                let source: storyos_core::RefusedEditPayload =
+                    serde_json::from_value(payload.clone()).map_err(|_| invalid())?;
+                let selected = storyos_core::select_draft_replacement(
+                    &source,
+                    (range.from.block_index, range.from.offset),
+                    (range.to.block_index, range.to.offset),
+                )
+                .ok_or_else(invalid)?;
+                if hex_sha256(
+                    canonical_json(&serde_json::to_value(selected).map_err(|_| invalid())?)
+                        .as_bytes(),
+                ) != range.slice_digest
+                {
+                    return Err(invalid());
+                }
+            }
+            (
+                json!([draft_id, retry.source_draft_id]),
+                json!([creation_id, close_id]),
+            )
+        };
         if admission.get("command_payload").is_some()
             || receipt["command_digest"] != command_digest
             || receipt["result_kind"] != "refused_to_draft"
-            || receipt["draft_artifact_refs"] != json!([draft_id])
-            || receipt["artifact_lifecycle_event_refs"]
-                != json!([text(event, "creation_event_id")?])
+            || receipt["draft_artifact_refs"] != draft_refs
+            || receipt["artifact_lifecycle_event_refs"] != event_refs
             || receipt["result_payload"]["draft_revision_id"] != revision_id
         {
             return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
