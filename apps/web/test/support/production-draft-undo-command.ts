@@ -28,7 +28,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     const reply = await route.fetch(); assert.equal(reply.status(), 200, await reply.text());
     response = await reply.json(); await route.abort("failed"); release();
   });
-  await page.locator("[data-manuscript-editor]").focus();
+  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus();
   await page.keyboard.press("ControlOrMeta+Z");
   await expect.poll(() => posts, { timeout: 5000 }).toBe(1).catch(async (cause: unknown) => {
     throw new Error(`Root Undo did not submit (${await page.locator("[data-editor-failure]").getAttribute("data-editor-failure")}): ${await page.locator("body").innerText()}`, { cause });
@@ -73,7 +73,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     const reply = await route.fetch(); assert.equal(reply.status(), 200); second = await reply.json();
     await route.fulfill({ response: reply, json: { ...second, receipt: { ...second.receipt, draft_artifact_refs: [] } } });
   });
-  await page.locator("[data-manuscript-editor]").focus(); await page.keyboard.press("ControlOrMeta+Z");
+  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus(); await page.keyboard.press("ControlOrMeta+Z");
   await surface.locator("[data-draft-reopened]").waitFor().catch(async (cause: unknown) => {
     const journal = await readProductionJournal(page, projectId), current = await read() as RefusedEditDraftInspect;
     const bindings = journal.metadata!.filter((row) => row.key === "schema" || String(row.key).startsWith("draft-undo"))
