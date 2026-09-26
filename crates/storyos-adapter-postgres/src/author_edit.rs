@@ -4,8 +4,8 @@ use storyos_application::{
 };
 use storyos_core::{
     ApplyAuthorEdit, ApplyAuthorEditResult, ApplyVersionedAuthorEdit,
-    ApplyVersionedAuthorEditResult, AuthorEditPrimitive, COORDINATE_VERSION,
-    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload,
+    ApplyVersionedAuthorEditResult, AuthorEditPrimitive, BlockReservation, COORDINATE_VERSION,
+    MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptPayload, VersionedTargetOwnership,
     apply_author_edit as apply_core_author_edit, apply_versioned_author_edit, chapter_display_body,
 };
 
@@ -608,6 +608,44 @@ async fn classify_author_edit(
     )
     .await
     .map_err(author_edit_database_error)?;
+    let mut current_target_ownership = VersionedTargetOwnership::Chapter;
+    if command.retry_source.is_some()
+        && let [unit] = command.author_edit_units.as_slice()
+        && let [
+            AuthorEditPrimitive::ReplaceBlockSelection {
+                manuscript_block_id,
+                ..
+            },
+        ] = unit.normalized_primitives.as_slice()
+        && blocks
+            .iter()
+            .any(|block| block.manuscript_block_id == *manuscript_block_id)
+    {
+        let reserved: bool = client
+            .query_one(
+                "SELECT EXISTS (SELECT 1 FROM storyos.proposal_operations AS reservation
+               WHERE reservation.owner_user_id=$1::text::uuid
+                 AND reservation.project_id=$2::text::uuid
+                 AND reservation.manuscript_block_id=$3::text::uuid
+                 AND reservation.reservation_state='unresolved')",
+                &[
+                    &command.project_scope.owner_user_id.as_ref(),
+                    &command.project_scope.project_id.as_ref(),
+                    &manuscript_block_id,
+                ],
+            )
+            .await
+            .map_err(author_edit_database_error)?
+            .get(0);
+        current_target_ownership = VersionedTargetOwnership::Block {
+            manuscript_block_id: manuscript_block_id.clone(),
+            reservation: if reserved {
+                BlockReservation::Present
+            } else {
+                BlockReservation::Absent
+            },
+        };
+    }
     Ok(
         match apply_versioned_author_edit(&ApplyVersionedAuthorEdit {
             chapter_id: command.chapter_id.clone(),
@@ -622,6 +660,7 @@ async fn classify_author_edit(
                 .expected_proposal_head_revision_ids
                 .clone(),
             current_ownership,
+            current_target_ownership,
             target_refs: command.target_refs.clone(),
             observed_ownership_partition: command.observed_ownership_partition.clone(),
             author_edit_units: command.author_edit_units.clone(),

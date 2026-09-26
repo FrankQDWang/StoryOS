@@ -534,6 +534,13 @@ and Heads are validated separately by the existing classifier. An absent
 `retry_source` denotes `FreshEditorIntent`; an absent
 `source_draft_disposition` denotes `NotApplicable` for that legacy wire form.
 
+A multi-Block `DraftRetry` may contain one `ReplaceBlockSelection` for one
+current paragraph Block. Storage supplies its same-Scope reservation facts;
+Core requires no unresolved reservation on that Block and the exact current
+whole Head set. Inline, generating, failed and closed reservations still count
+while unresolved. Other Blocks and Proposals remain unchanged. Fresh versioned
+edits retain the existing whole-Chapter ownership rule.
+
 `author_edit_units` is an ordered nonempty list of completed semantic editor
 intents. Each unit's `normalized_primitives` is an ordered nonempty list of:
 

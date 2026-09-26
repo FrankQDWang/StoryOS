@@ -97,9 +97,10 @@ pub use delete_volume::{
     DeleteVolumeResult, VolumeChildPolicy, VolumeRemovalLifecycle, delete_volume,
 };
 pub use manuscript_payload::{
-    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, COORDINATE_VERSION,
+    ApplyVersionedAuthorEdit, ApplyVersionedAuthorEditResult, BlockReservation, COORDINATE_VERSION,
     MANUSCRIPT_SCHEMA_VERSION, ManuscriptBlock, ManuscriptBlockKind, ManuscriptPayload,
-    apply_versioned_author_edit, chapter_display_body, upgrade_legacy_manuscript,
+    VersionedTargetOwnership, apply_versioned_author_edit, chapter_display_body,
+    upgrade_legacy_manuscript,
 };
 pub use open_block_proposal::{
     OpenBlockProposal, OpenBlockProposalConflict, OpenBlockProposalRefusal,

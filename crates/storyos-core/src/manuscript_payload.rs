@@ -38,6 +38,7 @@ pub struct ApplyVersionedAuthorEdit {
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
     pub current_ownership: CurrentOwnershipFacts,
+    pub current_target_ownership: VersionedTargetOwnership,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub author_edit_units: Vec<AuthorEditUnit>,
@@ -49,6 +50,22 @@ pub enum ApplyVersionedAuthorEditResult {
     Conflicted { reason: AuthorEditConflict },
     NoEffect { reason: AuthorEditNoEffect },
     Refused { reason: AuthorEditRefusal },
+}
+
+/// Current reservation facts for one versioned edit target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum VersionedTargetOwnership {
+    Chapter,
+    Block {
+        manuscript_block_id: String,
+        reservation: BlockReservation,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BlockReservation {
+    Present,
+    Absent,
 }
 
 /// Wrap one legacy UTF-8 Chapter body as one stable paragraph Block.
@@ -93,9 +110,36 @@ pub fn apply_versioned_author_edit(
     } else {
         "mixed"
     };
-    if command.observed_ownership_partition != current_partition
-        || current_partition != "authoritative"
-    {
+    let owns_target = match &command.current_target_ownership {
+        VersionedTargetOwnership::Chapter => current_partition == "authoritative",
+        VersionedTargetOwnership::Block {
+            manuscript_block_id,
+            reservation,
+        } => {
+            let [unit] = command.author_edit_units.as_slice() else {
+                return ApplyVersionedAuthorEditResult::Conflicted {
+                    reason: AuthorEditConflict::OwnershipChanged,
+                };
+            };
+            *reservation == BlockReservation::Absent
+                && unit.selection_snapshot.ordered_selection.is_none()
+                && matches!(unit.normalized_primitives.as_slice(),
+                    [AuthorEditPrimitive::ReplaceBlockSelection { manuscript_block_id: target, from, to, .. }]
+                    if target == manuscript_block_id && unit.selection_snapshot.from == *from
+                        && unit.selection_snapshot.to == *to)
+                && command
+                    .current_payload
+                    .blocks
+                    .iter()
+                    .filter(|block| {
+                        block.manuscript_block_id == *manuscript_block_id
+                            && block.block_kind == ManuscriptBlockKind::Paragraph
+                    })
+                    .count()
+                    == 1
+        }
+    };
+    if command.observed_ownership_partition != current_partition || !owns_target {
         return ApplyVersionedAuthorEditResult::Conflicted {
             reason: AuthorEditConflict::OwnershipChanged,
         };

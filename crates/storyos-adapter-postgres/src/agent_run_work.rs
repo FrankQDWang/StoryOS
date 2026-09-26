@@ -33,7 +33,7 @@ impl AgentRunWorkStore for PostgresProjectReader {
     ) -> Result<CompleteAgentRun, CompleteAgentRunError> {
         loop {
             let transaction = self
-                .begin_project_command_transaction(&claim.project_scope)
+                .begin_serializable_project_command_transaction(&claim.project_scope)
                 .await
                 .map_err(complete_challenge_error)?;
             let phase = settle_one_phase(&transaction.client, claim).await;
