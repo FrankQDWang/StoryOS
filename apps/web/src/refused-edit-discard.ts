@@ -151,7 +151,7 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
         ...(input.source_reopen_event_id ? { source_reopen_event_id: input.source_reopen_event_id } : {}),
         client_contract_revision: partition.client_contract_revision, security_policy_revision: partition.security_policy_revision, correlation_id: input?.correlation_id })
       || !UUID.test(input.draft_id) || !UUID.test(input.source_current_draft_revision_id) || !UUID.test(input.correlation_id)
-      || (input.source_reopen_event_id !== undefined && !UUID.test(input.source_reopen_event_id))
+      || (input.source_reopen_event_id !== undefined && (typeof input.source_reopen_event_id !== "string" || !UUID.test(input.source_reopen_event_id)))
       || !/^[0-9a-f]{64}$/.test(input.source_draft_payload_digest)
       || !same(record.group.frozen_request_digest, await digestCloseEditorFlowDraft(record.group.frozen_request_body, workspace.cryptoImpl))
       || !Number.isFinite(Date.parse(record.created_at))
