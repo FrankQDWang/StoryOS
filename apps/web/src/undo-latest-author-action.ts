@@ -152,9 +152,10 @@ export async function undoOwnedLatestAuthorAction(options: {
     flight.idempotencyKey = durable.group.idempotency_key;
     flight.correlationId = durable.group.frozen_request_body.undo_latest_author_action_input.correlation_id;
   }
+  const fetchImpl = options.fetchImpl;
   const guarded = { ...options, fetchImpl: ((input, init) => {
     if (!options.isCurrent()) throw new Error("Undo view changed");
-    return options.fetchImpl(input, init);
+    return fetchImpl(input, init);
   }) as typeof fetch };
   try {
     const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.group.frozen_request_body);
