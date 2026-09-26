@@ -122,7 +122,7 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                     closed_receipt.author_command_admission_id::text, closed.receipt_id::text,
                     closed_receipt.command_digest, closed_receipt.idempotency_key::text,
                     closed.author_action_sequence::text,
-                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'), reopened.payload::text
                FROM storyos.draft_artifacts AS draft
                JOIN storyos.projects AS project USING (owner_user_id, project_id)
                JOIN storyos.draft_artifact_revisions AS revision

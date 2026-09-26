@@ -1,3 +1,4 @@
+import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
 import { createHash } from "node:crypto";
@@ -171,6 +172,8 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
     assert.ok(!text.includes(nonce)); assert.ok(!text.includes(frozen.explicit_command_record_id)); }
   const archive = { exportId: exported.export_id, root: exported.immutable_root,
     bytesSha256: createHash("sha256").update(bytes).digest("hex") };
+  const reopened = await verifyProductionDraftUndo(page, projectId, closed, restart);
+  assert.deepEqual(await readObjects(page, projectId, chapterId, proposalId), before);
   const file = process.env.STORYOS_DISCARD_RECOVERY_EXPECTED;
   if (file !== undefined) {
     const journal = await readProductionJournal(page, projectId);
@@ -178,7 +181,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
       && !String(record.key).startsWith("rejection:"));
     const sessionStorage = await page.evaluate((projectId) => Object.fromEntries(Object.entries(window.sessionStorage)
       .filter(([key]) => key.endsWith(`:${projectId}`) && (key.startsWith("active_session:") || key.startsWith("block_proposals:")))), projectId);
-    await writeFile(file, JSON.stringify({ projectId, chapterId, proposalId, draft: closed, objects: before, journal, sessionStorage, archive }));
+    await writeFile(file, JSON.stringify({ projectId, chapterId, proposalId, draft: reopened, objects: before, journal, sessionStorage, archive }));
   }
 }
 
