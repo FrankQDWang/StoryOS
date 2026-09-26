@@ -608,7 +608,7 @@
           "type": "string"
         },
         "selected_payload_range": {
-          "$ref": "#/$defs/exact_structured_range"
+          "$ref": "#/$defs/ExactStructuredRange"
         },
         "source_draft_id": {
           "type": "string"
@@ -628,6 +628,40 @@
         "selected_payload_range"
       ],
       "type": "object"
+    },
+    "ExactStructuredRange": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        },
+        "kind": {
+          "$ref": "#/$defs/ExactStructuredRangeKind"
+        },
+        "slice_digest": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        }
+      },
+      "required": [
+        "kind",
+        "coordinate_profile",
+        "from",
+        "to",
+        "slice_digest"
+      ],
+      "type": "object"
+    },
+    "ExactStructuredRangeKind": {
+      "enum": [
+        "exact_structured_range"
+      ],
+      "type": "string"
     },
     "ManuscriptBlock": {
       "additionalProperties": false,
@@ -820,30 +854,6 @@
           "type": "object"
         }
       ]
-    },
-    "exact_structured_range": {
-      "additionalProperties": false,
-      "properties": {
-        "coordinate_profile": {
-          "type": "string"
-        },
-        "from": {
-          "$ref": "#/$defs/DraftPayloadPosition"
-        },
-        "slice_digest": {
-          "type": "string"
-        },
-        "to": {
-          "$ref": "#/$defs/DraftPayloadPosition"
-        }
-      },
-      "required": [
-        "coordinate_profile",
-        "from",
-        "to",
-        "slice_digest"
-      ],
-      "type": "object"
     }
   },
   "$id": "storyos.query.apply-author-edit-outcome.response.v1",

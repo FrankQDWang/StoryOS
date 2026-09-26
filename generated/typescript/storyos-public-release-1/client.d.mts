@@ -193,11 +193,15 @@ export type UndoLatestAuthorActionEffect = { "kind": "draft_compensated", event:
 
 export type UndoLatestAuthorActionResponse = { source_reopen_event?: EditorFlowDraftReopened | null, schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, project: ControlledProject, effect: UndoLatestAuthorActionEffect, };
 
-export type draft_retry = { "kind": "draft_retry", source_draft_kind: RetryDraftKind, source_draft_id: string, source_current_draft_revision_id: string, source_draft_payload_digest: string, expected_source_draft_closure: RetryDraftClosure, selected_payload_range: exact_structured_range, };
+export type DraftRetry = { kind: DraftRetryKind, source_draft_kind: RetryDraftKind, source_draft_id: string, source_current_draft_revision_id: string, source_draft_payload_digest: string, expected_source_draft_closure: RetryDraftClosure, selected_payload_range: ExactStructuredRange, };
+
+export type DraftRetryKind = "draft_retry";
+
+export type ExactStructuredRangeKind = "exact_structured_range";
 
 export type DraftPayloadPosition = { block_index: number, offset: number, };
 
-export type exact_structured_range = { "kind": "exact_structured_range", coordinate_profile: string, from: DraftPayloadPosition, to: DraftPayloadPosition, slice_digest: string, };
+export type ExactStructuredRange = { kind: ExactStructuredRangeKind, coordinate_profile: string, from: DraftPayloadPosition, to: DraftPayloadPosition, slice_digest: string, };
 
 export type RetryDraftKind = "refused_edit";
 
@@ -207,7 +211,7 @@ export type SourceDraftDisposition = { "kind": "unchanged", source_draft_kind: R
 
 export type ObservedDraftClosure = { "kind": "open" } | { "kind": "closed", close_reason: string, closure_event_ref: string, };
 
-export type DraftRetryReplacement = { source_draft_id: string, source_draft_revision_id: string, source_draft_payload_digest: string, closure_event_ref: string, selected_payload_range: exact_structured_range, };
+export type DraftRetryReplacement = { source_draft_id: string, source_draft_revision_id: string, source_draft_payload_digest: string, closure_event_ref: string, selected_payload_range: ExactStructuredRange, };
 
 export type RefusedEditPayload = { schema_revision: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, target_refs: Array<string>, author_edit_units: Array<AuthorEditUnit>, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, };
 
@@ -231,7 +235,7 @@ export type AuthorEditUnit = { normalized_primitives: Array<AuthorEditPrimitive>
 
 export type AuthorEditProposalTarget = { proposal_id: string, operation_id: string, revision_id: string, manuscript_block_id: string, };
 
-export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, retry_source?: draft_retry | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
+export type ApplyAuthorEditRequest = { command_schema: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, editor_session_id: string, writer_generation: string, chapter_id: string, expected_authoritative_revision_id: string, expected_proposal_head_revision_ids: Array<string>, proposal_target?: AuthorEditProposalTarget | null, retry_source?: DraftRetry | null, target_refs: Array<string>, observed_ownership_partition: string, editor_contract_revision: string, undo_group_id: string, completed_intent_record_id: string, local_intent_sequence: string, author_edit_units: Array<AuthorEditUnit>, };
 
 export type DomainReceiptCommandKind = "closeEditorFlowDraft" | "applyAuthorEdit" | "takeOverProjectWriter" | "createProject" | "updateProject" | "archiveProject" | "createVolume" | "createChapter" | "updateVolume" | "updateChapter" | "deleteChapter" | "deleteVolume" | "setCurrentChapter" | "undoLatestAuthorAction" | "exportHumanReadableManuscript" | "exportProjectArchive" | "updateProjectAssistance" | "createAgentRun" | "pauseAgentRun" | "cancelAgentRun";
 

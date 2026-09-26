@@ -43,6 +43,8 @@ pub(super) fn typescript_type_declarations() -> String {
     let config = Config::default();
     let source_types = [
         crate::DraftRetry::decl(&config),
+        crate::DraftRetryKind::decl(&config),
+        crate::ExactStructuredRangeKind::decl(&config),
         crate::DraftPayloadPosition::decl(&config),
         crate::ExactStructuredRange::decl(&config),
         crate::RetryDraftKind::decl(&config),

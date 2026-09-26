@@ -292,7 +292,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/refused-edit-draft-response.schema.json",
       "schema_id": "storyos.query.refused-edit-draft.response.v1",
-      "sha256": "sha256:ec8c54cd352831bca118405c1632afa9e866ae32b4f0d193e8bb8dda750b9eb0"
+      "sha256": "sha256:a565a8af734eccc81fdaa879faad767d9dbc50ca3c96b46750fc8f2de491ed09"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-request.schema.json",
@@ -467,12 +467,12 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-request.schema.json",
       "schema_id": "storyos.command.apply-author-edit.request.v1",
-      "sha256": "sha256:015a5aa28d375b0826d674bd807da6ce321f7beffd295e71f0b76b6d9fc66478"
+      "sha256": "sha256:4c9d656673b294fae7dcb86589a201188a10af8fc394206c31f7b99397b037ac"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-response.schema.json",
       "schema_id": "storyos.command.apply-author-edit.response.v2",
-      "sha256": "sha256:b287fce663262edf617df7dfcfbe582296185fee7551de05350d3d6a255c7b6f"
+      "sha256": "sha256:e48449bbd3dda155c5a26668294905f9427901a23d2a8e44cc0572cb115c13cf"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-request.schema.json",
@@ -482,7 +482,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/apply-author-edit-outcome-response.schema.json",
       "schema_id": "storyos.query.apply-author-edit-outcome.response.v1",
-      "sha256": "sha256:1692ef837aa6a36c7d9b3d7bcc8e48333ddbd51bc15101503ee77bb8477e407d"
+      "sha256": "sha256:9d4e0f9de9d65d203d9ce9217c8f3a6755ec8bc589d685ad78cd852d13a576f0"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/snapshot-request.schema.json",

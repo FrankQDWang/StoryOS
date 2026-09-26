@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "vitest";
 import {
-  closeEditorFlowDraft, digestCloseEditorFlowDraft, undoLatestAuthorAction, digestUndoLatestAuthorAction,
+  StoryOSProtocolError, closeEditorFlowDraft, digestCloseEditorFlowDraft, undoLatestAuthorAction, digestUndoLatestAuthorAction,
   takeOverProjectWriter, digestTakeOverProjectWriter,
   acceptProposal, applyAuthorEdit, archiveProject, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
@@ -270,6 +270,7 @@ test("an explicit narrowed public Draft retry changes content and supersedes onl
       draftId: created.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
     const selected = [{ block_kind: "paragraph", text: "New" }];
     const request: ApplyAuthorEditRequest = { ...replaceUnit(0, 5, "New", writer, "e0c95", opened.proposal.revision_id),
+      local_intent_sequence: String(BigInt(writer.nextSequence) + 1n),
       retry_source: { kind: "draft_retry", source_draft_kind: "refused_edit",
         source_draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
         source_draft_payload_digest: source.payload_digest, expected_source_draft_closure: "open",
@@ -277,7 +278,10 @@ test("an explicit narrowed public Draft retry changes content and supersedes onl
           coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
           from: { block_index: 0, offset: 0 }, to: { block_index: 0, offset: 3 },
           slice_digest: createHash("sha256").update(JSON.stringify(selected)).digest("hex") } } };
-    const retried = await sendMixed(started.baseUrl, prepared, request, id("e0c956"));
+    const retried = await sendMixed(started.baseUrl, prepared, request, id("e0c956")).catch((error: unknown) => {
+      if (error instanceof StoryOSProtocolError) throw new Error(error.responseBody, { cause: error });
+      throw error;
+    });
     assert.equal(retried.effect.kind, "authoritative_applied");
     const closed = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;

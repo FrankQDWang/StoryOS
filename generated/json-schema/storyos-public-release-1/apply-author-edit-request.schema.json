@@ -242,6 +242,48 @@
       ],
       "type": "object"
     },
+    "DraftRetry": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_source_draft_closure": {
+          "$ref": "#/$defs/RetryDraftClosure"
+        },
+        "kind": {
+          "$ref": "#/$defs/DraftRetryKind"
+        },
+        "selected_payload_range": {
+          "$ref": "#/$defs/ExactStructuredRange"
+        },
+        "source_current_draft_revision_id": {
+          "type": "string"
+        },
+        "source_draft_id": {
+          "type": "string"
+        },
+        "source_draft_kind": {
+          "$ref": "#/$defs/RetryDraftKind"
+        },
+        "source_draft_payload_digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "source_draft_kind",
+        "source_draft_id",
+        "source_current_draft_revision_id",
+        "source_draft_payload_digest",
+        "expected_source_draft_closure",
+        "selected_payload_range"
+      ],
+      "type": "object"
+    },
+    "DraftRetryKind": {
+      "enum": [
+        "draft_retry"
+      ],
+      "type": "string"
+    },
     "EditSourceOwner": {
       "oneOf": [
         {
@@ -291,6 +333,40 @@
           "type": "object"
         }
       ]
+    },
+    "ExactStructuredRange": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        },
+        "kind": {
+          "$ref": "#/$defs/ExactStructuredRangeKind"
+        },
+        "slice_digest": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        }
+      },
+      "required": [
+        "kind",
+        "coordinate_profile",
+        "from",
+        "to",
+        "slice_digest"
+      ],
+      "type": "object"
+    },
+    "ExactStructuredRangeKind": {
+      "enum": [
+        "exact_structured_range"
+      ],
+      "type": "string"
     },
     "ManuscriptBlockKind": {
       "enum": [
@@ -439,62 +515,6 @@
         "source_offset"
       ],
       "type": "object"
-    },
-    "draft_retry": {
-      "additionalProperties": false,
-      "properties": {
-        "expected_source_draft_closure": {
-          "$ref": "#/$defs/RetryDraftClosure"
-        },
-        "selected_payload_range": {
-          "$ref": "#/$defs/exact_structured_range"
-        },
-        "source_current_draft_revision_id": {
-          "type": "string"
-        },
-        "source_draft_id": {
-          "type": "string"
-        },
-        "source_draft_kind": {
-          "$ref": "#/$defs/RetryDraftKind"
-        },
-        "source_draft_payload_digest": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "source_draft_kind",
-        "source_draft_id",
-        "source_current_draft_revision_id",
-        "source_draft_payload_digest",
-        "expected_source_draft_closure",
-        "selected_payload_range"
-      ],
-      "type": "object"
-    },
-    "exact_structured_range": {
-      "additionalProperties": false,
-      "properties": {
-        "coordinate_profile": {
-          "type": "string"
-        },
-        "from": {
-          "$ref": "#/$defs/DraftPayloadPosition"
-        },
-        "slice_digest": {
-          "type": "string"
-        },
-        "to": {
-          "$ref": "#/$defs/DraftPayloadPosition"
-        }
-      },
-      "required": [
-        "coordinate_profile",
-        "from",
-        "to",
-        "slice_digest"
-      ],
-      "type": "object"
     }
   },
   "$id": "storyos.command.apply-author-edit.request.v1",
@@ -557,7 +577,7 @@
     "retry_source": {
       "anyOf": [
         {
-          "$ref": "#/$defs/draft_retry"
+          "$ref": "#/$defs/DraftRetry"
         },
         {
           "type": "null"
