@@ -1103,6 +1103,18 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_close_events.json"))), before.draft_close_events);
     assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifact_revisions.json"))), expectedRevisions);
     const exportedAdmissions = JSON.parse(new TextDecoder().decode(files.get("canonical/author_command_admissions.json")));
+    for (const [table, path] of [["author_command_admissions", "canonical/author_command_admissions.json"],
+      ["domain_receipts", "canonical/domain_receipts.json"]] as const) {
+      const expected = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text)
+        FROM storyos.${table} AS record WHERE project_id='${prepared.projectId}'::uuid AND command_kind='closeEditorFlowDraft'`));
+      const exported = JSON.parse(new TextDecoder().decode(files.get(path)))
+        .filter((record: Record<string, unknown>) => record.command_kind === "closeEditorFlowDraft");
+      const identity = table === "author_command_admissions" ? "author_command_admission_id" : "receipt_id";
+      const compare = (a: Record<string, unknown>, b: Record<string, unknown>) => String(a[identity]).localeCompare(String(b[identity]));
+      assert.deepEqual(exported.sort(compare), expected.sort(compare));
+    }
+    assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/author_action_entries.json"))), before.author_action_entries);
+    for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes(nonce));
     assert.deepEqual(exportedAdmissions.filter((row: Record<string, unknown>) => row.command_kind === "applyAuthorEdit"), expectedAdmissions);
     const exportedPins = JSON.parse(new TextDecoder().decode(files.get("canonical/pinned_export_sources.json")));
     const expectedPins = pinnedSources.map((row: Record<string, unknown>) => {
