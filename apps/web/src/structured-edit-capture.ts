@@ -54,6 +54,7 @@ export function captureStructuredSelection(state: EditorState, transaction: Tran
   });
   if (!valid) return undefined;
   if (replacement.length === 0) replacement.push({ block_kind: sources[0]!.block_kind, text: "" });
+  if (transaction.getMeta("storyos.origin") === "split_block") replacement.push({ block_kind: "paragraph", text: "" });
   const first = { source_index: 0, source_offset: sources[0]!.from };
   const last = { source_index: sources.length - 1, source_offset: sources.at(-1)!.to };
   const anchor = state.selection.anchor <= state.selection.head ? first : last;

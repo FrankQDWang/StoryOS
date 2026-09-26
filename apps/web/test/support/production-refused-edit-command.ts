@@ -120,4 +120,12 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.reload();
   await page.locator("button[data-draft-copy]").waitFor();
   assert.deepEqual((await read()).draft, retained.draft);
+  await page.route(draftRoute, (route) => route.fulfill({ status: 404, contentType: "application/problem+json",
+    body: JSON.stringify({ code: "draft_unavailable" }) }));
+  await page.locator("button[data-draft-copy]").click();
+  await page.locator(`[data-draft-unavailable="${effect.draft_id}"]`).waitFor();
+  assert.equal(await page.locator("[data-draft-replacement]").count(), 0);
+  assert.equal(await page.locator("button[data-draft-copy]").count(), 0);
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
+  await page.unroute(draftRoute);
 }

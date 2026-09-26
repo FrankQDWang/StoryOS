@@ -183,6 +183,7 @@ export function storyosManuscriptExtensions(
   blockId: string,
   onAuthorUndo?: () => boolean,
   canAcceptCandidateInput?: (hardBoundary: boolean) => boolean,
+  hasMixedComposition?: () => boolean,
 ) {
   return [
     Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
@@ -205,6 +206,11 @@ export function storyosManuscriptExtensions(
               return insertNewline(this.editor.view);
             }
             if (!this.editor.state.selection.empty) {
+              const mixed = this.editor.state.tr.deleteSelection().setMeta(STORYOS_ORIGIN, "split_block");
+              if (captureStructuredSelection(this.editor.state, mixed) !== undefined) {
+                this.editor.view.dispatch(mixed);
+                return true;
+              }
               this.editor.commands.command(({ tr, dispatch }) => {
                 dispatch?.(tr.deleteSelection());
                 return true;
@@ -238,6 +244,7 @@ export function storyosManuscriptExtensions(
               if (transaction.getMeta(STORYOS_HYDRATE) === true || !transaction.docChanged) {
                 return true;
               }
+              if (hasMixedComposition?.() === true) return true;
               const mixed = captureStructuredSelection(state, transaction);
               if (mixed !== undefined) {
                 if (canAcceptCandidateInput?.(true) !== true) return false;

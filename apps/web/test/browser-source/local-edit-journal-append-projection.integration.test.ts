@@ -146,3 +146,65 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
       Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
   } finally { await test.close(); }
 });
+
+it("freezes one complete mixed Tiptap IME intent only after confirmation and ignores cancellation", async () => {
+  const test = await openJournalAppendTestWorkspace();
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  const controller = { current: null as import("../../src/manual-input.ts").ManualInputController | null };
+  const id = "018f0000-0000-7001-8000-000000000090";
+  const { ManuscriptEditor } = await import("../../src/manuscript-editor.tsx");
+  const { applyImeComposition, applyTrustedInput } = await import("../support/browser-command-client.ts");
+  const { readJournalSnapshot } = await import("../../src/local-edit-journal.ts");
+  let failure: unknown;
+  let requests = 0;
+  const previousAct = Reflect.get(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+  Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+  try {
+    await act(async () => { root.render(createElement(ManuscriptEditor, { blocks: test.workspace.pending.blocks,
+      proposals: [{ proposalId: id, operationId: id, revisionId: id, blockId: test.workspace.pending.blocks[0]!.manuscript_block_id,
+        sourceRunId: id, sourceDecisionId: id, text: "Old", eligible: true, expectedHeads: [id] }],
+      editable: true, persistWorkspace: test.workspace, baseUrl: location.origin,
+      fetchImpl: () => { requests += 1; return new Promise<Response>(() => {}); }, cryptoImpl: crypto,
+      controllerRef: controller, onProjection: () => {}, onFailure: (error) => { failure = error; } })); });
+    await expect.poll(() => host.querySelector(".block-proposal-text")).not.toBeNull();
+    const surface = host.querySelector<HTMLElement>("[data-manuscript-editor]")!;
+    const select = () => {
+      surface.focus();
+      const first = surface.querySelector("p")!.firstChild!;
+      const last = surface.querySelector(".block-proposal-text")!.firstChild!;
+      window.getSelection()!.setBaseAndExtent(first, 1, last, 2);
+      document.dispatchEvent(new Event("selectionchange"));
+    };
+    select();
+    await applyImeComposition({ text: "provisional", replacementStart: 1, replacementEnd: 8, selectionStart: 11, selectionEnd: 11 });
+    expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
+    expect(requests).toBe(0);
+    await applyImeComposition({ operation: "cancel" });
+    await expect.poll(() => controller.current!.hasIncompleteSemanticIntent()).toBe(false);
+    expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
+    expect(requests).toBe(0);
+    select();
+    await applyImeComposition({ text: "provisional", replacementStart: 1, replacementEnd: 8, selectionStart: 11, selectionEnd: 11 });
+    expect((await readJournalSnapshot(test.workspace)).records).toEqual([]);
+    await applyTrustedInput({ operation: "insert_text", text: "Complete 中文" });
+    await expect.poll(async () => (await readJournalSnapshot(test.workspace)).records.length).toBe(1);
+    const [record] = (await readJournalSnapshot(test.workspace)).records;
+    expect(record!.input_origin).toBe("composition_confirmation");
+    expect(record!.author_edit_unit).toEqual({ normalized_primitives: [{ kind: "replace_structured_selection",
+      replacement: [{ block_kind: "paragraph", text: "Complete 中文" }] }],
+      selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 1, to: 2,
+        ordered_selection: { anchor: { source_index: 0, source_offset: 1 }, head: { source_index: 1, source_offset: 2 }, sources: [
+          { owner: { kind: "manuscript", manuscript_block_id: test.workspace.pending.blocks[0]!.manuscript_block_id },
+            coordinate_profile: "prosemirror-token-utf16.v1", from: 1, to: 4, block_kind: "paragraph", source_text: "Base" },
+          { owner: { kind: "proposal", proposal_id: id, operation_id: id, revision_id: id,
+            manuscript_block_id: test.workspace.pending.blocks[0]!.manuscript_block_id },
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 2, block_kind: "paragraph", source_text: "Old" },
+        ] } } });
+    expect(surface.querySelector("p")!.textContent).toBe("Base");
+    expect(surface.querySelector(".block-proposal-text")!.textContent).toBe("Old");
+    expect(failure).toBeUndefined();
+  } finally { await act(async () => { root.unmount(); }); host.remove(); await test.close();
+    Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
+});

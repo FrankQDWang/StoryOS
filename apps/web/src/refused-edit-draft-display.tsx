@@ -98,7 +98,9 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       {copied ? <p role="status">Copied</p> : null}
       <details><summary>Source and draft identity</summary>
         <p>Draft: {id}. Revision: {draft.draft_revision_id}. Creation: {draft.creation.creation_event_id}.</p>
+        <p>Command: {draft.creation.source.command_id}. Admission: {draft.creation.source.author_command_admission_id}. Idempotency key: {draft.creation.source.idempotency_key}.</p>
         <p>Receipt: {draft.creation.source.receipt_id}. Digest: {draft.payload_digest}. Status: {draft.closure}, {draft.retention_state}.</p>
+        <p>Selection: {JSON.stringify(unit.selection_snapshot?.ordered_selection?.anchor)} to {JSON.stringify(unit.selection_snapshot?.ordered_selection?.head)}.</p>
         {unit.selection_snapshot?.ordered_selection?.sources.map((source, index) => <div key={index}>
           <code>{JSON.stringify(source.owner)}; {source.block_kind}; {source.coordinate_profile}; {source.from}–{source.to}</code>
           <pre>{source.source_text}</pre></div>)}

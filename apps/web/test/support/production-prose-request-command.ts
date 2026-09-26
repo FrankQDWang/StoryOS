@@ -38,7 +38,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "the packaged Server origin is required");
   let owned = scenario === "refused_edit" ? await startStoryOSServer({ repositoryRoot,
-    serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server") }) : undefined;
+    serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server"), sessions: { "session-a": USER } }) : undefined;
   const origin = owned?.baseUrl ?? new URL(configured).origin;
   const page = await context.newPage();
   const errors: string[] = [];
@@ -227,7 +227,7 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
       await verifyProductionRefusedEdit({ page, context, origin, projectId, chapter: before, proposal: firstProposal,
         restart: async () => { await stopStoryOSServer(owned!.server);
           owned = await startStoryOSServer({ repositoryRoot, bind: new URL(origin).host,
-            serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server") }); } });
+            serverBinary: join(repositoryRoot, "target", "release-package", "storyos-server"), sessions: { "session-a": USER } }); } });
       assert.deepEqual(errors, []);
       return;
     }

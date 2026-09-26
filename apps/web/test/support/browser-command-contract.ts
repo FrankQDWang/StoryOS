@@ -7,7 +7,7 @@ export const storyOSBrowserCommandNames = {
   productionHost: "storyosProductionHost",
 } as const;
 
-export interface ImeCompositionRequest {
+export type ImeCompositionRequest = { readonly operation: "cancel" } | {
   readonly replacementEnd: number;
   readonly replacementStart: number;
   readonly selectionEnd: number;
@@ -75,6 +75,10 @@ function boundedIndex(value: unknown, maximum: number, label: string): number {
 }
 
 export function parseImeCompositionRequest(value: unknown): ImeCompositionRequest {
+  if (typeof value === "object" && value !== null && property(value, "operation") === "cancel") {
+    exactObject(value, ["operation"], "IME cancellation request");
+    return { operation: "cancel" };
+  }
   const request = exactObject(value, [
     "replacementEnd",
     "replacementStart",

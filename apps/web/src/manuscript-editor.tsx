@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 
-import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
+import { captureStructuredSelection, type StructuredSelectionEdit } from "./structured-edit-capture.ts";
 
 import { collectEligibleJournalPayload } from "./journal-payload-collection.ts";
 import { createAuthorEditIdleController, type AuthorEditIdleController }
@@ -130,6 +130,7 @@ export function ManuscriptEditor({
   const observedBlocksRef = useRef<ManuscriptParagraph[]>(blocks.map((block) => ({ ...block })));
   const composingRef = useRef(false);
   const mixedCompositionRef = useRef<StructuredSelectionEdit | undefined>(undefined);
+  const mixedCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionStartRef = useRef<ProseMirrorNode | null>(null);
   const candidateCompositionBlockedRef = useRef(false);
   const candidateCompositionDirtyRef = useRef(false);
@@ -153,7 +154,8 @@ export function ManuscriptEditor({
       ...storyosManuscriptExtensions(firstBlockId,
         () => onAuthorUndoRef.current(),
         (hardBoundary) => !candidateCompositionBlockedRef.current
-          && idleRef.current?.canAcceptCandidateInput(hardBoundary) === true),
+          && idleRef.current?.canAcceptCandidateInput(hardBoundary) === true,
+        () => composingRef.current && mixedCompositionRef.current !== undefined),
     ],
     content: manuscriptBlocksJson(blocks),
     editable,
@@ -183,7 +185,7 @@ export function ManuscriptEditor({
       const mixed = transaction.getMeta("storyos.structuredEdit") as StructuredSelectionEdit | undefined;
       if (mixed !== undefined) {
         if (current.view.composing || composingRef.current) {
-          mixedCompositionRef.current = mixed;
+          mixedCompositionRef.current ??= mixed;
           return;
         }
         void idleRef.current?.persist(mixed, originFromTransaction(transaction,
@@ -471,7 +473,9 @@ export function ManuscriptEditor({
     const onCompositionStart = (): void => {
       onFirstAuthorInput();
       composingRef.current = true;
-      mixedCompositionRef.current = undefined;
+      mixedCompositionRef.current = captureStructuredSelection(editor.state, editor.state.tr.deleteSelection());
+      if (mixedCompositionRef.current !== undefined && !idle.canAcceptCandidateInput(true)) mixedCompositionRef.current = undefined;
+      mixedCompositionStartRef.current = mixedCompositionRef.current === undefined ? null : editor.state.doc;
       const candidateSelected = editor.state.selection.$from.parent.type.name === "blockProposal";
       candidateCompositionBlockedRef.current = candidateSelected
         && !idle.canAcceptCandidateInput(true);
@@ -489,7 +493,11 @@ export function ManuscriptEditor({
       candidateCompositionDirtyRef.current = false;
       const mixed = mixedCompositionRef.current;
       mixedCompositionRef.current = undefined;
+      const mixedStart = mixedCompositionStartRef.current;
+      mixedCompositionStartRef.current = null;
       if (mixed !== undefined) {
+        if (mixedStart !== null) editor.view.dispatch(editor.state.tr
+          .replaceWith(0, editor.state.doc.content.size, mixedStart.content).setMeta("storyos.hydrate", true));
         if (event.data !== "") {
           const primitive = mixed.authorEditUnit.normalized_primitives[0];
           if (primitive?.kind === "replace_structured_selection") {
@@ -537,11 +545,11 @@ export function ManuscriptEditor({
       void idle.persist(edit, "composition_confirmation", new Date().toISOString());
     };
     dom.addEventListener("beforeinput", onFirstAuthorInput);
-    dom.addEventListener("compositionstart", onCompositionStart);
+    dom.addEventListener("compositionstart", onCompositionStart, true);
     dom.addEventListener("compositionend", onCompositionEnd);
     return () => {
       dom.removeEventListener("beforeinput", onFirstAuthorInput);
-      dom.removeEventListener("compositionstart", onCompositionStart);
+      dom.removeEventListener("compositionstart", onCompositionStart, true);
       dom.removeEventListener("compositionend", onCompositionEnd);
       idle.close();
       idleRef.current = null;

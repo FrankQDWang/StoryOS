@@ -233,4 +233,11 @@ it("retains paragraph boundaries from a real multi-line mixed paste", () => {
     { kind: "replace_structured_selection", replacement: [{ block_kind: "paragraph", text: "" }] },
   ] } });
   expect(editor.state.doc.eq(before)).toBe(true);
+  expect(pressKey(editor, "Enter")).toBe(true);
+  expect(captured).toMatchObject({ authorEditUnit: { normalized_primitives: [
+    { kind: "replace_structured_selection", replacement: [
+      { block_kind: "paragraph", text: "" }, { block_kind: "paragraph", text: "" },
+    ] },
+  ] } });
+  expect(editor.state.doc.eq(before)).toBe(true);
 });

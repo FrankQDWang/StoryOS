@@ -53,7 +53,8 @@ export const storyOSBrowserCommands = {
       await focusedApplicationFrame(context);
       const session = await context.context.newCDPSession(context.page);
       try {
-        await session.send("Input.imeSetComposition", request);
+        await session.send("Input.imeSetComposition", "operation" in request
+          ? { text: "", selectionStart: 0, selectionEnd: 0 } : request);
       } finally {
         await session.detach();
       }
