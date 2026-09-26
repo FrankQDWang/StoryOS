@@ -487,6 +487,17 @@ async function settleAuthorEditResponse({
     fetchImpl,
   });
   const freshBase = canonical.base_snapshot;
+  const request = group.frozen_request_body;
+  const primitive = request.author_edit_units[0]?.normalized_primitives[0];
+  const canonicalRetryProjection = request.retry_source !== undefined
+    && request.author_edit_units.length === 1
+    && request.author_edit_units[0]?.normalized_primitives.length === 1
+    && primitive?.kind === "replace_block_selection"
+    && request.author_edit_units[0]?.selection_snapshot?.ordered_selection == null
+    && request.observed_ownership_partition === "mixed"
+    && request.expected_proposal_head_revision_ids.length > 0
+    && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
+    && workspace.session.base_snapshot.observed_ownership_partition === "authoritative";
   if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
@@ -500,11 +511,11 @@ async function settleAuthorEditResponse({
     || freshBase.project_activity_position !== effect.project_activity_position
     || freshBase.authoritative_head_revision_id !== effect.authoritative_revision.revision_id
     || JSON.stringify(freshBase.proposal_head_revision_ids)
-      !== JSON.stringify(group.frozen_request_body.expected_proposal_head_revision_ids)
+      !== JSON.stringify(canonicalRetryProjection ? [] : request.expected_proposal_head_revision_ids)
     || JSON.stringify(freshBase.target_refs)
       !== JSON.stringify(group.frozen_request_body.target_refs)
     || freshBase.observed_ownership_partition
-      !== group.frozen_request_body.observed_ownership_partition
+      !== (canonicalRetryProjection ? "authoritative" : request.observed_ownership_partition)
     || JSON.stringify(freshBase.materialized_revision)
       !== JSON.stringify(effect.authoritative_revision)
     || freshBase.materialized_payload_digest?.algorithm !== "sha256"
