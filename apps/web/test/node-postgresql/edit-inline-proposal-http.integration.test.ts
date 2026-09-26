@@ -873,6 +873,8 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
         draft_kind: "refused_edit", draft_id: closed.draft.draft_id,
         source_current_draft_revision_id: closed.draft.draft_revision_id,
         source_draft_payload_digest: closed.draft.payload_digest, expected_closure: "open", close_reason: "abandoned" } };
+    await queryPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
+      WHERE owner_user_id='${USER_A}'::uuid AND project_id='${prepared.projectId}'::uuid`);
     const secondaryRequest: CreateEditorSessionRequest = { command_schema: "storyos.command.create-editor-session.request.v1",
       ...BINDING, correlation_id: id("e0db91") };
     const secondary = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
