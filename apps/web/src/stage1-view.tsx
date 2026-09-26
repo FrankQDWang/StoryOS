@@ -573,7 +573,6 @@ function ProjectReadyView({
                 setSwitchRecovery(HISTORICAL_ACKNOWLEDGEMENT_MESSAGE);
                 return;
               }
-              console.debug("storyos:831-readonly", JSON.stringify({ producer: "editor_failure", name: error instanceof Error ? error.name : "unknown", frames: error instanceof Error ? error.stack?.split("\n").slice(1).filter((line) => line.trim().startsWith("at ")) : undefined }));
               setReadOnly(true);
               setSaveState("needs_attention");
               setEditorFailure(
@@ -607,7 +606,6 @@ function ProjectReadyView({
             fetchImpl={fetchImpl}
             revisionKey={pending?.authoritative_revision_id ?? ""}
             onUnavailable={() => {
-              console.debug("storyos:831-readonly", JSON.stringify({ producer: "activity_unavailable" }));
               setReadOnly(true);
               setSaveState("needs_attention");
               setEditorFailure("活动流无法同步");

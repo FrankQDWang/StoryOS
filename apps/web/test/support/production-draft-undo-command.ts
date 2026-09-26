@@ -8,9 +8,6 @@ import { readProductionJournal } from "./production-discard-command.ts";
 export async function verifyProductionDraftUndo(page: Page, projectId: string,
   draft: RefusedEditDraftInspect, restart: () => Promise<void>): Promise<RefusedEditDraftInspect> {
   const surface = page.locator(`[data-refused-edit-draft="${draft.draft_id}"]`);
-  const readonlyCauses: string[] = [];
-  page.on("console", (message) => { const text = message.text();
-    if (text.startsWith("storyos:831-readonly")) readonlyCauses.push(text); });
   const original = await readProductionJournal(page, projectId);
   let posts = 0;
   let response: UndoLatestAuthorActionResponse | undefined;
@@ -87,10 +84,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     const reply = await route.fetch(); assert.equal(reply.status(), 200); second = await reply.json();
     await route.fulfill({ response: reply, json: { ...second, receipt: { ...second.receipt, draft_artifact_refs: [] } } });
   });
-  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus().catch((cause: unknown) => {
-    throw new Error(`Second Undo readonly causes: ${JSON.stringify(readonlyCauses)}`, { cause });
-  });
-  await page.keyboard.press("ControlOrMeta+Z");
+  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus(); await page.keyboard.press("ControlOrMeta+Z");
   await surface.locator("[data-draft-reopened]").waitFor().catch(async (cause: unknown) => {
     const journal = await readProductionJournal(page, projectId), current = await read() as RefusedEditDraftInspect;
     const bindings = journal.metadata!.filter((row) => row.key === "schema" || String(row.key).startsWith("draft-undo"))
