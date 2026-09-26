@@ -770,6 +770,7 @@ function pendingProjectionFromSnapshot(
         ? "saving"
         : "saved",
     unsettled_intent_count: activeRecords.length + pendingAcceptanceCount,
+    ...(pendingAcceptanceCount > 0 ? { author_edit_unsettled_intent_count: activeRecords.length } : {}),
     authoritative_revision_id: base.authoritative_head_revision_id,
     ...(workspace.session.author_undo_frontier_sequence
       ? { author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence }
