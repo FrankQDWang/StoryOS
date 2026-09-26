@@ -157,10 +157,15 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   try {
   await draft.locator("button[data-draft-retry]").click();
   const range = draft.locator('textarea[name="draft-range-text"]');
-  await range.focus(); await range.press("Home");
+  await range.click();
+  for (let index = 0; index < 26; index += 1) await range.press("ArrowLeft");
   for (let index = 0; index < 9; index += 1) await range.press("ArrowRight");
   for (let index = 0; index < 5; index += 1) await range.press("Shift+ArrowRight");
-  assert.equal(await draft.locator("[data-retry-preview]").textContent(), "mixed");
+  assert.equal(await draft.locator("[data-retry-preview]").textContent(), "mixed", JSON.stringify(await range.evaluate((field) => ({
+    value: (field as HTMLTextAreaElement).value, from: (field as HTMLTextAreaElement).selectionStart,
+    to: (field as HTMLTextAreaElement).selectionEnd, disabled: (field as HTMLTextAreaElement).disabled,
+    focused: document.activeElement === field,
+  }))));
   const submittedRetry = page.waitForRequest((request) => request.method() === "POST"
     && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
   await draft.locator("button[data-draft-retry-submit]").click();

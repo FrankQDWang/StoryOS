@@ -58,6 +58,7 @@ pub(super) async fn persist_proposal_compensation(
     let payload = serde_json::json!({
         "proposal_revision_id": proposal_revision_id,
         "source_proposal_revision_id": frontier.current_revision_id,
+        "project_activity_position": project_activity_position.to_string(),
     })
     .to_string();
     let receipt_created_at = insert_undo_receipt(

@@ -1059,6 +1059,16 @@ async fn read_undo_settlement(
             .transpose()
             .map_err(undo_parse_error)?
             .unwrap_or(0);
+        let project_activity_position = if row.get::<_, Option<String>>(18).as_deref() == Some("proposal_revised") {
+            let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
+                .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+            match payload.get("project_activity_position") {
+                Some(value) => value.as_str().ok_or(UndoLatestAuthorActionError::BindingConflict)?
+                    .parse().map_err(undo_parse_error)?,
+                None if payload == serde_json::json!({}) => 0,
+                None => return Err(UndoLatestAuthorActionError::BindingConflict),
+            }
+        } else { project_activity_position };
         Ok(UndoLatestAuthorActionSettlement {
             source_reopen_event: crate::undo_draft_retry::read_reopen(&client, command, receipt_id)
                 .await?,

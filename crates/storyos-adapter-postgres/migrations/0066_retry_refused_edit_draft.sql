@@ -11,10 +11,13 @@ BEGIN
   ALTER TABLE storyos.domain_receipts DROP CONSTRAINT domain_receipts_result_shape;
   EXECUTE format($sql$ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_result_shape CHECK ((%s) OR ((
     command_kind='undoLatestAuthorAction' AND result_kind='authoritative_applied'
-    AND jsonb_typeof(result_payload)='object' AND result_payload ?& ARRAY['proposal_revision_id','source_proposal_revision_id']
-    AND result_payload - ARRAY['proposal_revision_id','source_proposal_revision_id']='{}'::jsonb
+    AND jsonb_typeof(result_payload)='object' AND result_payload ?& ARRAY['proposal_revision_id','source_proposal_revision_id','project_activity_position']
+    AND result_payload - ARRAY['proposal_revision_id','source_proposal_revision_id','project_activity_position']='{}'::jsonb
     AND result_payload->>'proposal_revision_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
     AND result_payload->>'source_proposal_revision_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    AND CASE WHEN jsonb_typeof(result_payload->'project_activity_position')='string'
+      AND result_payload->>'project_activity_position' ~ '^(0|[1-9][0-9]{0,19})$'
+      THEN (result_payload->>'project_activity_position')::numeric <= 18446744073709551615 ELSE false END
     AND authoritative_revision_ids='{}' AND authoritative_commit_ids='{}' AND proposal_revision_ids='{}'
     AND prior_heads=expected_heads AND resulting_heads=expected_heads
   ) IS TRUE))$sql$,substring(prior_check FROM 8 FOR length(prior_check)-8));

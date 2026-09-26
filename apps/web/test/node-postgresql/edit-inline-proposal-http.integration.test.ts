@@ -314,7 +314,7 @@ test("an explicit narrowed public Draft retry changes content and supersedes onl
 });
 
 test("narrow Draft retry preserves candidate, refusal, no-effect and conflict outcomes with exact source replay", async () => {
-  const started = await startRealServer();
+  let started = await startRealServer();
   try {
     await drainLeftoverWork();
     for (const [index, outcome] of ["proposal_revised", "refused_to_draft", "no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content"].entries()) {
@@ -415,7 +415,10 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
           id(`${ns}62`), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: prepared.projectId,
             request: undo, idempotencyKey: id(`${ns}62`), antiForgery, fetchImpl: prepared.fetchImpl }));
         const beforeUndo = await retainedState(prepared.projectId);
-        for (const invalid of ["'{}'::jsonb", "NEW.result_payload || jsonb_build_object('source_proposal_revision_id', '018f0000-0000-7001-8000-000000000001')"]) {
+        for (const invalid of ["'{}'::jsonb", "NEW.result_payload || jsonb_build_object('source_proposal_revision_id', '018f0000-0000-7001-8000-000000000001')",
+          "NEW.result_payload || jsonb_build_object('project_activity_position', NULL)",
+          "NEW.result_payload || jsonb_build_object('project_activity_position', '01')",
+          "NEW.result_payload || jsonb_build_object('project_activity_position', '18446744073709551616')"]) {
           await queryPostgres(`CREATE FUNCTION storyos.damage_retry_compensation() RETURNS trigger LANGUAGE plpgsql AS $fault$
             BEGIN IF NEW.project_id='${prepared.projectId}'::uuid AND NEW.command_kind='undoLatestAuthorAction' THEN
               NEW.result_payload := ${invalid}; END IF; RETURN NEW; END $fault$;
@@ -439,6 +442,14 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
           draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft,
           { ...source, closure_event: observed.closure_event, reopen_event: undone.source_reopen_event });
         assert.deepEqual(await sendMixed(started.baseUrl, prepared, request, id(`${ns}56`)), retried);
+        await stopRealServer(started.server); started = await startRealServer();
+        prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+        assert.deepEqual(await compensate(), undone);
+        assert.deepEqual(await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl }), compensated);
+        assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft,
+          { ...source, closure_event: observed.closure_event, reopen_event: undone.source_reopen_event });
       }
     }
   } finally { await stopRealServer(started.server); }
