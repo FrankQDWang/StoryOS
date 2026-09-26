@@ -10,6 +10,7 @@ import type {
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
 import { applyAuthorEditPrimitive } from "./author-edit-primitive.ts";
+import { readDiscardJournal } from "./refused-edit-discard.ts";
 import { readAcceptanceJournal } from "./acceptance-journal.ts";
 import type {
   EditorWorkspace,
@@ -355,6 +356,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
     ]);
   const workingBoundary = await readJournalWorkingBoundary(transaction, workspace);
   const explicitAcceptance = await explicitAcceptancePromise;
+  const explicitDiscard = await readDiscardJournal(workspace);
   const schema = schemaValue as { version?: unknown } | undefined;
   const watermark = watermarkValue as JournalSnapshot["watermark"];
   const activeBaseRecord = activeBaseValue as { value?: EditorBaseSnapshot } | undefined;
@@ -374,7 +376,7 @@ export async function readJournalSnapshot(workspace: EditorWorkspace): Promise<J
   groups.sort((left, right) => left.covered_sequence_range.first
     - right.covered_sequence_range.first);
   return {
-    watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance,
+    watermark, activeBase, records, payloadChains, groups, fences, explicitAcceptance, explicitDiscard,
     ...(workingBoundary ? { workingBoundary } : {}),
   };
 }
@@ -714,8 +716,10 @@ function pendingProjectionFromSnapshot(
   workspace: EditorWorkspace,
   snapshot: ValidatedJournalSnapshot,
 ): PendingEditProjection {
-  const pendingAcceptanceCount = snapshot.explicitAcceptance?.groups.filter((group) =>
-    (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0;
+  const pendingDiscardCount = snapshot.explicitDiscard?.filter(({ observation }) =>
+    observation === undefined || observation.kind === "unresolved").length ?? 0;
+  const pendingAcceptanceCount = pendingDiscardCount + (snapshot.explicitAcceptance?.groups.filter((group) =>
+    (group.settlement as { kind?: string })?.kind === "unsettled").length ?? 0);
   const resolvedSequences = new Set<number>();
   let hasZeroAuthoritySettlement = false;
   const base = workspace.session.base_snapshot;

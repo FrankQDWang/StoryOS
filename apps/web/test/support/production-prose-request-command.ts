@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { expect } from "playwright/test";
 import { webcrypto } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -13,6 +14,7 @@ import type {
   RejectProposalOperationsResponse, UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { verifyRestoredProductionDiscard } from "./production-discard-command.ts";
 import { verifyProductionRefusedEdit } from "./production-refused-edit-command.ts";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
@@ -35,6 +37,7 @@ function uuidV7(): string {
 }
 
 export async function verifyProductionProseRequest(context: BrowserContext, scenario = "prose_request"): Promise<void> {
+  if (scenario === "restored_refused_edit") { await verifyRestoredProductionDiscard(context); return; }
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "the packaged Server origin is required");
   let owned = scenario === "refused_edit" ? await startStoryOSServer({ repositoryRoot,
@@ -101,15 +104,15 @@ export async function verifyProductionProseRequest(context: BrowserContext, scen
     await page.keyboard.insertText("The lantern went dark.");
     await page.keyboard.press("Enter");
     await page.keyboard.insertText("The second door opened.");
-    await page.waitForFunction(async ({ projectId, chapterId }) => {
-      const response = await fetch(`/api/v1/projects/${projectId}/chapters/${chapterId}`);
-      if (!response.ok) return false;
-      const chapter = await response.json() as {
-        chapter: { current_revision: { blocks: { text: string }[] } };
-      };
-      return chapter.chapter.current_revision.blocks.map((block) => block.text).join("\n")
-        === "The lantern went dark.\nThe second door opened.";
-    }, { projectId, chapterId }, { polling: 100 });
+    let chapterReadFailure: { cause: unknown } | undefined;
+    await expect.poll(async () => {
+      try {
+        const chapter = await getChapter({ ...options, chapterId });
+        return chapter.chapter.current_revision.blocks.map((block) => block.text).join("\n")
+          === "The lantern went dark.\nThe second door opened.";
+      } catch (cause: unknown) { chapterReadFailure = { cause }; return true; }
+    }, { timeout: 10_000, intervals: [100] }).toBe(true);
+    if (chapterReadFailure !== undefined) throw new Error("Chapter read failed", chapterReadFailure);
     await page.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
     const before = await getChapter({ ...options, chapterId });
     assert.equal(before.project_scope.owner_user_id, USER);

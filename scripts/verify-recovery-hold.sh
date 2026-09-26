@@ -181,6 +181,13 @@ if [ "$recovery_drill" = "mixed" ]; then
   STORYOS_VITEST_FILE_ORDER=test/node-postgresql/edit-inline-proposal-http.integration.test.ts: \
   pnpm --dir apps/web exec vitest run --project node-postgresql \
     test/node-postgresql/edit-inline-proposal-http.integration.test.ts
+  export STORYOS_DISCARD_RECOVERY_EXPECTED="$STORYOS_VERIFICATION_RUN/production-discard-recovery.json"
+  start_recovery_drill_server "postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres"
+  STORYOS_TEST_DATABASE_URL="postgres://storyos_runtime:runtime@127.0.0.1:$primary_port/postgres" \
+  STORYOS_TEST_POSTGRES_CONTAINER="$primary" \
+  pnpm --dir apps/web exec vitest run --project browser-exact-dist \
+    test/browser-exact-dist/production-host.integration.test.ts
+  stop_recovery_drill_server
   archived_before=$(archived_export_facts "$primary")
   if [ "$(printf '%s\n' "$archived_before" | wc -l | tr -d ' ')" != "2" ] \
     || ! printf '%s\n' "$archived_before" | grep -Eq '^Recovery Archive Archived\|[0-9a-f-]+\|archived\|1\|\|[0-9a-f-]+:sha256:[0-9a-f]{64}:[0-9a-f]+$' \

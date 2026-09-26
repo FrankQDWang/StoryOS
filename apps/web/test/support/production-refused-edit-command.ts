@@ -1,3 +1,4 @@
+import { verifyProductionDiscard } from "./production-discard-command.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Page } from "playwright";
@@ -101,7 +102,7 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   page.off("request", track);
   assert.deepEqual(mutations, []);
-  assert.equal(await draft.locator("button").count(), 1);
+  assert.equal(await draft.locator("button").count(), 2);
   const wrong = await page.evaluate(async (draftId) => {
     const response = await fetch(`/api/v1/projects/018f0000-0000-7001-8000-000000000005/refused-edit-drafts/${draftId}`);
     return { status: response.status, text: await response.text() };
@@ -134,4 +135,6 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   assert.equal(await page.locator("button[data-draft-copy]").count(), 0);
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   await page.unroute(draftRoute);
+  await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
+    proposalId: proposal.proposal_id, draft: retained.draft, restart });
 }

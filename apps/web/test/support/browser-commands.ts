@@ -39,7 +39,7 @@ export const storyOSBrowserCommands = {
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseProductionHostRequest(value);
-      if (request.scenario === "prose_request" || request.scenario === "refused_edit") {
+      if (request.scenario === "prose_request" || request.scenario === "refused_edit" || request.scenario === "restored_refused_edit") {
         await verifyProductionProseRequest(context.context, request.scenario);
       } else {
         await verifyProductionHostJourney(context.context);

@@ -70,6 +70,7 @@ export function BlockProposalDisplay({
 }) {
   const [reads, setReads] = useState<ProposalRead[]>([]);
   const [candidateTexts, setCandidateTexts] = useState<Record<string, string>>({});
+  const [discardHold, setDiscardHold] = useState(false);
   const [settlementRefresh, setSettlementRefresh] = useState(0);
   const [decisionMessages, setDecisionMessages] = useState<Record<string, string>>({});
   const [knownProblems, setKnownProblems] = useState<Record<string, {
@@ -542,7 +543,7 @@ export function BlockProposalDisplay({
   return (
     <>
       <ManuscriptEditor {...editorProps}
-        editable={editorProps.editable && !recoveryUnavailable
+        editable={editorProps.editable && !discardHold && !recoveryUnavailable
           && journalPendingIds.length === 0
           && (acceptanceChecked || (effectiveLocators.length === 0
             && editorProps.persistWorkspace?.pending.unsettled_intent_count === 0))
@@ -553,7 +554,7 @@ export function BlockProposalDisplay({
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed} />
       <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
-        refreshKey={`${refreshKey}:${settlementRefresh}`} />
+        refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection} />
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
         const problem = knownProblems[locator.proposalId];
