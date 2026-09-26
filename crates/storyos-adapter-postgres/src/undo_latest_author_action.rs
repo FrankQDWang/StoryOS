@@ -842,7 +842,7 @@ async fn read_undo_settlement(
                      ON (source_receipt.owner_user_id, source_receipt.project_id, source_receipt.receipt_id) =
                         (source_action.owner_user_id, source_action.project_id, source_action.receipt_id)
               LEFT JOIN storyos.proposal_revisions AS source_proposal
-                     ON (source_proposal.owner_user_id, source_proposal.project_id, source_proposal.revision_id::text) =
+                     ON (source_proposal.owner_user_id, source_proposal.project_id, source_proposal.revision_id) =
                         (source_receipt.owner_user_id, source_receipt.project_id, source_receipt.proposal_revision_ids[1])
               LEFT JOIN storyos.proposal_revisions AS restored_proposal
                      ON (restored_proposal.owner_user_id, restored_proposal.project_id,

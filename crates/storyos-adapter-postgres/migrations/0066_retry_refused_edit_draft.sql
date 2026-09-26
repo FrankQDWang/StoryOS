@@ -276,12 +276,12 @@ BEGIN
     IF NOT EXISTS(SELECT 1 FROM storyos.author_action_entries AS a JOIN storyos.author_action_entries AS s
       ON (s.owner_user_id,s.project_id,s.author_action_sequence)=(a.owner_user_id,a.project_id,a.compensated_source_sequence)
       JOIN storyos.domain_receipts AS r ON (r.owner_user_id,r.project_id,r.receipt_id)=(s.owner_user_id,s.project_id,s.receipt_id)
-      JOIN storyos.proposal_revisions AS parent ON (parent.owner_user_id,parent.project_id,parent.revision_id::text)=
+      JOIN storyos.proposal_revisions AS parent ON (parent.owner_user_id,parent.project_id,parent.revision_id)=
         (r.owner_user_id,r.project_id,r.proposal_revision_ids[1])
       JOIN storyos.proposal_revisions AS restored ON (restored.owner_user_id,restored.project_id,restored.proposal_id,restored.parent_revision_id)=
         (parent.owner_user_id,parent.project_id,parent.proposal_id,parent.revision_id)
       WHERE (a.owner_user_id,a.project_id,a.receipt_id)=(receipt.owner_user_id,receipt.project_id,receipt.receipt_id)
-        AND a.disposition='compensation' AND s.disposition='forward' AND r.command_kind='applyAuthorEdit' AND r.result_kind='proposal_revised'
+        AND a.disposition='compensation' AND s.disposition='forward' AND r.result_kind='proposal_revised'
         AND receipt.result_payload->>'proposal_revision_id'=restored.revision_id::text
         AND receipt.result_payload->>'source_proposal_revision_id'=parent.revision_id::text)
     THEN RAISE EXCEPTION 'Incomplete Proposal compensation identity' USING ERRCODE='23514'; END IF;
