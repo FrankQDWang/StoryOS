@@ -130,7 +130,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
   await runStoryOSWorker({ repositoryRoot, workerBinary: `${repositoryRoot}/target/release-package/storyos-worker`, args: ["--once"] });
   const exported = await getExportOperation({ ...options, exportId: admitted.effect.export_id });
-  assert.ok(exported.status === "ready", "Production Draft export not ready");
+  assert.ok(exported.status === "ready", `Production Draft export not ready: ${JSON.stringify(exported)}`);
   const download = await fetchImpl(`${origin}/api/v1/projects/${projectId}/exports/${exported.export_id}`,
     { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
   assert.equal(download.status, 200);
