@@ -308,6 +308,9 @@ async fn load_outcome_relation(
                        FROM jsonb_object_keys(admission.command_payload)) =
                       16 + CASE WHEN admission.command_payload ? 'proposal_target'
                                 THEN 1 ELSE 0 END
+                         + CASE WHEN admission.command_payload ? 'retry_source' THEN 1 ELSE 0 END
+                      AND (NOT admission.command_payload ? 'retry_source'
+                        OR jsonb_typeof(admission.command_payload->'retry_source') = 'object')
                       AND (NOT admission.command_payload ? 'proposal_target'
                         OR (jsonb_typeof(admission.command_payload->'proposal_target') = 'object'
                           AND (SELECT count(*) FROM jsonb_object_keys(

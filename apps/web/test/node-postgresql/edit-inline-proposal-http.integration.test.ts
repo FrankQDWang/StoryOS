@@ -298,7 +298,7 @@ test("an explicit narrowed public Draft retry changes content and supersedes onl
         expected_author_undo_frontier_sequence: retried.effect.author_action_sequence,
         expected_authoritative_revision_id: retried.effect.authoritative_revision.revision_id } };
     const compensate = async () => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
-      "/api/v1/projects/{project_id}/author-actions/undo-latest", undo.command_schema,
+      "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema,
       await digestUndoLatestAuthorAction(undo), id("e0c962"), (antiForgery) => undoLatestAuthorAction({
         baseUrl: started.baseUrl, projectId: prepared.projectId, request: undo,
         idempotencyKey: id("e0c962"), antiForgery, fetchImpl: prepared.fetchImpl }));
@@ -310,6 +310,169 @@ test("an explicit narrowed public Draft retry changes content and supersedes onl
     const reopened = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
     assert.deepEqual(reopened, { ...source, closure_event: closed.closure_event, reopen_event: undone.source_reopen_event });
+  } finally { await stopRealServer(started.server); }
+});
+
+test("narrow Draft retry preserves candidate, refusal, no-effect and conflict outcomes with exact source replay", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    for (const [index, outcome] of ["proposal_revised", "refused_to_draft", "no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content"].entries()) {
+      const ns = `e0c97${index}`;
+      const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Draft Retry Outcomes", `${ns}2`);
+      const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+        prepared.projectId, prepared.chapterId, `${ns}3`);
+      const original = mixedRequest(opened, writer, `${ns}4`);
+      original.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_structured_selection",
+        replacement: [{ block_kind: "paragraph", text: "Guard🙂New passage" }] }];
+      const created = await sendMixed(started.baseUrl, prepared, original, id(`${ns}46`));
+      if (created.effect.kind !== "refused_to_draft") throw new Error("expected complete source Draft");
+      const source = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        draftId: created.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+      const unchanged = { kind: "unchanged", source_draft_kind: "refused_edit", source_draft_id: source.draft_id,
+        requested_source_draft_revision_id: source.draft_revision_id,
+        current_source_draft_revision_id: source.draft_revision_id,
+        current_source_draft_payload_digest: source.payload_digest, current_closure: { kind: "open" } };
+      const text = outcome === "no_effect" ? "Guard" : "New";
+      const request = outcome === "refused_to_draft" ? mixedRequest(opened, writer, `${ns}5`)
+        : replaceUnit(outcome === "proposal_revised" ? 14 : 0, outcome === "proposal_revised" ? 17 : 5,
+          text, writer, `${ns}5`, opened.proposal.revision_id);
+      if (outcome === "refused_to_draft") request.author_edit_units[0]!.normalized_primitives = [
+        { kind: "replace_structured_selection", replacement: [{ block_kind: "paragraph", text }] }];
+      if (outcome === "conflicted") request.expected_proposal_head_revision_ids = [id(`${ns}58`)];
+      request.local_intent_sequence = String(BigInt(writer.nextSequence) + 1n);
+      request.retry_source = { kind: "draft_retry", source_draft_kind: "refused_edit",
+        source_draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
+        source_draft_payload_digest: outcome === "source_conflict" ? "0".repeat(64) : source.payload_digest,
+        expected_source_draft_closure: "open", selected_payload_range: { kind: "exact_structured_range",
+          coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
+          from: { block_index: 0, offset: outcome === "no_effect" ? 0 : 7 },
+          to: { block_index: 0, offset: outcome === "no_effect" ? 5 : 10 },
+          slice_digest: createHash("sha256").update(JSON.stringify([{ block_kind: "paragraph", text }])).digest("hex") } };
+      if (outcome === "split_surrogate") request.retry_source.selected_payload_range.from.offset = 6;
+      if (outcome === "changed_content") request.author_edit_units[0]!.normalized_primitives = [
+        { kind: "replace_selection", from: 0, to: 5, text: "NewX" }];
+      const before = await retainedState(prepared.projectId);
+      const retried = await sendMixed(started.baseUrl, prepared, request, id(`${ns}56`)).catch((error: unknown) => {
+        if (error instanceof StoryOSProtocolError) throw new Error(`${outcome}: ${error.responseBody}`, { cause: error });
+        throw error;
+      });
+      assert.equal(retried.effect.kind, ["source_conflict", "split_surrogate", "changed_content"].includes(outcome) ? "conflicted" : outcome);
+      const after = await retainedState(prepared.projectId);
+      const observed = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+      if (["no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content"].includes(outcome)) {
+        assert.deepEqual(retried.source_draft_disposition, unchanged);
+        assert.deepEqual(observed, source);
+        assert.deepEqual(after, before);
+        assert.deepEqual([retried.receipt.draft_artifact_refs, retried.receipt.artifact_lifecycle_event_refs], [[], []]);
+      } else {
+        const closed = observed.closure_event!;
+        assert.deepEqual(retried.source_draft_disposition, { kind: "closed_superseded", source_draft_kind: "refused_edit",
+          source_draft_id: source.draft_id, source_draft_revision_id: source.draft_revision_id,
+          source_draft_payload_digest: source.payload_digest, prior_closure: "open", resulting_closure: "closed",
+          close_reason: "superseded", closure_event_ref: closed.event_id });
+        assert.deepEqual({ ...observed, closure: "open", closure_event: undefined }, { ...source, closure_event: undefined });
+        if (retried.effect.kind === "refused_to_draft") {
+          const provenance = { source_draft_id: source.draft_id, source_draft_revision_id: source.draft_revision_id,
+            source_draft_payload_digest: source.payload_digest, closure_event_ref: closed.event_id,
+            selected_payload_range: request.retry_source.selected_payload_range };
+          assert.equal(retried.effect.refusal_origin, "draft_retry_replacement");
+          assert.deepEqual(retried.effect.replacement_provenance, provenance);
+          const replacement = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+            draftId: retried.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+          assert.deepEqual(replacement.payload.author_edit_units, request.author_edit_units);
+          assert.deepEqual(replacement.replacement_provenance, provenance);
+          assert.equal(replacement.closure, "open");
+          assert.equal(closed.author_action_sequence, null);
+          assert.deepEqual(retried.receipt.draft_artifact_refs, [replacement.draft_id, source.draft_id]);
+          assert.deepEqual(retried.receipt.artifact_lifecycle_event_refs, [replacement.creation.creation_event_id, closed.event_id]);
+          assert.deepEqual(after.author_action_entries, before.author_action_entries);
+        } else {
+          assert.equal(closed.author_action_sequence, retried.receipt.author_action_sequence);
+          assert.deepEqual(retried.receipt.draft_artifact_refs, [source.draft_id]);
+          assert.deepEqual(retried.receipt.artifact_lifecycle_event_refs, [closed.event_id]);
+          const proposal = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+            proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+          assert.equal(proposal.proposal.candidate_text, "narrNewr tone");
+          if (retried.effect.kind !== "proposal_revised") throw new Error("expected candidate retry");
+          assert.equal(proposal.proposal.revision_id, retried.effect.proposal_revision_id);
+        }
+      }
+      assert.deepEqual(await sendMixed(started.baseUrl, prepared, request, id(`${ns}56`)), retried);
+      assert.deepEqual(await retainedState(prepared.projectId), after);
+      await assert.rejects(() => sendMixed(started.baseUrl, prepared,
+        { ...request, correlation_id: id(`${ns}57`) }, id(`${ns}56`)),
+        (error) => requireStoryOSProtocolError(error).status === 409);
+    }
+  } finally { await stopRealServer(started.server); }
+});
+
+test("a cross-block Unicode Draft retry rolls back atomically and recovers one exact replacement after restart", async () => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0c9811"), "Structured Draft Retry", "e0c982");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0c983");
+    const original = mixedRequest(opened, writer, "e0c984");
+    original.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_structured_selection", replacement: [
+      { block_kind: "heading", text: "标题🙂" }, { block_kind: "paragraph", text: "GuardNew" }] }];
+    const created = await sendMixed(started.baseUrl, prepared, original, id("e0c9846"));
+    if (created.effect.kind !== "refused_to_draft") throw new Error("expected complete structured source");
+    const source = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: created.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    const selected = [{ block_kind: "heading", text: "🙂" }, { block_kind: "paragraph", text: "Guard" }];
+    const request = mixedRequest(opened, writer, "e0c985");
+    request.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_structured_selection",
+      replacement: selected as [{ block_kind: "heading"; text: string }, { block_kind: "paragraph"; text: string }] }];
+    request.local_intent_sequence = String(BigInt(writer.nextSequence) + 1n);
+    request.retry_source = { kind: "draft_retry", source_draft_kind: "refused_edit", source_draft_id: source.draft_id,
+      source_current_draft_revision_id: source.draft_revision_id, source_draft_payload_digest: source.payload_digest,
+      expected_source_draft_closure: "open", selected_payload_range: { kind: "exact_structured_range",
+        coordinate_profile: "storyos.draft-replacement.block-utf16.v1", from: { block_index: 0, offset: 2 },
+        to: { block_index: 1, offset: 5 }, slice_digest: createHash("sha256").update(JSON.stringify(selected)).digest("hex") } };
+    let retryNonce = "";
+    const sendRetry = async () => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+      await digestApplyAuthorEdit(request), id("e0c9856"), (antiForgery) => {
+        retryNonce = antiForgery;
+        return applyAuthorEdit({ baseUrl: started.baseUrl, projectId: prepared.projectId, request,
+          idempotencyKey: id("e0c9856"), antiForgery, fetchImpl: prepared.fetchImpl });
+      });
+    const before = await retainedState(prepared.projectId);
+    await queryPostgres(`CREATE FUNCTION storyos.fail_narrow_retry() RETURNS trigger LANGUAGE plpgsql AS $fault$
+      BEGIN IF NEW.project_id='${prepared.projectId}'::uuid AND NEW.source_draft_disposition IS NOT NULL THEN
+        RAISE EXCEPTION 'Controlled narrow retry failure' USING ERRCODE='23514'; END IF; RETURN NEW; END $fault$;
+      CREATE TRIGGER fail_narrow_retry BEFORE INSERT ON storyos.domain_receipts
+        FOR EACH ROW EXECUTE FUNCTION storyos.fail_narrow_retry();`);
+    try { await assert.rejects(() => sendRetry(),
+      (error) => requireStoryOSProtocolError(error).status === 503); }
+    finally { await queryPostgres("DROP TRIGGER fail_narrow_retry ON storyos.domain_receipts; DROP FUNCTION storyos.fail_narrow_retry();"); }
+    assert.deepEqual(await retainedState(prepared.projectId), before);
+    assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft, source);
+    const reconciled = await getApplyAuthorEditOutcome({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      idempotencyKey: id("e0c9856"), antiForgery: retryNonce, fetchImpl: prepared.fetchImpl });
+    if (reconciled.outcome.outcome_kind !== "committed") throw new Error(`expected original Admission recovery: ${JSON.stringify(reconciled.outcome)}`);
+    const retried = reconciled.outcome.response;
+    if (retried.effect.kind !== "refused_to_draft") throw new Error("expected exact replacement refusal");
+    const replacementId = retried.effect.draft_id;
+    const after = await retainedState(prepared.projectId);
+    await stopRealServer(started.server);
+    started = await startRealServer();
+    const resumed = { ...prepared, fetchImpl: browserFetch(started.baseUrl, "session-a") };
+    const recovered = await getApplyAuthorEditOutcome({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      idempotencyKey: id("e0c9856"), antiForgery: retryNonce, fetchImpl: resumed.fetchImpl });
+    if (recovered.outcome.outcome_kind !== "committed") throw new Error("expected retained retry outcome");
+    assert.deepEqual(recovered.outcome.response, retried);
+    assert.deepEqual(await sendMixed(started.baseUrl, resumed, request, id("e0c9856")), retried);
+    const replacement = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: replacementId, fetchImpl: resumed.fetchImpl })).draft;
+    assert.deepEqual(replacement.payload.author_edit_units, request.author_edit_units);
+    assert.deepEqual(replacement.replacement_provenance, retried.effect.replacement_provenance);
+    assert.equal(replacement.closure, "open");
+    assert.deepEqual(await retainedState(prepared.projectId), after);
   } finally { await stopRealServer(started.server); }
 });
 
