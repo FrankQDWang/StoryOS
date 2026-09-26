@@ -886,7 +886,7 @@ paths:
         '415':
           description: Unsupported content type
         '422':
-          description: Challenge or writer refused
+          description: Challenge refused
         '429':
           description: Rate limited
           headers:

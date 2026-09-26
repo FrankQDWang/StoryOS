@@ -30,7 +30,7 @@ pub(super) const CLOSE_EDITOR_FLOW_DRAFT: QueryOperation = QueryOperation {
         (409, "Binding conflict"),
         (413, "Request too large"),
         (415, "Unsupported content type"),
-        (422, "Challenge or writer refused"),
+        (422, "Challenge refused"),
         (429, "Rate limited"),
         (503, "Service unavailable"),
     ],

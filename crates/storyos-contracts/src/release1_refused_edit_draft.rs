@@ -77,7 +77,7 @@ pub struct RefusedEditDraftInspect {
     pub payload_digest: String,
     pub payload_digest_profile: String,
     pub creation: RefusedEditDraftCreated,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closure_event: Option<crate::EditorFlowDraftClosed>,
 }
 
