@@ -131,3 +131,32 @@ No new capacity, latency or retention-duration claim is made.
 Until [S3-12b2: Undo a Refused Edit Draft Discard](https://github.com/FrankQDWang/StoryOS/issues/831) registers the exact Root Undo handler, this Forward action
 is a non-skippable Barrier. [S3-12b1-web: Discard a Refused Edit Draft in the Production Editor](https://github.com/FrankQDWang/StoryOS/issues/832) owns the production controls and explicit
 local Discard record. This service exposes neither control nor compensation.
+
+## Production Discard consumer
+
+Issue 832 adds one immutable explicit Discard record and frozen group in the
+existing Journal metadata store. The shared Project-local sequence allocator
+and partition bind the record. The record schema is
+`storyos.local-edit-journal.refused-edit-discard.v1`; observations use its
+`.observation` schema. Database version 4 stays current. No old record is
+rewritten. The existing working-item ceiling bounds record and observation
+reads; unknown schema, incomplete coverage, extra fields or digest drift stop
+Discard. No throughput or retention-duration claim is added.
+
+The record commits before one fresh bounded Admission. It stores complete
+nonsecret command bytes, source bindings, coverage, digest and original key.
+Challenge secrets stay in memory. Typed Receipt-backed refusal or conflict
+is settled; a transport or infrastructure failure stays unresolved. The
+retained query can confirm success only when the exact closed event binds
+that original Scope, Draft, source Revision/digest and command key/digest.
+Open, missing, foreign or unavailable evidence proves no command outcome.
+Reload, restart and changed session create no automatic Discard or new identity.
+
+The Journal stays local and non-authoritative. It is not a Project Export
+entry or a PostgreSQL Recovery Copy. The mixed physical drill retains its
+original nonsecret bytes separately, then consumes the restored public Draft
+through the packaged editor without rebinding any original record. The
+public Archive retains the backend close facts and complete eligible content.
+Copy always needs a fresh permitted query and sends no state-changing request.
+Closed Drafts show the exact reason/event and the current non-skippable Undo
+Barrier; they expose no Discard, Retry or Expand control.

@@ -114,6 +114,7 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
           creator: { kind: "core_transition", receipt_id: ids[2] }, source: { command_id: ids[0],
             author_command_admission_id: ids[1], receipt_id: ids[2], idempotency_key: group.idempotency_key,
             command_digest: group.frozen_request_digest } } } };
+    for (const action of ["discard", "copy"]) {
     let release!: (response: Response) => void;
     let started!: () => void;
     const pending = new Promise<Response>((resolve) => { release = resolve; });
@@ -133,7 +134,8 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
         fetchImpl: queryFetch, refreshKey: "0" };
       await act(async () => { root.render(createElement(RefusedEditDraftDisplay, props)); });
       await expect.poll(() => host.querySelector("button[data-draft-copy]")).not.toBeNull();
-      const button = host.querySelector<HTMLButtonElement>("button[data-draft-copy]")!;
+      expect(host.querySelector("button[data-draft-discard]")).not.toBeNull();
+      const button = host.querySelector<HTMLButtonElement>(`button[data-draft-${action}]`)!;
       await act(async () => { button.click(); });
       await copyStarted;
       await act(async () => { root.render(createElement(RefusedEditDraftDisplay, { ...props,
@@ -141,9 +143,11 @@ it("keeps a complete mixed intent in the immutable Journal without projecting it
       await act(async () => { release(Response.json(query)); });
       await expect.poll(() => host.querySelector("[data-draft-unavailable]")).not.toBeNull();
       expect(clipboard).not.toHaveBeenCalled();
+      await expect((await import("../../src/refused-edit-discard.ts")).readDiscardJournal(test.workspace)).resolves.toEqual([]);
       expect(host.querySelector("[data-draft-replacement]")).toBeNull();
     } finally { await act(async () => { root.unmount(); }); clipboard.mockRestore(); host.remove();
       Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: previousAct }); }
+    }
   } finally { await test.close(); }
 });
 

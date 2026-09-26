@@ -13,6 +13,7 @@ import type {
   RejectProposalOperationsResponse, UpdateProjectAssistanceRequest,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
+import { verifyRestoredProductionDiscard } from "./production-discard-command.ts";
 import { verifyProductionRefusedEdit } from "./production-refused-edit-command.ts";
 import { queryStoryOSPostgres, runStoryOSWorker, sessionFetch, startStoryOSServer, stopStoryOSServer } from "./node-integration";
 
@@ -35,6 +36,7 @@ function uuidV7(): string {
 }
 
 export async function verifyProductionProseRequest(context: BrowserContext, scenario = "prose_request"): Promise<void> {
+  if (scenario === "restored_refused_edit") { await verifyRestoredProductionDiscard(context); return; }
   const configured = process.env.STORYOS_DEV_SERVER;
   assert.ok(configured, "the packaged Server origin is required");
   let owned = scenario === "refused_edit" ? await startStoryOSServer({ repositoryRoot,

@@ -2,22 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { getRefusedEditDraft } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type { ProjectScope, RefusedEditDraftInspect }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
-import { readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
-import type { EditorWorkspace, JournalSubmissionGroup } from "./editor-types.ts";
+import { canonicalDraftValue as canonical, discardRefusedEdit, reconcileDiscard, type DiscardObservation } from "./refused-edit-discard.ts";
+import { rebuildPendingProjection, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
+import type { EditorWorkspace, JournalSubmissionGroup, PendingEditProjection } from "./editor-types.ts";
 
-function canonical(value: unknown): string {
-  const keys = new Set<string>();
-  JSON.stringify(value, (key, item: unknown) => { keys.add(key); return item; });
-  return JSON.stringify(value, [...keys].sort());
-}
-
-export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey }: {
+export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, refreshKey, onHoldChange, onProjection }: {
   workspace: EditorWorkspace | undefined; scope: ProjectScope; baseUrl: string;
-  fetchImpl: typeof fetch; refreshKey: string;
+  fetchImpl: typeof fetch; refreshKey: string; onHoldChange?: ((hold: boolean) => void) | undefined;
+  onProjection?: ((projection: PendingEditProjection) => void) | undefined;
 }) {
   const [reads, setReads] = useState<{ group: JournalSubmissionGroup;
-    draft?: RefusedEditDraftInspect; copied?: boolean }[]>([]);
+    draft?: RefusedEditDraftInspect; copied?: boolean; discard?: DiscardObservation | undefined }[]>([]);
   const lifetime = useRef(0);
+  const [busy, setBusy] = useState(false);
+  const [settledWriter, setSettledWriter] = useState(false);
   async function read(group: JournalSubmissionGroup): Promise<RefusedEditDraftInspect> {
     const settled = group.settlement;
     if (workspace === undefined || settled.kind !== "zero_authority_receipt_settled"
@@ -36,6 +34,12 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
     const digest = await workspace.cryptoImpl.subtle.digest("SHA-256",
       new TextEncoder().encode(canonical(expected)));
     const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    const event = draft.closure_event;
+    if ((draft.closure === "closed" && (!event || event.schema_id !== "storyos.event.editor-flow-draft-closed.v1"
+      || event.event_kind !== "editor_flow_draft_closed" || canonical(event.project_scope) !== canonical(scope)
+      || event.draft_id !== effect.draft_id || event.draft_revision_id !== effect.draft_revision_id
+      || event.payload_digest !== draft.payload_digest || event.closure !== "closed" || event.prior_closure !== "open"
+      || event.close_reason !== "abandoned")) || (draft.closure === "open" && event != null)) throw new Error("Draft unavailable");
     if (result.schema_id !== "storyos.query.refused-edit-draft.response.v1"
       || canonical(result.project_scope) !== canonical(scope)
       || canonical(group.project_scope) !== canonical(scope)
@@ -61,17 +65,49 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
     lifetime.current += 1;
     let active = true;
     setReads([]);
+    setBusy(false);
+    setSettledWriter(false);
+    onHoldChange?.(false);
     if (workspace !== undefined) void (async () => {
+      const projection = await rebuildPendingProjection(workspace);
+      if (!active) return;
+      setSettledWriter(workspace.partition.disposition === "current_writer_open"
+        && workspace.session.writer.kind === "current_writer" && projection.save_state === "saved"
+        && projection.unsettled_intent_count === 0);
       const snapshot = await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace));
       const groups = snapshot.groups.filter((group) => group.settlement.kind === "zero_authority_receipt_settled"
         && group.settlement.effect.kind === "refused_to_draft");
       const next = await Promise.all(groups.map(async (group) => {
-        try { return { group, draft: await read(group) }; } catch { return { group }; }
+        try { const draft = await read(group);
+          return { group, draft, discard: await reconcileDiscard(workspace, draft) }; } catch { return { group }; }
       }));
-      if (active) setReads(next);
+      const currentProjection = await rebuildPendingProjection(workspace);
+      if (active) { setReads(next); onProjection?.(currentProjection); }
     })().catch(() => { if (active) setReads([]); });
     return () => { active = false; lifetime.current += 1; };
   }, [workspace, scope.owner_user_id, scope.project_id, baseUrl, fetchImpl, refreshKey]);
+  async function discard(group: JournalSubmissionGroup) {
+    if (workspace === undefined || busy) return;
+    const started = lifetime.current;
+    setBusy(true);
+    onHoldChange?.(true);
+    try { const draft = await read(group);
+      if (started !== lifetime.current) return;
+      await discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl, isCurrent: () => started === lifetime.current }); }
+    catch { /* Only an exact public settlement can close the Draft. */ }
+    try {
+      const draft = await read(group);
+      const observation = await reconcileDiscard(workspace, draft);
+      if (started !== lifetime.current) return;
+      const projection = await rebuildPendingProjection(workspace);
+      if (started !== lifetime.current) return;
+      setReads((current) => current.map((item) => item.group === group
+        ? { group, draft, discard: observation } : item));
+      onProjection?.(projection);
+    } catch {
+      if (started === lifetime.current) setReads((current) => current.map((item) => item.group === group ? { group } : item));
+    } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
+  }
   async function copy(group: JournalSubmissionGroup) {
     const started = lifetime.current;
     setReads((current) => current.map((item) => item.group === group ? { group } : item));
@@ -81,10 +117,12 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       const text = draft.payload.author_edit_units.flatMap((unit) => unit.normalized_primitives.flatMap((primitive) =>
         primitive.kind === "replace_structured_selection" ? primitive.replacement.map((block) => block.text) : [])).join("\n");
       await navigator.clipboard.writeText(text);
-      setReads((current) => current.map((item) => item.group === group ? { group, draft, copied: true } : item));
+      const observation = await reconcileDiscard(workspace!, draft);
+      if (lifetime.current !== started) return;
+      setReads((current) => current.map((item) => item.group === group ? { group, draft, copied: true, discard: observation } : item));
     } catch { /* The fresh query is required before Copy. */ }
   }
-  return reads.map(({ group, draft, copied }) => {
+  return reads.map(({ group, draft, copied, discard: observation }) => {
     const settled = group.settlement;
     if (settled.kind !== "zero_authority_receipt_settled" || settled.effect.kind !== "refused_to_draft") return null;
     const id = settled.effect.draft_id;
@@ -94,6 +132,13 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       <p>Draft preserved. The manuscript and proposal remain unchanged.</p>
       {unit.normalized_primitives.flatMap((primitive) => primitive.kind === "replace_structured_selection"
         ? primitive.replacement.map((block, index) => <pre key={index} data-draft-replacement={block.block_kind}>{block.text}</pre>) : [])}
+      {draft.closure === "open" && observation === undefined && settledWriter
+        ? <button type="button" data-draft-discard disabled={busy} onClick={() => { void discard(group); }}>Discard</button> : null}
+      {observation?.kind === "unresolved" ? <p role="status" data-discard-unresolved>Discard outcome unresolved. No new Discard was submitted.</p> : null}
+      {observation?.kind === "settled" && observation.response.effect.kind !== "draft_closure_changed"
+        ? <p role="status" data-discard-settled>Discard {observation.response.effect.kind}. The Draft was not closed by this command.</p> : null}
+      {draft.closure === "closed" && draft.closure_event ? <p data-draft-closed>
+        Closed: {draft.closure_event.close_reason}. Event: {draft.closure_event.event_id}. Undo unavailable: non-skippable Barrier.</p> : null}
       <button type="button" data-draft-copy onClick={() => { void copy(group); }}>Copy</button>
       {copied ? <p role="status">Copied</p> : null}
       <details><summary>Source and draft identity</summary>

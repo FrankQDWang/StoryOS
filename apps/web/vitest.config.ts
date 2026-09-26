@@ -99,11 +99,13 @@ export default defineConfig({
           ...browserTest(),
           globalSetup: ["./test/support/exact-dist-global-setup.ts"],
           include: physicalDrill
-            ? ["test/browser-exact-dist/s2-physical-drill.integration.test.ts"]
+            ? ["test/browser-exact-dist/s2-physical-drill.integration.test.ts",
+              ...(process.env.STORYOS_DISCARD_RECOVERY_EXPECTED === undefined ? []
+                : ["test/browser-exact-dist/restored-discard.integration.test.ts"])]
             : ["test/browser-exact-dist/**/*.test.ts"],
           ...(physicalDrill
             ? {}
-            : { exclude: ["test/browser-exact-dist/s2-physical-drill.integration.test.ts"] }),
+            : { exclude: ["test/browser-exact-dist/s2-physical-drill.integration.test.ts", "test/browser-exact-dist/restored-discard.integration.test.ts"] }),
           name: "browser-exact-dist",
           testTimeout: 120_000,
         },
