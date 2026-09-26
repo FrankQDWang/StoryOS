@@ -141,6 +141,8 @@ pub enum UndoLatestAuthorActionEffect {
 #[serde(deny_unknown_fields)]
 pub struct UndoLatestAuthorActionResponse {
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub proposal_revision_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_reopen_event: Option<EditorFlowDraftReopened>,
     pub schema_id: String,
     pub correlation_id: String,

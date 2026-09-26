@@ -404,6 +404,42 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
       await assert.rejects(() => sendMixed(started.baseUrl, prepared,
         { ...request, correlation_id: id(`${ns}57`) }, id(`${ns}56`)),
         (error) => requireStoryOSProtocolError(error).status === 409);
+      if (retried.effect.kind === "proposal_revised") {
+        const undo = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+          undo_latest_author_action_input: { ...BINDING, correlation_id: id(`${ns}61`),
+            editor_session_id: writer.session.editor_session.editor_session_id,
+            expected_author_undo_frontier_sequence: retried.effect.author_action_sequence,
+            expected_authoritative_revision_id: writer.authoritativeRevisionId } };
+        const compensate = async () => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+          "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema, await digestUndoLatestAuthorAction(undo),
+          id(`${ns}62`), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+            request: undo, idempotencyKey: id(`${ns}62`), antiForgery, fetchImpl: prepared.fetchImpl }));
+        const beforeUndo = await retainedState(prepared.projectId);
+        for (const invalid of ["'{}'::jsonb", "NEW.result_payload || jsonb_build_object('source_proposal_revision_id', '018f0000-0000-7001-8000-000000000001')"]) {
+          await queryPostgres(`CREATE FUNCTION storyos.damage_retry_compensation() RETURNS trigger LANGUAGE plpgsql AS $fault$
+            BEGIN IF NEW.project_id='${prepared.projectId}'::uuid AND NEW.command_kind='undoLatestAuthorAction' THEN
+              NEW.result_payload := ${invalid}; END IF; RETURN NEW; END $fault$;
+            CREATE TRIGGER damage_retry_compensation BEFORE INSERT ON storyos.domain_receipts
+              FOR EACH ROW EXECUTE FUNCTION storyos.damage_retry_compensation();`);
+          try { await assert.rejects(() => compensate(), (error) => requireStoryOSProtocolError(error).status === 503); }
+          finally { await queryPostgres("DROP TRIGGER damage_retry_compensation ON storyos.domain_receipts; DROP FUNCTION storyos.damage_retry_compensation();"); }
+          assert.deepEqual(await retainedState(prepared.projectId), beforeUndo);
+          assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+            draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft, observed);
+        }
+        const undone = await compensate();
+        assert.equal(undone.effect.kind, "compensated");
+        const compensated = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+        assert.equal(compensated.proposal.candidate_text, INLINE_CANDIDATE);
+        assert.equal(Reflect.get(undone, "proposal_revision_id"), compensated.proposal.revision_id);
+        assert.equal(undone.source_reopen_event?.source_close_event_id, observed.closure_event?.event_id);
+        assert.deepEqual(await compensate(), undone);
+        assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft,
+          { ...source, closure_event: observed.closure_event, reopen_event: undone.source_reopen_event });
+        assert.deepEqual(await sendMixed(started.baseUrl, prepared, request, id(`${ns}56`)), retried);
+      }
     }
   } finally { await stopRealServer(started.server); }
 });

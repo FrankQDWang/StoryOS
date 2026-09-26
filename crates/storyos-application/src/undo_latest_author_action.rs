@@ -60,7 +60,7 @@ pub enum UndoLatestAuthorActionSettlementEffect {
     CompensatedProposal {
         source_sequence: u64,
         author_action_sequence: u64,
-        proposal_revision_id: String,
+        proposal_revision_id: Option<String>,
         author_undo_frontier_sequence: Option<u64>,
     },
     Conflicted {

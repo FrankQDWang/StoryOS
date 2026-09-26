@@ -126,6 +126,18 @@ fn undo_response(
     settlement: storyos_application::UndoLatestAuthorActionSettlement,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
     let project = settlement.response_project;
+    let proposal_revision_id = match &settlement.effect {
+        UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+            proposal_revision_id,
+            ..
+        } => proposal_revision_id.clone(),
+        UndoLatestAuthorActionSettlementEffect::CompensatedDraft { .. }
+        | UndoLatestAuthorActionSettlementEffect::Compensated { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
+        | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
+        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => None,
+    };
     let (mut draft_refs, mut lifecycle_refs) = match &settlement.effect {
         UndoLatestAuthorActionSettlementEffect::CompensatedDraft { event, .. } => {
             (vec![event.draft_id.clone()], vec![event.event_id.clone()])
@@ -316,6 +328,7 @@ fn undo_response(
     let contract_project_scope = contract_scope(&command.project_scope);
     let expected = vec![command.expected_authoritative_revision_id.clone()];
     Ok(Json(contracts::UndoLatestAuthorActionResponse {
+        proposal_revision_id,
         source_reopen_event: settlement.source_reopen_event,
         schema_id: contracts::UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID.to_owned(),
         correlation_id: command.correlation_id.clone(),

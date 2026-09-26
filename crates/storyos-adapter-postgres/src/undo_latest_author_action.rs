@@ -813,7 +813,8 @@ async fn read_undo_settlement(
                         compensation_snapshot.snapshot_id,
                         compensation_snapshot.project_activity_position,
                         idempotency.acknowledgement_format,
-                        idempotency.response_project::text, receipt.result_payload::text
+                        idempotency.response_project::text, receipt.result_payload::text,
+                        source_receipt.result_kind, restored_proposal.revision_id::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -832,6 +833,24 @@ async fn read_undo_settlement(
               LEFT JOIN storyos.authoritative_commits AS commit
                      ON (commit.owner_user_id, commit.project_id, commit.receipt_id) =
                         (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)
+              LEFT JOIN storyos.author_action_entries AS source_action
+                     ON (source_action.owner_user_id, source_action.project_id,
+                         source_action.author_action_sequence) =
+                        (action.owner_user_id, action.project_id, action.compensated_source_sequence)
+                    AND source_action.disposition = 'forward'
+              LEFT JOIN storyos.domain_receipts AS source_receipt
+                     ON (source_receipt.owner_user_id, source_receipt.project_id, source_receipt.receipt_id) =
+                        (source_action.owner_user_id, source_action.project_id, source_action.receipt_id)
+              LEFT JOIN storyos.proposal_revisions AS source_proposal
+                     ON (source_proposal.owner_user_id, source_proposal.project_id, source_proposal.revision_id::text) =
+                        (source_receipt.owner_user_id, source_receipt.project_id, source_receipt.proposal_revision_ids[1])
+              LEFT JOIN storyos.proposal_revisions AS restored_proposal
+                     ON (restored_proposal.owner_user_id, restored_proposal.project_id,
+                         restored_proposal.proposal_id, restored_proposal.parent_revision_id) =
+                        (source_proposal.owner_user_id, source_proposal.project_id,
+                         source_proposal.proposal_id, source_proposal.revision_id)
+                    AND restored_proposal.revision_id::text = receipt.result_payload->>'proposal_revision_id'
+                    AND source_proposal.revision_id::text = receipt.result_payload->>'source_proposal_revision_id'
               LEFT JOIN storyos.authoritative_revisions AS revision
                      ON (revision.owner_user_id, revision.project_id,
                          revision.manuscript_object_id, revision.revision_id) =
@@ -935,7 +954,20 @@ async fn read_undo_settlement(
                     .parse()
                     .map_err(undo_parse_error)?;
                 let authoritative_commit_id = row.get::<_, Option<String>>(8);
-                if let Some(revision_id) = row.get::<_, Option<String>>(9) {
+                if row.get::<_, Option<String>>(18).as_deref() == Some("proposal_revised") {
+                    let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
+                        .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+                    let proposal_revision_id = row.get::<_, Option<String>>(19);
+                    if payload.get("proposal_revision_id").is_some() && proposal_revision_id.is_none() {
+                        return Err(UndoLatestAuthorActionError::BindingConflict);
+                    }
+                    UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
+                        source_sequence,
+                        author_action_sequence,
+                        proposal_revision_id,
+                        author_undo_frontier_sequence: current_frontier,
+                    }
+                } else if let Some(revision_id) = row.get::<_, Option<String>>(9) {
                     let stored = row
                         .get::<_, Option<String>>(10)
                         .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
@@ -983,7 +1015,7 @@ async fn read_undo_settlement(
                     UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
                         source_sequence,
                         author_action_sequence,
-                        proposal_revision_id: String::new(),
+                        proposal_revision_id: None,
                         author_undo_frontier_sequence: current_frontier,
                     }
                 }

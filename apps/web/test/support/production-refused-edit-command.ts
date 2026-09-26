@@ -142,22 +142,31 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.unroute(originalEditRoute);
   let retryRequest: ApplyAuthorEditRequest | undefined, retryResponse: ApplyAuthorEditResponse | undefined;
   let retryKey = "", retryPosts = 0;
-  let releaseRetry!: () => void;
-  const committedRetry = new Promise<void>((resolve) => { releaseRetry = resolve; });
+  let releaseRetry!: () => void, rejectRetry!: (error: unknown) => void;
+  const committedRetry = new Promise<void>((resolve, reject) => { releaseRetry = resolve; rejectRetry = reject; });
   const retryRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
   await page.route(retryRoute, async (route) => {
     retryPosts += 1; retryRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
     retryKey = route.request().headers()["idempotency-key"]!;
-    const settled = await route.fetch(); assert.equal(settled.status(), 200);
-    retryResponse = await settled.json() as ApplyAuthorEditResponse;
-    await route.abort("failed"); releaseRetry();
+    try {
+      const settled = await route.fetch({ timeout: 10000 }); assert.equal(settled.status(), 200, await settled.text());
+      retryResponse = await settled.json() as ApplyAuthorEditResponse;
+      await route.abort("failed"); releaseRetry();
+    } catch (error) { rejectRetry(error); await route.abort("failed"); }
   });
+  try {
   await draft.locator("button[data-draft-retry]").click();
-  await draft.locator('input[name="draft-from-offset"]').fill("9");
-  await draft.locator('input[name="draft-to-offset"]').fill("14");
+  const range = draft.locator('textarea[name="draft-range-text"]');
+  await range.focus(); await range.press("Home");
+  for (let index = 0; index < 9; index += 1) await range.press("ArrowRight");
+  for (let index = 0; index < 5; index += 1) await range.press("Shift+ArrowRight");
   assert.equal(await draft.locator("[data-retry-preview]").textContent(), "mixed");
+  const submittedRetry = page.waitForRequest((request) => request.method() === "POST"
+    && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
   await draft.locator("button[data-draft-retry-submit]").click();
-  await committedRetry;
+  await Promise.all([submittedRetry, committedRetry]).catch(async (error: unknown) => {
+    throw new Error(`Retry did not settle: ${await draft.textContent()}`, { cause: error });
+  });
   assert.ok(retryRequest?.retry_source && retryResponse?.effect.kind === "refused_to_draft");
   assert.notEqual(retryKey, key);
   assert.notEqual(retryRequest.completed_intent_record_id, request.completed_intent_record_id);
@@ -188,4 +197,5 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.unroute(retryRoute);
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
     proposalId: proposal.proposal_id, draft: replacement.draft, restart });
+  } finally { await page.unroute(retryRoute); }
 }

@@ -1,5 +1,5 @@
 import { RefusedEditRetryControls } from "./refused-edit-retry-controls.tsx";
-import { retryRefusedEdit } from "./refused-edit-retry.ts";
+import { retryRefusedEdit, type RetryTargetRead } from "./refused-edit-retry.ts";
 import type { DraftPayloadPosition } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { useEffect, useRef, useState } from "react";
 import { getRefusedEditDraft } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -131,14 +131,14 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
     } finally { if (started === lifetime.current) { setBusy(false); onHoldChange?.(false); } }
   }
   async function retry(group: JournalSubmissionGroup, from: DraftPayloadPosition, to: DraftPayloadPosition,
-    target: string, targetFrom: number, targetTo: number) {
+    target: string, targetFrom: number, targetTo: number, targetRead: RetryTargetRead) {
     if (!workspace || busy) return;
     const started = lifetime.current;
     setBusy(true); onHoldChange?.(true);
     try {
       const draft = await read(group);
       if (started !== lifetime.current) throw new Error("Retry view changed");
-      const projection = await retryRefusedEdit({ workspace, draft, from, to, target, targetFrom, targetTo,
+      const projection = await retryRefusedEdit({ workspace, draft, from, to, target, targetFrom, targetTo, targetRead,
         baseUrl, fetchImpl, isCurrent: () => started === lifetime.current });
       if (started !== lifetime.current) return;
       onProjection?.(projection); onResult?.();
@@ -172,7 +172,8 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       {draft.closure === "open" && observation === undefined && settledWriter
         ? <button type="button" data-draft-discard disabled={busy} onClick={() => { void discard(group); }}>Discard</button> : null}
       {draft.closure === "open" && observation === undefined && settledWriter
-        ? <RefusedEditRetryControls draft={draft} disabled={busy} submit={(from, to, target, start, end) => retry(group, from, to, target, start, end)} /> : null}
+        ? <RefusedEditRetryControls draft={draft} workspace={workspace!} baseUrl={baseUrl} fetchImpl={fetchImpl} disabled={busy}
+          submit={(from, to, target, start, end, read) => retry(group, from, to, target, start, end, read)} /> : null}
       {retryResults[id] ? <p role="status" data-draft-retry-result>{retryResults[id]}</p> : null}
       {draft.replacement_provenance ? <p data-draft-replacement-source>Replacement of Draft {draft.replacement_provenance.source_draft_id}.
         Closure event: {draft.replacement_provenance.closure_event_ref}.</p> : null}

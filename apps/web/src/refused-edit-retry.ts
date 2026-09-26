@@ -24,10 +24,41 @@ export function selectedDraftBlocks(draft: RefusedEditDraftInspect, from: DraftP
   });
 }
 
+export type RetryTargetRead = { text: string; authoritativeHead: string; proposalHeads: string[];
+  proposal?: Awaited<ReturnType<typeof getProposal>>["proposal"] };
+
+export async function readRetryTarget(workspace: EditorWorkspace, draft: RefusedEditDraftInspect, target: string,
+  baseUrl: string, fetchImpl: typeof fetch): Promise<RetryTargetRead> {
+  const session = await getEditorSession({ baseUrl, fetchImpl, projectId: workspace.partition.project_scope.project_id,
+    editorSessionId: workspace.partition.editor_session_id });
+  if (canonical(session.project_scope) !== canonical(workspace.partition.project_scope)
+    || canonical(session.editor_session) !== canonical(workspace.session.editor_session)
+    || session.base_snapshot.chapter_id !== draft.payload.chapter_id || session.writer.kind !== "current_writer"
+    || session.writer.writer_generation !== workspace.partition.writer_generation) throw new Error("Retry target unavailable");
+  const result: RetryTargetRead = { text: "", authoritativeHead: session.base_snapshot.authoritative_head_revision_id,
+    proposalHeads: session.base_snapshot.proposal_head_revision_ids };
+  if (target === "original") return result;
+  const source = draft.payload.author_edit_units[0]?.selection_snapshot?.ordered_selection?.sources[Number(target)];
+  if (source?.owner.kind === "proposal") {
+    const read = await getProposal({ baseUrl, fetchImpl, projectId: session.project_scope.project_id, proposalId: source.owner.proposal_id });
+    const proposal = read.proposal;
+    if (canonical(read.project_scope) !== canonical(session.project_scope) || proposal.proposal_id !== source.owner.proposal_id
+      || proposal.chapter_id !== draft.payload.chapter_id || proposal.closure !== "open"
+      || proposal.manuscript_block_id !== source.owner.manuscript_block_id || !result.proposalHeads.includes(proposal.revision_id)) {
+      throw new Error("Retry target unavailable");
+    }
+    return { ...result, text: proposal.candidate_text, proposal };
+  }
+  const block = source?.owner.kind === "manuscript" ? session.base_snapshot.materialized_revision.blocks
+    .find((block) => block.manuscript_block_id === source.owner.manuscript_block_id) : undefined;
+  if (!block) throw new Error("Retry target unavailable");
+  return { ...result, text: block.text };
+}
+
 export async function retryRefusedEdit({ workspace, draft, from, to, target, targetFrom, targetTo,
-  baseUrl, fetchImpl, isCurrent }: { workspace: EditorWorkspace; draft: RefusedEditDraftInspect;
+  baseUrl, fetchImpl, isCurrent, targetRead }: { workspace: EditorWorkspace; draft: RefusedEditDraftInspect;
   from: DraftPayloadPosition; to: DraftPayloadPosition; target: string; targetFrom: number; targetTo: number;
-  baseUrl: string; fetchImpl: typeof fetch; isCurrent: () => boolean }) {
+  baseUrl: string; fetchImpl: typeof fetch; isCurrent: () => boolean; targetRead: RetryTargetRead }) {
   const pending = await rebuildPendingProjection(workspace);
   const session = await getEditorSession({ baseUrl, fetchImpl, projectId: workspace.partition.project_scope.project_id,
     editorSessionId: workspace.partition.editor_session_id });
@@ -37,7 +68,9 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
     || canonical(session.project_scope) !== canonical(workspace.partition.project_scope)
     || canonical(session.editor_session) !== canonical(workspace.session.editor_session)
     || session.base_snapshot.chapter_id !== draft.payload.chapter_id || draft.closure !== "open"
-    || draft.retention_state !== "retained") throw new Error("Draft retry requires the current writer and source");
+    || draft.retention_state !== "retained"
+    || session.base_snapshot.authoritative_head_revision_id !== targetRead.authoritativeHead
+    || canonical(session.base_snapshot.proposal_head_revision_ids) !== canonical(targetRead.proposalHeads)) throw new Error("Draft retry requires the current writer and source");
   const replacement = selectedDraftBlocks(draft, from, to);
   const digest = await workspace.cryptoImpl.subtle.digest("SHA-256", new TextEncoder().encode(canonical(replacement)));
   const retrySource: DraftRetry = { kind: "draft_retry", source_draft_kind: "refused_edit", source_draft_id: draft.draft_id,
@@ -51,23 +84,14 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
     || !source || !Number.isInteger(targetFrom) || !Number.isInteger(targetTo) || targetFrom < 0 || targetTo < targetFrom)) {
     throw new Error("Select a supported target and complete paragraph range");
   }
-  let candidate: Awaited<ReturnType<typeof getProposal>> | undefined;
-  if (source?.owner.kind === "proposal") {
-    candidate = await getProposal({ baseUrl, fetchImpl, projectId: session.project_scope.project_id,
-      proposalId: source.owner.proposal_id });
-    if (canonical(candidate.project_scope) !== canonical(session.project_scope) || candidate.proposal.closure !== "open"
-      || candidate.proposal.proposal_id !== source.owner.proposal_id
-      || candidate.proposal.operation_id !== source.owner.operation_id
-      || candidate.proposal.manuscript_block_id !== source.owner.manuscript_block_id
-      || candidate.proposal.revision_id !== source.owner.revision_id
-      || candidate.proposal.chapter_id !== draft.payload.chapter_id
-      || !session.base_snapshot.proposal_head_revision_ids.includes(candidate.proposal.revision_id)) throw new Error("Retry target changed");
-  }
+  const currentTarget = await readRetryTarget(workspace, draft, target, baseUrl, fetchImpl);
+  if (canonical(currentTarget) !== canonical(targetRead)) throw new Error("Retry target changed");
+  const candidate = targetRead.proposal;
   if (!isCurrent()) throw new Error("Retry view changed");
   await installAuthoritativeBaseSnapshot(workspace, session.base_snapshot);
   workspace.session = session;
   if (candidate) {
-    const proposal = candidate.proposal, text = replacement[0]!.text;
+    const proposal = candidate, text = replacement[0]!.text;
     await persistCandidateSelection(workspace, { kind: "candidate_selection", retrySource,
       target: { proposal_id: proposal.proposal_id, operation_id: proposal.operation_id,
         revision_id: proposal.revision_id, manuscript_block_id: proposal.manuscript_block_id },

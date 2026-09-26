@@ -442,7 +442,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json",
       "schema_id": "storyos.command.undo-latest-author-action.response.v1",
-      "sha256": "sha256:a7715cec2e9912c5ba8aa86059a56290a803c3dd247b60b45a284ebe12b6f29d"
+      "sha256": "sha256:78592ba431d60139fe2060c55498f51b2f14b2e85b5e6344b6c92ed0775d2d33"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",

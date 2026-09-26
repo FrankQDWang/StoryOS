@@ -2,6 +2,23 @@ ALTER TABLE storyos.domain_receipts ADD COLUMN source_draft_disposition jsonb;
 ALTER TABLE storyos.domain_receipts ADD CONSTRAINT draft_retry_disposition_shape CHECK (
   source_draft_disposition IS NULL OR (command_kind='applyAuthorEdit' AND
     source_draft_disposition->>'kind' IN ('unchanged','closed_superseded')) IS TRUE);
+DO $migration$
+DECLARE prior_check text;
+BEGIN
+  SELECT pg_get_constraintdef(oid) INTO STRICT prior_check FROM pg_constraint
+    WHERE conrelid='storyos.domain_receipts'::regclass AND conname='domain_receipts_result_shape' AND contype='c';
+  IF prior_check NOT LIKE 'CHECK (%)' THEN RAISE EXCEPTION 'Receipt result shape is unavailable'; END IF;
+  ALTER TABLE storyos.domain_receipts DROP CONSTRAINT domain_receipts_result_shape;
+  EXECUTE format($sql$ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_result_shape CHECK ((%s) OR ((
+    command_kind='undoLatestAuthorAction' AND result_kind='authoritative_applied'
+    AND jsonb_typeof(result_payload)='object' AND result_payload ?& ARRAY['proposal_revision_id','source_proposal_revision_id']
+    AND result_payload - ARRAY['proposal_revision_id','source_proposal_revision_id']='{}'::jsonb
+    AND result_payload->>'proposal_revision_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    AND result_payload->>'source_proposal_revision_id' ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$'
+    AND authoritative_revision_ids='{}' AND authoritative_commit_ids='{}' AND proposal_revision_ids='{}'
+    AND prior_heads=expected_heads AND resulting_heads=expected_heads
+  ) IS TRUE))$sql$,substring(prior_check FROM 8 FOR length(prior_check)-8));
+END $migration$;
 ALTER TABLE storyos.draft_close_events ADD COLUMN close_reason text NOT NULL DEFAULT 'abandoned';
 ALTER TABLE storyos.draft_close_events ALTER COLUMN author_action_sequence DROP NOT NULL;
 ALTER TABLE storyos.draft_close_events DROP CONSTRAINT draft_close_events_receipt_result_kind_check;
@@ -251,6 +268,25 @@ BEGIN
   IF TG_TABLE_NAME='domain_receipts' THEN receipt:=NEW;
   ELSE SELECT * INTO STRICT receipt FROM storyos.domain_receipts AS r WHERE
     (r.owner_user_id,r.project_id,r.receipt_id)=(NEW.owner_user_id,NEW.project_id,NEW.receipt_id); END IF;
+  IF receipt.command_kind='undoLatestAuthorAction' AND receipt.result_kind='authoritative_applied'
+    AND EXISTS(SELECT 1 FROM storyos.author_action_entries AS a JOIN storyos.author_action_entries AS s
+      ON (s.owner_user_id,s.project_id,s.author_action_sequence)=(a.owner_user_id,a.project_id,a.compensated_source_sequence)
+      JOIN storyos.domain_receipts AS r ON (r.owner_user_id,r.project_id,r.receipt_id)=(s.owner_user_id,s.project_id,s.receipt_id)
+      WHERE (a.owner_user_id,a.project_id,a.receipt_id)=(receipt.owner_user_id,receipt.project_id,receipt.receipt_id) AND r.result_kind='proposal_revised') THEN
+    IF NOT EXISTS(SELECT 1 FROM storyos.author_action_entries AS a JOIN storyos.author_action_entries AS s
+      ON (s.owner_user_id,s.project_id,s.author_action_sequence)=(a.owner_user_id,a.project_id,a.compensated_source_sequence)
+      JOIN storyos.domain_receipts AS r ON (r.owner_user_id,r.project_id,r.receipt_id)=(s.owner_user_id,s.project_id,s.receipt_id)
+      JOIN storyos.proposal_revisions AS parent ON (parent.owner_user_id,parent.project_id,parent.revision_id::text)=
+        (r.owner_user_id,r.project_id,r.proposal_revision_ids[1])
+      JOIN storyos.proposal_revisions AS restored ON (restored.owner_user_id,restored.project_id,restored.proposal_id,restored.parent_revision_id)=
+        (parent.owner_user_id,parent.project_id,parent.proposal_id,parent.revision_id)
+      WHERE (a.owner_user_id,a.project_id,a.receipt_id)=(receipt.owner_user_id,receipt.project_id,receipt.receipt_id)
+        AND a.disposition='compensation' AND s.disposition='forward' AND r.command_kind='applyAuthorEdit' AND r.result_kind='proposal_revised'
+        AND receipt.result_payload->>'proposal_revision_id'=restored.revision_id::text
+        AND receipt.result_payload->>'source_proposal_revision_id'=parent.revision_id::text)
+    THEN RAISE EXCEPTION 'Incomplete Proposal compensation identity' USING ERRCODE='23514'; END IF;
+    RETURN NULL;
+  END IF;
   IF receipt.command_kind<>'applyAuthorEdit' THEN RETURN NULL; END IF;
   SELECT * INTO STRICT admission FROM storyos.author_command_admissions AS a WHERE
     (a.owner_user_id,a.project_id,a.author_command_admission_id)=(receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id);
