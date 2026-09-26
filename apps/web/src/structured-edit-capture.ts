@@ -18,10 +18,12 @@ export function captureStructuredSelection(state: EditorState, transaction: Tran
   const sources: SelectedEditSource[] = [];
   const expectedHeads = new Set<string>();
   let valid = true;
+  let blockKind: ReplacementBlock["block_kind"] = "paragraph";
   state.doc.forEach((node, position) => {
     if (node.type.name === "blockProposal") {
       for (const head of node.attrs.expectedHeads as string[]) expectedHeads.add(head);
     }
+    if (node.type.name !== "blockProposal") blockKind = node.type.name === "heading" ? "heading" : "paragraph";
     const start = position + 1;
     const end = start + node.textContent.length;
     if (step.from > end || step.to < start
@@ -36,7 +38,7 @@ export function captureStructuredSelection(state: EditorState, transaction: Tran
         : { kind: "manuscript", manuscript_block_id: node.attrs.id as string },
       coordinate_profile: candidate ? "storyos.editor.utf16-code-unit.v1" : "prosemirror-token-utf16.v1",
       from: Math.max(0, step.from - start), to: Math.min(node.textContent.length, step.to - start),
-      block_kind: node.type.name === "heading" ? "heading" : "paragraph", source_text: node.textContent,
+      block_kind: blockKind, source_text: node.textContent,
     });
   });
   const owners = new Set(sources.map((source) => source.owner.kind === "manuscript"
