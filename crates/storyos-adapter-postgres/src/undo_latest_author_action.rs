@@ -677,13 +677,15 @@ pub(super) async fn insert_undo_receipt(
                 command_id, command_kind, command_digest, idempotency_key, producer_cause,
                 expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
                 proposal_revision_ids, authoritative_commit_ids, draft_artifact_refs,
-                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload)
+                artifact_lifecycle_event_refs, condition_refs, result_kind, result_payload, created_at)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, 'undoLatestAuthorAction', $6, $7::text::uuid,
                      'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
                      ARRAY[$10::text::uuid], $11::text[]::uuid[], '{}'::uuid[],
                      $12::text[]::uuid[], $15::text[], $16::text[], '{}'::text[],
-                     $13, $14::text::jsonb)
+                     $13, $14::text::jsonb,
+                     CASE WHEN $13='authoritative_applied' AND cardinality($15::text[])>0
+                       THEN transaction_timestamp() ELSE clock_timestamp() END)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
