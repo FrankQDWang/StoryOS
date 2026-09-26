@@ -44,6 +44,7 @@ pub(super) const CLOSE_EDITOR_FLOW_DRAFT: QueryOperation = QueryOperation {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct CloseEditorFlowDraftInput {
+    pub draft_id: String,
     pub draft_kind: String,
     pub source_current_draft_revision_id: String,
     pub source_draft_payload_digest: String,

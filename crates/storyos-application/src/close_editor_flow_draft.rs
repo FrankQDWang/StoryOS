@@ -64,6 +64,7 @@ pub async fn close_editor_flow_draft(
         || binding.method != "POST"
         || binding.canonical_command_digest
             != format!("sha256:storyos.command.closeEditorFlowDraft.jcs.v1:{digest}")
+        || command.input.draft_id != command.draft_id
         || command.input.draft_kind != "refused_edit"
         || command.input.expected_closure != "open"
         || command.input.close_reason != "abandoned"

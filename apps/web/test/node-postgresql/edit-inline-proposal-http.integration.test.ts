@@ -869,7 +869,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const beforeClose = await retainedState(prepared.projectId);
     const closeRequest: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
       close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1"),
-        editor_session_id: writer.session.editor_session.editor_session_id, draft_kind: "refused_edit",
+        editor_session_id: writer.session.editor_session.editor_session_id, draft_kind: "refused_edit", draft_id: closed.draft.draft_id,
         source_current_draft_revision_id: closed.draft.draft_revision_id,
         source_draft_payload_digest: closed.draft.payload_digest, expected_closure: "open", close_reason: "abandoned" } };
     const key = id("e0db2");
@@ -932,6 +932,10 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       draftId: closed.draft.draft_id, fetchImpl: prepared.fetchImpl })).draft, closedDraft);
     const afterClose = await retainedState(prepared.projectId);
+    await assert.rejects(() => sendClose({ ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, draft_id: archived.draft.draft_id } }),
+      (error) => requireStoryOSProtocolError(error).status === 400);
+    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     for (const table of ["authoritative_heads", "authoritative_revisions", "authoritative_commits", "project_activity_events",
       "proposals", "proposal_heads", "proposal_revisions", "proposal_operations", "draft_artifact_revisions", "draft_lifecycle_events"])
       assert.deepEqual(afterClose[table], beforeClose[table]);
@@ -1026,7 +1030,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       UPDATE storyos.draft_artifacts SET retention_state='tombstoned'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${tombstoned.draft.draft_id}'::uuid;`);
     const unavailable = await settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
-      ...closeRequest.close_editor_flow_draft_input, source_current_draft_revision_id: tombstoned.draft.draft_revision_id,
+      ...closeRequest.close_editor_flow_draft_input, draft_id: tombstoned.draft.draft_id, source_current_draft_revision_id: tombstoned.draft.draft_revision_id,
       source_draft_payload_digest: tombstoned.draft.payload_digest } }, "e0db8", tombstoned.draft.draft_id);
     assert.deepEqual(unavailable.effect, { kind: "refused", reason: "source_unavailable", current_closure: "open" });
     const read = (draftId: string, projectId = prepared.projectId) => getRefusedEditDraft({ baseUrl: started.baseUrl,

@@ -19,7 +19,7 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:b7fafce54c025b8b38ffd560a88d9f66bec5ff5419c87457c7a4127f118b1a8a",
+    "migration_chain_digest": "sha256:d25651ab6bffa35031e01e3eecaab36755fa4ab479603338331ad0f424079836",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:b1dcaa0d501a28584a6019bdf05f523dd38fdb008e131215e7bf35743b5a3df3",
+      "manifest_sha256": "sha256:70973aa6b95e582835f23cf809ee809199f73a55307f931492ba59fea0aab78a",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -490,7 +490,7 @@
         },
         {
           "path": "crates/storyos-adapter-postgres/migrations/0064_close_refused_edit_draft.sql",
-          "lf_sha256": "sha256:88e3581dfeb0f1febbd5d3d0e29fa54e75548bb6362ef7efee8f3db09f422bbf"
+          "lf_sha256": "sha256:515848b973ce1f37c6a21076e1ea769f313af8999b3d4fed891aeeee696ade95"
         }
       ]
     },

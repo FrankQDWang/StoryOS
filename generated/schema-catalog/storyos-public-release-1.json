@@ -51,7 +51,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/close-editor-flow-draft-request.schema.json",
       "schema_id": "storyos.command.close-editor-flow-draft.request.v1",
-      "sha256": "sha256:9c4b85ea534d62fbd2830abac50fbee7b2f7ef5632a1ebb693b16ca372755638"
+      "sha256": "sha256:f17be4172165b5063abc7b11eab568f6579402eb83030a9ddee649f7ca3c67c9"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/close-editor-flow-draft-response.schema.json",

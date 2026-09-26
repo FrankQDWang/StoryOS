@@ -28,6 +28,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
     schema["properties"]["command_schema"]["const"] =
         json!(CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID);
     let input = &mut schema["$defs"]["CloseEditorFlowDraftInput"]["properties"];
+    input["draft_id"]["format"] = json!("uuid");
     input["source_current_draft_revision_id"]["format"] = json!("uuid");
     input["source_draft_payload_digest"]["pattern"] = json!("^[0-9a-f]{64}$");
     for (field, value) in [
