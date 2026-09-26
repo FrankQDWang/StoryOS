@@ -51,12 +51,12 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/close-editor-flow-draft-request.schema.json",
       "schema_id": "storyos.command.close-editor-flow-draft.request.v1",
-      "sha256": "sha256:f17be4172165b5063abc7b11eab568f6579402eb83030a9ddee649f7ca3c67c9"
+      "sha256": "sha256:d7962ef78b055a78f00007c9f1aaad056b41b0db79d005ab8334722ff958bd46"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/close-editor-flow-draft-response.schema.json",
       "schema_id": "storyos.command.close-editor-flow-draft.response.v1",
-      "sha256": "sha256:3905f9113f846f168beefa08a3066f001707a3018b6dda4ab447698a96ce8a2c"
+      "sha256": "sha256:a0cca1014888ce6115a5d8cbbda2445a8d6b454a71a2205485f2f241edf78c15"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-closed.schema.json",

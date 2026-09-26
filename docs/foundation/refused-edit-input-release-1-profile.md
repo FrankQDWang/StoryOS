@@ -101,10 +101,10 @@ Draft recovery controls.
 
 ## Public Discard service
 
-Issue 825 adds only the abandoned Discard of one exact open retained Refused
+[S3-12b: Discard a Refused Edit Draft Through the Public Core Path](https://github.com/FrankQDWang/StoryOS/issues/825) adds only the abandoned Discard of one exact open retained Refused
 Edit Draft. The command uses the existing 1 MiB complete JSON body ceiling.
 It carries finite identifiers, the exact Revision and SHA-256 digest, and
-accepted Editor Session, client and security identities. It carries no source
+accepted Editor Session, exact writer generation, client and security identities. It carries no source
 text. The store reads one current Revision only when the Draft is retained.
 The existing Draft payload bound limits that integrity check. An unavailable
 source returns a settled refusal without loading or returning its payload.
@@ -128,6 +128,6 @@ still withhold source bytes; close metadata never revives them. The existing
 physical isolated restore retains the same closed projection and identities.
 No new capacity, latency or retention-duration claim is made.
 
-Until Issue 831 registers the exact Root Undo handler, this Forward action
-is a non-skippable Barrier. Issue 832 owns the production controls and explicit
+Until [S3-12b2: Undo a Refused Edit Draft Discard](https://github.com/FrankQDWang/StoryOS/issues/831) registers the exact Root Undo handler, this Forward action
+is a non-skippable Barrier. [S3-12b1-web: Discard a Refused Edit Draft in the Production Editor](https://github.com/FrankQDWang/StoryOS/issues/832) owns the production controls and explicit
 local Discard record. This service exposes neither control nor compensation.

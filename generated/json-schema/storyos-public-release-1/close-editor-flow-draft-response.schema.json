@@ -398,6 +398,6 @@
     "receipt",
     "effect"
   ],
-  "title": "StoryOS Reject Proposal Operations Response",
+  "title": "StoryOS Close Editor Flow Draft Response",
   "type": "object"
 }

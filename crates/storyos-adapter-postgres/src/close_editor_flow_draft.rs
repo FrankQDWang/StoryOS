@@ -158,11 +158,12 @@ async fn insert_admission(
         (session.owner_user_id,session.project_id,$8::text::uuid) AND challenge.command_kind='closeEditorFlowDraft'
         WHERE session.owner_user_id=$1::text::uuid AND session.project_id=$2::text::uuid AND session.editor_session_id=$11::text::uuid
         AND session.client_session_binding_ref=$12 AND session.client_session_generation=$13::text::numeric
-        AND session.client_contract_revision=$14 AND session.security_policy_revision=$15 AND challenge.consumed_at IS NOT NULL",
+        AND session.client_contract_revision=$14 AND session.security_policy_revision=$15 AND challenge.consumed_at IS NOT NULL
+        AND writer.writer_generation=$16::text::numeric",
         &[&command.project_scope.owner_user_id.as_ref(),&command.project_scope.project_id.as_ref(),&command.ids.author_command_admission_id,&command.ids.command_id,
           &binding.route_template,&binding.command_schema,&binding.canonical_command_digest,&binding.idempotency_key,&input.correlation_id,
           &command.canonical_command_bytes,&input.editor_session_id,&client_binding.binding_ref,&client_binding.session_generation.to_string(),
-          &client_binding.client_contract_revision,&client_binding.security_policy_revision]).await.map_err(database_error)?;
+          &client_binding.client_contract_revision,&client_binding.security_policy_revision,&input.writer_generation]).await.map_err(database_error)?;
     if count != 1 {
         return Err(DraftCloseError::InvalidWriter);
     }

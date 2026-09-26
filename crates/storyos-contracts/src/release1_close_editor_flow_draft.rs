@@ -51,6 +51,7 @@ pub struct CloseEditorFlowDraftInput {
     pub expected_closure: String,
     pub close_reason: String,
     pub editor_session_id: String,
+    pub writer_generation: String,
     pub client_contract_revision: String,
     pub security_policy_revision: String,
     pub correlation_id: String,

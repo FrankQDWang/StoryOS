@@ -35,6 +35,10 @@ pub(super) async fn close_editor_flow_draft(
     if request.command_schema != contracts::CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID
         || input.client_contract_revision != session.client_contract_revision
         || input.security_policy_revision != session.security_policy_revision
+        || !input
+            .writer_generation
+            .parse::<u64>()
+            .is_ok_and(|generation| generation.to_string() == input.writer_generation)
         || input.draft_id != draft_id
         || input.draft_kind != "refused_edit"
         || input.expected_closure != "open"

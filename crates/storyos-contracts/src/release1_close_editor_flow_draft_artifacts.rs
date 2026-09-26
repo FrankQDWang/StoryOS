@@ -23,7 +23,7 @@ pub(super) const FIXTURE_PATHS: [&str; 3] = [
 pub(super) fn request_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CloseEditorFlowDraftRequest>(
         CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID,
-        "StoryOS Reject Proposal Operations Request",
+        "StoryOS Close Editor Flow Draft Request",
     );
     schema["properties"]["command_schema"]["const"] =
         json!(CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID);
@@ -39,6 +39,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
         input[field]["const"] = json!(value);
     }
     input["editor_session_id"]["format"] = json!("uuid");
+    input["writer_generation"] = super::release1_author_edit_artifacts::canonical_u64_wire_schema();
     input["correlation_id"]["format"] = json!("uuid");
     json_bytes(&schema)
 }
@@ -46,7 +47,7 @@ pub(super) fn request_schema_bytes() -> Vec<u8> {
 pub(super) fn response_schema_bytes() -> Vec<u8> {
     let mut schema = schema_value::<CloseEditorFlowDraftResponse>(
         CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
-        "StoryOS Reject Proposal Operations Response",
+        "StoryOS Close Editor Flow Draft Response",
     );
     schema["properties"]["schema_id"]["const"] = json!(CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID);
     schema["properties"]["correlation_id"]["format"] = json!("uuid");

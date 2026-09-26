@@ -1,12 +1,12 @@
 ALTER TABLE storyos.domain_receipts DROP CONSTRAINT domain_receipts_result_kind_check;
-ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_result_kind_check CHECK (result_kind IN ('draft_closure_changed', 
+ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_result_kind_check CHECK (result_kind IN ('draft_closure_changed',
     'authoritative_applied', 'proposal_revised', 'proposal_operations_resolved',
     'proposal_generation_completed', 'proposal_generation_started',
     'no_effect', 'conflicted', 'refused', 'invalid'
   , 'refused_to_draft'));
 
 ALTER TABLE storyos.domain_receipts DROP CONSTRAINT domain_receipts_command_kind_check;
-ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_command_kind_check CHECK (command_kind IN ('closeEditorFlowDraft', 
+ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_command_kind_check CHECK (command_kind IN ('closeEditorFlowDraft',
     'applyAuthorEdit', 'takeOverProjectWriter', 'createProject', 'updateProject',
     'archiveProject', 'createVolume', 'createChapter', 'updateVolume', 'updateChapter',
     'setCurrentChapter', 'undoLatestAuthorAction', 'deleteChapter', 'deleteVolume',
@@ -18,7 +18,7 @@ ALTER TABLE storyos.domain_receipts ADD CONSTRAINT domain_receipts_command_kind_
   ));
 
 ALTER TABLE storyos.author_action_entries DROP CONSTRAINT author_action_entries_receipt_result_kind_check;
-ALTER TABLE storyos.author_action_entries ADD CONSTRAINT author_action_entries_receipt_result_kind_check CHECK (receipt_result_kind IN ('draft_closure_changed', 
+ALTER TABLE storyos.author_action_entries ADD CONSTRAINT author_action_entries_receipt_result_kind_check CHECK (receipt_result_kind IN ('draft_closure_changed',
     'authoritative_applied', 'proposal_revised', 'proposal_operations_resolved',
     'proposal_generation_completed', 'proposal_generation_started'
   ));
@@ -921,6 +921,8 @@ ALTER TABLE storyos.author_command_admissions ADD CONSTRAINT author_command_admi
   ) IS TRUE
 ) OR ((
 command_kind='closeEditorFlowDraft' AND action_class='explicit_editor_command' AND editor_session_id IS NOT NULL AND writer_generation IS NOT NULL
+AND command_payload->'close_editor_flow_draft_input'->>'writer_generation'=writer_generation::text
+AND command_payload->'close_editor_flow_draft_input'->>'editor_session_id'=editor_session_id::text
 AND chapter_object_id IS NULL AND expected_authoritative_revision_id IS NULL AND expected_proposal_head_revision_ids='{}' AND target_refs='{}'
 AND observed_ownership_partition IS NULL AND undo_group_id IS NULL AND completed_intent_record_id IS NULL AND local_intent_sequence IS NULL
 AND challenge_consumed_at IS NOT NULL AND challenge_expires_at IS NOT NULL

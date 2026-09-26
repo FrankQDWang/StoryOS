@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { test } from "vitest";
 import {
   closeEditorFlowDraft, digestCloseEditorFlowDraft, undoLatestAuthorAction, digestUndoLatestAuthorAction,
+  takeOverProjectWriter, digestTakeOverProjectWriter,
   acceptProposal, applyAuthorEdit, archiveProject, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestRejectProposalOperations,
@@ -396,7 +397,7 @@ test("a protected mixed replacement retains complete content after response loss
     const events = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json")));
     const rowScope = { owner_user_id: USER_A, project_id: prepared.projectId };
     assert.deepEqual(drafts, [{ ...rowScope, draft_id: queried.draft.draft_id, draft_kind: "refused_edit",
-      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained" }]);
+      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained", close_event_id: null }]);
     const revisionCreatedAt = revisions[0].created_at;
     assert.equal(new Date(revisionCreatedAt).toISOString(), queried.draft.creation.created_at);
     assert.deepEqual(revisions, [{ ...rowScope, draft_id: queried.draft.draft_id,
@@ -866,12 +867,48 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     }
     const [closed, archived, tombstoned] = drafts;
     if (!closed || !archived || !tombstoned) throw new Error("expected three retained Drafts");
-    const beforeClose = await retainedState(prepared.projectId);
     const closeRequest: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
       close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0db1"),
-        editor_session_id: writer.session.editor_session.editor_session_id, draft_kind: "refused_edit", draft_id: closed.draft.draft_id,
+        editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration,
+        draft_kind: "refused_edit", draft_id: closed.draft.draft_id,
         source_current_draft_revision_id: closed.draft.draft_revision_id,
         source_draft_payload_digest: closed.draft.payload_digest, expected_closure: "open", close_reason: "abandoned" } };
+    const secondaryRequest: CreateEditorSessionRequest = { command_schema: "storyos.command.create-editor-session.request.v1",
+      ...BINDING, correlation_id: id("e0db91") };
+    const secondary = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/editor-sessions", secondaryRequest.command_schema,
+      await digestCreateEditorSession(secondaryRequest), id("e0db92"), (antiForgery) => createEditorSession({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, request: secondaryRequest,
+        idempotencyKey: id("e0db92"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session", observed_writer_generation: writer.writerGeneration });
+    let afterTakeovers: Awaited<ReturnType<typeof retainedState>> | undefined;
+    await assert.rejects(async () => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", closeRequest.command_schema,
+      await digestCloseEditorFlowDraft(closeRequest), id("e0db94"), async (antiForgery) => {
+        for (const [index, sessionId] of [secondary.editor_session.editor_session_id,
+          writer.session.editor_session.editor_session_id].entries()) {
+          const takeoverRequest = { command_schema: "storyos.command.take-over-project-writer.request.v1", ...BINDING,
+            correlation_id: id(`e0db95${index}`), editor_session_id: sessionId,
+            observed_writer_generation: writer.writerGeneration, editor_contract_revision: "storyos.editor-contract.release-1.v3" };
+          const takeoverKey = id(`e0db96${index}`);
+          const takeover = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+            "/api/v1/projects/{project_id}/editor-sessions/{editor_session_id}/takeovers", takeoverRequest.command_schema,
+            await digestTakeOverProjectWriter(takeoverRequest), takeoverKey, (nonce) => takeOverProjectWriter({
+              baseUrl: started.baseUrl, projectId: prepared.projectId, editorSessionId: sessionId, request: takeoverRequest,
+              idempotencyKey: takeoverKey, antiForgery: nonce, fetchImpl: prepared.fetchImpl }));
+          if (takeover.result.kind !== "takeover_applied") throw new Error("expected writer generation advance");
+          writer.writerGeneration = takeover.result.resulting_writer_generation;
+        }
+        afterTakeovers = await retainedState(prepared.projectId);
+        return closeEditorFlowDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          draftId: closed.draft.draft_id, request: closeRequest, idempotencyKey: id("e0db94"), antiForgery,
+          fetchImpl: prepared.fetchImpl });
+      }), (error) => requireStoryOSProtocolError(error).status === 409);
+    assert.deepEqual(await retainedState(prepared.projectId), afterTakeovers);
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.author_command_admissions
+      WHERE project_id='${prepared.projectId}'::uuid AND idempotency_key='${id("e0db94")}'::uuid`), "0");
+    closeRequest.close_editor_flow_draft_input.writer_generation = writer.writerGeneration;
+    const beforeClose = await retainedState(prepared.projectId);
     const key = id("e0db2");
     const digest = await digestCloseEditorFlowDraft(closeRequest);
     let nonce = "";
@@ -960,14 +997,6 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       assert.equal(refused.receipt.author_action_sequence, null);
       assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     }
-    const secondaryRequest: CreateEditorSessionRequest = { command_schema: "storyos.command.create-editor-session.request.v1",
-      ...BINDING, correlation_id: id("e0db91") };
-    const secondary = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
-      "/api/v1/projects/{project_id}/editor-sessions", secondaryRequest.command_schema,
-      await digestCreateEditorSession(secondaryRequest), id("e0db92"), (antiForgery) => createEditorSession({
-        baseUrl: started.baseUrl, projectId: prepared.projectId, request: secondaryRequest,
-        idempotencyKey: id("e0db92"), antiForgery, fetchImpl: prepared.fetchImpl }));
-    assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session", observed_writer_generation: writer.writerGeneration });
     await assert.rejects(() => settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
       ...closeRequest.close_editor_flow_draft_input, editor_session_id: secondary.editor_session.editor_session_id } }, "e0db93"),
       (error) => requireStoryOSProtocolError(error).status === 409);
