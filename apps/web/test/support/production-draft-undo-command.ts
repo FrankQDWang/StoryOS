@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { expect } from "playwright/test";
 import type { Page } from "playwright";
 import type { CloseEditorFlowDraftResponse, RefusedEditDraftInspect, UndoLatestAuthorActionResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -29,6 +30,9 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
   });
   await page.locator("[data-manuscript-editor]").focus();
   await page.keyboard.press("ControlOrMeta+Z");
+  await expect.poll(() => posts, { timeout: 5000 }).toBe(1).catch(async (cause: unknown) => {
+    throw new Error(`Root Undo did not submit: ${await page.locator("body").innerText()}`, { cause });
+  });
   await committed;
   assert.ok(frozen, "Original Undo identity must be durable before the first POST");
   assert.ok(response?.effect.kind === "draft_compensated");
