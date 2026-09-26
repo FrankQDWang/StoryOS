@@ -79,6 +79,8 @@ pub struct RefusedEditDraftInspect {
     pub creation: RefusedEditDraftCreated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub closure_event: Option<crate::EditorFlowDraftClosed>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reopen_event: Option<crate::EditorFlowDraftReopened>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]

@@ -59,7 +59,8 @@ it("persists the complete immutable explicit Discard before Admission and only r
         command_digest: original!.record.group.frozen_request_digest }, author_action_sequence: "1",
       created_at: "2026-09-26T12:00:00.000Z" };
     expect(await reconcileDiscard(test.workspace, { ...draft, closure: "closed", closure_event: {
-      ...event, source: { ...event.source, idempotency_key: id } } })).toMatchObject({ kind: "unresolved" });
+      ...event, source: { ...event.source, idempotency_key: id } } })).toBeUndefined();
+    expect(await readDiscardJournal(test.workspace)).toEqual([original]);
     expect(await reconcileDiscard(test.workspace, draft)).toMatchObject({ kind: "unresolved" });
     const postsBeforeReload = routes.length;
     expect(await reconcileDiscard(test.workspace, { ...draft, closure: "closed", closure_event: event }))

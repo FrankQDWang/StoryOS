@@ -6,7 +6,7 @@ import { getExportOperation, getRefusedEditDraft, StoryOSProtocolError } from ".
 
 const [container, baseUrl, expectedPath] = process.argv.slice(2);
 const expectations = readFileSync(expectedPath, "utf8").trim().split("\n").map(JSON.parse);
-assert.equal(expectations.length, 3);
+assert.equal(expectations.length, 4);
 const fetchImpl = (input, init) => {
   const headers = new Headers(init?.headers);
   headers.set("origin", baseUrl);
@@ -20,7 +20,7 @@ for (const expected of expectations) {
   const tableEntries = Object.keys(expected.state).filter((table) => table !== "domain_receipts");
   const allowed = new Set(["projects", "authoritative_heads", "authoritative_revisions", "authoritative_commits",
     "author_action_entries", "project_activity_events", "scope_counters", "proposals", "proposal_heads",
-    "proposal_revisions", "proposal_operations", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"]);
+    "proposal_revisions", "proposal_operations", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "draft_reopen_receipts"]);
   for (const table of tableEntries) assert.ok(allowed.has(table));
   const state = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
     "-U", "postgres", "-Atc", `SELECT jsonb_build_object(${tableEntries.map((table) =>
@@ -29,7 +29,7 @@ for (const expected of expectations) {
         AND record.project_id='${expected.projectId}'::uuid)`).join(",")},
       'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
         FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${expected.ownerUserId}'::uuid
-        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft') AND cardinality(receipt.draft_artifact_refs)>0))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
+        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft','undoLatestAuthorAction') AND cardinality(receipt.draft_artifact_refs)>0))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
   assert.deepEqual(state, expected.state);
   for (const retained of expected.drafts) {
     const query = () => getRefusedEditDraft({ baseUrl, projectId: expected.projectId,
@@ -57,5 +57,5 @@ for (const expected of expectations) {
     }
   }
 }
-assert.equal(restoredDrafts, 5);
-console.log("Restored five public Refused Edit Drafts: complete payloads, digests, creation, Receipts, Heads, lifecycle, and archive copies unchanged");
+assert.equal(restoredDrafts, 6);
+console.log("Restored six public Refused Edit Drafts: complete payloads, digests, creation, Receipts, Heads, lifecycle, and archive copies unchanged");

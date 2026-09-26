@@ -188,6 +188,7 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
 }
 
 export interface JournalSnapshot {
+  explicitDraftUndo?: Awaited<ReturnType<typeof import("./draft-undo-journal.ts").readDraftUndoJournal>>;
   explicitDiscard?: Awaited<ReturnType<typeof import("./refused-edit-discard.ts").readDiscardJournal>>;
   explicitAcceptance?: { records: Record<string, unknown>[]; groups: Record<string, unknown>[] };
   workingBoundary?: JournalWorkingBoundary;
@@ -210,6 +211,8 @@ export interface PendingEditProjection {
   blocks: EditorBaseSnapshot["materialized_revision"]["blocks"];
   save_state: "saving" | "saved" | "needs_attention";
   unsettled_intent_count: number;
+  /** If absent, the Author Edit count equals the total unsettled count. */
+  author_edit_unsettled_intent_count?: number;
   authoritative_revision_id: string;
   author_undo_frontier_sequence?: string;
 }

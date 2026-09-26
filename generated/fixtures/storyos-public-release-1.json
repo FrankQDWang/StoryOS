@@ -1,11 +1,13 @@
 {
-  "corpus_digest": "sha256:04c8adb2120fe35d1193c163507e3b87028c86deb7e0a99a3271c97dc97b0dd6",
+  "corpus_digest": "sha256:3ff275a0bb078a42993c1ef490754c14a220c65d51a72b62a6c9812cc2e653a6",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
       "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json",
       "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json",
       "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json",
       "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json",
       "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json",
       "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json",
@@ -162,6 +164,18 @@
       "fixture_id": "storyos.golden.closeEditorFlowDraft.boundary.v1",
       "operation_id": "closeEditorFlowDraft",
       "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
+      "operation_id": "undoLatestAuthorAction",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-reopened.invalid.json"
     },
     {
       "classification": "positive",

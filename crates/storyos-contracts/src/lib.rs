@@ -305,11 +305,12 @@ pub use release1_takeover::{
     TakeoverCompareFailedReason,
 };
 pub use release1_undo_latest_author_action::{
-    UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE, UNDO_LATEST_AUTHOR_ACTION_METHOD,
-    UNDO_LATEST_AUTHOR_ACTION_PATH, UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID,
-    UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID, UndoLatestAuthorActionConflictReason,
-    UndoLatestAuthorActionEffect, UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest,
-    UndoLatestAuthorActionResponse, UndoLatestAuthorActionUnavailableReason,
+    DraftReopenReceipt, EditorFlowDraftReopened, UNDO_LATEST_AUTHOR_ACTION_DIGEST_PROFILE,
+    UNDO_LATEST_AUTHOR_ACTION_METHOD, UNDO_LATEST_AUTHOR_ACTION_PATH,
+    UNDO_LATEST_AUTHOR_ACTION_REQUEST_SCHEMA_ID, UNDO_LATEST_AUTHOR_ACTION_RESPONSE_SCHEMA_ID,
+    UndoLatestAuthorActionConflictReason, UndoLatestAuthorActionEffect,
+    UndoLatestAuthorActionInput, UndoLatestAuthorActionRequest, UndoLatestAuthorActionResponse,
+    UndoLatestAuthorActionUnavailableReason,
 };
 pub use release1_update_chapter::{
     UPDATE_CHAPTER_DIGEST_PROFILE, UPDATE_CHAPTER_METHOD, UPDATE_CHAPTER_PATH,

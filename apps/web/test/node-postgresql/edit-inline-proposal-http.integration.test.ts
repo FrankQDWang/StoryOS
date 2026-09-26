@@ -240,7 +240,7 @@ async function retainedState(projectId: string) {
   const tables = ["authoritative_heads", "authoritative_revisions", "authoritative_commits",
     "author_action_entries", "project_activity_events", "scope_counters", "proposals",
     "proposal_heads", "proposal_revisions", "proposal_operations", "draft_artifacts",
-    "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"];
+    "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "draft_reopen_receipts"];
   return JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${tables.map((table) =>
     `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
       FROM storyos.${table} AS record WHERE record.owner_user_id = '${USER_A}'::uuid
@@ -397,7 +397,7 @@ test("a protected mixed replacement retains complete content after response loss
     const events = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json")));
     const rowScope = { owner_user_id: USER_A, project_id: prepared.projectId };
     assert.deepEqual(drafts, [{ ...rowScope, draft_id: queried.draft.draft_id, draft_kind: "refused_edit",
-      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained", close_event_id: null }]);
+      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained", close_event_id: null, reopen_event_id: null }]);
     const revisionCreatedAt = revisions[0].created_at;
     assert.equal(new Date(revisionCreatedAt).toISOString(), queried.draft.creation.created_at);
     assert.deepEqual(revisions, [{ ...rowScope, draft_id: queried.draft.draft_id,
@@ -1011,14 +1011,15 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const undoRequest = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
       undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0db6"),
         editor_session_id: writer.session.editor_session.editor_session_id,
-        expected_author_undo_frontier_sequence: closeEvent.author_action_sequence,
+        expected_author_undo_frontier_sequence: String(Number(closeEvent.author_action_sequence) - 1),
         expected_authoritative_revision_id: writer.authoritativeRevisionId } };
     const undo = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/author-actions/undo", undoRequest.command_schema,
       await digestUndoLatestAuthorAction(undoRequest), id("e0db7"), (antiForgery) => undoLatestAuthorAction({
         baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
         request: undoRequest, idempotencyKey: id("e0db7"), antiForgery }));
-    assert.deepEqual(undo.effect, { kind: "unavailable", reason: "barrier" });
+    assert.deepEqual(undo.effect, { kind: "conflicted", reason: "frontier_mismatch",
+      current_author_undo_frontier_sequence: closeEvent.author_action_sequence });
     assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     await assert.rejects(() => queryPostgres(`UPDATE storyos.draft_artifacts SET closure='closed'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid`), /Incomplete Draft Discard settlement/);
@@ -1056,10 +1057,23 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     }
     const pinnedSources = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(source) ORDER BY source.export_id)
       FROM storyos.pinned_export_sources AS source WHERE project_id='${prepared.projectId}'::uuid`));
+    const archivedClose = await settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
+      ...closeRequest.close_editor_flow_draft_input, draft_id: archived.draft.draft_id,
+      source_current_draft_revision_id: archived.draft.draft_revision_id, source_draft_payload_digest: archived.draft.payload_digest } }, "e0db81", archived.draft.draft_id);
+    if (archivedClose.effect.kind !== "draft_closure_changed") throw new Error("expected archived source Discard");
     await queryPostgres(`UPDATE storyos.draft_artifacts SET retention_state='archived'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid;
       UPDATE storyos.draft_artifacts SET retention_state='tombstoned'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${tombstoned.draft.draft_id}'::uuid;`);
+    const unavailableUndoRequest = { ...undoRequest, undo_latest_author_action_input: { ...undoRequest.undo_latest_author_action_input,
+      expected_author_undo_frontier_sequence: archivedClose.effect.event.author_action_sequence } };
+    const retainedBeforeUnavailable = await retainedState(prepared.projectId);
+    const unavailableUndo = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", undoRequest.command_schema, await digestUndoLatestAuthorAction(unavailableUndoRequest),
+      id("e0db82"), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        request: unavailableUndoRequest, idempotencyKey: id("e0db82"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    assert.deepEqual(unavailableUndo.effect, { kind: "unavailable", reason: "source_unavailable" });
+    assert.deepEqual(await retainedState(prepared.projectId), retainedBeforeUnavailable);
     const unavailable = await settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
       ...closeRequest.close_editor_flow_draft_input, draft_id: tombstoned.draft.draft_id, source_current_draft_revision_id: tombstoned.draft.draft_revision_id,
       source_draft_payload_digest: tombstoned.draft.payload_digest } }, "e0db8", tombstoned.draft.draft_id);
@@ -1259,6 +1273,134 @@ test("a distant generating Proposal does not block a proven span, while a select
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: generating.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, generating.proposal);
   } finally { await drainLeftoverWork(); await stopRealServer(started.server); }
+});
+
+test("Root Undo reopens the exact public Discard without changing manuscript or Proposal content", async () => {
+  let started = await startRealServer();
+  let faultInstalled = false;
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0fa111"), "Draft Discard Undo", "e0fa2");
+    const originalHead = (await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl })).chapter.current_revision.revision_id;
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0fa3");
+    const created = await sendMixed(started.baseUrl, prepared, mixedRequest(opened, writer, "e0fa4"), id("e0fa46"));
+    if (created.effect.kind !== "refused_to_draft") throw new Error("expected public Refused Edit Draft");
+    const read = () => getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: created.effect.kind === "refused_to_draft" ? created.effect.draft_id : "", fetchImpl: prepared.fetchImpl });
+    const retained = (await read()).draft;
+    const objects = () => Promise.all([getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl }).then((value) => value.chapter),
+    getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl }).then((value) => value.proposal)]);
+    const before = await objects();
+    const close: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
+      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0fa51"), draft_id: retained.draft_id,
+        draft_kind: "refused_edit", source_current_draft_revision_id: retained.draft_revision_id,
+        source_draft_payload_digest: retained.payload_digest, expected_closure: "open", close_reason: "abandoned",
+        editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration } };
+    const closed = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", close.command_schema,
+      await digestCloseEditorFlowDraft(close), id("e0fa52"), (antiForgery) => closeEditorFlowDraft({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: retained.draft_id, request: close,
+        idempotencyKey: id("e0fa52"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    if (closed.effect.kind !== "draft_closure_changed") throw new Error("expected public Discard");
+    const request = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+      undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0fa61"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        expected_author_undo_frontier_sequence: closed.effect.event.author_action_sequence,
+        expected_authoritative_revision_id: writer.authoritativeRevisionId } };
+    const staleHeadRequest = { ...request, undo_latest_author_action_input: { ...request.undo_latest_author_action_input,
+      expected_authoritative_revision_id: originalHead } };
+    const staleHead = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", request.command_schema, await digestUndoLatestAuthorAction(staleHeadRequest),
+      id("e0fa63"), (antiForgery) => undoLatestAuthorAction({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        request: staleHeadRequest, idempotencyKey: id("e0fa63"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    assert.deepEqual(staleHead.effect, { kind: "conflicted", reason: "wrong_target_head" });
+    assert.deepEqual(await objects(), before);
+    const digest = await digestUndoLatestAuthorAction(request);
+    let nonce = "";
+    const sendUndo = (fetchImpl = prepared.fetchImpl) => undoLatestAuthorAction({
+      baseUrl: started.baseUrl, projectId: prepared.projectId, request, idempotencyKey: id("e0fa62"), antiForgery: nonce, fetchImpl });
+    const beforeUndo = await retainedState(prepared.projectId);
+    await queryPostgres(`CREATE FUNCTION storyos.undo_draft_831_fault() RETURNS trigger LANGUAGE plpgsql AS $fault$
+      BEGIN IF NEW.project_id='${prepared.projectId}'::uuid THEN RAISE EXCEPTION 'Controlled Undo precommit failure';
+      END IF; RETURN NULL; END $fault$;
+      CREATE CONSTRAINT TRIGGER undo_draft_831_fault AFTER INSERT ON storyos.draft_reopen_events
+      DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.undo_draft_831_fault();`);
+    faultInstalled = true;
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", request.command_schema, digest, id("e0fa62"),
+      (antiForgery) => { nonce = antiForgery; return sendUndo(); }), (error) => requireStoryOSProtocolError(error).status === 503);
+    assert.deepEqual(await retainedState(prepared.projectId), beforeUndo);
+    for (const table of ["domain_receipts", "author_command_admissions"]) assert.equal(await queryPostgres(
+      `SELECT count(*)::text FROM storyos.${table} WHERE project_id='${prepared.projectId}'::uuid AND idempotency_key='${id("e0fa62")}'::uuid`), "0");
+    await queryPostgres("DROP TRIGGER undo_draft_831_fault ON storyos.draft_reopen_events; DROP FUNCTION storyos.undo_draft_831_fault();");
+    faultInstalled = false;
+    let lost: Awaited<ReturnType<typeof undoLatestAuthorAction>> | undefined;
+    await assert.rejects(() => sendUndo(async (input, init) => {
+      const reply = await prepared.fetchImpl(input, init); assert.equal(reply.status, 200, await reply.clone().text());
+      lost = await reply.json(); await stopRealServer(started.server); throw new Error("Controlled Undo response loss");
+    }), /Controlled Undo response loss/);
+    const origin = new URL(started.baseUrl);
+    started = await startRealServer(`${origin.hostname}:${origin.port}`);
+    prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const [undone, concurrent] = await Promise.all([sendUndo(), sendUndo()]);
+    assert.deepEqual(undone, lost); assert.deepEqual(concurrent, undone);
+    assert.equal(undone.effect.kind, "draft_compensated");
+    const reopened = (await read()).draft;
+    assert.equal(reopened.closure, "open");
+    assert.deepEqual(reopened.payload, retained.payload);
+    assert.deepEqual(reopened.creation, retained.creation);
+    assert.deepEqual(reopened.closure_event, closed.effect.event);
+    assert.deepEqual(await objects(), before);
+    if (undone.effect.kind !== "draft_compensated") throw new Error("expected Draft compensation");
+    const event = undone.effect.event, receipt = undone.receipt;
+    assert.deepEqual(event, { schema_id: "storyos.event.editor-flow-draft-reopened.v1", event_kind: "editor_flow_draft_reopened",
+      event_id: receipt.artifact_lifecycle_event_refs[0], project_scope: closed.project_scope,
+      draft_id: retained.draft_id, draft_revision_id: retained.draft_revision_id, payload_digest: retained.payload_digest,
+      source_close_event_id: closed.effect.event.event_id, prior_closure: "closed", closure: "open",
+      source: { command_id: undone.command_id, author_command_admission_id: undone.author_command_admission_id,
+        receipt_id: receipt.receipt_id, idempotency_key: id("e0fa62"), command_digest: digest },
+      handler_receipt: { schema_id: "storyos.receipt.draft-reopen.v1", receipt_id: event.handler_receipt.receipt_id,
+        project_scope: closed.project_scope, author_undo_receipt_id: receipt.receipt_id,
+        source_close_event_id: closed.effect.event.event_id, event_id: event.event_id, result: "draft_reopened", created_at: receipt.created_at },
+      source_author_action_sequence: closed.effect.event.author_action_sequence,
+      author_action_sequence: String(Number(closed.effect.event.author_action_sequence) + 1), created_at: receipt.created_at });
+    assert.deepEqual(reopened, { ...retained, closure_event: closed.effect.event, reopen_event: event });
+    assert.deepEqual(receipt, { receipt_id: receipt.receipt_id, project_scope: closed.project_scope,
+      command_kind: "undoLatestAuthorAction", command_digest: digest, idempotency_key: id("e0fa62"),
+      producer_cause: "author_command_admission", author_command_admission_id: undone.author_command_admission_id,
+      created_at: event.created_at, expected_heads: [writer.authoritativeRevisionId], prior_heads: [writer.authoritativeRevisionId],
+      resulting_heads: [writer.authoritativeRevisionId], authoritative_revision_ids: [], authoritative_commit_ids: [],
+      proposal_revision_ids: [], draft_artifact_refs: [retained.draft_id], artifact_lifecycle_event_refs: [event.event_id],
+      author_action_sequence: event.author_action_sequence, condition_refs: [], result: "draft_closure_changed" });
+    const afterUndo = await retainedState(prepared.projectId);
+    for (const table of ["authoritative_heads", "authoritative_revisions", "authoritative_commits", "project_activity_events",
+      "proposals", "proposal_heads", "proposal_revisions", "proposal_operations", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"])
+      assert.deepEqual(afterUndo[table], beforeUndo[table]);
+    assert.equal(afterUndo.author_action_entries.length, beforeUndo.author_action_entries.length + 1);
+    assert.deepEqual(afterUndo.author_action_entries.filter((entry: { receipt_id: string }) => entry.receipt_id === receipt.receipt_id),
+      [{ owner_user_id: USER_A, project_id: prepared.projectId, author_action_sequence: Number(event.author_action_sequence),
+        disposition: "compensation", compensated_source_sequence: Number(event.source_author_action_sequence),
+        receipt_id: receipt.receipt_id, receipt_result_kind: "draft_closure_changed", authoritative_commit_id: null }]);
+    await assert.rejects(() => sendUndo(browserFetch(started.baseUrl, "session-b")),
+      (error) => [404, 422].includes(requireStoryOSProtocolError(error).status ?? 0));
+    assert.deepEqual(await retainedState(prepared.projectId), afterUndo);
+    const stale = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", close.command_schema,
+      await digestCloseEditorFlowDraft(close), id("e0fa72"), (antiForgery) => closeEditorFlowDraft({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: retained.draft_id, request: close,
+        idempotencyKey: id("e0fa72"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    assert.deepEqual(stale.effect, { kind: "conflicted", current_revision_id: retained.draft_revision_id,
+      current_digest: retained.payload_digest, current_closure: "open" });
+    assert.deepEqual(await retainedState(prepared.projectId), afterUndo);
+    await retainRefusedEditRecoveryExpectation(prepared.projectId, [{ draft: reopened, available: true }]);
+  } finally {
+    if (faultInstalled) await queryPostgres("DROP TRIGGER undo_draft_831_fault ON storyos.draft_reopen_events; DROP FUNCTION storyos.undo_draft_831_fault();");
+    await stopRealServer(started.server);
+  }
 });
 
 test("a complete source cannot prove a selection inside a UTF-16 surrogate pair", async () => {

@@ -174,14 +174,17 @@ def selector_events(selector: Any, events: list[dict[str, Any]], errors: list[st
     event_ids = {event.get("schema_id") for event in events}
     refused_creation = "storyos.event.refused-edit-draft-created.v1"
     refused_closed = "storyos.event.editor-flow-draft-closed.v1"
+    refused_reopened = "storyos.event.editor-flow-draft-reopened.v1"
     if selector["mode"] == "all":
         return event_ids
     if selector["mode"] == "project_activity":
-        return event_ids - {refused_creation, refused_closed}
+        return event_ids - {refused_creation, refused_closed, refused_reopened}
     if selector["mode"] == "refused_edit_creation" and refused_creation in event_ids:
         return {refused_creation}
     if selector["mode"] == "refused_edit_creation_and_discard" and {refused_creation, refused_closed} <= event_ids:
         return {refused_creation, refused_closed}
+    if selector["mode"] == "refused_edit_creation_discard_and_reopen" and {refused_creation, refused_closed, refused_reopened} <= event_ids:
+        return {refused_creation, refused_closed, refused_reopened}
     fail(errors, f"{label}: unsupported event selector mode")
     return set()
 

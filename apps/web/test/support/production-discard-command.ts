@@ -1,3 +1,4 @@
+import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
 import { createHash } from "node:crypto";
@@ -78,7 +79,8 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   let nonce = "";
   let release!: () => void;
   const completed = new Promise<void>((resolve) => { release = resolve; });
-  await page.route((url) => url.pathname.endsWith(`/drafts/${draft.draft_id}/closures`), async (route) => {
+  const closeRoute = (url: URL) => url.pathname.endsWith(`/drafts/${draft.draft_id}/closures`);
+  await page.route(closeRoute, async (route) => {
     posts += 1;
     const request = route.request().postDataJSON() as CloseEditorFlowDraftRequest;
     const key = route.request().headers()["idempotency-key"]!;
@@ -103,7 +105,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   assert.ok(frozen && reply && reply.effect.kind === "draft_closure_changed");
   const closed = { ...draft, closure: "closed", closure_event: reply.effect.event };
   assert.equal(await surface.locator("[data-draft-closed]").textContent(),
-    `Closed: abandoned. Event: ${reply.effect.event.event_id}. Undo unavailable: non-skippable Barrier.`);
+    `Closed: abandoned. Event: ${reply.effect.event.event_id}. Root Undo requires this exact latest action.`);
   await restart(); await page.reload();
   await surface.locator("[data-draft-closed]").waitFor();
   assert.equal(posts, 1);
@@ -117,6 +119,9 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   await surface.locator("button[data-draft-copy]").click(); await surface.getByText("Copied").waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   page.off("request", track); assert.deepEqual(mutations, []);
+  await page.unroute(closeRoute);
+  const reopened = await verifyProductionDraftUndo(page, projectId, closed, restart);
+  assert.deepEqual(await readObjects(page, projectId, chapterId, proposalId), before);
   const fetchImpl = sessionFetch(origin, "session-a");
   const options = { baseUrl: origin, projectId, fetchImpl };
   const request = { command_schema: "storyos.command.export-project-archive.request.v1", export_project_archive_input: {
@@ -155,14 +160,14 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   assert.equal(download.status, 200);
   const bytes = new Uint8Array(await download.arrayBuffer());
   const entries = zipStoreFiles(bytes);
-  for (const table of ["draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "domain_receipts", "author_action_entries", "author_command_admissions"]) {
+  for (const table of ["draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "draft_reopen_events", "draft_reopen_receipts", "domain_receipts", "author_action_entries", "author_command_admissions"]) {
     const restriction = table === "domain_receipts" ? " AND cardinality(draft_artifact_refs)>0"
-      : table === "author_command_admissions" ? " AND command_kind='closeEditorFlowDraft'" : "";
+      : table === "author_command_admissions" ? " AND command_kind IN ('closeEditorFlowDraft','undoLatestAuthorAction')" : "";
     const expected = JSON.parse(await queryStoryOSPostgres(`SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)::text
       FROM storyos.${table} AS record WHERE owner_user_id='${USER}'::uuid AND project_id='${projectId}'::uuid${restriction}`));
     const actual = JSON.parse(new TextDecoder().decode(entries.get(`canonical/${table}.json`)))
       .filter((record: { draft_artifact_refs?: string[]; command_kind?: string }) => table === "domain_receipts"
-        ? (record.draft_artifact_refs?.length ?? 0) > 0 : table !== "author_command_admissions" || record.command_kind === "closeEditorFlowDraft");
+        ? (record.draft_artifact_refs?.length ?? 0) > 0 : table !== "author_command_admissions" || ["closeEditorFlowDraft", "undoLatestAuthorAction"].includes(record.command_kind ?? ""));
     const order = (a: Record<string, unknown>, b: Record<string, unknown>) =>
       JSON.stringify(a, Object.keys(a).sort()).localeCompare(JSON.stringify(b, Object.keys(b).sort()));
     assert.deepEqual(actual.sort(order), expected.sort(order));
@@ -178,7 +183,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
       && !String(record.key).startsWith("rejection:"));
     const sessionStorage = await page.evaluate((projectId) => Object.fromEntries(Object.entries(window.sessionStorage)
       .filter(([key]) => key.endsWith(`:${projectId}`) && (key.startsWith("active_session:") || key.startsWith("block_proposals:")))), projectId);
-    await writeFile(file, JSON.stringify({ projectId, chapterId, proposalId, draft: closed, objects: before, journal, sessionStorage, archive }));
+    await writeFile(file, JSON.stringify({ projectId, chapterId, proposalId, draft: reopened, objects: before, journal, sessionStorage, archive }));
   }
 }
 
@@ -208,7 +213,7 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
     page.on("request", (request) => { if (request.method() !== "GET") mutations.push(request.url()); });
     await page.reload();
     const surface = page.locator(`[data-refused-edit-draft="${expected.draft.draft_id}"]`);
-    await surface.locator("[data-draft-closed]").waitFor();
+    await surface.locator("[data-draft-reopened]").waitFor();
     assert.deepEqual(await readObjects(page, expected.projectId, expected.chapterId, expected.proposalId), expected.objects);
     const restored = await page.evaluate(async ({ projectId, draft }) => {
       const response = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draft.draft_id}`);
@@ -216,7 +221,7 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
       return (await response.json()).draft;
     }, expected);
     assert.deepEqual(restored, expected.draft);
-    assert.equal(await surface.locator("button[data-draft-discard]").count(), 0);
+    assert.equal(await surface.locator("button[data-draft-discard]").count(), 1);
     await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
     await surface.locator("button[data-draft-copy]").click(); await surface.getByText("Copied").waitFor();
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");

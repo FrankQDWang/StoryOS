@@ -58,6 +58,9 @@ pub(super) async fn close_editor_flow_draft(
     ] {
         valid_uuid(value)?;
     }
+    if let Some(event_id) = &input.source_reopen_event_id {
+        valid_uuid(event_id)?;
+    }
     let key = exact_header(&headers, "idempotency-key")?;
     let nonce = exact_header(&headers, "x-storyos-anti-forgery")?;
     if !valid_uuid_v7(key)

@@ -122,7 +122,7 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                     closed_receipt.author_command_admission_id::text, closed.receipt_id::text,
                     closed_receipt.command_digest, closed_receipt.idempotency_key::text,
                     closed.author_action_sequence::text,
-                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')
+                    to_char(closed.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"'), reopened.payload::text
                FROM storyos.draft_artifacts AS draft
                JOIN storyos.projects AS project USING (owner_user_id, project_id)
                JOIN storyos.draft_artifact_revisions AS revision
@@ -137,6 +137,9 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                LEFT JOIN storyos.draft_close_events AS closed
                  ON (closed.owner_user_id,closed.project_id,closed.event_id,closed.draft_id,closed.revision_id)=
                     (draft.owner_user_id,draft.project_id,draft.close_event_id,draft.draft_id,draft.current_revision_id)
+               LEFT JOIN storyos.draft_reopen_events AS reopened ON
+                 (reopened.owner_user_id,reopened.project_id,reopened.event_id)=
+                 (draft.owner_user_id,draft.project_id,draft.reopen_event_id)
                LEFT JOIN storyos.domain_receipts AS closed_receipt
                  ON (closed_receipt.owner_user_id,closed_receipt.project_id,closed_receipt.receipt_id)=
                     (closed.owner_user_id,closed.project_id,closed.receipt_id)
@@ -174,6 +177,11 @@ impl RefusedEditDraftReader for PostgresProjectReader {
                     command_digest: row.get(8),
                     idempotency_key: row.get(9),
                     created_at: row.get(10),
+                    reopen_event: row
+                        .get::<_, Option<String>>(21)
+                        .map(|payload| serde_json::from_str(&payload))
+                        .transpose()
+                        .map_err(ProjectReadError::unavailable)?,
                     closure: row.get(11),
                     retention: row.get(12),
                     closure_event: row.get::<_, Option<String>>(13).map(|event_id| {

@@ -170,9 +170,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:8df229a19aa2d4c4be040fac6b5dbcaa4164c63a352e4f5c669d6456134c9add";
+    "sha256:e4211dba9560f3b034e3eb350c5e906db257e1e1a34503ab8f2b40235aa83e30";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:afc8fc5ffe7a3503d2b99ee349f6f8f4e4538cffb37cfc7a6946f5de16363350";
+    "sha256:505eb90dcdd148cc70628729a1df0053196924c77aee6e2d3f2de6ff589bcb31";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -340,6 +340,11 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             crate::CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
             close_draft_artifacts::RESPONSE_SCHEMA_PATH,
             close_draft_artifacts::response_schema_bytes(),
+        ),
+        (
+            "storyos.event.editor-flow-draft-reopened.v1",
+            undo_latest_author_action_artifacts::EVENT_SCHEMA_PATH,
+            undo_latest_author_action_artifacts::event_schema_bytes(),
         ),
         (
             crate::EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,

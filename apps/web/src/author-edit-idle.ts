@@ -78,7 +78,7 @@ export function createAuthorEditIdleController({
   setTimeoutImpl?: (callback: () => void, timeout: number) => TimerHandle;
   clearTimeoutImpl?: (timer: TimerHandle) => void;
 }): AuthorEditIdleController {
-  let pendingIntentCount = workspace.pending.unsettled_intent_count;
+  let pendingIntentCount = workspace.pending.author_edit_unsettled_intent_count ?? workspace.pending.unsettled_intent_count;
   let pendingTarget = pendingIntentCount > 0 ? "recovered" : undefined;
   let submissionClosed = pendingIntentCount > 0;
   let queuedWrites = 0;
@@ -125,7 +125,7 @@ export function createAuthorEditIdleController({
       onWriterFenced: () => fail(new Error("Editor Session is read only")),
     });
     workspace.pending = projection;
-    pendingIntentCount = projection.unsettled_intent_count;
+    pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
     if (pendingIntentCount === 0) pendingTarget = undefined;
     if (projection.save_state === "saved" && pendingIntentCount === 0) {
       submissionClosed = false;
@@ -235,7 +235,7 @@ export function createAuthorEditIdleController({
                 ...persistFields,
               }, cryptoImpl);
         workspace.pending = projection;
-        pendingIntentCount = projection.unsettled_intent_count;
+        pendingIntentCount = projection.author_edit_unsettled_intent_count ?? projection.unsettled_intent_count;
         pendingTarget = target;
         lastCompletedAt = completedAt;
         onProjection(projection);
@@ -250,6 +250,8 @@ export function createAuthorEditIdleController({
     },
     canAcceptCandidateInput(hardBoundary = false) {
       return !stopped && !failed && !submissionClosed
+        && (workspace.pending.author_edit_unsettled_intent_count ?? workspace.pending.unsettled_intent_count)
+          === workspace.pending.unsettled_intent_count
         && (!hardBoundary || pendingIntentCount === 0 && queuedWrites === 0);
     },
     async whenIdle() {

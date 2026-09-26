@@ -126,8 +126,34 @@ fn undo_response(
     settlement: storyos_application::UndoLatestAuthorActionSettlement,
 ) -> Result<Json<contracts::UndoLatestAuthorActionResponse>, ApiError> {
     let project = settlement.response_project;
+    let (draft_refs, lifecycle_refs) = match &settlement.effect {
+        UndoLatestAuthorActionSettlementEffect::CompensatedDraft { event, .. } => {
+            (vec![event.draft_id.clone()], vec![event.event_id.clone()])
+        }
+        UndoLatestAuthorActionSettlementEffect::Compensated { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedProposal { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedStructure { .. }
+        | UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter { .. }
+        | UndoLatestAuthorActionSettlementEffect::Conflicted { .. }
+        | UndoLatestAuthorActionSettlementEffect::Unavailable { .. } => (Vec::new(), Vec::new()),
+    };
     let (receipt_result, effect, revision_ids, commit_ids, resulting_head, action_sequence) =
         match settlement.effect {
+            UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
+                event,
+                author_undo_frontier_sequence,
+            } => (
+                contracts::DomainReceiptResult::DraftClosureChanged,
+                contracts::UndoLatestAuthorActionEffect::DraftCompensated {
+                    event: event.clone(),
+                    author_undo_frontier_sequence: author_undo_frontier_sequence
+                        .map(|value| value.to_string()),
+                },
+                Vec::new(),
+                Vec::new(),
+                command.expected_authoritative_revision_id.clone(),
+                Some(event.author_action_sequence),
+            ),
             UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
                 source_sequence,
                 author_action_sequence,
@@ -242,13 +268,19 @@ fn undo_response(
                         storyos_core::UndoLatestAuthorActionConflict::WrongTargetHead => {
                             contracts::UndoLatestAuthorActionConflictReason::WrongTargetHead
                         }
+                        storyos_core::UndoLatestAuthorActionConflict::SourceBindingChanged => {
+                            contracts::UndoLatestAuthorActionConflictReason::SourceBindingChanged
+                        }
                     },
                     current_author_undo_frontier_sequence: match reason {
                         storyos_core::UndoLatestAuthorActionConflict::FrontierMismatch {
                             current_author_undo_frontier_sequence,
                         } => current_author_undo_frontier_sequence
                             .map(|sequence| sequence.to_string()),
-                        storyos_core::UndoLatestAuthorActionConflict::WrongTargetHead => None,
+                        storyos_core::UndoLatestAuthorActionConflict::WrongTargetHead
+                        | storyos_core::UndoLatestAuthorActionConflict::SourceBindingChanged => {
+                            None
+                        }
                     },
                 },
                 Vec::new(),
@@ -265,6 +297,9 @@ fn undo_response(
                         }
                         storyos_core::UndoLatestAuthorActionUnavailable::Barrier => {
                             contracts::UndoLatestAuthorActionUnavailableReason::Barrier
+                        }
+                        storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable => {
+                            contracts::UndoLatestAuthorActionUnavailableReason::SourceUnavailable
                         }
                     },
                 },
@@ -301,8 +336,8 @@ fn undo_response(
             proposal_revision_ids: Vec::new(),
             authoritative_commit_ids: commit_ids,
             author_action_sequence: action_sequence,
-            draft_artifact_refs: Vec::new(),
-            artifact_lifecycle_event_refs: Vec::new(),
+            draft_artifact_refs: draft_refs,
+            artifact_lifecycle_event_refs: lifecycle_refs,
             condition_refs: Vec::new(),
             result: receipt_result,
             created_at: settlement.receipt_created_at,
