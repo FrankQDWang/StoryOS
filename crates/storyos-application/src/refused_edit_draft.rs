@@ -11,6 +11,7 @@ pub struct RefusedEditDraftIdentity {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RefusedEditDraftRecord {
+    pub replacement_provenance: Option<storyos_contracts::DraftRetryReplacement>,
     pub project_scope: ProjectScope,
     pub identity: RefusedEditDraftIdentity,
     pub payload: storyos_core::RefusedEditPayload,
@@ -44,6 +45,7 @@ pub struct RefusedEditDraftClosure {
     pub source: AuthorCommandAdmissionIds,
     pub command_digest: String,
     pub idempotency_key: String,
-    pub author_action_sequence: String,
+    pub author_action_sequence: Option<String>,
+    pub close_reason: String,
     pub created_at: String,
 }

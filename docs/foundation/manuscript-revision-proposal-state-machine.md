@@ -519,6 +519,21 @@ manuscript Block ID alone does not select a Proposal. The command digest and
 persisted Admission payload include the optional target so exact retry and
 recovery retain its identity.
 
+The implemented Refused Edit Draft retry profile is
+`storyos.draft-replacement.block-utf16.v1`. It selects from one retained unit
+with one `ReplaceStructuredSelection`. Each endpoint has a zero-based
+`block_index` and a non-negative UTF-16 code-unit `offset` in that replacement
+Block's text. Endpoints must be Unicode scalar boundaries. The server refuses
+reversed or out-of-bounds endpoints and endpoints inside a surrogate pair.
+The start is inclusive and the end is exclusive. A same-point range retains
+one empty Block. A cross-Block range retains each ordered Block, its kind,
+and empty boundary Blocks. Its `slice_digest` is the existing JCS/SHA-256
+of that complete selected Block vector, recomputed by the server. These are
+Draft payload coordinates; current manuscript and Proposal target coordinates
+and Heads are validated separately by the existing classifier. An absent
+`retry_source` denotes `FreshEditorIntent`; an absent
+`source_draft_disposition` denotes `NotApplicable` for that legacy wire form.
+
 `author_edit_units` is an ordered nonempty list of completed semantic editor
 intents. Each unit's `normalized_primitives` is an ordered nonempty list of:
 

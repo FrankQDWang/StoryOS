@@ -21,6 +21,7 @@ pub struct UndoLatestAuthorActionCommand {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UndoLatestAuthorActionSettlement {
+    pub source_reopen_event: Option<storyos_contracts::EditorFlowDraftReopened>,
     pub ids: AuthorCommandAdmissionIds,
     pub effect: UndoLatestAuthorActionSettlementEffect,
     pub receipt_created_at: String,

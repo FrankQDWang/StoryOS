@@ -62,7 +62,7 @@ function matchesEvent(record: DiscardRecord, event: EditorFlowDraftClosed): bool
     && UUID.test(event.source.command_id) && UUID.test(event.source.author_command_admission_id)
     && UUID.test(event.source.receipt_id) && event.source.idempotency_key === record.group.idempotency_key
     && same(event.source.command_digest, record.group.frozen_request_digest)
-    && /^[1-9][0-9]*$/.test(event.author_action_sequence) && Number.isFinite(Date.parse(event.created_at));
+    && typeof event.author_action_sequence === "string" && /^[1-9][0-9]*$/.test(event.author_action_sequence) && Number.isFinite(Date.parse(event.created_at));
 }
 function matchesResponse(record: DiscardRecord, response: CloseEditorFlowDraftResponse): boolean {
   const receipt = response.receipt;

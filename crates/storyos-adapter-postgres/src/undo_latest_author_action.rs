@@ -100,11 +100,27 @@ async fn persist_undo(
         }
         other => other,
     };
+    let retry_source = match &observed {
+        Some(ObservedFrontier::Prose(_) | ObservedFrontier::Proposal(_)) => {
+            crate::undo_draft_close::load_frontier(
+                client,
+                command,
+                observed.as_ref().expect("observed frontier").sequence(),
+            )
+            .await?
+        }
+        _ => None,
+    };
     let classified = classify_undo(&CoreUndo {
         expected_author_undo_frontier_sequence: command.expected_author_undo_frontier_sequence,
         current_author_undo_frontier: observed.as_ref().map(|frontier| AuthorUndoFrontier {
             sequence: frontier.sequence(),
-            kind: frontier.kind(),
+            kind: retry_source
+                .as_ref()
+                .filter(|source| {
+                    source.kind != storyos_core::AuthorUndoFrontierKind::ReversibleDraftClose
+                })
+                .map_or_else(|| frontier.kind(), |source| source.kind.clone()),
         }),
         expected_head_revision_id: command.expected_authoritative_revision_id.clone(),
         current_head_revision_id: observed
@@ -142,7 +158,7 @@ async fn persist_undo(
         }
     };
     insert_undo_admission(client, command, admission_chapter, admission_expected).await?;
-    match classified {
+    let mut settlement = match classified {
         UndoLatestAuthorActionResult::Compensated { source_sequence } => match &observed {
             Some(ObservedFrontier::Prose(frontier)) => {
                 persist_compensation(client, command, frontier, source_sequence).await
@@ -223,7 +239,10 @@ async fn persist_undo(
             )
             .await
         }
-    }
+    }?;
+    settlement.source_reopen_event =
+        crate::undo_draft_retry::read_reopen(client, command, &command.ids.receipt_id).await?;
+    Ok(settlement)
 }
 
 async fn persist_compensation(
@@ -486,6 +505,7 @@ async fn persist_compensation(
         .await
         .map_err(undo_from_session)?;
     Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
         ids: command.ids.clone(),
         effect: UndoLatestAuthorActionSettlementEffect::Compensated {
             source_sequence,
@@ -529,6 +549,7 @@ async fn persist_zero_authority(
     .await?;
     let response_project = settle_idempotency(client, command).await?;
     Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
         ids: command.ids.clone(),
         effect,
         receipt_created_at,
@@ -635,7 +656,7 @@ pub(super) async fn insert_undo_receipt(
         UndoReceiptAuthority::Structure { commit_id } => (Vec::new(), vec![commit_id.clone()]),
         UndoReceiptAuthority::None | UndoReceiptAuthority::Draft { .. } => (Vec::new(), Vec::new()),
     };
-    let (draft_refs, event_refs) = match &authority {
+    let (mut draft_refs, mut event_refs) = match &authority {
         UndoReceiptAuthority::Draft { draft_id, event_id } => {
             (vec![draft_id.clone()], vec![event_id.clone()])
         }
@@ -643,6 +664,12 @@ pub(super) async fn insert_undo_receipt(
         | UndoReceiptAuthority::Prose { .. }
         | UndoReceiptAuthority::Structure { .. } => (Vec::new(), Vec::new()),
     };
+    if result_kind == "authoritative_applied"
+        && let Some(event) = crate::undo_draft_retry::persist_reopen(client, command).await?
+    {
+        draft_refs.push(event.draft_id);
+        event_refs.push(event.event_id);
+    }
     let created_at = client
         .query_one(
             "INSERT INTO storyos.domain_receipts
@@ -999,6 +1026,8 @@ async fn read_undo_settlement(
             .map_err(undo_parse_error)?
             .unwrap_or(0);
         Ok(UndoLatestAuthorActionSettlement {
+            source_reopen_event: crate::undo_draft_retry::read_reopen(&client, command, receipt_id)
+                .await?,
             ids: AuthorCommandAdmissionIds {
                 command_id: row.get(0),
                 author_command_admission_id: row.get(1),

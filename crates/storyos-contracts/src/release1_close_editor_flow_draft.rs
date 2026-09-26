@@ -80,7 +80,7 @@ pub struct EditorFlowDraftClosed {
     pub closure: String,
     pub close_reason: String,
     pub source: RefusedEditDraftSource,
-    pub author_action_sequence: String,
+    pub author_action_sequence: Option<String>,
     pub created_at: String,
 }
 

@@ -14,6 +14,8 @@ impl AuthorEditStore for Store {
     ) -> Result<AuthorEditSettlement, AuthorEditError> {
         *self.0.lock().unwrap() += 1;
         Ok(AuthorEditSettlement {
+            source_draft_disposition: None,
+            replacement_provenance: None,
             ids: command.ids.clone(),
             effect: AuthorEditSettlementEffect::AuthoritativeApplied {
                 ids: AuthoritativeAppliedIds {
@@ -47,6 +49,7 @@ fn command() -> ApplyAuthorEditCommand {
         security_policy_revision: "security".to_owned(),
     };
     ApplyAuthorEditCommand {
+        retry_source: None,
         project_scope: project_scope.clone(),
         client_binding: client_binding.clone(),
         challenge_binding: ProjectCommandChallengeBinding {

@@ -20,6 +20,16 @@
             },
             "refusal_origin": {
               "$ref": "#/$defs/RefusedEditOrigin"
+            },
+            "replacement_provenance": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DraftRetryReplacement"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             }
           },
           "required": [
@@ -368,6 +378,54 @@
       ],
       "type": "string"
     },
+    "DraftPayloadPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "block_index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "block_index",
+        "offset"
+      ],
+      "type": "object"
+    },
+    "DraftRetryReplacement": {
+      "additionalProperties": false,
+      "properties": {
+        "closure_event_ref": {
+          "type": "string"
+        },
+        "selected_payload_range": {
+          "$ref": "#/$defs/exact_structured_range"
+        },
+        "source_draft_id": {
+          "type": "string"
+        },
+        "source_draft_payload_digest": {
+          "type": "string"
+        },
+        "source_draft_revision_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_draft_id",
+        "source_draft_revision_id",
+        "source_draft_payload_digest",
+        "closure_event_ref",
+        "selected_payload_range"
+      ],
+      "type": "object"
+    },
     "ManuscriptBlock": {
       "additionalProperties": false,
       "properties": {
@@ -401,6 +459,44 @@
       ],
       "type": "string"
     },
+    "ObservedDraftClosure": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "open",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "close_reason": {
+              "type": "string"
+            },
+            "closure_event_ref": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "closed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "close_reason",
+            "closure_event_ref"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -419,9 +515,132 @@
     },
     "RefusedEditOrigin": {
       "enum": [
-        "fresh_editor_intent"
+        "fresh_editor_intent",
+        "draft_retry_replacement"
       ],
       "type": "string"
+    },
+    "RetryDraftClosure": {
+      "enum": [
+        "open"
+      ],
+      "type": "string"
+    },
+    "RetryDraftKind": {
+      "enum": [
+        "refused_edit"
+      ],
+      "type": "string"
+    },
+    "SourceDraftDisposition": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_closure": {
+              "$ref": "#/$defs/ObservedDraftClosure"
+            },
+            "current_source_draft_payload_digest": {
+              "type": "string"
+            },
+            "current_source_draft_revision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "unchanged",
+              "type": "string"
+            },
+            "requested_source_draft_revision_id": {
+              "type": "string"
+            },
+            "source_draft_id": {
+              "type": "string"
+            },
+            "source_draft_kind": {
+              "$ref": "#/$defs/RetryDraftKind"
+            }
+          },
+          "required": [
+            "kind",
+            "source_draft_kind",
+            "source_draft_id",
+            "requested_source_draft_revision_id",
+            "current_source_draft_revision_id",
+            "current_source_draft_payload_digest",
+            "current_closure"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "close_reason": {
+              "type": "string"
+            },
+            "closure_event_ref": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "closed_superseded",
+              "type": "string"
+            },
+            "prior_closure": {
+              "$ref": "#/$defs/RetryDraftClosure"
+            },
+            "resulting_closure": {
+              "type": "string"
+            },
+            "source_draft_id": {
+              "type": "string"
+            },
+            "source_draft_kind": {
+              "$ref": "#/$defs/RetryDraftKind"
+            },
+            "source_draft_payload_digest": {
+              "type": "string"
+            },
+            "source_draft_revision_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "source_draft_kind",
+            "source_draft_id",
+            "source_draft_revision_id",
+            "source_draft_payload_digest",
+            "prior_closure",
+            "resulting_closure",
+            "close_reason",
+            "closure_event_ref"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "exact_structured_range": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        },
+        "slice_digest": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        }
+      },
+      "required": [
+        "coordinate_profile",
+        "from",
+        "to",
+        "slice_digest"
+      ],
+      "type": "object"
     }
   },
   "$id": "storyos.command.apply-author-edit.response.v2",
@@ -455,6 +674,16 @@
     },
     "schema_id": {
       "type": "string"
+    },
+    "source_draft_disposition": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SourceDraftDisposition"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

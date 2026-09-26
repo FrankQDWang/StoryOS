@@ -12,6 +12,7 @@ impl UndoLatestAuthorActionStore for Store {
     ) -> Result<UndoLatestAuthorActionSettlement, UndoLatestAuthorActionError> {
         *self.0.lock().unwrap() += 1;
         Ok(UndoLatestAuthorActionSettlement {
+            source_reopen_event: None,
             ids: command.ids.clone(),
             effect: UndoLatestAuthorActionSettlementEffect::Unavailable {
                 reason: storyos_core::UndoLatestAuthorActionUnavailable::NoFrontier,

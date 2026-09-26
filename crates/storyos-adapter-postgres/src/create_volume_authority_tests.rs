@@ -560,6 +560,7 @@ async fn apply_named_edit(
         text,
     } = edit;
     let mut command = ApplyAuthorEditCommand {
+        retry_source: None,
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: "sha256:session-a".to_owned(),

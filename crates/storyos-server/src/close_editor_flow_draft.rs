@@ -175,10 +175,8 @@ fn close_response(
                         source: settled.ids.clone(),
                         command_digest: command.challenge_binding.canonical_command_digest.clone(),
                         idempotency_key: command.challenge_binding.idempotency_key.clone(),
-                        author_action_sequence: settled
-                            .author_action_sequence
-                            .clone()
-                            .ok_or_else(invalid_request)?,
+                        author_action_sequence: settled.author_action_sequence.clone(),
+                        close_reason: "abandoned".to_owned(),
                         created_at: settled.created_at.clone(),
                     },
                 )?),
@@ -245,9 +243,15 @@ pub(super) fn closed_event(
     payload_digest: &str,
     closed: &storyos_application::RefusedEditDraftClosure,
 ) -> Result<contracts::EditorFlowDraftClosed, ApiError> {
+    let profile = if closed.close_reason == "superseded" {
+        "storyos.command.applyAuthorEdit.jcs.v1"
+    } else {
+        contracts::CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE
+    };
+    let prefix = format!("sha256:{profile}:");
     let value_hex_lowercase = closed
         .command_digest
-        .strip_prefix("sha256:storyos.command.closeEditorFlowDraft.jcs.v1:")
+        .strip_prefix(&prefix)
         .filter(|digest| {
             digest.len() == 64
                 && digest
@@ -266,7 +270,7 @@ pub(super) fn closed_event(
         payload_digest: payload_digest.to_owned(),
         prior_closure: "open".to_owned(),
         closure: "closed".to_owned(),
-        close_reason: "abandoned".to_owned(),
+        close_reason: closed.close_reason.clone(),
         source: contracts::RefusedEditDraftSource {
             command_id: closed.source.command_id.clone(),
             author_command_admission_id: closed.source.author_command_admission_id.clone(),
@@ -274,7 +278,7 @@ pub(super) fn closed_event(
             idempotency_key: closed.idempotency_key.clone(),
             command_digest: contracts::DigestValue {
                 algorithm: contracts::DigestAlgorithm::Sha256,
-                profile: contracts::CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE.to_owned(),
+                profile: profile.to_owned(),
                 value_hex_lowercase,
             },
         },

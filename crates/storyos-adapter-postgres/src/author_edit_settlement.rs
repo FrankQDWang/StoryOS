@@ -16,6 +16,7 @@ pub(super) async fn persist_author_edit_settlement(
     command: &ApplyAuthorEditCommand,
     current_revision_id: &str,
     classified: ClassifiedAuthorEdit,
+    source_disposition: Option<storyos_contracts::SourceDraftDisposition>,
 ) -> Result<AuthorEditSettlement, AuthorEditError> {
     let prepared = match classified.result {
         ApplyAuthorEditResult::AuthoritativeApplied { body } => {
@@ -206,7 +207,55 @@ pub(super) async fn persist_author_edit_settlement(
             Vec::new(),
         ),
     };
+    let source_draft_disposition = super::draft_retry::supersede_source(
+        client,
+        command,
+        source_disposition,
+        result_kind,
+        match &prepared {
+            PreparedSettlement::AuthoritativeApplied {
+                author_action_sequence,
+                ..
+            }
+            | PreparedSettlement::ProposalRevised {
+                author_action_sequence,
+                ..
+            } => Some(*author_action_sequence),
+            _ => None,
+        },
+    )
+    .await?;
+    let replacement_provenance = if result_kind == "refused_to_draft" {
+        super::draft_retry::replacement_provenance(
+            source_draft_disposition.as_ref(),
+            command.retry_source.as_ref(),
+        )
+    } else {
+        None
+    };
+    let source_json = source_draft_disposition
+        .as_ref()
+        .map(serde_json::to_string)
+        .transpose()
+        .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))?;
     let result_payload = result_payload.to_string();
+    let mut draft_refs = match &prepared {
+        PreparedSettlement::RefusedToDraft { identity } => vec![identity.draft_id.clone()],
+        _ => Vec::new(),
+    };
+    let mut lifecycle_refs = match &prepared {
+        PreparedSettlement::RefusedToDraft { identity } => vec![identity.creation_event_id.clone()],
+        _ => Vec::new(),
+    };
+    if let Some(storyos_contracts::SourceDraftDisposition::ClosedSuperseded {
+        source_draft_id,
+        closure_event_ref,
+        ..
+    }) = &source_draft_disposition
+    {
+        draft_refs.push(source_draft_id.clone());
+        lifecycle_refs.push(closure_event_ref.clone());
+    }
     let receipt_row = client
         .query_one(
             "INSERT INTO storyos.domain_receipts
@@ -215,14 +264,14 @@ pub(super) async fn persist_author_edit_settlement(
                 expected_heads, prior_heads, resulting_heads, authoritative_revision_ids,
                 proposal_revision_ids, authoritative_commit_ids,
                 draft_artifact_refs, artifact_lifecycle_event_refs, condition_refs,
-                result_kind, result_payload)
+                result_kind, result_payload, source_draft_disposition)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
                      $5::text::uuid, 'applyAuthorEdit', $6, $7::text::uuid,
                      'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
                      ARRAY[$10::text::uuid],
                      $11::text[]::uuid[], $12::text[]::uuid[], $13::text[]::uuid[],
                      $16::text[], $17::text[], ARRAY[]::text[],
-                     $14, $15::text::jsonb)
+                     $14, $15::text::jsonb, $18::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
             &[
@@ -241,18 +290,9 @@ pub(super) async fn persist_author_edit_settlement(
                 &commit_ids,
                 &result_kind,
                 &result_payload.to_string(),
-                &match &prepared {
-                    PreparedSettlement::RefusedToDraft { identity } => {
-                        vec![identity.draft_id.clone()]
-                    }
-                    _ => Vec::<String>::new(),
-                },
-                &match &prepared {
-                    PreparedSettlement::RefusedToDraft { identity } => {
-                        vec![identity.creation_event_id.clone()]
-                    }
-                    _ => Vec::<String>::new(),
-                },
+                &draft_refs,
+                &lifecycle_refs,
+                &source_json,
             ],
         )
         .await
@@ -436,6 +476,8 @@ pub(super) async fn persist_author_edit_settlement(
     Ok(AuthorEditSettlement {
         ids: command.ids.clone(),
         effect,
+        source_draft_disposition,
+        replacement_provenance,
         receipt_created_at,
         completed_intent_record_id: command.completed_intent_record_id.clone(),
         local_intent_sequence: command.local_intent_sequence,

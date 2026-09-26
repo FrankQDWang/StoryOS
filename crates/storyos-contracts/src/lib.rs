@@ -18,6 +18,11 @@ mod release1_author_edit;
 mod release1_author_edit_artifacts;
 mod release1_author_edit_outcome;
 mod release1_author_edit_outcome_artifacts;
+mod release1_draft_retry;
+pub use release1_draft_retry::{
+    DraftPayloadPosition, DraftRetry, DraftRetryReplacement, ExactStructuredRange,
+    ObservedDraftClosure, RetryDraftClosure, RetryDraftKind, SourceDraftDisposition,
+};
 mod release1_create_chapter;
 mod release1_create_chapter_artifacts;
 mod release1_create_project;

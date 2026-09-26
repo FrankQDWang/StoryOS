@@ -256,6 +256,59 @@ async function sendMixed(baseUrl: string, prepared: Awaited<ReturnType<typeof pr
       idempotencyKey: key, antiForgery }));
 }
 
+test("an explicit narrowed public Draft retry changes content and supersedes only its exact source", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0c9111"), "Narrow Draft Retry", "e0c92");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0c93");
+    const created = await sendMixed(started.baseUrl, prepared,
+      mixedRequest(opened, writer, "e0c94"), id("e0c946"));
+    if (created.effect.kind !== "refused_to_draft") throw new Error("expected complete public Draft");
+    const source = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: created.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    const selected = [{ block_kind: "paragraph", text: "New" }];
+    const request: ApplyAuthorEditRequest = { ...replaceUnit(0, 5, "New", writer, "e0c95", opened.proposal.revision_id),
+      retry_source: { kind: "draft_retry", source_draft_kind: "refused_edit",
+        source_draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
+        source_draft_payload_digest: source.payload_digest, expected_source_draft_closure: "open",
+        selected_payload_range: { kind: "exact_structured_range",
+          coordinate_profile: "storyos.draft-replacement.block-utf16.v1",
+          from: { block_index: 0, offset: 0 }, to: { block_index: 0, offset: 3 },
+          slice_digest: createHash("sha256").update(JSON.stringify(selected)).digest("hex") } } };
+    const retried = await sendMixed(started.baseUrl, prepared, request, id("e0c956"));
+    assert.equal(retried.effect.kind, "authoritative_applied");
+    const closed = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    assert.deepEqual({ ...closed, closure: source.closure, closure_event: undefined },
+      { ...source, closure_event: undefined });
+    assert.equal(closed.closure, "closed");
+    assert.equal(closed.closure_event?.close_reason, "superseded");
+    assert.equal(closed.closure_event?.source.receipt_id, retried.receipt.receipt_id);
+    assert.deepEqual(await sendMixed(started.baseUrl, prepared, request, id("e0c956")), retried);
+    if (retried.effect.kind !== "authoritative_applied") throw new Error("expected content retry");
+    const undo = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+      undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0c961"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        expected_author_undo_frontier_sequence: retried.effect.author_action_sequence,
+        expected_authoritative_revision_id: retried.effect.authoritative_revision.revision_id } };
+    const compensate = async () => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo-latest", undo.command_schema,
+      await digestUndoLatestAuthorAction(undo), id("e0c962"), (antiForgery) => undoLatestAuthorAction({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, request: undo,
+        idempotencyKey: id("e0c962"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    const undone = await compensate();
+    assert.equal(undone.effect.kind, "compensated");
+    assert.equal(undone.source_reopen_event?.source_close_event_id, closed.closure_event?.event_id);
+    assert.deepEqual(undone.receipt.artifact_lifecycle_event_refs, [undone.source_reopen_event?.event_id]);
+    assert.deepEqual(await compensate(), undone);
+    const reopened = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    assert.deepEqual(reopened, { ...source, closure_event: closed.closure_event, reopen_event: undone.source_reopen_event });
+  } finally { await stopRealServer(started.server); }
+});
+
 test("a protected mixed replacement retains complete content after response loss, replay, and restart", async () => {
   let started = await startRealServer();
   try {
@@ -1065,6 +1118,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid;
       UPDATE storyos.draft_artifacts SET retention_state='tombstoned'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${tombstoned.draft.draft_id}'::uuid;`);
+    assert.ok(archivedClose.effect.event.author_action_sequence);
     const unavailableUndoRequest = { ...undoRequest, undo_latest_author_action_input: { ...undoRequest.undo_latest_author_action_input,
       expected_author_undo_frontier_sequence: archivedClose.effect.event.author_action_sequence } };
     const retainedBeforeUnavailable = await retainedState(prepared.projectId);
@@ -1306,6 +1360,7 @@ test("Root Undo reopens the exact public Discard without changing manuscript or 
         baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: retained.draft_id, request: close,
         idempotencyKey: id("e0fa52"), antiForgery, fetchImpl: prepared.fetchImpl }));
     if (closed.effect.kind !== "draft_closure_changed") throw new Error("expected public Discard");
+    assert.ok(closed.effect.event.author_action_sequence);
     const request = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
       undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0fa61"),
         editor_session_id: writer.session.editor_session.editor_session_id,

@@ -163,6 +163,7 @@ pub(super) async fn persist_current_chapter_compensation(
         .await
         .map_err(undo_from_session)?;
     Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
         ids: command.ids.clone(),
         effect: UndoLatestAuthorActionSettlementEffect::CompensatedCurrentChapter {
             source_sequence,

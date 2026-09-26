@@ -222,6 +222,26 @@
       ],
       "type": "object"
     },
+    "DraftPayloadPosition": {
+      "additionalProperties": false,
+      "properties": {
+        "block_index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "block_index",
+        "offset"
+      ],
+      "type": "object"
+    },
     "EditSourceOwner": {
       "oneOf": [
         {
@@ -318,6 +338,18 @@
       ],
       "type": "object"
     },
+    "RetryDraftClosure": {
+      "enum": [
+        "open"
+      ],
+      "type": "string"
+    },
+    "RetryDraftKind": {
+      "enum": [
+        "refused_edit"
+      ],
+      "type": "string"
+    },
     "SelectedEditSource": {
       "additionalProperties": false,
       "properties": {
@@ -407,6 +439,62 @@
         "source_offset"
       ],
       "type": "object"
+    },
+    "draft_retry": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_source_draft_closure": {
+          "$ref": "#/$defs/RetryDraftClosure"
+        },
+        "selected_payload_range": {
+          "$ref": "#/$defs/exact_structured_range"
+        },
+        "source_current_draft_revision_id": {
+          "type": "string"
+        },
+        "source_draft_id": {
+          "type": "string"
+        },
+        "source_draft_kind": {
+          "$ref": "#/$defs/RetryDraftKind"
+        },
+        "source_draft_payload_digest": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "source_draft_kind",
+        "source_draft_id",
+        "source_current_draft_revision_id",
+        "source_draft_payload_digest",
+        "expected_source_draft_closure",
+        "selected_payload_range"
+      ],
+      "type": "object"
+    },
+    "exact_structured_range": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        },
+        "slice_digest": {
+          "type": "string"
+        },
+        "to": {
+          "$ref": "#/$defs/DraftPayloadPosition"
+        }
+      },
+      "required": [
+        "coordinate_profile",
+        "from",
+        "to",
+        "slice_digest"
+      ],
+      "type": "object"
     }
   },
   "$id": "storyos.command.apply-author-edit.request.v1",
@@ -460,6 +548,16 @@
       "anyOf": [
         {
           "$ref": "#/$defs/AuthorEditProposalTarget"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "retry_source": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/draft_retry"
         },
         {
           "type": "null"

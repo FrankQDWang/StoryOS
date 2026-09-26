@@ -71,6 +71,7 @@ pub(crate) fn author_command(
         key,
     );
     let mut command = ApplyAuthorEditCommand {
+        retry_source: None,
         project_scope: scope.clone(),
         client_binding: EditorClientBinding {
             binding_ref: "binding:author-edit".to_owned(),

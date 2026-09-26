@@ -590,6 +590,16 @@
     "schema_id": {
       "const": "storyos.command.undo-latest-author-action.response.v1",
       "type": "string"
+    },
+    "source_reopen_event": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/EditorFlowDraftReopened"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [

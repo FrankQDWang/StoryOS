@@ -84,6 +84,7 @@ pub(super) async fn persist_proposal_compensation(
         .await
         .map_err(undo_from_session)?;
     Ok(UndoLatestAuthorActionSettlement {
+        source_reopen_event: None,
         ids: command.ids.clone(),
         effect: UndoLatestAuthorActionSettlementEffect::CompensatedProposal {
             source_sequence,

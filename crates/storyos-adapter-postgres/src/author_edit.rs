@@ -171,18 +171,33 @@ impl PostgresProjectReader {
         };
         let current_revision_id = row.get::<_, String>(0);
         let current_body = row.get::<_, String>(1);
-        let classified = classify_author_edit(
-            &transaction.client,
-            command,
-            &current_revision_id,
-            current_body,
-        )
-        .await?;
+        let retry_source = super::draft_retry::load_source(&transaction.client, command).await?;
+        let classified = if retry_source
+            .as_ref()
+            .is_some_and(|source| !source.input_matches)
+        {
+            ClassifiedAuthorEdit {
+                result: ApplyAuthorEditResult::Conflicted {
+                    reason: storyos_core::AuthorEditConflict::OwnershipChanged,
+                },
+                successor_blocks: None,
+                proposal_context: None,
+            }
+        } else {
+            classify_author_edit(
+                &transaction.client,
+                command,
+                &current_revision_id,
+                current_body,
+            )
+            .await?
+        };
         let settlement = match super::author_edit_settlement::persist_author_edit_settlement(
             &transaction.client,
             command,
             &current_revision_id,
             classified,
+            retry_source.map(|source| source.disposition),
         )
         .await
         {

@@ -85,7 +85,8 @@ impl PostgresProjectReader {
                         cardinality(receipt.condition_refs),
                         receipt.authoritative_revision_ids[1]::text,
                         receipt.authoritative_commit_ids[1]::text,
-                        receipt.proposal_revision_ids[1]::text
+                        receipt.proposal_revision_ids[1]::text, receipt.source_draft_disposition::text,
+                        (admission.command_payload->'retry_source')::text AS retry_source
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admissions AS admission
                      ON (admission.owner_user_id, admission.project_id,
@@ -121,10 +122,7 @@ impl PostgresProjectReader {
                     AND admission.expected_authoritative_revision_id = $7::text::uuid
                     AND admission.target_refs = $8::text[]
                     AND (
-                      (receipt.result_kind NOT IN ('proposal_revised', 'refused_to_draft')
-                        AND admission.expected_proposal_head_revision_ids =
-                            receipt.proposal_revision_ids)
-                      OR (receipt.result_kind = 'refused_to_draft'
+                      (receipt.result_kind <> 'proposal_revised'
                         AND cardinality(receipt.proposal_revision_ids) = 0)
                       OR (receipt.result_kind = 'proposal_revised'
                         AND cardinality(receipt.proposal_revision_ids) = 1
@@ -165,11 +163,36 @@ impl PostgresProjectReader {
         let expected_head = receipt.get::<_, String>(8);
         let prior_head = receipt.get::<_, String>(9);
         let resulting_head = receipt.get::<_, String>(10);
+        let source_draft_disposition: Option<storyos_contracts::SourceDraftDisposition> = receipt
+            .get::<_, Option<String>>(23)
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))?;
+        let replacement_provenance = if result_kind == "refused_to_draft" {
+            let retry: Option<storyos_contracts::DraftRetry> = receipt
+                .get::<_, Option<String>>(24)
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| AuthorEditError::Unavailable(Box::new(error)))?;
+            super::draft_retry::replacement_provenance(
+                source_draft_disposition.as_ref(),
+                retry.as_ref(),
+            )
+        } else {
+            None
+        };
+        let has_source_close = matches!(
+            &source_draft_disposition,
+            Some(storyos_contracts::SourceDraftDisposition::ClosedSuperseded { .. })
+        );
         let common_cardinalities =
             [11, 12, 13, 15, 17, 18, 19].map(|index| receipt.get::<_, i32>(index));
-        if common_cardinalities != [1, 1, 1, 0, 0, 0, 0]
-            && !(result_kind == "refused_to_draft" && common_cardinalities == [1, 1, 1, 0, 1, 1, 0])
-            && !(result_kind == "proposal_revised" && common_cardinalities == [1, 1, 1, 1, 0, 0, 0])
+        let source_count = i32::from(has_source_close);
+        if common_cardinalities != [1, 1, 1, 0, source_count, source_count, 0]
+            && !(result_kind == "refused_to_draft"
+                && common_cardinalities == [1, 1, 1, 0, 1 + source_count, 1 + source_count, 0])
+            && !(result_kind == "proposal_revised"
+                && common_cardinalities == [1, 1, 1, 1, source_count, source_count, 0])
         {
             return Err(AuthorEditError::BindingConflict);
         }
@@ -448,6 +471,8 @@ impl PostgresProjectReader {
                 receipt_id: receipt.get(2),
             },
             effect,
+            source_draft_disposition,
+            replacement_provenance,
             completed_intent_record_id: receipt.get(3),
             local_intent_sequence: parse_u64(receipt.get(4))?,
             receipt_created_at: receipt.get(5),
