@@ -11,11 +11,11 @@ pub(super) const ACTIVITY_PROFILE: &str = "storyos.project-activity.v1";
 pub const LIMIT_PROFILE_REVISION: &str = "storyos.foundation.absolute.v1";
 const MAX_JSON_STRING_UTF8_BYTES: u32 = 1024 * 1024;
 pub(super) const COMPATIBILITY_PROFILE: &str = "storyos.public.same-release.v1";
-pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-09-14-responses-memory";
+pub(super) const CONTRACT_REVISION: &str = "release1-wire-catalog-2026-09-26-refused-edit-draft";
 pub(super) const WEB_CLIENT_CONTRACT_REVISION: &str = "storyos.web-client.release-1.v3";
-pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v5";
-pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v5";
-pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v23";
+pub(super) const SERVER_CONTRACT_REVISION: &str = "storyos.server.release-1.v6";
+pub(super) const WORKER_CONTRACT_REVISION: &str = "storyos.worker.release-1.v6";
+pub(super) const GENERATED_CLIENT_REVISION: &str = "storyos.typescript-client.release-1.v24";
 pub(super) const PROTOCOL_PROFILE_REQUEST_SCHEMA_ID: &str =
     "storyos.query.protocol-profile.request.v1";
 pub(super) const PROTOCOL_PROFILE_SCHEMA_ID: &str = "storyos.query.protocol-profile.response.v1";
@@ -37,7 +37,7 @@ pub(super) const GET_EDITOR_SESSION_RESPONSE_SCHEMA_ID: &str =
     "storyos.query.editor-session.response.v1";
 pub const APPLY_AUTHOR_EDIT_REQUEST_SCHEMA_ID: &str =
     "storyos.command.apply-author-edit.request.v1";
-pub const EDITOR_CONTRACT_REVISION: &str = "storyos.editor-contract.release-1.v2";
+pub const EDITOR_CONTRACT_REVISION: &str = "storyos.editor-contract.release-1.v3";
 pub const AUTHOR_EDIT_BATCH_POLICY_REVISION: &str =
     "storyos.author-edit-batch.release-1.preview.v1";
 pub const AUTHOR_EDIT_BATCH_IDLE_MS: usize = 250;

@@ -1,0 +1,115 @@
+{
+  "correlation_id": "018f0000-0000-7001-8000-000000000b02",
+  "draft": {
+    "closure": "open",
+    "creation": {
+      "created_at": "2026-09-26T00:00:00.000Z",
+      "creation_event_id": "018f0000-0000-7001-8000-000000000b02",
+      "creator": {
+        "kind": "core_transition",
+        "receipt_id": "018f0000-0000-7001-8000-000000000b02"
+      },
+      "draft_id": "018f0000-0000-7001-8000-000000000b02",
+      "draft_revision_id": "018f0000-0000-7001-8000-000000000b02",
+      "event_kind": "refused_edit_draft_created",
+      "project_scope": {
+        "owner_user_id": "018f0000-0000-7001-8000-000000000b02",
+        "project_id": "018f0000-0000-7001-8000-000000000b02"
+      },
+      "schema_id": "storyos.event.refused-edit-draft-created.v1",
+      "source": {
+        "author_command_admission_id": "018f0000-0000-7001-8000-000000000b02",
+        "command_digest": {
+          "algorithm": "sha256",
+          "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+          "value_hex_lowercase": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        "command_id": "018f0000-0000-7001-8000-000000000b02",
+        "idempotency_key": "018f0000-0000-7001-8000-000000000b02",
+        "receipt_id": "018f0000-0000-7001-8000-000000000b02"
+      }
+    },
+    "draft_id": "018f0000-0000-7001-8000-000000000b02",
+    "draft_revision_id": "018f0000-0000-7001-8000-000000000b02",
+    "kind": "refused_edit",
+    "payload": {
+      "author_edit_units": [
+        {
+          "normalized_primitives": [
+            {
+              "kind": "replace_structured_selection",
+              "replacement": [
+                {
+                  "block_kind": "paragraph",
+                  "text": "New passage"
+                }
+              ]
+            }
+          ],
+          "selection_snapshot": {
+            "coordinate_profile": "storyos.editor.ordered-source.v1",
+            "from": 0,
+            "ordered_selection": {
+              "anchor": {
+                "source_index": 0,
+                "source_offset": 0
+              },
+              "head": {
+                "source_index": 1,
+                "source_offset": 9
+              },
+              "sources": [
+                {
+                  "block_kind": "paragraph",
+                  "coordinate_profile": "prosemirror-token-utf16.v1",
+                  "from": 0,
+                  "owner": {
+                    "kind": "manuscript",
+                    "manuscript_block_id": "018f0000-0000-7001-8000-000000000b02"
+                  },
+                  "source_text": "First",
+                  "to": 5
+                },
+                {
+                  "block_kind": "paragraph",
+                  "coordinate_profile": "storyos.editor.utf16-code-unit.v1",
+                  "from": 0,
+                  "owner": {
+                    "kind": "proposal",
+                    "manuscript_block_id": "018f0000-0000-7001-8000-000000000b02",
+                    "operation_id": "018f0000-0000-7001-8000-000000000b02",
+                    "proposal_id": "018f0000-0000-7001-8000-000000000b02",
+                    "revision_id": "018f0000-0000-7001-8000-000000000b02"
+                  },
+                  "source_text": "Candidate",
+                  "to": 9
+                }
+              ]
+            },
+            "to": 9
+          }
+        }
+      ],
+      "chapter_id": "018f0000-0000-7001-8000-000000000b02",
+      "completed_intent_record_id": "018f0000-0000-7001-8000-000000000b02",
+      "expected_authoritative_revision_id": "018f0000-0000-7001-8000-000000000b02",
+      "expected_proposal_head_revision_ids": [
+        "018f0000-0000-7001-8000-000000000b02"
+      ],
+      "local_intent_sequence": "1",
+      "schema_revision": "storyos.refused-edit-payload.v1",
+      "target_refs": [
+        "manuscript:018f0000-0000-7001-8000-000000000b02"
+      ],
+      "undo_group_id": "018f0000-0000-7001-8000-000000000b02"
+    },
+    "payload_digest": "7e791d480f4a8e5d8f6dd9b12007f5e747d26bc6efef0d50426d1449a46a1592",
+    "payload_digest_profile": "storyos.refused-edit-payload.jcs.v1",
+    "retention_state": "retained"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000b02",
+    "project_id": "018f0000-0000-7001-8000-000000000b02"
+  },
+  "schema_id": "storyos.query.refused-edit-draft.response.v1"
+}

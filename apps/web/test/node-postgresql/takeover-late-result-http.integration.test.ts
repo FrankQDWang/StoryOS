@@ -146,7 +146,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
       expected_proposal_head_revision_ids: writer.base_snapshot.proposal_head_revision_ids,
       target_refs: writer.base_snapshot.target_refs,
       observed_ownership_partition: writer.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_id: "018f0000-0000-7001-8000-000000000343",
       completed_intent_record_id: "018f0000-0000-7001-8000-000000000344",
       local_intent_sequence: "1",
@@ -194,7 +194,7 @@ test("a fenced writer's late ApplyAuthorEdit result does not mutate authority", 
       correlation_id: "018f0000-0000-7001-8000-000000000346",
       editor_session_id: observer.editor_session.editor_session_id,
       observed_writer_generation: priorGeneration,
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
     };
     const takeoverKey = "018f0000-0000-7001-8000-000000000347";
     const takeoverDigest = await digestTakeOverProjectWriter(takeoverRequest);

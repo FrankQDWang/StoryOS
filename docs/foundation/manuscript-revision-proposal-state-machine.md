@@ -566,9 +566,12 @@ candidate set. The selected values are a replaceable conservative prerelease
 choice supported by synthetic browser evidence. They are not a batching target,
 permanent product default, real-user validation, or latency SLA.
 
-`storyos.editor-contract.release-1.v2` maps exactly to this policy. The existing
-request digest binds `editor_contract_revision` and the exact ordered
-`author_edit_units`; no new wire field is required. A policy change requires a
+`storyos.editor-contract.release-1.v3` retains this legacy batch policy. The
+existing request digest binds `editor_contract_revision` and the exact ordered
+`author_edit_units`; batching needs no new policy field. The new mixed-source
+wire shape and its separate evidence boundary are specified in the
+[Refused Edit Input profile](refused-edit-input-release-1-profile.md). The old
+synthetic measurements qualify only the legacy primitive workload. A policy change requires a
 new policy revision and matching Editor Contract revision. A missing or
 mismatched mapping falls back to one intent per command or a safe pre-Admission
 refusal.

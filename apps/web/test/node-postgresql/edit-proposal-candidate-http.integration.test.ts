@@ -261,7 +261,7 @@ test("applyAuthorEdit revises one Proposal candidate in place and Root Undo rest
       },
       target_refs: session.base_snapshot.target_refs,
       observed_ownership_partition: "mixed",
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_id: id("c844"),
       completed_intent_record_id: id("c845"),
       local_intent_sequence: "1",

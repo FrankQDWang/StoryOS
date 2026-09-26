@@ -166,6 +166,7 @@ impl PostgresProjectReader {
         let common_cardinalities =
             [11, 12, 13, 15, 17, 18, 19].map(|index| receipt.get::<_, i32>(index));
         if common_cardinalities != [1, 1, 1, 0, 0, 0, 0]
+            && !(result_kind == "refused_to_draft" && common_cardinalities == [1, 1, 1, 0, 1, 1, 0])
             && !(result_kind == "proposal_revised" && common_cardinalities == [1, 1, 1, 1, 0, 0, 0])
         {
             return Err(AuthorEditError::BindingConflict);
@@ -393,6 +394,28 @@ impl PostgresProjectReader {
                     reason,
                     current_authoritative_revision_id: resulting_head,
                 }
+            }
+            "refused_to_draft" => {
+                if prior_head != resulting_head
+                    || expected_head != resulting_head
+                    || receipt.get::<_, i32>(14) != 0
+                    || receipt.get::<_, i32>(16) != 0
+                {
+                    return Err(AuthorEditError::BindingConflict);
+                }
+                verify_zero_authority_relations(&client, identity, receipt_id).await?;
+                let draft = crate::refused_edit_draft::read_settled_identity(
+                    &client,
+                    &identity.project_scope,
+                    receipt_id,
+                )
+                .await?;
+                if result_payload
+                    != serde_json::json!({"draft_id": draft.draft_id, "draft_revision_id": draft.draft_revision_id, "creation_event_id": draft.creation_event_id})
+                {
+                    return Err(AuthorEditError::BindingConflict);
+                }
+                AuthorEditSettlementEffect::RefusedToDraft { identity: draft }
             }
             "refused" => {
                 let reason = result_payload

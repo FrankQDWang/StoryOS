@@ -81,6 +81,12 @@ def validate_route_coverage(catalog: dict[str, Any], route_catalog: dict[str, An
     if activity_mapping != "activity_owner":
         fail(errors, "route coverage activity owner is not an activity_owner family")
     for event_id in required_events:
+        if event_id == "storyos.event.refused-edit-draft-created.v1":
+            if "artifact-proposal-draft" not in event_owners.get(event_id, set()) or event_by_id[event_id].get("wire_profile") != "storyos.artifact-lifecycle.v1":
+                fail(errors, "Refused Edit creation lacks exact Artifact lifecycle coverage")
+            if activity_family in event_owners.get(event_id, set()):
+                fail(errors, "Refused Edit creation must not be owned by Project Activity")
+            continue
         if activity_family not in event_owners.get(event_id, set()):
             fail(errors, f"Release 1 Event lacks activity physical coverage: {event_id}")
         elif event_by_id.get(event_id, {}).get("wire_profile") != family_map.get(activity_family, {}).get("public_contract", {}).get("activity_profile"):

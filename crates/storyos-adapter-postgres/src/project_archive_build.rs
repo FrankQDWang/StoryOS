@@ -58,6 +58,15 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "chapter_removal_decisions",
         "canonical/chapter_removal_decisions.json",
     ),
+    ("draft_artifacts", "canonical/draft_artifacts.json"),
+    (
+        "draft_artifact_revisions",
+        "canonical/draft_artifact_revisions.json",
+    ),
+    (
+        "draft_lifecycle_events",
+        "canonical/draft_lifecycle_events.json",
+    ),
     ("command_idempotency", "canonical/command_idempotency.json"),
     (
         "context_assembly_manifests",

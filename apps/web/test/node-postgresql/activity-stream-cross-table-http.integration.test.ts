@@ -197,7 +197,7 @@ test("activityStream delivers a payload-table Event then an Author Edit in posit
       expected_proposal_head_revision_ids: writer.base_snapshot.proposal_head_revision_ids,
       target_refs: writer.base_snapshot.target_refs,
       observed_ownership_partition: writer.base_snapshot.observed_ownership_partition,
-      editor_contract_revision: "storyos.editor-contract.release-1.v2",
+      editor_contract_revision: "storyos.editor-contract.release-1.v3",
       undo_group_id: EDIT_UNDO,
       completed_intent_record_id: EDIT_INTENT,
       local_intent_sequence: "1",

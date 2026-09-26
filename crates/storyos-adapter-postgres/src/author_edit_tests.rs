@@ -95,7 +95,7 @@ pub(crate) fn author_command(
         proposal_target: None,
         target_refs: vec![format!("manuscript:{CHAPTER}")],
         observed_ownership_partition: "authoritative".to_owned(),
-        editor_contract_revision: "storyos.editor-contract.release-1.v2".to_owned(),
+        editor_contract_revision: "storyos.editor-contract.release-1.v3".to_owned(),
         undo_group_id: format!("018f0000-0000-7001-8000-000000000{suffix}8"),
         completed_intent_record_id: format!("018f0000-0000-7001-8000-000000000{suffix}9"),
         local_intent_sequence: suffix.parse().unwrap(),
@@ -107,6 +107,7 @@ pub(crate) fn author_command(
                     text: "x".to_owned(),
                 }],
                 selection_snapshot: SelectionSnapshot {
+                    ordered_selection: None,
                     coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                     from: 15,
                     to: 15,
@@ -119,6 +120,7 @@ pub(crate) fn author_command(
                     text: "!".to_owned(),
                 }],
                 selection_snapshot: SelectionSnapshot {
+                    ordered_selection: None,
                     coordinate_profile: storyos_core::UTF16_COORDINATE_PROFILE.to_owned(),
                     from: 15,
                     to: 16,

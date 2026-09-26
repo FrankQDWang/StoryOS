@@ -451,7 +451,11 @@ def main() -> int:
                 )
         else:
             event_kinds[event_kind] = event_id
-        if event.get("wire_profile") != "storyos.project-activity.v1":
+        if event_id == "storyos.event.refused-edit-draft-created.v1":
+            expected_shape = {"creator": "core_transition", "scope": "exact_project", "source": "exact_command_admission_receipt", "delivery": "getRefusedEditDraft", "schema_path": "generated/json-schema/storyos-public-release-1/refused-edit-draft-created.schema.json"}
+            if event.get("wire_profile") != "storyos.artifact-lifecycle.v1" or event.get("event_kind") != "refused_edit_draft_created" or event.get("semantic_owner") != "core" or event.get("record_shape") != expected_shape:
+                fail("Refused Edit creation must use its exact Core Artifact lifecycle contract", errors)
+        elif event.get("wire_profile") != "storyos.project-activity.v1":
             fail(f"Event {event_id} must use the Release 1 Project Activity profile", errors)
         for fixture_key in ("positive_fixture", "negative_fixture"):
             fixture_id = event.get(fixture_key)
@@ -732,6 +736,12 @@ def main() -> int:
 
     referenced_events = set(internal_events)
     for operation in operations:
+        creation_events = operation.get("artifact_creation_events", [])
+        if creation_events:
+            if operation.get("operation_id") != "applyAuthorEdit" or creation_events != ["storyos.event.refused-edit-draft-created.v1"]:
+                fail("Only ApplyAuthorEdit owns this exact Refused Edit creation mapping", errors)
+            else:
+                referenced_events.update(creation_events)
         activity = operation.get("activity", {})
         if isinstance(activity, dict):
             referenced_events.update(activity.get("success", []))

@@ -1,0 +1,26 @@
+{
+  "created_at": "2026-09-26T00:00:00.000Z",
+  "creation_event_id": "018f0000-0000-7001-8000-000000000b02",
+  "creator": {
+    "kind": "author"
+  },
+  "draft_id": "018f0000-0000-7001-8000-000000000b02",
+  "draft_revision_id": "018f0000-0000-7001-8000-000000000b02",
+  "event_kind": "refused_edit_draft_created",
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000b02",
+    "project_id": "018f0000-0000-7001-8000-000000000b02"
+  },
+  "schema_id": "storyos.event.refused-edit-draft-created.v1",
+  "source": {
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000b02",
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.applyAuthorEdit.jcs.v1",
+      "value_hex_lowercase": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "command_id": "018f0000-0000-7001-8000-000000000b02",
+    "idempotency_key": "018f0000-0000-7001-8000-000000000b02",
+    "receipt_id": "018f0000-0000-7001-8000-000000000b02"
+  }
+}

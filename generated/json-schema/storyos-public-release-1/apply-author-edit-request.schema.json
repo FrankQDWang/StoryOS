@@ -4,6 +4,25 @@
       "oneOf": [
         {
           "properties": {
+            "kind": {
+              "const": "replace_structured_selection",
+              "type": "string"
+            },
+            "replacement": {
+              "items": {
+                "$ref": "#/$defs/ReplacementBlock"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "replacement"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
             "from": {
               "format": "uint32",
               "minimum": 0,
@@ -196,12 +215,137 @@
       ],
       "type": "object"
     },
+    "EditSourceOwner": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "manuscript",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "proposal",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "operation_id": {
+              "type": "string"
+            },
+            "proposal_id": {
+              "type": "string"
+            },
+            "revision_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "manuscript_block_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ManuscriptBlockKind": {
       "enum": [
         "paragraph",
         "heading"
       ],
       "type": "string"
+    },
+    "OrderedSourceSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/SourceSelectionEndpoint"
+        },
+        "head": {
+          "$ref": "#/$defs/SourceSelectionEndpoint"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/SelectedEditSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources",
+        "anchor",
+        "head"
+      ],
+      "type": "object"
+    },
+    "ReplacementBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "block_kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "SelectedEditSource": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "owner": {
+          "$ref": "#/$defs/EditSourceOwner"
+        },
+        "source_text": {
+          "type": "string"
+        },
+        "to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "owner",
+        "coordinate_profile",
+        "from",
+        "to",
+        "block_kind",
+        "source_text"
+      ],
+      "type": "object"
     },
     "SelectionSnapshot": {
       "additionalProperties": false,
@@ -214,6 +358,16 @@
           "minimum": 0,
           "type": "integer"
         },
+        "ordered_selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OrderedSourceSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "to": {
           "format": "uint32",
           "minimum": 0,
@@ -224,6 +378,26 @@
         "coordinate_profile",
         "from",
         "to"
+      ],
+      "type": "object"
+    },
+    "SourceSelectionEndpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "source_index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_index",
+        "source_offset"
       ],
       "type": "object"
     }

@@ -41,7 +41,7 @@ export const JOURNAL_OBJECT_STORES = Object.freeze([
   "outcome_query_attempts",
   "outcome_query_observations",
 ]);
-export const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v2";
+export const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
 export const AUTHOR_EDIT_BATCH_POLICY_REVISION =
   "storyos.author-edit-batch.release-1.preview.v1";
 export const AUTHOR_EDIT_BATCH_IDLE_MS = 250;

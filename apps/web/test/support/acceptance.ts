@@ -41,8 +41,9 @@ function runRequest(chapterId: string, correlationId: string): CreateAgentRunReq
   };
 }
 
-export async function startRealServer() {
+export async function startRealServer(bind = "127.0.0.1:0") {
   return startStoryOSServer({
+    bind,
     repositoryRoot,
     serverBinary: bin("storyos-server"),
     sessions: { "session-a": USER_A, "session-c": USER_A, "session-b": "018f0000-0000-7001-8000-00000000000b" },
@@ -204,7 +205,7 @@ export async function reviseCandidate(
     },
     target_refs: session.base_snapshot.target_refs,
     observed_ownership_partition: "mixed",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}4`),
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: currentSession ? "2" : "1",

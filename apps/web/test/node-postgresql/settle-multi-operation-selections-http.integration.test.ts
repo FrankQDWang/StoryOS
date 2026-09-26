@@ -50,7 +50,7 @@ async function seedTwoBlocks(
     expected_proposal_head_revision_ids: [],
     target_refs: session.base_snapshot.target_refs,
     observed_ownership_partition: "authoritative",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}4`),
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: "1",

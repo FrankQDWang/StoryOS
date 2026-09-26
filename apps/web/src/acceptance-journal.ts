@@ -178,7 +178,7 @@ export async function readAcceptanceJournal(workspace: EditorWorkspace,
       || group.digest_profile !== decisionDigestProfile(flight.command_kind)
       || !Number.isSafeInteger(record.local_intent_sequence)
       || record.local_intent_sequence !== coverage[0]?.local_intent_sequence
-      || record.editor_contract_revision !== "storyos.editor-contract.release-1.v2"
+      || record.editor_contract_revision !== "storyos.editor-contract.release-1.v3"
       || record.exact_semantic_payload_ref !== group.journal_submission_group_id
       || group.frozen_request_body_ref !== group.journal_submission_group_id
       || JSON.stringify(record.author_visible_decision_ref) !== JSON.stringify({
@@ -517,7 +517,7 @@ async function commitFlight(workspace: EditorReadyState,
         authoritative_revision_id: input.authoritative_revision_id,
       } : { target_revisions: input.target_revisions }),
     },
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
     author_visible_decision_ref: flight.author_visible_decision_ref,
     created_at: createdAt,
   };

@@ -53,6 +53,8 @@ use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
 use crate::release1_readable_export_query_artifacts as readable_export_query_artifacts;
+use crate::release1_refused_edit_draft::GET_REFUSED_EDIT_DRAFT;
+use crate::release1_refused_edit_draft_artifacts as refused_draft_artifacts;
 use crate::release1_reject_proposal_operations::REJECT_PROPOSAL_OPERATIONS;
 use crate::release1_reject_proposal_operations_artifacts as reject_proposal_operations_artifacts;
 use crate::release1_reopen_rejected_operations::REOPEN_REJECTED_OPERATIONS;
@@ -168,7 +170,21 @@ fn fixture_triple(
 }
 
 fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
-    let mut membership = Vec::with_capacity(93);
+    let mut membership = Vec::with_capacity(98);
+    membership.push(FixtureMembership {
+        path: refused_draft_artifacts::EVENT_FIXTURE_PATHS[0],
+        fixture_id: "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
+        classification: "positive",
+        operation_id: "applyAuthorEdit",
+        bytes: |_profile| refused_draft_artifacts::event_fixture_bytes(),
+    });
+    membership.push(FixtureMembership {
+        path: refused_draft_artifacts::EVENT_FIXTURE_PATHS[1],
+        fixture_id: "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1",
+        classification: "invalid",
+        operation_id: "applyAuthorEdit",
+        bytes: |_profile| refused_draft_artifacts::event_invalid_fixture_bytes(),
+    });
     membership.extend(fixture_triple(
         [
             GOLDEN_PROFILE_PATH,
@@ -360,6 +376,15 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| agent_run_control_artifacts::cancel_fixture_bytes(),
             |_profile| agent_run_control_artifacts::cancel_invalid_fixture_bytes(),
             |_profile| agent_run_control_artifacts::cancel_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        refused_draft_artifacts::FIXTURE_PATHS,
+        &GET_REFUSED_EDIT_DRAFT,
+        [
+            |_profile| refused_draft_artifacts::fixture_bytes(),
+            |_profile| refused_draft_artifacts::invalid_fixture_bytes(),
+            |_profile| refused_draft_artifacts::boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

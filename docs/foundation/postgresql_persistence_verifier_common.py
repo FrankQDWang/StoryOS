@@ -168,10 +168,19 @@ def selector_operations(selector: Any, operations: list[dict[str, Any]], errors:
 def selector_events(selector: Any, events: list[dict[str, Any]], errors: list[str], label: str) -> set[str]:
     if selector is None:
         return set()
-    if not isinstance(selector, dict) or selector.get("mode") != "all":
-        fail(errors, f"{label}: event_selector must use the explicit all mode")
+    if not isinstance(selector, dict) or set(selector) != {"mode"}:
+        fail(errors, f"{label}: event_selector needs one exact mode")
         return set()
-    return {event.get("schema_id") for event in events}
+    event_ids = {event.get("schema_id") for event in events}
+    refused_creation = "storyos.event.refused-edit-draft-created.v1"
+    if selector["mode"] == "all":
+        return event_ids
+    if selector["mode"] == "project_activity":
+        return event_ids - {refused_creation}
+    if selector["mode"] == "refused_edit_creation" and refused_creation in event_ids:
+        return {refused_creation}
+    fail(errors, f"{label}: unsupported event selector mode")
+    return set()
 
 
 def dependency_path_count(graph: dict[str, list[str]], start: str, target: str) -> int:

@@ -6,12 +6,12 @@ import {
   acceptProposal, applyAuthorEdit, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestCreateAgentRun,
   digestCreateEditorSession, digestExportProjectArchive, digestRejectProposalOperations,
-  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal,
+  exportProjectArchive, getAgentRun, getChapter, getExportOperation, getProposal, getRefusedEditDraft, getApplyAuthorEditOutcome,
   rejectProposalOperations,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import type {
   AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
-  CreateEditorSessionRequest, RejectProposalOperationsRequest,
+  CreateEditorSessionRequest, RejectProposalOperationsRequest, SelectedEditSource,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
@@ -88,7 +88,7 @@ async function writePassage(
     expected_proposal_head_revision_ids: [],
     target_refs: session.base_snapshot.target_refs,
     observed_ownership_partition: "authoritative",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}4`),
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: "1",
@@ -194,7 +194,7 @@ function replaceUnit(
     expected_proposal_head_revision_ids: [proposalRevisionId],
     target_refs: writer.session.base_snapshot.target_refs,
     observed_ownership_partition: "mixed",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
     undo_group_id: id(`${ns}4`),
     completed_intent_record_id: id(`${ns}5`),
     local_intent_sequence: writer.nextSequence,
@@ -206,6 +206,162 @@ function replaceUnit(
     }],
   };
 }
+
+test("a protected mixed replacement retains complete content after response loss, replay, and restart", async () => {
+  let started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e09111"), "Refused Edit Novel", "e092");
+    const { opened, writer } = await openInline(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, prepared.chapterId, "e093",
+    );
+    const request = replaceUnit(8, 26, "New passage", writer, "e094", opened.proposal.revision_id);
+    const sources: SelectedEditSource[] = [
+      { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
+        coordinate_profile: "prosemirror-token-utf16.v1", from: 8, to: 10,
+        block_kind: "paragraph", source_text: "Guard the narrator voice in this passage." },
+      { owner: { kind: "proposal", proposal_id: opened.proposal.proposal_id,
+        operation_id: opened.proposal.operation_id, revision_id: opened.proposal.revision_id,
+        manuscript_block_id: opened.proposal.manuscript_block_id },
+        coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 13,
+        block_kind: "paragraph", source_text: "narrator tone" },
+      { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
+        coordinate_profile: "prosemirror-token-utf16.v1", from: 24, to: 26,
+        block_kind: "paragraph", source_text: "Guard the narrator voice in this passage." },
+    ];
+    request.author_edit_units = [{
+      normalized_primitives: [{ kind: "replace_structured_selection",
+        replacement: [{ block_kind: "paragraph", text: "New passage" }] }],
+      selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 8, to: 26,
+        ordered_selection: { sources, anchor: { source_index: 0, source_offset: 8 },
+          head: { source_index: 2, source_offset: 26 } } },
+    }];
+    const before = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    const key = id("e0946");
+    const digest = await digestApplyAuthorEdit(request);
+    let originalNonce = "";
+    let loseResponse = true;
+    const lossyFetch: typeof fetch = async (input, init) => {
+      const response = await prepared.fetchImpl(input, init);
+      if (loseResponse && init?.method === "POST" && String(input).endsWith("/manuscript/author-edits")) {
+        loseResponse = false;
+        await stopRealServer(started.server);
+        throw new Error("Controlled response loss after durable HTTP settlement");
+      }
+      return response;
+    };
+    await assert.rejects(() => challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+      digest, key, (antiForgery) => {
+        originalNonce = antiForgery;
+        return applyAuthorEdit({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          fetchImpl: lossyFetch, idempotencyKey: key, antiForgery, request });
+      }), /Controlled response loss/);
+    const originalOrigin = new URL(started.baseUrl);
+    started = await startRealServer(`${originalOrigin.hostname}:${originalOrigin.port}`);
+    prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
+    const recovered = await getApplyAuthorEditOutcome({ baseUrl: started.baseUrl,
+      projectId: prepared.projectId, idempotencyKey: key, antiForgery: originalNonce,
+      fetchImpl: prepared.fetchImpl });
+    if (recovered.outcome.outcome_kind !== "committed") throw new Error("expected committed outcome");
+    const result = recovered.outcome.response;
+    if (result.effect.kind !== "refused_to_draft") throw new Error("expected preserved Draft");
+    assert.deepEqual(result.effect, { kind: "refused_to_draft", refusal_origin: "fresh_editor_intent",
+      draft_id: result.effect.draft_id, draft_revision_id: result.effect.draft_revision_id,
+      creation_event_id: result.effect.creation_event_id });
+    for (const value of [result.command_id, result.author_command_admission_id,
+      result.receipt.receipt_id, result.effect.draft_id, result.effect.draft_revision_id,
+      result.effect.creation_event_id]) assert.match(value, UUID_V7);
+    assert.deepEqual(result.receipt, {
+      receipt_id: result.receipt.receipt_id, project_scope: { owner_user_id: USER_A, project_id: prepared.projectId },
+      command_kind: "applyAuthorEdit", command_digest: digest, idempotency_key: key,
+      producer_cause: "author_command_admission", author_command_admission_id: result.author_command_admission_id,
+      expected_heads: [writer.authoritativeRevisionId], prior_heads: [writer.authoritativeRevisionId],
+      resulting_heads: [writer.authoritativeRevisionId], authoritative_revision_ids: [], proposal_revision_ids: [],
+      authoritative_commit_ids: [], author_action_sequence: null, draft_artifact_refs: [result.effect.draft_id],
+      artifact_lifecycle_event_refs: [result.effect.creation_event_id], condition_refs: [],
+      result: "refused_to_draft", created_at: result.receipt.created_at,
+    });
+    const expectedPayload = {
+      schema_revision: "storyos.refused-edit-payload.v1", chapter_id: prepared.chapterId,
+      expected_authoritative_revision_id: writer.authoritativeRevisionId,
+      expected_proposal_head_revision_ids: [opened.proposal.revision_id],
+      target_refs: [`manuscript:${prepared.chapterId}`], author_edit_units: request.author_edit_units,
+      undo_group_id: id("e0944"), completed_intent_record_id: id("e0945"), local_intent_sequence: "2",
+    };
+    const canonicalPayload = JSON.stringify(expectedPayload, (_key, value: unknown) =>
+      value !== null && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0))
+        : value);
+    const queried = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
+    assert.ok(Number.isFinite(Date.parse(queried.draft.creation.created_at)));
+    assert.ok(Date.parse(queried.draft.creation.created_at) <= Date.parse(result.receipt.created_at));
+    assert.deepEqual(queried.draft, {
+      draft_id: result.effect.draft_id, draft_revision_id: result.effect.draft_revision_id,
+      kind: "refused_edit", closure: "open", retention_state: "retained", payload: expectedPayload,
+      payload_digest: createHash("sha256").update(canonicalPayload).digest("hex"),
+      payload_digest_profile: "storyos.refused-edit-payload.jcs.v1", creation: {
+        schema_id: "storyos.event.refused-edit-draft-created.v1", event_kind: "refused_edit_draft_created",
+        project_scope: { owner_user_id: USER_A, project_id: prepared.projectId },
+        creator: { kind: "core_transition", receipt_id: result.receipt.receipt_id }, creation_event_id: result.effect.creation_event_id,
+        draft_id: result.effect.draft_id, draft_revision_id: result.effect.draft_revision_id,
+        created_at: queried.draft.creation.created_at, source: { command_id: result.command_id,
+          author_command_admission_id: result.author_command_admission_id, receipt_id: result.receipt.receipt_id,
+          idempotency_key: key, command_digest: digest },
+      },
+    });
+    const replay = () => applyAuthorEdit({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      fetchImpl: prepared.fetchImpl, idempotencyKey: key, antiForgery: originalNonce, request });
+    assert.deepEqual(await replay(), result);
+    assert.deepEqual(await Promise.all([replay(), replay()]), [result, result]);
+    assert.deepEqual((await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl })).chapter, before.chapter);
+    assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, opened.proposal);
+    await assert.rejects(() => getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: queried.draft.draft_id, fetchImpl: browserFetch(started.baseUrl, "session-b") }), (error) => {
+        const protocol = requireStoryOSProtocolError(error);
+        return protocol.status === 404 && !String(protocol.responseBody).includes("New passage");
+      });
+    const archiveRequest = { command_schema: "storyos.command.export-project-archive.request.v1" as const,
+      export_project_archive_input: { ...BINDING, correlation_id: id("e0951"),
+        archive_profile: "storyos.project-export.v1", archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" } };
+    const archive = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/exports", archiveRequest.command_schema,
+      await digestExportProjectArchive(archiveRequest), id("e0952"),
+      (antiForgery) => exportProjectArchive({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        fetchImpl: prepared.fetchImpl, idempotencyKey: id("e0952"), antiForgery, request: archiveRequest }));
+    if (archive.effect.kind !== "admitted") throw new Error("expected admitted archive");
+    await settleOnce();
+    assert.equal((await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      exportId: archive.effect.export_id, fetchImpl: prepared.fetchImpl })).status, "ready");
+    const download = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${archive.effect.export_id}`,
+      { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+    assert.equal(download.status, 200);
+    const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+    const drafts = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifacts.json")));
+    const revisions = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifact_revisions.json")));
+    const events = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json")));
+    const rowScope = { owner_user_id: USER_A, project_id: prepared.projectId };
+    assert.deepEqual(drafts, [{ ...rowScope, draft_id: queried.draft.draft_id, kind: "refused_edit",
+      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained" }]);
+    const revisionCreatedAt = revisions[0].created_at;
+    assert.equal(new Date(revisionCreatedAt).toISOString(), queried.draft.creation.created_at);
+    assert.deepEqual(revisions, [{ ...rowScope, draft_id: queried.draft.draft_id,
+      revision_id: queried.draft.draft_revision_id, payload: expectedPayload,
+      payload_digest: queried.draft.payload_digest, payload_digest_profile: "storyos.refused-edit-payload.jcs.v1",
+      created_at: revisionCreatedAt }]);
+    assert.deepEqual(events, [{ ...rowScope, creation_event_id: queried.draft.creation.creation_event_id,
+      event_kind: "refused_edit_draft_created", draft_id: queried.draft.draft_id,
+      revision_id: queried.draft.draft_revision_id, receipt_id: result.receipt.receipt_id,
+      author_command_admission_id: result.author_command_admission_id, command_id: result.command_id,
+      result_kind: "refused_to_draft", created_at: revisionCreatedAt }]);
+    for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes(originalNonce));
+  } finally { await stopRealServer(started.server); }
+});
 
 test("inline Proposal uses exact Anchors, keeps source and candidate distinct, and Accepts a splice", async () => {
   const started = await startRealServer();

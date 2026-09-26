@@ -54,6 +54,7 @@ fn versioned_command() -> ApplyVersionedAuthorEdit {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 1,
                 to: 3,
@@ -156,6 +157,7 @@ fn split_command() -> ApplyVersionedAuthorEdit {
                 new_manuscript_block_id: "block-right".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 5,
                 to: 5,
@@ -184,6 +186,7 @@ fn join_keeps_the_left_identity_and_drops_the_right_from_current_payload() {
             right_manuscript_block_id: "block-right".to_owned(),
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 5,
             to: 5,
@@ -227,6 +230,7 @@ fn join_of_nonadjacent_blocks_is_invalid() {
             right_manuscript_block_id: "block-right".to_owned(),
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 5,
             to: 5,
@@ -252,6 +256,7 @@ fn replace_still_targets_one_block_inside_a_split_payload() {
             text: "StoryOS".to_owned(),
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 5,
@@ -325,6 +330,7 @@ fn one_unit_joins_then_replaces_across_adjacent_blocks_atomically() {
             },
         ],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 2,
             to: 8,
@@ -356,6 +362,7 @@ fn a_later_invalid_primitive_in_the_same_unit_refuses_the_complete_range() {
             },
         ],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 99,
@@ -388,6 +395,7 @@ fn one_unit_replaces_then_splits_so_pasted_paragraphs_receive_new_identities() {
             },
         ],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 5,
             to: 5,
@@ -426,6 +434,7 @@ fn one_unit_moves_a_block_and_keeps_both_identities() {
             to_index: 1,
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 0,
@@ -464,6 +473,7 @@ fn an_invalid_move_index_refuses_without_changing_payload_order() {
             to_index: 2,
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 0,
@@ -487,6 +497,7 @@ fn one_to_one_retype_keeps_identity_and_text() {
             block_kind: ManuscriptBlockKind::Heading,
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 0,
@@ -526,6 +537,7 @@ fn a_stale_head_still_has_zero_authority_effect_for_move() {
             to_index: 1,
         }],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 0,
@@ -559,6 +571,7 @@ fn two_disconnected_block_replacements_in_one_unit_are_an_unsupported_intent() {
             },
         ],
         selection_snapshot: SelectionSnapshot {
+            ordered_selection: None,
             coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
             from: 0,
             to: 5,

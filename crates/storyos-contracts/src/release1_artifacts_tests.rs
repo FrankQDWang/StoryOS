@@ -589,15 +589,15 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.server_contract_revision,
-        "storyos.server.release-1.v5"
+        "storyos.server.release-1.v6"
     );
     assert_eq!(
         profile.release_identity.worker_contract_revision,
-        "storyos.worker.release-1.v5"
+        "storyos.worker.release-1.v6"
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v23"
+        "storyos.typescript-client.release-1.v24"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -704,19 +704,25 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
         .find(|line| line.starts_with("export type ApplyAuthorEditEffect ="))
         .expect("generated TypeScript effect declaration exists");
     let variants = effect_declaration.split(" | ").collect::<Vec<_>>();
-    assert!(variants[0].contains("project_activity_position: string"));
+    assert_eq!(
+        variants
+            .iter()
+            .filter(|variant| variant.contains("project_activity_position"))
+            .count(),
+        1
+    );
     assert!(
         variants
             .iter()
-            .skip(1)
-            .all(|variant| !variant.contains("project_activity_position"))
+            .any(|variant| variant.contains("authoritative_applied")
+                && variant.contains("project_activity_position: string"))
     );
     let generated_client = String::from_utf8(
         generated["generated/typescript/storyos-public-release-1/client.mjs"].clone(),
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v23\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v24\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])

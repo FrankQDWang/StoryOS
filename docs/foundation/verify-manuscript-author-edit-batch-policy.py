@@ -13,6 +13,7 @@ import re
 import sys
 ROOT = Path(__file__).resolve().parents[2]
 POLICY_PATH = ROOT / "docs/foundation/author-edit-batch-release-1-policy.json"
+LEGACY_POLICY_PATH = ROOT / "docs/research/author-edit-batch-prerelease-policy-source.v1.json"
 EVIDENCE_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-evidence.json"
 CANDIDATES_PATH = ROOT / "docs/research/author-edit-batch-prerelease-browser-candidates.jsonl"
 APPLY_AUTHOR_EDIT_RESPONSE_SCHEMA_PATH = (
@@ -34,7 +35,7 @@ PROJECTIONS = (
     AUTHOR_ADMISSION_PATH,
 )
 REVISION = "storyos.author-edit-batch.release-1.preview.v1"
-EDITOR_REVISION = "storyos.editor-contract.release-1.v2"
+EDITOR_REVISION = "storyos.editor-contract.release-1.v3"
 PROJECTION_REQUIREMENTS = {
     PROJECTIONS[0]: ("**Editor Verification Split**:", "typed zero-authority Receipt",
                      "pre-Admission refusal or infrastructure failure before commit"),
@@ -381,6 +382,7 @@ def apply_author_edit_web_errors(schema: dict, web_projection: str) -> list[str]
     if len(effect_variants) != len(variants):
         errors.append("applyAuthorEdit effect branches are not unique tagged objects")
     expected_fields = {
+        "refused_to_draft": {"kind", "refusal_origin", "draft_id", "draft_revision_id", "creation_event_id"},
         "authoritative_applied": {
             "kind", "authoritative_revision", "authoritative_commit_id",
             "author_action_sequence", "project_activity_position"},
@@ -530,7 +532,7 @@ def apply_author_edit_outcome_contract_errors(
     errors: list[str] = []
     if hashlib.sha256(json.dumps(
             outcome_schema, sort_keys=True, separators=(",", ":")
-    ).encode()).hexdigest() != "1d45f497194e385ccfd47bd3f5962a1e7aed3e09185ec2ddd69e5557a5f623b7":
+    ).encode()).hexdigest() != "7124740c276e50d2f651b3828288afdf895ce151db1218b4794f55b951be4002":
         errors.append("outcome Query generated schema drifted")
     root_properties = outcome_schema.get("properties", {})
     if (outcome_schema.get("$id") != "storyos.query.apply-author-edit-outcome.response.v1"
@@ -969,8 +971,22 @@ def policy_errors(
             or calibration.get("minimum_completed_intent_counters") != 100000 \
             or calibration.get("allowed_data") != "aggregated counters and histograms only":
         errors.append("future anonymous calibration gate drifted")
-    if evidence.get("policy_revision") != REVISION or evidence.get("policy_sha256") != sha256(POLICY_PATH):
-        errors.append("captured evidence is not bound to the exact policy source")
+    coverage = policy.get("input_coverage", {})
+    if coverage != {
+        "retained_synthetic_evidence": "legacy_single_owner_primitives_only",
+        "legacy_evidence_policy_source": "docs/research/author-edit-batch-prerelease-policy-source.v1.json",
+        "structured_source_profile": "docs/foundation/refused-edit-input-release-1-profile.md",
+        "structured_source_evidence_owner": "https://github.com/FrankQDWang/StoryOS/issues/827",
+        "new_workload_qualified_by_legacy_measurements": False,
+    }:
+        errors.append("legacy measurement coverage must not claim the new structured-source workload")
+    legacy_projection = deepcopy(policy)
+    legacy_projection.pop("input_coverage", None)
+    legacy_projection.setdefault("identity_binding", {})["editor_contract_revision"] = "storyos.editor-contract.release-1.v2"
+    if legacy_projection != json.loads(LEGACY_POLICY_PATH.read_text(encoding="utf-8")):
+        errors.append("current legacy batch policy changed beyond its editor identity mapping")
+    if evidence.get("policy_revision") != REVISION or evidence.get("policy_sha256") != sha256(LEGACY_POLICY_PATH):
+        errors.append("captured evidence is not bound to its exact retained legacy policy source")
     if evidence.get("synthetic_only") is not True or evidence.get("real_user_content") is not False:
         errors.append("captured evidence is not synthetic-only")
     if evidence.get("candidate_order") != {
@@ -1039,6 +1055,7 @@ def self_test() -> None:
     ) == []
     for path, value in (
         (("selected", "max_author_edit_units"), 999),
+        (("input_coverage", "new_workload_qualified_by_legacy_measurements"), True),
         (("identity_binding", "wire_change"), True),
         (("receipt_boundary", "receipt_free"), ["refused"]),
     ):

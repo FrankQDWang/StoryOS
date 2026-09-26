@@ -32,6 +32,7 @@ mod delete_chapter;
 mod delete_volume;
 mod editor_session;
 mod get_proposal;
+mod get_refused_edit_draft;
 mod list_projects;
 mod manuscript_search;
 mod manuscript_statistics;
@@ -86,6 +87,7 @@ use delete_chapter::delete_chapter;
 use delete_volume::delete_volume;
 use editor_session::{create_editor_session, get_editor_session};
 use get_proposal::get_proposal;
+use get_refused_edit_draft::get_refused_edit_draft;
 use list_projects::list_projects;
 use manuscript_search::search_manuscript_query;
 use manuscript_statistics::get_statistics;
@@ -317,6 +319,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::GET_AGENT_RUN_METHOD),
                 get_agent_run,
+            ),
+        )
+        .route(
+            contracts::GET_REFUSED_EDIT_DRAFT_PATH,
+            routing::on(
+                method_filter(contracts::GET_REFUSED_EDIT_DRAFT_METHOD),
+                get_refused_edit_draft,
             ),
         )
         .route(

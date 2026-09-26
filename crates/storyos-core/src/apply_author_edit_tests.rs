@@ -12,6 +12,7 @@ fn command() -> ApplyAuthorEdit {
             anchor_refs: Vec::new(),
             unresolved_reservation_refs: Vec::new(),
         },
+        ordered_source_facts: None,
         target_refs: vec!["manuscript:chapter".to_owned()],
         observed_ownership_partition: "authoritative".to_owned(),
         inline_edit_disposition: InlineEditDisposition::Unspecified,
@@ -22,6 +23,7 @@ fn command() -> ApplyAuthorEdit {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 1,
                 to: 3,
@@ -51,6 +53,7 @@ fn ordered_units_apply_against_one_transient_body() {
                 text: "xy".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 1,
                 to: 3,
@@ -63,6 +66,7 @@ fn ordered_units_apply_against_one_transient_body() {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: UTF16_COORDINATE_PROFILE.to_owned(),
                 from: 3,
                 to: 3,

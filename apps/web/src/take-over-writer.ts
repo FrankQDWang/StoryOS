@@ -8,7 +8,7 @@ import type { TakeOverProjectWriterResponse }
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
-const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v2";
+const EDITOR_CONTRACT_REVISION = "storyos.editor-contract.release-1.v3";
 
 type InFlightTakeover = {
   idempotencyKey: string;

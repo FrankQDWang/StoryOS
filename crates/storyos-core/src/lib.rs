@@ -16,6 +16,8 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod manuscript_payload;
+mod refused_edit;
+pub use refused_edit::{CurrentOrderedSourceFacts, ProposalEditSourceFacts};
 mod open_block_proposal;
 mod open_inline_proposal;
 mod pause_proposal_generation;
@@ -189,6 +191,7 @@ pub struct ApplyAuthorEdit {
     pub expected_authoritative_revision_id: String,
     pub expected_proposal_head_revision_ids: Vec<String>,
     pub current_ownership: CurrentOwnershipFacts,
+    pub ordered_source_facts: Option<CurrentOrderedSourceFacts>,
     pub target_refs: Vec<String>,
     pub observed_ownership_partition: String,
     pub inline_edit_disposition: InlineEditDisposition,
@@ -202,14 +205,19 @@ pub struct CurrentOwnershipFacts {
     pub unresolved_reservation_refs: Vec<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AuthorEditUnit {
     pub normalized_primitives: Vec<AuthorEditPrimitive>,
     pub selection_snapshot: SelectionSnapshot,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthorEditPrimitive {
+    ReplaceStructuredSelection {
+        replacement: Vec<ReplacementBlock>,
+    },
     ReplaceSelection {
         from: u32,
         to: u32,
@@ -240,15 +248,80 @@ pub enum AuthorEditPrimitive {
     },
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SelectionSnapshot {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ordered_selection: Option<OrderedSourceSelection>,
     pub coordinate_profile: String,
     pub from: u32,
     pub to: u32,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReplacementBlock {
+    pub block_kind: ManuscriptBlockKind,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OrderedSourceSelection {
+    pub sources: Vec<SelectedEditSource>,
+    pub anchor: SourceSelectionEndpoint,
+    pub head: SourceSelectionEndpoint,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceSelectionEndpoint {
+    pub source_index: u32,
+    pub source_offset: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SelectedEditSource {
+    pub owner: EditSourceOwner,
+    pub coordinate_profile: String,
+    pub from: u32,
+    pub to: u32,
+    pub block_kind: ManuscriptBlockKind,
+    pub source_text: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum EditSourceOwner {
+    Manuscript {
+        manuscript_block_id: String,
+    },
+    Proposal {
+        proposal_id: String,
+        operation_id: String,
+        revision_id: String,
+        manuscript_block_id: String,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RefusedEditPayload {
+    pub schema_revision: String,
+    pub chapter_id: String,
+    pub expected_authoritative_revision_id: String,
+    pub expected_proposal_head_revision_ids: Vec<String>,
+    pub target_refs: Vec<String>,
+    pub author_edit_units: Vec<AuthorEditUnit>,
+    pub undo_group_id: String,
+    pub completed_intent_record_id: String,
+    pub local_intent_sequence: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ApplyAuthorEditResult {
+    RefusedToDraft,
     AuthoritativeApplied { body: String },
     ProposalRevised { candidate_text: String },
     Conflicted { reason: AuthorEditConflict },
@@ -308,6 +381,9 @@ pub fn apply_author_edit(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
         return ApplyAuthorEditResult::Conflicted {
             reason: AuthorEditConflict::OwnershipChanged,
         };
+    }
+    if command.ordered_source_facts.is_some() {
+        return refused_edit::classify(command);
     }
     if command.inline_edit_disposition == InlineEditDisposition::AuthoritativeDespiteReservation {
         if current_partition != "mixed" || command.expected_proposal_head_revision_ids.is_empty() {

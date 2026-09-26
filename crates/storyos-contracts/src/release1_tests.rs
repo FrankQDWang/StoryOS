@@ -80,6 +80,7 @@ fn apply_author_edit_contract_activates_the_bounded_batch_policy() {
                 text: "!".to_owned(),
             }],
             selection_snapshot: SelectionSnapshot {
+                ordered_selection: None,
                 coordinate_profile: "storyos.editor.utf16-code-unit.v1".to_owned(),
                 from: 4,
                 to: 4,
@@ -99,7 +100,7 @@ fn apply_author_edit_contract_activates_the_bounded_batch_policy() {
     );
     assert_eq!(
         EDITOR_CONTRACT_REVISION,
-        "storyos.editor-contract.release-1.v2"
+        "storyos.editor-contract.release-1.v3"
     );
     let policy: serde_json::Value = serde_json::from_str(include_str!(
         "../../../docs/foundation/author-edit-batch-release-1-policy.json"

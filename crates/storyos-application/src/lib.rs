@@ -37,6 +37,13 @@ mod agent_run_work;
 mod archive_project;
 mod author_command_outcome_unknown;
 mod author_edit;
+mod author_edit_wire;
+pub use author_edit_wire::{author_edit_units_from_wire, author_edit_units_to_wire};
+mod refused_edit_draft;
+pub use refused_edit_draft::{
+    AUTHOR_EDIT_INLINE_SOURCE_MAX_BYTES, RefusedEditDraftIdentity, RefusedEditDraftReader,
+    RefusedEditDraftRecord,
+};
 mod author_edit_outcome;
 mod chapter_query;
 mod create_agent_run;

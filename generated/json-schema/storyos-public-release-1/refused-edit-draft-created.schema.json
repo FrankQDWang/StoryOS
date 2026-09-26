@@ -1,0 +1,147 @@
+{
+  "$defs": {
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "project_id": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "RefusedEditDraftCreator": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "core_transition",
+              "type": "string"
+            },
+            "receipt_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "receipt_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "RefusedEditDraftSource": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "command_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "author_command_admission_id",
+        "receipt_id",
+        "idempotency_key",
+        "command_digest"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.event.refused-edit-draft-created.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "created_at": {
+      "type": "string"
+    },
+    "creation_event_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "creator": {
+      "$ref": "#/$defs/RefusedEditDraftCreator"
+    },
+    "draft_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "draft_revision_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "event_kind": {
+      "const": "refused_edit_draft_created",
+      "type": "string"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "schema_id": {
+      "const": "storyos.event.refused-edit-draft-created.v1",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/RefusedEditDraftSource"
+    }
+  },
+  "required": [
+    "event_kind",
+    "project_scope",
+    "creator",
+    "schema_id",
+    "creation_event_id",
+    "draft_id",
+    "draft_revision_id",
+    "created_at",
+    "source"
+  ],
+  "title": "RefusedEditDraftCreated",
+  "type": "object"
+}

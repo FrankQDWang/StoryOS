@@ -86,7 +86,7 @@ function assertGroup(
     expected_authoritative_revision_id: REVISION,
     expected_proposal_head_revision_ids: [],
     observed_ownership_partition: "authoritative",
-    editor_contract_revision: "storyos.editor-contract.release-1.v2",
+    editor_contract_revision: "storyos.editor-contract.release-1.v3",
   });
   expect(group.ordered_coverage).toHaveLength(snapshot.records.length);
   return group;

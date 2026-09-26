@@ -133,6 +133,8 @@ mod project_export_work;
 mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_work;
+mod refused_edit_draft;
+mod refused_edit_source;
 mod reject_proposal_operations;
 mod reopen_rejected_operations;
 mod set_current_chapter;

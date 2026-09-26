@@ -5,7 +5,7 @@ use storyos_application::{
     ProjectCommandChallengeBinding, RequiresReconfirmationApplyAuthorEdit,
     ResolveApplyAuthorEditOutcome,
 };
-use storyos_core::{AuthorEditPrimitive, AuthorEditUnit, SelectionSnapshot};
+use storyos_core::AuthorEditUnit;
 use uuid::Uuid;
 
 use super::author_edit::{AuthorEditFault, parse_u64};
@@ -312,64 +312,7 @@ fn committed_outcome(
 }
 
 fn parse_units(value: &serde_json::Value) -> Option<Vec<AuthorEditUnit>> {
-    value
-        .as_array()?
-        .iter()
-        .map(|unit| {
-            let snapshot = unit.get("selection_snapshot")?;
-            Some(AuthorEditUnit {
-                normalized_primitives: unit
-                    .get("normalized_primitives")?
-                    .as_array()?
-                    .iter()
-                    .map(parse_primitive)
-                    .collect::<Option<Vec<_>>>()?,
-                selection_snapshot: SelectionSnapshot {
-                    coordinate_profile: required_string(snapshot, "coordinate_profile")?,
-                    from: snapshot.get("from")?.as_u64()? as u32,
-                    to: snapshot.get("to")?.as_u64()? as u32,
-                },
-            })
-        })
-        .collect()
-}
-
-fn parse_primitive(value: &serde_json::Value) -> Option<AuthorEditPrimitive> {
-    match value.get("kind")?.as_str()? {
-        "replace_selection" => Some(AuthorEditPrimitive::ReplaceSelection {
-            from: value.get("from")?.as_u64()? as u32,
-            to: value.get("to")?.as_u64()? as u32,
-            text: required_string(value, "text")?,
-        }),
-        "replace_block_selection" => Some(AuthorEditPrimitive::ReplaceBlockSelection {
-            manuscript_block_id: required_string(value, "manuscript_block_id")?,
-            from: value.get("from")?.as_u64()? as u32,
-            to: value.get("to")?.as_u64()? as u32,
-            text: required_string(value, "text")?,
-        }),
-        "split_block" => Some(AuthorEditPrimitive::SplitBlock {
-            manuscript_block_id: required_string(value, "manuscript_block_id")?,
-            offset: value.get("offset")?.as_u64()? as u32,
-            new_manuscript_block_id: required_string(value, "new_manuscript_block_id")?,
-        }),
-        "join_blocks" => Some(AuthorEditPrimitive::JoinBlocks {
-            left_manuscript_block_id: required_string(value, "left_manuscript_block_id")?,
-            right_manuscript_block_id: required_string(value, "right_manuscript_block_id")?,
-        }),
-        "move_block" => Some(AuthorEditPrimitive::MoveBlock {
-            manuscript_block_id: required_string(value, "manuscript_block_id")?,
-            to_index: value.get("to_index")?.as_u64()? as u32,
-        }),
-        "retype_block" => Some(AuthorEditPrimitive::RetypeBlock {
-            manuscript_block_id: required_string(value, "manuscript_block_id")?,
-            block_kind: match value.get("block_kind")?.as_str()? {
-                "paragraph" => storyos_core::ManuscriptBlockKind::Paragraph,
-                "heading" => storyos_core::ManuscriptBlockKind::Heading,
-                _ => return None,
-            },
-        }),
-        _ => None,
-    }
+    serde_json::from_value(value.clone()).ok()
 }
 
 fn required_string(value: &serde_json::Value, key: &str) -> Option<String> {

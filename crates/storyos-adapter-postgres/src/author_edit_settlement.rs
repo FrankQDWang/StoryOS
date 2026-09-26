@@ -129,6 +129,9 @@ pub(super) async fn persist_author_edit_settlement(
                 author_action_sequence: parse_u64(counter_row.get(0))?,
             }
         }
+        ApplyAuthorEditResult::RefusedToDraft => PreparedSettlement::RefusedToDraft {
+            identity: crate::refused_edit_draft::persist(client, command).await?,
+        },
         ApplyAuthorEditResult::NoEffect { reason } => PreparedSettlement::NoEffect { reason },
         ApplyAuthorEditResult::Conflicted { reason } => PreparedSettlement::Conflicted {
             reason,
@@ -162,6 +165,14 @@ pub(super) async fn persist_author_edit_settlement(
             current_revision_id,
             Vec::new(),
             vec![proposal_revision_id.clone()],
+            Vec::new(),
+        ),
+        PreparedSettlement::RefusedToDraft { identity } => (
+            "refused_to_draft",
+            serde_json::json!({"draft_id": identity.draft_id, "draft_revision_id": identity.draft_revision_id, "creation_event_id": identity.creation_event_id}),
+            current_revision_id,
+            Vec::new(),
+            Vec::new(),
             Vec::new(),
         ),
         PreparedSettlement::NoEffect { reason } => (
@@ -210,7 +221,7 @@ pub(super) async fn persist_author_edit_settlement(
                      'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
                      ARRAY[$10::text::uuid],
                      $11::text[]::uuid[], $12::text[]::uuid[], $13::text[]::uuid[],
-                     ARRAY[]::text[], ARRAY[]::text[], ARRAY[]::text[],
+                     $16::text[], $17::text[], ARRAY[]::text[],
                      $14, $15::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -229,7 +240,19 @@ pub(super) async fn persist_author_edit_settlement(
                 &proposal_revision_ids,
                 &commit_ids,
                 &result_kind,
-                &result_payload,
+                &result_payload.to_string(),
+                &match &prepared {
+                    PreparedSettlement::RefusedToDraft { identity } => {
+                        vec![identity.draft_id.clone()]
+                    }
+                    _ => Vec::<String>::new(),
+                },
+                &match &prepared {
+                    PreparedSettlement::RefusedToDraft { identity } => {
+                        vec![identity.creation_event_id.clone()]
+                    }
+                    _ => Vec::<String>::new(),
+                },
             ],
         )
         .await
@@ -358,6 +381,9 @@ pub(super) async fn persist_author_edit_settlement(
                 proposal_revision_id,
                 author_action_sequence,
             }
+        }
+        PreparedSettlement::RefusedToDraft { identity } => {
+            AuthorEditSettlementEffect::RefusedToDraft { identity }
         }
         PreparedSettlement::NoEffect { reason } => AuthorEditSettlementEffect::NoEffect { reason },
         PreparedSettlement::Conflicted {
@@ -550,6 +576,9 @@ async fn persist_authority_change(
 }
 
 enum PreparedSettlement {
+    RefusedToDraft {
+        identity: storyos_application::RefusedEditDraftIdentity,
+    },
     AuthoritativeApplied {
         ids: AuthoritativeAppliedIds,
         body: String,

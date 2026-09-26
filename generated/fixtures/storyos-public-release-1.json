@@ -1,8 +1,10 @@
 {
-  "corpus_digest": "sha256:192e24a4e7da28f09e01ad300c34a3ef76e87d54846ff6dc0cccab3b31702e1f",
+  "corpus_digest": "sha256:01fb9ed6973d94313196847d0cf236394dcf0077f6799f4e9f9fb6a7d18f2ac4",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
+      "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json",
+      "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.boundary.json",
@@ -66,6 +68,9 @@
       "generated/golden-wire/storyos-public-release-1/cancel-agent-run.json",
       "generated/golden-wire/storyos-public-release-1/cancel-agent-run.invalid.json",
       "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json",
+      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-proposal.boundary.json",
@@ -135,6 +140,18 @@
     ]
   },
   "fixtures": [
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.negative.v1",
+      "operation_id": "applyAuthorEdit",
+      "path": "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json"
+    },
     {
       "classification": "positive",
       "fixture_id": "storyos.golden.getProtocolProfile.positive.v1",
@@ -512,6 +529,24 @@
       "fixture_id": "storyos.golden.cancelAgentRun.boundary.v1",
       "operation_id": "cancelAgentRun",
       "path": "generated/golden-wire/storyos-public-release-1/cancel-agent-run.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.getRefusedEditDraft.positive.v1",
+      "operation_id": "getRefusedEditDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.getRefusedEditDraft.invalid.v1",
+      "operation_id": "getRefusedEditDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.getRefusedEditDraft.boundary.v1",
+      "operation_id": "getRefusedEditDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/get-refused-edit-draft.boundary.json"
     },
     {
       "classification": "positive",
