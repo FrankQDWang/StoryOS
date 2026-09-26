@@ -50,7 +50,8 @@ async fn persist(
     let owner = scope.owner_user_id.as_ref();
     let project = scope.project_id.as_ref();
     let row = client.query_opt("SELECT draft.current_revision_id::text, revision.payload_digest,
-        draft.closure, draft.retention_state, CASE WHEN draft.retention_state='retained' THEN revision.payload::text END
+        draft.closure, draft.retention_state, CASE WHEN draft.retention_state='retained' THEN revision.payload::text END,
+        draft.reopen_event_id::text
         FROM storyos.draft_artifacts AS draft JOIN storyos.projects AS project USING(owner_user_id,project_id)
         JOIN storyos.draft_artifact_revisions AS revision ON
         (revision.owner_user_id,revision.project_id,revision.draft_id,revision.revision_id)=
@@ -73,11 +74,18 @@ async fn persist(
         }
     }
     insert_admission(client, command).await?;
+    let reopen_event_id: Option<String> = row.get(5);
     let classified = storyos_core::close_editor_flow_draft(
-        &command.input.source_current_draft_revision_id,
-        &command.input.source_draft_payload_digest,
-        &revision,
-        &digest,
+        &storyos_core::DraftCloseSource {
+            revision: &command.input.source_current_draft_revision_id,
+            digest: &command.input.source_draft_payload_digest,
+            reopen_event_id: command.input.source_reopen_event_id.as_deref(),
+        },
+        &storyos_core::DraftCloseSource {
+            revision: &revision,
+            digest: &digest,
+            reopen_event_id: reopen_event_id.as_deref(),
+        },
         &closure,
         &retention,
     );

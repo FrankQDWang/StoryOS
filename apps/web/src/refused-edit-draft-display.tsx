@@ -18,6 +18,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
   const [busy, setBusy] = useState(false);
   const [settledWriter, setSettledWriter] = useState(false);
   async function read(group: JournalSubmissionGroup): Promise<RefusedEditDraftInspect> {
+    const started = lifetime.current;
     const settled = group.settlement;
     if (workspace === undefined || settled.kind !== "zero_authority_receipt_settled"
       || settled.effect.kind !== "refused_to_draft") throw new Error("Draft unavailable");
@@ -61,7 +62,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         author_command_admission_id: settled.author_command_admission_id,
         receipt_id: settled.receipt.receipt_id, idempotency_key: group.idempotency_key,
         command_digest: group.frozen_request_digest })) throw new Error("Draft unavailable");
-    await reconcileDraftUndo(workspace, draft);
+    await reconcileDraftUndo(workspace, draft, () => started === lifetime.current);
     return draft;
   }
   useEffect(() => {

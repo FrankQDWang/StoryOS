@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import type { Page } from "playwright";
-import type { RefusedEditDraftInspect, UndoLatestAuthorActionResponse }
+import type { CloseEditorFlowDraftResponse, RefusedEditDraftInspect, UndoLatestAuthorActionResponse }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { readProductionJournal } from "./production-discard-command.ts";
 
@@ -55,5 +55,31 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     if (!reply.ok) throw new Error(`Undo replay ${reply.status}`); return reply.json();
   }, { projectId, request, key, nonce });
   assert.deepEqual(replay, response); assert.deepEqual(await read(), reopened);
-  return reopened;
+  const closeReply = page.waitForResponse((reply) => reply.url().endsWith(`/drafts/${draft.draft_id}/closures`) && reply.request().method() === "POST");
+  await surface.locator("button[data-draft-discard]").click();
+  const closedAgain = await (await closeReply).json() as CloseEditorFlowDraftResponse;
+  assert.ok(closedAgain.effect.kind === "draft_closure_changed");
+  const secondCloseEvent = closedAgain.effect.event;
+  await surface.locator("[data-draft-closed]").waitFor();
+  const discarded = (await readProductionJournal(page, projectId)).metadata!.find((row) => row.key === `discard:${draft.draft_id}:${reopened.reopen_event!.event_id}`)!;
+  assert.equal((discarded.group as { frozen_request_body: { close_editor_flow_draft_input: { source_reopen_event_id: string } } }).frozen_request_body.close_editor_flow_draft_input.source_reopen_event_id, reopened.reopen_event!.event_id);
+  let second!: UndoLatestAuthorActionResponse;
+  await page.route(undoRoute, async (route) => {
+    const reply = await route.fetch(); assert.equal(reply.status(), 200); second = await reply.json();
+    await route.fulfill({ response: reply, json: { ...second, receipt: { ...second.receipt, draft_artifact_refs: [] } } });
+  });
+  await page.locator("[data-manuscript-editor]").focus(); await page.keyboard.press("ControlOrMeta+Z");
+  await surface.locator("[data-draft-reopened]").waitFor();
+  await surface.locator("button[data-draft-discard]").waitFor(); await page.unroute(undoRoute);
+  assert.ok(second.effect.kind === "draft_compensated");
+  const final = await read() as RefusedEditDraftInspect;
+  assert.equal(final.reopen_event!.source_close_event_id, secondCloseEvent.event_id);
+  assert.notEqual(final.reopen_event!.event_id, reopened.reopen_event!.event_id);
+  const settled = await readProductionJournal(page, projectId);
+  assert.equal(settled.metadata!.filter((row) => String(row.key).startsWith("draft-undo:")).length, 2);
+  const observed = settled.metadata!.find((row) => row.key === `draft-undo-observation:${secondCloseEvent.event_id}`)!;
+  assert.deepEqual(observed, { key: observed.key, record_key: `draft-undo:${secondCloseEvent.event_id}`, event: second.effect.event });
+  for (const row of journal.metadata!.filter((row) => String(row.key).startsWith("discard:") || String(row.key).startsWith("draft-undo")))
+    assert.deepEqual(settled.metadata!.find((other) => other.key === row.key), row);
+  return final;
 }

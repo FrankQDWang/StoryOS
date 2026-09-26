@@ -705,8 +705,17 @@ BEGIN
       (event.owner_user_id,event.project_id,event.author_action_sequence)
     JOIN storyos.author_command_admissions AS admission ON (admission.owner_user_id,admission.project_id,admission.author_command_admission_id)=
       (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id)
+    JOIN storyos.draft_artifacts AS draft ON (draft.owner_user_id,draft.project_id,draft.draft_id)=
+      (event.owner_user_id,event.project_id,event.draft_id)
     WHERE event.owner_user_id=NEW.owner_user_id AND event.project_id=NEW.project_id AND event.event_id=target_event
-      AND receipt.command_kind='undoLatestAuthorAction' AND receipt.result_kind='draft_closure_changed'
+      AND draft.closure='open' AND draft.retention_state='retained' AND draft.current_revision_id=event.revision_id
+      AND draft.close_event_id=closed.event_id AND draft.reopen_event_id=event.event_id
+      AND admission.command_kind=receipt.command_kind AND admission.command_id=receipt.command_id
+      AND admission.canonical_command_digest=receipt.command_digest AND admission.idempotency_key=receipt.idempotency_key
+      AND EXISTS(SELECT 1 FROM storyos.author_command_admission_settlements AS settlement WHERE
+        (settlement.owner_user_id,settlement.project_id,settlement.author_command_admission_id,settlement.receipt_id)=
+        (receipt.owner_user_id,receipt.project_id,receipt.author_command_admission_id,receipt.receipt_id) AND settlement.settlement_kind='receipt_settled')
+      AND receipt.command_kind='undoLatestAuthorAction'  AND receipt.result_kind='draft_closure_changed'
       AND receipt.authoritative_revision_ids='{}' AND receipt.authoritative_commit_ids='{}' AND receipt.proposal_revision_ids='{}'
       AND receipt.draft_artifact_refs=ARRAY[event.draft_id::text] AND receipt.artifact_lifecycle_event_refs=ARRAY[event.event_id::text]
       AND receipt.result_payload->>'event_id'=event.event_id::text AND receipt.result_payload->>'handler_receipt_id'=handler.receipt_id::text
@@ -747,10 +756,18 @@ CREATE CONSTRAINT TRIGGER draft_reopen_root_complete AFTER INSERT ON storyos.dom
 
 CREATE OR REPLACE FUNCTION storyos.require_draft_close_settlement() RETURNS trigger LANGUAGE plpgsql AS $function$
 DECLARE target_event uuid; target_draft uuid; target_revision uuid; target_receipt uuid;
+  prior_reopen_event text; validate_lifecycle boolean := false;
 BEGIN
   IF TG_TABLE_NAME='draft_artifacts' THEN
     target_draft := NEW.draft_id;
     target_revision := NEW.current_revision_id;
+    IF TG_OP='UPDATE' THEN
+      IF OLD.closure='closed' AND NEW.closure='closed' AND NEW.close_event_id IS DISTINCT FROM OLD.close_event_id THEN
+        RAISE EXCEPTION 'Draft Discard requires open source' USING ERRCODE='23514';
+      END IF;
+      validate_lifecycle := OLD.closure='open' AND NEW.closure='closed';
+      prior_reopen_event := OLD.reopen_event_id::text;
+    END IF;
     IF NEW.closure='open' THEN
       IF TG_OP='UPDATE' AND OLD.closure='closed' AND
         (NEW.close_event_id IS DISTINCT FROM OLD.close_event_id OR NEW.reopen_event_id IS NULL) THEN
@@ -793,6 +810,7 @@ BEGIN
       AND admission.command_payload->'close_editor_flow_draft_input'->>'source_current_draft_revision_id'=event.revision_id::text
       AND admission.command_payload->'close_editor_flow_draft_input'->>'source_draft_payload_digest'=event.payload_digest
       AND admission.command_payload->'close_editor_flow_draft_input'->>'expected_closure'='open'
+      AND (NOT validate_lifecycle OR (admission.command_payload->'close_editor_flow_draft_input'->>'source_reopen_event_id') IS NOT DISTINCT FROM prior_reopen_event)
       AND admission.command_payload->'close_editor_flow_draft_input'->>'close_reason'='abandoned'
       AND admission.command_payload->'close_editor_flow_draft_input'->>'draft_kind'='refused_edit'
       AND admission.command_kind=receipt.command_kind AND admission.canonical_command_digest=receipt.command_digest

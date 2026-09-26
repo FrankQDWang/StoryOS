@@ -79,8 +79,17 @@ pub fn undo_latest_author_action(command: &UndoLatestAuthorAction) -> UndoLatest
         AuthorUndoFrontierKind::DraftBindingChanged => UndoLatestAuthorActionResult::Conflicted {
             reason: UndoLatestAuthorActionConflict::SourceBindingChanged,
         },
-        AuthorUndoFrontierKind::ReversibleStructureTransition
-        | AuthorUndoFrontierKind::ReversibleDraftClose => {
+        AuthorUndoFrontierKind::ReversibleDraftClose => {
+            if command.current_head_revision_id != command.expected_head_revision_id {
+                return UndoLatestAuthorActionResult::Conflicted {
+                    reason: UndoLatestAuthorActionConflict::WrongTargetHead,
+                };
+            }
+            UndoLatestAuthorActionResult::Compensated {
+                source_sequence: frontier.sequence,
+            }
+        }
+        AuthorUndoFrontierKind::ReversibleStructureTransition => {
             UndoLatestAuthorActionResult::Compensated {
                 source_sequence: frontier.sequence,
             }

@@ -16,27 +16,34 @@ pub(super) struct ObservedDraftClose {
     pub digest: String,
     pub close_event_id: String,
     pub kind: AuthorUndoFrontierKind,
+    pub current_head_revision_id: String,
 }
 
 pub(super) async fn load_frontier(
     client: &tokio_postgres::Client,
-    scope: &ProjectScope,
+    command: &UndoLatestAuthorActionCommand,
     sequence: u64,
 ) -> Result<Option<ObservedDraftClose>, UndoLatestAuthorActionError> {
+    let scope = &command.project_scope;
     let row = client.query_opt("SELECT closed.draft_id::text, closed.revision_id::text, closed.payload_digest,
         closed.event_id::text, draft.current_revision_id::text, revision.payload_digest, draft.closure,
         draft.retention_state, draft.close_event_id::text,
-        CASE WHEN draft.retention_state='retained' THEN revision.payload::text END
+        CASE WHEN draft.retention_state='retained' THEN revision.payload::text END,
+        head.current_revision_id::text
         FROM storyos.author_action_entries AS action JOIN storyos.domain_receipts AS receipt USING(owner_user_id,project_id,receipt_id)
         JOIN storyos.draft_close_events AS closed USING(owner_user_id,project_id,receipt_id,author_action_sequence)
         JOIN storyos.draft_artifacts AS draft USING(owner_user_id,project_id,draft_id)
         JOIN storyos.draft_artifact_revisions AS revision ON
         (revision.owner_user_id,revision.project_id,revision.draft_id,revision.revision_id)=
         (draft.owner_user_id,draft.project_id,draft.draft_id,draft.current_revision_id)
+        JOIN storyos.editor_session_base_snapshots AS snapshot ON
+        (snapshot.owner_user_id,snapshot.project_id,snapshot.editor_session_id)=(action.owner_user_id,action.project_id,$4::text::uuid)
+        JOIN storyos.authoritative_heads AS head ON (head.owner_user_id,head.project_id,head.manuscript_object_id)=
+        (snapshot.owner_user_id,snapshot.project_id,snapshot.chapter_object_id)
         WHERE action.owner_user_id=$1::text::uuid AND action.project_id=$2::text::uuid
         AND action.author_action_sequence=$3::text::numeric AND action.disposition='forward'
         AND receipt.command_kind='closeEditorFlowDraft' AND receipt.result_kind='draft_closure_changed'
-        FOR UPDATE OF draft", &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&sequence.to_string()])
+        FOR UPDATE OF draft", &[&scope.owner_user_id.as_ref(),&scope.project_id.as_ref(),&sequence.to_string(),&command.editor_session_id.as_ref()])
         .await.map_err(undo_database_error)?;
     let Some(row) = row else {
         return Ok(None);
@@ -67,6 +74,7 @@ pub(super) async fn load_frontier(
         digest,
         close_event_id,
         kind,
+        current_head_revision_id: row.get(10),
     }))
 }
 
@@ -90,6 +98,10 @@ pub(super) async fn persist_compensation(
     let sequence: String = row.get(0);
     let activity: String = row.get(1);
     let next: Option<String> = client.query_one("SELECT max(action.author_action_sequence)::text FROM storyos.author_action_entries AS action
+        JOIN storyos.editor_session_base_snapshots AS snapshot ON
+        (snapshot.owner_user_id,snapshot.project_id,snapshot.editor_session_id)=(action.owner_user_id,action.project_id,$4::text::uuid)
+        JOIN storyos.authoritative_heads AS head ON (head.owner_user_id,head.project_id,head.manuscript_object_id)=
+        (snapshot.owner_user_id,snapshot.project_id,snapshot.chapter_object_id)
         WHERE action.owner_user_id=$1::text::uuid AND action.project_id=$2::text::uuid AND action.disposition='forward'
         AND action.author_action_sequence<>$3::text::numeric AND NOT EXISTS(SELECT 1 FROM storyos.author_action_entries AS compensation
         WHERE compensation.owner_user_id=action.owner_user_id AND compensation.project_id=action.project_id

@@ -24,7 +24,7 @@ export type DiscardRecord = {
   key: string; schema_id: string; explicit_command_record_id: string; local_intent_sequence: number;
   journal_partition_id: string; project_scope: ProjectScope; editor_session_id: string;
   writer_generation: string; exact_semantic_payload_ref: string; semantic_payload_digest: DigestValue;
-  exact_target_head_anchor_bindings: { draft_id: string; draft_revision_id: string; payload_digest: string; expected_closure: "open" };
+  exact_target_head_anchor_bindings: { draft_id: string; draft_revision_id: string; payload_digest: string; expected_closure: "open"; source_reopen_event_id?: string };
   editor_contract_revision: string; command_kind: "closeEditorFlowDraft"; created_at: string;
   author_visible_decision_ref: { draft_id: string; close_reason: "abandoned" };
   group: { journal_submission_group_id: string; action_class: "explicit_editor_command";
@@ -116,7 +116,7 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
     const coverageDigest = { ...await digestJournalValue(coverage, workspace.cryptoImpl),
       profile: "storyos.local-edit-journal.submission-coverage.sha256.v1" };
     if (record.group === undefined || input === undefined || record.schema_id !== RECORD_SCHEMA || record.command_kind !== "closeEditorFlowDraft"
-      || record.key !== `discard:${input?.draft_id}` || !UUID.test(record.explicit_command_record_id)
+      || record.key !== (input.source_reopen_event_id ? `discard:${input.draft_id}:${input.source_reopen_event_id}` : `discard:${input.draft_id}`) || !UUID.test(record.explicit_command_record_id)
       || !Number.isSafeInteger(record.local_intent_sequence) || record.local_intent_sequence <= 0
       || !same(record.project_scope, workspace.partition.project_scope)
       || !record.journal_partition_id.startsWith(`${record.project_scope.owner_user_id}:${record.project_scope.project_id}:${record.editor_session_id}:${record.writer_generation}:`)
@@ -124,7 +124,8 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
       || !same(record.semantic_payload_digest, record.group.frozen_request_digest)
       || record.editor_contract_revision !== "storyos.editor-contract.release-1.v3"
       || !same(record.exact_target_head_anchor_bindings, { draft_id: input?.draft_id,
-        draft_revision_id: input?.source_current_draft_revision_id, payload_digest: input?.source_draft_payload_digest, expected_closure: "open" })
+        draft_revision_id: input?.source_current_draft_revision_id, payload_digest: input?.source_draft_payload_digest, expected_closure: "open",
+        ...(input.source_reopen_event_id ? { source_reopen_event_id: input.source_reopen_event_id } : {}) })
       || !same(record.group.ordered_coverage, [{ local_intent_sequence: record.local_intent_sequence,
         intent_record_ref: record.explicit_command_record_id, payload_digest: record.group.frozen_request_digest }])
       || !same(record.group.covered_sequence_range, { first: record.local_intent_sequence, last: record.local_intent_sequence })
@@ -147,8 +148,10 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
         source_current_draft_revision_id: input?.source_current_draft_revision_id,
         source_draft_payload_digest: input?.source_draft_payload_digest, expected_closure: "open", close_reason: "abandoned",
         editor_session_id: record.editor_session_id, writer_generation: record.writer_generation,
+        ...(input.source_reopen_event_id ? { source_reopen_event_id: input.source_reopen_event_id } : {}),
         client_contract_revision: partition.client_contract_revision, security_policy_revision: partition.security_policy_revision, correlation_id: input?.correlation_id })
       || !UUID.test(input.draft_id) || !UUID.test(input.source_current_draft_revision_id) || !UUID.test(input.correlation_id)
+      || (input.source_reopen_event_id !== undefined && !UUID.test(input.source_reopen_event_id))
       || !/^[0-9a-f]{64}$/.test(input.source_draft_payload_digest)
       || !same(record.group.frozen_request_digest, await digestCloseEditorFlowDraft(record.group.frozen_request_body, workspace.cryptoImpl))
       || !Number.isFinite(Date.parse(record.created_at))
@@ -242,6 +245,7 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
     const request: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
       close_editor_flow_draft_input: { draft_id: draft.draft_id, draft_kind: "refused_edit",
         source_current_draft_revision_id: draft.draft_revision_id, source_draft_payload_digest: draft.payload_digest,
+        ...(draft.reopen_event ? { source_reopen_event_id: draft.reopen_event.event_id } : {}),
         expected_closure: "open", close_reason: "abandoned", editor_session_id: workspace.partition.editor_session_id,
         writer_generation: workspace.partition.writer_generation, client_contract_revision: workspace.partition.client_contract_revision,
         security_policy_revision: workspace.partition.security_policy_revision, correlation_id: uuidV7(workspace.cryptoImpl) } };
@@ -270,7 +274,8 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
       editor_session_id: workspace.partition.editor_session_id, writer_generation: workspace.partition.writer_generation,
       exact_semantic_payload_ref: groupId, semantic_payload_digest: digest,
       exact_target_head_anchor_bindings: { draft_id: draft.draft_id, draft_revision_id: draft.draft_revision_id,
-        payload_digest: draft.payload_digest, expected_closure: "open" }, editor_contract_revision: "storyos.editor-contract.release-1.v3",
+        payload_digest: draft.payload_digest, expected_closure: "open",
+        ...(draft.reopen_event ? { source_reopen_event_id: draft.reopen_event.event_id } : {}) }, editor_contract_revision: "storyos.editor-contract.release-1.v3",
       command_kind: "closeEditorFlowDraft", created_at: createdAt,
       author_visible_decision_ref: { draft_id: draft.draft_id, close_reason: "abandoned" },
       group: { journal_submission_group_id: groupId, command_kind: "closeEditorFlowDraft", command_schema: request.command_schema,

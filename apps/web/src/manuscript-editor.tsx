@@ -260,18 +260,26 @@ export function ManuscriptEditor({
     },
   }, []);
 
+  const undoLifetime = useRef(0);
+  useEffect(() => { undoLifetime.current += 1;
+    return () => { undoLifetime.current += 1; };
+  }, [persistWorkspace, editor]);
   onAuthorUndoRef.current = () => {
     void (async () => {
       const workspace = persistWorkspaceRef.current;
       if (editor === null || workspace === undefined) return;
+      const started = undoLifetime.current;
+      const isCurrent = () => started === undoLifetime.current && persistWorkspaceRef.current === workspace && !editor.isDestroyed;
       await idleRef.current?.flush();
+      if (!isCurrent()) return;
       try {
         const settled = await undoOwnedLatestAuthorAction({
           workspace,
           baseUrl,
           fetchImpl,
-          cryptoImpl,
+          cryptoImpl, isCurrent,
         });
+        if (!isCurrent()) return;
         if (settled?.effect.kind === "draft_compensated" || settled?.effect.kind === "draft_reconciled") {
           onProjectionRef.current(await rebuildPendingProjection(workspace));
           onCandidateSettledRef.current?.(); return;
@@ -289,7 +297,7 @@ export function ManuscriptEditor({
         onProjectionRef.current(await rebuildPendingProjection(workspace));
         onCandidateSettledRef.current?.();
       } catch (error) {
-        onFailureRef.current(error);
+        if (isCurrent()) onFailureRef.current(error);
       }
     })();
     return true;

@@ -48,6 +48,8 @@ pub struct CloseEditorFlowDraftInput {
     pub draft_kind: String,
     pub source_current_draft_revision_id: String,
     pub source_draft_payload_digest: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_reopen_event_id: Option<String>,
     pub expected_closure: String,
     pub close_reason: String,
     pub editor_session_id: String,

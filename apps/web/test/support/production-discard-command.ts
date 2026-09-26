@@ -79,7 +79,8 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   let nonce = "";
   let release!: () => void;
   const completed = new Promise<void>((resolve) => { release = resolve; });
-  await page.route((url) => url.pathname.endsWith(`/drafts/${draft.draft_id}/closures`), async (route) => {
+  const closeRoute = (url: URL) => url.pathname.endsWith(`/drafts/${draft.draft_id}/closures`);
+  await page.route(closeRoute, async (route) => {
     posts += 1;
     const request = route.request().postDataJSON() as CloseEditorFlowDraftRequest;
     const key = route.request().headers()["idempotency-key"]!;
@@ -118,6 +119,7 @@ export async function verifyProductionDiscard({ page, context, origin, projectId
   await surface.locator("button[data-draft-copy]").click(); await surface.getByText("Copied").waitFor();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), "Complete mixed replacement");
   page.off("request", track); assert.deepEqual(mutations, []);
+  await page.unroute(closeRoute);
   const reopened = await verifyProductionDraftUndo(page, projectId, closed, restart);
   assert.deepEqual(await readObjects(page, projectId, chapterId, proposalId), before);
   const fetchImpl = sessionFetch(origin, "session-a");

@@ -81,6 +81,7 @@ export async function undoOwnedLatestAuthorAction(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
+  isCurrent: () => boolean;
 }): Promise<UndoLatestAuthorActionResponse | { effect: { kind: "draft_reconciled"; event: EditorFlowDraftReopened } } | undefined> {
   const retainedUndo = await readDraftUndoJournal(options.workspace);
   const pendingUndo = retainedUndo.filter(({ observation }) => observation === undefined);
@@ -109,6 +110,7 @@ export async function undoOwnedLatestAuthorAction(options: {
       !== options.workspace.session.base_snapshot.authoritative_head_revision_id) {
     throw new Error("Author Undo requires the current Editor Session");
   }
+  if (!options.isCurrent()) throw new Error("Undo view changed");
   options.workspace.session = canonical;
   let durable: DraftUndoRecord | undefined = pendingUndo[0]?.record;
   if (durable !== undefined && durable.journal_partition_id !== options.workspace.partition.journal_partition_id) {
@@ -143,16 +145,20 @@ export async function undoOwnedLatestAuthorAction(options: {
       if (current.draft.closure !== "closed" || current.draft.retention_state !== "retained"
         || canonicalDraftValue(current.draft.closure_event) !== canonicalDraftValue(closed)) throw new Error("Undo source changed");
       durable = await freezeDraftUndo(options.workspace, closed,
-        undoRequest(options.workspace, frontier, expectedHead, flight.correlationId), flight.idempotencyKey);
+        undoRequest(options.workspace, frontier, expectedHead, flight.correlationId), flight.idempotencyKey, options.isCurrent);
     }
   }
   if (durable !== undefined) {
     flight.idempotencyKey = durable.idempotency_key;
     flight.correlationId = durable.request.undo_latest_author_action_input.correlation_id;
   }
+  const guarded = { ...options, fetchImpl: ((input, init) => {
+    if (!options.isCurrent()) throw new Error("Undo view changed");
+    return options.fetchImpl(input, init);
+  }) as typeof fetch };
   try {
-    const settled = await submitUndo(options, frontier, expectedHead, flight, durable?.request);
-    if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled });
+    const settled = await submitUndo(durable === undefined ? options : guarded, frontier, expectedHead, flight, durable?.request);
+    if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled }, options.isCurrent);
     inFlight.delete(identity);
     if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated") {
       await refreshSessionAfterCompensation(options);
@@ -160,9 +166,10 @@ export async function undoOwnedLatestAuthorAction(options: {
     return settled;
   } catch (error) {
     if (durable !== undefined) {
+      if (!options.isCurrent()) throw error;
       const current = await getRefusedEditDraft({ baseUrl: options.baseUrl,
         projectId: durable.project_scope.project_id, draftId: durable.source_close.draft_id, fetchImpl: options.fetchImpl });
-      const event = await reconcileDraftUndo(options.workspace, current.draft);
+      const event = await reconcileDraftUndo(options.workspace, current.draft, options.isCurrent);
       if (event !== undefined) { inFlight.delete(identity); await refreshSessionAfterCompensation(options);
         return { effect: { kind: "draft_reconciled", event } }; }
       throw error;
@@ -183,6 +190,7 @@ async function refreshSessionAfterCompensation(options: {
   workspace: EditorWorkspace;
   baseUrl: string;
   fetchImpl: typeof fetch;
+  isCurrent: () => boolean;
 }): Promise<void> {
   const canonical = await getEditorSession({
     baseUrl: options.baseUrl,
@@ -190,6 +198,7 @@ async function refreshSessionAfterCompensation(options: {
     editorSessionId: options.workspace.partition.editor_session_id,
     fetchImpl: options.fetchImpl,
   });
+  if (!options.isCurrent()) throw new Error("Undo view changed");
   await installAuthoritativeBaseSnapshot(options.workspace, canonical.base_snapshot);
   options.workspace.session = canonical;
 }

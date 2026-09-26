@@ -156,8 +156,7 @@ pub(super) async fn load_observed_frontier(
     let observed = match observed {
         Some(ObservedFrontier::Barrier { sequence }) => {
             if let Some(frontier) =
-                crate::undo_draft_close::load_frontier(client, &command.project_scope, sequence)
-                    .await?
+                crate::undo_draft_close::load_frontier(client, command, sequence).await?
             {
                 return Ok(LoadedUndoFrontier {
                     lifecycle_state: row.get(0),
@@ -439,8 +438,8 @@ impl ObservedFrontier {
             Self::Structure(_)
             | Self::CurrentChapter(_)
             | Self::Proposal(_)
-            | Self::DraftClose(_)
             | Self::Barrier { .. } => None,
+            Self::DraftClose(frontier) => Some(frontier.current_head_revision_id.as_str()),
         }
     }
 }
