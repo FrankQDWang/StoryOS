@@ -39,8 +39,8 @@ export const storyOSBrowserCommands = {
   [storyOSBrowserCommandNames.productionHost]: defineBrowserCommand<[request: unknown]>(
     async (context, value) => {
       const request = parseProductionHostRequest(value);
-      if (request.scenario === "prose_request") {
-        await verifyProductionProseRequest(context.context);
+      if (request.scenario === "prose_request" || request.scenario === "refused_edit") {
+        await verifyProductionProseRequest(context.context, request.scenario);
       } else {
         await verifyProductionHostJourney(context.context);
       }
@@ -53,7 +53,8 @@ export const storyOSBrowserCommands = {
       await focusedApplicationFrame(context);
       const session = await context.context.newCDPSession(context.page);
       try {
-        await session.send("Input.imeSetComposition", request);
+        await session.send("Input.imeSetComposition", "operation" in request
+          ? { text: "", selectionStart: 0, selectionEnd: 0 } : request);
       } finally {
         await session.detach();
       }

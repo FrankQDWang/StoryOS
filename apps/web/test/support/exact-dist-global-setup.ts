@@ -92,6 +92,8 @@ export default function exactDistGlobalSetup(): (() => Promise<void>) | undefine
             AND project_id <> '${PROJECT_A}'::uuid
             AND project_id NOT IN (SELECT project_id FROM production)
             AND project_id NOT IN (SELECT project_id FROM prose_request)
+            AND project_id NOT IN (SELECT project_id FROM storyos.projects
+              WHERE owner_user_id = '${USER_A}'::uuid AND title LIKE 'Refused edit %')
             AND (command_kind, idempotency_key) NOT IN (
               ('updateProjectAssistance', '018f0000-0000-7001-8000-00000000f802'::uuid),
               ('createAgentRun', '018f0000-0000-7001-8000-00000000f804'::uuid))

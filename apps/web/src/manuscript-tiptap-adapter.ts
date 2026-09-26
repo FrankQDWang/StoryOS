@@ -22,6 +22,8 @@ import {
   readManuscriptParagraphs,
 } from "./manuscript-doc.ts";
 
+import { captureStructuredSelection } from "./structured-edit-capture.ts";
+
 const STORYOS_HYDRATE = "storyos.hydrate";
 const STORYOS_ORIGIN = "storyos.origin";
 const STORYOS_CAPTURED_EDIT = "storyos.capturedEdit";
@@ -181,6 +183,7 @@ export function storyosManuscriptExtensions(
   blockId: string,
   onAuthorUndo?: () => boolean,
   canAcceptCandidateInput?: (hardBoundary: boolean) => boolean,
+  hasMixedComposition?: () => boolean,
 ) {
   return [
     Document.extend({ content: "(paragraph | heading | blockProposal)+" }),
@@ -203,6 +206,11 @@ export function storyosManuscriptExtensions(
               return insertNewline(this.editor.view);
             }
             if (!this.editor.state.selection.empty) {
+              const mixed = this.editor.state.tr.deleteSelection().setMeta(STORYOS_ORIGIN, "split_block");
+              if (captureStructuredSelection(this.editor.state, mixed) !== undefined) {
+                this.editor.view.dispatch(mixed);
+                return true;
+              }
               this.editor.commands.command(({ tr, dispatch }) => {
                 dispatch?.(tr.deleteSelection());
                 return true;
@@ -234,6 +242,15 @@ export function storyosManuscriptExtensions(
             key: new PluginKey("storyosManuscriptAdapter"),
             filterTransaction: (transaction, state) => {
               if (transaction.getMeta(STORYOS_HYDRATE) === true || !transaction.docChanged) {
+                return true;
+              }
+              if (hasMixedComposition?.() === true) return true;
+              const mixed = captureStructuredSelection(state, transaction);
+              if (mixed !== undefined) {
+                if (canAcceptCandidateInput?.(true) !== true) return false;
+                transaction.setMeta("storyos.structuredEdit", mixed);
+                transaction.replaceWith(0, transaction.doc.content.size, state.doc.content);
+                transaction.setSelection(TextSelection.create(transaction.doc, state.selection.anchor, state.selection.head));
                 return true;
               }
               const next = readManuscriptParagraphs(transaction.doc);
@@ -305,6 +322,15 @@ export function storyosEditorProps(blockId: string) {
       return true;
     },
     handleDOMEvents: {
+      beforeinput: (view: EditorView, event: Event) => {
+        if (!(event instanceof InputEvent) || event.isComposing
+          || event.inputType !== "insertText" || event.data === null) return false;
+        const transaction = view.state.tr.insertText(event.data);
+        if (captureStructuredSelection(view.state, transaction) === undefined) return false;
+        event.preventDefault();
+        view.dispatch(transaction);
+        return true;
+      },
       dragover: (_view: EditorView, event: Event) => {
         event.preventDefault();
         return true;
@@ -329,6 +355,12 @@ function dispatchPlainTextReplacement(
   const previous = readManuscriptParagraphs(view.state.doc);
   if (previous === undefined) return;
   const { from, to } = view.state.selection;
+  const replacement = view.state.tr.insertText(text, from, to);
+  if (captureStructuredSelection(view.state, replacement) !== undefined) {
+    replacement.setMeta(STORYOS_ORIGIN, origin);
+    view.dispatch(replacement);
+    return;
+  }
   const $from = view.state.doc.resolve(from);
   const $to = view.state.doc.resolve(to);
   if ($from.parent.type.name === "blockProposal"

@@ -5,6 +5,7 @@ import type {
   BlockProposalInspect, ProjectScope,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-editor.tsx";
+import { RefusedEditDraftDisplay } from "./refused-edit-draft-display.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
@@ -550,6 +551,9 @@ export function BlockProposalDisplay({
         proposals={projections}
         onCandidateSettled={() => setSettlementRefresh((value) => value + 1)}
         onAcceptProposal={acceptDisplayed} onRejectProposal={rejectDisplayed} />
+      <RefusedEditDraftDisplay workspace={editorProps.persistWorkspace} scope={scope}
+        baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
+        refreshKey={`${refreshKey}:${settlementRefresh}`} />
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
         const problem = knownProblems[locator.proposalId];

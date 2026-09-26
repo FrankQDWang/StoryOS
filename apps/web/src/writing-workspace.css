@@ -374,3 +374,6 @@ input:focus-visible,
 
 .assistant-toggle:hover { background: var(--hover); }
 .assistant-toggle svg { width: 20px; height: 20px; }
+
+[data-refused-edit-draft] { overflow-wrap: anywhere; }
+[data-refused-edit-draft] pre { white-space: pre-wrap; }

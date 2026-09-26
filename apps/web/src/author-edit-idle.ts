@@ -4,6 +4,7 @@ import {
   AUTHOR_EDIT_MAX_UNITS,
   createJournalUuid,
   persistCandidateSelection,
+  persistStructuredSelection,
   persistJoinBlocks,
   persistMoveBlock,
   persistReplaceSelection,
@@ -21,10 +22,12 @@ import type {
 } from "./editor-types.ts";
 import type { CapturedManuscriptEdit } from "./manuscript-doc.ts";
 
+import type { StructuredSelectionEdit } from "./structured-edit-capture.ts";
+
 type TimerHandle = number | ReturnType<typeof globalThis.setTimeout>;
 
 export type IdlePersistEdit = ReplaceSelectionEdit | CapturedManuscriptEdit
-  | CandidateSelectionEdit;
+  | CandidateSelectionEdit | StructuredSelectionEdit;
 
 export interface AuthorEditIdleController {
   persist(
@@ -163,7 +166,8 @@ export function createAuthorEditIdleController({
         const hardBoundary = origin === "composition_confirmation"
           || origin === "paste" || origin === "cut" || origin === "drop"
           || origin === "split_block" || origin === "join_blocks"
-          || origin === "move_block" || origin === "retype_block";
+          || origin === "move_block" || origin === "retype_block"
+          || ("kind" in edit && edit.kind === "structured_selection");
         const completedAt = Date.parse(createdAt);
         const target = "kind" in edit && edit.kind === "candidate_selection"
           ? JSON.stringify(edit.target) : "authoritative";
@@ -175,6 +179,8 @@ export function createAuthorEditIdleController({
         const persistFields = { inputOrigin: origin, undoGroupId, createdAt };
         const projection = !("kind" in edit)
           ? await persistIntent(workspace, { ...edit, ...persistFields }, cryptoImpl)
+          : edit.kind === "structured_selection"
+            ? await persistStructuredSelection(workspace, { ...edit, ...persistFields }, cryptoImpl)
           : edit.kind === "candidate_selection"
             ? await persistCandidateSelection(workspace, { ...edit, ...persistFields }, cryptoImpl)
           : edit.kind === "split_block"

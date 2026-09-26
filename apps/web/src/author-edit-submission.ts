@@ -373,8 +373,10 @@ async function settleAuthorEditResponse({
         !== JSON.stringify([effect?.kind === "proposal_revised" ? effect.proposal_revision_id : ""])
         || receipt.proposal_revision_ids.length !== 1)
       : JSON.stringify(receipt.proposal_revision_ids) !== JSON.stringify([]))
-    || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify([])
-    || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify([])
+    || JSON.stringify(receipt.draft_artifact_refs) !== JSON.stringify(
+      effect?.kind === "refused_to_draft" ? [effect.draft_id] : [])
+    || JSON.stringify(receipt.artifact_lifecycle_event_refs) !== JSON.stringify(
+      effect?.kind === "refused_to_draft" ? [effect.creation_event_id] : [])
     || JSON.stringify(receipt.condition_refs) !== JSON.stringify([])
     || typeof receipt.created_at !== "string"
     || Number.isNaN(Date.parse(receipt.created_at))) {
@@ -419,7 +421,14 @@ async function settleAuthorEditResponse({
           .includes(effect.reason)
           && UUID.test(effect.current_authoritative_revision_id ?? "")
           && receipt.result === "conflicted"
-        : effect?.kind === "refused"
+        : effect?.kind === "refused_to_draft"
+          ? effect.refusal_origin === "fresh_editor_intent" && receipt.result === "refused_to_draft"
+            && UUID.test(effect.draft_id) && UUID.test(effect.draft_revision_id)
+            && UUID.test(effect.creation_event_id)
+            && group.frozen_request_body.author_edit_units.length === 1
+            && group.frozen_request_body.author_edit_units[0]?.normalized_primitives[0]?.kind
+              === "replace_structured_selection"
+          : effect?.kind === "refused"
           && ["unsupported_intent_shape", "invalid_selection", "target_mismatch"]
             .includes(effect.reason)
           && receipt.result === "refused";
