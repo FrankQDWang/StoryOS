@@ -498,6 +498,13 @@ async function settleAuthorEditResponse({
     && request.expected_proposal_head_revision_ids.length > 0
     && workspace.session.base_snapshot.proposal_head_revision_ids.length === 0
     && workspace.session.base_snapshot.observed_ownership_partition === "authoritative";
+  const sourceRecord = durableQuery && canonicalRetryProjection
+    ? (await validateJournalSnapshot(workspace, await readJournalSnapshot(workspace))).records.find(
+      (record) => record.completed_intent_record_id === group.ordered_coverage[0]?.intent_record_ref,
+    ) : undefined;
+  const recoveredCanonicalBase = sourceRecord !== undefined
+    && sourceRecord.base_snapshot_id !== freshBase.snapshot_id
+    && JSON.stringify(freshBase) === JSON.stringify(workspace.session.base_snapshot);
   if (canonical.schema_id !== "storyos.query.editor-session.response.v1"
     || !UUID.test(canonical.correlation_id ?? "")
     || JSON.stringify(canonical.project_scope) !== JSON.stringify(group.project_scope)
@@ -506,7 +513,7 @@ async function settleAuthorEditResponse({
       canonical.writer, workspace.session.writer, workspace.partition.writer_generation,
     )
     || !UUID.test(freshBase?.snapshot_id ?? "")
-    || freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id
+    || (freshBase.snapshot_id === workspace.session.base_snapshot.snapshot_id && !recoveredCanonicalBase)
     || freshBase.chapter_id !== group.frozen_request_body.chapter_id
     || freshBase.project_activity_position !== effect.project_activity_position
     || freshBase.authoritative_head_revision_id !== effect.authoritative_revision.revision_id

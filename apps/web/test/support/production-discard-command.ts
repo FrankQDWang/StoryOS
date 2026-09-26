@@ -248,8 +248,11 @@ export async function verifyRestoredProductionDiscard(context: BrowserContext): 
     assert.equal(download.status, 200);
     assert.equal(createHash("sha256").update(new Uint8Array(await download.arrayBuffer())).digest("hex"), expected.archive.bytesSha256);
     const current = await readProductionJournal(page, expected.projectId);
-    const original = expected.journal.metadata!.find((record) => String(record.key).startsWith("discard:"));
-    assert.deepEqual(current.metadata!.find((record) => record.key === original!.key), original);
+    for (const prefix of ["discard:", "draft-undo:", "draft-undo-observation:"]) {
+      const original = expected.journal.metadata!.filter((record) => String(record.key).startsWith(prefix));
+      assert.ok(original.length > 0);
+      assert.deepEqual(current.metadata!.filter((record) => String(record.key).startsWith(prefix)), original);
+    }
     console.log(`Restored production Discard ${expected.projectId}/${expected.draft.draft_id}: exact local record, closed event and full Copy`);
   } finally { await page.close(); }
 }

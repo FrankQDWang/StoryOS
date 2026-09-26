@@ -310,6 +310,7 @@ test("an explicit narrowed public Draft retry changes content and supersedes onl
     const reopened = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
     assert.deepEqual(reopened, { ...source, closure_event: closed.closure_event, reopen_event: undone.source_reopen_event });
+    await retainRefusedEditRecoveryExpectation(prepared.projectId, [{ draft: reopened, available: true }]);
   } finally { await stopRealServer(started.server); }
 });
 
@@ -317,7 +318,7 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
   let started = await startRealServer();
   try {
     await drainLeftoverWork();
-    for (const [index, outcome] of ["proposal_revised", "refused_to_draft", "no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content"].entries()) {
+    for (const [index, outcome] of ["proposal_revised", "refused_to_draft", "no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content", "reserved_block"].entries()) {
       const ns = `e0c97${index}`;
       const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Draft Retry Outcomes", `${ns}2`);
       const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
@@ -340,6 +341,9 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
       if (outcome === "refused_to_draft") request.author_edit_units[0]!.normalized_primitives = [
         { kind: "replace_structured_selection", replacement: [{ block_kind: "paragraph", text }] }];
       if (outcome === "conflicted") request.expected_proposal_head_revision_ids = [id(`${ns}58`)];
+      if (outcome === "reserved_block") request.author_edit_units[0]!.normalized_primitives = [
+        { kind: "replace_block_selection", manuscript_block_id: opened.proposal.manuscript_block_id,
+          from: 0, to: 5, text }];
       request.local_intent_sequence = String(BigInt(writer.nextSequence) + 1n);
       request.retry_source = { kind: "draft_retry", source_draft_kind: "refused_edit",
         source_draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
@@ -357,11 +361,11 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
         if (error instanceof StoryOSProtocolError) throw new Error(`${outcome}: ${error.responseBody}`, { cause: error });
         throw error;
       });
-      assert.equal(retried.effect.kind, ["source_conflict", "split_surrogate", "changed_content"].includes(outcome) ? "conflicted" : outcome);
+      assert.equal(retried.effect.kind, ["source_conflict", "split_surrogate", "changed_content", "reserved_block"].includes(outcome) ? "conflicted" : outcome);
       const after = await retainedState(prepared.projectId);
       const observed = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
         draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
-      if (["no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content"].includes(outcome)) {
+      if (["no_effect", "conflicted", "source_conflict", "split_surrogate", "changed_content", "reserved_block"].includes(outcome)) {
         assert.deepEqual(retried.source_draft_disposition, unchanged);
         assert.deepEqual(observed, source);
         assert.deepEqual(after, before);
@@ -452,6 +456,12 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
           draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft,
           { ...source, closure_event: observed.closure_event, reopen_event: undone.source_reopen_event });
       }
+      const recovered = [(await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft];
+      if (retried.effect.kind === "refused_to_draft") recovered.push((await getRefusedEditDraft({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: retried.effect.draft_id,
+        fetchImpl: prepared.fetchImpl })).draft);
+      await retainRefusedEditRecoveryExpectation(prepared.projectId, recovered.map((draft) => ({ draft, available: true })));
     }
   } finally { await stopRealServer(started.server); }
 });

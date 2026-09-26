@@ -764,6 +764,12 @@ function pendingProjectionFromSnapshot(
   const activeRecords = snapshot.records.filter((record) =>
     recordTargetsCurrentBase(record, base)
     && !resolvedSequences.has(record.local_intent_sequence));
+  const recoveredRetrySequences = new Set(snapshot.groups.filter((group) =>
+    group.settlement.kind === "unsettled" && group.frozen_request_body.retry_source !== undefined
+    && group.frozen_request_body.chapter_id === base.chapter_id).flatMap((group) =>
+    group.ordered_coverage.map((coverage) => coverage.local_intent_sequence)));
+  for (const record of activeRecords) recoveredRetrySequences.delete(record.local_intent_sequence);
+  const pendingRecordCount = activeRecords.length + recoveredRetrySequences.size;
   const authoritativeRecords = activeRecords.filter((record) => record.proposal_target === undefined);
   const blocks = (authoritativeRecords.length === 0
     ? cloneBlocks(base.materialized_revision.blocks)
@@ -783,11 +789,11 @@ function pendingProjectionFromSnapshot(
     blocks: cloneBlocks(blocks),
     save_state: pendingAcceptanceCount > 0 || hasZeroAuthoritySettlement || hasLegacyReplaceSelection
       ? "needs_attention"
-      : activeRecords.length
+      : pendingRecordCount
         ? "saving"
         : "saved",
-    unsettled_intent_count: activeRecords.length + pendingAcceptanceCount,
-    ...(pendingAcceptanceCount > 0 ? { author_edit_unsettled_intent_count: activeRecords.length } : {}),
+    unsettled_intent_count: pendingRecordCount + pendingAcceptanceCount,
+    ...(pendingAcceptanceCount > 0 ? { author_edit_unsettled_intent_count: pendingRecordCount } : {}),
     authoritative_revision_id: base.authoritative_head_revision_id,
     ...(workspace.session.author_undo_frontier_sequence
       ? { author_undo_frontier_sequence: workspace.session.author_undo_frontier_sequence }

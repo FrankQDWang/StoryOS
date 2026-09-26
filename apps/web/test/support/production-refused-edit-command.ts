@@ -1,5 +1,6 @@
-import { verifyProductionDiscard } from "./production-discard-command.ts";
+import { readProductionJournal, verifyProductionDiscard } from "./production-discard-command.ts";
 import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
+import { verifyProductionRetryReservationRace } from "./production-draft-retry-race.ts";
 import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
@@ -150,6 +151,7 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   let releaseRetry!: () => void, rejectRetry!: (error: unknown) => void;
   const committedRetry = new Promise<void>((resolve, reject) => { releaseRetry = resolve; rejectRetry = reject; });
   const retryRoute = (url: URL) => url.pathname.endsWith("/manuscript/author-edits");
+  const snapshotRoute = (url: URL) => url.pathname.startsWith(`/api/v1/projects/${projectId}/editor-sessions/`);
   await page.route(retryRoute, async (route) => {
     retryPosts += 1; retryRequest = route.request().postDataJSON() as ApplyAuthorEditRequest;
     retryKey = route.request().headers()["idempotency-key"]!;
@@ -220,22 +222,68 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
     await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
       WHERE owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid AND project_id='${projectId}'::uuid`);
     let proposalRetry!: ApplyAuthorEditResponse;
+    let nativePosts = 0, malformedSnapshots = 0;
+    let frozenJournal: Awaited<ReturnType<typeof readProductionJournal>> | undefined;
+    let nativeKey = "", nativeSession = "";
+    if (targetIndex === "1") await page.route(snapshotRoute, async (route) => {
+      const reply = await route.fetch(), snapshot = await reply.json();
+      if (malformedSnapshots === 0 && proposalRetry?.effect.kind === "authoritative_applied"
+        && JSON.stringify(snapshot.project_scope) === JSON.stringify(proposalRetry.project_scope)
+        && snapshot.editor_session.editor_session_id === nativeSession
+        && snapshot.base_snapshot.authoritative_head_revision_id === proposalRetry.effect.authoritative_revision.revision_id) {
+        malformedSnapshots += 1;
+        snapshot.base_snapshot.materialized_payload_digest.value_hex_lowercase = "0".repeat(64);
+        await route.fulfill({ response: reply, json: snapshot });
+      } else await route.fulfill({ response: reply });
+    });
     let finishProposal!: () => void, failProposal!: (error: unknown) => void;
     const settledProposal = new Promise<void>((resolve, reject) => { finishProposal = resolve; failProposal = reject; });
     await page.route(retryRoute, async (route) => {
       try {
+        nativePosts += 1; nativeKey = route.request().headers()["idempotency-key"]!;
+        nativeSession = (route.request().postDataJSON() as ApplyAuthorEditRequest).editor_session_id;
+        if (targetIndex === "1") frozenJournal = await readProductionJournal(page, projectId);
         const reply = await route.fetch(); assert.equal(reply.status(), 200, await reply.text());
         proposalRetry = await reply.json(); await route.fulfill({ response: reply }); finishProposal();
       } catch (error) { failProposal(error); await route.abort("failed"); }
     });
     const proposalPost = page.waitForRequest((request) => request.method() === "POST"
       && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
-    await next.locator("button[data-draft-retry-submit]").click();
-    await Promise.all([proposalPost, settledProposal]);
-    await page.unroute(retryRoute);
+    const submit = async () => {
+      await next.locator("button[data-draft-retry-submit]").click();
+      await Promise.all([proposalPost, settledProposal]);
+      return proposalRetry;
+    };
+    if (targetIndex === "1") await verifyProductionRetryReservationRace({ origin, projectId,
+      chapterId: chapter.chapter.chapter_id, blockId: right.manuscript_block_id, retry: submit });
+    else await submit();
     assert.equal(proposalRetry.effect.kind, targetIndex === "0" ? "proposal_revised" : "authoritative_applied");
     assert.equal(proposalRetry.source_draft_disposition?.kind, "closed_superseded");
+    if (proposalRetry.effect.kind === "authoritative_applied") assert.deepEqual(
+      proposalRetry.effect.authoritative_revision.blocks, blocks.map((block) =>
+        block.manuscript_block_id === right.manuscript_block_id ? { ...block, text: "mixed" } : block));
+    if (targetIndex === "1") {
+      try {
+        await page.getByText("Editor Base Snapshot did not converge", { exact: true }).waitFor();
+        assert.equal(malformedSnapshots, 1); assert.ok(frozenJournal);
+        const rejected = await readProductionJournal(page, projectId);
+        const group = rejected.submission_groups!.find((row) => row.idempotency_key === nativeKey);
+        assert.ok(group); assert.deepEqual(group.settlement, { kind: "unsettled" });
+        const baseKey = `active_base:${String(group.journal_partition_id)}`;
+        const originalBase = frozenJournal.metadata!.find((row) => row.key === baseKey);
+        assert.ok(originalBase);
+        assert.deepEqual(rejected.metadata!.find((row) => row.key === baseKey), originalBase);
+        assert.deepEqual(group, frozenJournal.submission_groups!.find((row) => row.idempotency_key === nativeKey));
+      } finally { await page.unroute(snapshotRoute); }
+      await page.reload();
+      await expect.poll(async () => {
+        const journal = await readProductionJournal(page, projectId);
+        return Reflect.get(journal.submission_groups!.find((row) => row.idempotency_key === nativeKey)!.settlement as object, "kind");
+      }, { timeout: 5000 }).toBe("applied_receipt_settled");
+    }
     await next.locator("[data-draft-closed]").waitFor();
+    assert.equal(nativePosts, 1);
+    await page.unroute(retryRoute);
     const readReplacement = () => page.evaluate(async ({ projectId, draftId }) => {
       const reply = await fetch(`/api/v1/projects/${projectId}/refused-edit-drafts/${draftId}`);
       if (!reply.ok) throw new Error(`Retry source read ${reply.status}`); return (await reply.json()).draft;
@@ -258,5 +306,5 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   }
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
     proposalId: proposal.proposal_id, draft: reopened, restart });
-  } finally { await page.unroute(retryRoute); }
+  } finally { await page.unroute(snapshotRoute); await page.unroute(retryRoute); }
 }
