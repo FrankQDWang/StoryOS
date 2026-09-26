@@ -60,6 +60,11 @@
       "sha256": "sha256:a0cca1014888ce6115a5d8cbbda2445a8d6b454a71a2205485f2f241edf78c15"
     },
     {
+      "path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json",
+      "schema_id": "storyos.event.editor-flow-draft-reopened.v1",
+      "sha256": "sha256:4b9ace4b7a478dbaeb865f8d22e7ebba74fbcaaa53dcbcd2adb0eb4da47fb19c"
+    },
+    {
       "path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-closed.schema.json",
       "schema_id": "storyos.event.editor-flow-draft-closed.v1",
       "sha256": "sha256:8c614ef7d55c2f92a33fbf3c414e8b53facd9d24c3a34d8200c586e33cb92145"
@@ -287,7 +292,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/refused-edit-draft-response.schema.json",
       "schema_id": "storyos.query.refused-edit-draft.response.v1",
-      "sha256": "sha256:510dbfd5f794c5d362d30b1c01173e6020d761bcaa1fcb3b17ded6ddfe85b8eb"
+      "sha256": "sha256:7b71ced4b39cded457d86bf0808603629a91189f3cb7b6261bf2152bad5178a9"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-request.schema.json",
@@ -437,7 +442,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/undo-latest-author-action-response.schema.json",
       "schema_id": "storyos.command.undo-latest-author-action.response.v1",
-      "sha256": "sha256:29802cd55441d5c604c3f1e2ae4605157f9a8544f10299fd8ea160b672439919"
+      "sha256": "sha256:4a1e71e7a0bdeddcd9f4db4b15286249c0bb41773624be589b176e93e23ebf1f"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/editor-session-create-request.schema.json",

@@ -120,7 +120,7 @@ async fn persist(
             VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6,$7::text::uuid,$8::text::numeric,(SELECT created_at FROM storyos.domain_receipts
               WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND receipt_id=$7::text::uuid))",
             &[&owner,&project,&event_id,&command.draft_id,&revision,&digest,&command.ids.receipt_id,&sequence]).await.map_err(database_error)?;
-        client.execute("UPDATE storyos.draft_artifacts SET closure='closed',close_event_id=$4::text::uuid
+        client.execute("UPDATE storyos.draft_artifacts SET closure='closed',close_event_id=$4::text::uuid,reopen_event_id=NULL
             WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND draft_id=$3::text::uuid",
             &[&owner,&project,&command.draft_id,&event_id]).await.map_err(database_error)?;
     }

@@ -223,6 +223,114 @@
       ],
       "type": "string"
     },
+    "DraftReopenReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "author_undo_receipt_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_close_event_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_id",
+        "receipt_id",
+        "project_scope",
+        "author_undo_receipt_id",
+        "source_close_event_id",
+        "event_id",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "EditorFlowDraftReopened": {
+      "additionalProperties": false,
+      "properties": {
+        "author_action_sequence": {
+          "type": "string"
+        },
+        "closure": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "draft_id": {
+          "type": "string"
+        },
+        "draft_revision_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "event_kind": {
+          "type": "string"
+        },
+        "handler_receipt": {
+          "$ref": "#/$defs/DraftReopenReceipt"
+        },
+        "payload_digest": {
+          "type": "string"
+        },
+        "prior_closure": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/RefusedEditDraftSource"
+        },
+        "source_author_action_sequence": {
+          "type": "string"
+        },
+        "source_close_event_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_id",
+        "event_kind",
+        "event_id",
+        "project_scope",
+        "draft_id",
+        "draft_revision_id",
+        "payload_digest",
+        "source_close_event_id",
+        "prior_closure",
+        "closure",
+        "source",
+        "handler_receipt",
+        "source_author_action_sequence",
+        "author_action_sequence",
+        "created_at"
+      ],
+      "type": "object"
+    },
     "ManuscriptBlock": {
       "additionalProperties": false,
       "properties": {
@@ -300,15 +408,67 @@
       ],
       "type": "object"
     },
+    "RefusedEditDraftSource": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "command_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "author_command_admission_id",
+        "receipt_id",
+        "idempotency_key",
+        "command_digest"
+      ],
+      "type": "object"
+    },
     "UndoLatestAuthorActionConflictReason": {
       "enum": [
         "frontier_mismatch",
-        "wrong_target_head"
+        "wrong_target_head",
+        "source_binding_changed"
       ],
       "type": "string"
     },
     "UndoLatestAuthorActionEffect": {
       "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "author_undo_frontier_sequence": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "event": {
+              "$ref": "#/$defs/EditorFlowDraftReopened"
+            },
+            "kind": {
+              "const": "draft_compensated",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "event"
+          ],
+          "type": "object"
+        },
         {
           "additionalProperties": false,
           "properties": {
@@ -393,7 +553,8 @@
     "UndoLatestAuthorActionUnavailableReason": {
       "enum": [
         "no_frontier",
-        "barrier"
+        "barrier",
+        "source_unavailable"
       ],
       "type": "string"
     }

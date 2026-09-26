@@ -50,6 +50,10 @@ def validate_event_profile(event: dict[str, Any], errors: list[str]) -> None:
         expected_shape = {"scope": "exact_project", "source": "exact_command_admission_receipt_forward_action", "delivery": "closeEditorFlowDraft_and_getRefusedEditDraft", "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-closed.schema.json"}
         if event.get("wire_profile") != "storyos.artifact-lifecycle.v1" or event.get("event_kind") != "editor_flow_draft_closed" or event.get("semantic_owner") != "core" or event.get("record_shape") != expected_shape:
             fail("Draft Discard must use its exact Core Artifact lifecycle contract", errors)
+    elif event_id == "storyos.event.editor-flow-draft-reopened.v1":
+        expected_shape = {"scope": "exact_project", "source": "exact_root_undo_handler_receipt_compensation", "delivery": "undoLatestAuthorAction_and_getRefusedEditDraft", "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json"}
+        if event.get("wire_profile") != "storyos.artifact-lifecycle.v1" or event.get("event_kind") != "editor_flow_draft_reopened" or event.get("semantic_owner") != "core" or event.get("record_shape") != expected_shape:
+            fail("Draft Undo must use its exact Core Artifact lifecycle contract", errors)
     elif event.get("wire_profile") != "storyos.project-activity.v1":
         fail(f"Event {event_id} must use the Release 1 Project Activity profile", errors)
 

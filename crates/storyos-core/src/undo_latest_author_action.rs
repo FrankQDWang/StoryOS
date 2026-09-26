@@ -18,6 +18,9 @@ pub struct AuthorUndoFrontier {
 pub enum AuthorUndoFrontierKind {
     ReversibleDirectAuthorAction { resulting_revision_id: String },
     ReversibleStructureTransition,
+    ReversibleDraftClose,
+    DraftSourceUnavailable,
+    DraftBindingChanged,
     Barrier,
 }
 
@@ -40,12 +43,14 @@ pub enum UndoLatestAuthorActionConflict {
         current_author_undo_frontier_sequence: Option<u64>,
     },
     WrongTargetHead,
+    SourceBindingChanged,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UndoLatestAuthorActionUnavailable {
     NoFrontier,
     Barrier,
+    SourceUnavailable,
 }
 
 /// Classify one Undo Latest Author Action against the derived Author Undo Frontier.
@@ -66,7 +71,16 @@ pub fn undo_latest_author_action(command: &UndoLatestAuthorAction) -> UndoLatest
         AuthorUndoFrontierKind::Barrier => UndoLatestAuthorActionResult::Unavailable {
             reason: UndoLatestAuthorActionUnavailable::Barrier,
         },
-        AuthorUndoFrontierKind::ReversibleStructureTransition => {
+        AuthorUndoFrontierKind::DraftSourceUnavailable => {
+            UndoLatestAuthorActionResult::Unavailable {
+                reason: UndoLatestAuthorActionUnavailable::SourceUnavailable,
+            }
+        }
+        AuthorUndoFrontierKind::DraftBindingChanged => UndoLatestAuthorActionResult::Conflicted {
+            reason: UndoLatestAuthorActionConflict::SourceBindingChanged,
+        },
+        AuthorUndoFrontierKind::ReversibleStructureTransition
+        | AuthorUndoFrontierKind::ReversibleDraftClose => {
             UndoLatestAuthorActionResult::Compensated {
                 source_sequence: frontier.sequence,
             }

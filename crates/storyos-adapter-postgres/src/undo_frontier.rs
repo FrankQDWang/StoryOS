@@ -6,6 +6,7 @@ pub(super) enum ObservedFrontier {
     Structure(ObservedStructureFrontier),
     CurrentChapter(ObservedCurrentChapterFrontier),
     Proposal(crate::author_edit_proposal::ObservedProposalFrontier),
+    DraftClose(crate::undo_draft_close::ObservedDraftClose),
     Barrier { sequence: u64 },
 }
 
@@ -154,6 +155,15 @@ pub(super) async fn load_observed_frontier(
     let observed = observed_frontier(&row)?;
     let observed = match observed {
         Some(ObservedFrontier::Barrier { sequence }) => {
+            if let Some(frontier) =
+                crate::undo_draft_close::load_frontier(client, &command.project_scope, sequence)
+                    .await?
+            {
+                return Ok(LoadedUndoFrontier {
+                    lifecycle_state: row.get(0),
+                    observed: Some(ObservedFrontier::DraftClose(frontier)),
+                });
+            }
             match crate::author_edit_proposal::load_proposal_frontier(
                 client,
                 &command.project_scope,
@@ -405,6 +415,7 @@ impl ObservedFrontier {
             Self::Structure(frontier) => frontier.sequence,
             Self::CurrentChapter(frontier) => frontier.sequence,
             Self::Proposal(frontier) => frontier.sequence,
+            Self::DraftClose(frontier) => frontier.sequence,
             Self::Barrier { sequence } => *sequence,
         }
     }
@@ -417,6 +428,7 @@ impl ObservedFrontier {
             Self::Structure(_) | Self::CurrentChapter(_) | Self::Proposal(_) => {
                 AuthorUndoFrontierKind::ReversibleStructureTransition
             }
+            Self::DraftClose(frontier) => frontier.kind.clone(),
             Self::Barrier { .. } => AuthorUndoFrontierKind::Barrier,
         }
     }
@@ -427,6 +439,7 @@ impl ObservedFrontier {
             Self::Structure(_)
             | Self::CurrentChapter(_)
             | Self::Proposal(_)
+            | Self::DraftClose(_)
             | Self::Barrier { .. } => None,
         }
     }

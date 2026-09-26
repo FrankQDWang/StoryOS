@@ -22,6 +22,7 @@ pub struct RefusedEditDraftRecord {
     pub closure: String,
     pub retention: String,
     pub closure_event: Option<RefusedEditDraftClosure>,
+    pub reopen_event: Option<storyos_contracts::EditorFlowDraftReopened>,
 }
 
 /// Reads one retained Draft and its immutable source under the exact Scope.

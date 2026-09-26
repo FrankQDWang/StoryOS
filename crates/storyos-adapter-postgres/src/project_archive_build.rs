@@ -77,6 +77,11 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "canonical/conversation_memory_settings.json",
     ),
     ("draft_close_events", "canonical/draft_close_events.json"),
+    ("draft_reopen_events", "canonical/draft_reopen_events.json"),
+    (
+        "draft_reopen_receipts",
+        "canonical/draft_reopen_receipts.json",
+    ),
     ("domain_receipts", "canonical/domain_receipts.json"),
     (
         "editor_session_base_snapshots",

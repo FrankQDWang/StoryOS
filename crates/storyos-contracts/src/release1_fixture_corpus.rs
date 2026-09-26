@@ -183,6 +183,20 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
         ],
     ));
     membership.push(FixtureMembership {
+        path: undo_latest_author_action_artifacts::EVENT_FIXTURE_PATHS[0],
+        fixture_id: "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
+        classification: "positive",
+        operation_id: "undoLatestAuthorAction",
+        bytes: |_| undo_latest_author_action_artifacts::event_fixture_bytes(),
+    });
+    membership.push(FixtureMembership {
+        path: undo_latest_author_action_artifacts::EVENT_FIXTURE_PATHS[1],
+        fixture_id: "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
+        classification: "invalid",
+        operation_id: "undoLatestAuthorAction",
+        bytes: |_| undo_latest_author_action_artifacts::event_invalid_fixture_bytes(),
+    });
+    membership.push(FixtureMembership {
         path: close_draft_artifacts::EVENT_FIXTURE_PATHS[0],
         fixture_id: "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
         classification: "positive",

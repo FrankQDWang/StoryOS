@@ -9,6 +9,7 @@ sha2.workspace = true
 serde_json.workspace = true
 storyos-application = { path = "../storyos-application" }
 storyos-core = { path = "../storyos-core" }
+storyos-contracts = { path = "../storyos-contracts" }
 tokio.workspace = true
 tokio-postgres.workspace = true
 uuid.workspace = true

@@ -1011,14 +1011,15 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     const undoRequest = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
       undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0db6"),
         editor_session_id: writer.session.editor_session.editor_session_id,
-        expected_author_undo_frontier_sequence: closeEvent.author_action_sequence,
+        expected_author_undo_frontier_sequence: String(Number(closeEvent.author_action_sequence) - 1),
         expected_authoritative_revision_id: writer.authoritativeRevisionId } };
     const undo = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/author-actions/undo", undoRequest.command_schema,
       await digestUndoLatestAuthorAction(undoRequest), id("e0db7"), (antiForgery) => undoLatestAuthorAction({
         baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
         request: undoRequest, idempotencyKey: id("e0db7"), antiForgery }));
-    assert.deepEqual(undo.effect, { kind: "unavailable", reason: "barrier" });
+    assert.deepEqual(undo.effect, { kind: "conflicted", reason: "frontier_mismatch",
+      current_author_undo_frontier_sequence: closeEvent.author_action_sequence });
     assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     await assert.rejects(() => queryPostgres(`UPDATE storyos.draft_artifacts SET closure='closed'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${archived.draft.draft_id}'::uuid`), /Incomplete Draft Discard settlement/);
@@ -1259,6 +1260,54 @@ test("a distant generating Proposal does not block a proven span, while a select
     assert.deepEqual((await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
       proposalId: generating.proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal, generating.proposal);
   } finally { await drainLeftoverWork(); await stopRealServer(started.server); }
+});
+
+test("Root Undo reopens the exact public Discard without changing manuscript or Proposal content", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0fa111"), "Draft Discard Undo", "e0fa2");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0fa3");
+    const created = await sendMixed(started.baseUrl, prepared, mixedRequest(opened, writer, "e0fa4"), id("e0fa46"));
+    if (created.effect.kind !== "refused_to_draft") throw new Error("expected public Refused Edit Draft");
+    const read = () => getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: created.effect.kind === "refused_to_draft" ? created.effect.draft_id : "", fetchImpl: prepared.fetchImpl });
+    const retained = (await read()).draft;
+    const objects = () => Promise.all([getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl }).then((value) => value.chapter),
+    getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl }).then((value) => value.proposal)]);
+    const before = await objects();
+    const close: CloseEditorFlowDraftRequest = { command_schema: "storyos.command.close-editor-flow-draft.request.v1",
+      close_editor_flow_draft_input: { ...BINDING, correlation_id: id("e0fa51"), draft_id: retained.draft_id,
+        draft_kind: "refused_edit", source_current_draft_revision_id: retained.draft_revision_id,
+        source_draft_payload_digest: retained.payload_digest, expected_closure: "open", close_reason: "abandoned",
+        editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration } };
+    const closed = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/closures", close.command_schema,
+      await digestCloseEditorFlowDraft(close), id("e0fa52"), (antiForgery) => closeEditorFlowDraft({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: retained.draft_id, request: close,
+        idempotencyKey: id("e0fa52"), antiForgery, fetchImpl: prepared.fetchImpl }));
+    if (closed.effect.kind !== "draft_closure_changed") throw new Error("expected public Discard");
+    const request = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+      undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0fa61"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        expected_author_undo_frontier_sequence: closed.effect.event.author_action_sequence,
+        expected_authoritative_revision_id: writer.authoritativeRevisionId } };
+    const undone = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", request.command_schema,
+      await digestUndoLatestAuthorAction(request), id("e0fa62"), (antiForgery) => undoLatestAuthorAction({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, request, idempotencyKey: id("e0fa62"),
+        antiForgery, fetchImpl: prepared.fetchImpl }));
+    assert.equal(undone.effect.kind, "draft_compensated");
+    const reopened = (await read()).draft;
+    assert.equal(reopened.closure, "open");
+    assert.deepEqual(reopened.payload, retained.payload);
+    assert.deepEqual(reopened.creation, retained.creation);
+    assert.deepEqual(reopened.closure_event, closed.effect.event);
+    assert.deepEqual(await objects(), before);
+  } finally { await stopRealServer(started.server); }
 });
 
 test("a complete source cannot prove a selection inside a UTF-16 surrogate pair", async () => {

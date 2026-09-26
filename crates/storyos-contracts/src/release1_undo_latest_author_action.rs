@@ -46,6 +46,39 @@ pub const UNDO_LATEST_AUTHOR_ACTION_METHOD: &str = UNDO_LATEST_AUTHOR_ACTION.met
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
+pub struct DraftReopenReceipt {
+    pub schema_id: String,
+    pub receipt_id: String,
+    pub project_scope: crate::ProjectScope,
+    pub author_undo_receipt_id: String,
+    pub source_close_event_id: String,
+    pub event_id: String,
+    pub result: String,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct EditorFlowDraftReopened {
+    pub schema_id: String,
+    pub event_kind: String,
+    pub event_id: String,
+    pub project_scope: crate::ProjectScope,
+    pub draft_id: String,
+    pub draft_revision_id: String,
+    pub payload_digest: String,
+    pub source_close_event_id: String,
+    pub prior_closure: String,
+    pub closure: String,
+    pub source: crate::RefusedEditDraftSource,
+    pub handler_receipt: DraftReopenReceipt,
+    pub source_author_action_sequence: String,
+    pub author_action_sequence: String,
+    pub created_at: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(deny_unknown_fields)]
 pub struct UndoLatestAuthorActionInput {
     pub expected_author_undo_frontier_sequence: String,
     pub expected_authoritative_revision_id: String,
@@ -67,6 +100,7 @@ pub struct UndoLatestAuthorActionRequest {
 pub enum UndoLatestAuthorActionConflictReason {
     FrontierMismatch,
     WrongTargetHead,
+    SourceBindingChanged,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -74,11 +108,16 @@ pub enum UndoLatestAuthorActionConflictReason {
 pub enum UndoLatestAuthorActionUnavailableReason {
     NoFrontier,
     Barrier,
+    SourceUnavailable,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum UndoLatestAuthorActionEffect {
+    DraftCompensated {
+        event: Box<EditorFlowDraftReopened>,
+        author_undo_frontier_sequence: Option<String>,
+    },
     Compensated {
         source_sequence: String,
         author_action_sequence: String,
