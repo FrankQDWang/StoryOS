@@ -60,49 +60,31 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     if (!reply.ok) throw new Error(`Undo replay ${reply.status}`); return reply.json();
   }, { projectId, request, key, nonce });
   assert.deepEqual(replay, response); assert.deepEqual(await read(), reopened);
-  const closeReply = page.waitForResponse((reply) => reply.url().endsWith(`/drafts/${draft.draft_id}/closures`) && reply.request().method() === "POST");
+  let releaseClose!: (response: CloseEditorFlowDraftResponse) => void;
+  const closeReply = new Promise<CloseEditorFlowDraftResponse>((resolve) => { releaseClose = resolve; });
+  const closeRoute = (url: URL) => url.pathname.endsWith(`/drafts/${draft.draft_id}/closures`);
+  await page.route(closeRoute, async (route) => {
+    const reply = await route.fetch(); assert.equal(reply.status(), 200);
+    const response = await reply.json() as CloseEditorFlowDraftResponse;
+    await route.abort("failed"); releaseClose(response);
+  });
   await surface.locator("button[data-draft-discard]").click();
-  const closedAgain = await (await closeReply).json() as CloseEditorFlowDraftResponse;
+  const closedAgain = await closeReply; await page.unroute(closeRoute);
   assert.ok(closedAgain.effect.kind === "draft_closure_changed");
   const secondCloseEvent = closedAgain.effect.event;
   await surface.locator("[data-draft-closed]").waitFor();
-  const discarded = (await readProductionJournal(page, projectId)).metadata!.find((row) => row.key === `discard:${draft.draft_id}:${reopened.reopen_event!.event_id}`)!;
+  const secondJournal = await readProductionJournal(page, projectId);
+  const discarded = secondJournal.metadata!.find((row) => row.key === `discard:${draft.draft_id}:${reopened.reopen_event!.event_id}`)!;
   assert.equal((discarded.group as { frozen_request_body: { close_editor_flow_draft_input: { source_reopen_event_id: string } } }).frozen_request_body.close_editor_flow_draft_input.source_reopen_event_id, reopened.reopen_event!.event_id);
+  const closeObservationKey = `discard-observation:${discarded.explicit_command_record_id}:settled_closed`;
+  assert.deepEqual(secondJournal.metadata!.find((row) => row.key === closeObservationKey), { key: closeObservationKey,
+    record_key: discarded.key, schema_id: "storyos.local-edit-journal.refused-edit-discard.v1.observation", kind: "settled_closed", event: secondCloseEvent });
   let second!: UndoLatestAuthorActionResponse;
   await page.route(undoRoute, async (route) => {
     const reply = await route.fetch(); assert.equal(reply.status(), 200); second = await reply.json();
     await route.fulfill({ response: reply, json: { ...second, receipt: { ...second.receipt, draft_artifact_refs: [] } } });
   });
-  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus().catch(async (cause: unknown) => {
-    const input = (frozen!.group as { frozen_request_body: { undo_latest_author_action_input: { editor_session_id: string } } }).frozen_request_body.undo_latest_author_action_input;
-    const diagnostic = await page.evaluate(async ({ projectId, editorSessionId }) => {
-      const editor = document.querySelector<HTMLElement>("[data-manuscript-editor]")!;
-      const status = document.querySelector<HTMLElement>("[data-save-state]")!;
-      const reply = await fetch(`/api/v1/projects/${projectId}/editor-sessions/${editorSessionId}`);
-      const session = await reply.json() as { writer: { kind: string; writer_generation?: string }; author_undo_frontier_sequence: string };
-      const publicState = { editable: editor.getAttribute("contenteditable"), save: status.dataset.saveState,
-        failure: status.dataset.editorFailure, unsettled: status.dataset.unsettledIntentCount, writer: session.writer,
-        frontier: session.author_undo_frontier_sequence, focused: document.activeElement === editor };
-      if (session.writer.kind !== "current_writer" || publicState.save !== "saved" || publicState.failure) return publicState;
-      type Hook = { memoizedState: unknown; next: Hook | null };
-      type Fiber = { memoizedProps: Record<string, unknown> | null; memoizedState: Hook | null; return: Fiber | null };
-      let owner: HTMLElement | null = editor, key = Object.keys(editor).find((key) => key.startsWith("__reactFiber$"));
-      while (owner !== null && key === undefined) { owner = owner.parentElement;
-        key = owner === null ? undefined : Object.keys(owner).find((key) => key.startsWith("__reactFiber$")); }
-      let fiber = owner === null || key === undefined ? null : Reflect.get(owner, key) as Fiber | null;
-      while (fiber !== null && (!fiber.memoizedProps || !Object.hasOwn(fiber.memoizedProps, "locators"))) fiber = fiber.return;
-      if (fiber === null) return { ...publicState, gates: "not_collected" };
-      const states: unknown[] = []; let hook = fiber?.memoizedState;
-      while (hook) { states.push(hook.memoizedState); hook = hook.next; }
-      const length = (index: number) => Array.isArray(states[index]) ? states[index].length : undefined;
-      const flag = (index: number) => typeof states[index] === "boolean" ? states[index] : undefined;
-      return { ...publicState, gates: { found: true, baseEditable: fiber.memoizedProps?.editable, discardHold: flag(2),
-        accepting: states.length > 6 ? states[6] !== undefined : undefined, pendingAcceptances: length(7), acceptanceChecked: flag(8),
-        journalPending: length(10), recoveryUnavailable: flag(13), recoveryChecked: flag(14) } };
-    }, { projectId, editorSessionId: input.editor_session_id });
-    throw new Error(`Second Undo editable gate: ${JSON.stringify(diagnostic)}`, { cause });
-  });
-  await page.keyboard.press("ControlOrMeta+Z");
+  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus(); await page.keyboard.press("ControlOrMeta+Z");
   await surface.locator("[data-draft-reopened]").waitFor().catch(async (cause: unknown) => {
     const journal = await readProductionJournal(page, projectId), current = await read() as RefusedEditDraftInspect;
     const bindings = journal.metadata!.filter((row) => row.key === "schema" || String(row.key).startsWith("draft-undo"))
