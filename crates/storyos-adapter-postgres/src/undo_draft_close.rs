@@ -98,10 +98,6 @@ pub(super) async fn persist_compensation(
     let sequence: String = row.get(0);
     let activity: String = row.get(1);
     let next: Option<String> = client.query_one("SELECT max(action.author_action_sequence)::text FROM storyos.author_action_entries AS action
-        JOIN storyos.editor_session_base_snapshots AS snapshot ON
-        (snapshot.owner_user_id,snapshot.project_id,snapshot.editor_session_id)=(action.owner_user_id,action.project_id,$4::text::uuid)
-        JOIN storyos.authoritative_heads AS head ON (head.owner_user_id,head.project_id,head.manuscript_object_id)=
-        (snapshot.owner_user_id,snapshot.project_id,snapshot.chapter_object_id)
         WHERE action.owner_user_id=$1::text::uuid AND action.project_id=$2::text::uuid AND action.disposition='forward'
         AND action.author_action_sequence<>$3::text::numeric AND NOT EXISTS(SELECT 1 FROM storyos.author_action_entries AS compensation
         WHERE compensation.owner_user_id=action.owner_user_id AND compensation.project_id=action.project_id
