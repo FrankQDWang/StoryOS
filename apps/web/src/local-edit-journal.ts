@@ -873,10 +873,12 @@ export async function persistStructuredSelection(
 }
 
 export async function persistDraftRetryUnit(workspace: EditorWorkspace, authorEditUnit: AuthorEditUnit,
-  retrySource: DraftRetry): Promise<PendingEditProjection> {
+  retrySource: DraftRetry, expectedProposalHeads: string[]): Promise<PendingEditProjection> {
   const snapshot = await prepareJournalAppend(workspace);
   const projection = pendingProjectionFromSnapshot(workspace, snapshot);
-  if (projection.save_state !== "saved" || projection.unsettled_intent_count !== 0 || !validDraftRetry(retrySource)) {
+  if (projection.save_state !== "saved" || projection.unsettled_intent_count !== 0 || !validDraftRetry(retrySource)
+    || expectedProposalHeads.some((head) => !UUID.test(head))
+    || expectedProposalHeads.length !== new Set(expectedProposalHeads).size) {
     throw new Error("Draft retry requires a settled writer");
   }
   const expectedBlocks = cloneBlocks(projection.blocks);
@@ -884,7 +886,7 @@ export async function persistDraftRetryUnit(workspace: EditorWorkspace, authorEd
   const expectedBody = flattenChapterBody(expectedBlocks);
   return persistAuthorEditUnit(workspace, { snapshot, projection, authorEditUnit, retrySource,
     expectedBody, expectedBlocks, resultingBody: expectedBody, extraUtf8: JSON.stringify(authorEditUnit),
-    inputOrigin: "selection_replacement" }, workspace.cryptoImpl);
+    inputOrigin: "selection_replacement", expectedProposalHeads }, workspace.cryptoImpl);
 }
 
 export interface CandidateSelectionEdit {

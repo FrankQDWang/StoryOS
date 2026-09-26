@@ -1,4 +1,5 @@
 import { verifyProductionDiscard } from "./production-discard-command.ts";
+import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import type { BrowserContext, Page } from "playwright";
@@ -140,6 +141,8 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   await page.reload();
   await draft.locator("button[data-draft-retry]").waitFor();
   await page.unroute(originalEditRoute);
+  await queryStoryOSPostgres(`UPDATE storyos.project_command_challenge_rate_windows SET issued_count=0
+    WHERE owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid AND project_id='${projectId}'::uuid`);
   let retryRequest: ApplyAuthorEditRequest | undefined, retryResponse: ApplyAuthorEditResponse | undefined;
   let retryKey = "", retryPosts = 0;
   let releaseRetry!: () => void, rejectRetry!: (error: unknown) => void;
@@ -157,15 +160,15 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
   try {
   await draft.locator("button[data-draft-retry]").click();
   const range = draft.locator('textarea[name="draft-range-text"]');
-  await range.click();
-  for (let index = 0; index < 26; index += 1) await range.press("ArrowLeft");
-  for (let index = 0; index < 9; index += 1) await range.press("ArrowRight");
-  for (let index = 0; index < 5; index += 1) await range.press("Shift+ArrowRight");
-  assert.equal(await draft.locator("[data-retry-preview]").textContent(), "mixed", JSON.stringify(await range.evaluate((field) => ({
-    value: (field as HTMLTextAreaElement).value, from: (field as HTMLTextAreaElement).selectionStart,
-    to: (field as HTMLTextAreaElement).selectionEnd, disabled: (field as HTMLTextAreaElement).disabled,
-    focused: document.activeElement === field,
-  }))));
+  await range.dblclick();
+  assert.deepEqual(await range.evaluate((field) => ({
+    from: (field as HTMLTextAreaElement).selectionStart, to: (field as HTMLTextAreaElement).selectionEnd,
+    text: (field as HTMLTextAreaElement).value.slice((field as HTMLTextAreaElement).selectionStart,
+      (field as HTMLTextAreaElement).selectionEnd),
+  })), { from: 9, to: 14, text: "mixed" });
+  assert.deepEqual(await draft.locator("[data-retry-preview]").evaluateAll((blocks) => blocks.map((block) => ({
+    block_kind: (block as HTMLElement).dataset.retryPreview, text: block.textContent,
+  }))), [{ block_kind: "paragraph", text: "mixed" }]);
   const submittedRetry = page.waitForRequest((request) => request.method() === "POST"
     && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
   await draft.locator("button[data-draft-retry-submit]").click();

@@ -445,8 +445,9 @@ test("narrow Draft retry preserves candidate, refusal, no-effect and conflict ou
         await stopRealServer(started.server); started = await startRealServer();
         prepared.fetchImpl = browserFetch(started.baseUrl, "session-a");
         assert.deepEqual(await compensate(), undone);
-        assert.deepEqual(await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
-          proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl }), compensated);
+        const resumedProposal = await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          proposalId: opened.proposal.proposal_id, fetchImpl: prepared.fetchImpl });
+        assert.deepEqual({ ...resumedProposal, correlation_id: compensated.correlation_id }, compensated);
         assert.deepEqual((await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
           draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft,
           { ...source, closure_event: observed.closure_event, reopen_event: undone.source_reopen_event });

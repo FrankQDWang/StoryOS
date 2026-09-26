@@ -37,18 +37,32 @@ export async function readRetryTarget(workspace: EditorWorkspace, draft: Refused
     || session.writer.writer_generation !== workspace.partition.writer_generation) throw new Error("Retry target unavailable");
   const result: RetryTargetRead = { text: "", authoritativeHead: session.base_snapshot.authoritative_head_revision_id,
     proposalHeads: session.base_snapshot.proposal_head_revision_ids };
-  if (target === "original") return result;
-  const source = draft.payload.author_edit_units[0]?.selection_snapshot?.ordered_selection?.sources[Number(target)];
-  if (source?.owner.kind === "proposal") {
-    const read = await getProposal({ baseUrl, fetchImpl, projectId: session.project_scope.project_id, proposalId: source.owner.proposal_id });
+  const sources = draft.payload.author_edit_units[0]?.selection_snapshot?.ordered_selection?.sources ?? [];
+  const source = sources[Number(target)];
+  const selected = target === "original" ? sources : source === undefined ? [] : [source];
+  const owners = new Map(selected.flatMap((item) => item.owner.kind === "proposal"
+    ? [[item.owner.proposal_id, item.owner] as const] : []));
+  const heads = new Set(result.proposalHeads);
+  let selectedProposal: RetryTargetRead["proposal"];
+  for (const owner of owners.values()) {
+    const read = await getProposal({ baseUrl, fetchImpl, projectId: session.project_scope.project_id, proposalId: owner.proposal_id });
     const proposal = read.proposal;
-    if (canonical(read.project_scope) !== canonical(session.project_scope) || proposal.proposal_id !== source.owner.proposal_id
+    if (canonical(read.project_scope) !== canonical(session.project_scope) || proposal.proposal_id !== owner.proposal_id
       || proposal.chapter_id !== draft.payload.chapter_id || proposal.closure !== "open"
-      || proposal.manuscript_block_id !== source.owner.manuscript_block_id || !result.proposalHeads.includes(proposal.revision_id)) {
+      || proposal.operation_id !== owner.operation_id || proposal.manuscript_block_id !== owner.manuscript_block_id) {
       throw new Error("Retry target unavailable");
     }
-    return { ...result, text: proposal.candidate_text, proposal };
+    if (target === "original" && selected.some((item) => item.owner.kind === "proposal"
+      && item.owner.proposal_id === owner.proposal_id
+      && (item.owner.revision_id !== proposal.revision_id || item.source_text !== proposal.candidate_text))) {
+      throw new Error("Original target changed. Select the current target");
+    }
+    heads.delete(owner.revision_id); heads.add(proposal.revision_id);
+    if (target !== "original") selectedProposal = proposal;
   }
+  result.proposalHeads = [...heads].sort();
+  if (target === "original") return result;
+  if (selectedProposal) return { ...result, text: selectedProposal.candidate_text, proposal: selectedProposal };
   const block = source?.owner.kind === "manuscript" ? session.base_snapshot.materialized_revision.blocks
     .find((block) => block.manuscript_block_id === source.owner.manuscript_block_id) : undefined;
   if (!block) throw new Error("Retry target unavailable");
@@ -69,8 +83,7 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
     || canonical(session.editor_session) !== canonical(workspace.session.editor_session)
     || session.base_snapshot.chapter_id !== draft.payload.chapter_id || draft.closure !== "open"
     || draft.retention_state !== "retained"
-    || session.base_snapshot.authoritative_head_revision_id !== targetRead.authoritativeHead
-    || canonical(session.base_snapshot.proposal_head_revision_ids) !== canonical(targetRead.proposalHeads)) throw new Error("Draft retry requires the current writer and source");
+    || session.base_snapshot.authoritative_head_revision_id !== targetRead.authoritativeHead) throw new Error("Draft retry requires the current writer and source");
   const replacement = selectedDraftBlocks(draft, from, to);
   const digest = await workspace.cryptoImpl.subtle.digest("SHA-256", new TextEncoder().encode(canonical(replacement)));
   const retrySource: DraftRetry = { kind: "draft_retry", source_draft_kind: "refused_edit", source_draft_id: draft.draft_id,
@@ -95,12 +108,12 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
     await persistCandidateSelection(workspace, { kind: "candidate_selection", retrySource,
       target: { proposal_id: proposal.proposal_id, operation_id: proposal.operation_id,
         revision_id: proposal.revision_id, manuscript_block_id: proposal.manuscript_block_id },
-      expectedProposalHeads: session.base_snapshot.proposal_head_revision_ids, priorText: proposal.candidate_text,
+      expectedProposalHeads: targetRead.proposalHeads, priorText: proposal.candidate_text,
       from: targetFrom, to: targetTo, text, resultingBody: proposal.candidate_text.slice(0, targetFrom) + text
         + proposal.candidate_text.slice(targetTo), inputOrigin: "selection_replacement" }, workspace.cryptoImpl);
   } else if (target === "original") {
     await persistDraftRetryUnit(workspace, { ...original,
-      normalized_primitives: [{ kind: "replace_structured_selection", replacement }] }, retrySource);
+      normalized_primitives: [{ kind: "replace_structured_selection", replacement }] }, retrySource, targetRead.proposalHeads);
   } else {
     if (source?.owner.kind !== "manuscript") throw new Error("Retry target unavailable");
     const blocks = session.base_snapshot.materialized_revision.blocks;
@@ -109,7 +122,7 @@ export async function retryRefusedEdit({ workspace, draft, from, to, target, tar
       : { kind: "replace_block_selection" as const, manuscript_block_id: source.owner.manuscript_block_id,
         from: targetFrom, to: targetTo, text: replacement[0]!.text };
     await persistDraftRetryUnit(workspace, { normalized_primitives: [primitive], selection_snapshot: {
-      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: targetFrom, to: targetTo } }, retrySource);
+      coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: targetFrom, to: targetTo } }, retrySource, targetRead.proposalHeads);
   }
   const guardedFetch: typeof fetch = (input, init) => {
     if (!isCurrent()) throw new Error("Retry view changed");
