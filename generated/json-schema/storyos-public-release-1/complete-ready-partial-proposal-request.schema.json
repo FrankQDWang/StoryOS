@@ -1,0 +1,73 @@
+{
+  "$defs": {
+    "CompleteReadyPartialProposalInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_candidate_digest": {
+          "type": "string"
+        },
+        "expected_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "generation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "last_applied_stream_seq": {
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "proposal_revision_id",
+        "generation_id",
+        "expected_candidate_digest",
+        "last_applied_stream_seq",
+        "expected_target_revisions",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.complete-ready-partial-proposal.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.complete-ready-partial-proposal.request.v1",
+      "type": "string"
+    },
+    "complete_ready_partial_proposal_input": {
+      "$ref": "#/$defs/CompleteReadyPartialProposalInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "complete_ready_partial_proposal_input"
+  ],
+  "title": "StoryOS Complete Ready Partial Proposal Request",
+  "type": "object"
+}

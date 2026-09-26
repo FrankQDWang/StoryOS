@@ -1,0 +1,50 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000e12",
+  "command_id": "018f0000-0000-7001-8000-000000000e11",
+  "correlation_id": "018f0000-0000-7001-8000-000000000e10",
+  "effect": {
+    "author_action_sequence": "4",
+    "generation_event_ref": "018f0000-0000-7001-8000-000000000e17",
+    "generation_id": "018f0000-0000-7001-8000-000000000e16",
+    "kind": "completed",
+    "preserved_closure": "open",
+    "preserved_operation_resolution": "pending",
+    "preserved_validation": "pending",
+    "prior_generation_state": "ready_partial",
+    "resulting_generation_state": "ready",
+    "undo_disposition": "forward"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000e12",
+    "authoritative_commit_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.completeReadyPartialProposal.jcs.v1",
+      "value_hex_lowercase": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "created_at": "2026-09-25T12:00:00.000Z",
+    "expected_target_revisions": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000e14",
+    "prior_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_id": "018f0000-0000-7001-8000-000000000b02",
+    "proposal_revision_id": "018f0000-0000-7001-8000-000000000b03",
+    "receipt_id": "018f0000-0000-7001-8000-000000000e13",
+    "result": "proposal_generation_completed",
+    "resulting_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ]
+  },
+  "schema_id": "storyos.command.complete-ready-partial-proposal.response.v1"
+}

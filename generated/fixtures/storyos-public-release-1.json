@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:b176047d8bf71d6d8f37d0b0062a771f9d781e42eb1576163538dbe28a901317",
+  "corpus_digest": "sha256:192e24a4e7da28f09e01ad300c34a3ef76e87d54846ff6dc0cccab3b31702e1f",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -75,6 +75,12 @@
       "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.json",
       "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.invalid.json",
       "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json",
+      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json",
       "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.json",
       "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.invalid.json",
       "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json",
@@ -560,6 +566,42 @@
       "fixture_id": "storyos.golden.rejectProposalOperations.boundary.v1",
       "operation_id": "rejectProposalOperations",
       "path": "generated/golden-wire/storyos-public-release-1/reject-proposal-operations.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.completeReadyPartialProposal.positive.v1",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.completeReadyPartialProposal.invalid.v1",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.completeReadyPartialProposal.boundary.v1",
+      "operation_id": "completeReadyPartialProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/complete-ready-partial-proposal.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.continueProposalGeneration.positive.v1",
+      "operation_id": "continueProposalGeneration",
+      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.continueProposalGeneration.invalid.v1",
+      "operation_id": "continueProposalGeneration",
+      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.continueProposalGeneration.boundary.v1",
+      "operation_id": "continueProposalGeneration",
+      "path": "generated/golden-wire/storyos-public-release-1/continue-proposal-generation.boundary.json"
     },
     {
       "classification": "positive",

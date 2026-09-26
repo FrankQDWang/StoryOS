@@ -499,6 +499,34 @@ export type ReopenRejectedOperationsEffect = { "kind": "resolved", author_action
 
 export type ReopenRejectedOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenReceipt, project: ControlledProject, effect: ReopenRejectedOperationsEffect, };
 
+export type CompleteReadyPartialProposalInput = { proposal_revision_id: string, generation_id: string, expected_candidate_digest: string, last_applied_stream_seq: string, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type CompleteReadyPartialProposalRequest = { command_schema: string, complete_ready_partial_proposal_input: CompleteReadyPartialProposalInput, };
+
+export type ContinueProposalGenerationInput = { proposal_revision_id: string, prior_generation_id: string, expected_generation_state: string, expected_candidate_digest: string, selected_pending_operation_ids: Array<string>, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type ContinueProposalGenerationRequest = { command_schema: string, continue_proposal_generation_input: ContinueProposalGenerationInput, };
+
+export type ProposalGenerationReceiptResult = "proposal_generation_completed" | "proposal_generation_started" | "conflicted" | "refused";
+
+export type ProposalGenerationReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, proposal_revision_id: string, expected_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ProposalGenerationReceiptResult, created_at: string, };
+
+export type CompleteReadyPartialProposalRefusalReason = "stale_proposal_revision" | "not_eligible" | "not_ready_partial" | "stale_generation" | "stale_candidate";
+
+export type ContinueProposalGenerationRefusalReason = "stale_proposal_revision" | "not_eligible" | "not_continuable" | "stale_generation" | "stale_candidate" | "operation_not_pending" | "duplicate_identities";
+
+export type ProposalGenerationConflictReason = "changed_head";
+
+export type ProposalGenerationUndoDisposition = "forward";
+
+export type CompleteReadyPartialProposalEffect = { "kind": "completed", author_action_sequence: string, undo_disposition: ProposalGenerationUndoDisposition, generation_id: string, prior_generation_state: string, resulting_generation_state: string, preserved_validation: string, preserved_closure: string, preserved_operation_resolution: string, generation_event_ref: string, } | { "kind": "conflicted", reason: ProposalGenerationConflictReason, } | { "kind": "refused", reason: CompleteReadyPartialProposalRefusalReason, };
+
+export type ContinueProposalGenerationEffect = { "kind": "started", author_action_sequence: string, undo_disposition: ProposalGenerationUndoDisposition, prior_generation_id: string, new_generation_id: string, prior_generation_state: string, resulting_generation_state: string, prior_run_id: string, resulting_run_id: string, preserved_validation: string, preserved_closure: string, preserved_operation_resolution: string, generation_event_ref: string, } | { "kind": "conflicted", reason: ProposalGenerationConflictReason, } | { "kind": "refused", reason: ContinueProposalGenerationRefusalReason, };
+
+export type CompleteReadyPartialProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ProposalGenerationReceipt, project: ControlledProject, effect: CompleteReadyPartialProposalEffect, };
+
+export type ContinueProposalGenerationResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ProposalGenerationReceipt, project: ControlledProject, effect: ContinueProposalGenerationEffect, };
+
 export declare const GENERATED_CLIENT_REVISION: string;
 export declare class StoryOSProtocolError extends Error {
   readonly code: string;
@@ -540,6 +568,10 @@ export declare function digestRejectProposalOperations(request: RejectProposalOp
 export declare function rejectProposalOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: RejectProposalOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<RejectProposalOperationsResponse>;
 export declare function digestReopenRejectedOperations(request: ReopenRejectedOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function reopenRejectedOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenRejectedOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenRejectedOperationsResponse>;
+export declare function digestCompleteReadyPartialProposal(request: CompleteReadyPartialProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function completeReadyPartialProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: CompleteReadyPartialProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<CompleteReadyPartialProposalResponse>;
+export declare function digestContinueProposalGeneration(request: ContinueProposalGenerationRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function continueProposalGeneration(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ContinueProposalGenerationRequest; idempotencyKey: string; antiForgery: string }): Promise<ContinueProposalGenerationResponse>;
 export declare function digestArchiveProject(request: ArchiveProjectRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function archiveProject(options: StoryOSQueryOptions & { projectId: string; request: ArchiveProjectRequest; idempotencyKey: string; antiForgery: string }): Promise<ArchiveProjectResponse>;
 export declare function digestCreateVolume(request: CreateVolumeRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

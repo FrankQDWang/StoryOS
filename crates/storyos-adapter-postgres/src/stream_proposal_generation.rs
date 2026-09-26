@@ -210,6 +210,15 @@ async fn open_generating(
         )
         .await
         .map_err(stream_err)?;
+    client
+        .execute(
+            "INSERT INTO storyos.proposal_generation_heads
+               (owner_user_id, project_id, proposal_id, generation_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)",
+            &[&owner, &project, &proposal_id, &generation_id],
+        )
+        .await
+        .map_err(stream_err)?;
     Ok(Some(LoadedGeneration {
         proposal_id,
         generation_id,
@@ -395,9 +404,14 @@ async fn load_generation(
                     proposal.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text
                FROM storyos.proposals AS proposal
-               JOIN storyos.proposal_generations AS generation
-                 ON (generation.owner_user_id, generation.project_id, generation.proposal_id) =
+               JOIN storyos.proposal_generation_heads AS generation_head
+                 ON (generation_head.owner_user_id, generation_head.project_id,
+                     generation_head.proposal_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+               JOIN storyos.proposal_generations AS generation
+                 ON (generation.owner_user_id, generation.project_id, generation.generation_id) =
+                    (generation_head.owner_user_id, generation_head.project_id,
+                     generation_head.generation_id)
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)

@@ -130,6 +130,7 @@ mod pinned_export_source;
 mod project_archive_build;
 mod project_export;
 mod project_export_work;
+mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;

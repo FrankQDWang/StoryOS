@@ -45,6 +45,8 @@ mod release1_project_export_query;
 mod release1_project_export_query_artifacts;
 mod release1_proposal;
 mod release1_proposal_artifacts;
+mod release1_proposal_generation_decision;
+mod release1_proposal_generation_decision_artifacts;
 mod release1_readable_export;
 mod release1_readable_export_artifacts;
 mod release1_readable_export_query;
@@ -234,6 +236,20 @@ pub use release1_proposal::{
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
     OptionalAcceptanceRefusalInspect, OptionalValidationReceiptInspect, ProposalAnchorInspect,
     ProposalOperationInspect, ProposalSourceInspect,
+};
+pub use release1_proposal_generation_decision::{
+    COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE, COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
+    COMPLETE_READY_PARTIAL_PROPOSAL_PATH, COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
+    COMPLETE_READY_PARTIAL_PROPOSAL_RESPONSE_SCHEMA_ID,
+    CONTINUE_PROPOSAL_GENERATION_DIGEST_PROFILE, CONTINUE_PROPOSAL_GENERATION_METHOD,
+    CONTINUE_PROPOSAL_GENERATION_PATH, CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
+    CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID, CompleteReadyPartialProposalEffect,
+    CompleteReadyPartialProposalInput, CompleteReadyPartialProposalRefusalReason,
+    CompleteReadyPartialProposalRequest, CompleteReadyPartialProposalResponse,
+    ContinueProposalGenerationEffect, ContinueProposalGenerationInput,
+    ContinueProposalGenerationRefusalReason, ContinueProposalGenerationRequest,
+    ContinueProposalGenerationResponse, ProposalGenerationConflictReason,
+    ProposalGenerationReceipt, ProposalGenerationReceiptResult, ProposalGenerationUndoDisposition,
 };
 pub use release1_readable_export::{
     EXPORT_HUMAN_READABLE_MANUSCRIPT_DIGEST_PROFILE, EXPORT_HUMAN_READABLE_MANUSCRIPT_METHOD,
