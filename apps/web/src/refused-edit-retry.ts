@@ -40,7 +40,7 @@ export async function readRetryTarget(workspace: EditorWorkspace, draft: Refused
   const sources = draft.payload.author_edit_units[0]?.selection_snapshot?.ordered_selection?.sources ?? [];
   const source = sources[Number(target)];
   const selected = target === "original" ? sources : source === undefined ? [] : [source];
-  const owners = new Map(selected.flatMap((item) => item.owner.kind === "proposal"
+  const owners = new Map(sources.flatMap((item) => item.owner.kind === "proposal"
     ? [[item.owner.proposal_id, item.owner] as const] : []));
   const heads = new Set(result.proposalHeads);
   let selectedProposal: RetryTargetRead["proposal"];
@@ -58,7 +58,7 @@ export async function readRetryTarget(workspace: EditorWorkspace, draft: Refused
       throw new Error("Original target changed. Select the current target");
     }
     heads.delete(owner.revision_id); heads.add(proposal.revision_id);
-    if (target !== "original") selectedProposal = proposal;
+    if (source?.owner.kind === "proposal" && source.owner.proposal_id === owner.proposal_id) selectedProposal = proposal;
   }
   result.proposalHeads = [...heads].sort();
   if (target === "original") return result;

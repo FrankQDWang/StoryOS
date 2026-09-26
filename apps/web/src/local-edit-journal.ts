@@ -1457,7 +1457,8 @@ async function persistAuthorEditUnit(
       ?? base.proposal_head_revision_ids,
     ...(edit.candidate === undefined ? {} : { proposal_target: edit.candidate.target }),
     proposal_anchors: workspace.inlineProposalAnchors ?? [],
-    observed_ownership_partition: edit.expectedProposalHeads !== undefined ? "mixed" : edit.candidate === undefined
+    observed_ownership_partition: edit.expectedProposalHeads !== undefined
+      ? edit.expectedProposalHeads.length === 0 ? "authoritative" : "mixed" : edit.candidate === undefined
       ? base.observed_ownership_partition : "mixed",
     author_edit_unit: authorEditUnit,
     retry_source: edit.retrySource ?? { kind: "fresh_editor_intent" },

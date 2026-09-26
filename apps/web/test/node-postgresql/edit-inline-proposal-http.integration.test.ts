@@ -580,7 +580,11 @@ test("a cross-block Unicode Draft retry rolls back atomically and recovers one e
     for (const table of ["draft_lifecycle_events", "draft_close_events", "domain_receipts", "author_action_entries"]) {
       const expected = JSON.parse(await queryPostgres(`SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]')
         FROM storyos.${table} AS record WHERE owner_user_id='${USER_A}'::uuid AND project_id='${prepared.projectId}'::uuid`));
-      assert.deepEqual(rows(table), expected);
+      const key = table === "domain_receipts" ? "receipt_id" : table === "draft_lifecycle_events"
+        ? "creation_event_id" : table === "author_action_entries" ? "author_action_sequence" : "event_id";
+      const compare = (a: Record<string, unknown>, b: Record<string, unknown>) => String(a[key]).localeCompare(String(b[key]));
+      assert.deepEqual(rows(table).sort(compare), expected.filter((row: Record<string, unknown>) =>
+        table !== "domain_receipts" || row.idempotency_key !== id("e0c9872")).sort(compare));
     }
     const pin = rows("pinned_export_sources").find((row) => row.export_id === prior.export_id)!;
     assert.equal(Object.hasOwn(pin, "facts"), false);
@@ -588,6 +592,32 @@ test("a cross-block Unicode Draft retry rolls back atomically and recovers one e
       entry_path: "canonical/pinned_export_sources.json", record_id: prior.export_id, payload_field: "facts",
       restricted_draft_ids: [replacementId], facts_sha256: pin.facts_sha256 });
     for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes(retryNonce));
+    for (const [index, mutation] of ["entry - 'draft_retry_source'",
+      "jsonb_set(entry, '{draft_retry_source,source_draft_payload_digest}', to_jsonb(repeat('0',64)))"].entries()) {
+      await queryPostgres(`CREATE FUNCTION storyos.damage_retry_archive() RETURNS trigger LANGUAGE plpgsql AS $fault$
+        DECLARE damaged jsonb;
+        BEGIN
+          IF NEW.owner_user_id='${USER_A}'::uuid AND NEW.project_id='${prepared.projectId}'::uuid
+            AND NEW.path='canonical/author_command_admissions.json' THEN
+            SELECT jsonb_agg(CASE WHEN entry->>'author_command_admission_id'='${retried.author_command_admission_id}'
+              THEN ${mutation} ELSE entry END ORDER BY position) INTO damaged
+              FROM jsonb_array_elements(convert_from(NEW.payload,'UTF8')::jsonb) WITH ORDINALITY AS rows(entry,position);
+            NEW.payload:=convert_to(damaged::text,'UTF8'); NEW.byte_length:=octet_length(NEW.payload);
+            NEW.digest:='sha256:'||encode(sha256(NEW.payload),'hex');
+          END IF; RETURN NEW;
+        END $fault$;
+        CREATE TRIGGER damage_retry_archive BEFORE INSERT ON storyos.project_export_entries
+          FOR EACH ROW EXECUTE FUNCTION storyos.damage_retry_archive();`);
+      try {
+        const damaged = await archive(`e0c988${index}`), refused = await download(damaged.export_id);
+        assert.equal(refused.status, 422);
+        assert.equal(refused.headers.get("content-type"), "application/json");
+        assert.deepEqual(await refused.json(), { schema_id: "storyos.problem.v1", code: "invalid_provenance",
+          message: "The Project Export Archive did not complete." });
+      } finally {
+        await queryPostgres("DROP TRIGGER damage_retry_archive ON storyos.project_export_entries; DROP FUNCTION storyos.damage_retry_archive();");
+      }
+    }
     await retainRefusedEditRecoveryExpectation(prepared.projectId,
       [{ draft: closedSource, available: true }, { draft: { ...replacement, retention_state: "tombstoned" }, available: false }],
       [{ exportId: prior.export_id, root: prior.immutable_root, status: 422 },
