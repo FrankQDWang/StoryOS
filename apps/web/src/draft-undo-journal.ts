@@ -80,9 +80,13 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
   if (!keys(observation, ["key", "record_key", event === undefined ? "response" : "event"])
     || observation.record_key !== record.key || observation.key !== `draft-undo-observation:${record.source_close.event_id}`) return false;
   if (event !== undefined) return matches(record, event);
-  if (!response || !keys(response, ["schema_id", "correlation_id", "project_scope", "command_id", "author_command_admission_id", "receipt", "project", "effect"])) return false;
+  if (!response || !keys(response, ["schema_id", "correlation_id", "project_scope", "command_id", "author_command_admission_id", "receipt", "project", "effect"], ["source_reopen_event", "proposal_revision_id"])) return false;
   const receipt = response.receipt, effect = response.effect;
-  const success = effect.kind === "draft_compensated";
+  const coupled = record.source_close.close_reason === "superseded" && effect.kind === "compensated";
+  const success = effect.kind === "draft_compensated" && record.source_close.close_reason === "abandoned" || coupled;
+  const reopened = effect.kind === "draft_compensated" ? effect.event : response.source_reopen_event;
+  const proposal = coupled && response.proposal_revision_id != null;
+  const expectedHead = record.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id;
   return keys(receipt, ["receipt_id", "project_scope", "command_kind", "command_digest", "idempotency_key", "producer_cause",
     "author_command_admission_id", "expected_heads", "prior_heads", "resulting_heads", "authoritative_revision_ids", "proposal_revision_ids",
     "authoritative_commit_ids", "draft_artifact_refs", "artifact_lifecycle_event_refs", "condition_refs", "result", "created_at"], ["author_action_sequence"])
@@ -93,19 +97,39 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
     && receipt.author_command_admission_id === response.author_command_admission_id && receipt.command_kind === "undoLatestAuthorAction"
     && receipt.producer_cause === "author_command_admission" && receipt.idempotency_key === record.group.idempotency_key
     && same(receipt.command_digest, record.group.frozen_request_digest) && Number.isFinite(Date.parse(receipt.created_at))
-    && [receipt.expected_heads, receipt.prior_heads, receipt.resulting_heads].every((heads) => same(heads, [record.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id]))
-    && [receipt.authoritative_revision_ids, receipt.proposal_revision_ids, receipt.authoritative_commit_ids, receipt.condition_refs].every((refs) => same(refs, []))
+    && [receipt.expected_heads, receipt.prior_heads].every((heads) => same(heads, [expectedHead]))
+    && same(receipt.proposal_revision_ids, []) && same(receipt.condition_refs, [])
+    && (coupled && effect.kind === "compensated" ? keys(effect, ["kind", "source_sequence", "author_action_sequence",
+      "authoritative_commit_id", "authoritative_revision", "project_activity_position", "author_undo_frontier_sequence"])
+      && effect.source_sequence === record.source_close.author_action_sequence
+      && effect.author_action_sequence === reopened?.author_action_sequence
+      && (effect.project_activity_position === "0" || positive(effect.project_activity_position))
+      && keys(effect.authoritative_revision, ["revision_id", "body", "blocks"])
+      && (proposal ? UUID.test(response.proposal_revision_id!) && effect.authoritative_commit_id === ""
+        && same(effect.authoritative_revision, { revision_id: expectedHead, body: "", blocks: [] })
+        && [receipt.authoritative_revision_ids, receipt.authoritative_commit_ids].every((refs) => same(refs, []))
+        : UUID.test(effect.authoritative_revision.revision_id) && UUID.test(effect.authoritative_commit_id)
+          && same(receipt.authoritative_revision_ids, [effect.authoritative_revision.revision_id])
+          && same(receipt.authoritative_commit_ids, [effect.authoritative_commit_id])
+          && typeof effect.authoritative_revision.body === "string" && Array.isArray(effect.authoritative_revision.blocks)
+          && effect.authoritative_revision.blocks.every((block) => keys(block, ["manuscript_block_id", "block_kind", "text"])
+            && UUID.test(block.manuscript_block_id) && ["paragraph", "heading"].includes(block.block_kind) && typeof block.text === "string"))
+      && same(receipt.resulting_heads, [effect.authoritative_revision.revision_id])
+      : same(receipt.resulting_heads, [expectedHead])
+        && [receipt.authoritative_revision_ids, receipt.authoritative_commit_ids].every((refs) => same(refs, []))
+        && response.proposal_revision_id == null && response.source_reopen_event == null)
     && keys(response.project, ["project_id", "title", "open"]) && response.project.project_id === record.project_scope.project_id
     && typeof response.project.title === "string" && keys(response.project.open, response.project.open.kind === "empty" ? ["kind"] : ["kind", "current_chapter_id"])
     && (response.project.open.kind === "empty" || (response.project.open.kind === "current_chapter" && UUID.test(response.project.open.current_chapter_id)))
     && (effect.kind !== "conflicted" || effect.current_author_undo_frontier_sequence === undefined || positive(effect.current_author_undo_frontier_sequence))
-    && (success ? keys(effect, ["kind", "event", "author_undo_frontier_sequence"]) && matches(record, effect.event)
-      && (effect.author_undo_frontier_sequence === null || positive(effect.author_undo_frontier_sequence))
-      && same(effect.event.source, { command_id: response.command_id, author_command_admission_id: response.author_command_admission_id,
+    && (success && reopened ? (coupled || keys(effect, ["kind", "event", "author_undo_frontier_sequence"])) && matches(record, reopened)
+      && ((effect.kind === "draft_compensated" || effect.kind === "compensated")
+        && (effect.author_undo_frontier_sequence === null || positive(effect.author_undo_frontier_sequence)))
+      && same(reopened.source, { command_id: response.command_id, author_command_admission_id: response.author_command_admission_id,
         receipt_id: receipt.receipt_id, idempotency_key: record.group.idempotency_key, command_digest: record.group.frozen_request_digest })
-      && receipt.result === "draft_closure_changed" && receipt.created_at === effect.event.created_at
-      && receipt.author_action_sequence === effect.event.author_action_sequence
-      && same(receipt.draft_artifact_refs, [record.source_close.draft_id]) && same(receipt.artifact_lifecycle_event_refs, [effect.event.event_id])
+      && receipt.result === (coupled ? "authoritative_applied" : "draft_closure_changed") && receipt.created_at === reopened.created_at
+      && receipt.author_action_sequence === reopened.author_action_sequence
+      && same(receipt.draft_artifact_refs, [record.source_close.draft_id]) && same(receipt.artifact_lifecycle_event_refs, [reopened.event_id])
       : keys(effect, ["kind", "reason"], effect.kind === "conflicted" ? ["current_author_undo_frontier_sequence"] : [])
         && ((effect.kind === "conflicted" && ["frontier_mismatch", "wrong_target_head", "source_binding_changed"].includes(effect.reason) && receipt.result === "conflicted")
           || (effect.kind === "unavailable" && ["no_frontier", "barrier", "source_unavailable"].includes(effect.reason) && receipt.result === "refused"))
@@ -148,9 +172,11 @@ export async function readDraftUndoJournal(workspace: EditorWorkspace) {
       || record.group.frozen_request_body.command_schema !== "storyos.command.undo-latest-author-action.request.v1"
       || ![input.editor_session_id, input.correlation_id, input.expected_authoritative_revision_id].every((id) => UUID.test(id))
       || !keys(record.source_close, ["schema_id", "event_kind", "event_id", "project_scope", "draft_id", "draft_revision_id", "payload_digest", "prior_closure", "closure", "close_reason", "source", "author_action_sequence", "created_at"])
-      || !validSource(record.source_close.source, "storyos.command.closeEditorFlowDraft.jcs.v1")
+      || !validSource(record.source_close.source, record.source_close.close_reason === "superseded"
+        ? "storyos.command.applyAuthorEdit.jcs.v1" : "storyos.command.closeEditorFlowDraft.jcs.v1")
       || record.source_close.schema_id !== "storyos.event.editor-flow-draft-closed.v1" || record.source_close.event_kind !== "editor_flow_draft_closed"
-      || record.source_close.prior_closure !== "open" || record.source_close.closure !== "closed" || record.source_close.close_reason !== "abandoned"
+      || record.source_close.prior_closure !== "open" || record.source_close.closure !== "closed"
+      || !["abandoned", "superseded"].includes(record.source_close.close_reason)
       || ![record.source_close.event_id, record.source_close.draft_id, record.source_close.draft_revision_id].every((id) => UUID.test(id))
       || !/^[0-9a-f]{64}$/.test(record.source_close.payload_digest) || !positive(record.source_close.author_action_sequence)
       || !Number.isFinite(Date.parse(record.source_close.created_at))
@@ -222,7 +248,8 @@ export async function observeDraftUndo(workspace: EditorWorkspace, record: Draft
   const previous = await read(metadata.get(key)) as Observation | undefined;
   if (!isCurrent()) { transaction.abort(); await done; throw new Error("Undo view changed"); }
   if (previous === undefined) metadata.add(observation);
-  else if (value.event && !same(previous.event ?? (previous.response?.effect.kind === "draft_compensated" ? previous.response.effect.event : undefined), value.event)) {
+  else if (value.event && !same(previous.event ?? (previous.response?.effect.kind === "draft_compensated"
+    ? previous.response.effect.event : previous.response?.source_reopen_event), value.event)) {
     transaction.abort(); await done; throw new Error("Undo settlement changed");
   }
   await done;
