@@ -509,8 +509,15 @@ async fn zero_effect<T>(
     effect: T,
 ) -> Result<ProposalGenerationSettlement<T>, ProposalGenerationDecisionError> {
     let payload = serde_json::json!({ "reason": reason }).to_string();
-    let created_at =
-        write::insert_receipt(client, &binding, command_kind, result_kind, &payload, None).await?;
+    let created_at = write::insert_receipt(
+        client,
+        &binding,
+        command_kind,
+        result_kind,
+        &payload,
+        /*author_action_sequence*/ None,
+    )
+    .await?;
     let project = settle_idempotency(
         client,
         binding.scope,
@@ -543,7 +550,8 @@ async fn load_generation(
             "SELECT head.current_revision_id::text, revision.generation, revision.validation,
                     revision.closure, operation.resolution,
                     revision.candidate_text, generation.generation_id::text,
-                    generation.last_applied_stream_seq, proposal.source_run_id::text,
+                    generation.last_applied_stream_seq,
+                    COALESCE(generation.run_id, proposal.source_run_id)::text,
                     run.status, proposal.chapter_id::text, chapter_head.current_revision_id::text,
                     run.project_agent_id::text, run.conversation_id::text,
                     run.memory_settings_revision::text, run.grant_id::text,
@@ -570,7 +578,8 @@ async fn load_generation(
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
                JOIN storyos.agent_runs AS run
                  ON (run.owner_user_id, run.project_id, run.run_id) =
-                    (proposal.owner_user_id, proposal.project_id, proposal.source_run_id)
+                    (proposal.owner_user_id, proposal.project_id,
+                     COALESCE(generation.run_id, proposal.source_run_id))
                LEFT JOIN storyos.authoritative_heads AS chapter_head
                  ON (chapter_head.owner_user_id, chapter_head.project_id,
                      chapter_head.manuscript_object_id) =
