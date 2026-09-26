@@ -80,7 +80,7 @@ pub struct AuthorEditUnit {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AuthorEditPrimitive {
     ReplaceStructuredSelection {
         replacement: Vec<ReplacementBlock>,

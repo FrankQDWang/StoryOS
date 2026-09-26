@@ -663,6 +663,23 @@ test("changed Heads, source identities, order, text, and ranges create no Draft 
     staleWriter.local_intent_sequence = "9";
     await assert.rejects(() => sendMixed(started.baseUrl, prepared, staleWriter, id("e0a61")),
       (error) => requireStoryOSProtocolError(error).status === 412);
+    const known = mixedRequest(opened, writer, "e0a70");
+    known.local_intent_sequence = "10";
+    const untrusted = { ...known, author_edit_units: known.author_edit_units.map((unit) => ({ ...unit,
+      normalized_primitives: unit.normalized_primitives.map((primitive) => ({ ...primitive,
+        raw_steps: [{ arbitrary: "This is not typed domain content" }] })) })) };
+    const extraFieldFetch: typeof fetch = (input, init) => prepared.fetchImpl(input,
+      init?.method === "POST" && String(input).endsWith("/manuscript/author-edits")
+        ? { ...init, body: JSON.stringify(untrusted) } : init);
+    const knownDigest = await digestApplyAuthorEdit(known);
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", known.command_schema,
+      knownDigest, id("e0a71"), (antiForgery) => applyAuthorEdit({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: extraFieldFetch,
+        request: known, antiForgery, idempotencyKey: id("e0a71") })),
+      (error) => requireStoryOSProtocolError(error).status === 422);
+    assert.equal(await queryPostgres(`SELECT count(*) FROM storyos.author_command_admissions
+      WHERE project_id='${prepared.projectId}'::uuid AND idempotency_key='${id("e0a71")}'::uuid`), "0");
     assert.deepEqual(await retainedState(prepared.projectId), before);
   } finally { await stopRealServer(started.server); }
 });

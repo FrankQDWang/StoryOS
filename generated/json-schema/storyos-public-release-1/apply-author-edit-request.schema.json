@@ -3,6 +3,7 @@
     "AuthorEditPrimitive": {
       "oneOf": [
         {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "replace_structured_selection",
@@ -22,6 +23,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "from": {
               "format": "uint32",
@@ -50,6 +52,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "from": {
               "format": "uint32",
@@ -82,6 +85,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "split_block",
@@ -108,6 +112,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "join_blocks",
@@ -128,6 +133,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "kind": {
               "const": "move_block",
@@ -150,6 +156,7 @@
           "type": "object"
         },
         {
+          "additionalProperties": false,
           "properties": {
             "block_kind": {
               "$ref": "#/$defs/ManuscriptBlockKind"
