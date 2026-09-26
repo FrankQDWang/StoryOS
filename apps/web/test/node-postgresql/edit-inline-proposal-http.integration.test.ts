@@ -397,7 +397,7 @@ test("a protected mixed replacement retains complete content after response loss
     const events = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json")));
     const rowScope = { owner_user_id: USER_A, project_id: prepared.projectId };
     assert.deepEqual(drafts, [{ ...rowScope, draft_id: queried.draft.draft_id, draft_kind: "refused_edit",
-      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained", close_event_id: null }]);
+      current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained", close_event_id: null, reopen_event_id: null }]);
     const revisionCreatedAt = revisions[0].created_at;
     assert.equal(new Date(revisionCreatedAt).toISOString(), queried.draft.creation.created_at);
     assert.deepEqual(revisions, [{ ...rowScope, draft_id: queried.draft.draft_id,

@@ -3,6 +3,7 @@ import { getRefusedEditDraft } from "../../../generated/typescript/storyos-publi
 import type { ProjectScope, RefusedEditDraftInspect }
   from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { canonicalDraftValue as canonical, discardRefusedEdit, MAX_DISCARD_RECORDS, reconcileDiscard, type DiscardObservation } from "./refused-edit-discard.ts";
+import { validDraftReopen, reconcileDraftUndo } from "./draft-undo-journal.ts";
 import { rebuildPendingProjection, readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import type { EditorWorkspace, JournalSubmissionGroup, PendingEditProjection } from "./editor-types.ts";
 
@@ -35,11 +36,12 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       new TextEncoder().encode(canonical(expected)));
     const hex = [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     const event = draft.closure_event;
+    if (!validDraftReopen(draft, scope)) throw new Error("Draft unavailable");
     if ((draft.closure === "closed" && (!event || event.schema_id !== "storyos.event.editor-flow-draft-closed.v1"
       || event.event_kind !== "editor_flow_draft_closed" || canonical(event.project_scope) !== canonical(scope)
       || event.draft_id !== effect.draft_id || event.draft_revision_id !== effect.draft_revision_id
       || event.payload_digest !== draft.payload_digest || event.closure !== "closed" || event.prior_closure !== "open"
-      || event.close_reason !== "abandoned")) || (draft.closure === "open" && event != null)) throw new Error("Draft unavailable");
+      || event.close_reason !== "abandoned")) || (draft.closure === "open" && !validDraftReopen(draft, scope))) throw new Error("Draft unavailable");
     if (result.schema_id !== "storyos.query.refused-edit-draft.response.v1"
       || canonical(result.project_scope) !== canonical(scope)
       || canonical(group.project_scope) !== canonical(scope)
@@ -59,6 +61,7 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
         author_command_admission_id: settled.author_command_admission_id,
         receipt_id: settled.receipt.receipt_id, idempotency_key: group.idempotency_key,
         command_digest: group.frozen_request_digest })) throw new Error("Draft unavailable");
+    await reconcileDraftUndo(workspace, draft);
     return draft;
   }
   useEffect(() => {
@@ -82,7 +85,11 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
           return { group, draft, discard: await reconcileDiscard(workspace, draft) }; } catch { return { group }; }
       }));
       const currentProjection = await rebuildPendingProjection(workspace);
-      if (active) { setReads(next); onProjection?.(currentProjection); }
+      if (active) { setReads(next);
+        setSettledWriter(workspace.partition.disposition === "current_writer_open"
+          && workspace.session.writer.kind === "current_writer" && currentProjection.save_state === "saved"
+          && currentProjection.unsettled_intent_count === 0 && (snapshot.explicitDiscard?.length ?? MAX_DISCARD_RECORDS) < MAX_DISCARD_RECORDS);
+        onProjection?.(currentProjection); }
     })().catch(() => { if (active) setReads([]); });
     return () => { active = false; lifetime.current += 1; };
   }, [workspace, scope.owner_user_id, scope.project_id, baseUrl, fetchImpl, refreshKey]);
@@ -138,7 +145,8 @@ export function RefusedEditDraftDisplay({ workspace, scope, baseUrl, fetchImpl, 
       {observation?.kind === "settled" && observation.response.effect.kind !== "draft_closure_changed"
         ? <p role="status" data-discard-settled>Discard {observation.response.effect.kind}. The Draft was not closed by this command.</p> : null}
       {draft.closure === "closed" && draft.closure_event ? <p data-draft-closed>
-        Closed: {draft.closure_event.close_reason}. Event: {draft.closure_event.event_id}. Undo unavailable: non-skippable Barrier.</p> : null}
+        Closed: {draft.closure_event.close_reason}. Event: {draft.closure_event.event_id}. Root Undo requires this exact latest action.</p> : null}
+      {draft.reopen_event ? <p data-draft-reopened>Reopened. Event: {draft.reopen_event.event_id}.</p> : null}
       <button type="button" data-draft-copy onClick={() => { void copy(group); }}>Copy</button>
       {copied ? <p role="status">Copied</p> : null}
       <details><summary>Source and draft identity</summary>

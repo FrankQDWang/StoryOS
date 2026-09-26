@@ -265,7 +265,6 @@ export function ManuscriptEditor({
       const workspace = persistWorkspaceRef.current;
       if (editor === null || workspace === undefined) return;
       await idleRef.current?.flush();
-      if (workspace.pending.save_state !== "saved") return;
       try {
         const settled = await undoOwnedLatestAuthorAction({
           workspace,
@@ -273,6 +272,10 @@ export function ManuscriptEditor({
           fetchImpl,
           cryptoImpl,
         });
+        if (settled?.effect.kind === "draft_compensated" || settled?.effect.kind === "draft_reconciled") {
+          onProjectionRef.current(await rebuildPendingProjection(workspace));
+          onCandidateSettledRef.current?.(); return;
+        }
         if (settled === undefined || settled.effect.kind !== "compensated") {
           if (settled !== undefined) {
             onFailureRef.current(new Error("Author Undo did not compensate"));

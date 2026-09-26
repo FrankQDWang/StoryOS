@@ -2,15 +2,22 @@ import {
   createProjectCommandChallenge,
   digestUndoLatestAuthorAction,
   getEditorSession,
+  getRefusedEditDraft,
   undoLatestAuthorAction,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { historicalAcknowledgementUnavailable } from "./historical-acknowledgement.ts";
 import type {
   EditorBaseSnapshot,
+  UndoLatestAuthorActionRequest,
+  EditorFlowDraftReopened,
   UndoLatestAuthorActionResponse,
 } from "../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyos-public-release-1/release-profile.mjs";
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
+
+import { readDiscardJournal, canonicalDraftValue } from "./refused-edit-discard.ts";
+import { freezeDraftUndo, readDraftUndoJournal, observeDraftUndo, reconcileDraftUndo,
+  type DraftUndoRecord } from "./draft-undo-journal.ts";
 
 const SECURITY_POLICY_REVISION = "storyos.web-security-policy.release-1.v1";
 const U64 = /^(?:0|[1-9][0-9]{0,19})$/;
@@ -74,9 +81,12 @@ export async function undoOwnedLatestAuthorAction(options: {
   baseUrl: string;
   fetchImpl: typeof fetch;
   cryptoImpl: Crypto;
-}): Promise<UndoLatestAuthorActionResponse | undefined> {
+}): Promise<UndoLatestAuthorActionResponse | { effect: { kind: "draft_reconciled"; event: EditorFlowDraftReopened } } | undefined> {
+  const retainedUndo = await readDraftUndoJournal(options.workspace);
+  const pendingUndo = retainedUndo.filter(({ observation }) => observation === undefined);
   if (options.workspace.partition.disposition !== "current_writer_open"
-    || options.workspace.pending.save_state !== "saved") {
+    || (options.workspace.pending.save_state !== "saved"
+      && options.workspace.pending.unsettled_intent_count !== pendingUndo.length)) {
     throw new Error("Author Undo requires a settled current writer");
   }
   const canonical = await getEditorSession({
@@ -100,8 +110,14 @@ export async function undoOwnedLatestAuthorAction(options: {
     throw new Error("Author Undo requires the current Editor Session");
   }
   options.workspace.session = canonical;
-  const frontier = canonical.author_undo_frontier_sequence;
-  const expectedHead = canonical.base_snapshot.authoritative_head_revision_id;
+  let durable: DraftUndoRecord | undefined = pendingUndo[0]?.record;
+  if (durable !== undefined && durable.journal_partition_id !== options.workspace.partition.journal_partition_id) {
+    throw new Error("Original Undo belongs to another writer");
+  }
+  const frontier = durable?.request.undo_latest_author_action_input.expected_author_undo_frontier_sequence
+    ?? canonical.author_undo_frontier_sequence;
+  const expectedHead = durable?.request.undo_latest_author_action_input.expected_authoritative_revision_id
+    ?? canonical.base_snapshot.authoritative_head_revision_id;
   if (!positiveU64(frontier)) return undefined;
   const identity = undoIdentity({
     projectId: options.workspace.partition.project_scope.project_id,
@@ -116,20 +132,47 @@ export async function undoOwnedLatestAuthorAction(options: {
     };
     inFlight.set(identity, flight);
   }
+  if (durable === undefined) {
+    const closed = (await readDiscardJournal(options.workspace)).flatMap(({ observation }) =>
+      observation?.kind === "settled_closed" ? [observation.event]
+        : observation?.kind === "settled" && observation.response.effect.kind === "draft_closure_changed"
+          ? [observation.response.effect.event] : []).find((event) => event.author_action_sequence === frontier);
+    if (closed !== undefined) {
+      const current = await getRefusedEditDraft({ baseUrl: options.baseUrl, projectId: canonical.project_scope.project_id,
+        draftId: closed.draft_id, fetchImpl: options.fetchImpl });
+      if (current.draft.closure !== "closed" || current.draft.retention_state !== "retained"
+        || canonicalDraftValue(current.draft.closure_event) !== canonicalDraftValue(closed)) throw new Error("Undo source changed");
+      durable = await freezeDraftUndo(options.workspace, closed,
+        undoRequest(options.workspace, frontier, expectedHead, flight.correlationId), flight.idempotencyKey);
+    }
+  }
+  if (durable !== undefined) {
+    flight.idempotencyKey = durable.idempotency_key;
+    flight.correlationId = durable.request.undo_latest_author_action_input.correlation_id;
+  }
   try {
-    const settled = await submitUndo(options, frontier, expectedHead, flight);
+    const settled = await submitUndo(options, frontier, expectedHead, flight, durable?.request);
+    if (durable !== undefined) await observeDraftUndo(options.workspace, durable, { response: settled });
     inFlight.delete(identity);
-    if (settled.effect.kind === "compensated") {
+    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
   } catch (error) {
+    if (durable !== undefined) {
+      const current = await getRefusedEditDraft({ baseUrl: options.baseUrl,
+        projectId: durable.project_scope.project_id, draftId: durable.source_close.draft_id, fetchImpl: options.fetchImpl });
+      const event = await reconcileDraftUndo(options.workspace, current.draft);
+      if (event !== undefined) { inFlight.delete(identity); await refreshSessionAfterCompensation(options);
+        return { effect: { kind: "draft_reconciled", event } }; }
+      throw error;
+    }
     if (historicalAcknowledgementUnavailable(error)) {
       throw error;
     }
     const settled = await submitUndo(options, frontier, expectedHead, flight);
     inFlight.delete(identity);
-    if (settled.effect.kind === "compensated") {
+    if (settled.effect.kind === "compensated" || settled.effect.kind === "draft_compensated") {
       await refreshSessionAfterCompensation(options);
     }
     return settled;
@@ -161,19 +204,9 @@ async function submitUndo(
   frontier: string,
   expectedHead: string,
   flight: InFlightUndo,
+  frozen?: UndoLatestAuthorActionRequest,
 ): Promise<UndoLatestAuthorActionResponse> {
-  const request = {
-    command_schema: "storyos.command.undo-latest-author-action.request.v1",
-    undo_latest_author_action_input: {
-      expected_author_undo_frontier_sequence: frontier,
-      expected_authoritative_revision_id: expectedHead,
-      editor_session_id: options.workspace.partition.editor_session_id,
-      client_contract_revision:
-        RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
-      security_policy_revision: SECURITY_POLICY_REVISION,
-      correlation_id: flight.correlationId,
-    },
-  };
+  const request = frozen ?? undoRequest(options.workspace, frontier, expectedHead, flight.correlationId);
   if (flight.nonce === undefined) {
     const challenge = await createProjectCommandChallenge({
       baseUrl: options.baseUrl,
@@ -204,4 +237,19 @@ async function submitUndo(
     antiForgery: nonce,
     request,
   });
+}
+
+function undoRequest(workspace: EditorWorkspace, frontier: string, expectedHead: string, correlationId: string): UndoLatestAuthorActionRequest {
+  return {
+    command_schema: "storyos.command.undo-latest-author-action.request.v1",
+    undo_latest_author_action_input: {
+      expected_author_undo_frontier_sequence: frontier,
+      expected_authoritative_revision_id: expectedHead,
+      editor_session_id: workspace.partition.editor_session_id,
+      client_contract_revision:
+        RELEASE_1_PROTOCOL_PROFILE.release_identity.web_client_contract_revision,
+      security_policy_revision: SECURITY_POLICY_REVISION,
+      correlation_id: correlationId,
+    },
+  };
 }

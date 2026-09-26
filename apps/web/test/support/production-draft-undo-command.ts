@@ -21,7 +21,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     key = route.request().headers()["idempotency-key"]!;
     nonce = route.request().headers()["x-storyos-anti-forgery"]!;
     frozen = (await readProductionJournal(page, projectId)).metadata!.find((row) => String(row.key).startsWith("draft-undo:"));
-    assert.ok(frozen, "Original Undo identity must be durable before the first POST");
+    if (frozen === undefined) { await route.abort("failed"); release(); return; }
     assert.deepEqual(frozen.request, request); assert.equal(frozen.idempotency_key, key);
     const reply = await route.fetch(); assert.equal(reply.status(), 200, await reply.text());
     response = await reply.json(); await route.abort("failed"); release();
@@ -29,6 +29,7 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
   await page.locator("[data-manuscript-editor]").focus();
   await page.keyboard.press("ControlOrMeta+Z");
   await committed;
+  assert.ok(frozen, "Original Undo identity must be durable before the first POST");
   assert.ok(response?.effect.kind === "draft_compensated");
   await restart(); await page.reload();
   await surface.locator("[data-draft-reopened]").waitFor();

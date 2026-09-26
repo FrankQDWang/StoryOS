@@ -201,8 +201,11 @@ export async function observeDiscard(workspace: EditorWorkspace, record: Discard
   await done;
 }
 
+function discardRecordKey(draft: RefusedEditDraftInspect): string {
+  return draft.reopen_event ? `discard:${draft.draft_id}:${draft.reopen_event.event_id}` : `discard:${draft.draft_id}`;
+}
 export async function reconcileDiscard(workspace: EditorWorkspace, draft: RefusedEditDraftInspect): Promise<DiscardObservation | undefined> {
-  const found = (await readDiscardJournal(workspace)).find(({ record }) => record.key === `discard:${draft.draft_id}`);
+  const found = (await readDiscardJournal(workspace)).find(({ record }) => record.key === discardRecordKey(draft));
   if (found === undefined) return undefined;
   if (draft.closure === "closed" && draft.closure_event && matchesEvent(found.record, draft.closure_event)) {
     if (found.observation?.kind !== "settled_closed") {
@@ -227,7 +230,7 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
       editorSessionId: workspace.partition.editor_session_id, fetchImpl });
     if (!isCurrent() || journal.length >= MAX_DISCARD_RECORDS || workspace.partition.disposition !== "current_writer_open" || pending.save_state !== "saved"
       || pending.unsettled_intent_count !== 0 || journal.some(({ observation }) => observation === undefined || observation.kind === "unresolved")
-      || journal.some(({ record }) => record.key === `discard:${draft.draft_id}`)
+      || journal.some(({ record }) => record.key === discardRecordKey(draft))
       || !same(canonical.project_scope, scope) || canonical.writer.kind !== "current_writer"
       || canonical.writer.writer_generation !== workspace.partition.writer_generation
       || canonical.editor_session.editor_session_id !== workspace.partition.editor_session_id
@@ -256,12 +259,12 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
     const done = committed(transaction);
     const metadata = transaction.objectStore("metadata");
     const [previous, partition, existing, schema] = await Promise.all([result(metadata.get("local_intent_sequence")) as Promise<{ value: number } | undefined>,
-      result(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id)), result(metadata.get(`discard:${draft.draft_id}`)), result(metadata.get("schema")) as Promise<{ version: number }>]);
+      result(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id)), result(metadata.get(discardRecordKey(draft))), result(metadata.get("schema")) as Promise<{ version: number }>]);
     if (!isCurrent() || schema?.version !== 4 || !same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
       transaction.abort(); await done; return;
     }
     const createdAt = new Date().toISOString();
-    const record: DiscardRecord = { key: `discard:${draft.draft_id}`, schema_id: RECORD_SCHEMA,
+    const record: DiscardRecord = { key: discardRecordKey(draft), schema_id: RECORD_SCHEMA,
       explicit_command_record_id: recordId, local_intent_sequence: sequence,
       journal_partition_id: workspace.partition.journal_partition_id, project_scope: scope,
       editor_session_id: workspace.partition.editor_session_id, writer_generation: workspace.partition.writer_generation,
