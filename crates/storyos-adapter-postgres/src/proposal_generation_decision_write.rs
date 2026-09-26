@@ -1,6 +1,43 @@
 use super::{LoadedGeneration, ReceiptBinding, database_error};
 use storyos_application::ProposalGenerationDecisionError;
 
+pub(super) async fn insert_successor_run(
+    client: &tokio_postgres::Client,
+    scope: &storyos_application::ProjectScope,
+    loaded: &LoadedGeneration,
+    run_id: &str,
+    receipt_id: &str,
+) -> Result<(), ProposalGenerationDecisionError> {
+    client
+        .execute(
+            "INSERT INTO storyos.agent_runs
+               (owner_user_id, project_id, run_id, project_agent_id, conversation_id,
+                memory_settings_revision, grant_id, project_model_use_binding_revision,
+                chapter_id, author_message, status, receipt_id, predecessor_run_id,
+                wakeup_pending)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     $5::text::uuid, $6::text::uuid, $7::text::uuid, $8::text::uuid,
+                     $9::text::uuid, $10, 'completed', $11::text::uuid, $12::text::uuid, false)",
+            &[
+                &scope.owner_user_id.as_ref(),
+                &scope.project_id.as_ref(),
+                &run_id,
+                &loaded.run_agent_id,
+                &loaded.conversation_id,
+                &loaded.memory_settings_revision,
+                &loaded.grant_id,
+                &loaded.binding_revision,
+                &loaded.chapter_id,
+                &loaded.author_message,
+                &receipt_id,
+                &loaded.source_run_id,
+            ],
+        )
+        .await
+        .map_err(database_error)?;
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn insert_transition(
     client: &tokio_postgres::Client,
