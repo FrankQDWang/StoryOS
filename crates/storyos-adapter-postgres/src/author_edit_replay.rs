@@ -121,9 +121,11 @@ impl PostgresProjectReader {
                     AND admission.expected_authoritative_revision_id = $7::text::uuid
                     AND admission.target_refs = $8::text[]
                     AND (
-                      (receipt.result_kind <> 'proposal_revised'
+                      (receipt.result_kind NOT IN ('proposal_revised', 'refused_to_draft')
                         AND admission.expected_proposal_head_revision_ids =
                             receipt.proposal_revision_ids)
+                      OR (receipt.result_kind = 'refused_to_draft'
+                        AND cardinality(receipt.proposal_revision_ids) = 0)
                       OR (receipt.result_kind = 'proposal_revised'
                         AND cardinality(receipt.proposal_revision_ids) = 1
                         AND cardinality(admission.expected_proposal_head_revision_ids) >= 1)
