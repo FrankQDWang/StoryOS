@@ -162,7 +162,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -491,6 +491,10 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_reject_proposal_operations_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_reopen_rejected_operations_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_reopen_rejected_operations_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_proposal_generation_decision_artifacts::COMPLETE_REQUEST_SCHEMA_PATH,
+        crate::release1_proposal_generation_decision_artifacts::COMPLETE_RESPONSE_SCHEMA_PATH,
+        crate::release1_proposal_generation_decision_artifacts::CONTINUE_REQUEST_SCHEMA_PATH,
+        crate::release1_proposal_generation_decision_artifacts::CONTINUE_RESPONSE_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_archive_project_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_create_volume_artifacts::REQUEST_SCHEMA_PATH,
