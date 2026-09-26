@@ -62,11 +62,22 @@ Draft exports its safe Revision metadata and creation/source/lifecycle facts;
 it withholds both Revision `payload` and the exact Admission `command_payload`
 copy. Each affected entry row has `payload_availability` with the exact entry,
 record, field, Draft identity, digest, and `withheld_due_to_tombstone` reason.
-The same two gaps enter the existing root `known_purged_gaps` slot. That slot
+A prior Project Export pinned source can contain the same forbidden bytes,
+including nested prior pinned sources. The Draft copy check traverses only
+known Archive families and exact Scope/Revision/Admission/command associations.
+It verifies complete facts digests and uses iterative traversal and indexed
+identity lookup. A containing pinned source exports its safe pin identity,
+Snapshot, profile, and `facts_sha256`; a third gap type marks its withheld
+`facts` and exact restricted Draft identities. All entry gaps enter the
+existing root `known_purged_gaps` slot. That slot
 name does not claim physical deletion. Creation verifies the original digests
 and exact association before withholding. Persist and download derive gaps from
 the same pinned entry bytes. Download does not rebuild a historical root from
-current lifecycle. Missing association or digest proof causes a typed failure.
+current lifecycle. The download still checks current Draft copy eligibility:
+an old package that contains now-tombstoned input is unavailable. Its original
+entries and root remain unchanged. An authorized archived package and a package
+with the forbidden content already withheld remain eligible. Missing association,
+unknown required copy structure, or digest proof causes a typed failure.
 The existing physical isolated-restore path retains exact storage rows.
 Restoration does not reopen or revive a closed, archived, or tombstoned record.
 

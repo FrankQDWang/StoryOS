@@ -810,7 +810,7 @@ test("243 ordered sources and two distinct Proposal owners retain a near-1-MiB s
   } finally { await stopRealServer(started.server); }
 });
 
-test("closed and archived Drafts keep their lifecycle, while tombstoned content leaves two explicit archive gaps", async () => {
+test("closed and archived Drafts keep their lifecycle, while tombstoned content fences old packages and leaves exact archive gaps", async () => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
@@ -835,6 +835,30 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     }
     const [closed, archived, tombstoned] = drafts;
     if (!closed || !archived || !tombstoned) throw new Error("expected three retained Drafts");
+    const priorExports: { exportId: string; root: string }[] = [];
+    for (const index of [0, 1]) {
+      const request = { command_schema: "storyos.command.export-project-archive.request.v1" as const,
+        export_project_archive_input: { ...BINDING, correlation_id: id(`e0da${index}1`), archive_profile: "storyos.project-export.v1",
+          archive_path_profile: "storyos.archive-path.utf8-nfc-unicode-16.0.0.v1" } };
+      const key = id(`e0da${index}2`);
+      const admitted = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/exports", request.command_schema, await digestExportProjectArchive(request), key,
+        (antiForgery) => exportProjectArchive({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+          fetchImpl: prepared.fetchImpl, request, idempotencyKey: key, antiForgery }));
+      if (admitted.effect.kind !== "admitted") throw new Error("expected retained source export");
+      await settleOnce();
+      const ready = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        exportId: admitted.effect.export_id, fetchImpl: prepared.fetchImpl });
+      if (ready.status !== "ready") throw new Error("expected completed prior export");
+      priorExports.push({ exportId: ready.export_id, root: ready.immutable_root });
+      const download = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${ready.export_id}`,
+        { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+      assert.equal(download.status, 200);
+      const files = zipStoreFiles(new Uint8Array(await download.arrayBuffer()));
+      assert.ok([...files.values()].some((content) => new TextDecoder().decode(content).includes("Restricted erased alternative")));
+    }
+    const pinnedSources = JSON.parse(await queryPostgres(`SELECT jsonb_agg(to_jsonb(source) ORDER BY source.export_id)
+      FROM storyos.pinned_export_sources AS source WHERE project_id='${prepared.projectId}'::uuid`));
     await queryPostgres(`UPDATE storyos.draft_artifacts SET closure='closed'
       WHERE project_id='${prepared.projectId}'::uuid AND draft_id='${closed.draft.draft_id}'::uuid;
       UPDATE storyos.draft_artifacts SET retention_state='archived'
@@ -848,6 +872,17 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       (error) => requireStoryOSProtocolError(error).status === 404);
     await assert.rejects(() => read(closed.draft.draft_id, id("e0dff1")),
       (error) => requireStoryOSProtocolError(error).status === 404);
+    for (const prior of priorExports) {
+      const download = await prepared.fetchImpl(`${started.baseUrl}/api/v1/projects/${prepared.projectId}/exports/${prior.exportId}`,
+        { headers: { Accept: 'application/vnd.storyos.project-archive+zip; profile="storyos.project-export.v1"' } });
+      assert.equal(download.status, 422);
+      assert.deepEqual(await download.json(), { schema_id: "storyos.problem.v1", code: "ineligible_lifecycle",
+        message: "The Project Export Archive did not complete." });
+      const ready = await getExportOperation({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        exportId: prior.exportId, fetchImpl: prepared.fetchImpl });
+      if (ready.status !== "ready") throw new Error("eligibility must not rewrite the historical export");
+      assert.equal(ready.immutable_root, prior.root);
+    }
     const before = await retainedState(prepared.projectId);
     for (const table of ["draft_artifact_revisions", "draft_lifecycle_events"]) {
       await assert.rejects(() => queryPostgres(`DELETE FROM storyos.${table}
@@ -900,7 +935,17 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     assert.deepEqual(JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifact_revisions.json"))), expectedRevisions);
     const exportedAdmissions = JSON.parse(new TextDecoder().decode(files.get("canonical/author_command_admissions.json")));
     assert.deepEqual(exportedAdmissions.filter((row: Record<string, unknown>) => row.command_kind === "applyAuthorEdit"), expectedAdmissions);
+    const exportedPins = JSON.parse(new TextDecoder().decode(files.get("canonical/pinned_export_sources.json")));
+    const expectedPins = pinnedSources.map((row: Record<string, unknown>) => {
+      const { facts: _withheld, ...metadata } = row;
+      return { ...metadata, payload_availability: { kind: "refused_edit_pinned_export_source_facts",
+        reason: "withheld_due_to_tombstone", entry_path: "canonical/pinned_export_sources.json", record_id: row.export_id,
+        payload_field: "facts", restricted_draft_ids: [tombstoned.draft.draft_id], facts_sha256: row.facts_sha256 } };
+    });
+    assert.deepEqual(exportedPins, expectedPins);
     for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes("Restricted erased alternative"));
-    assert.deepEqual(await retainedState(prepared.projectId), before);
+    const after = await retainedState(prepared.projectId);
+    assert.deepEqual(after, { ...before, scope_counters: before.scope_counters.map((row: Record<string, number>) =>
+      ({ ...row, project_activity_position: row.project_activity_position! + 1 })) });
   } finally { await stopRealServer(started.server); }
 });

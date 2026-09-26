@@ -431,7 +431,18 @@ pub(super) async fn package_stored_export(
         Err(reason) => return Ok(VerifiedExportArchive::Refused(reason)),
     };
     match package_verified_project_archive_zip(&root_facts, &sources, immutable_root) {
-        Ok(bytes) => Ok(VerifiedExportArchive::Ready(bytes)),
+        Ok(bytes) => {
+            if super::project_archive_draft_copies::stored_payload_is_ineligible(
+                client, scope, &sources,
+            )
+            .await?
+            {
+                return Ok(VerifiedExportArchive::Refused(
+                    ProjectArchiveBuildRefusal::IneligibleLifecycle,
+                ));
+            }
+            Ok(VerifiedExportArchive::Ready(bytes))
+        }
         Err(reason) => Ok(VerifiedExportArchive::Refused(reason)),
     }
 }
@@ -492,6 +503,14 @@ async fn load_table_json(
         let value: serde_json::Value = serde_json::from_str(&raw)
             .map_err(|error| ExportProjectArchiveError::Unavailable(Box::new(error)))?;
         values.push(value);
+    }
+    if table == "pinned_export_sources" {
+        super::project_archive_draft_copies::withhold_pinned_source_copies(
+            client,
+            scope,
+            &mut values,
+        )
+        .await?;
     }
     values.sort_by_cached_key(canonical_json);
     Ok(values)

@@ -179,11 +179,44 @@ pub(super) fn withheld_payload_gaps(
     {
         return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
     }
+    for source in rows("pinned_export_sources")? {
+        if source.get("facts").is_some() {
+            continue;
+        }
+        let gap = source
+            .get("payload_availability")
+            .ok_or(ProjectArchiveBuildRefusal::InvalidProvenance)?;
+        let ids = gap
+            .get("restricted_draft_ids")
+            .and_then(Value::as_array)
+            .filter(|ids| !ids.is_empty())
+            .ok_or(ProjectArchiveBuildRefusal::InvalidProvenance)?;
+        if ids.iter().any(|id| {
+            !drafts
+                .iter()
+                .any(|draft| &draft["draft_id"] == id && draft["retention_state"] == "tombstoned")
+        }) {
+            return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+        }
+        let digest = text(&source, "facts_sha256")?;
+        if digest.len() != 64
+            || !digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+            || gap
+                != &json!({"kind":"refused_edit_pinned_export_source_facts","reason":"withheld_due_to_tombstone",
+                "entry_path":"canonical/pinned_export_sources.json","record_id":text(&source,"export_id")?,
+                "payload_field":"facts","restricted_draft_ids":ids,"facts_sha256":digest})
+        {
+            return Err(ProjectArchiveBuildRefusal::InvalidProvenance);
+        }
+        gaps.push(gap.clone());
+    }
     gaps.sort_by_cached_key(storyos_core::canonical_json);
     Ok(gaps)
 }
 
-fn text<'a>(row: &'a Value, field: &str) -> Result<&'a str, ProjectArchiveBuildRefusal> {
+pub(super) fn text<'a>(row: &'a Value, field: &str) -> Result<&'a str, ProjectArchiveBuildRefusal> {
     row.get(field)
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
