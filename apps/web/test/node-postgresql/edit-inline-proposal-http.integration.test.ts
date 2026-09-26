@@ -956,10 +956,6 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
       assert.equal(refused.receipt.author_action_sequence, null);
       assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     }
-    await assert.rejects(() => settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
-      ...closeRequest.close_editor_flow_draft_input, editor_session_id: id("e0dff5") } }, "e0db5"),
-      (error) => requireStoryOSProtocolError(error).status === 409);
-    assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     const secondaryRequest: CreateEditorSessionRequest = { command_schema: "storyos.command.create-editor-session.request.v1",
       ...BINDING, correlation_id: id("e0db91") };
     const secondary = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",

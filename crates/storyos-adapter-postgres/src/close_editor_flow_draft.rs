@@ -116,8 +116,9 @@ async fn persist(
         client.execute("INSERT INTO storyos.author_action_entries(owner_user_id,project_id,author_action_sequence,disposition,receipt_id,receipt_result_kind)
             VALUES($1::text::uuid,$2::text::uuid,$3::text::numeric,'forward',$4::text::uuid,'draft_closure_changed')",
             &[&owner,&project,&sequence,&command.ids.receipt_id]).await.map_err(database_error)?;
-        client.execute("INSERT INTO storyos.draft_close_events(owner_user_id,project_id,event_id,draft_id,revision_id,payload_digest,receipt_id,author_action_sequence)
-            VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6,$7::text::uuid,$8::text::numeric)",
+        client.execute("INSERT INTO storyos.draft_close_events(owner_user_id,project_id,event_id,draft_id,revision_id,payload_digest,receipt_id,author_action_sequence,created_at)
+            VALUES($1::text::uuid,$2::text::uuid,$3::text::uuid,$4::text::uuid,$5::text::uuid,$6,$7::text::uuid,$8::text::numeric,(SELECT created_at FROM storyos.domain_receipts
+              WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND receipt_id=$7::text::uuid))",
             &[&owner,&project,&event_id,&command.draft_id,&revision,&digest,&command.ids.receipt_id,&sequence]).await.map_err(database_error)?;
         client.execute("UPDATE storyos.draft_artifacts SET closure='closed',close_event_id=$4::text::uuid
             WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid AND draft_id=$3::text::uuid",
