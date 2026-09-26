@@ -131,7 +131,7 @@ pub(super) async fn load_sources(
                 CASE
                   WHEN NOT ((proposal.proposal_id::text || ':' || operation.operation_id::text) = ANY($13::text[])) THEN ''
                   WHEN row_number() OVER (PARTITION BY proposal.proposal_id, operation.operation_id ORDER BY anchor.anchor_order) > 1 THEN ''
-                  WHEN octet_length(operation.candidate_text) <= $6
+                  WHEN octet_length(operation.candidate_text)::bigint <= $6::bigint
                    AND octet_length(operation.candidate_text) <= (
                      SELECT min(source.source_bytes) FROM unnest($13::text[], $16::bigint[]) AS source(owner_key, source_bytes)
                       WHERE source.owner_key = proposal.proposal_id::text || ':' || operation.operation_id::text)

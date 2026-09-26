@@ -245,6 +245,7 @@ test("a protected mixed replacement retains complete content after response loss
     const lossyFetch: typeof fetch = async (input, init) => {
       const response = await prepared.fetchImpl(input, init);
       if (loseResponse && init?.method === "POST" && String(input).endsWith("/manuscript/author-edits")) {
+        assert.equal(response.status, 200, await response.clone().text());
         loseResponse = false;
         await stopRealServer(started.server);
         throw new Error("Controlled response loss after durable HTTP settlement");
