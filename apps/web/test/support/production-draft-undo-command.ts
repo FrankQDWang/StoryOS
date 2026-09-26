@@ -73,7 +73,32 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
     const reply = await route.fetch(); assert.equal(reply.status(), 200); second = await reply.json();
     await route.fulfill({ response: reply, json: { ...second, receipt: { ...second.receipt, draft_artifact_refs: [] } } });
   });
-  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus(); await page.keyboard.press("ControlOrMeta+Z");
+  await page.locator('[data-manuscript-editor][contenteditable="true"]').focus().catch(async (cause: unknown) => {
+    const input = (frozen!.group as { frozen_request_body: { undo_latest_author_action_input: { editor_session_id: string } } }).frozen_request_body.undo_latest_author_action_input;
+    const diagnostic = await page.evaluate(async ({ projectId, editorSessionId }) => {
+      const editor = document.querySelector<HTMLElement>("[data-manuscript-editor]")!;
+      const status = document.querySelector<HTMLElement>("[data-save-state]")!;
+      const reply = await fetch(`/api/v1/projects/${projectId}/editor-sessions/${editorSessionId}`);
+      const session = await reply.json() as { writer: { kind: string; writer_generation?: string }; author_undo_frontier_sequence: string };
+      const publicState = { editable: editor.getAttribute("contenteditable"), save: status.dataset.saveState,
+        failure: status.dataset.editorFailure, unsettled: status.dataset.unsettledIntentCount, writer: session.writer,
+        frontier: session.author_undo_frontier_sequence, focused: document.activeElement === editor };
+      if (session.writer.kind !== "current_writer" || publicState.save !== "saved" || publicState.failure) return publicState;
+      type Hook = { memoizedState: unknown; next: Hook | null };
+      type Fiber = { memoizedProps: Record<string, unknown>; memoizedState: Hook | null; return: Fiber | null };
+      const key = Object.keys(editor).find((key) => key.startsWith("__reactFiber$"));
+      let fiber = key === undefined ? null : Reflect.get(editor, key) as Fiber | null;
+      while (fiber !== null && !Object.hasOwn(fiber.memoizedProps, "locators")) fiber = fiber.return;
+      const states: unknown[] = []; let hook = fiber?.memoizedState;
+      while (hook) { states.push(hook.memoizedState); hook = hook.next; }
+      const length = (index: number) => Array.isArray(states[index]) ? states[index].length : undefined;
+      return { ...publicState, gates: { baseEditable: fiber?.memoizedProps.editable, discardHold: states[2],
+        accepting: states[6] !== undefined, pendingAcceptances: length(7), acceptanceChecked: states[8],
+        journalPending: length(10), recoveryUnavailable: states[13], recoveryChecked: states[14] } };
+    }, { projectId, editorSessionId: input.editor_session_id });
+    throw new Error(`Second Undo editable gate: ${JSON.stringify(diagnostic)}`, { cause });
+  });
+  await page.keyboard.press("ControlOrMeta+Z");
   await surface.locator("[data-draft-reopened]").waitFor().catch(async (cause: unknown) => {
     const journal = await readProductionJournal(page, projectId), current = await read() as RefusedEditDraftInspect;
     const bindings = journal.metadata!.filter((row) => row.key === "schema" || String(row.key).startsWith("draft-undo"))
