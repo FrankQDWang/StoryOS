@@ -85,16 +85,20 @@ export async function verifyProductionDraftUndo(page: Page, projectId: string,
         frontier: session.author_undo_frontier_sequence, focused: document.activeElement === editor };
       if (session.writer.kind !== "current_writer" || publicState.save !== "saved" || publicState.failure) return publicState;
       type Hook = { memoizedState: unknown; next: Hook | null };
-      type Fiber = { memoizedProps: Record<string, unknown>; memoizedState: Hook | null; return: Fiber | null };
-      const key = Object.keys(editor).find((key) => key.startsWith("__reactFiber$"));
-      let fiber = key === undefined ? null : Reflect.get(editor, key) as Fiber | null;
-      while (fiber !== null && !Object.hasOwn(fiber.memoizedProps, "locators")) fiber = fiber.return;
+      type Fiber = { memoizedProps: Record<string, unknown> | null; memoizedState: Hook | null; return: Fiber | null };
+      let owner: HTMLElement | null = editor, key = Object.keys(editor).find((key) => key.startsWith("__reactFiber$"));
+      while (owner !== null && key === undefined) { owner = owner.parentElement;
+        key = owner === null ? undefined : Object.keys(owner).find((key) => key.startsWith("__reactFiber$")); }
+      let fiber = owner === null || key === undefined ? null : Reflect.get(owner, key) as Fiber | null;
+      while (fiber !== null && (!fiber.memoizedProps || !Object.hasOwn(fiber.memoizedProps, "locators"))) fiber = fiber.return;
+      if (fiber === null) return { ...publicState, gates: "not_collected" };
       const states: unknown[] = []; let hook = fiber?.memoizedState;
       while (hook) { states.push(hook.memoizedState); hook = hook.next; }
       const length = (index: number) => Array.isArray(states[index]) ? states[index].length : undefined;
-      return { ...publicState, gates: { baseEditable: fiber?.memoizedProps.editable, discardHold: states[2],
-        accepting: states[6] !== undefined, pendingAcceptances: length(7), acceptanceChecked: states[8],
-        journalPending: length(10), recoveryUnavailable: states[13], recoveryChecked: states[14] } };
+      const flag = (index: number) => typeof states[index] === "boolean" ? states[index] : undefined;
+      return { ...publicState, gates: { found: true, baseEditable: fiber.memoizedProps?.editable, discardHold: flag(2),
+        accepting: states.length > 6 ? states[6] !== undefined : undefined, pendingAcceptances: length(7), acceptanceChecked: flag(8),
+        journalPending: length(10), recoveryUnavailable: flag(13), recoveryChecked: flag(14) } };
     }, { projectId, editorSessionId: input.editor_session_id });
     throw new Error(`Second Undo editable gate: ${JSON.stringify(diagnostic)}`, { cause });
   });
