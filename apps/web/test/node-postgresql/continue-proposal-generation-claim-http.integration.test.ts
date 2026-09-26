@@ -1,4 +1,4 @@
-// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/complete-ready-partial-proposal-http.integration.test.ts"]}
+// Verification: {"phase":"http-main","after":["apps/web/test/node-postgresql/continue-proposal-generation-http.integration.test.ts"]}
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { test } from "vitest";
@@ -31,7 +31,7 @@ import {
   stopStoryOSServer as stopRealServer,
 } from "../support/node-integration.ts";
 import {
-  BINDING, challenged, drainLeftoverWork, id, prepare, settleOnce,
+  BINDING, PROSE, challenged, drainLeftoverWork, id, prepare, settleOnce,
   startRealServer,
 } from "../support/acceptance.ts";
 
@@ -90,29 +90,47 @@ async function generationFacts(proposalId: string): Promise<{
   return { generationId, streamSeq, runStatus, runId, revisionCount };
 }
 
-async function successorFacts(runId: string): Promise<{
+async function runFacts(runId: string): Promise<{
   status: string;
   predecessor: string;
   wakeupPending: string;
 }> {
   const row = await queryStoryOSPostgres(
-    `SELECT status, predecessor_run_id::text, wakeup_pending
+    `SELECT status, COALESCE(predecessor_run_id::text, ''), wakeup_pending
        FROM storyos.agent_runs
       WHERE run_id = '${runId}'`,
   );
   const [status, predecessor, wakeupPending] = row.split("|");
-  if (!status || !predecessor || !wakeupPending) {
-    throw new Error(`successor facts were incomplete: ${row}`);
+  if (!status || wakeupPending === undefined) {
+    throw new Error(`run facts were incomplete: ${row}`);
   }
-  return { status, predecessor, wakeupPending };
+  return { status, predecessor: predecessor ?? "", wakeupPending };
 }
 
-test("continue opens a fresh generation without accepting the candidate", async () => {
+async function streamEventCount(generationId: string): Promise<string> {
+  const count = await queryStoryOSPostgres(
+    `SELECT count(*)::text FROM storyos.proposal_stream_events
+      WHERE generation_id = '${generationId}'`,
+  );
+  if (!count) throw new Error("stream event count was empty");
+  return count.trim();
+}
+
+async function assemblyCount(runId: string): Promise<string> {
+  const count = await queryStoryOSPostgres(
+    `SELECT count(*)::text FROM storyos.context_assembly_manifests
+      WHERE run_id = '${runId}'`,
+  );
+  if (!count) throw new Error("assembly count was empty");
+  return count.trim();
+}
+
+test("Worker claims a Continue successor and writes the next batch into the new Generation", async () => {
   const started = await startRealServer();
   try {
     await drainLeftoverWork();
     const ns = freshNs();
-    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Continue Novel", ns);
+    const prepared = await prepare(started.baseUrl, id(`${ns}11`), "Claim Novel", ns);
     const before = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
@@ -198,6 +216,10 @@ test("continue opens a fresh generation without accepting the candidate", async 
     });
     assert.equal(paused.proposal.generation, "ready_partial");
     const facts = await generationFacts(paused.proposal.proposal_id);
+    if (facts.runStatus !== "completed" && facts.runStatus !== "refused" && facts.runStatus !== "cancelled") {
+      throw new Error(`expected a terminal source Run, got ${facts.runStatus}`);
+    }
+    const priorEvents = await streamEventCount(facts.generationId);
     const completeRequest: CompleteReadyPartialProposalRequest = {
       command_schema: "storyos.command.complete-ready-partial-proposal.request.v1",
       complete_ready_partial_proposal_input: {
@@ -241,47 +263,76 @@ test("continue opens a fresh generation without accepting the candidate", async 
         correlation_id: id(`${ns}81`),
       },
     };
-    const continueOptions = {
-      baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
-      proposalId: ready.proposal.proposal_id, idempotencyKey: id(`${ns}82`), request: continueRequest,
-      antiForgery: "",
-    };
     const continued = await challenged(
       started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
       "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations",
       continueRequest.command_schema, await digestContinueProposalGeneration(continueRequest),
-      continueOptions.idempotencyKey,
-      (antiForgery) => {
-        continueOptions.antiForgery = antiForgery;
-        return continueProposalGeneration(continueOptions);
-      },
+      id(`${ns}82`),
+      (antiForgery) => continueProposalGeneration({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+        proposalId: ready.proposal.proposal_id, idempotencyKey: id(`${ns}82`),
+        request: continueRequest, antiForgery,
+      }),
     );
     assert.equal(continued.effect.kind, "started");
     if (continued.effect.kind !== "started") throw new Error("expected started");
-    assert.equal(continued.effect.prior_generation_id, facts.generationId);
-    assert.notEqual(continued.effect.new_generation_id, facts.generationId);
-    assert.equal(continued.effect.prior_generation_state, "ready");
-    assert.equal(continued.effect.resulting_generation_state, "generating");
-    assert.equal(continued.effect.prior_run_id, facts.runId);
-    assert.equal(continued.effect.preserved_validation, ready.proposal.validation);
-    assert.equal(continued.effect.preserved_closure, ready.proposal.closure);
-    assert.equal(continued.effect.preserved_operation_resolution, ready.proposal.operation_resolution);
-    assert.deepEqual(continued.receipt.authoritative_commit_ids, []);
-    assert.deepEqual(await continueProposalGeneration(continueOptions), continued);
-    const afterContinue = await generationFacts(ready.proposal.proposal_id);
-    assert.equal(afterContinue.generationId, continued.effect.new_generation_id);
-    if (facts.runStatus === "completed" || facts.runStatus === "refused" || facts.runStatus === "cancelled") {
-      assert.notEqual(continued.effect.resulting_run_id, facts.runId);
-      const successor = await successorFacts(continued.effect.resulting_run_id);
-      assert.equal(successor.predecessor, facts.runId);
-    } else {
-      assert.equal(continued.effect.resulting_run_id, facts.runId);
-    }
-    const after = await getChapter({
+    assert.notEqual(continued.effect.resulting_run_id, facts.runId);
+    const successor = await runFacts(continued.effect.resulting_run_id);
+    assert.equal(successor.predecessor, facts.runId);
+    assert.equal(await assemblyCount(continued.effect.resulting_run_id), "1");
+    const prior = await runFacts(facts.runId);
+    assert.equal(prior.status, facts.runStatus);
+    await drainLeftoverWork();
+    const streamed = await getProposal({
+      baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: ready.proposal.proposal_id, fetchImpl: prepared.fetchImpl,
+    });
+    assert.equal(streamed.proposal.candidate_text, PROSE);
+    assert.notEqual(streamed.proposal.revision_id, ready.proposal.revision_id);
+    const after = await generationFacts(ready.proposal.proposal_id);
+    assert.equal(after.generationId, continued.effect.new_generation_id);
+    assert.notEqual(after.streamSeq, "0");
+    assert.notEqual(await streamEventCount(after.generationId), "0");
+    assert.equal(await streamEventCount(facts.generationId), priorEvents);
+    const settledSuccessor = await runFacts(continued.effect.resulting_run_id);
+    assert.equal(settledSuccessor.status, "completed");
+    assert.equal(settledSuccessor.predecessor, facts.runId);
+    const settledPrior = await runFacts(facts.runId);
+    assert.equal(settledPrior.status, facts.runStatus);
+    const secondRequest: ContinueProposalGenerationRequest = {
+      command_schema: "storyos.command.continue-proposal-generation.request.v1",
+      continue_proposal_generation_input: {
+        proposal_revision_id: streamed.proposal.revision_id,
+        prior_generation_id: after.generationId,
+        expected_generation_state: "ready",
+        expected_candidate_digest: candidateDigest(PROSE),
+        selected_pending_operation_ids: [streamed.proposal.operation_id],
+        expected_target_revisions: [session.base_snapshot.authoritative_head_revision_id],
+        editor_session_id: session.editor_session.editor_session_id,
+        ...BINDING,
+        correlation_id: id(`${ns}91`),
+      },
+    };
+    const second = await challenged(
+      started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/generation-continuations",
+      secondRequest.command_schema, await digestContinueProposalGeneration(secondRequest),
+      id(`${ns}92`),
+      (antiForgery) => continueProposalGeneration({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+        proposalId: ready.proposal.proposal_id, idempotencyKey: id(`${ns}92`),
+        request: secondRequest, antiForgery,
+      }),
+    );
+    assert.equal(second.effect.kind, "started");
+    if (second.effect.kind !== "started") throw new Error("expected started");
+    assert.equal(second.effect.prior_run_id, continued.effect.resulting_run_id);
+    assert.notEqual(second.effect.prior_run_id, facts.runId);
+    const chapter = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
     });
-    assert.deepEqual(after.chapter, before.chapter);
+    assert.deepEqual(chapter.chapter, before.chapter);
     await drainLeftoverWork();
   } finally {
     await stopRealServer(started.server);
