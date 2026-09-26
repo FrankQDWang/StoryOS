@@ -1,0 +1,80 @@
+{
+  "$defs": {
+    "ContinueProposalGenerationInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_candidate_digest": {
+          "type": "string"
+        },
+        "expected_generation_state": {
+          "type": "string"
+        },
+        "expected_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "prior_generation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "selected_pending_operation_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "proposal_revision_id",
+        "prior_generation_id",
+        "expected_generation_state",
+        "expected_candidate_digest",
+        "selected_pending_operation_ids",
+        "expected_target_revisions",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "storyos.command.continue-proposal-generation.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.continue-proposal-generation.request.v1",
+      "type": "string"
+    },
+    "continue_proposal_generation_input": {
+      "$ref": "#/$defs/ContinueProposalGenerationInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "continue_proposal_generation_input"
+  ],
+  "title": "StoryOS Continue Proposal Generation Request",
+  "type": "object"
+}

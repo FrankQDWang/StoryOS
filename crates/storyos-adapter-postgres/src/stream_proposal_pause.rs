@@ -27,9 +27,14 @@ pub(crate) async fn pause_generating_proposals(
                      revision.revision_id) =
                     (head.owner_user_id, head.project_id, head.proposal_id,
                      head.current_revision_id)
-               JOIN storyos.proposal_generations AS generation
-                 ON (generation.owner_user_id, generation.project_id, generation.proposal_id) =
+               JOIN storyos.proposal_generation_heads AS generation_head
+                 ON (generation_head.owner_user_id, generation_head.project_id,
+                     generation_head.proposal_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+               JOIN storyos.proposal_generations AS generation
+                 ON (generation.owner_user_id, generation.project_id, generation.generation_id) =
+                    (generation_head.owner_user_id, generation_head.project_id,
+                     generation_head.generation_id)
                LEFT JOIN storyos.editor_input_fences AS fence
                  ON (fence.owner_user_id, fence.project_id, fence.generation_id) =
                     (generation.owner_user_id, generation.project_id, generation.generation_id)

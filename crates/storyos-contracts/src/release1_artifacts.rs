@@ -67,6 +67,10 @@ use crate::release1_project_export_query::GET_EXPORT_OPERATION;
 use crate::release1_project_export_query_artifacts as project_export_query_artifacts;
 use crate::release1_proposal::GET_PROPOSAL;
 use crate::release1_proposal_artifacts as proposal_artifacts;
+use crate::release1_proposal_generation_decision::{
+    COMPLETE_READY_PARTIAL_PROPOSAL, CONTINUE_PROPOSAL_GENERATION,
+};
+use crate::release1_proposal_generation_decision_artifacts as proposal_generation_decision_artifacts;
 use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
@@ -164,7 +168,7 @@ const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-
 const REVIEW_CATALOG_SHA256: &str =
     "sha256:e73e9210e01e10c22622425690f131ae990092baa326f2dac4d7150f9affbc19";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:80ea1212fc973fb9bf7495c1892d97369572210a8627c18b6098bb05803b5e45";
+    "sha256:58a1bbcc378300fe2c4ad6e40f9a312e3df7f5cb108d97a0552d48ee90366139";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -571,6 +575,26 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
             reopen_rejected_operations_response_schema,
         ),
         (
+            crate::COMPLETE_READY_PARTIAL_PROPOSAL_REQUEST_SCHEMA_ID,
+            proposal_generation_decision_artifacts::COMPLETE_REQUEST_SCHEMA_PATH,
+            proposal_generation_decision_artifacts::complete_request_schema_bytes(),
+        ),
+        (
+            crate::COMPLETE_READY_PARTIAL_PROPOSAL_RESPONSE_SCHEMA_ID,
+            proposal_generation_decision_artifacts::COMPLETE_RESPONSE_SCHEMA_PATH,
+            proposal_generation_decision_artifacts::complete_response_schema_bytes(),
+        ),
+        (
+            crate::CONTINUE_PROPOSAL_GENERATION_REQUEST_SCHEMA_ID,
+            proposal_generation_decision_artifacts::CONTINUE_REQUEST_SCHEMA_PATH,
+            proposal_generation_decision_artifacts::continue_request_schema_bytes(),
+        ),
+        (
+            crate::CONTINUE_PROPOSAL_GENERATION_RESPONSE_SCHEMA_ID,
+            proposal_generation_decision_artifacts::CONTINUE_RESPONSE_SCHEMA_PATH,
+            proposal_generation_decision_artifacts::continue_response_schema_bytes(),
+        ),
+        (
             crate::ARCHIVE_PROJECT_REQUEST_SCHEMA_ID,
             archive_project_artifacts::REQUEST_SCHEMA_PATH,
             archive_project_request_schema,
@@ -911,6 +935,8 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&ACCEPT_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "valid_validation_receipt", "selected_pending_operations", "expected_target_revisions", "acceptance_admission"]),
             command_operation_graph(&REJECT_PROPOSAL_OPERATIONS, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "selected_pending_operations", "expected_target_revisions", "explicit_editor_control"]),
             command_operation_graph(&REOPEN_REJECTED_OPERATIONS, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "selected_rejected_operations", "matching_rejection_event_refs", "expected_target_revisions", "explicit_editor_control"]),
+            command_operation_graph(&COMPLETE_READY_PARTIAL_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_ready_partial_generation", "expected_candidate_digest", "last_applied_stream_seq", "expected_target_revisions", "explicit_editor_control"]),
+            command_operation_graph(&CONTINUE_PROPOSAL_GENERATION, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_generation_ready_partial_or_ready", "prior_generation_id", "expected_candidate_digest", "selected_pending_operations", "expected_target_revisions", "explicit_editor_control"]),
             command_operation_graph(&ARCHIVE_PROJECT, &["server_derived_project_scope", "expected_project_revision", "project_not_deleted"]),
             command_operation_graph(&CREATE_VOLUME, &["server_derived_project_scope", "project_active", "expected_tree_revision"]),
             command_operation_graph(&UPDATE_VOLUME, &["server_derived_project_scope", "volume_scope_join", "expected_tree_revision"]),
@@ -1040,6 +1066,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&accept_proposal_artifacts::openapi());
     paths.push_str(&reject_proposal_operations_artifacts::openapi());
     paths.push_str(&reopen_rejected_operations_artifacts::openapi());
+    paths.push_str(&proposal_generation_decision_artifacts::openapi());
     paths.push_str(&archive_project_artifacts::openapi());
     paths.push_str(&create_volume_artifacts::openapi());
     paths.push_str(&update_volume_artifacts::openapi());
@@ -1237,6 +1264,8 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         ACCEPT_PROPOSAL.operation_id,
         REJECT_PROPOSAL_OPERATIONS.operation_id,
         REOPEN_REJECTED_OPERATIONS.operation_id,
+        COMPLETE_READY_PARTIAL_PROPOSAL.operation_id,
+        CONTINUE_PROPOSAL_GENERATION.operation_id,
         ARCHIVE_PROJECT.operation_id,
         CREATE_VOLUME.operation_id,
         UPDATE_VOLUME.operation_id,
@@ -1354,7 +1383,7 @@ fn typescript_client_bytes() -> Vec<u8> {
             "  if (typeof projectId !== \"string\" || projectId.length === 0) throw new TypeError(\"getEditorSession requires projectId\");\n",
             "  if (typeof editorSessionId !== \"string\" || editorSessionId.length === 0) throw new TypeError(\"getEditorSession requires editorSessionId\");\n",
             "  return queryJson({{ ...options, path: `{}` }});\n}}\n",
-        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
+        "{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}",
     ),
         GENERATED_CLIENT_REVISION,
         GET_PROTOCOL_PROFILE.path,
@@ -1388,6 +1417,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         accept_proposal_client,
         reject_proposal_operations_client,
         reopen_rejected_operations_client,
+        proposal_generation_decision_artifacts::typescript_client_source(),
         archive_project_client,
         create_volume_client,
         update_volume_client,
@@ -1476,6 +1506,8 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str("\n\n");
     declaration.push_str(&reopen_rejected_operations_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
+    declaration.push_str(&proposal_generation_decision_artifacts::typescript_type_declarations());
+    declaration.push_str("\n\n");
     declaration.push_str(
         concat!(
             "export declare const GENERATED_CLIENT_REVISION: string;\n",
@@ -1500,6 +1532,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(accept_proposal_artifacts::typescript_declarations());
     declaration.push_str(reject_proposal_operations_artifacts::typescript_declarations());
     declaration.push_str(reopen_rejected_operations_artifacts::typescript_declarations());
+    declaration.push_str(proposal_generation_decision_artifacts::typescript_declarations());
     declaration.push_str(archive_project_artifacts::typescript_declarations());
     declaration.push_str(create_volume_artifacts::typescript_declarations());
     declaration.push_str(update_volume_artifacts::typescript_declarations());

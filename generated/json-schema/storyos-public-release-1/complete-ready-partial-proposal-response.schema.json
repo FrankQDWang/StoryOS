@@ -1,0 +1,335 @@
+{
+  "$defs": {
+    "CompleteReadyPartialProposalEffect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "author_action_sequence": {
+              "type": "string"
+            },
+            "generation_event_ref": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "completed",
+              "type": "string"
+            },
+            "preserved_closure": {
+              "type": "string"
+            },
+            "preserved_operation_resolution": {
+              "type": "string"
+            },
+            "preserved_validation": {
+              "type": "string"
+            },
+            "prior_generation_state": {
+              "type": "string"
+            },
+            "resulting_generation_state": {
+              "type": "string"
+            },
+            "undo_disposition": {
+              "$ref": "#/$defs/ProposalGenerationUndoDisposition"
+            }
+          },
+          "required": [
+            "kind",
+            "author_action_sequence",
+            "undo_disposition",
+            "generation_id",
+            "prior_generation_state",
+            "resulting_generation_state",
+            "preserved_validation",
+            "preserved_closure",
+            "preserved_operation_resolution",
+            "generation_event_ref"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "conflicted",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/ProposalGenerationConflictReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "$ref": "#/$defs/CompleteReadyPartialProposalRefusalReason"
+            }
+          },
+          "required": [
+            "kind",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "CompleteReadyPartialProposalRefusalReason": {
+      "enum": [
+        "stale_proposal_revision",
+        "not_eligible",
+        "not_ready_partial",
+        "stale_generation",
+        "stale_candidate"
+      ],
+      "type": "string"
+    },
+    "ControlledProject": {
+      "additionalProperties": false,
+      "properties": {
+        "open": {
+          "$ref": "#/$defs/ProjectOpenState"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "title",
+        "open"
+      ],
+      "type": "object"
+    },
+    "DigestAlgorithm": {
+      "enum": [
+        "sha256"
+      ],
+      "type": "string"
+    },
+    "DigestValue": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "$ref": "#/$defs/DigestAlgorithm"
+        },
+        "profile": {
+          "type": "string"
+        },
+        "value_hex_lowercase": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "profile",
+        "value_hex_lowercase"
+      ],
+      "type": "object"
+    },
+    "ProjectOpenState": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "empty",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_chapter_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "current_chapter",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "current_chapter_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ProjectScope": {
+      "additionalProperties": false,
+      "properties": {
+        "owner_user_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "owner_user_id",
+        "project_id"
+      ],
+      "type": "object"
+    },
+    "ProposalGenerationConflictReason": {
+      "enum": [
+        "changed_head"
+      ],
+      "type": "string"
+    },
+    "ProposalGenerationReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "authoritative_commit_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "expected_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "prior_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "proposal_id": {
+          "type": "string"
+        },
+        "proposal_revision_id": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "$ref": "#/$defs/ProposalGenerationReceiptResult"
+        },
+        "resulting_authoritative_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "project_scope",
+        "command_digest",
+        "idempotency_key",
+        "author_command_admission_id",
+        "proposal_id",
+        "proposal_revision_id",
+        "expected_target_revisions",
+        "prior_authoritative_revision_ids",
+        "resulting_authoritative_revision_ids",
+        "authoritative_commit_ids",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "ProposalGenerationReceiptResult": {
+      "enum": [
+        "proposal_generation_completed",
+        "proposal_generation_started",
+        "conflicted",
+        "refused"
+      ],
+      "type": "string"
+    },
+    "ProposalGenerationUndoDisposition": {
+      "enum": [
+        "forward"
+      ],
+      "type": "string"
+    }
+  },
+  "$id": "storyos.command.complete-ready-partial-proposal.response.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_command_admission_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "command_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "correlation_id": {
+      "format": "uuid",
+      "type": "string"
+    },
+    "effect": {
+      "$ref": "#/$defs/CompleteReadyPartialProposalEffect"
+    },
+    "project": {
+      "$ref": "#/$defs/ControlledProject"
+    },
+    "project_scope": {
+      "$ref": "#/$defs/ProjectScope"
+    },
+    "receipt": {
+      "$ref": "#/$defs/ProposalGenerationReceipt"
+    },
+    "schema_id": {
+      "const": "storyos.command.complete-ready-partial-proposal.response.v1",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_id",
+    "correlation_id",
+    "project_scope",
+    "command_id",
+    "author_command_admission_id",
+    "receipt",
+    "project",
+    "effect"
+  ],
+  "title": "StoryOS Complete Ready Partial Proposal Response",
+  "type": "object"
+}

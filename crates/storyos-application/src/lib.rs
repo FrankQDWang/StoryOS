@@ -57,6 +57,7 @@ mod pinned_export_source;
 mod project_activity;
 mod project_export;
 mod project_export_work;
+mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_work;
 mod reject_proposal_operations;
@@ -181,6 +182,12 @@ pub use project_export::{
 pub use project_export_work::{
     ArchiveExportWorkStore, ClaimedArchiveExport, CompleteArchiveExport,
     CompleteArchiveExportError, claim_next_archive_export, complete_archive_export,
+};
+pub use proposal_generation_decision::{
+    CompleteReadyPartialProposalCommand, CompleteReadyPartialProposalEffect,
+    ContinueProposalGenerationCommand, ContinueProposalGenerationEffect,
+    ProposalGenerationDecisionError, ProposalGenerationDecisionStore, ProposalGenerationSettlement,
+    complete_ready_partial_proposal, continue_proposal_generation,
 };
 pub use readable_export::{
     ExportHumanReadableManuscriptAdmission, ExportHumanReadableManuscriptAdmissionEffect,

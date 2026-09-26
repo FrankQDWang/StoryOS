@@ -45,6 +45,10 @@ use crate::release1_project_export_query::GET_EXPORT_OPERATION;
 use crate::release1_project_export_query_artifacts as project_export_query_artifacts;
 use crate::release1_proposal::GET_PROPOSAL;
 use crate::release1_proposal_artifacts as proposal_artifacts;
+use crate::release1_proposal_generation_decision::{
+    COMPLETE_READY_PARTIAL_PROPOSAL, CONTINUE_PROPOSAL_GENERATION,
+};
+use crate::release1_proposal_generation_decision_artifacts as proposal_generation_decision_artifacts;
 use crate::release1_readable_export::EXPORT_HUMAN_READABLE_MANUSCRIPT;
 use crate::release1_readable_export_artifacts as readable_export_artifacts;
 use crate::release1_readable_export_query::GET_HUMAN_READABLE_MANUSCRIPT_EXPORT;
@@ -383,6 +387,24 @@ fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
             |_profile| reject_proposal_operations_artifacts::fixture_bytes(),
             |_profile| reject_proposal_operations_artifacts::invalid_fixture_bytes(),
             |_profile| reject_proposal_operations_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        proposal_generation_decision_artifacts::COMPLETE_FIXTURE_PATHS,
+        &COMPLETE_READY_PARTIAL_PROPOSAL,
+        [
+            |_profile| proposal_generation_decision_artifacts::complete_fixture_bytes(),
+            |_profile| proposal_generation_decision_artifacts::complete_invalid_fixture_bytes(),
+            |_profile| proposal_generation_decision_artifacts::complete_boundary_fixture_bytes(),
+        ],
+    ));
+    membership.extend(fixture_triple(
+        proposal_generation_decision_artifacts::CONTINUE_FIXTURE_PATHS,
+        &CONTINUE_PROPOSAL_GENERATION,
+        [
+            |_profile| proposal_generation_decision_artifacts::continue_fixture_bytes(),
+            |_profile| proposal_generation_decision_artifacts::continue_invalid_fixture_bytes(),
+            |_profile| proposal_generation_decision_artifacts::continue_boundary_fixture_bytes(),
         ],
     ));
     membership.extend(fixture_triple(

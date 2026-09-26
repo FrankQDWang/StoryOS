@@ -1,0 +1,61 @@
+{
+  "author_command_admission_id": "018f0000-0000-7001-8000-000000000e12",
+  "command_id": "018f0000-0000-7001-8000-000000000e11",
+  "correlation_id": "018f0000-0000-7001-8000-000000000e20",
+  "effect": {
+    "author_action_sequence": "5",
+    "generation_event_ref": "018f0000-0000-7001-8000-000000000e2a",
+    "kind": "started",
+    "new_generation_id": "018f0000-0000-7001-8000-000000000e27",
+    "preserved_closure": "open",
+    "preserved_operation_resolution": "pending",
+    "preserved_validation": "pending",
+    "prior_generation_id": "018f0000-0000-7001-8000-000000000e26",
+    "prior_generation_state": "ready_partial",
+    "prior_run_id": "018f0000-0000-7001-8000-000000000e28",
+    "resulting_generation_state": "generating",
+    "resulting_run_id": "018f0000-0000-7001-8000-000000000e29",
+    "undo_disposition": "forward"
+  },
+  "project": {
+    "open": {
+      "current_chapter_id": "018f0000-0000-7001-8000-000000000301",
+      "kind": "current_chapter"
+    },
+    "project_id": "018f0000-0000-7001-8000-000000000201",
+    "title": "Open Proposal Novel"
+  },
+  "project_scope": {
+    "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+    "project_id": "018f0000-0000-7001-8000-000000000201"
+  },
+  "receipt": {
+    "author_command_admission_id": "018f0000-0000-7001-8000-000000000e12",
+    "authoritative_commit_ids": [],
+    "command_digest": {
+      "algorithm": "sha256",
+      "profile": "storyos.command.continueProposalGeneration.jcs.v1",
+      "value_hex_lowercase": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    },
+    "created_at": "1970-01-01T00:00:00.000Z",
+    "expected_target_revisions": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "idempotency_key": "018f0000-0000-7001-8000-000000000e14",
+    "prior_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ],
+    "project_scope": {
+      "owner_user_id": "018f0000-0000-7001-8000-000000000001",
+      "project_id": "018f0000-0000-7001-8000-000000000201"
+    },
+    "proposal_id": "018f0000-0000-7001-8000-000000000b02",
+    "proposal_revision_id": "018f0000-0000-7001-8000-000000000b03",
+    "receipt_id": "018f0000-0000-7001-8000-000000000e13",
+    "result": "proposal_generation_started",
+    "resulting_authoritative_revision_ids": [
+      "018f0000-0000-7001-8000-000000000b06"
+    ]
+  },
+  "schema_id": "storyos.command.continue-proposal-generation.response.v1"
+}

@@ -204,9 +204,26 @@ async fn open_generating(
     client
         .execute(
             "INSERT INTO storyos.proposal_generations
-               (owner_user_id, project_id, generation_id, proposal_id, last_applied_stream_seq)
-             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 0)",
-            &[&owner, &project, &generation_id, &proposal_id],
+               (owner_user_id, project_id, generation_id, proposal_id,
+                last_applied_stream_seq, run_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
+                     0, $5::text::uuid)",
+            &[
+                &owner,
+                &project,
+                &generation_id,
+                &proposal_id,
+                &claim.run_id,
+            ],
+        )
+        .await
+        .map_err(stream_err)?;
+    client
+        .execute(
+            "INSERT INTO storyos.proposal_generation_heads
+               (owner_user_id, project_id, proposal_id, generation_id)
+             VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid)",
+            &[&owner, &project, &proposal_id, &generation_id],
         )
         .await
         .map_err(stream_err)?;
@@ -395,9 +412,14 @@ async fn load_generation(
                     proposal.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text
                FROM storyos.proposals AS proposal
-               JOIN storyos.proposal_generations AS generation
-                 ON (generation.owner_user_id, generation.project_id, generation.proposal_id) =
+               JOIN storyos.proposal_generation_heads AS generation_head
+                 ON (generation_head.owner_user_id, generation_head.project_id,
+                     generation_head.proposal_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
+               JOIN storyos.proposal_generations AS generation
+                 ON (generation.owner_user_id, generation.project_id, generation.generation_id) =
+                    (generation_head.owner_user_id, generation_head.project_id,
+                     generation_head.generation_id)
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
                     (proposal.owner_user_id, proposal.project_id, proposal.proposal_id)
@@ -411,8 +433,11 @@ async fn load_generation(
                     (generation.owner_user_id, generation.project_id, generation.generation_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
-                AND proposal.source_run_id = $3::text::uuid
-              ORDER BY generation.generation_id
+                AND (
+                  generation.run_id = $3::text::uuid
+                  OR proposal.source_run_id = $3::text::uuid
+                )
+              ORDER BY (generation.run_id = $3::text::uuid) DESC, generation.generation_id
               LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),

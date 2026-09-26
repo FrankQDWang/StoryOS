@@ -21,6 +21,7 @@ mod open_inline_proposal;
 mod pause_proposal_generation;
 mod project_archive;
 mod project_export;
+mod proposal_generation_decision;
 mod readable_export;
 mod readable_export_command;
 mod reject_proposal_operations;
@@ -121,6 +122,12 @@ pub use project_archive::{
 pub use project_export::{
     ExportProjectArchive, ExportProjectArchiveRefusal, ExportProjectArchiveResult,
     export_project_archive,
+};
+pub use proposal_generation_decision::{
+    CompleteReadyPartialProposal, CompleteReadyPartialProposalRefusal,
+    CompleteReadyPartialProposalResult, ContinueProposalGeneration,
+    ContinueProposalGenerationRefusal, ContinueProposalGenerationResult,
+    ProposalGenerationConflict, complete_ready_partial_proposal, continue_proposal_generation,
 };
 pub use readable_export::{
     READABLE_EXPORT_PROFILE, READABLE_EXPORT_UNAVAILABLE_MARKER, ReadableExportChapter,
