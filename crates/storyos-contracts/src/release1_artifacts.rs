@@ -1302,6 +1302,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         CANCEL_AGENT_RUN.operation_id,
         GET_AGENT_RUN.operation_id,
         GET_REFUSED_EDIT_DRAFT.operation_id,
+        CLOSE_EDITOR_FLOW_DRAFT.operation_id,
         GET_PROPOSAL.operation_id,
         ACCEPT_PROPOSAL.operation_id,
         REJECT_PROPOSAL_OPERATIONS.operation_id,
