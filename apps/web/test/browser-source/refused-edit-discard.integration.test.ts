@@ -1,5 +1,5 @@
-import { expect, it } from "vitest";
-import { discardRefusedEdit, readDiscardJournal, reconcileDiscard } from "../../src/refused-edit-discard.ts";
+import { expect, it, vi } from "vitest";
+import { discardRefusedEdit, observeDiscard, readDiscardJournal, reconcileDiscard } from "../../src/refused-edit-discard.ts";
 import { rebuildPendingProjection } from "../../src/local-edit-journal.ts";
 import type { CloseEditorFlowDraftRequest, EditorFlowDraftClosed, RefusedEditDraftInspect }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
@@ -50,6 +50,10 @@ it("persists the complete immutable explicit Discard before Admission and only r
     const postsBeforeReload = routes.length;
     expect(await reconcileDiscard(test.workspace, { ...draft, closure: "closed", closure_event: event }))
       .toMatchObject({ kind: "settled_closed", event });
+    expect(await rebuildPendingProjection(test.workspace)).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse("2030-01-01T00:00:00.000Z"));
+    try { await observeDiscard(test.workspace, original!.record, { kind: "unresolved" }); }
+    finally { clock.mockRestore(); }
     expect(await rebuildPendingProjection(test.workspace)).toMatchObject({ save_state: "saved", unsettled_intent_count: 0 });
     expect((await readDiscardJournal(test.workspace))[0]!.record).toEqual(original!.record);
     expect(routes.length).toBe(postsBeforeReload);

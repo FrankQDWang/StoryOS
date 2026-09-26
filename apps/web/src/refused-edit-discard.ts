@@ -27,7 +27,9 @@ export type DiscardRecord = {
   editor_contract_revision: string; command_kind: "closeEditorFlowDraft"; created_at: string;
   author_visible_decision_ref: { draft_id: string; close_reason: "abandoned" };
   group: { journal_submission_group_id: string; action_class: "explicit_editor_command";
-    api_major: 1; method: "POST"; route_template: string; idempotency_key: string;
+    api_major: 1; method: "POST"; route_template: string; idempotency_key: string; command_kind: "closeEditorFlowDraft";
+    command_schema: string; digest_profile: string; frozen_request_body_ref: string;
+    frozen_request_digest_input_ref: string; frozen_at: string;
     ordered_coverage: { local_intent_sequence: number; intent_record_ref: string; payload_digest: DigestValue }[];
     covered_sequence_range: { first: number; last: number }; frozen_payload_coverage_digest: DigestValue;
     frozen_request_body: CloseEditorFlowDraftRequest; frozen_request_digest: DigestValue };
@@ -65,6 +67,12 @@ function matchesResponse(record: DiscardRecord, response: CloseEditorFlowDraftRe
   const receipt = response.receipt;
   const effect = response.effect;
   return exactKeys(response, ["schema_id", "correlation_id", "project_scope", "command_id", "author_command_admission_id", "receipt", "effect"])
+    && exactKeys(receipt, ["receipt_id", "project_scope", "command_kind", "command_digest", "idempotency_key",
+      "producer_cause", "author_command_admission_id", "expected_heads", "prior_heads", "resulting_heads",
+      "authoritative_revision_ids", "proposal_revision_ids", "authoritative_commit_ids", "author_action_sequence",
+      "draft_artifact_refs", "artifact_lifecycle_event_refs", "condition_refs", "result", "created_at"])
+    && exactKeys(effect, effect.kind === "draft_closure_changed" ? ["kind", "event"] : effect.kind === "conflicted"
+      ? ["kind", "current_revision_id", "current_digest", "current_closure"] : ["kind", "reason", "current_closure"])
     && response.schema_id === "storyos.command.close-editor-flow-draft.response.v1"
     && response.correlation_id === record.group.frozen_request_body.close_editor_flow_draft_input.correlation_id
     && same(response.project_scope, record.project_scope) && UUID.test(response.command_id)
@@ -122,8 +130,14 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
       || !same(record.group.frozen_payload_coverage_digest, coverageDigest)
       || !same(record.author_visible_decision_ref, { draft_id: input?.draft_id, close_reason: "abandoned" })
       || !exactKeys(record.group, ["journal_submission_group_id", "action_class", "api_major", "method", "route_template",
-        "idempotency_key", "frozen_request_body", "frozen_request_digest", "ordered_coverage", "covered_sequence_range", "frozen_payload_coverage_digest"])
+        "idempotency_key", "frozen_request_body", "frozen_request_digest", "ordered_coverage", "covered_sequence_range", "frozen_payload_coverage_digest", "command_kind", "command_schema", "digest_profile",
+        "frozen_request_body_ref", "frozen_request_digest_input_ref", "frozen_at"])
       || !exactKeys(record.group.frozen_request_body, ["command_schema", "close_editor_flow_draft_input"])
+      || record.group.command_kind !== record.command_kind || record.group.command_schema !== record.group.frozen_request_body.command_schema
+      || record.group.digest_profile !== record.group.frozen_request_digest.profile
+      || record.group.frozen_request_body_ref !== record.group.journal_submission_group_id
+      || record.group.frozen_request_digest_input_ref !== record.group.journal_submission_group_id
+      || record.group.frozen_at !== record.created_at
       || record.group.action_class !== "explicit_editor_command" || record.group.api_major !== 1
       || record.group.method !== "POST" || record.group.route_template !== "/api/v1/projects/{project_id}/drafts/{draft_id}/closures"
       || !UUID.test(record.group.journal_submission_group_id) || !UUID.test(record.group.idempotency_key)
@@ -152,8 +166,18 @@ export async function readDiscardJournal(workspace: EditorWorkspace, snapshotTra
         : observation.kind === "settled" ? !matchesResponse(record, observation.response)
           : observation.kind !== "unresolved")) throw new Error("Discard Journal unavailable");
   }
-  return records.map((record) => ({ record, observation: observations.filter((item) => item.record_key === record.key)
-    .sort((left, right) => left.key.localeCompare(right.key)).at(-1) }));
+  return records.map((record) => {
+    const rows = observations.filter((item) => item.record_key === record.key);
+    const replies = rows.filter((item) => item.kind === "settled");
+    const closures = rows.filter((item) => item.kind === "settled_closed");
+    const reply = replies[0];
+    const closure = closures[0];
+    if (replies.some((item) => !same(item.response, reply?.response))
+      || closures.some((item) => !same(item.event, closure?.event))
+      || (closure && reply && (reply.response.effect.kind !== "draft_closure_changed"
+        || !same(closure.event, reply.response.effect.event)))) throw new Error("Discard Journal unavailable");
+    return { record, observation: closure ?? reply ?? rows[0] };
+  });
 }
 
 export async function observeDiscard(workspace: EditorWorkspace, record: DiscardRecord,
@@ -227,11 +251,12 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
     const transaction = workspace.database.transaction(["metadata", "partitions"], "readwrite", { durability: "strict" });
     const done = committed(transaction);
     const metadata = transaction.objectStore("metadata");
-    const [previous, partition, existing] = await Promise.all([result(metadata.get("local_intent_sequence")) as Promise<{ value: number } | undefined>,
-      result(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id)), result(metadata.get(`discard:${draft.draft_id}`))]);
-    if (!same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
+    const [previous, partition, existing, schema] = await Promise.all([result(metadata.get("local_intent_sequence")) as Promise<{ value: number } | undefined>,
+      result(transaction.objectStore("partitions").get(workspace.partition.journal_partition_id)), result(metadata.get(`discard:${draft.draft_id}`)), result(metadata.get("schema")) as Promise<{ version: number }>]);
+    if (schema?.version !== 4 || !same(partition, workspace.partition) || existing !== undefined || (previous?.value ?? 0) !== (previousSequence?.value ?? 0) || !Number.isSafeInteger(sequence)) {
       transaction.abort(); await done; return;
     }
+    const createdAt = new Date().toISOString();
     const record: DiscardRecord = { key: `discard:${draft.draft_id}`, schema_id: RECORD_SCHEMA,
       explicit_command_record_id: recordId, local_intent_sequence: sequence,
       journal_partition_id: workspace.partition.journal_partition_id, project_scope: scope,
@@ -239,9 +264,10 @@ export async function discardRefusedEdit({ workspace, draft, baseUrl, fetchImpl,
       exact_semantic_payload_ref: groupId, semantic_payload_digest: digest,
       exact_target_head_anchor_bindings: { draft_id: draft.draft_id, draft_revision_id: draft.draft_revision_id,
         payload_digest: draft.payload_digest, expected_closure: "open" }, editor_contract_revision: "storyos.editor-contract.release-1.v3",
-      command_kind: "closeEditorFlowDraft", created_at: new Date().toISOString(),
+      command_kind: "closeEditorFlowDraft", created_at: createdAt,
       author_visible_decision_ref: { draft_id: draft.draft_id, close_reason: "abandoned" },
-      group: { journal_submission_group_id: groupId, ...coverage, frozen_payload_coverage_digest: coverageDigest, action_class: "explicit_editor_command",
+      group: { journal_submission_group_id: groupId, command_kind: "closeEditorFlowDraft", command_schema: request.command_schema,
+        digest_profile: digest.profile, frozen_request_body_ref: groupId, frozen_request_digest_input_ref: groupId, frozen_at: createdAt, ...coverage, frozen_payload_coverage_digest: coverageDigest, action_class: "explicit_editor_command",
         api_major: 1, method: "POST", route_template: "/api/v1/projects/{project_id}/drafts/{draft_id}/closures",
         idempotency_key: uuidV7(workspace.cryptoImpl), frozen_request_body: request, frozen_request_digest: digest } };
     metadata.add(record);

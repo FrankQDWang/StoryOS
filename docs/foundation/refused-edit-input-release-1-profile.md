@@ -146,7 +146,9 @@ Discard. No throughput or retention-duration claim is added.
 The record commits before one fresh bounded Admission. It stores complete
 nonsecret command bytes, source bindings, coverage, digest and original key.
 Challenge secrets stay in memory. Typed Receipt-backed refusal or conflict
-is settled; a transport or infrastructure failure stays unresolved. The
+is settled; a transport or infrastructure failure stays unresolved. Known
+settlement takes precedence over a delayed unresolved observation; UUID order
+never decides settlement. Inconsistent terminal evidence stops the consumer. The
 retained query can confirm success only when the exact closed event binds
 that original Scope, Draft, source Revision/digest and command key/digest.
 Open, missing, foreign or unavailable evidence proves no command outcome.
