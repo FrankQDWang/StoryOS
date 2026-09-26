@@ -223,6 +223,46 @@
       ],
       "type": "object"
     },
+    "DraftReopenReceipt": {
+      "additionalProperties": false,
+      "properties": {
+        "author_undo_receipt_id": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "receipt_id": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source_close_event_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_id",
+        "receipt_id",
+        "project_scope",
+        "author_undo_receipt_id",
+        "source_close_event_id",
+        "event_id",
+        "result",
+        "created_at"
+      ],
+      "type": "object"
+    },
     "EditSourceOwner": {
       "oneOf": [
         {
@@ -328,6 +368,74 @@
         "closure",
         "close_reason",
         "source",
+        "author_action_sequence",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "EditorFlowDraftReopened": {
+      "additionalProperties": false,
+      "properties": {
+        "author_action_sequence": {
+          "type": "string"
+        },
+        "closure": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "draft_id": {
+          "type": "string"
+        },
+        "draft_revision_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "event_kind": {
+          "type": "string"
+        },
+        "handler_receipt": {
+          "$ref": "#/$defs/DraftReopenReceipt"
+        },
+        "payload_digest": {
+          "type": "string"
+        },
+        "prior_closure": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/RefusedEditDraftSource"
+        },
+        "source_author_action_sequence": {
+          "type": "string"
+        },
+        "source_close_event_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_id",
+        "event_kind",
+        "event_id",
+        "project_scope",
+        "draft_id",
+        "draft_revision_id",
+        "payload_digest",
+        "source_close_event_id",
+        "prior_closure",
+        "closure",
+        "source",
+        "handler_receipt",
+        "source_author_action_sequence",
         "author_action_sequence",
         "created_at"
       ],
@@ -495,6 +603,16 @@
         "payload_digest_profile": {
           "const": "storyos.refused-edit-payload.jcs.v1",
           "type": "string"
+        },
+        "reopen_event": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EditorFlowDraftReopened"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "retention_state": {
           "enum": [

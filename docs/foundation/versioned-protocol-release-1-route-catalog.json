@@ -6027,10 +6027,16 @@
       "schema_id": "storyos.event.editor-flow-draft-reopened.v1",
       "event_kind": "editor_flow_draft_reopened",
       "semantic_owner": "core",
-      "wire_profile": "storyos.project-activity.v1",
+      "wire_profile": "storyos.artifact-lifecycle.v1",
       "description": "Reopens a retained source Draft only through the exact typed undo compensation.",
       "positive_fixture": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.positive.v1",
-      "negative_fixture": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1"
+      "negative_fixture": "storyos.golden.storyos.event.editor-flow-draft-reopened.v1.negative.v1",
+      "record_shape": {
+        "scope": "exact_project",
+        "source": "exact_root_undo_handler_receipt_compensation",
+        "delivery": "undoLatestAuthorAction_and_getRefusedEditDraft",
+        "schema_path": "generated/json-schema/storyos-public-release-1/editor-flow-draft-reopened.schema.json"
+      }
     },
     {
       "schema_id": "storyos.event.recovery-draft-created.v1",

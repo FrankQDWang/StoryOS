@@ -64,6 +64,10 @@ pub(super) enum UndoReceiptAuthority {
     Structure {
         commit_id: String,
     },
+    Draft {
+        draft_id: String,
+        event_id: String,
+    },
     None,
 }
 
@@ -122,6 +126,7 @@ async fn persist_undo(
         Some(
             ObservedFrontier::Structure(_)
             | ObservedFrontier::CurrentChapter(_)
+            | ObservedFrontier::DraftClose(_)
             | ObservedFrontier::Barrier { .. },
         )
         | None => {
@@ -169,6 +174,9 @@ async fn persist_undo(
                 )
                 .await
             }
+            Some(ObservedFrontier::DraftClose(frontier)) => {
+                crate::undo_draft_close::persist_compensation(client, command, frontier).await
+            }
             Some(ObservedFrontier::Barrier { .. }) | None => {
                 Err(UndoLatestAuthorActionError::BindingConflict)
             }
@@ -185,6 +193,9 @@ async fn persist_undo(
                             "frontier_mismatch"
                         }
                         UndoLatestAuthorActionConflict::WrongTargetHead => "wrong_target_head",
+                        UndoLatestAuthorActionConflict::SourceBindingChanged => {
+                            "source_binding_changed"
+                        }
                     },
                     UndoLatestAuthorActionSettlementEffect::Conflicted { reason },
                 ),
@@ -203,6 +214,9 @@ async fn persist_undo(
                             "no_frontier"
                         }
                         storyos_core::UndoLatestAuthorActionUnavailable::Barrier => "barrier",
+                        storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable => {
+                            "source_unavailable"
+                        }
                     },
                     UndoLatestAuthorActionSettlementEffect::Unavailable { reason },
                 ),
@@ -619,7 +633,15 @@ pub(super) async fn insert_undo_receipt(
             commit_id,
         } => (vec![revision_id.clone()], vec![commit_id.clone()]),
         UndoReceiptAuthority::Structure { commit_id } => (Vec::new(), vec![commit_id.clone()]),
-        UndoReceiptAuthority::None => (Vec::new(), Vec::new()),
+        UndoReceiptAuthority::None | UndoReceiptAuthority::Draft { .. } => (Vec::new(), Vec::new()),
+    };
+    let (draft_refs, event_refs) = match &authority {
+        UndoReceiptAuthority::Draft { draft_id, event_id } => {
+            (vec![draft_id.clone()], vec![event_id.clone()])
+        }
+        UndoReceiptAuthority::None
+        | UndoReceiptAuthority::Prose { .. }
+        | UndoReceiptAuthority::Structure { .. } => (Vec::new(), Vec::new()),
     };
     let created_at = client
         .query_one(
@@ -633,7 +655,7 @@ pub(super) async fn insert_undo_receipt(
                      $5::text::uuid, 'undoLatestAuthorAction', $6, $7::text::uuid,
                      'author_command_admission', ARRAY[$8::text::uuid], ARRAY[$9::text::uuid],
                      ARRAY[$10::text::uuid], $11::text[]::uuid[], '{}'::uuid[],
-                     $12::text[]::uuid[], '{}'::text[], '{}'::text[], '{}'::text[],
+                     $12::text[]::uuid[], $15::text[], $16::text[], '{}'::text[],
                      $13, $14::text::jsonb)
           RETURNING to_char(created_at AT TIME ZONE 'UTC',
                             'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"')",
@@ -652,6 +674,8 @@ pub(super) async fn insert_undo_receipt(
                 &commit_ids,
                 &result_kind,
                 &result_payload,
+                &draft_refs,
+                &event_refs,
             ],
         )
         .await
@@ -760,7 +784,7 @@ async fn read_undo_settlement(
                         compensation_snapshot.snapshot_id,
                         compensation_snapshot.project_activity_position,
                         idempotency.acknowledgement_format,
-                        idempotency.response_project::text
+                        idempotency.response_project::text, receipt.result_payload::text
                    FROM storyos.domain_receipts AS receipt
                    JOIN storyos.author_command_admission_settlements AS settlement
                      ON (settlement.owner_user_id, settlement.project_id,
@@ -848,6 +872,28 @@ async fn read_undo_settlement(
         let result_kind = row.get::<_, String>(3);
         let reason = row.get::<_, Option<String>>(4);
         let effect = match (result_kind.as_str(), reason.as_deref()) {
+            ("draft_closure_changed", None) => {
+                let payload: serde_json::Value = serde_json::from_str(&row.get::<_, String>(17))
+                    .map_err(|error| UndoLatestAuthorActionError::Unavailable(Box::new(error)))?;
+                let event_id = payload["event_id"]
+                    .as_str()
+                    .ok_or(UndoLatestAuthorActionError::BindingConflict)?;
+                UndoLatestAuthorActionSettlementEffect::CompensatedDraft {
+                    event: Box::new(
+                        crate::undo_draft_close::read_event(
+                            &client,
+                            &command.project_scope,
+                            event_id,
+                        )
+                        .await?,
+                    ),
+                    author_undo_frontier_sequence: payload["author_undo_frontier_sequence"]
+                        .as_str()
+                        .map(str::parse)
+                        .transpose()
+                        .map_err(undo_parse_error)?,
+                }
+            }
             ("authoritative_applied", None) => {
                 let source_sequence = row
                     .get::<_, Option<String>>(6)
@@ -923,6 +969,16 @@ async fn read_undo_settlement(
             ("conflicted", Some("wrong_target_head")) => {
                 UndoLatestAuthorActionSettlementEffect::Conflicted {
                     reason: UndoLatestAuthorActionConflict::WrongTargetHead,
+                }
+            }
+            ("conflicted", Some("source_binding_changed")) => {
+                UndoLatestAuthorActionSettlementEffect::Conflicted {
+                    reason: UndoLatestAuthorActionConflict::SourceBindingChanged,
+                }
+            }
+            ("refused", Some("source_unavailable")) => {
+                UndoLatestAuthorActionSettlementEffect::Unavailable {
+                    reason: storyos_core::UndoLatestAuthorActionUnavailable::SourceUnavailable,
                 }
             }
             ("refused", Some("no_frontier")) => {

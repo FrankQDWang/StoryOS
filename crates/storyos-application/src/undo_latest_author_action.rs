@@ -30,6 +30,10 @@ pub struct UndoLatestAuthorActionSettlement {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum UndoLatestAuthorActionSettlementEffect {
+    CompensatedDraft {
+        event: Box<storyos_contracts::EditorFlowDraftReopened>,
+        author_undo_frontier_sequence: Option<u64>,
+    },
     Compensated {
         source_sequence: u64,
         author_action_sequence: u64,

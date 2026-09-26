@@ -557,4 +557,6 @@ mod set_current_chapter_tests;
 mod undo_latest_author_action_tests;
 
 mod close_editor_flow_draft;
-pub use close_editor_flow_draft::{CloseEditorFlowDraftResult, close_editor_flow_draft};
+pub use close_editor_flow_draft::{
+    CloseEditorFlowDraftResult, DraftCloseSource, close_editor_flow_draft,
+};

@@ -1298,6 +1298,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "storyos-application",
+ "storyos-contracts",
  "storyos-core",
  "tokio",
  "tokio-postgres",

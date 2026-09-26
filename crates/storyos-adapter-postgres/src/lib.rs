@@ -149,6 +149,7 @@ mod stream_proposal_pause;
 mod structural_authority_settlement;
 mod takeover;
 mod undo_current_chapter;
+mod undo_draft_close;
 mod undo_frontier;
 mod undo_latest_author_action;
 mod undo_proposal;

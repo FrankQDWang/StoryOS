@@ -43,6 +43,7 @@ pub(super) async fn get_refused_edit_draft(
         correlation_id: Uuid::now_v7().to_string(),
         project_scope: contract_scope(&scope),
         draft: contracts::RefusedEditDraftInspect {
+            reopen_event: record.reopen_event,
             closure_event: record
                 .closure_event
                 .as_ref()
