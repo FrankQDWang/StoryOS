@@ -14,7 +14,7 @@ import type {
   CreateEditorSessionRequest, RejectProposalOperationsRequest, SelectedEditSource,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
-  stopStoryOSServer as stopRealServer } from "../support/node-integration.ts";
+  stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
 import { zipStoreFiles } from "../support/archive.ts";
 import { BINDING, PROSE, USER_A, UUID_V7, challenged, drainLeftoverWork, id,
   prepare, settleOnce, startRealServer } from "../support/acceptance.ts";
@@ -207,6 +207,52 @@ function replaceUnit(
   };
 }
 
+function mixedRequest(
+  opened: Awaited<ReturnType<typeof getProposal>>,
+  writer: Awaited<ReturnType<typeof writePassage>>,
+  ns: string,
+): ApplyAuthorEditRequest {
+  const request = replaceUnit(8, 26, "New passage", writer, ns, opened.proposal.revision_id);
+  request.author_edit_units = [{ normalized_primitives: [{ kind: "replace_structured_selection",
+    replacement: [{ block_kind: "paragraph", text: "New passage" }] }],
+    selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 8, to: 26,
+      ordered_selection: { anchor: { source_index: 0, source_offset: 8 },
+        head: { source_index: 2, source_offset: 26 }, sources: [
+          { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
+            coordinate_profile: "prosemirror-token-utf16.v1", from: 8, to: 10,
+            block_kind: "paragraph", source_text: PROSE },
+          { owner: { kind: "proposal", proposal_id: opened.proposal.proposal_id,
+            operation_id: opened.proposal.operation_id, revision_id: opened.proposal.revision_id,
+            manuscript_block_id: opened.proposal.manuscript_block_id },
+            coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: INLINE_CANDIDATE.length,
+            block_kind: "paragraph", source_text: INLINE_CANDIDATE },
+          { owner: { kind: "manuscript", manuscript_block_id: opened.proposal.manuscript_block_id },
+            coordinate_profile: "prosemirror-token-utf16.v1", from: 24, to: 26,
+            block_kind: "paragraph", source_text: PROSE },
+        ] } } }];
+  return request;
+}
+
+async function retainedState(projectId: string) {
+  const tables = ["authoritative_heads", "authoritative_revisions", "authoritative_commits",
+    "author_action_entries", "project_activity_events", "scope_counters", "proposals",
+    "proposal_heads", "proposal_revisions", "proposal_operations", "draft_artifacts",
+    "draft_artifact_revisions", "draft_lifecycle_events"];
+  return JSON.parse(await queryPostgres(`SELECT jsonb_build_object(${tables.map((table) =>
+    `'${table}', (SELECT coalesce(jsonb_agg(to_jsonb(record) ORDER BY to_jsonb(record)::text), '[]'::jsonb)
+      FROM storyos.${table} AS record WHERE record.owner_user_id = '${USER_A}'::uuid
+      AND record.project_id = '${projectId}'::uuid)`).join(",")})::text`));
+}
+
+async function sendMixed(baseUrl: string, prepared: Awaited<ReturnType<typeof prepare>>,
+  request: ApplyAuthorEditRequest, key: string) {
+  return challenged(baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+    "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+    await digestApplyAuthorEdit(request), key, (antiForgery) => applyAuthorEdit({ baseUrl,
+      projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, request,
+      idempotencyKey: key, antiForgery }));
+}
+
 test("a protected mixed replacement retains complete content after response loss, replay, and restart", async () => {
   let started = await startRealServer();
   try {
@@ -347,7 +393,7 @@ test("a protected mixed replacement retains complete content after response loss
     const revisions = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_artifact_revisions.json")));
     const events = JSON.parse(new TextDecoder().decode(files.get("canonical/draft_lifecycle_events.json")));
     const rowScope = { owner_user_id: USER_A, project_id: prepared.projectId };
-    assert.deepEqual(drafts, [{ ...rowScope, draft_id: queried.draft.draft_id, kind: "refused_edit",
+    assert.deepEqual(drafts, [{ ...rowScope, draft_id: queried.draft.draft_id, draft_kind: "refused_edit",
       current_revision_id: queried.draft.draft_revision_id, closure: "open", retention_state: "retained" }]);
     const revisionCreatedAt = revisions[0].created_at;
     assert.equal(new Date(revisionCreatedAt).toISOString(), queried.draft.creation.created_at);
@@ -359,7 +405,7 @@ test("a protected mixed replacement retains complete content after response loss
       event_kind: "refused_edit_draft_created", draft_id: queried.draft.draft_id,
       revision_id: queried.draft.draft_revision_id, receipt_id: result.receipt.receipt_id,
       author_command_admission_id: result.author_command_admission_id, command_id: result.command_id,
-      result_kind: "refused_to_draft", created_at: revisionCreatedAt }]);
+      receipt_result_kind: "refused_to_draft", created_at: revisionCreatedAt }]);
     for (const content of files.values()) assert.ok(!new TextDecoder().decode(content).includes(originalNonce));
   } finally { await stopRealServer(started.server); }
 });
@@ -568,4 +614,198 @@ test("edge input stays authoritative, reserved-block change conflicts, and Rejec
   } finally {
     await stopRealServer(started.server);
   }
+});
+
+
+test("changed Heads, source identities, order, text, and ranges create no Draft or authority change", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0a111"), "Invalid Mixed Proof", "e0a2");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0a3");
+    const before = await retainedState(prepared.projectId);
+    const mutations: ((request: ApplyAuthorEditRequest) => void)[] = [
+      (request) => { request.expected_authoritative_revision_id = id("e0aff1"); },
+      (request) => { request.expected_proposal_head_revision_ids = []; },
+      (request) => { request.author_edit_units[0]!.selection_snapshot.ordered_selection!.sources[1]!.source_text = "altered"; },
+      (request) => { request.author_edit_units[0]!.selection_snapshot.ordered_selection!.sources.reverse(); },
+      (request) => { request.author_edit_units[0]!.selection_snapshot.ordered_selection!.sources.splice(1, 1); },
+      (request) => { const owner = request.author_edit_units[0]!.selection_snapshot.ordered_selection!.sources[1]!.owner;
+        if (owner.kind === "proposal") owner.revision_id = id("e0aff2"); },
+      (request) => { request.author_edit_units[0]!.selection_snapshot.ordered_selection!.sources[1]!.to += 1; },
+    ];
+    for (const [index, mutate] of mutations.entries()) {
+      const request = mixedRequest(opened, writer, `e0a4${index}`);
+      request.local_intent_sequence = String(index + 2);
+      mutate(request);
+      if (index <= 1) {
+        await assert.rejects(() => sendMixed(started.baseUrl, prepared, request, id(`e0a5${index}`)),
+          (error) => requireStoryOSProtocolError(error).status === (index === 0 ? 409 : 422));
+      } else {
+        const result = await sendMixed(started.baseUrl, prepared, request, id(`e0a5${index}`));
+        assert.equal(result.effect.kind, index === 3 ? "refused" : "conflicted");
+      }
+      assert.deepEqual(await retainedState(prepared.projectId), before);
+    }
+    const staleWriter = mixedRequest(opened, writer, "e0a60");
+    staleWriter.writer_generation = "2";
+    staleWriter.local_intent_sequence = "9";
+    await assert.rejects(() => sendMixed(started.baseUrl, prepared, staleWriter, id("e0a61")),
+      (error) => requireStoryOSProtocolError(error).status === 412);
+    assert.deepEqual(await retainedState(prepared.projectId), before);
+  } finally { await stopRealServer(started.server); }
+});
+
+
+test("a pre-commit database fault rolls back all Draft records and GET settles only the retained Admission", async () => {
+  const started = await startRealServer();
+  const functionName = "refused_edit_test_precommit_fault";
+  let faultInstalled = false;
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0b111"), "Refused Draft Atomic Fault", "e0b2");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0b3");
+    const before = await retainedState(prepared.projectId);
+    await queryPostgres(`CREATE FUNCTION storyos.${functionName}() RETURNS trigger LANGUAGE plpgsql AS $fault$
+      BEGIN IF NEW.project_id = '${prepared.projectId}'::uuid THEN
+        RAISE EXCEPTION 'Controlled failure before Refused Draft commit'; END IF; RETURN NULL; END $fault$;
+      CREATE CONSTRAINT TRIGGER ${functionName} AFTER INSERT ON storyos.draft_lifecycle_events
+        DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION storyos.${functionName}();`);
+    faultInstalled = true;
+    const request = mixedRequest(opened, writer, "e0b4");
+    const key = id("e0b46");
+    let nonce = "";
+    const digest = await digestApplyAuthorEdit(request);
+    await assert.rejects(() => challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/manuscript/author-edits", request.command_schema,
+      digest, key, (antiForgery) => { nonce = antiForgery; return applyAuthorEdit({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, fetchImpl: prepared.fetchImpl,
+        request, idempotencyKey: key, antiForgery }); }),
+      (error) => requireStoryOSProtocolError(error).status === 503);
+    assert.deepEqual(await retainedState(prepared.projectId), before);
+    assert.equal(await queryPostgres(`SELECT count(*)::text FROM storyos.domain_receipts
+      WHERE project_id = '${prepared.projectId}'::uuid AND idempotency_key = '${key}'::uuid`), "0");
+    await queryPostgres(`DROP TRIGGER ${functionName} ON storyos.draft_lifecycle_events;
+      DROP FUNCTION storyos.${functionName}();`);
+    faultInstalled = false;
+    const recovered = await getApplyAuthorEditOutcome({ baseUrl: started.baseUrl,
+      projectId: prepared.projectId, idempotencyKey: key, antiForgery: nonce, fetchImpl: prepared.fetchImpl });
+    if (recovered.outcome.outcome_kind !== "committed") throw new Error("expected committed outcome");
+    const result = recovered.outcome.response;
+    if (result.effect.kind !== "refused_to_draft")
+      throw new Error("expected explicit GET reconciliation to settle the original retained intent");
+    const draft = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
+    assert.deepEqual(draft.draft.payload.author_edit_units, request.author_edit_units);
+    assert.equal(draft.draft.creation.source.author_command_admission_id, result.author_command_admission_id);
+    const after = await retainedState(prepared.projectId);
+    assert.deepEqual({ ...after, draft_artifacts: [], draft_artifact_revisions: [], draft_lifecycle_events: [] }, before);
+    assert.equal(after.draft_artifacts.length, 1);
+    assert.equal(after.draft_artifact_revisions.length, 1);
+    assert.equal(after.draft_lifecycle_events.length, 1);
+  } finally {
+    if (faultInstalled) await queryPostgres(`DROP TRIGGER ${functionName} ON storyos.draft_lifecycle_events;
+      DROP FUNCTION storyos.${functionName}();`);
+    await stopRealServer(started.server);
+  }
+});
+
+test("243 ordered sources and two distinct Proposal owners retain a near-1-MiB structured request", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0c111"), "Bounded Refused Draft", "e0c2");
+    const writer = await writePassage(started.baseUrl, prepared.fetchImpl, prepared.projectId, "e0c3");
+    const initial = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    const firstBlock = initial.chapter.current_revision.blocks[0]!;
+    for (const [batch, count] of [240, 2].entries()) {
+      const request = replaceUnit(0, 0, "", writer, `e0c4${batch}`, id("e0cff1"));
+      request.expected_proposal_head_revision_ids = [];
+      request.observed_ownership_partition = "authoritative";
+      request.author_edit_units = [{ normalized_primitives: Array.from({ length: count }, (_, index) => ({
+        kind: "split_block" as const, manuscript_block_id: firstBlock.manuscript_block_id,
+        offset: PROSE.length, new_manuscript_block_id: id(`e0c${batch}${index.toString(16).padStart(3, "0")}`),
+      })), selection_snapshot: { coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: 0 } }];
+      const result = await sendMixed(started.baseUrl, prepared, request, id(`e0c5${batch}`));
+      if (result.effect.kind !== "authoritative_applied") throw new Error("expected lawful Block splits");
+      writer.authoritativeRevisionId = result.effect.authoritative_revision.revision_id;
+      writer.nextSequence = String(batch + 3);
+    }
+    const before = await getChapter({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl });
+    assert.equal(before.chapter.current_revision.blocks.length, 243);
+    const proposals: Awaited<ReturnType<typeof getProposal>>[] = [];
+    for (const index of [0, 1]) {
+      const request = phraseRequest(prepared.chapterId, id(`e0c6${index}`));
+      request.create_agent_run_input.author_message.text = "Revise this passage: keep the voice.";
+      const key = id(`e0c7${index}`);
+      const admitted = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+        "/api/v1/projects/{project_id}/agent-runs", request.command_schema,
+        await digestCreateAgentRun(request), key, (antiForgery) => createAgentRun({ baseUrl: started.baseUrl,
+          projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, request, idempotencyKey: key, antiForgery }));
+      if (admitted.effect.kind !== "admitted") throw new Error("expected admitted run");
+      await settleOnce();
+      const queried = await getAgentRun({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        runId: admitted.effect.run_id, fetchImpl: prepared.fetchImpl });
+      if (queried.decision.kind !== "prose_change" || queried.decision.opened_proposal.kind !== "present")
+        throw new Error("expected public pending Proposal");
+      proposals.push(await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+        proposalId: queried.decision.opened_proposal.proposal_id, fetchImpl: prepared.fetchImpl }));
+    }
+    assert.notEqual(proposals[0]!.proposal.proposal_id, proposals[1]!.proposal.proposal_id);
+    const sources: SelectedEditSource[] = before.chapter.current_revision.blocks.map((block) => {
+      const proposal = proposals.find((item) => item.proposal.manuscript_block_id === block.manuscript_block_id)?.proposal;
+      return proposal === undefined
+        ? { owner: { kind: "manuscript", manuscript_block_id: block.manuscript_block_id },
+          coordinate_profile: "prosemirror-token-utf16.v1", from: 0, to: block.text.length,
+          block_kind: block.block_kind, source_text: block.text }
+        : { owner: { kind: "proposal", proposal_id: proposal.proposal_id, operation_id: proposal.operation_id,
+          revision_id: proposal.revision_id, manuscript_block_id: block.manuscript_block_id },
+          coordinate_profile: "storyos.editor.utf16-code-unit.v1", from: 0, to: proposal.candidate_text.length,
+          block_kind: block.block_kind, source_text: proposal.candidate_text };
+    });
+    const request = replaceUnit(0, 0, "", writer, "e0c8", proposals[0]!.proposal.revision_id);
+    request.expected_proposal_head_revision_ids = proposals.map((item) => item.proposal.revision_id).sort();
+    const replacement = [{ block_kind: "paragraph" as const, text: "" },
+      { block_kind: "heading" as const, text: "A retained alternative ✨" }];
+    request.author_edit_units = [{ normalized_primitives: [{ kind: "replace_structured_selection", replacement }],
+      selection_snapshot: { coordinate_profile: "storyos.editor.ordered-source.v1", from: 0, to: 0,
+        ordered_selection: { sources, anchor: { source_index: 0, source_offset: 0 },
+          head: { source_index: sources.length - 1, source_offset: 0 } } } }];
+    const wholeBodyCeiling = 1_048_576;
+    const remaining = wholeBodyCeiling - Buffer.byteLength(JSON.stringify(request));
+    replacement[0]!.text = "🙂".repeat(Math.floor(remaining / 4)) + "x".repeat(remaining % 4);
+    assert.equal(Buffer.byteLength(JSON.stringify(request)), wholeBodyCeiling);
+    const stateBefore = await retainedState(prepared.projectId);
+    const result = await sendMixed(started.baseUrl, prepared, request, id("e0c86"));
+    if (result.effect.kind !== "refused_to_draft") throw new Error("expected complete bounded Draft");
+    const queried = await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: result.effect.draft_id, fetchImpl: prepared.fetchImpl });
+    const expectedPayload = { schema_revision: "storyos.refused-edit-payload.v1", chapter_id: prepared.chapterId,
+      expected_authoritative_revision_id: writer.authoritativeRevisionId,
+      expected_proposal_head_revision_ids: request.expected_proposal_head_revision_ids,
+      target_refs: [`manuscript:${prepared.chapterId}`], author_edit_units: request.author_edit_units,
+      undo_group_id: id("e0c84"), completed_intent_record_id: id("e0c85"), local_intent_sequence: "4" };
+    assert.deepEqual(queried.draft.payload, expectedPayload);
+    const canonicalPayload = JSON.stringify(expectedPayload, (_key, value: unknown) =>
+      value !== null && typeof value === "object" && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)) : value);
+    assert.equal(queried.draft.payload_digest, createHash("sha256").update(canonicalPayload).digest("hex"));
+    const stateAfter = await retainedState(prepared.projectId);
+    assert.deepEqual({ ...stateAfter, draft_artifacts: [], draft_artifact_revisions: [], draft_lifecycle_events: [] }, stateBefore);
+    const oversized = structuredClone(request);
+    oversized.correlation_id = id("e0c91");
+    oversized.completed_intent_record_id = id("e0c92");
+    oversized.local_intent_sequence = "5";
+    const primitive = oversized.author_edit_units[0]!.normalized_primitives[0]!;
+    if (primitive.kind !== "replace_structured_selection") throw new Error("expected structured replacement");
+    primitive.replacement[0]!.text += "x";
+    assert.equal(Buffer.byteLength(JSON.stringify(oversized)), wholeBodyCeiling + 1);
+    await assert.rejects(() => sendMixed(started.baseUrl, prepared, oversized, id("e0c93")),
+      (error) => requireStoryOSProtocolError(error).status === 413);
+    assert.deepEqual(await retainedState(prepared.projectId), stateAfter);
+  } finally { await stopRealServer(started.server); }
 });

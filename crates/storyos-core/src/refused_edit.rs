@@ -122,6 +122,7 @@ pub(super) fn classify(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
             .remove(&block.manuscript_block_id)
             .unwrap_or_default();
         proposals.sort_by_key(|proposal| proposal.anchors.first().map_or(0, |anchor| anchor.from));
+        let has_proposals = !proposals.is_empty();
         let mut cursor = 0;
         let end = block.text.encode_utf16().count() as u32;
         let manuscript = ProjectedSource {
@@ -211,7 +212,7 @@ pub(super) fn classify(command: &ApplyAuthorEdit) -> ApplyAuthorEditResult {
             });
             cursor = to;
         }
-        if cursor < end || (cursor == 0 && end == 0) {
+        if cursor < end || (!has_proposals && end == 0) {
             projection.push(ProjectedSource {
                 from: cursor,
                 ..manuscript
