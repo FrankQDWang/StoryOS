@@ -76,6 +76,7 @@ const EXPORT_TABLES: &[(&str, &str)] = &[
         "conversation_memory_settings",
         "canonical/conversation_memory_settings.json",
     ),
+    ("draft_close_events", "canonical/draft_close_events.json"),
     ("domain_receipts", "canonical/domain_receipts.json"),
     (
         "editor_session_base_snapshots",

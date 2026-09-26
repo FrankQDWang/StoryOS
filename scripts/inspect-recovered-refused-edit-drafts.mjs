@@ -20,7 +20,7 @@ for (const expected of expectations) {
   const tableEntries = Object.keys(expected.state).filter((table) => table !== "domain_receipts");
   const allowed = new Set(["projects", "authoritative_heads", "authoritative_revisions", "authoritative_commits",
     "author_action_entries", "project_activity_events", "scope_counters", "proposals", "proposal_heads",
-    "proposal_revisions", "proposal_operations", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events"]);
+    "proposal_revisions", "proposal_operations", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events"]);
   for (const table of tableEntries) assert.ok(allowed.has(table));
   const state = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X", "-v", "ON_ERROR_STOP=1",
     "-U", "postgres", "-Atc", `SELECT jsonb_build_object(${tableEntries.map((table) =>
@@ -28,9 +28,8 @@ for (const expected of expectations) {
         FROM storyos.${table} AS record WHERE record.owner_user_id='${expected.ownerUserId}'::uuid
         AND record.project_id='${expected.projectId}'::uuid)`).join(",")},
       'domain_receipts', (SELECT coalesce(jsonb_agg(to_jsonb(receipt) ORDER BY receipt.receipt_id), '[]'::jsonb)
-        FROM storyos.domain_receipts AS receipt JOIN storyos.draft_lifecycle_events AS event
-        USING (owner_user_id,project_id,receipt_id) WHERE event.owner_user_id='${expected.ownerUserId}'::uuid
-        AND event.project_id='${expected.projectId}'::uuid))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
+        FROM storyos.domain_receipts AS receipt WHERE receipt.owner_user_id='${expected.ownerUserId}'::uuid
+        AND receipt.project_id='${expected.projectId}'::uuid AND receipt.command_kind IN ('applyAuthorEdit','closeEditorFlowDraft') AND cardinality(receipt.draft_artifact_refs)>0))::text`], { encoding: "utf8", maxBuffer: 4 * 1024 * 1024 }));
   assert.deepEqual(state, expected.state);
   for (const retained of expected.drafts) {
     const query = () => getRefusedEditDraft({ baseUrl, projectId: expected.projectId,

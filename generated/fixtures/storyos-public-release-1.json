@@ -1,8 +1,13 @@
 {
-  "corpus_digest": "sha256:2c681defe4dcd56de2234546ab4b5c23905c0821aaf91abf2be688091292270e",
+  "corpus_digest": "sha256:04c8adb2120fe35d1193c163507e3b87028c86deb7e0a99a3271c97dc97b0dd6",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
+      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json",
+      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json",
+      "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json",
       "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.json",
       "generated/golden-wire/storyos-public-release-1/refused-edit-draft-created.invalid.json",
       "generated/golden-wire/storyos-public-release-1/get-protocol-profile.json",
@@ -140,6 +145,36 @@
     ]
   },
   "fixtures": [
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.closeEditorFlowDraft.positive.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.closeEditorFlowDraft.invalid.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.closeEditorFlowDraft.boundary.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.positive.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.storyos.event.editor-flow-draft-closed.v1.negative.v1",
+      "operation_id": "closeEditorFlowDraft",
+      "path": "generated/golden-wire/storyos-public-release-1/editor-flow-draft-closed.invalid.json"
+    },
     {
       "classification": "positive",
       "fixture_id": "storyos.golden.storyos.event.refused-edit-draft-created.v1.positive.v1",

@@ -345,3 +345,13 @@ pub use release1_refused_edit_draft::{
     GetRefusedEditDraftResponse, REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID, RefusedEditDraftCreated,
     RefusedEditDraftCreator, RefusedEditDraftInspect, RefusedEditDraftSource,
 };
+
+mod release1_close_editor_flow_draft;
+mod release1_close_editor_flow_draft_artifacts;
+pub use release1_close_editor_flow_draft::{
+    CLOSE_EDITOR_FLOW_DRAFT_DIGEST_PROFILE, CLOSE_EDITOR_FLOW_DRAFT_PATH,
+    CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID, CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
+    CloseEditorFlowDraftEffect, CloseEditorFlowDraftInput, CloseEditorFlowDraftRequest,
+    CloseEditorFlowDraftResponse, DraftCloseRefusal, EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,
+    EditorFlowDraftClosed,
+};

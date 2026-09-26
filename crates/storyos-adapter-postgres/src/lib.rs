@@ -107,6 +107,7 @@ mod author_edit_proposal;
 mod author_edit_replay;
 mod author_edit_settlement;
 mod chapter_query;
+mod close_editor_flow_draft;
 mod command_response_assistance;
 mod command_response_project;
 mod connection_pool;

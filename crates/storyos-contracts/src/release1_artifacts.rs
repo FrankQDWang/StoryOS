@@ -41,6 +41,8 @@ use crate::release1_author_edit::APPLY_AUTHOR_EDIT;
 use crate::release1_author_edit_artifacts as author_edit_artifacts;
 use crate::release1_author_edit_outcome::GET_APPLY_AUTHOR_EDIT_OUTCOME;
 use crate::release1_author_edit_outcome_artifacts as author_edit_outcome_artifacts;
+use crate::release1_close_editor_flow_draft::CLOSE_EDITOR_FLOW_DRAFT;
+use crate::release1_close_editor_flow_draft_artifacts as close_draft_artifacts;
 use crate::release1_create_chapter::CREATE_CHAPTER;
 use crate::release1_create_chapter_artifacts as create_chapter_artifacts;
 use crate::release1_create_project::{CREATE_PROJECT, CREATE_PROJECT_CHALLENGE};
@@ -168,9 +170,9 @@ const GET_EDITOR_SESSION_FIXTURE_PATHS: [&str; 3] = [
 ];
 const REVIEW_CATALOG_PATH: &str = "docs/foundation/versioned-protocol-release-1-route-catalog.json";
 const REVIEW_CATALOG_SHA256: &str =
-    "sha256:5cb21822148cf1de4c3a1c28ff3816eff9408721d89bd7d16d88f699a3ab9648";
+    "sha256:8df229a19aa2d4c4be040fac6b5dbcaa4164c63a352e4f5c669d6456134c9add";
 const REVIEWED_CONTRACT_GRAPH_SHA256: &str =
-    "sha256:f67167faec4d98aeb6b521e64f479a9fd4157cb90369e5d16e0f0ebfedb1382b";
+    "sha256:afc8fc5ffe7a3503d2b99ee349f6f8f4e4538cffb37cfc7a6946f5de16363350";
 
 type GeneratedFile = (&'static str, Vec<u8>);
 
@@ -329,6 +331,21 @@ fn release1_artifact_assembly() -> Release1ArtifactAssembly {
     let undo_latest_author_action_response_schema =
         undo_latest_author_action_artifacts::response_schema_bytes();
     let schemas = vec![
+        (
+            crate::CLOSE_EDITOR_FLOW_DRAFT_REQUEST_SCHEMA_ID,
+            close_draft_artifacts::REQUEST_SCHEMA_PATH,
+            close_draft_artifacts::request_schema_bytes(),
+        ),
+        (
+            crate::CLOSE_EDITOR_FLOW_DRAFT_RESPONSE_SCHEMA_ID,
+            close_draft_artifacts::RESPONSE_SCHEMA_PATH,
+            close_draft_artifacts::response_schema_bytes(),
+        ),
+        (
+            crate::EDITOR_FLOW_DRAFT_CLOSED_SCHEMA_ID,
+            close_draft_artifacts::EVENT_SCHEMA_PATH,
+            close_draft_artifacts::event_schema_bytes(),
+        ),
         (
             crate::REFUSED_EDIT_DRAFT_CREATED_SCHEMA_ID,
             refused_draft_artifacts::EVENT_SCHEMA_PATH,
@@ -951,6 +968,7 @@ fn contract_graph_bytes() -> Vec<u8> {
             command_operation_graph(&PAUSE_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_pauseable", "current_fence_generation"]),
             command_operation_graph(&CANCEL_AGENT_RUN, &["server_derived_project_scope", "run_scope_join", "current_run_state_cancellable", "current_fence_generation"]),
             operation_graph(&GET_AGENT_RUN, &["run_scope_join", "run_projection_watermark_or_snapshot"]),
+            command_operation_graph(&CLOSE_EDITOR_FLOW_DRAFT, &["exact_scope", "current_writer", "exact_retained_open_source", "explicit_editor_command"]),
             operation_graph(&GET_REFUSED_EDIT_DRAFT, &["exact_scope", "retained_revision_digest", "immutable_creation_source"]),
             operation_graph(&GET_PROPOSAL, &["proposal_scope_join", "exact_revision_or_current_projection", "redaction_profile"]),
             command_operation_graph(&ACCEPT_PROPOSAL, &["server_derived_project_scope", "project_active", "editor_session_writer_generation", "current_open_ready_proposal_revision", "valid_validation_receipt", "selected_pending_operations", "expected_target_revisions", "acceptance_admission"]),
@@ -1084,6 +1102,7 @@ fn openapi_bytes() -> Vec<u8> {
     paths.push_str(&agent_run_artifacts::openapi());
     paths.push_str(&agent_run_control_artifacts::openapi());
     paths.push_str(&refused_draft_artifacts::openapi());
+    paths.push_str(&close_draft_artifacts::openapi());
     paths.push_str(&proposal_artifacts::openapi());
     paths.push_str(&accept_proposal_artifacts::openapi());
     paths.push_str(&reject_proposal_operations_artifacts::openapi());
@@ -1283,6 +1302,7 @@ fn implemented_operation_ids() -> Vec<&'static str> {
         CANCEL_AGENT_RUN.operation_id,
         GET_AGENT_RUN.operation_id,
         GET_REFUSED_EDIT_DRAFT.operation_id,
+        CLOSE_EDITOR_FLOW_DRAFT.operation_id,
         GET_PROPOSAL.operation_id,
         ACCEPT_PROPOSAL.operation_id,
         REJECT_PROPOSAL_OPERATIONS.operation_id,
@@ -1436,7 +1456,7 @@ fn typescript_client_bytes() -> Vec<u8> {
         project_assistance_artifacts::typescript_client_source(),
         agent_run_artifacts::typescript_client_source(),
         agent_run_control_artifacts::typescript_client_source(),
-        proposal_artifacts::typescript_client_source() + &refused_draft_artifacts::typescript_client_source(),
+        proposal_artifacts::typescript_client_source() + &refused_draft_artifacts::typescript_client_source() + &close_draft_artifacts::typescript_client_source(),
         accept_proposal_client,
         reject_proposal_operations_client,
         reopen_rejected_operations_client,
@@ -1522,6 +1542,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(&agent_run_control_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
     declaration.push_str(&refused_draft_artifacts::typescript_type_declarations());
+    declaration.push_str(&close_draft_artifacts::typescript_type_declarations());
     declaration.push_str(&proposal_artifacts::typescript_type_declarations());
     declaration.push_str("\n\n");
     declaration.push_str(&accept_proposal_artifacts::typescript_type_declarations());
@@ -1553,6 +1574,7 @@ fn typescript_declaration_bytes() -> Vec<u8> {
     declaration.push_str(agent_run_artifacts::typescript_declarations());
     declaration.push_str(agent_run_control_artifacts::typescript_declarations());
     declaration.push_str(refused_draft_artifacts::typescript_declarations());
+    declaration.push_str(close_draft_artifacts::typescript_declarations());
     declaration.push_str(proposal_artifacts::typescript_declarations());
     declaration.push_str(accept_proposal_artifacts::typescript_declarations());
     declaration.push_str(reject_proposal_operations_artifacts::typescript_declarations());

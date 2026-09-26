@@ -11,7 +11,7 @@
     "profile": "storyos.persistence.table-family-registry.v1",
     "digest_algorithm": "sha256:canonical-json",
     "covers": ["family_id", "table_families", "owner", "authority_class", "durability_class"],
-    "digest": "sha256:75754320152754d58f459e3af4cfeab94f69df077d6ec2eee10e019699ab6565"
+    "digest": "sha256:5b2264a768d247837b44cfecdd1eb2663e21cb55e88b78d9fdef416369517b05"
   },
   "schema_identity": {
     "database_schema_identity": "storyos.postgresql.schema.v3",
@@ -19,15 +19,15 @@
     "persisted_format_catalog_id": "storyos.persistence.catalog.release-1.v3",
     "migration_chain_id": "storyos.persistence.bootstrap.release-1.v3",
     "migration_chain_digest_profile": "storyos.persistence.migration-chain-jcs.v1",
-    "migration_chain_digest": "sha256:a2941df806d62c3c94f4a2a3cb68f4e1d289fcd040a1c46c0e1a4e3fa758f595",
+    "migration_chain_digest": "sha256:367e8041c3a78d192132ad938f7622c70fe7d10077e894d7bafb484b10a4b5c9",
     "protocol_binding": {
       "source": "docs/foundation/versioned-protocol-release-1-route-catalog.json",
       "route_catalog_id": "storyos.public.route-catalog.release-1.v1",
-      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-26-refused-edit-draft",
+      "route_catalog_contract_revision": "release1-wire-catalog-2026-09-26-refused-edit-discard",
       "public_release": "storyos.public.release.1",
       "compatibility_profile": "storyos.public.same-release.v1",
       "release_identity_schema_id": "storyos.compatibility.release-identity.v1",
-      "route_catalog_sha256": "sha256:5cb21822148cf1de4c3a1c28ff3816eff9408721d89bd7d16d88f699a3ab9648",
+      "route_catalog_sha256": "sha256:8df229a19aa2d4c4be040fac6b5dbcaa4164c63a352e4f5c669d6456134c9add",
       "required_persistence_identity_fields": [
         "database_schema_identity",
         "active_schema_version",
@@ -234,7 +234,7 @@
       "transaction_boundary": "one_postgresql_transaction",
       "digest_profile": "storyos.persistence.bootstrap-manifest-jcs.v1",
       "runtime_credential_source": "external_secret_after_atomic_bootstrap",
-      "manifest_sha256": "sha256:6e3db677f0eaf208711e0c1680711da189ba7a0164793a1d16c8b1e14021f12a",
+      "manifest_sha256": "sha256:32c3aea072b65ba22f787f336f60912b66820797ecc93e18ef03b51832239bb4",
       "sources": [
         {
           "path": "crates/storyos-adapter-postgres/migrations/0000_roles.sql",
@@ -487,6 +487,10 @@
         {
           "path": "crates/storyos-adapter-postgres/migrations/0063_preserve_refused_edit_draft.sql",
           "lf_sha256": "sha256:72b3841a6e30afa503633bdce58e15189b3fe081a0c43e3fcd8bae9bc0492cf4"
+        },
+        {
+          "path": "crates/storyos-adapter-postgres/migrations/0064_close_refused_edit_draft.sql",
+          "lf_sha256": "sha256:f3dcd82a6285afb16c043ff032705dcdaf0fa379cef3d2e8c856a1694ec96f4e"
         }
       ]
     },
@@ -616,7 +620,7 @@
     },
     {
       "family_id": "artifact-proposal-draft",
-      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_anchors", "proposal_operation_reopenings", "proposal_operation_resolutions", "proposal_validation_conditions", "proposal_generations", "proposal_generation_heads", "proposal_generation_transitions", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "research_claims", "research_evidence_edges", "source_snapshots"],
+      "table_families": ["artifacts", "artifact_revisions", "artifact_payloads", "artifact_heads", "artifact_provenance_edges", "proposals", "proposal_revisions", "proposal_heads", "proposal_operations", "proposal_anchors", "proposal_operation_reopenings", "proposal_operation_resolutions", "proposal_validation_conditions", "proposal_generations", "proposal_generation_heads", "proposal_generation_transitions", "proposal_stream_events", "draft_artifacts", "draft_artifact_revisions", "draft_lifecycle_events", "draft_close_events", "research_claims", "research_evidence_edges", "source_snapshots"],
       "owner": "artifact",
       "authority_class": "artifact",
       "durability_class": "immutable_revisions_with_heads",
@@ -628,7 +632,7 @@
       "head": "scoped_head",
       "projection": {"kind": "none", "source_family_ids": [], "dependency_closure": [], "generation_field": null, "watermark_field": null, "invalidation_families": [], "rebuild": "not_applicable", "visibility_gate": "artifact_lifecycle_verified"},
       "portability": {"physical_backup": "full_rows", "whole_service_restore": "restore_and_verify", "project_export": "include", "project_restore": "restore_exact_scope", "secret_exclusion": "no_secret_material"},
-      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "getRefusedEditDraft", "getArtifact", "getConversationMemory"], "operation_selector": null, "event_selector": {"mode": "refused_edit_creation"}, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
+      "public_contract": {"mapping_role": "semantic_persistence", "operation_ids": ["createReplacementProposal", "acceptProposal", "rejectProposalOperations", "withdrawProposal", "replanProposal", "reopenWithdrawnProposal", "supersedeProposal", "reopenRejectedOperations", "completeReadyPartialProposal", "continueProposalGeneration", "expandRefusedEditDraftToProposal", "closeEditorFlowDraft", "undoLatestAuthorAction", "getProposal", "getRefusedEditDraft", "getArtifact", "getConversationMemory"], "operation_selector": null, "event_selector": {"mode": "refused_edit_creation_and_discard"}, "settlement_modes": ["sync", "async", "conditional_by_cause", "read"], "activity_profile": "storyos.project-activity.v1", "wire_history": "referenced_by_wire_history", "internal_only": false}
     },
     {
       "family_id": "operational-receipts-actions",
