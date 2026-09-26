@@ -279,6 +279,11 @@ test("complete keeps the partial candidate ready and continue opens a fresh Gene
     assert.equal(head.generationId, continued.effect.new_generation_id);
     assert.equal(head.streamSeq, "0");
     assert.equal(head.revisionCount, facts.revisionCount);
+    const copiedEvents = await queryStoryOSPostgres(
+      `SELECT count(*)::text FROM storyos.proposal_stream_events
+        WHERE generation_id = '${continued.effect.new_generation_id}'`,
+    );
+    assert.equal(copiedEvents, "0");
     const terminal = facts.runStatus === "completed" || facts.runStatus === "refused" || facts.runStatus === "cancelled";
     if (terminal) {
       assert.notEqual(continued.effect.resulting_run_id, continued.effect.prior_run_id);
@@ -286,20 +291,45 @@ test("complete keeps the partial candidate ready and continue opens a fresh Gene
         `SELECT status || '|' || predecessor_run_id::text || '|' || wakeup_pending::text
            FROM storyos.agent_runs WHERE run_id = '${continued.effect.resulting_run_id}'`,
       );
-      assert.equal(successor, `completed|${continued.effect.prior_run_id}|false`);
+      assert.equal(successor, `queued|${continued.effect.prior_run_id}|true`);
+      const assembly = await queryStoryOSPostgres(
+        `SELECT count(*)::text FROM storyos.context_assembly_manifests
+          WHERE run_id = '${continued.effect.resulting_run_id}'`,
+      );
+      assert.equal(assembly, "1");
+      const priorEvents = await queryStoryOSPostgres(
+        `SELECT count(*)::text FROM storyos.proposal_stream_events
+          WHERE generation_id = '${facts.generationId}'`,
+      );
+      await settleOnce();
+      const continuedEvents = await queryStoryOSPostgres(
+        `SELECT count(*)::text || '|' || COALESCE(max(stream_seq)::text, '0')
+           FROM storyos.proposal_stream_events
+          WHERE generation_id = '${continued.effect.new_generation_id}'`,
+      );
+      assert.equal(continuedEvents, "1|1");
+      const priorEventsAfter = await queryStoryOSPostgres(
+        `SELECT count(*)::text FROM storyos.proposal_stream_events
+          WHERE generation_id = '${facts.generationId}'`,
+      );
+      assert.equal(priorEventsAfter, priorEvents);
+      const stillOneProposal = await queryStoryOSPostgres(
+        `SELECT count(*)::text FROM storyos.proposals
+          WHERE proposal_id = '${ready.proposal.proposal_id}'`,
+      );
+      assert.equal(stillOneProposal, "1");
+      const advanced = await generationFacts(ready.proposal.proposal_id);
+      assert.equal(advanced.generationId, continued.effect.new_generation_id);
+      assert.equal(advanced.streamSeq, "1");
     } else {
       assert.equal(continued.effect.resulting_run_id, continued.effect.prior_run_id);
     }
-    const copiedEvents = await queryStoryOSPostgres(
-      `SELECT count(*)::text FROM storyos.proposal_stream_events
-        WHERE generation_id = '${continued.effect.new_generation_id}'`,
-    );
-    assert.equal(copiedEvents, "0");
     const after = await getChapter({
       baseUrl: started.baseUrl, projectId: prepared.projectId,
       chapterId: prepared.chapterId, fetchImpl: prepared.fetchImpl,
     });
     assert.deepEqual(after.chapter, before.chapter);
+    await drainLeftoverWork();
   } finally {
     await stopRealServer(started.server);
   }

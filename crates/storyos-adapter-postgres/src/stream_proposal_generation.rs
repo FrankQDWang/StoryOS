@@ -425,8 +425,11 @@ async fn load_generation(
                     (generation.owner_user_id, generation.project_id, generation.generation_id)
               WHERE proposal.owner_user_id = $1::text::uuid
                 AND proposal.project_id = $2::text::uuid
-                AND proposal.source_run_id = $3::text::uuid
-              ORDER BY generation.generation_id
+                AND (
+                  generation.run_id = $3::text::uuid
+                  OR proposal.source_run_id = $3::text::uuid
+                )
+              ORDER BY (generation.run_id = $3::text::uuid) DESC, generation.generation_id
               LIMIT 1",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
