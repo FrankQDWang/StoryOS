@@ -994,6 +994,7 @@ BEGIN
       AND EXISTS(SELECT 1 FROM storyos.command_idempotency AS replay
         WHERE (replay.owner_user_id,replay.project_id,replay.command_kind,replay.idempotency_key)=
         (receipt.owner_user_id,receipt.project_id,receipt.command_kind,receipt.idempotency_key)
+        AND replay.canonical_command_digest=receipt.command_digest
         AND replay.outcome_kind='settled' AND replay.result_reference=receipt.receipt_id::text))
   THEN RAISE EXCEPTION 'Incomplete Draft Discard settlement' USING ERRCODE='23514'; END IF;
   RETURN NULL;
@@ -1012,3 +1013,5 @@ CREATE POLICY draft_close_scope ON storyos.draft_close_events USING (
   owner_user_id=current_setting('storyos.owner_user_id',true)::uuid AND project_id=current_setting('storyos.project_id',true)::uuid
 );
 GRANT SELECT,INSERT ON storyos.draft_close_events TO storyos_runtime;
+
+GRANT UPDATE(closure,close_event_id) ON storyos.draft_artifacts TO storyos_runtime;

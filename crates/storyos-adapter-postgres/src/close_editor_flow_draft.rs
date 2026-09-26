@@ -163,7 +163,7 @@ async fn insert_admission(
           &command.canonical_command_bytes,&input.editor_session_id,&client_binding.binding_ref,&client_binding.session_generation.to_string(),
           &client_binding.client_contract_revision,&client_binding.security_policy_revision]).await.map_err(database_error)?;
     if count != 1 {
-        return Err(DraftCloseError::InvalidChallenge);
+        return Err(DraftCloseError::InvalidWriter);
     }
     Ok(())
 }

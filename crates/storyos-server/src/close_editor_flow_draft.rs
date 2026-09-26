@@ -115,6 +115,11 @@ pub(super) async fn close_editor_flow_draft(
     let settled = storyos_application::close_editor_flow_draft(&store, &command)
         .await
         .map_err(|error| match error {
+            DraftCloseError::InvalidWriter => problem(
+                StatusCode::CONFLICT,
+                "draft_writer_ineligible",
+                "The Draft Discard session is not the current writer.",
+            ),
             DraftCloseError::MissingDraft => resource_unavailable(),
             DraftCloseError::InvalidChallenge => problem(
                 StatusCode::UNPROCESSABLE_ENTITY,

@@ -958,7 +958,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     }
     await assert.rejects(() => settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
       ...closeRequest.close_editor_flow_draft_input, editor_session_id: id("e0dff5") } }, "e0db5"),
-      (error) => requireStoryOSProtocolError(error).status === 422);
+      (error) => requireStoryOSProtocolError(error).status === 409);
     assert.deepEqual(await retainedState(prepared.projectId), afterClose);
     const secondaryRequest: CreateEditorSessionRequest = { command_schema: "storyos.command.create-editor-session.request.v1",
       ...BINDING, correlation_id: id("e0db91") };
@@ -970,7 +970,7 @@ test("closed and archived Drafts keep their lifecycle, while tombstoned content 
     assert.deepEqual(secondary.writer, { kind: "read_only", reason: "secondary_session", observed_writer_generation: writer.writerGeneration });
     await assert.rejects(() => settleFresh({ ...closeRequest, close_editor_flow_draft_input: {
       ...closeRequest.close_editor_flow_draft_input, editor_session_id: secondary.editor_session.editor_session_id } }, "e0db93"),
-      (error) => requireStoryOSProtocolError(error).status === 422);
+      (error) => requireStoryOSProtocolError(error).status === 409);
     await assert.rejects(() => sendClose(closeRequest, nonce, key, closed.draft.draft_id, browserFetch(started.baseUrl, "session-b")),
       (error) => [404, 422].includes(requireStoryOSProtocolError(error).status ?? 0));
     await assert.rejects(() => getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,

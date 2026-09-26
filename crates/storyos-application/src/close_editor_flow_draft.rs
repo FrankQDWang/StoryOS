@@ -33,6 +33,7 @@ pub struct DraftCloseSettlement {
 pub enum DraftCloseError {
     BindingConflict,
     InvalidChallenge,
+    InvalidWriter,
     MissingDraft,
     Unavailable(Box<dyn std::error::Error + Send + Sync>),
 }
