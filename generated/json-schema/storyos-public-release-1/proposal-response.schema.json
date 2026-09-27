@@ -294,6 +294,9 @@
         "source": {
           "$ref": "#/$defs/ProposalSourceInspect"
         },
+        "source_condition": {
+          "$ref": "#/$defs/ProposalSourceConditionInspect"
+        },
         "validation": {
           "type": "string"
         },
@@ -308,6 +311,7 @@
         "generation",
         "validation",
         "condition_refs",
+        "source_condition",
         "latest_acceptance_refusal",
         "closure",
         "operation_id",
@@ -621,6 +625,57 @@
         "reservation_state"
       ],
       "type": "object"
+    },
+    "ProposalSourceConditionInspect": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "absent",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "proposal_conflict",
+              "type": "string"
+            },
+            "proposal_conflict_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_conflict_ref"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "proposal_recovery_conflict",
+              "type": "string"
+            },
+            "proposal_recovery_conflict_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_recovery_conflict_ref"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "ProposalSourceInspect": {
       "oneOf": [

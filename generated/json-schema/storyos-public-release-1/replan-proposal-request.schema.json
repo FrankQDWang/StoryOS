@@ -1,0 +1,114 @@
+{
+  "$defs": {
+    "ReplanProposalInput": {
+      "additionalProperties": false,
+      "properties": {
+        "client_contract_revision": {
+          "type": "string"
+        },
+        "conflicted_proposal_revision_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "correlation_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "editor_session_id": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_current_proposal_head": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "expected_current_target_revisions": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "replacement_operations": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "security_policy_revision": {
+          "type": "string"
+        },
+        "source_condition": {
+          "$ref": "#/$defs/ReplanSourceCondition"
+        }
+      },
+      "required": [
+        "conflicted_proposal_revision_id",
+        "expected_current_proposal_head",
+        "expected_current_target_revisions",
+        "replacement_operations",
+        "source_condition",
+        "editor_session_id",
+        "client_contract_revision",
+        "security_policy_revision",
+        "correlation_id"
+      ],
+      "type": "object"
+    },
+    "ReplanSourceCondition": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "proposal_conflict",
+              "type": "string"
+            },
+            "proposal_conflict_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_conflict_ref"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "proposal_recovery_conflict",
+              "type": "string"
+            },
+            "proposal_recovery_conflict_ref": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_recovery_conflict_ref"
+          ],
+          "type": "object"
+        }
+      ]
+    }
+  },
+  "$id": "storyos.command.replan-proposal.request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "command_schema": {
+      "const": "storyos.command.replan-proposal.request.v1",
+      "type": "string"
+    },
+    "replan_proposal_input": {
+      "$ref": "#/$defs/ReplanProposalInput"
+    }
+  },
+  "required": [
+    "command_schema",
+    "replan_proposal_input"
+  ],
+  "title": "StoryOS Replan Proposal Request",
+  "type": "object"
+}

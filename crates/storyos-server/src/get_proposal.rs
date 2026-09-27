@@ -32,6 +32,7 @@ pub(super) async fn get_proposal(
             generation: record.generation,
             validation: record.validation,
             condition_refs: record.condition_refs,
+            source_condition: record.source_condition,
             latest_acceptance_refusal: match record.latest_acceptance_refusal {
                 None => contracts::OptionalAcceptanceRefusalInspect::Absent,
                 Some(refusal) => contracts::OptionalAcceptanceRefusalInspect::Present(Box::new(

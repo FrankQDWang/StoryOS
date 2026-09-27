@@ -20,6 +20,7 @@
     "acceptProposal",
     "rejectProposalOperations",
     "reopenRejectedOperations",
+    "replanProposal",
     "completeReadyPartialProposal",
     "continueProposalGeneration",
     "archiveProject",
@@ -313,7 +314,7 @@
     {
       "path": "generated/json-schema/storyos-public-release-1/proposal-response.schema.json",
       "schema_id": "storyos.query.proposal.response.v1",
-      "sha256": "sha256:ef4c411fc6b257ec45c8f4a30de7d8581aa864d3011eccb4452f9a2dd92dacdb"
+      "sha256": "sha256:e068a8847bd5d6800c9d037ed995e9af8ee1c680d6629b56eb4667481b97170b"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/accept-proposal-request.schema.json",
@@ -344,6 +345,16 @@
       "path": "generated/json-schema/storyos-public-release-1/reopen-rejected-operations-response.schema.json",
       "schema_id": "storyos.command.reopen-rejected-operations.response.v1",
       "sha256": "sha256:e0e2faf48c1c35da9b1b6f3ba4efe3a10bacbf3e080dcfb87a73a5d352f0b971"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/replan-proposal-request.schema.json",
+      "schema_id": "storyos.command.replan-proposal.request.v1",
+      "sha256": "sha256:13ce0250e7c1489a0f70ed3dacc2db77eed1654d015767cdf55c7d840aa55cde"
+    },
+    {
+      "path": "generated/json-schema/storyos-public-release-1/replan-proposal-response.schema.json",
+      "schema_id": "storyos.command.replan-proposal.response.v1",
+      "sha256": "sha256:461d794e855e63bb720cc2f842dad3bd541002391679c239071c644e57fb4bb1"
     },
     {
       "path": "generated/json-schema/storyos-public-release-1/complete-ready-partial-proposal-request.schema.json",

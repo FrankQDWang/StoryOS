@@ -35,6 +35,9 @@
       "kind": "agent_run_decision",
       "run_id": "018f0000-0000-7001-8000-000000000a34"
     },
+    "source_condition": {
+      "kind": "absent"
+    },
     "validation": "pending",
     "validation_receipt": {
       "kind": "absent"

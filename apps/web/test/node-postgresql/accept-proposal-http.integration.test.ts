@@ -301,6 +301,9 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
     const expected = {
       ...revised.proposal, validation, condition_refs: failed.receipt.condition_refs,
       candidate_text: reason === "altered_candidate" ? "Tampered narrator voice." : revised.proposal.candidate_text,
+      source_condition: reason === "changed_head"
+        ? { kind: "proposal_conflict" as const, proposal_conflict_ref: failed.receipt.condition_refs[0] ?? "" }
+        : revised.proposal.source_condition,
     };
     const reload = await getProposal(command);
     assert.deepEqual(reload.proposal, expected);
@@ -347,7 +350,7 @@ test.each(["invalid_validation", "changed_head", "altered_candidate"] as const)(
       assert.deepEqual(conditions, [{ owner_user_id: USER_A, project_id: prepared.projectId,
         proposal_id: revised.proposal.proposal_id, proposal_revision_id: revised.proposal.revision_id,
         acceptance_receipt_id: failed.receipt.receipt_id, validation: "conflicted",
-        conflict_id: failed.receipt.condition_refs[0] }]);
+        conflict_id: failed.receipt.condition_refs[0], condition_kind: "proposal_conflict" }]);
     }
     await stopRealServer(started.server);
     started = await startRealServer();

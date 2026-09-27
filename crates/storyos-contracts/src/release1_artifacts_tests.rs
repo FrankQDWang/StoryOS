@@ -162,7 +162,7 @@ fn snapshot_and_activity_stream_are_generated_from_the_release_1_contract() {
         "#/$defs/ProjectActivityEvent"
     );
     assert!(openapi.contains(
-        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getRefusedEditDraft,closeEditorFlowDraft,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
+        "x-storyos-implemented-slice: getProtocolProfile,getProject,getChapter,createProjectChallenge,createProject,listProjects,updateProject,getProjectAssistance,updateProjectAssistance,createAgentRun,pauseAgentRun,cancelAgentRun,getAgentRun,getRefusedEditDraft,closeEditorFlowDraft,expandRefusedEditDraftToProposal,getProposal,acceptProposal,rejectProposalOperations,reopenRejectedOperations,replanProposal,completeReadyPartialProposal,continueProposalGeneration,archiveProject,createVolume,updateVolume,deleteVolume,createChapter,updateChapter,deleteChapter,setCurrentChapter,createProjectCommandChallenge,createEditorSession,getEditorSession,applyAuthorEdit,getApplyAuthorEditOutcome,getSnapshot,getManuscriptTree,searchManuscript,getStatistics,exportHumanReadableManuscript,getHumanReadableManuscriptExport,exportProjectArchive,getExportOperation,activityStream,takeOverProjectWriter,undoLatestAuthorAction"
     ));
 
     let client = String::from_utf8(
@@ -289,6 +289,7 @@ fn take_over_project_writer_wire_is_generated_without_stage1_coverage() {
     assert_eq!(
         response["$defs"]["DomainReceiptCommandKind"]["enum"],
         serde_json::json!([
+            "expandRefusedEditDraftToProposal",
             "closeEditorFlowDraft",
             "applyAuthorEdit",
             "takeOverProjectWriter",
@@ -465,6 +466,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
     let mut expected_references = vec![
         crate::release1_close_editor_flow_draft_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_close_editor_flow_draft_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_expand_refused_edit_draft_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_expand_refused_edit_draft_artifacts::RESPONSE_SCHEMA_PATH,
         RESPONSE_SCHEMA_PATH,
         PROJECT_RESPONSE_SCHEMA_PATH,
         CHAPTER_RESPONSE_SCHEMA_PATH,
@@ -494,6 +497,8 @@ fn generated_openapi_file_references_resolve_from_the_openapi_directory() {
         crate::release1_reject_proposal_operations_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_reopen_rejected_operations_artifacts::REQUEST_SCHEMA_PATH,
         crate::release1_reopen_rejected_operations_artifacts::RESPONSE_SCHEMA_PATH,
+        crate::release1_replan_proposal_artifacts::REQUEST_SCHEMA_PATH,
+        crate::release1_replan_proposal_artifacts::RESPONSE_SCHEMA_PATH,
         crate::release1_proposal_generation_decision_artifacts::COMPLETE_REQUEST_SCHEMA_PATH,
         crate::release1_proposal_generation_decision_artifacts::COMPLETE_RESPONSE_SCHEMA_PATH,
         crate::release1_proposal_generation_decision_artifacts::CONTINUE_REQUEST_SCHEMA_PATH,
@@ -585,7 +590,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     let profile = release1_protocol_profile();
     assert_eq!(
         profile.contract_revision,
-        "release1-wire-catalog-2026-09-27-refused-edit-retry"
+        "release1-wire-catalog-2026-09-27-replan-proposal"
     );
     assert_eq!(
         profile.release_identity.web_client_contract_revision,
@@ -601,7 +606,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     );
     assert_eq!(
         profile.release_identity.generated_client_revision,
-        "storyos.typescript-client.release-1.v25"
+        "storyos.typescript-client.release-1.v26"
     );
     let schema: serde_json::Value = serde_json::from_slice(
         &generated[crate::release1_author_edit_artifacts::RESPONSE_SCHEMA_PATH],
@@ -735,7 +740,7 @@ fn author_edit_response_v2_keeps_activity_only_on_the_applied_variant() {
     )
     .expect("generated client is UTF-8");
     assert!(generated_client.contains(
-        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v25\";"
+        "export const GENERATED_CLIENT_REVISION = \"storyos.typescript-client.release-1.v26\";"
     ));
     let boundary: serde_json::Value =
         serde_json::from_slice(&generated[crate::release1_author_edit_artifacts::FIXTURE_PATHS[2]])
