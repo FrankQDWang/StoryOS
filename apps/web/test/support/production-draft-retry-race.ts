@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +10,7 @@ import { cancelAgentRun, createAgentRun, digestCancelAgentRun, digestCreateAgent
 import type { ApplyAuthorEditResponse, CancelAgentRunRequest, CreateAgentRunRequest }
   from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { BINDING, challenged, id } from "./acceptance.ts";
-import { queryStoryOSPostgres as query, runStoryOSWorker, sessionFetch } from "./node-integration.ts";
+import { queryStoryOSPostgres as query, sessionFetch } from "./node-integration.ts";
 
 export async function verifyProductionRetryReservationRace({ origin, projectId, chapterId, blockId, retry }: {
   origin: string; projectId: string; chapterId: string; blockId: string;
@@ -21,9 +22,31 @@ export async function verifyProductionRetryReservationRace({ origin, projectId, 
       author_message: { text: "Revise this passage: keep the voice." },
       working_target: { kind: "current_chapter", chapter_id: chapterId },
       instruction: { kind: "absent" }, cause: { kind: "author_request" } } };
+  const createKey = id("e0c9912");
+  const workerName = `storyos_retry_worker_${projectId}`;
+  const runtime = process.env.STORYOS_TEST_DATABASE_URL;
+  assert.ok(runtime);
+  const workerUrl = new URL(runtime);
+  workerUrl.searchParams.set("application_name", workerName);
+  const claimGate = `claim_retry_${projectId.replaceAll("-", "")}`;
+  let claimGateInstalled = false;
+  try {
+    await query(`CREATE FUNCTION storyos.${claimGate}() RETURNS trigger LANGUAGE plpgsql
+      SECURITY DEFINER SET search_path=pg_catalog AS $gate$
+      BEGIN IF NEW.owner_user_id='018f0000-0000-7001-8000-000000000001'::uuid
+        AND NEW.project_id='${projectId}'::uuid AND NEW.status='claimed'
+        AND current_setting('application_name')<>'${workerName}'
+        AND EXISTS (SELECT 1 FROM storyos.domain_receipts AS receipt
+          WHERE (receipt.owner_user_id, receipt.project_id, receipt.receipt_id)=
+            (NEW.owner_user_id, NEW.project_id, NEW.receipt_id)
+          AND receipt.command_kind='createAgentRun' AND receipt.idempotency_key='${createKey}'::uuid)
+        THEN RETURN NULL; END IF; RETURN NEW; END $gate$;
+      CREATE TRIGGER ${claimGate} BEFORE UPDATE ON storyos.agent_runs
+        FOR EACH ROW EXECUTE FUNCTION storyos.${claimGate}();`);
+    claimGateInstalled = true;
   const admitted = await challenged(origin, options.fetchImpl, projectId, "POST",
     "/api/v1/projects/{project_id}/agent-runs", request.command_schema, await digestCreateAgentRun(request),
-    id("e0c9912"), (antiForgery) => createAgentRun({ ...options, request, antiForgery, idempotencyKey: id("e0c9912") }));
+    createKey, (antiForgery) => createAgentRun({ ...options, request, antiForgery, idempotencyKey: createKey }));
   assert.ok(admitted.effect.kind === "admitted");
   const runId = admitted.effect.run_id;
   const tables = ["proposals", "proposal_heads", "proposal_revisions", "proposal_operations", "proposal_anchors",
@@ -78,10 +101,12 @@ export async function verifyProductionRetryReservationRace({ origin, projectId, 
         FOR EACH ROW EXECUTE FUNCTION storyos.${barrier}();`);
     installed = true;
     const repositoryRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-    work = runStoryOSWorker({ repositoryRoot, workerBinary: join(repositoryRoot, "target/release-package/storyos-worker"),
-      args: ["--once"] }).then(() => undefined, (error: unknown) => error);
-    await expect.poll(() => query(`SELECT count(*) FROM pg_locks
-      WHERE ${lockPredicate} AND NOT granted AND pg_blocking_pids(pid)=ARRAY[${guardPid}]`),
+    work = promisify(execFile)(join(repositoryRoot, "target/release-package/storyos-worker"), ["--once"],
+      { cwd: repositoryRoot, env: { ...process.env, STORYOS_DATABASE_URL: workerUrl.toString() },
+        timeout: 15000, killSignal: "SIGKILL" }).then(() => undefined, (error: unknown) => error);
+    await expect.poll(() => query(`SELECT count(*) FROM pg_locks JOIN pg_stat_activity USING(pid)
+      WHERE application_name='${workerName}' AND ${lockPredicate}
+        AND NOT granted AND pg_blocking_pids(pid)=ARRAY[${guardPid}]`),
       { timeout: 5000 }).toBe("1");
     const before = await readPhase();
     const dispatched = before.model_attempts!.filter((row) =>
@@ -131,5 +156,9 @@ export async function verifyProductionRetryReservationRace({ origin, projectId, 
       try { await cleanup(); } catch (error) { failures.push(error); }
     }
     if (failures.length > 0) throw new AggregateError(failures, "Retry reservation race cleanup failed");
+  }
+  } finally {
+    if (claimGateInstalled) await query(`DROP TRIGGER ${claimGate} ON storyos.agent_runs;
+      DROP FUNCTION storyos.${claimGate}();`);
   }
 }

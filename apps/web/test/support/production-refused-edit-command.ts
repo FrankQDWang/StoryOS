@@ -247,9 +247,9 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
         proposalRetry = await reply.json(); await route.fulfill({ response: reply }); finishProposal();
       } catch (error) { failProposal(error); await route.abort("failed"); }
     });
-    const proposalPost = page.waitForRequest((request) => request.method() === "POST"
-      && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
     const submit = async () => {
+      const proposalPost = page.waitForRequest((request) => request.method() === "POST"
+        && new URL(request.url()).pathname.endsWith("/manuscript/author-edits"));
       await next.locator("button[data-draft-retry-submit]").click();
       await Promise.all([proposalPost, settledProposal]);
       return proposalRetry;
