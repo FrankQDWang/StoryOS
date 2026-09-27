@@ -101,8 +101,12 @@ pub(super) async fn load_chapter_proposal_heads(
         .author_edit_units
         .iter()
         .any(|unit| unit.selection_snapshot.ordered_selection.is_some());
-    let row_limit =
-        structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1);
+    let versioned = versioned_author_edit(command);
+    let row_limit = if versioned {
+        None
+    } else {
+        structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1)
+    };
     let rows = client
         .query(
             "SELECT head.current_revision_id::text, proposal.proposal_id::text,
@@ -190,7 +194,7 @@ pub(super) async fn load_chapter_proposal_heads(
                 target.proposal_id == proposal_id && target.revision_id == revision_id
             });
         if kind == "block_edit"
-            && versioned_author_edit(command)
+            && versioned
             && !acknowledged
             && !command_mentions_block(command, &manuscript_block_id)
         {

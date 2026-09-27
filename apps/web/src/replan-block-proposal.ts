@@ -198,6 +198,12 @@ export async function retryPendingDisplayedReplan(options: Pick<ReplanTarget, "b
         && row.settlement === "unresolved");
       const record = pending.length === 1 ? pending[0] : undefined;
       if (record === undefined) throw new Error("Replan recovery is not available");
+      if (workspace.partition.disposition !== "current_writer_open"
+        || workspace.session.writer.kind !== "current_writer"
+        || record.writer_generation !== workspace.partition.writer_generation
+        || record.journal_partition_id !== workspace.partition.journal_partition_id) {
+        throw new Error("请先恢复写作会话。");
+      }
       return sendReplan(options, record);
     });
 }

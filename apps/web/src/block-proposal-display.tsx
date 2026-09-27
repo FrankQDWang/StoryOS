@@ -665,9 +665,10 @@ export function BlockProposalDisplay({
             : "重新规划结果尚未确认。请重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
         await onAccepted();
-      } catch {
+      } catch (error) {
         setDecisionMessages((current) => ({ ...current,
-          [proposalId]: "重新规划结果尚未确认。请重试同一操作。" }));
+          [proposalId]: error instanceof Error && error.message.startsWith("请先")
+            ? error.message : "重新规划结果尚未确认。请重试同一操作。" }));
         setSettlementRefresh((value) => value + 1);
       } finally {
         acceptingRef.current = false;
