@@ -1,6 +1,7 @@
 import { readProductionJournal, verifyProductionDiscard } from "./production-discard-command.ts";
 import { verifyProductionDraftUndo } from "./production-draft-undo-command.ts";
 import { verifyProductionRetryReservationRace } from "./production-draft-retry-race.ts";
+import { verifyProductionDraftExpansion } from "./production-draft-expansion-command.ts";
 import { queryStoryOSPostgres } from "./node-integration.ts";
 import assert from "node:assert/strict";
 import { expect } from "playwright/test";
@@ -304,6 +305,7 @@ export async function verifyProductionRefusedEdit({ page, context, origin, proje
     assert.deepEqual((await read()).draft.payload, retained.draft.payload);
     assert.equal((await read()).draft.closure, "closed");
   }
+  reopened = await verifyProductionDraftExpansion(page, projectId, reopened, restart);
   await verifyProductionDiscard({ page, context, origin, projectId, chapterId: chapter.chapter.chapter_id,
     proposalId: proposal.proposal_id, draft: reopened, restart });
   } finally { await page.unroute(snapshotRoute); await page.unroute(retryRoute); }

@@ -83,7 +83,8 @@ function validObservation(record: DraftUndoRecord, observation: Observation): bo
   if (!response || !keys(response, ["schema_id", "correlation_id", "project_scope", "command_id", "author_command_admission_id", "receipt", "project", "effect"], ["source_reopen_event", "proposal_revision_id"])) return false;
   const receipt = response.receipt, effect = response.effect;
   const coupled = record.source_close.close_reason === "superseded" && effect.kind === "compensated";
-  const success = effect.kind === "draft_compensated" && record.source_close.close_reason === "abandoned" || coupled;
+  const expansion = record.source_close.source.command_digest.profile === "storyos.command.expandRefusedEditDraftToProposal.jcs.v1";
+  const success = effect.kind === "draft_compensated" && (record.source_close.close_reason === "abandoned" || expansion) || coupled;
   const reopened = effect.kind === "draft_compensated" ? effect.event : response.source_reopen_event;
   const proposal = coupled && response.proposal_revision_id != null;
   const expectedHead = record.group.frozen_request_body.undo_latest_author_action_input.expected_authoritative_revision_id;
@@ -173,7 +174,9 @@ export async function readDraftUndoJournal(workspace: EditorWorkspace) {
       || ![input.editor_session_id, input.correlation_id, input.expected_authoritative_revision_id].every((id) => UUID.test(id))
       || !keys(record.source_close, ["schema_id", "event_kind", "event_id", "project_scope", "draft_id", "draft_revision_id", "payload_digest", "prior_closure", "closure", "close_reason", "source", "author_action_sequence", "created_at"])
       || !validSource(record.source_close.source, record.source_close.close_reason === "superseded"
-        ? "storyos.command.applyAuthorEdit.jcs.v1" : "storyos.command.closeEditorFlowDraft.jcs.v1")
+        ? record.source_close.source.command_digest.profile === "storyos.command.expandRefusedEditDraftToProposal.jcs.v1"
+          ? "storyos.command.expandRefusedEditDraftToProposal.jcs.v1" : "storyos.command.applyAuthorEdit.jcs.v1"
+        : "storyos.command.closeEditorFlowDraft.jcs.v1")
       || record.source_close.schema_id !== "storyos.event.editor-flow-draft-closed.v1" || record.source_close.event_kind !== "editor_flow_draft_closed"
       || record.source_close.prior_closure !== "open" || record.source_close.closure !== "closed"
       || !["abandoned", "superseded"].includes(record.source_close.close_reason)

@@ -9,6 +9,7 @@ import { RefusedEditDraftDisplay } from "./refused-edit-draft-display.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
 import { canonicalDraftValue as canonical } from "./refused-edit-discard.ts";
+import { readExpansionJournal, retryExpansion } from "./refused-edit-expansion.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
@@ -103,11 +104,17 @@ export function BlockProposalDisplay({
       return () => { active = false; };
     }
     setRecoveryChecked(false);
-    void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace)])
-      .then(([acceptance, rejection]) => {
+    void Promise.all([acceptanceJournalProposals(workspace), rejectionJournalState(workspace), readExpansionJournal(workspace)])
+      .then(async ([acceptance, rejection, expansions]) => {
+      for (const entry of expansions) if (entry.observation === undefined) {
+        const response = await retryExpansion(workspace, entry.record, editorProps.baseUrl, editorProps.fetchImpl, () => active);
+        entry.observation = { key: `expansion-observation:${entry.record.key}`, record_key: entry.record.key, response };
+        await onAccepted();
+      }
       if (!active) return;
       setRecoveredProposalIds([...new Set([...acceptance.proposalIds,
-        ...rejection.proposalIds])]);
+        ...rejection.proposalIds, ...expansions.flatMap(({ observation }) =>
+          observation?.response.effect.kind === "proposal_created_from_draft" ? [observation.response.effect.proposal_id] : [])])]);
       setJournalPendingIds([...new Set([...acceptance.unresolvedIds,
         ...rejection.pendingIds])]);
       setPendingRejections(rejection.pendingIds);
@@ -557,6 +564,13 @@ export function BlockProposalDisplay({
         baseUrl={editorProps.baseUrl} fetchImpl={editorProps.fetchImpl}
         refreshKey={`${refreshKey}:${settlementRefresh}`} onHoldChange={setDiscardHold} onProjection={editorProps.onProjection}
         onResult={() => setSettlementRefresh((value) => value + 1)} />
+      {reads.flatMap(({ proposal }) => proposal?.source.kind === "refused_edit_draft" ? [
+        <section key={proposal.proposal_id} data-proposal-id={proposal.proposal_id} aria-label="Draft Proposal">
+          <p>Source Draft: {proposal.source.draft_id}. Revision: {proposal.source.draft_revision_id}. Status: {proposal.validation}, {proposal.closure}.</p>
+          {proposal.candidate_blocks?.map((block, index) => block.block_kind === "heading"
+            ? <h3 key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</h3>
+            : <p key={index} data-proposal-structured-block style={{ whiteSpace: "pre-wrap" }}>{block.text}</p>)}
+        </section>] : [])}
       {recoveryUnavailable ? <p role="alert">接受记录暂不可读取，请检查本地数据。</p> : null}
       {reads.map(({ locator, proposal }) => {
         const problem = knownProblems[locator.proposalId];

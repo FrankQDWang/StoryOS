@@ -192,6 +192,7 @@ export interface JournalSubmissionGroup extends Record<string, unknown> {
 }
 
 export interface JournalSnapshot {
+  explicitExpansion?: Awaited<ReturnType<typeof import("./refused-edit-expansion.ts").readExpansionJournal>>;
   explicitDraftUndo?: Awaited<ReturnType<typeof import("./draft-undo-journal.ts").readDraftUndoJournal>>;
   explicitDiscard?: Awaited<ReturnType<typeof import("./refused-edit-discard.ts").readDiscardJournal>>;
   explicitAcceptance?: { records: Record<string, unknown>[]; groups: Record<string, unknown>[] };
