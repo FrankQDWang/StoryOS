@@ -429,13 +429,23 @@ export type ContinuationAdmissionInspect = { processing_destination_identity: st
 
 export type OptionalModelAttemptInspect = { "kind": "absent" } | { "kind": "present", model_attempt_id: string, destination_attempt_id: string, outbound_disclosure_event_id: string, model_invocation_id: string, dispatch_state: string, prior_continuation: OptionalContinuationInspect, known_prior_continuation: OptionalContinuationInspect, input_mapping: ContinuationInputMappingInspect, admission: ContinuationAdmissionInspect, };
 
+export type ActiveCompactionInstallState = "staged" | "installed" | "refused";
+
+export type ActiveCompactionMappingKind = "host_managed" | "native";
+
+export type ActiveCompactionKnownInput = { "kind": "model_attempt", id: string, } | { "kind": "manifest", id: string, } | { "kind": "projection", source_class: string, source_version: string, };
+
+export type OptionalCompactionInstallInspect = { "kind": "absent" } | { "kind": "present", run_step_id: string, model_invocation_id: string, model_attempt_id: string, };
+
+export type OptionalActiveCompactionInspect = { "kind": "absent" } | { "kind": "present", compaction_id: string, install_state: ActiveCompactionInstallState, prior_model_attempt_id: string, prior_manifest_id: string, prior_run_step_id: string, producer_model_attempt_id: string, producer_manifest_id: string, producer_invocation_id: string, producer: string, mapping_kind: ActiveCompactionMappingKind, mapping_revision: string, known_inputs: Array<ActiveCompactionKnownInput>, output_text: string, usage: AgentRunUsageInspect, loss_facts: Array<string>, refusal_reason?: string | null, installed: OptionalCompactionInstallInspect, preserved_item_ids: Array<string>, admission: ContinuationAdmissionInspect, };
+
 export type AgentRunStreamItemInspect = { item_id: string, role: string, state: string, phase: string, text: string | null, summary: string | null, call_id: string | null, arguments: string | null, refusal: string | null, hosted_report: string | null, };
 
 export type AgentRunUsageInspect = { kind: string, };
 
 export type GetAgentRunRequest = { model_attempt_id?: string | null, };
 
-export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
+export type GetAgentRunResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, project_agent_id: string, conversation_id: string, memory_settings_revision: string, run_id: string, status: AgentRunStatus, context: AgentRunContextInspect, decision: OptionalDecisionInspect, model_attempt: OptionalModelAttemptInspect, active_compaction: OptionalActiveCompactionInspect, evidence: Array<AttemptEvidence>, items: Array<AgentRunStreamItemInspect>, usage: AgentRunUsageInspect, redaction_profile: string, };
 
 export type PauseAgentRunInput = { client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 

@@ -119,6 +119,7 @@ pub use release1_accept_proposal::{
     AcceptProposalResponse, AcceptanceReceipt, AcceptanceReceiptResult,
 };
 pub use release1_agent_run::{
+    ActiveCompactionInstallState, ActiveCompactionKnownInput, ActiveCompactionMappingKind,
     AgentRunContextInspect, AgentRunRef, AgentRunStatus, AgentRunStreamItemInspect,
     AgentRunUsageInspect, AssistanceCause, AssistanceWorkingTarget, AttemptEvidence, AuthorMessage,
     CREATE_AGENT_RUN_DIGEST_PROFILE, CREATE_AGENT_RUN_METHOD, CREATE_AGENT_RUN_PATH,
@@ -129,9 +130,10 @@ pub use release1_agent_run::{
     CreateAgentRunInput, CreateAgentRunRequest, CreateAgentRunResponse, CurrentAvailabilityInspect,
     DestinationIo, EvidenceAvailability, GET_AGENT_RUN_METHOD, GET_AGENT_RUN_PATH,
     GET_AGENT_RUN_REQUEST_SCHEMA_ID, GET_AGENT_RUN_RESPONSE_SCHEMA_ID, GetAgentRunRequest,
-    GetAgentRunResponse, HostControlInspect, InstructionBinding, OptionalContinuationInspect,
-    OptionalDecisionInspect, OptionalManifestRef, OptionalModelAttemptInspect,
-    OptionalOpenedProposalInspect, ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
+    GetAgentRunResponse, HostControlInspect, InstructionBinding, OptionalActiveCompactionInspect,
+    OptionalCompactionInstallInspect, OptionalContinuationInspect, OptionalDecisionInspect,
+    OptionalManifestRef, OptionalModelAttemptInspect, OptionalOpenedProposalInspect,
+    ProjectionMode, SourceAvailability, TokenCountingProfileInspect,
 };
 pub use release1_agent_run_control::{
     CANCEL_AGENT_RUN_DIGEST_PROFILE, CANCEL_AGENT_RUN_METHOD, CANCEL_AGENT_RUN_PATH,

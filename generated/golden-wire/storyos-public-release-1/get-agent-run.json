@@ -1,4 +1,7 @@
 {
+  "active_compaction": {
+    "kind": "absent"
+  },
   "context": {
     "assembly_manifest_id": "018f0000-0000-7001-8000-000000000a3b",
     "considered": [

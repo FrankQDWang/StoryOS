@@ -23,7 +23,8 @@ pub(crate) async fn load_admitted_targets(
                FROM storyos.operation_requirements AS requirement
               WHERE requirement.owner_user_id = $1::text::uuid
                 AND requirement.project_id = $2::text::uuid
-                AND requirement.run_id = $3::text::uuid",
+                AND requirement.run_id = $3::text::uuid
+                AND requirement.requirement_role = 'primary'",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),

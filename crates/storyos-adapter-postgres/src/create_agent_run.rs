@@ -17,7 +17,7 @@ use crate::update_project_assistance::read_assistance_record;
 use super::*;
 
 #[path = "create_agent_run_context.rs"]
-mod context;
+pub(crate) mod context;
 #[path = "create_agent_run_read.rs"]
 mod read;
 #[path = "create_agent_run_write.rs"]

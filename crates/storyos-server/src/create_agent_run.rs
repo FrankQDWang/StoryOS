@@ -209,6 +209,7 @@ pub(super) async fn get_agent_run(
         context: inspect_context(&record.context),
         decision: inspect_decision(&record.decision),
         model_attempt: inspect_model(record.model.as_ref()),
+        active_compaction: inspect_active_compaction(record.active_compaction.as_ref()),
         evidence: record
             .model
             .as_ref()
@@ -310,6 +311,102 @@ fn inspect_continuation(
             continuation_binding_id: continuation_binding_id.to_owned(),
         },
         None => contracts::OptionalContinuationInspect::Absent,
+    }
+}
+
+fn inspect_active_compaction(
+    compaction: Option<&storyos_application::ActiveCompactionInspect>,
+) -> contracts::OptionalActiveCompactionInspect {
+    let Some(compaction) = compaction else {
+        return contracts::OptionalActiveCompactionInspect::Absent;
+    };
+    let installed = match (
+        compaction.installed_run_step_id.clone(),
+        compaction.installed_model_invocation_id.clone(),
+        compaction.installed_model_attempt_id.clone(),
+    ) {
+        (Some(run_step_id), Some(model_invocation_id), Some(model_attempt_id)) => {
+            contracts::OptionalCompactionInstallInspect::Present {
+                run_step_id,
+                model_invocation_id,
+                model_attempt_id,
+            }
+        }
+        _ => contracts::OptionalCompactionInstallInspect::Absent,
+    };
+    contracts::OptionalActiveCompactionInspect::Present {
+        compaction_id: compaction.compaction_id.clone(),
+        install_state: match compaction.install_state {
+            storyos_application::ActiveCompactionInstallState::Staged => {
+                contracts::ActiveCompactionInstallState::Staged
+            }
+            storyos_application::ActiveCompactionInstallState::Installed => {
+                contracts::ActiveCompactionInstallState::Installed
+            }
+            storyos_application::ActiveCompactionInstallState::Refused => {
+                contracts::ActiveCompactionInstallState::Refused
+            }
+        },
+        prior_model_attempt_id: compaction.prior_model_attempt_id.clone(),
+        prior_manifest_id: compaction.prior_manifest_id.clone(),
+        prior_run_step_id: compaction.prior_run_step_id.clone(),
+        producer_model_attempt_id: compaction.producer_model_attempt_id.clone(),
+        producer_manifest_id: compaction.producer_manifest_id.clone(),
+        producer_invocation_id: compaction.producer_invocation_id.clone(),
+        producer: compaction.producer.clone(),
+        mapping_kind: match compaction.mapping_kind {
+            storyos_application::ActiveCompactionMappingKind::HostManaged => {
+                contracts::ActiveCompactionMappingKind::HostManaged
+            }
+            storyos_application::ActiveCompactionMappingKind::Native => {
+                contracts::ActiveCompactionMappingKind::Native
+            }
+        },
+        mapping_revision: compaction.mapping_revision.clone(),
+        known_inputs: compaction
+            .known_inputs
+            .iter()
+            .map(|input| match input {
+                storyos_application::ActiveCompactionKnownInput::ModelAttempt { id } => {
+                    contracts::ActiveCompactionKnownInput::ModelAttempt { id: id.clone() }
+                }
+                storyos_application::ActiveCompactionKnownInput::Manifest { id } => {
+                    contracts::ActiveCompactionKnownInput::Manifest { id: id.clone() }
+                }
+                storyos_application::ActiveCompactionKnownInput::Projection {
+                    source_class,
+                    source_version,
+                } => contracts::ActiveCompactionKnownInput::Projection {
+                    source_class: source_class.clone(),
+                    source_version: source_version.clone(),
+                },
+            })
+            .collect(),
+        output_text: compaction.output_text.clone(),
+        usage: contracts::AgentRunUsageInspect {
+            kind: compaction.usage_kind.clone(),
+        },
+        loss_facts: compaction.loss_facts.clone(),
+        refusal_reason: compaction.refusal_reason.clone(),
+        installed,
+        preserved_item_ids: compaction.preserved_item_ids.clone(),
+        admission: contracts::ContinuationAdmissionInspect {
+            processing_destination_identity: compaction
+                .admission
+                .processing_destination_identity
+                .clone(),
+            evidence_revision: compaction.admission.evidence_revision.clone(),
+            model_registration_revision: compaction.admission.model_registration_revision.clone(),
+            adapter_mapping: compaction.admission.adapter_mapping.clone(),
+            project_model_use_binding_revision: compaction
+                .admission
+                .project_model_use_binding_revision
+                .clone(),
+            external_compatibility_decision: compaction
+                .admission
+                .external_compatibility_decision
+                .clone(),
+        },
     }
 }
 

@@ -138,7 +138,8 @@ pub(super) async fn load_assembled_context(
                      assembly.operation_requirement_id)
               WHERE assembly.owner_user_id = $1::text::uuid
                 AND assembly.project_id = $2::text::uuid
-                AND assembly.run_id = $3::text::uuid",
+                AND assembly.run_id = $3::text::uuid
+                AND assembly.manifest_role = 'decision'",
             &[
                 &scope.owner_user_id.as_ref(),
                 &scope.project_id.as_ref(),
@@ -184,7 +185,7 @@ pub(super) async fn load_assembled_context(
     })
 }
 
-async fn load_working_target(
+pub(crate) async fn load_working_target(
     client: &tokio_postgres::Client,
     scope: &ProjectScope,
     chapter_id: &str,

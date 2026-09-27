@@ -132,9 +132,11 @@ async fn settle_one_phase(
                JOIN storyos.context_assembly_manifests AS assembly
                  ON (assembly.owner_user_id, assembly.project_id, assembly.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
+                AND assembly.manifest_role = 'decision'
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
+                AND attempt.attempt_role = 'decision'
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid
@@ -298,7 +300,8 @@ async fn settle_one_phase(
                     AND project_id = $2::text::uuid
                     AND run_id = $3::text::uuid
                     AND decision_id = $5::text::uuid
-                    AND continuation_binding_id IS NULL",
+                    AND continuation_binding_id IS NULL
+                    AND attempt_role = 'decision'",
                 &[
                     &claim.project_scope.owner_user_id.as_ref(),
                     &claim.project_scope.project_id.as_ref(),
@@ -310,25 +313,9 @@ async fn settle_one_phase(
             )
             .await
             .map_err(complete_database_error)?;
-        update_run(
-            client,
-            claim,
-            "completed",
-            /*settlement*/ None,
-            /*clear_lease*/ true,
-        )
-        .await?;
-        return Ok(WorkPhase::Done(CompleteAgentRun::Settled));
+        return complete_or_compact(client, claim, &author_message).await;
     }
-    update_run(
-        client,
-        claim,
-        "completed",
-        /*settlement*/ None,
-        /*clear_lease*/ true,
-    )
-    .await?;
-    Ok(WorkPhase::Done(CompleteAgentRun::Settled))
+    complete_or_compact(client, claim, &author_message).await
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -430,7 +417,8 @@ async fn persist_stream_and_decision(
                     payload = $6::text::jsonb
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
-                AND run_id = $3::text::uuid",
+                AND run_id = $3::text::uuid
+                AND attempt_role = 'decision'",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
                 &claim.project_scope.project_id.as_ref(),
@@ -520,6 +508,7 @@ async fn persist_uncertain_attempt(
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
                 AND run_id = $3::text::uuid
+                AND manifest_role = 'decision'
                 AND destination_context_manifest_id IS NULL",
             &[
                 &claim.project_scope.owner_user_id.as_ref(),
@@ -721,6 +710,33 @@ fn evidence_values(
     values
 }
 
+async fn complete_or_compact(
+    client: &tokio_postgres::Client,
+    claim: &ClaimedAgentRun,
+    author_message: &str,
+) -> Result<WorkPhase, CompleteAgentRunError> {
+    if storyos_core::requests_active_compaction(author_message) {
+        let advance =
+            crate::agent_run_compaction::advance_active_compaction(client, claim, author_message)
+                .await?;
+        if matches!(
+            advance,
+            crate::agent_run_compaction::CompactionAdvance::Hold
+        ) {
+            return Ok(WorkPhase::Hold("compaction_stage"));
+        }
+    }
+    update_run(
+        client,
+        claim,
+        "completed",
+        /*settlement*/ None,
+        /*clear_lease*/ true,
+    )
+    .await?;
+    Ok(WorkPhase::Done(CompleteAgentRun::Settled))
+}
+
 async fn update_run(
     client: &tokio_postgres::Client,
     claim: &ClaimedAgentRun,
@@ -771,6 +787,7 @@ async fn hold_if_requested(kind: &str) {
         "dispatch" => "STORYOS_TEST_FAKE_DISPATCH_HOLD_PATH",
         "stream" => "STORYOS_TEST_FAKE_STREAM_HOLD_PATH",
         "decision" => "STORYOS_TEST_FAKE_DECISION_HOLD_PATH",
+        "compaction_stage" => "STORYOS_TEST_FAKE_COMPACTION_STAGE_HOLD_PATH",
         _ => return,
     };
     let Ok(path) = std::env::var(key) else {

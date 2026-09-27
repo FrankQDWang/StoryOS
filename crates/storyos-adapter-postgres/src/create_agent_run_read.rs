@@ -141,6 +141,7 @@ pub(super) async fn load_agent_run(
                LEFT JOIN storyos.model_attempts AS attempt
                  ON (attempt.owner_user_id, attempt.project_id, attempt.run_id) =
                     (run.owner_user_id, run.project_id, run.run_id)
+                AND attempt.attempt_role = 'decision'
               WHERE run.owner_user_id = $1::text::uuid
                 AND run.project_id = $2::text::uuid
                 AND run.run_id = $3::text::uuid",
@@ -227,6 +228,10 @@ pub(super) async fn load_agent_run(
             row.get::<_, Option<String>>(12),
         ),
         model,
+        active_compaction: crate::agent_run_compaction::load_active_compaction(
+            client, scope, run_id,
+        )
+        .await?,
     }))
 }
 

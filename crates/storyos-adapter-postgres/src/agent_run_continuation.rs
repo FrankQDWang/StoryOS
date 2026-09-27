@@ -150,6 +150,7 @@ async fn load_prior_binding(
               WHERE attempt.owner_user_id = $1::text::uuid
                 AND attempt.project_id = $2::text::uuid
                 AND attempt.conversation_id = $3::text::uuid
+                AND attempt.attempt_role = 'decision'
                 AND attempt.continuation_binding_id IS NOT NULL
                 AND attempt.dispatch_state = 'settled'
                 AND run.status = 'completed' AND run.run_id <> $4::text::uuid
