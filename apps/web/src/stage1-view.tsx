@@ -525,7 +525,8 @@ function ProjectReadyView({
               : selectedChapter.chapter.current_revision.revision_id}
             locators={proposalLocators}
             refreshKey={proposalRefresh}
-            safeToProject={selectedChapter.chapter.chapter_id !== currentChapterId
+            safeToProject={(state.editor.kind !== "editor-ready" && pending === null)
+              || selectedChapter.chapter.chapter_id !== currentChapterId
               || saveState === "saved"
               || (pending !== null
                 && pending.body === selectedChapter.chapter.current_revision.body
