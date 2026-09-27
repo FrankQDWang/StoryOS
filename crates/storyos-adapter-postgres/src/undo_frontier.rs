@@ -155,9 +155,11 @@ pub(super) async fn load_observed_frontier(
     let observed = observed_frontier(&row)?;
     let observed = match observed {
         Some(ObservedFrontier::Barrier { sequence }) => {
-            if row.get::<_, Option<String>>(11).as_deref() == Some("closeEditorFlowDraft")
-                && let Some(frontier) =
-                    crate::undo_draft_close::load_frontier(client, command, sequence).await?
+            if matches!(
+                row.get::<_, Option<String>>(11).as_deref(),
+                Some("closeEditorFlowDraft" | "expandRefusedEditDraftToProposal")
+            ) && let Some(frontier) =
+                crate::undo_draft_close::load_frontier(client, command, sequence).await?
             {
                 return Ok(LoadedUndoFrontier {
                     lifecycle_state: row.get(0),

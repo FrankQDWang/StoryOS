@@ -316,6 +316,35 @@ test("whole Draft expansion preserves structured content in a fresh pending Prop
     assert.deepEqual(closed.payload, source.payload);
     assert.equal(closed.closure_event?.close_reason, "superseded");
     assert.deepEqual(response.receipt.authoritative_commit_ids, []);
+    const replay = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions", request.command_schema,
+      digest, id("e0fb62"), (antiForgery) => expandRefusedEditDraftToProposal({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: source.draft_id,
+        fetchImpl: prepared.fetchImpl, request, antiForgery, idempotencyKey: id("e0fb62") }));
+    assert.deepEqual(replay, response);
+    const undo = { command_schema: "storyos.command.undo-latest-author-action.request.v1",
+      undo_latest_author_action_input: { ...BINDING, correlation_id: id("e0fb71"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        expected_authoritative_revision_id: writer.authoritativeRevisionId,
+        expected_author_undo_frontier_sequence: response.receipt.author_action_sequence! } };
+    const undoDigest = await digestUndoLatestAuthorAction(undo);
+    const reverse = (antiForgery: string) => undoLatestAuthorAction({ baseUrl: started.baseUrl,
+      projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, request: undo,
+      antiForgery, idempotencyKey: id("e0fb72") });
+    const undone = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema, undoDigest, id("e0fb72"), reverse);
+    assert.equal(undone.effect.kind, "draft_compensated");
+    const reopened = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    assert.equal(reopened.closure, "open");
+    assert.deepEqual(reopened.payload, source.payload);
+    const withdrawn = (await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: proposal.proposal_id, fetchImpl: prepared.fetchImpl })).proposal;
+    assert.equal(withdrawn.closure, "withdrawn");
+    assert.deepEqual(withdrawn.candidate_blocks, replacement);
+    assert.equal(withdrawn.reservation_state, "resolved");
+    assert.deepEqual(await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/author-actions/undo", undo.command_schema, undoDigest, id("e0fb72"), reverse), undone);
   } finally { await stopRealServer(started.server); }
 });
 
