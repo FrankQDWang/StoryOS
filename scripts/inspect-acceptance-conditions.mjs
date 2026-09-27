@@ -12,7 +12,8 @@ const rows = JSON.parse(execFileSync("docker", ["exec", container, "psql", "-X",
       (validation.owner_user_id, validation.project_id, validation.proposal_id, validation.proposal_revision_id) =
       (condition.owner_user_id, condition.project_id, condition.proposal_id, condition.proposal_revision_id)
   ) AS evidence`], { encoding: "utf8" }));
-assert.equal(rows.length, 3);
+// Three acceptProposal refusals plus the production conflicted Proposal acceptance.
+assert.equal(rows.length, 4);
 const inspected = [];
 for (const row of rows) {
   const options = { baseUrl, projectId: row.project_id, proposalId: row.proposal_id };
