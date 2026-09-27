@@ -25,7 +25,7 @@ export async function verifyProductionDraftExpansion(page: Page, projectId: stri
   assert.equal((await (await conflict).json()).effect.kind, "conflicted");
   await page.unroute(sessionRoute);
   await expect.poll(async () => (await readProductionJournal(page, projectId)).metadata!.filter((row) => String(row.key).startsWith("expansion-observation:")).length).toBe(1);
-  await surface.locator('select[name="draft-retry-target"]').selectOption("original");
+  await surface.locator("button[data-draft-retry]").click();
   await surface.locator('select[name="draft-retry-target"]').selectOption("1");
   await target.click(); await page.keyboard.press("ControlOrMeta+A");
   let response: ExpandRefusedEditDraftResponse | undefined;
