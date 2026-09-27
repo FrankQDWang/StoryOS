@@ -45,8 +45,16 @@ pub(super) struct ObservedProposalFrontier {
     pub base_authoritative_revision_id: String,
 }
 
-fn versioned_author_edit(command: &ApplyAuthorEditCommand) -> bool {
-    command.author_edit_units.iter().any(|unit| {
+pub(super) async fn load_chapter_proposal_heads(
+    client: &Client,
+    command: &ApplyAuthorEditCommand,
+    manuscript_body: String,
+) -> Result<LoadedProposalHeads, AuthorEditError> {
+    let structured = command
+        .author_edit_units
+        .iter()
+        .any(|unit| unit.selection_snapshot.ordered_selection.is_some());
+    let versioned = command.author_edit_units.iter().any(|unit| {
         unit.normalized_primitives.iter().any(|primitive| {
             matches!(
                 primitive,
@@ -57,51 +65,7 @@ fn versioned_author_edit(command: &ApplyAuthorEditCommand) -> bool {
                     | AuthorEditPrimitive::RetypeBlock { .. }
             )
         })
-    })
-}
-
-fn command_mentions_block(command: &ApplyAuthorEditCommand, block_id: &str) -> bool {
-    command.author_edit_units.iter().any(|unit| {
-        unit.normalized_primitives
-            .iter()
-            .any(|primitive| match primitive {
-                AuthorEditPrimitive::ReplaceBlockSelection {
-                    manuscript_block_id,
-                    ..
-                }
-                | AuthorEditPrimitive::MoveBlock {
-                    manuscript_block_id,
-                    ..
-                }
-                | AuthorEditPrimitive::RetypeBlock {
-                    manuscript_block_id,
-                    ..
-                } => manuscript_block_id == block_id,
-                AuthorEditPrimitive::SplitBlock {
-                    manuscript_block_id,
-                    new_manuscript_block_id,
-                    ..
-                } => manuscript_block_id == block_id || new_manuscript_block_id == block_id,
-                AuthorEditPrimitive::JoinBlocks {
-                    left_manuscript_block_id,
-                    right_manuscript_block_id,
-                } => left_manuscript_block_id == block_id || right_manuscript_block_id == block_id,
-                AuthorEditPrimitive::ReplaceStructuredSelection { .. }
-                | AuthorEditPrimitive::ReplaceSelection { .. } => false,
-            })
-    })
-}
-
-pub(super) async fn load_chapter_proposal_heads(
-    client: &Client,
-    command: &ApplyAuthorEditCommand,
-    manuscript_body: String,
-) -> Result<LoadedProposalHeads, AuthorEditError> {
-    let structured = command
-        .author_edit_units
-        .iter()
-        .any(|unit| unit.selection_snapshot.ordered_selection.is_some());
-    let versioned = versioned_author_edit(command);
+    });
     let row_limit = if versioned {
         None
     } else {
@@ -193,11 +157,42 @@ pub(super) async fn load_chapter_proposal_heads(
             || command.proposal_target.as_ref().is_some_and(|target| {
                 target.proposal_id == proposal_id && target.revision_id == revision_id
             });
-        if kind == "block_edit"
-            && versioned
-            && !acknowledged
-            && !command_mentions_block(command, &manuscript_block_id)
-        {
+        let mentions_block = command.author_edit_units.iter().any(|unit| {
+            unit.normalized_primitives
+                .iter()
+                .any(|primitive| match primitive {
+                    AuthorEditPrimitive::ReplaceBlockSelection {
+                        manuscript_block_id: edited_block_id,
+                        ..
+                    }
+                    | AuthorEditPrimitive::MoveBlock {
+                        manuscript_block_id: edited_block_id,
+                        ..
+                    }
+                    | AuthorEditPrimitive::RetypeBlock {
+                        manuscript_block_id: edited_block_id,
+                        ..
+                    } => edited_block_id == &manuscript_block_id,
+                    AuthorEditPrimitive::SplitBlock {
+                        manuscript_block_id: edited_block_id,
+                        new_manuscript_block_id,
+                        ..
+                    } => {
+                        edited_block_id == &manuscript_block_id
+                            || new_manuscript_block_id == &manuscript_block_id
+                    }
+                    AuthorEditPrimitive::JoinBlocks {
+                        left_manuscript_block_id,
+                        right_manuscript_block_id,
+                    } => {
+                        left_manuscript_block_id == &manuscript_block_id
+                            || right_manuscript_block_id == &manuscript_block_id
+                    }
+                    AuthorEditPrimitive::ReplaceStructuredSelection { .. }
+                    | AuthorEditPrimitive::ReplaceSelection { .. } => false,
+                })
+        });
+        if kind == "block_edit" && versioned && !acknowledged && !mentions_block {
             continue;
         }
         heads.push(revision_id);
