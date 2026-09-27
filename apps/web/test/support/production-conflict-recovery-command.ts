@@ -22,6 +22,45 @@ function uuidV7(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+async function alignCurrentWriterBase(projectId: string, chapterId: string,
+  nextRevision: string): Promise<void> {
+  const snapshotId = uuidV7();
+  const updated = await queryStoryOSPostgres(`WITH advanced AS (
+      UPDATE storyos.scope_counters
+      SET project_activity_position = project_activity_position + 1
+      WHERE project_id = '${projectId}'::uuid
+      RETURNING project_activity_position
+    ), moved AS (
+      UPDATE storyos.editor_session_base_snapshots AS snapshot
+      SET snapshot_id = '${snapshotId}'::uuid,
+          authoritative_revision_id = '${nextRevision}'::uuid,
+          project_activity_position = (SELECT project_activity_position FROM advanced),
+          created_at = clock_timestamp()
+      FROM storyos.project_writer_generations AS writer
+      WHERE snapshot.owner_user_id = writer.owner_user_id
+        AND snapshot.project_id = writer.project_id
+        AND snapshot.editor_session_id = writer.current_editor_session_id
+        AND snapshot.project_id = '${projectId}'::uuid
+        AND snapshot.chapter_object_id = '${chapterId}'::uuid
+        AND writer.writer_generation = (
+          SELECT max(latest.writer_generation) FROM storyos.project_writer_generations AS latest
+          WHERE latest.project_id = '${projectId}'::uuid
+        )
+      RETURNING snapshot.snapshot_id
+    )
+    UPDATE storyos.project_snapshots AS canonical
+    SET project_activity_position = (SELECT project_activity_position FROM advanced)
+    WHERE canonical.project_id = '${projectId}'::uuid
+      AND canonical.snapshot_kind = 'canonical'
+      AND canonical.project_activity_position = (
+        SELECT max(current.project_activity_position) FROM storyos.project_snapshots AS current
+        WHERE current.project_id = '${projectId}'::uuid AND current.snapshot_kind = 'canonical'
+      )
+      AND EXISTS (SELECT 1 FROM moved)
+    RETURNING canonical.project_activity_position::text`);
+  assert.match(updated.split("\n")[0] ?? "", /^[0-9]+$/);
+}
+
 function watchAcceptances(page: Page): { key: string; correlation: string }[] {
   const sent: { key: string; correlation: string }[] = [];
   page.on("request", (request) => {
@@ -130,6 +169,7 @@ export async function verifyConflictedProposalRecovery(input: {
       WHERE project_id = '${projectId}'::uuid AND revision_id = '${input.chapterRevisionId}'::uuid;
       UPDATE storyos.authoritative_heads SET current_revision_id = '${nextRevision}'::uuid
       WHERE project_id = '${projectId}'::uuid AND manuscript_object_id = '${chapterId}'::uuid`);
+    await alignCurrentWriterBase(projectId, chapterId, nextRevision);
     await restored.locator("button[data-proposal-accept]").click();
     await observer.locator(`[data-proposal-id="${proposalId}"][data-proposal-condition="proposal_conflict"]`).waitFor();
     assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-accept]`).count(), 0);
@@ -203,7 +243,9 @@ export async function verifyConflictedProposalRecovery(input: {
     assert.equal(await observer.locator(`[data-proposal-id="${proposalId}"] button[data-proposal-accept]`).count(), 0);
     await observer.unrouteAll();
     await observer.locator("[data-manuscript-editor][contenteditable='true']").waitFor();
-    const paragraph = observer.locator("[data-manuscript-editor] > p").first();
+    const paragraph = observer.locator(
+      `[data-manuscript-editor] p:not([data-id="${proposal.manuscript_block_id}"])`,
+    ).last();
     await paragraph.click();
     await observer.keyboard.insertText("Still writing. ");
     await observer.locator('[data-save-state="saved"][data-unsettled-intent-count="0"]').waitFor();
