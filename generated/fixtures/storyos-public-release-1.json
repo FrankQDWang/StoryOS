@@ -1,8 +1,11 @@
 {
-  "corpus_digest": "sha256:ce255c4321355ecd8ac64b974b3692c7aa6cfaac858355908e943285142555dd",
+  "corpus_digest": "sha256:1e6aac9a08c59b8d33dcb1cc863edc6cac2b1d439b430ef3b8ee662df2fbddf3",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
+      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.boundary.json",
       "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.json",
       "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.invalid.json",
       "generated/golden-wire/storyos-public-release-1/close-editor-flow-draft.boundary.json",
@@ -147,6 +150,24 @@
     ]
   },
   "fixtures": [
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.positive.v1",
+      "operation_id": "expandRefusedEditDraftToProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.invalid.v1",
+      "operation_id": "expandRefusedEditDraftToProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.expandRefusedEditDraftToProposal.boundary.v1",
+      "operation_id": "expandRefusedEditDraftToProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/expand-refused-edit-draft-to-proposal.boundary.json"
+    },
     {
       "classification": "positive",
       "fixture_id": "storyos.golden.closeEditorFlowDraft.positive.v1",

@@ -23,7 +23,14 @@ impl ProposalReader for PostgresProjectReader {
                         operation.reservation_state, revision.candidate_text,
                         proposal.source_run_id::text, proposal.source_decision_id::text,
                         receipt.validation_receipt_id::text, receipt.result,
-                        failure.conflict_id::text
+                        failure.conflict_id::text,
+                        revision.candidate_blocks::text,
+                        CASE WHEN proposal.source_run_id IS NOT NULL THEN jsonb_build_object(
+                          'kind','agent_run_decision','run_id',proposal.source_run_id::text,
+                          'decision_id',proposal.source_decision_id::text)
+                        ELSE jsonb_build_object('kind','refused_edit_draft','draft_id',proposal.source_draft_id::text,
+                          'draft_revision_id',proposal.source_draft_revision_id::text,
+                          'payload_digest',source_revision.payload_digest,'payload',source_revision.payload) END::text
                    FROM storyos.proposals AS proposal
                    JOIN storyos.proposal_heads AS head
                      ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -50,9 +57,16 @@ impl ProposalReader for PostgresProjectReader {
                          receipt.proposal_revision_id) =
                         (revision.owner_user_id, revision.project_id, revision.proposal_id,
                          revision.revision_id)
+                   LEFT JOIN storyos.draft_artifacts AS source_draft ON
+                     (source_draft.owner_user_id,source_draft.project_id,source_draft.draft_id)=
+                     (proposal.owner_user_id,proposal.project_id,proposal.source_draft_id)
+                   LEFT JOIN storyos.draft_artifact_revisions AS source_revision ON
+                     (source_revision.owner_user_id,source_revision.project_id,source_revision.draft_id,source_revision.revision_id)=
+                     (proposal.owner_user_id,proposal.project_id,proposal.source_draft_id,proposal.source_draft_revision_id)
                   WHERE proposal.owner_user_id = $1::text::uuid
                     AND proposal.project_id = $2::text::uuid
-                    AND proposal.proposal_id = $3::text::uuid",
+                    AND proposal.proposal_id = $3::text::uuid
+                    AND (proposal.source_run_id IS NOT NULL OR source_draft.retention_state='retained')",
                 &[
                     &scope.owner_user_id.as_ref(),
                     &scope.project_id.as_ref(),
@@ -72,30 +86,39 @@ impl ProposalReader for PostgresProjectReader {
             _ => Vec::new(),
         };
         transaction.commit().await.map_err(read_error)?;
-        Ok(row.map(|row| BlockProposalRecord {
-            project_scope: scope.clone(),
-            proposal_id: row.get(0),
-            kind: row.get(1),
-            revision_id: row.get(2),
-            generation: row.get(3),
-            validation: row.get(4),
-            closure: row.get(5),
-            operation_id: row.get(6),
-            operation_resolution: row.get(7),
-            operations,
-            chapter_id: row.get(8),
-            manuscript_block_id: row.get(9),
-            base_authoritative_revision_id: row.get(10),
-            reservation_state: row.get(11),
-            candidate_text: row.get(12),
-            source_run_id: row.get(13),
-            source_decision_id: row.get(14),
-            validation_receipt_id: row.get(15),
-            validation_receipt_result: row.get(16),
-            condition_refs: row.get::<_, Option<String>>(17).into_iter().collect(),
-            latest_acceptance_refusal,
-            anchors,
-        }))
+        row.map(|row| {
+            Ok(BlockProposalRecord {
+                project_scope: scope.clone(),
+                proposal_id: row.get(0),
+                kind: row.get(1),
+                revision_id: row.get(2),
+                generation: row.get(3),
+                validation: row.get(4),
+                closure: row.get(5),
+                operation_id: row.get(6),
+                operation_resolution: row.get(7),
+                operations,
+                chapter_id: row.get(8),
+                manuscript_block_id: row.get(9),
+                base_authoritative_revision_id: row.get(10),
+                reservation_state: row.get(11),
+                candidate_text: row.get(12),
+                candidate_blocks: row
+                    .get::<_, Option<String>>(18)
+                    .map(|value| {
+                        serde_json::from_str(&value).map_err(ProjectReadError::unavailable)
+                    })
+                    .transpose()?,
+                source: serde_json::from_str(&row.get::<_, String>(19))
+                    .map_err(ProjectReadError::unavailable)?,
+                validation_receipt_id: row.get(15),
+                validation_receipt_result: row.get(16),
+                condition_refs: row.get::<_, Option<String>>(17).into_iter().collect(),
+                latest_acceptance_refusal,
+                anchors,
+            })
+        })
+        .transpose()
     }
 }
 
@@ -106,7 +129,7 @@ async fn read_operations(
 ) -> Result<Vec<ProposalOperationRecord>, ProjectReadError> {
     let rows = client
         .query(
-            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state
+            "SELECT operation_id::text, manuscript_block_id::text, resolution, reservation_state, candidate_blocks::text
                FROM storyos.proposal_operations
               WHERE owner_user_id = $1::text::uuid
                 AND project_id = $2::text::uuid
@@ -120,15 +143,22 @@ async fn read_operations(
         )
         .await
         .map_err(read_error)?;
-    Ok(rows
-        .into_iter()
-        .map(|row| ProposalOperationRecord {
-            operation_id: row.get(0),
-            manuscript_block_id: row.get(1),
-            resolution: row.get(2),
-            reservation_state: row.get(3),
+    rows.into_iter()
+        .map(|row| {
+            Ok(ProposalOperationRecord {
+                operation_id: row.get(0),
+                manuscript_block_id: row.get(1),
+                resolution: row.get(2),
+                reservation_state: row.get(3),
+                candidate_blocks: row
+                    .get::<_, Option<String>>(4)
+                    .map(|value| {
+                        serde_json::from_str(&value).map_err(ProjectReadError::unavailable)
+                    })
+                    .transpose()?,
+            })
         })
-        .collect())
+        .collect()
 }
 
 async fn read_inline_anchors(

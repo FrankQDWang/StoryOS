@@ -19,6 +19,7 @@ pub(super) struct ProposalEditContext {
     pub kind: String,
     pub ranges: Vec<(u32, u32)>,
     pub candidate_text: String,
+    pub structured_candidate: bool,
 }
 
 pub(super) struct RoutedInlineAuthorEdit {
@@ -61,7 +62,7 @@ pub(super) async fn load_chapter_proposal_heads(
                     CASE WHEN $5 THEN '' ELSE revision.candidate_text END, proposal.manuscript_block_id::text,
                     revision.base_authoritative_revision_id::text, proposal.kind,
                     operation.operation_id::text, operation.resolution,
-                    operation.reservation_state
+                    operation.reservation_state, revision.candidate_blocks IS NOT NULL
                FROM storyos.proposals AS proposal
                JOIN storyos.proposal_heads AS head
                  ON (head.owner_user_id, head.project_id, head.proposal_id) =
@@ -129,6 +130,7 @@ pub(super) async fn load_chapter_proposal_heads(
                     kind,
                     ranges: Vec::new(),
                     candidate_text: candidate_text.clone(),
+                    structured_candidate: row.get(9),
                 },
                 candidate_text,
             ));
@@ -222,6 +224,9 @@ pub(super) fn route_inline_author_edit(
     };
     match classify_inline_input_owner(&context.ranges, from, to) {
         InlineInputOwner::Proposal => {
+            if context.structured_candidate {
+                return Err(AuthorEditRefusal::UnsupportedIntentShape);
+            }
             let Some((anchor_from, _)) = context.ranges.first().copied() else {
                 return Err(AuthorEditRefusal::UnsupportedIntentShape);
             };

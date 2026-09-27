@@ -15,6 +15,203 @@
       ],
       "type": "string"
     },
+    "AuthorEditPrimitive": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "replace_structured_selection",
+              "type": "string"
+            },
+            "replacement": {
+              "items": {
+                "$ref": "#/$defs/ReplacementBlock"
+              },
+              "type": "array"
+            }
+          },
+          "required": [
+            "kind",
+            "replacement"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "replace_selection",
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "to": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "from",
+            "to",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "kind": {
+              "const": "replace_block_selection",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "text": {
+              "type": "string"
+            },
+            "to": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "from",
+            "to",
+            "text"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "split_block",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "new_manuscript_block_id": {
+              "type": "string"
+            },
+            "offset": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "offset",
+            "new_manuscript_block_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "join_blocks",
+              "type": "string"
+            },
+            "left_manuscript_block_id": {
+              "type": "string"
+            },
+            "right_manuscript_block_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "left_manuscript_block_id",
+            "right_manuscript_block_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "move_block",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "to_index": {
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "to_index"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "block_kind": {
+              "$ref": "#/$defs/ManuscriptBlockKind"
+            },
+            "kind": {
+              "const": "retype_block",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id",
+            "block_kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "AuthorEditUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "normalized_primitives": {
+          "items": {
+            "$ref": "#/$defs/AuthorEditPrimitive"
+          },
+          "type": "array"
+        },
+        "selection_snapshot": {
+          "$ref": "#/$defs/SelectionSnapshot"
+        }
+      },
+      "required": [
+        "normalized_primitives",
+        "selection_snapshot"
+      ],
+      "type": "object"
+    },
     "BlockProposalInspect": {
       "additionalProperties": false,
       "properties": {
@@ -27,6 +224,15 @@
         "base_authoritative_revision_id": {
           "format": "uuid",
           "type": "string"
+        },
+        "candidate_blocks": {
+          "items": {
+            "$ref": "#/$defs/ReplacementBlock"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
         },
         "candidate_text": {
           "type": "string"
@@ -117,6 +323,63 @@
         "anchors"
       ],
       "type": "object"
+    },
+    "EditSourceOwner": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "manuscript",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "manuscript_block_id"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "proposal",
+              "type": "string"
+            },
+            "manuscript_block_id": {
+              "type": "string"
+            },
+            "operation_id": {
+              "type": "string"
+            },
+            "proposal_id": {
+              "type": "string"
+            },
+            "revision_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "proposal_id",
+            "operation_id",
+            "revision_id",
+            "manuscript_block_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "ManuscriptBlockKind": {
+      "enum": [
+        "paragraph",
+        "heading"
+      ],
+      "type": "string"
     },
     "OptionalAcceptanceRefusalInspect": {
       "oneOf": [
@@ -235,6 +498,29 @@
         }
       }
     },
+    "OrderedSourceSelection": {
+      "additionalProperties": false,
+      "properties": {
+        "anchor": {
+          "$ref": "#/$defs/SourceSelectionEndpoint"
+        },
+        "head": {
+          "$ref": "#/$defs/SourceSelectionEndpoint"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/SelectedEditSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources",
+        "anchor",
+        "head"
+      ],
+      "type": "object"
+    },
     "ProjectScope": {
       "additionalProperties": false,
       "properties": {
@@ -304,6 +590,15 @@
     "ProposalOperationInspect": {
       "additionalProperties": false,
       "properties": {
+        "candidate_blocks": {
+          "items": {
+            "$ref": "#/$defs/ReplacementBlock"
+          },
+          "type": [
+            "array",
+            "null"
+          ]
+        },
         "manuscript_block_id": {
           "format": "uuid",
           "type": "string"
@@ -349,6 +644,35 @@
             "decision_id"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "draft_id": {
+              "type": "string"
+            },
+            "draft_revision_id": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "refused_edit_draft",
+              "type": "string"
+            },
+            "payload": {
+              "$ref": "#/$defs/RefusedEditPayload"
+            },
+            "payload_digest": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "draft_id",
+            "draft_revision_id",
+            "payload_digest",
+            "payload"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -359,6 +683,165 @@
           "format": "uuid"
         }
       }
+    },
+    "RefusedEditPayload": {
+      "additionalProperties": false,
+      "properties": {
+        "author_edit_units": {
+          "items": {
+            "$ref": "#/$defs/AuthorEditUnit"
+          },
+          "type": "array"
+        },
+        "chapter_id": {
+          "type": "string"
+        },
+        "completed_intent_record_id": {
+          "type": "string"
+        },
+        "expected_authoritative_revision_id": {
+          "type": "string"
+        },
+        "expected_proposal_head_revision_ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "local_intent_sequence": {
+          "type": "string"
+        },
+        "schema_revision": {
+          "type": "string"
+        },
+        "target_refs": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "undo_group_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_revision",
+        "chapter_id",
+        "expected_authoritative_revision_id",
+        "expected_proposal_head_revision_ids",
+        "target_refs",
+        "author_edit_units",
+        "undo_group_id",
+        "completed_intent_record_id",
+        "local_intent_sequence"
+      ],
+      "type": "object"
+    },
+    "ReplacementBlock": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "block_kind",
+        "text"
+      ],
+      "type": "object"
+    },
+    "SelectedEditSource": {
+      "additionalProperties": false,
+      "properties": {
+        "block_kind": {
+          "$ref": "#/$defs/ManuscriptBlockKind"
+        },
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "owner": {
+          "$ref": "#/$defs/EditSourceOwner"
+        },
+        "source_text": {
+          "type": "string"
+        },
+        "to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "owner",
+        "coordinate_profile",
+        "from",
+        "to",
+        "block_kind",
+        "source_text"
+      ],
+      "type": "object"
+    },
+    "SelectionSnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "coordinate_profile": {
+          "type": "string"
+        },
+        "from": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ordered_selection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OrderedSourceSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "to": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "coordinate_profile",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "SourceSelectionEndpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "source_index": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "source_offset": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_index",
+        "source_offset"
+      ],
+      "type": "object"
     }
   },
   "$id": "storyos.query.proposal.response.v1",

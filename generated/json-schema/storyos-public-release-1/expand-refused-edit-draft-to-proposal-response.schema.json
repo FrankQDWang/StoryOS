@@ -1,25 +1,5 @@
 {
   "$defs": {
-    "ControlledProject": {
-      "additionalProperties": false,
-      "properties": {
-        "open": {
-          "$ref": "#/$defs/ProjectOpenState"
-        },
-        "project_id": {
-          "type": "string"
-        },
-        "title": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "project_id",
-        "title",
-        "open"
-      ],
-      "type": "object"
-    },
     "DigestAlgorithm": {
       "enum": [
         "sha256"
@@ -56,18 +36,9 @@
           "type": "array"
         },
         "author_action_sequence": {
-          "anyOf": [
-            {
-              "pattern": "^(0|[1-9][0-9]{0,19})$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          "type": "string"
         },
         "author_command_admission_id": {
-          "format": "uuid",
           "type": "string"
         },
         "authoritative_commit_ids": {
@@ -95,7 +66,6 @@
           "type": "array"
         },
         "created_at": {
-          "format": "date-time",
           "type": "string"
         },
         "draft_artifact_refs": {
@@ -111,7 +81,6 @@
           "type": "array"
         },
         "idempotency_key": {
-          "format": "uuid",
           "type": "string"
         },
         "prior_heads": {
@@ -133,7 +102,6 @@
           "type": "array"
         },
         "receipt_id": {
-          "format": "uuid",
           "type": "string"
         },
         "result": {
@@ -214,35 +182,138 @@
       ],
       "type": "string"
     },
-    "ProjectOpenState": {
+    "EditorFlowDraftClosed": {
+      "additionalProperties": false,
+      "properties": {
+        "author_action_sequence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "close_reason": {
+          "type": "string"
+        },
+        "closure": {
+          "type": "string"
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "draft_id": {
+          "type": "string"
+        },
+        "draft_revision_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "event_kind": {
+          "type": "string"
+        },
+        "payload_digest": {
+          "type": "string"
+        },
+        "prior_closure": {
+          "type": "string"
+        },
+        "project_scope": {
+          "$ref": "#/$defs/ProjectScope"
+        },
+        "schema_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/RefusedEditDraftSource"
+        }
+      },
+      "required": [
+        "schema_id",
+        "event_kind",
+        "event_id",
+        "project_scope",
+        "draft_id",
+        "draft_revision_id",
+        "payload_digest",
+        "prior_closure",
+        "closure",
+        "close_reason",
+        "source",
+        "created_at"
+      ],
+      "type": "object"
+    },
+    "ExpandRefusedEditDraftEffect": {
       "oneOf": [
         {
           "additionalProperties": false,
           "properties": {
+            "event": {
+              "$ref": "#/$defs/EditorFlowDraftClosed"
+            },
             "kind": {
-              "const": "empty",
+              "const": "proposal_created_from_draft",
+              "type": "string"
+            },
+            "proposal_id": {
+              "type": "string"
+            },
+            "proposal_revision_id": {
               "type": "string"
             }
           },
           "required": [
-            "kind"
+            "kind",
+            "proposal_id",
+            "proposal_revision_id",
+            "event"
           ],
           "type": "object"
         },
         {
           "additionalProperties": false,
           "properties": {
-            "current_chapter_id": {
+            "current_closure": {
+              "type": "string"
+            },
+            "current_digest": {
+              "type": "string"
+            },
+            "current_revision_id": {
               "type": "string"
             },
             "kind": {
-              "const": "current_chapter",
+              "const": "conflicted",
               "type": "string"
             }
           },
           "required": [
             "kind",
-            "current_chapter_id"
+            "current_revision_id",
+            "current_digest",
+            "current_closure"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "current_closure": {
+              "type": "string"
+            },
+            "kind": {
+              "const": "refused",
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "reason",
+            "current_closure"
           ],
           "type": "object"
         }
@@ -263,9 +334,37 @@
         "project_id"
       ],
       "type": "object"
+    },
+    "RefusedEditDraftSource": {
+      "additionalProperties": false,
+      "properties": {
+        "author_command_admission_id": {
+          "type": "string"
+        },
+        "command_digest": {
+          "$ref": "#/$defs/DigestValue"
+        },
+        "command_id": {
+          "type": "string"
+        },
+        "idempotency_key": {
+          "type": "string"
+        },
+        "receipt_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "command_id",
+        "author_command_admission_id",
+        "receipt_id",
+        "idempotency_key",
+        "command_digest"
+      ],
+      "type": "object"
     }
   },
-  "$id": "storyos.command.create-project.response.v1",
+  "$id": "storyos.command.expand-refused-edit-draft-to-proposal.response.v1",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
@@ -281,8 +380,8 @@
       "format": "uuid",
       "type": "string"
     },
-    "project": {
-      "$ref": "#/$defs/ControlledProject"
+    "effect": {
+      "$ref": "#/$defs/ExpandRefusedEditDraftEffect"
     },
     "project_scope": {
       "$ref": "#/$defs/ProjectScope"
@@ -291,7 +390,7 @@
       "$ref": "#/$defs/DomainReceipt"
     },
     "schema_id": {
-      "const": "storyos.command.create-project.response.v1",
+      "const": "storyos.command.expand-refused-edit-draft-to-proposal.response.v1",
       "type": "string"
     }
   },
@@ -302,8 +401,8 @@
     "command_id",
     "author_command_admission_id",
     "receipt",
-    "project"
+    "effect"
   ],
-  "title": "StoryOS Create Project Response",
+  "title": "StoryOS Close Editor Flow Draft Response",
   "type": "object"
 }

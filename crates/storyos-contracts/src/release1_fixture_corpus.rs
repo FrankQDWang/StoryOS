@@ -31,6 +31,8 @@ use crate::release1_delete_chapter::DELETE_CHAPTER;
 use crate::release1_delete_chapter_artifacts as delete_chapter_artifacts;
 use crate::release1_delete_volume::DELETE_VOLUME;
 use crate::release1_delete_volume_artifacts as delete_volume_artifacts;
+use crate::release1_expand_refused_edit_draft::EXPAND_REFUSED_EDIT_DRAFT;
+use crate::release1_expand_refused_edit_draft_artifacts as expand_draft_artifacts;
 use crate::release1_list_projects::LIST_PROJECTS;
 use crate::release1_list_projects_artifacts as list_projects_artifacts;
 use crate::release1_manuscript_search::SEARCH_MANUSCRIPT;
@@ -173,6 +175,15 @@ fn fixture_triple(
 
 fn build_fixture_corpus_membership() -> Vec<FixtureMembership> {
     let mut membership = Vec::with_capacity(98);
+    membership.extend(fixture_triple(
+        expand_draft_artifacts::FIXTURE_PATHS,
+        &EXPAND_REFUSED_EDIT_DRAFT,
+        [
+            |_| expand_draft_artifacts::fixture_bytes(),
+            |_| expand_draft_artifacts::invalid_fixture_bytes(),
+            |_| expand_draft_artifacts::boundary_fixture_bytes(),
+        ],
+    ));
     membership.extend(fixture_triple(
         close_draft_artifacts::FIXTURE_PATHS,
         &CLOSE_EDITOR_FLOW_DRAFT,

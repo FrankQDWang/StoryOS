@@ -16,6 +16,8 @@ mod create_volume;
 mod delete_chapter;
 mod delete_volume;
 mod draft_retry;
+mod expand_refused_edit_draft;
+pub use expand_refused_edit_draft::{ExpandRefusedEditDraftResult, expand_refused_edit_draft};
 mod manuscript_payload;
 mod refused_edit;
 pub use draft_retry::select_draft_replacement;

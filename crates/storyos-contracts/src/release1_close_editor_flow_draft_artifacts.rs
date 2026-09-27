@@ -187,19 +187,19 @@ fn command_fixture(created_at: &str) -> Value {
     })
 }
 
-fn generated_ref(path: &str) -> &str {
+pub(super) fn generated_ref(path: &str) -> &str {
     path.strip_prefix("generated/")
         .expect("schema is a generated artifact")
 }
 
-fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
+pub(super) fn schema_value<T: schemars::JsonSchema>(schema_id: &str, title: &str) -> Value {
     let mut schema = serde_json::to_value(schema_for!(T)).expect("contract schema serializes");
     schema["$id"] = Value::String(schema_id.to_owned());
     schema["title"] = Value::String(title.to_owned());
     schema
 }
 
-fn json_bytes(value: &Value) -> Vec<u8> {
+pub(super) fn json_bytes(value: &Value) -> Vec<u8> {
     let mut bytes = serde_json::to_vec_pretty(value).expect("contract JSON should serialize");
     bytes.push(b'\n');
     bytes

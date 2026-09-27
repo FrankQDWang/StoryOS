@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { test } from "vitest";
 import {
   StoryOSProtocolError, closeEditorFlowDraft, digestCloseEditorFlowDraft, undoLatestAuthorAction, digestUndoLatestAuthorAction,
+  expandRefusedEditDraftToProposal, digestExpandRefusedEditDraft,
   takeOverProjectWriter, digestTakeOverProjectWriter,
   acceptProposal, applyAuthorEdit, archiveProject, createAgentRun, createEditorSession,
   digestAcceptProposal, digestApplyAuthorEdit, digestArchiveProject, digestCreateAgentRun,
@@ -14,6 +15,7 @@ import {
 import type {
   CloseEditorFlowDraftRequest, CloseEditorFlowDraftResponse, AcceptProposalRequest, ApplyAuthorEditRequest, CreateAgentRunRequest,
   CreateEditorSessionRequest, RejectProposalOperationsRequest, SelectedEditSource,
+  ExpandRefusedEditDraftRequest, ReplacementBlock,
 } from "../../../../generated/typescript/storyos-public-release-1/client.mjs";
 import { requireStoryOSProtocolError, sessionFetch as browserFetch,
   stopStoryOSServer as stopRealServer, queryStoryOSPostgres as queryPostgres } from "../support/node-integration.ts";
@@ -255,6 +257,67 @@ async function sendMixed(baseUrl: string, prepared: Awaited<ReturnType<typeof pr
       projectId: prepared.projectId, fetchImpl: prepared.fetchImpl, request,
       idempotencyKey: key, antiForgery }));
 }
+
+test("whole Draft expansion preserves structured content in a fresh pending Proposal and supersedes its source", async () => {
+  const started = await startRealServer();
+  try {
+    await drainLeftoverWork();
+    const prepared = await prepare(started.baseUrl, id("e0fb11"), "Whole Draft Expansion", "e0fb2");
+    const { opened, writer } = await openInline(started.baseUrl, prepared.fetchImpl,
+      prepared.projectId, prepared.chapterId, "e0fb3");
+    const original = mixedRequest(opened, writer, "e0fb4");
+    const replacement: ReplacementBlock[] = [{ block_kind: "heading", text: "完整标题🙂" },
+      { block_kind: "paragraph", text: "First line\n第二行" }];
+    original.author_edit_units[0]!.normalized_primitives = [{ kind: "replace_structured_selection", replacement }];
+    const created = await sendMixed(started.baseUrl, prepared, original, id("e0fb46"));
+    if (created.effect.kind !== "refused_to_draft") throw new Error("expected complete source Draft");
+    const source = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: created.effect.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    const rejection: RejectProposalOperationsRequest = {
+      command_schema: "storyos.command.reject-proposal-operations.request.v1",
+      reject_proposal_operations_input: { ...BINDING, correlation_id: id("e0fb51"),
+        editor_session_id: writer.session.editor_session.editor_session_id,
+        proposal_revision_id: opened.proposal.revision_id,
+        selected_pending_operation_ids: [opened.proposal.operation_id],
+        expected_target_revisions: [writer.authoritativeRevisionId],
+        rejection_reason: { kind: "author_declined", note: { kind: "omitted" } } },
+    };
+    await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/proposals/{proposal_id}/rejections", rejection.command_schema,
+      await digestRejectProposalOperations(rejection), id("e0fb52"), (antiForgery) => rejectProposalOperations({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, proposalId: opened.proposal.proposal_id,
+        request: rejection, fetchImpl: prepared.fetchImpl, antiForgery, idempotencyKey: id("e0fb52") }));
+    const request: ExpandRefusedEditDraftRequest = { command_schema: "storyos.command.expand-refused-edit-draft-to-proposal.request.v1",
+      expand_refused_edit_draft_to_proposal_input: { ...BINDING, correlation_id: id("e0fb61"),
+        draft_id: source.draft_id, source_current_draft_revision_id: source.draft_revision_id,
+        source_draft_payload_digest: source.payload_digest, expected_source_draft_closure: "open",
+        selected_payload_range: { kind: "whole_draft_payload" }, proposal_kind: "inline_edit",
+        chapter_id: prepared.chapterId, target_refs: [opened.proposal.manuscript_block_id],
+        expected_target_revisions: [writer.authoritativeRevisionId], anchors: opened.proposal.anchors,
+        editor_session_id: writer.session.editor_session.editor_session_id, writer_generation: writer.writerGeneration } };
+    const digest = await digestExpandRefusedEditDraft(request);
+    const response = await challenged(started.baseUrl, prepared.fetchImpl, prepared.projectId, "POST",
+      "/api/v1/projects/{project_id}/drafts/{draft_id}/proposal-expansions", request.command_schema,
+      digest, id("e0fb62"), (antiForgery) => expandRefusedEditDraftToProposal({
+        baseUrl: started.baseUrl, projectId: prepared.projectId, draftId: source.draft_id,
+        fetchImpl: prepared.fetchImpl, request, antiForgery, idempotencyKey: id("e0fb62") }));
+    assert.equal(response.effect.kind, "proposal_created_from_draft");
+    if (response.effect.kind !== "proposal_created_from_draft") throw new Error("expected expanded Proposal");
+    const proposal = (await getProposal({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      proposalId: response.effect.proposal_id, fetchImpl: prepared.fetchImpl })).proposal;
+    assert.equal(proposal.validation, "pending");
+    assert.deepEqual(proposal.candidate_blocks, replacement);
+    assert.deepEqual(proposal.operations.map((operation) => operation.candidate_blocks), [replacement]);
+    assert.equal(proposal.candidate_text, "完整标题🙂\nFirst line\n第二行");
+    assert.deepEqual(proposal.source, { kind: "refused_edit_draft", draft_id: source.draft_id,
+      draft_revision_id: source.draft_revision_id, payload_digest: source.payload_digest, payload: source.payload });
+    const closed = (await getRefusedEditDraft({ baseUrl: started.baseUrl, projectId: prepared.projectId,
+      draftId: source.draft_id, fetchImpl: prepared.fetchImpl })).draft;
+    assert.deepEqual(closed.payload, source.payload);
+    assert.equal(closed.closure_event?.close_reason, "superseded");
+    assert.deepEqual(response.receipt.authoritative_commit_ids, []);
+  } finally { await stopRealServer(started.server); }
+});
 
 test("an explicit narrowed public Draft retry changes content and supersedes only its exact source", async () => {
   const started = await startRealServer();

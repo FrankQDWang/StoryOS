@@ -44,7 +44,16 @@ pub struct GetProposalRequest {}
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ProposalSourceInspect {
-    AgentRunDecision { run_id: String, decision_id: String },
+    AgentRunDecision {
+        run_id: String,
+        decision_id: String,
+    },
+    RefusedEditDraft {
+        draft_id: String,
+        draft_revision_id: String,
+        payload_digest: String,
+        payload: Box<crate::RefusedEditPayload>,
+    },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
@@ -114,6 +123,8 @@ pub struct BlockProposalInspect {
     pub base_authoritative_revision_id: String,
     pub reservation_state: String,
     pub candidate_text: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_blocks: Option<Vec<crate::ReplacementBlock>>,
     pub source: ProposalSourceInspect,
     pub validation_receipt: OptionalValidationReceiptInspect,
     pub anchors: Vec<ProposalAnchorInspect>,
@@ -122,6 +133,8 @@ pub struct BlockProposalInspect {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ProposalOperationInspect {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_blocks: Option<Vec<crate::ReplacementBlock>>,
     pub operation_id: String,
     pub manuscript_block_id: String,
     pub resolution: String,

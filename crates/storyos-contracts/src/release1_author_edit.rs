@@ -196,6 +196,9 @@ pub enum DomainReceiptProducerCause {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 pub enum DomainReceiptCommandKind {
+    #[serde(rename = "expandRefusedEditDraftToProposal")]
+    #[ts(rename = "expandRefusedEditDraftToProposal")]
+    ExpandRefusedEditDraftToProposal,
     #[serde(rename = "closeEditorFlowDraft")]
     #[ts(rename = "closeEditorFlowDraft")]
     CloseEditorFlowDraft,
@@ -261,6 +264,7 @@ pub enum DomainReceiptCommandKind {
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum DomainReceiptResult {
+    ProposalCreatedFromDraft,
     DraftClosureChanged,
     RefusedToDraft,
     AuthoritativeApplied,

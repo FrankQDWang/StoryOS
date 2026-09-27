@@ -337,6 +337,7 @@
     },
     "DomainReceiptCommandKind": {
       "enum": [
+        "expandRefusedEditDraftToProposal",
         "closeEditorFlowDraft",
         "applyAuthorEdit",
         "takeOverProjectWriter",
@@ -368,6 +369,7 @@
     },
     "DomainReceiptResult": {
       "enum": [
+        "proposal_created_from_draft",
         "draft_closure_changed",
         "refused_to_draft",
         "authoritative_applied",

@@ -8,6 +8,7 @@ import { ManuscriptEditor, type ManuscriptEditorProps } from "./manuscript-edito
 import { RefusedEditDraftDisplay } from "./refused-edit-draft-display.tsx";
 import type { BlockProposalProjection } from "./block-proposal-decoration.ts";
 import { candidateProjectionFromJournal } from "./local-edit-journal.ts";
+import { canonicalDraftValue as canonical } from "./refused-edit-discard.ts";
 import { acceptDisplayedBlockProposal, retryPendingDisplayedAcceptance } from "./accept-block-proposal.ts";
 import { rejectDisplayedBlockProposal, rejectionJournalState,
   retryPendingDisplayedRejection } from "./reject-block-proposal.ts";
@@ -134,12 +135,14 @@ export function BlockProposalDisplay({
         if (response.project_scope.owner_user_id !== scope.owner_user_id
           || response.project_scope.project_id !== scope.project_id
           || response.proposal.proposal_id !== locator.proposalId
-          || (locator.runId !== "" && response.proposal.source.run_id !== locator.runId)
+          || (locator.runId !== "" && (response.proposal.source.kind !== "agent_run_decision"
+            || response.proposal.source.run_id !== locator.runId))
           || (locator.decisionId !== ""
-            && response.proposal.source.decision_id !== locator.decisionId)) {
+            && (response.proposal.source.kind !== "agent_run_decision"
+              || response.proposal.source.decision_id !== locator.decisionId))) {
           return { locator };
         }
-        return { locator: locator.runId === "" ? {
+        return { locator: locator.runId === "" && response.proposal.source.kind === "agent_run_decision" ? {
           proposalId: locator.proposalId,
           runId: response.proposal.source.run_id,
           decisionId: response.proposal.source.decision_id,
@@ -280,8 +283,8 @@ export function BlockProposalDisplay({
       operationId: operation.operation_id,
       revisionId: proposal.revision_id,
       blockId: proposal.manuscript_block_id,
-      sourceRunId: proposal.source.run_id,
-      sourceDecisionId: proposal.source.decision_id,
+      sourceRunId: proposal.source.kind === "agent_run_decision" ? proposal.source.run_id : "",
+      sourceDecisionId: proposal.source.kind === "agent_run_decision" ? proposal.source.decision_id : "",
       text: candidateTexts[`${proposal.proposal_id}:${proposal.revision_id}`]
         ?? proposal.candidate_text,
       eligible,
@@ -343,8 +346,7 @@ export function BlockProposalDisplay({
         });
         if (current.project_scope.owner_user_id !== scope.owner_user_id
           || current.project_scope.project_id !== scope.project_id
-          || current.proposal.source.run_id !== displayed.source.run_id
-          || current.proposal.source.decision_id !== displayed.source.decision_id) {
+          || canonical(current.proposal.source) !== canonical(displayed.source)) {
           throw new Error("候选文字的项目身份已变化。");
         }
         const response = await acceptDisplayedBlockProposal({
@@ -467,8 +469,7 @@ export function BlockProposalDisplay({
         if (current.project_scope.owner_user_id !== scope.owner_user_id
           || current.project_scope.project_id !== scope.project_id
           || current.proposal.revision_id !== target.revisionId
-          || current.proposal.source.run_id !== displayed.source.run_id
-          || current.proposal.source.decision_id !== displayed.source.decision_id
+          || canonical(current.proposal.source) !== canonical(displayed.source)
           || current.proposal.operations.find((item) => item.operation_id === target.operationId
             && item.resolution === "pending") === undefined) {
           throw new Error("候选文字的身份已变化。");
@@ -609,8 +610,8 @@ export function BlockProposalDisplay({
         <p className="block-proposal-unavailable" data-proposal-unavailable={locator.proposalId}
           data-proposal-revision-id={proposal?.revision_id ?? ""}
           data-proposal-operation-id={proposal?.operation_id ?? ""}
-          data-proposal-source-run-id={proposal?.source.run_id ?? locator.runId}
-          data-proposal-source-decision-id={proposal?.source.decision_id ?? locator.decisionId}
+          data-proposal-source-run-id={proposal?.source.kind === "agent_run_decision" ? proposal.source.run_id : locator.runId}
+          data-proposal-source-decision-id={proposal?.source.kind === "agent_run_decision" ? proposal.source.decision_id : locator.decisionId}
           data-proposal-eligibility="unavailable"
           key={locator.proposalId}>
           {proposal?.operation_resolution === "applied"
