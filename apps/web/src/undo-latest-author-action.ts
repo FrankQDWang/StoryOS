@@ -16,6 +16,7 @@ import { RELEASE_1_PROTOCOL_PROFILE } from "../../../generated/typescript/storyo
 import type { EditorReadyState, EditorWorkspace } from "./editor-types.ts";
 
 import { readDiscardJournal, canonicalDraftValue } from "./refused-edit-discard.ts";
+import { readExpansionJournal } from "./refused-edit-expansion.ts";
 import { readJournalSnapshot, validateJournalSnapshot } from "./local-edit-journal.ts";
 import { freezeDraftUndo, readDraftUndoJournal, observeDraftUndo, reconcileDraftUndo,
   type DraftUndoRecord } from "./draft-undo-journal.ts";
@@ -139,7 +140,9 @@ export async function undoOwnedLatestAuthorAction(options: {
     let closed = (await readDiscardJournal(options.workspace)).flatMap(({ observation }) =>
       observation?.kind === "settled_closed" ? [observation.event]
         : observation?.kind === "settled" && observation.response.effect.kind === "draft_closure_changed"
-          ? [observation.response.effect.event] : []).find((event) => event.author_action_sequence === frontier);
+          ? [observation.response.effect.event] : []).concat((await readExpansionJournal(options.workspace)).flatMap(({ observation }) =>
+            observation?.response.effect.kind === "proposal_created_from_draft" ? [observation.response.effect.event] : []))
+      .find((event) => event.author_action_sequence === frontier);
     if (closed === undefined) {
       const snapshot = await validateJournalSnapshot(options.workspace, await readJournalSnapshot(options.workspace));
       const group = snapshot.groups.find(({ settlement }) =>
