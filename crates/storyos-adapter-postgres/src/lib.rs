@@ -142,6 +142,7 @@ mod refused_edit_draft;
 mod refused_edit_source;
 mod reject_proposal_operations;
 mod reopen_rejected_operations;
+mod replan_proposal;
 mod set_current_chapter;
 mod snapshot;
 mod storage_activation;

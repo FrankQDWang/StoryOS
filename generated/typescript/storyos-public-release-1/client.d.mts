@@ -479,6 +479,8 @@ export type ExpandRefusedEditDraftEffect = { "kind": "proposal_created_from_draf
 export type ExpandRefusedEditDraftResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: DomainReceipt, effect: ExpandRefusedEditDraftEffect, };
 export type ProposalSourceInspect = { "kind": "agent_run_decision", run_id: string, decision_id: string, } | { "kind": "refused_edit_draft", draft_id: string, draft_revision_id: string, payload_digest: string, payload: RefusedEditPayload, };
 
+export type ProposalSourceConditionInspect = { "kind": "absent" } | { "kind": "proposal_conflict", proposal_conflict_ref: string, } | { "kind": "proposal_recovery_conflict", proposal_recovery_conflict_ref: string, };
+
 export type OptionalValidationReceiptInspect = { "kind": "absent" } | { "kind": "present", validation_receipt_id: string, result: string, };
 
 export type AcceptanceRefusalReason = "stale_writer" | "session_changed" | "invalid_challenge";
@@ -493,7 +495,7 @@ export type ProposalOperationInspect = { candidate_blocks?: Array<ReplacementBlo
 
 export type ProposalAnchorInspect = { manuscript_block_id: string, base_authoritative_revision_id: string, manuscript_schema_version: number, coordinate_profile: string, from: number, to: number, boundary_profile: string, base_slice_digest: string, };
 
-export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, operations: Array<ProposalOperationInspect>, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, candidate_blocks?: Array<ReplacementBlock> | null, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, anchors: Array<ProposalAnchorInspect>, };
+export type BlockProposalInspect = { proposal_id: string, kind: string, revision_id: string, generation: string, validation: string, condition_refs: Array<string>, source_condition: ProposalSourceConditionInspect, latest_acceptance_refusal: OptionalAcceptanceRefusalInspect, closure: string, operation_id: string, operation_resolution: string, operations: Array<ProposalOperationInspect>, chapter_id: string, manuscript_block_id: string, base_authoritative_revision_id: string, reservation_state: string, candidate_text: string, candidate_blocks?: Array<ReplacementBlock> | null, source: ProposalSourceInspect, validation_receipt: OptionalValidationReceiptInspect, anchors: Array<ProposalAnchorInspect>, };
 
 export type GetProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, proposal: BlockProposalInspect, };
 
@@ -551,7 +553,23 @@ export type ReopenRejectedOperationsConflictReason = "changed_head";
 
 export type ReopenRejectedOperationsEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, operation_ids: Array<string>, rejection_event_refs: Array<string>, prior_resolution: string, resulting_resolution: string, resulting_proposal_revision_id: string, resulting_validation: string, preserved_generation: string, preserved_closure: string, state_event_refs: Array<string>, } | { "kind": "conflicted", reason: ReopenRejectedOperationsConflictReason, } | { "kind": "refused", reason: ReopenRejectedOperationsRefusalReason, };
 
-export type ReopenRejectedOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenReceipt, project: ControlledProject, effect: ReopenRejectedOperationsEffect, };
+export type ReopenRejectedOperationsResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReopenReceipt, project: ControlledProject, effect: ReopenRejectedOperationsEffect, };export type ReplanSourceCondition = { "kind": "proposal_conflict", proposal_conflict_ref: string, } | { "kind": "proposal_recovery_conflict", proposal_recovery_conflict_ref: string, };
+
+export type ReplanProposalInput = { conflicted_proposal_revision_id: string, expected_current_proposal_head: string, expected_current_target_revisions: Array<string>, replacement_operations: Array<string>, source_condition: ReplanSourceCondition, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
+
+export type ReplanProposalRequest = { command_schema: string, replan_proposal_input: ReplanProposalInput, };
+
+export type ReplanReceiptResult = "resolved" | "conflicted" | "refused";
+
+export type ReplanReceipt = { receipt_id: string, project_scope: ProjectScope, command_digest: DigestValue, idempotency_key: string, author_command_admission_id: string, proposal_id: string, source_proposal_revision_id: string, resulting_proposal_revision_id: string, expected_current_target_revisions: Array<string>, prior_authoritative_revision_ids: Array<string>, resulting_authoritative_revision_ids: Array<string>, authoritative_commit_ids: Array<string>, result: ReplanReceiptResult, created_at: string, };
+
+export type ReplanProposalRefusalReason = "wrong_scope" | "wrong_admission" | "stale_proposal_revision" | "not_eligible" | "unavailable_proof";
+
+export type ReplanProposalConflictReason = "changed_head";
+
+export type ReplanProposalEffect = { "kind": "resolved", author_action_sequence: string, undo_disposition: AuthorUndoDisposition, resulting_proposal_revision_id: string, resulting_validation: string, preserved_generation: string, preserved_closure: string, source_condition: ReplanSourceCondition, state_event_refs: Array<string>, } | { "kind": "conflicted", reason: ReplanProposalConflictReason, } | { "kind": "refused", reason: ReplanProposalRefusalReason, };
+
+export type ReplanProposalResponse = { schema_id: string, correlation_id: string, project_scope: ProjectScope, command_id: string, author_command_admission_id: string, receipt: ReplanReceipt, project: ControlledProject, effect: ReplanProposalEffect, };
 
 export type CompleteReadyPartialProposalInput = { proposal_revision_id: string, generation_id: string, expected_candidate_digest: string, last_applied_stream_seq: string, expected_target_revisions: Array<string>, editor_session_id: string, client_contract_revision: string, security_policy_revision: string, correlation_id: string, };
 
@@ -627,6 +645,8 @@ export declare function digestRejectProposalOperations(request: RejectProposalOp
 export declare function rejectProposalOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: RejectProposalOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<RejectProposalOperationsResponse>;
 export declare function digestReopenRejectedOperations(request: ReopenRejectedOperationsRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function reopenRejectedOperations(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReopenRejectedOperationsRequest; idempotencyKey: string; antiForgery: string }): Promise<ReopenRejectedOperationsResponse>;
+export declare function digestReplanProposal(request: ReplanProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
+export declare function replanProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: ReplanProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<ReplanProposalResponse>;
 export declare function digestCompleteReadyPartialProposal(request: CompleteReadyPartialProposalRequest, cryptoImpl?: Crypto): Promise<DigestValue>;
 export declare function completeReadyPartialProposal(options: StoryOSQueryOptions & { projectId: string; proposalId: string; request: CompleteReadyPartialProposalRequest; idempotencyKey: string; antiForgery: string }): Promise<CompleteReadyPartialProposalResponse>;
 export declare function digestContinueProposalGeneration(request: ContinueProposalGenerationRequest, cryptoImpl?: Crypto): Promise<DigestValue>;

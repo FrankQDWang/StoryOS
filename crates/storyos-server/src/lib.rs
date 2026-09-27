@@ -46,6 +46,7 @@ mod public_origin;
 mod readable_export;
 mod reject_proposal_operations;
 mod reopen_rejected_operations;
+mod replan_proposal;
 mod request_origin;
 mod session_bootstrap;
 mod set_current_chapter;
@@ -102,6 +103,7 @@ use readable_export::{
 };
 use reject_proposal_operations::reject_proposal_operations;
 use reopen_rejected_operations::reopen_rejected_operations;
+use replan_proposal::replan_proposal;
 use request_origin::{RequestOriginPolicy, TupleOrigin, request_origin};
 use set_current_chapter::set_current_chapter;
 use snapshot::{activity_stream, get_snapshot, snapshot_method_not_allowed};
@@ -381,6 +383,13 @@ pub(crate) fn api_router(state: Arc<ServerState>) -> Router {
             routing::on(
                 method_filter(contracts::REOPEN_REJECTED_OPERATIONS_METHOD),
                 reopen_rejected_operations,
+            ),
+        )
+        .route(
+            contracts::REPLAN_PROPOSAL_PATH,
+            routing::on(
+                method_filter(contracts::REPLAN_PROPOSAL_METHOD),
+                replan_proposal,
             ),
         )
         .route(

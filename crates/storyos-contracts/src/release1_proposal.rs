@@ -58,6 +58,18 @@ pub enum ProposalSourceInspect {
 
 #[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum ProposalSourceConditionInspect {
+    Absent,
+    ProposalConflict {
+        proposal_conflict_ref: String,
+    },
+    ProposalRecoveryConflict {
+        proposal_recovery_conflict_ref: String,
+    },
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, JsonSchema, PartialEq, Serialize, TS)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum OptionalValidationReceiptInspect {
     Absent,
     Present {
@@ -113,6 +125,7 @@ pub struct BlockProposalInspect {
     pub generation: String,
     pub validation: String,
     pub condition_refs: Vec<String>,
+    pub source_condition: ProposalSourceConditionInspect,
     pub latest_acceptance_refusal: OptionalAcceptanceRefusalInspect,
     pub closure: String,
     pub operation_id: String,

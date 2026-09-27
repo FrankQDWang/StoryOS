@@ -1,5 +1,5 @@
 {
-  "corpus_digest": "sha256:1e6aac9a08c59b8d33dcb1cc863edc6cac2b1d439b430ef3b8ee662df2fbddf3",
+  "corpus_digest": "sha256:9e7acc1ad2456c2eab133e56468a8e2bb97a117d5c97ef9a221d802c86d1305a",
   "digest_scope": {
     "normalization": "replace every release_identity.fixture_corpus_digest with sha256:self-normalized",
     "paths": [
@@ -99,6 +99,9 @@
       "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.json",
       "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.invalid.json",
       "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json",
+      "generated/golden-wire/storyos-public-release-1/replan-proposal.json",
+      "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json",
+      "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.invalid.json",
       "generated/golden-wire/storyos-public-release-1/archive-project.boundary.json",
@@ -725,6 +728,24 @@
       "fixture_id": "storyos.golden.reopenRejectedOperations.boundary.v1",
       "operation_id": "reopenRejectedOperations",
       "path": "generated/golden-wire/storyos-public-release-1/reopen-rejected-operations.boundary.json"
+    },
+    {
+      "classification": "positive",
+      "fixture_id": "storyos.golden.replanProposal.positive.v1",
+      "operation_id": "replanProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.json"
+    },
+    {
+      "classification": "invalid",
+      "fixture_id": "storyos.golden.replanProposal.invalid.v1",
+      "operation_id": "replanProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.invalid.json"
+    },
+    {
+      "classification": "boundary",
+      "fixture_id": "storyos.golden.replanProposal.boundary.v1",
+      "operation_id": "replanProposal",
+      "path": "generated/golden-wire/storyos-public-release-1/replan-proposal.boundary.json"
     },
     {
       "classification": "positive",

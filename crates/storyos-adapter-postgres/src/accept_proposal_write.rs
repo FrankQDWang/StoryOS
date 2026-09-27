@@ -311,9 +311,9 @@ pub(super) async fn persist_zero(
             .execute(
                 "INSERT INTO storyos.proposal_validation_conditions
                (owner_user_id, project_id, proposal_id, proposal_revision_id,
-                acceptance_receipt_id, validation, conflict_id)
+                acceptance_receipt_id, validation, conflict_id, condition_kind)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid,
-                     $5::text::uuid, $6, $7::text::uuid)",
+                     $5::text::uuid, $6, $7::text::uuid, $8)",
                 &[
                     &command.project_scope.owner_user_id.as_ref(),
                     &command.project_scope.project_id.as_ref(),
@@ -322,6 +322,11 @@ pub(super) async fn persist_zero(
                     &command.ids.receipt_id,
                     &result_kind,
                     &condition_refs.first(),
+                    &if result_kind == "conflicted" {
+                        Some("proposal_conflict")
+                    } else {
+                        None
+                    },
                 ],
             )
             .await

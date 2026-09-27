@@ -63,6 +63,8 @@ mod release1_reject_proposal_operations;
 mod release1_reject_proposal_operations_artifacts;
 mod release1_reopen_rejected_operations;
 mod release1_reopen_rejected_operations_artifacts;
+mod release1_replan_proposal;
+mod release1_replan_proposal_artifacts;
 mod release1_set_current_chapter;
 mod release1_set_current_chapter_artifacts;
 mod release1_snapshot;
@@ -244,7 +246,7 @@ pub use release1_proposal::{
     BlockProposalInspect, GET_PROPOSAL_METHOD, GET_PROPOSAL_PATH, GET_PROPOSAL_REQUEST_SCHEMA_ID,
     GET_PROPOSAL_RESPONSE_SCHEMA_ID, GetProposalRequest, GetProposalResponse,
     OptionalAcceptanceRefusalInspect, OptionalValidationReceiptInspect, ProposalAnchorInspect,
-    ProposalOperationInspect, ProposalSourceInspect,
+    ProposalOperationInspect, ProposalSourceConditionInspect, ProposalSourceInspect,
 };
 pub use release1_proposal_generation_decision::{
     COMPLETE_READY_PARTIAL_PROPOSAL_DIGEST_PROFILE, COMPLETE_READY_PARTIAL_PROPOSAL_METHOD,
@@ -290,6 +292,13 @@ pub use release1_reopen_rejected_operations::{
     ReopenRejectedOperationsConflictReason, ReopenRejectedOperationsEffect,
     ReopenRejectedOperationsInput, ReopenRejectedOperationsRefusalReason,
     ReopenRejectedOperationsRequest, ReopenRejectedOperationsResponse,
+};
+pub use release1_replan_proposal::{
+    REPLAN_PROPOSAL_DIGEST_PROFILE, REPLAN_PROPOSAL_METHOD, REPLAN_PROPOSAL_PATH,
+    REPLAN_PROPOSAL_REQUEST_SCHEMA_ID, REPLAN_PROPOSAL_RESPONSE_SCHEMA_ID,
+    ReplanProposalConflictReason, ReplanProposalEffect, ReplanProposalInput,
+    ReplanProposalRefusalReason, ReplanProposalRequest, ReplanProposalResponse, ReplanReceipt,
+    ReplanReceiptResult, ReplanSourceCondition,
 };
 pub use release1_set_current_chapter::{
     SET_CURRENT_CHAPTER_DIGEST_PROFILE, SET_CURRENT_CHAPTER_METHOD, SET_CURRENT_CHAPTER_PATH,

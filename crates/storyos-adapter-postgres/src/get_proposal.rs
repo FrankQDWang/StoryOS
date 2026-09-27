@@ -24,6 +24,7 @@ impl ProposalReader for PostgresProjectReader {
                         proposal.source_run_id::text, proposal.source_decision_id::text,
                         receipt.validation_receipt_id::text, receipt.result,
                         failure.conflict_id::text,
+                        failure.condition_kind,
                         revision.candidate_blocks::text,
                         CASE WHEN proposal.source_run_id IS NOT NULL THEN jsonb_build_object(
                           'kind','agent_run_decision','run_id',proposal.source_run_id::text,
@@ -104,21 +105,44 @@ impl ProposalReader for PostgresProjectReader {
                 reservation_state: row.get(11),
                 candidate_text: row.get(12),
                 candidate_blocks: row
-                    .get::<_, Option<String>>(18)
+                    .get::<_, Option<String>>(19)
                     .map(|value| {
                         serde_json::from_str(&value).map_err(ProjectReadError::unavailable)
                     })
                     .transpose()?,
-                source: serde_json::from_str(&row.get::<_, String>(19))
+                source: serde_json::from_str(&row.get::<_, String>(20))
                     .map_err(ProjectReadError::unavailable)?,
                 validation_receipt_id: row.get(15),
                 validation_receipt_result: row.get(16),
                 condition_refs: row.get::<_, Option<String>>(17).into_iter().collect(),
+                source_condition: source_condition(
+                    row.get::<_, Option<String>>(18),
+                    row.get::<_, Option<String>>(17),
+                ),
                 latest_acceptance_refusal,
                 anchors,
             })
         })
         .transpose()
+    }
+}
+
+fn source_condition(
+    condition_kind: Option<String>,
+    conflict_id: Option<String>,
+) -> storyos_contracts::ProposalSourceConditionInspect {
+    match (condition_kind.as_deref(), conflict_id) {
+        (Some("proposal_conflict"), Some(proposal_conflict_ref)) => {
+            storyos_contracts::ProposalSourceConditionInspect::ProposalConflict {
+                proposal_conflict_ref,
+            }
+        }
+        (Some("proposal_recovery_conflict"), Some(proposal_recovery_conflict_ref)) => {
+            storyos_contracts::ProposalSourceConditionInspect::ProposalRecoveryConflict {
+                proposal_recovery_conflict_ref,
+            }
+        }
+        _ => storyos_contracts::ProposalSourceConditionInspect::Absent,
     }
 }
 
