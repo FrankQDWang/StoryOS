@@ -365,9 +365,13 @@ pub(super) async fn append_proposal_revision(
         .execute(
             "INSERT INTO storyos.proposal_revisions
                (owner_user_id, project_id, proposal_id, revision_id, generation, validation,
-                closure, candidate_text, base_authoritative_revision_id, parent_revision_id)
+                closure, candidate_text, base_authoritative_revision_id, parent_revision_id,
+                candidate_blocks)
              VALUES ($1::text::uuid, $2::text::uuid, $3::text::uuid, $4::text::uuid, 'ready',
-                     $5, 'open', $6, $7::text::uuid, $8::text::uuid)",
+                     $5, 'open', $6, $7::text::uuid, $8::text::uuid,
+                     (SELECT candidate_blocks FROM storyos.proposal_revisions
+                       WHERE owner_user_id=$1::text::uuid AND project_id=$2::text::uuid
+                         AND proposal_id=$3::text::uuid AND revision_id=$8::text::uuid))",
             &[
                 &owner,
                 &project,
