@@ -54,8 +54,23 @@ pub(super) async fn load_chapter_proposal_heads(
         .author_edit_units
         .iter()
         .any(|unit| unit.selection_snapshot.ordered_selection.is_some());
-    let row_limit =
-        structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1);
+    let versioned = command.author_edit_units.iter().any(|unit| {
+        unit.normalized_primitives.iter().any(|primitive| {
+            matches!(
+                primitive,
+                AuthorEditPrimitive::ReplaceBlockSelection { .. }
+                    | AuthorEditPrimitive::SplitBlock { .. }
+                    | AuthorEditPrimitive::JoinBlocks { .. }
+                    | AuthorEditPrimitive::MoveBlock { .. }
+                    | AuthorEditPrimitive::RetypeBlock { .. }
+            )
+        })
+    });
+    let row_limit = if versioned {
+        None
+    } else {
+        structured.then(|| command.expected_proposal_head_revision_ids.len() as i64 + 1)
+    };
     let rows = client
         .query(
             "SELECT head.current_revision_id::text, proposal.proposal_id::text,
@@ -119,21 +134,66 @@ pub(super) async fn load_chapter_proposal_heads(
             let candidate_text: String = row.get(2);
             selected = Some((
                 ProposalEditContext {
-                    proposal_id,
+                    proposal_id: proposal_id.clone(),
                     operation_id: command
                         .proposal_target
                         .as_ref()
                         .map(|target| target.operation_id.clone()),
                     prior_revision_id: revision_id.clone(),
-                    manuscript_block_id,
+                    manuscript_block_id: manuscript_block_id.clone(),
                     base_authoritative_revision_id: row.get(4),
-                    kind,
+                    kind: kind.clone(),
                     ranges: Vec::new(),
                     candidate_text: candidate_text.clone(),
                     structured_candidate: row.get(9),
                 },
                 candidate_text,
             ));
+        }
+        let acknowledged = command
+            .expected_proposal_head_revision_ids
+            .iter()
+            .any(|head| head == &revision_id)
+            || command.proposal_target.as_ref().is_some_and(|target| {
+                target.proposal_id == proposal_id && target.revision_id == revision_id
+            });
+        let mentions_block = command.author_edit_units.iter().any(|unit| {
+            unit.normalized_primitives
+                .iter()
+                .any(|primitive| match primitive {
+                    AuthorEditPrimitive::ReplaceBlockSelection {
+                        manuscript_block_id: edited_block_id,
+                        ..
+                    }
+                    | AuthorEditPrimitive::MoveBlock {
+                        manuscript_block_id: edited_block_id,
+                        ..
+                    }
+                    | AuthorEditPrimitive::RetypeBlock {
+                        manuscript_block_id: edited_block_id,
+                        ..
+                    } => edited_block_id == &manuscript_block_id,
+                    AuthorEditPrimitive::SplitBlock {
+                        manuscript_block_id: edited_block_id,
+                        new_manuscript_block_id,
+                        ..
+                    } => {
+                        edited_block_id == &manuscript_block_id
+                            || new_manuscript_block_id == &manuscript_block_id
+                    }
+                    AuthorEditPrimitive::JoinBlocks {
+                        left_manuscript_block_id,
+                        right_manuscript_block_id,
+                    } => {
+                        left_manuscript_block_id == &manuscript_block_id
+                            || right_manuscript_block_id == &manuscript_block_id
+                    }
+                    AuthorEditPrimitive::ReplaceStructuredSelection { .. }
+                    | AuthorEditPrimitive::ReplaceSelection { .. } => false,
+                })
+        });
+        if kind == "block_edit" && versioned && !acknowledged && !mentions_block {
+            continue;
         }
         heads.push(revision_id);
     }

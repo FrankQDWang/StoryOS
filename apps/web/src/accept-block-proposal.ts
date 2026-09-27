@@ -91,15 +91,22 @@ async function acceptDisplayedBlockProposalLocked(
         (group.ordered_coverage as { intent_record_ref: string }[])?.[0]?.intent_record_ref
           === prior.explicit_command_record_id);
       const priorSettlement = priorGroup?.settlement as { kind: string;
-        response?: AcceptProposalResponse } | undefined;
+        response?: AcceptProposalResponse; problem?: { code?: string } } | undefined;
       const priorInput = (priorGroup?.frozen_request_body as AcceptProposalRequest | undefined)
         ?.accept_proposal_input;
-      if (priorSettlement?.kind === "settled" && priorSettlement.response !== undefined
+      const sessionRefusal = priorSettlement?.kind === "refused"
+        || (priorSettlement?.kind === "pre_admission_problem"
+          && priorSettlement.problem?.code === "acceptance_session_ineligible");
+      const restoredWriter = sessionRefusal
+        && prior.writer_generation !== workspace.partition.writer_generation;
+      if (!restoredWriter && priorSettlement?.kind === "settled" && priorSettlement.response !== undefined
         && priorInput?.validation_receipt_id === options.validationReceiptId
         && priorInput.expected_authoritative_revision_id === options.authoritativeRevisionId) {
         return priorSettlement.response;
       }
-      throw new Error("A prior Acceptance decision is unresolved. Reload and inspect its result.");
+      if (!restoredWriter) {
+        throw new Error("A prior Acceptance decision is unresolved. Reload and inspect its result.");
+      }
     }
     const request: AcceptProposalRequest = {
       command_schema: "storyos.command.accept-proposal.request.v1",

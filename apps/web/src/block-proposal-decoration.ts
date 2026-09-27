@@ -15,6 +15,11 @@ export type BlockProposalProjection = {
   retryPending?: boolean;
   rejectEligible?: boolean;
   retryRejection?: boolean;
+  replanEligible?: boolean;
+  copyEligible?: boolean;
+  conditionKind?: string;
+  validity?: string;
+  sessionEligible?: boolean;
   expectedHeads: string[];
   localPending?: boolean;
 };
@@ -22,7 +27,8 @@ export type BlockProposalProjection = {
 const ATTRIBUTES = [
   "proposalId", "operationId", "revisionId", "blockId", "sourceRunId",
   "sourceDecisionId", "eligible", "retryPending", "expectedHeads",
-  "rejectEligible", "retryRejection",
+  "rejectEligible", "retryRejection", "replanEligible",
+  "copyEligible", "conditionKind", "validity", "sessionEligible",
 ] as const;
 
 function candidateNodes(doc: ProseMirrorNode): ProseMirrorNode[] {
@@ -79,6 +85,11 @@ export function capturedCandidateEdit(previous: ProseMirrorNode, next: ProseMirr
         retryPending: node.attrs.retryPending as boolean,
         rejectEligible: node.attrs.rejectEligible as boolean,
         retryRejection: node.attrs.retryRejection as boolean,
+        replanEligible: node.attrs.replanEligible as boolean,
+        copyEligible: node.attrs.copyEligible as boolean,
+        conditionKind: node.attrs.conditionKind as string,
+        validity: node.attrs.validity as string,
+        sessionEligible: node.attrs.sessionEligible as boolean,
         expectedHeads: node.attrs.expectedHeads as string[],
       },
       priorText: node.textContent,
@@ -120,6 +131,11 @@ export function projectBlockProposals(editor: Editor, proposals: readonly BlockP
         retryPending: proposal.retryPending ?? false,
         rejectEligible: proposal.rejectEligible ?? false,
         retryRejection: proposal.retryRejection ?? false,
+        replanEligible: proposal.replanEligible ?? false,
+        copyEligible: proposal.copyEligible ?? false,
+        conditionKind: proposal.conditionKind ?? "absent",
+        validity: proposal.validity ?? "",
+        sessionEligible: proposal.sessionEligible ?? false,
         expectedHeads: proposal.expectedHeads,
       }, text.length ? schema.text(text) : undefined));
     }
@@ -150,6 +166,8 @@ export const blockProposalDecoration = TiptapNode.create({
     const retryPending = node.attrs.retryPending === true;
     const rejectEligible = node.attrs.rejectEligible === true;
     const retryRejection = node.attrs.retryRejection === true;
+    const replanEligible = node.attrs.replanEligible === true;
+    const copyEligible = node.attrs.copyEligible === true;
     return ["div", {
       class: "block-proposal",
       "data-proposal-id": node.attrs.proposalId,
@@ -159,6 +177,9 @@ export const blockProposalDecoration = TiptapNode.create({
       "data-proposal-source-decision-id": node.attrs.sourceDecisionId,
       "data-proposal-target-id": node.attrs.blockId,
       "data-proposal-eligibility": eligible ? "eligible" : "ineligible",
+      "data-proposal-validity": node.attrs.validity ?? "",
+      "data-proposal-condition": node.attrs.conditionKind ?? "absent",
+      "data-proposal-session": node.attrs.sessionEligible === true ? "eligible" : "ineligible",
       role: "group",
       "aria-label": eligible || rejectEligible ? "候选文字，尚未成为正文"
         : "候选文字，暂不可操作",
@@ -175,6 +196,14 @@ export const blockProposalDecoration = TiptapNode.create({
     ...(rejectEligible || retryRejection ? [["button", {
       type: "button", class: "block-proposal-reject",
       "data-proposal-reject": node.attrs.proposalId, contenteditable: "false",
-    }, retryRejection ? "重试拒绝" : "拒绝"]] : [])];
+    }, retryRejection ? "重试拒绝" : "拒绝"]] : []),
+    ...(replanEligible ? [["button", {
+      type: "button", class: "block-proposal-replan",
+      "data-proposal-replan": node.attrs.proposalId, contenteditable: "false",
+    }, "重新规划"]] : []),
+    ...(copyEligible ? [["button", {
+      type: "button", class: "block-proposal-copy",
+      "data-proposal-copy": node.attrs.proposalId, contenteditable: "false",
+    }, "复制"]] : [])];
   },
 });
