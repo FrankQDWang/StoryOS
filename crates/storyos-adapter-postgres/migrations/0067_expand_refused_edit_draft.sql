@@ -782,7 +782,8 @@ BEGIN
         AND EXISTS(SELECT 1 FROM storyos.domain_receipts AS source
           JOIN storyos.proposals AS proposal ON (proposal.owner_user_id,proposal.project_id,proposal.proposal_id::text)=
             (source.owner_user_id,source.project_id,source.result_payload->>'proposal_id')
-          JOIN storyos.proposal_heads AS head USING(owner_user_id,project_id,proposal_id)
+          JOIN storyos.proposal_heads AS head ON (head.owner_user_id,head.project_id,head.proposal_id)=
+            (proposal.owner_user_id,proposal.project_id,proposal.proposal_id)
           JOIN storyos.proposal_revisions AS candidate ON (candidate.owner_user_id,candidate.project_id,candidate.proposal_id,candidate.revision_id)=
             (head.owner_user_id,head.project_id,head.proposal_id,head.current_revision_id)
           WHERE (source.owner_user_id,source.project_id,source.receipt_id)=(closed.owner_user_id,closed.project_id,closed.receipt_id)
