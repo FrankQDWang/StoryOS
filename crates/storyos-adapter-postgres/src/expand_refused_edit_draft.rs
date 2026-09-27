@@ -254,7 +254,7 @@ async fn persist_effect(
         "draft":command.draft_id,"input":command.input,"effect":effect,"result":result_kind,
         "blocks":replacement,"candidate":replacement.map(|blocks| blocks.iter().map(|block| block.text.as_str()).collect::<Vec<_>>().join("\n")),
         "operation":Uuid::now_v7().to_string()}).to_string();
-    client.execute("WITH context AS (SELECT $1::jsonb AS c), ids AS (
+    client.execute("WITH context AS (SELECT $1::text::jsonb AS c), ids AS (
         SELECT c,(c->>'owner')::uuid AS owner,(c->>'project')::uuid AS project,(c->>'receipt')::uuid AS receipt,
           (c->'effect'->>'proposal_id')::uuid AS proposal,(c->'effect'->>'proposal_revision_id')::uuid AS revision,
           (c->'effect'->>'event_id')::uuid AS event,(c->>'draft')::uuid AS draft,(c->>'operation')::uuid AS operation FROM context),
